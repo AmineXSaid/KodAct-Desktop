@@ -2,10 +2,15 @@
 //! first), and settings at the bottom. Collapses with Ctrl/⌘B.
 
 use gpui::component::input::{Input, InputEvent, InputState};
-use gpui::{div, prelude::*, px, Context, Entity, FontWeight, IntoElement, Render, SharedString, Subscription, Window};
+use std::time::Duration;
+
+use gpui::{
+    div, percentage, prelude::*, px, Animation, AnimationExt, Context, Entity, FontWeight, IntoElement, Render, SharedString,
+    Subscription, Transformation, Window,
+};
 
 use super::*;
-use crate::state::{AppState, Screen};
+use crate::state::{AppState, ChatStatus, Screen};
 use crate::theme::ActiveTheme;
 
 pub struct Sidebar {
@@ -69,6 +74,8 @@ impl Render for Sidebar {
                 let state = self.state.clone();
                 let state_pin = self.state.clone();
                 let ago: SharedString = ago(c.minutes_ago).into();
+                let status = s.status(c);
+                let unread = status == ChatStatus::Unread;
                 list = list.child(
                     div()
                         .id(("chat", id))
@@ -83,7 +90,17 @@ impl Render for Sidebar {
                         .text_color(if selected { t.colors.text_strong } else { t.colors.text_muted })
                         .when(selected, |d| d.bg(t.extra.selected).border_1().border_color(t.colors.border).font_weight(FontWeight::MEDIUM))
                         .when(!selected, |d| d.hover(move |st| st.bg(hover)))
-                        .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(c.title.clone()))
+                        .child(status_mark(status, id, &t))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .when(unread, |d| d.font_weight(FontWeight::SEMIBOLD).text_color(t.colors.text_strong))
+                                .child(c.title.clone()),
+                        )
                         .child(
                             div()
                                 .flex_none()
@@ -215,6 +232,28 @@ impl Render for Sidebar {
                     ),
             )
     }
+}
+
+/// A chat's status, in a fixed slot before its title: a turning loader
+/// while it works, a breathing amber dot when it needs you, a warning when it
+/// ended on an error, a blue dot when a reply is unread, a faint ring at rest.
+fn status_mark(status: ChatStatus, id: usize, t: &crate::theme::Theme) -> gpui::AnyElement {
+    let dot = || div().size(px(7.)).rounded(t.radius.pill);
+    let inner: gpui::AnyElement = match status {
+        ChatStatus::Working => icon("icons/loader-circle.svg", px(12.), t.colors.sky)
+            .with_animation(("chat-working", id), Animation::new(Duration::from_millis(900)).repeat(), |svg, d| svg.with_transformation(Transformation::rotate(percentage(d))))
+            .into_any_element(),
+        ChatStatus::NeedsYou => dot()
+            .bg(t.colors.marigold)
+            .with_animation(("chat-needs", id), Animation::new(Duration::from_millis(1600)).repeat().with_easing(gpui::ease_in_out), |d, delta| {
+                d.opacity(0.45 + 0.55 * (1. - (delta * 2. - 1.).abs()))
+            })
+            .into_any_element(),
+        ChatStatus::Error => icon("icons/triangle-alert.svg", px(12.), t.extra.danger).into_any_element(),
+        ChatStatus::Unread => dot().bg(t.colors.primary).into_any_element(),
+        ChatStatus::Idle => dot().border_1().border_color(t.colors.text_subtle.opacity(0.45)).into_any_element(),
+    };
+    div().w(t.size.icon_sm).flex_none().flex().items_center().justify_center().child(inner).into_any_element()
 }
 
 fn ago(minutes: u32) -> String {

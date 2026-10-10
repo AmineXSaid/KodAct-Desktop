@@ -129,6 +129,22 @@ pub struct Chat {
     pub messages: Vec<Message>,
     /// Bumped on every change, so the list knows what to re-measure.
     pub version: u64,
+    /// A reply finished here while you were looking at another chat.
+    pub unread: bool,
+}
+
+/// Where a chat stands, as its sidebar row shows it.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum ChatStatus {
+    /// A reply is playing.
+    Working,
+    /// A reply waits on a permission answer.
+    NeedsYou,
+    /// It ended on an error.
+    Error,
+    /// A reply finished while you were elsewhere.
+    Unread,
+    Idle,
 }
 
 impl Chat {
@@ -241,12 +257,11 @@ pub struct AppState {
     toast_reset: Option<Task<()>>,
     /// Tokens used / context size, for the composer's meter.
     pub context_used: f32,
-    /// The reply being played, if any. Dropping it stops the reply.
-    reply: Option<Task<()>>,
+    /// The replies being played, by chat. Each keeps going while you look at
+    /// another chat; dropping one stops it.
+    replies: std::collections::HashMap<usize, Task<()>>,
     /// Text for the composer to take (an edited message).
     pub draft: Option<String>,
-    /// When the current turn started (for the working line's timer).
-    pub turn_started: Option<std::time::Instant>,
     next_id: usize,
 }
 
@@ -280,8 +295,7 @@ impl AppState {
             toast: None,
             toast_reset: None,
             context_used: 0.31,
-            reply: None,
-            turn_started: None,
+            replies: Default::default(),
             draft: None,
             next_id,
         }
@@ -295,19 +309,33 @@ impl AppState {
         self.chats.iter_mut().find(|c| c.id == id)
     }
 
+    /// A reply is playing in the chat you're looking at.
     pub fn busy(&self) -> bool {
-        self.reply.is_some()
+        self.current.is_some_and(|id| self.replies.contains_key(&id))
+    }
+
+    /// Where a chat stands, for its row in the sidebar.
+    pub fn status(&self, chat: &Chat) -> ChatStatus {
+        if self.replies.contains_key(&chat.id) {
+            return if self.waiting_on_permission(chat.id) { ChatStatus::NeedsYou } else { ChatStatus::Working };
+        }
+        match chat.messages.last() {
+            Some(Message::Notice { error: true, .. }) => ChatStatus::Error,
+            _ if chat.unread => ChatStatus::Unread,
+            _ => ChatStatus::Idle,
+        }
     }
 
     pub fn open_chat(&mut self, id: usize, cx: &mut Context<Self>) {
-        self.stop(cx);
         self.screen = Screen::Chat;
         self.current = Some(id);
+        if let Some(c) = self.chat_mut(id) {
+            c.unread = false;
+        }
         cx.notify();
     }
 
     pub fn new_chat(&mut self, cx: &mut Context<Self>) {
-        self.stop(cx);
         self.screen = Screen::Chat;
         self.current = None;
         cx.notify();
@@ -352,10 +380,7 @@ impl AppState {
     /// Cut the chat back to before message `msg` (one of yours), returning
     /// its text. Stops a reply in progress first.
     fn take_from(&mut self, chat: usize, msg: usize, cx: &mut Context<Self>) -> Option<String> {
-        if self.busy() {
-            self.reply = None;
-            self.turn_started = None;
-        }
+        self.replies.remove(&chat);
         let c = self.chat_mut(chat)?;
         let Some(Message::User { text, .. }) = c.messages.get(msg) else { return None };
         let text = text.to_string();
@@ -443,11 +468,11 @@ impl AppState {
 
     /// Stop the reply being played (the composer's Stop, Escape).
     pub fn stop(&mut self, cx: &mut Context<Self>) {
-        if self.reply.take().is_none() {
+        let Some(id) = self.current else { return };
+        if self.replies.remove(&id).is_none() {
             return;
         }
-        self.turn_started = None;
-        if let Some(id) = self.current {
+        {
             if let Some(c) = self.chat_mut(id) {
                 for m in c.messages.iter_mut() {
                     if let Message::Assistant { blocks } = m {
@@ -480,7 +505,7 @@ impl AppState {
                 let id = self.next_id;
                 self.next_id += 1;
                 let title: String = text.lines().next().unwrap_or_default().chars().take(48).collect();
-                self.chats.insert(0, Chat { id, title: title.into(), minutes_ago: 0, pinned: false, messages: vec![], version: 0 });
+                self.chats.insert(0, Chat { id, title: title.into(), minutes_ago: 0, pinned: false, messages: vec![], version: 0, unread: false });
                 self.current = Some(id);
                 id
             }
@@ -490,8 +515,7 @@ impl AppState {
             c.minutes_ago = 0;
             c.version += 1;
         }
-        self.turn_started = Some(std::time::Instant::now());
-        self.reply = Some(cx.spawn(async move |this, cx| {
+        self.replies.insert(id, cx.spawn(async move |this, cx| {
             for step in script(&text) {
                 let wait = step.delay();
                 cx.background_executor().timer(Duration::from_millis(wait)).await;
@@ -516,8 +540,13 @@ impl AppState {
                 }
             }
             let _ = this.update(cx, |s, cx| {
-                s.reply = None;
-                s.turn_started = None;
+                s.replies.remove(&id);
+                // Finished while you were elsewhere: it waits as unread.
+                if s.current != Some(id) {
+                    if let Some(c) = s.chat_mut(id) {
+                        c.unread = true;
+                    }
+                }
                 cx.notify();
             });
         }));
@@ -744,14 +773,18 @@ fn mock_chats() -> Vec<Chat> {
             Message::TurnEnd { seconds: 3.2, cost: 0.004 },
         ]
     };
+    let with_error = |mut m: Vec<Message>| {
+        m.push(Message::Notice { text: "The agent stopped unexpectedly (exit code 1). Send a message to try again.".into(), error: true });
+        m
+    };
     let mut chats = vec![
-        Chat { id: 1, title: "Fix the greeting and add a test".into(), minutes_ago: 4, pinned: true, messages: rich, version: 0 },
-        Chat { id: 2, title: "Explain the hermes review pipeline".into(), minutes_ago: 120, pinned: false, messages: simple("Explain the hermes review pipeline", 120), version: 0 },
-        Chat { id: 3, title: "Speed up the session store".into(), minutes_ago: 300, pinned: false, messages: simple("Speed up the session store", 300), version: 0 },
-        Chat { id: 4, title: "Write a README for the CLI".into(), minutes_ago: 1500, pinned: false, messages: simple("Write a README for the CLI", 1500), version: 0 },
-        Chat { id: 5, title: "Why does cargo test hang on Windows?".into(), minutes_ago: 1800, pinned: false, messages: simple("Why does cargo test hang on Windows?", 1800), version: 0 },
-        Chat { id: 6, title: "Migrate settings to the new schema".into(), minutes_ago: 5000, pinned: false, messages: simple("Migrate settings to the new schema", 5000), version: 0 },
-        Chat { id: 7, title: "Genesis redesign: landing page".into(), minutes_ago: 20000, pinned: false, messages: simple("Genesis redesign: landing page", 20000), version: 0 },
+        Chat { id: 1, title: "Fix the greeting and add a test".into(), minutes_ago: 4, pinned: true, messages: rich, version: 0, unread: false },
+        Chat { id: 2, title: "Explain the hermes review pipeline".into(), minutes_ago: 120, pinned: false, messages: simple("Explain the hermes review pipeline", 120), version: 0, unread: true },
+        Chat { id: 3, title: "Speed up the session store".into(), minutes_ago: 300, pinned: false, messages: simple("Speed up the session store", 300), version: 0, unread: false },
+        Chat { id: 4, title: "Write a README for the CLI".into(), minutes_ago: 1500, pinned: false, messages: simple("Write a README for the CLI", 1500), version: 0, unread: false },
+        Chat { id: 5, title: "Why does cargo test hang on Windows?".into(), minutes_ago: 1800, pinned: false, messages: with_error(simple("Why does cargo test hang on Windows?", 1800)), version: 0, unread: false },
+        Chat { id: 6, title: "Migrate settings to the new schema".into(), minutes_ago: 5000, pinned: false, messages: simple("Migrate settings to the new schema", 5000), version: 0, unread: false },
+        Chat { id: 7, title: "Genesis redesign: landing page".into(), minutes_ago: 20000, pinned: false, messages: simple("Genesis redesign: landing page", 20000), version: 0, unread: false },
     ];
     chats.sort_by_key(|c| (!c.pinned, c.minutes_ago));
     chats
