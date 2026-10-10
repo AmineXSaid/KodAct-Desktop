@@ -26,7 +26,13 @@ impl Composer {
         let max_rows = (f32::from(t.size.composer_max) / (f32::from(t.text.body) * 1.5)).floor().max(2.) as usize;
         let input = cx.new(|cx| TextareaState::new(window, cx).auto_grow(1, max_rows).placeholder("Ask Forge anything… (@ to mention a file)").submit_on_enter(true));
         let subs = vec![
-            cx.observe(&state, |_, _, cx| cx.notify()),
+            cx.observe_in(&state, window, |this, state, window, cx| {
+                // An edited message comes back here to be changed and sent.
+                if let Some(text) = state.update(cx, |s, _| s.draft.take()) {
+                    this.fill(&text, window, cx);
+                }
+                cx.notify();
+            }),
             cx.subscribe_in(&input, window, |this, _, ev: &InputEvent, window, cx| match ev {
                 InputEvent::PressEnter { shift: false, .. } => this.submit(window, cx),
                 InputEvent::Change => cx.notify(),

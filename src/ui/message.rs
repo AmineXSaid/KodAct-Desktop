@@ -7,11 +7,11 @@
 //! - the end of a turn: how long it took and what it cost;
 //! - a notice (interrupted, an error).
 
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use gpui::{
-    div, percentage, prelude::*, px, relative, Animation, AnimationExt, AnyElement, Entity, FontWeight, SharedString,
-    Transformation,
+    div, percentage, prelude::*, px, relative, Animation, AnimationExt, AnyElement, ClipboardItem, Entity, FontWeight,
+    SharedString, Transformation,
 };
 
 use super::icon;
@@ -35,23 +35,7 @@ pub struct ItemContext {
 
 pub fn render(m: &Message, cx: &ItemContext, t: &Theme) -> AnyElement {
     match m {
-        Message::User { text } => div()
-            .flex()
-            .justify_end()
-            .child(
-                div()
-                    .max_w(relative(0.85))
-                    .px(t.space.md + px(2.))
-                    .py(t.space.sm + px(2.))
-                    .bg(t.colors.surface)
-                    .border_1()
-                    .border_color(t.colors.border)
-                    .rounded(t.radius.card)
-                    .text_size(t.text.body_sm)
-                    .line_height(relative(t.size.line_height_chat))
-                    .child(text.clone()),
-            )
-            .into_any_element(),
+        Message::User { text, sent } => user(text, *sent, cx, t),
         Message::Assistant { blocks } => assistant(blocks, cx, t),
         Message::TurnEnd { seconds, cost } => div()
             .text_size(t.text.caption)
@@ -71,6 +55,88 @@ pub fn render(m: &Message, cx: &ItemContext, t: &Theme) -> AnyElement {
             .child(text.clone())
             .into_any_element(),
     }
+}
+
+/// `just now`, `4 min ago`, `5 hours ago`, `3 days ago`.
+fn sent_ago(sent: SystemTime) -> String {
+    let secs = sent.elapsed().map(|d| d.as_secs()).unwrap_or(0);
+    match secs {
+        0..=59 => "just now".into(),
+        60..=3599 => format!("{} min ago", secs / 60),
+        3600..=86_399 => match secs / 3600 {
+            1 => "1 hour ago".into(),
+            h => format!("{h} hours ago"),
+        },
+        _ => match secs / 86_400 {
+            1 => "yesterday".into(),
+            d => format!("{d} days ago"),
+        },
+    }
+}
+
+/// Your message: a card on the right. Hovering it shows when you sent it
+/// and three actions under it: retry, edit, copy.
+fn user(text: &SharedString, sent: SystemTime, cx: &ItemContext, t: &Theme) -> AnyElement {
+    let key = format!("{}-{}", cx.chat, cx.index);
+    let group: SharedString = format!("user-{key}").into();
+    let copy_key: SharedString = format!("msg-{key}").into();
+    let copied = cx.copied.as_ref() == Some(&copy_key);
+    let hover = t.colors.hover;
+    let action = |name: &str, path: &'static str, tip_color: gpui::Hsla| {
+        div()
+            .id(SharedString::from(format!("{name}-{key}")))
+            .size(t.size.control - px(4.))
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded(t.radius.button)
+            .cursor_pointer()
+            .hover(move |s| s.bg(hover))
+            .child(icon(path, t.size.icon_sm, tip_color))
+    };
+    let (state, chat, msg) = (cx.state.clone(), cx.chat, cx.index);
+    let (state_edit, state_copy) = (state.clone(), state.clone());
+    let to_copy = text.to_string();
+    let actions = div()
+        .flex()
+        .items_center()
+        .justify_end()
+        .gap(px(2.))
+        .when(!copied, |d| d.invisible().group_hover(group.clone(), |s| s.visible()))
+        .child(div().pr(t.space.xs).text_size(t.text.caption).text_color(t.colors.text_subtle).child(sent_ago(sent)))
+        .child(action("retry", "icons/rotate-ccw.svg", t.colors.text_muted).on_click(move |_, _, app| state.update(app, |s, cx| s.retry(chat, msg, cx))))
+        .child(action("edit", "icons/pencil.svg", t.colors.text_muted).on_click(move |_, window, app| {
+            state_edit.update(app, |s, cx| s.edit(chat, msg, cx));
+            window.dispatch_action(Box::new(super::FocusComposer), app);
+        }))
+        .child(
+            action("copy", if copied { "icons/check.svg" } else { "icons/copy.svg" }, if copied { t.extra.success } else { t.colors.text_muted }).on_click(move |_, _, app| {
+                app.write_to_clipboard(ClipboardItem::new_string(to_copy.clone()));
+                let key = copy_key.clone();
+                state_copy.update(app, |s, cx| s.mark_copied(key, cx));
+            }),
+        );
+    div()
+        .group(group)
+        .flex()
+        .flex_col()
+        .items_end()
+        .gap(px(2.))
+        .child(
+            div()
+                .max_w(relative(0.85))
+                .px(t.space.md + px(2.))
+                .py(t.space.sm + px(2.))
+                .bg(t.colors.surface)
+                .border_1()
+                .border_color(t.colors.border)
+                .rounded(t.radius.card)
+                .text_size(t.text.body_sm)
+                .line_height(relative(t.size.line_height_chat))
+                .child(text.clone()),
+        )
+        .child(actions)
+        .into_any_element()
 }
 
 /// The head of a turn: Forge's mark and name. The mark breathes while the

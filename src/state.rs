@@ -7,7 +7,7 @@
 //! assistant turns made of blocks. A tool call is one row with its input and
 //! output; its status colours the turn's timeline dot.
 
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use gpui::{Context, SharedString, Task};
 
@@ -112,7 +112,7 @@ pub enum Block {
 
 #[derive(Clone, Debug)]
 pub enum Message {
-    User { text: SharedString },
+    User { text: SharedString, sent: SystemTime },
     Assistant { blocks: Vec<Block> },
     /// The end of a turn: how long it took and what it cost.
     TurnEnd { seconds: f32, cost: f32 },
@@ -243,6 +243,8 @@ pub struct AppState {
     pub context_used: f32,
     /// The reply being played, if any. Dropping it stops the reply.
     reply: Option<Task<()>>,
+    /// Text for the composer to take (an edited message).
+    pub draft: Option<String>,
     /// When the current turn started (for the working line's timer).
     pub turn_started: Option<std::time::Instant>,
     next_id: usize,
@@ -280,6 +282,7 @@ impl AppState {
             context_used: 0.31,
             reply: None,
             turn_started: None,
+            draft: None,
             next_id,
         }
     }
@@ -328,6 +331,38 @@ impl AppState {
         self.onboarding = false;
         cx.notify();
         Ok(())
+    }
+
+    /// Run the reply to one of your messages again: the conversation goes
+    /// back to that message, and Forge answers it afresh.
+    pub fn retry(&mut self, chat: usize, msg: usize, cx: &mut Context<Self>) {
+        let Some(text) = self.take_from(chat, msg, cx) else { return };
+        self.send(text, cx);
+    }
+
+    /// Edit one of your messages: the conversation goes back to before it,
+    /// and its text waits in the composer to be changed and sent.
+    pub fn edit(&mut self, chat: usize, msg: usize, cx: &mut Context<Self>) {
+        if let Some(text) = self.take_from(chat, msg, cx) {
+            self.draft = Some(text);
+            cx.notify();
+        }
+    }
+
+    /// Cut the chat back to before message `msg` (one of yours), returning
+    /// its text. Stops a reply in progress first.
+    fn take_from(&mut self, chat: usize, msg: usize, cx: &mut Context<Self>) -> Option<String> {
+        if self.busy() {
+            self.reply = None;
+            self.turn_started = None;
+        }
+        let c = self.chat_mut(chat)?;
+        let Some(Message::User { text, .. }) = c.messages.get(msg) else { return None };
+        let text = text.to_string();
+        c.messages.truncate(msg);
+        c.version += 1;
+        cx.notify();
+        Some(text)
     }
 
     pub fn mark_copied(&mut self, key: SharedString, cx: &mut Context<Self>) {
@@ -451,7 +486,7 @@ impl AppState {
             }
         };
         if let Some(c) = self.chat_mut(id) {
-            c.messages.push(Message::User { text: text.clone().into() });
+            c.messages.push(Message::User { text: text.clone().into(), sent: SystemTime::now() });
             c.minutes_ago = 0;
             c.version += 1;
         }
@@ -638,9 +673,13 @@ fn script(prompt: &str) -> Vec<Step> {
 
 // ---------------------------------------------------------------- mock chats
 
+fn minutes_ago(minutes: u32) -> SystemTime {
+    SystemTime::now() - Duration::from_secs(minutes as u64 * 60)
+}
+
 fn mock_chats() -> Vec<Chat> {
     let rich = vec![
-        Message::User { text: "Fix the greeting in src/main.rs so it says Hello, Forge, and add a test for it.".into() },
+        Message::User { text: "Fix the greeting in src/main.rs so it says Hello, Forge, and add a test for it.".into(), sent: minutes_ago(9) },
         Message::Assistant {
             blocks: vec![
                 Block::Thinking {
@@ -686,7 +725,7 @@ fn mock_chats() -> Vec<Chat> {
             )],
         },
         Message::TurnEnd { seconds: 18.4, cost: 0.0412 },
-        Message::User { text: "Can you also check the hermes review pipeline for unused imports?".into() },
+        Message::User { text: "Can you also check the hermes review pipeline for unused imports?".into(), sent: minutes_ago(4) },
         Message::Assistant {
             blocks: vec![
                 Block::Tool(ToolCall { kind: ToolKind::Web, target: "https://eslint.org/docs/latest/rules/no-unused-vars".into(), note: None, status: ToolStatus::Done, output: "no-unused-vars: disallow unused variables, including imports.".into(), diff: vec![], open: false, full: false }),
@@ -698,21 +737,21 @@ fn mock_chats() -> Vec<Chat> {
         },
         Message::TurnEnd { seconds: 6.1, cost: 0.0087 },
     ];
-    let simple = |title: &str| {
+    let simple = |title: &str, minutes: u32| {
         vec![
-            Message::User { text: title.to_string().into() },
+            Message::User { text: title.to_string().into(), sent: minutes_ago(minutes) },
             Message::Assistant { blocks: vec![Block::Text(format!("This is an older conversation about *{}*.", title.to_lowercase()).into())] },
             Message::TurnEnd { seconds: 3.2, cost: 0.004 },
         ]
     };
     let mut chats = vec![
         Chat { id: 1, title: "Fix the greeting and add a test".into(), minutes_ago: 4, pinned: true, messages: rich, version: 0 },
-        Chat { id: 2, title: "Explain the hermes review pipeline".into(), minutes_ago: 120, pinned: false, messages: simple("Explain the hermes review pipeline"), version: 0 },
-        Chat { id: 3, title: "Speed up the session store".into(), minutes_ago: 300, pinned: false, messages: simple("Speed up the session store"), version: 0 },
-        Chat { id: 4, title: "Write a README for the CLI".into(), minutes_ago: 1500, pinned: false, messages: simple("Write a README for the CLI"), version: 0 },
-        Chat { id: 5, title: "Why does cargo test hang on Windows?".into(), minutes_ago: 1800, pinned: false, messages: simple("Why does cargo test hang on Windows?"), version: 0 },
-        Chat { id: 6, title: "Migrate settings to the new schema".into(), minutes_ago: 5000, pinned: false, messages: simple("Migrate settings to the new schema"), version: 0 },
-        Chat { id: 7, title: "Genesis redesign: landing page".into(), minutes_ago: 20000, pinned: false, messages: simple("Genesis redesign: landing page"), version: 0 },
+        Chat { id: 2, title: "Explain the hermes review pipeline".into(), minutes_ago: 120, pinned: false, messages: simple("Explain the hermes review pipeline", 120), version: 0 },
+        Chat { id: 3, title: "Speed up the session store".into(), minutes_ago: 300, pinned: false, messages: simple("Speed up the session store", 300), version: 0 },
+        Chat { id: 4, title: "Write a README for the CLI".into(), minutes_ago: 1500, pinned: false, messages: simple("Write a README for the CLI", 1500), version: 0 },
+        Chat { id: 5, title: "Why does cargo test hang on Windows?".into(), minutes_ago: 1800, pinned: false, messages: simple("Why does cargo test hang on Windows?", 1800), version: 0 },
+        Chat { id: 6, title: "Migrate settings to the new schema".into(), minutes_ago: 5000, pinned: false, messages: simple("Migrate settings to the new schema", 5000), version: 0 },
+        Chat { id: 7, title: "Genesis redesign: landing page".into(), minutes_ago: 20000, pinned: false, messages: simple("Genesis redesign: landing page", 20000), version: 0 },
     ];
     chats.sort_by_key(|c| (!c.pinned, c.minutes_ago));
     chats
