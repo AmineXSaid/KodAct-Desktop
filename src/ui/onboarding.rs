@@ -3,11 +3,14 @@
 //! command palette ("Change your name") with the current name filled in.
 
 use gpui::component::input::{Input, InputEvent, InputState};
-use gpui::{div, prelude::*, px, relative, Context, Entity, FontWeight, IntoElement, Render, Subscription, Window};
+use std::time::Duration;
+
+use gpui::{div, point, prelude::*, px, relative, Animation, AnimationExt, BoxShadow, Context, Entity, FontWeight, IntoElement, Render, Subscription, Window};
 
 use super::mark::mark;
 use crate::state::AppState;
-use crate::theme::{self, ActiveTheme};
+use super::{icon, shortcut};
+use crate::theme::ActiveTheme;
 
 pub struct Onboarding {
     state: Entity<AppState>,
@@ -56,63 +59,146 @@ impl Render for Onboarding {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let returning = self.state.read(cx).user_name.is_some();
+        let empty = self.input.read(cx).value().trim().is_empty();
+        let hover = t.colors.primary_hover;
+        let glow = t.colors.sky;
+
+        // The cube floats over its shadow; a faint crystal glow sits behind it.
+        let float = Duration::from_millis(3200);
+        let cube = div()
+            .relative()
+            .size(px(96.))
+            .child(
+                div()
+                    .absolute()
+                    .top(px(28.))
+                    .left(px(28.))
+                    .size(px(40.))
+                    .rounded(t.radius.pill)
+                    .shadow(vec![BoxShadow { color: glow.opacity(if t.is_dark { 0.35 } else { 0.28 }), offset: point(px(0.), px(0.)), blur_radius: px(48.), spread_radius: px(14.), inset: false }]),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .left(px(0.))
+                    .child(mark(&t, px(96.)))
+                    .with_animation("cube-float", Animation::new(float).repeat().with_easing(gpui::ease_in_out), |d, delta| {
+                        d.top(px(-4. * (1. - (delta * 2. - 1.).abs())))
+                    }),
+            );
+        let shadow = div()
+            .w(px(56.))
+            .h(px(6.))
+            .rounded(t.radius.pill)
+            .shadow(vec![BoxShadow { color: t.colors.midnight.opacity(if t.is_dark { 0.5 } else { 0.18 }), offset: point(px(0.), px(0.)), blur_radius: px(10.), spread_radius: px(0.), inset: false }])
+            .with_animation("cube-shadow", Animation::new(float).repeat().with_easing(gpui::ease_in_out), |d, delta| {
+                d.opacity(1. - 0.35 * (1. - (delta * 2. - 1.).abs()))
+            });
+
+        let field = div()
+            .w_full()
+            .h(px(52.))
+            .pl(t.space.lg)
+            .pr(px(8.))
+            .flex()
+            .items_center()
+            .gap(t.space.sm)
+            .rounded(t.radius.card)
+            .bg(t.colors.surface)
+            .border_1()
+            .border_color(if self.error.is_some() { t.extra.danger } else { t.colors.border })
+            .text_size(t.text.body)
+            .child(div().flex_1().child(Input::new(&self.input).appearance(false)))
+            .child(
+                div()
+                    .id("onboarding-continue")
+                    .size(px(36.))
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(t.radius.button)
+                    .bg(if empty { t.colors.hover } else { t.colors.primary })
+                    .when(!empty, |d| d.cursor_pointer().hover(move |s| s.bg(hover)))
+                    .child(icon("icons/arrow-right.svg", t.size.icon, if empty { t.colors.text_subtle } else { t.colors.primary_fg }))
+                    .on_click(cx.listener(|this, _, window, cx| this.submit(window, cx))),
+            );
+
         div().flex_1().flex().items_center().justify_center().bg(t.colors.canvas).pb(t.space.xxl * 2.).child(
-            theme::card(&t)
-                .w(px(440.))
-                .p(t.space.xxl)
+            div()
+                .w(px(480.))
                 .flex()
                 .flex_col()
                 .items_center()
-                .gap(t.space.lg)
-                .child(mark(&t, px(64.)))
+                .child(cube)
+                .child(div().mt(t.space.md).child(shadow))
                 .child(
                     div()
-                        .text_center()
-                        .text_size(t.text.heading_sm + px(2.))
+                        .mt(t.space.xl + t.space.sm)
+                        .text_size(t.text.caption)
                         .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(t.colors.text_strong)
-                        .child(if returning { "What should Forge call you?" } else { "Welcome to Forge" }),
+                        .text_color(t.colors.primary)
+                        .child(if returning { "YOUR NAME" } else { "WELCOME TO FORGE" }),
                 )
                 .child(
                     div()
+                        .mt(t.space.sm)
                         .text_center()
                         .font_family(t.font_serif.clone())
-                        .text_size(t.text.body + px(1.))
-                        .line_height(relative(1.56))
-                        .text_color(t.colors.text_body)
-                        .child("Your workshop for building with AI. Before we start, what should we call you?"),
+                        .text_size(t.size.display - px(8.))
+                        .line_height(relative(1.15))
+                        .text_color(t.colors.text_strong)
+                        .child(if returning { "What should we call you now?" } else { "Hello. What should we call you?" }),
                 )
                 .child(
                     div()
-                        .w_full()
-                        .flex()
-                        .flex_col()
-                        .gap(t.space.sm)
-                        .pt(t.space.sm)
-                        .child(
-                            div()
-                                .w_full()
-                                .px(t.space.md)
-                                .py(t.space.xs)
-                                .rounded(t.radius.button)
-                                .border_1()
-                                .border_color(if self.error.is_some() { t.extra.danger } else { t.colors.border })
-                                .bg(t.colors.surface)
-                                .text_size(t.text.body)
-                                .child(Input::new(&self.input).appearance(false)),
-                        )
-                        .children(self.error.map(|e| div().text_size(t.text.caption).text_color(t.extra.danger).child(e))),
+                        .mt(t.space.md)
+                        .text_center()
+                        .text_size(t.text.body_sm)
+                        .line_height(relative(1.55))
+                        .text_color(t.colors.text_muted)
+                        .child("Forge greets you by name and shows it in the sidebar. It stays on this computer."),
+                )
+                .child(div().mt(t.space.xl).w(px(420.)).child(field))
+                .child(
+                    div()
+                        .mt(t.space.sm)
+                        .h(t.text.caption * 1.6)
+                        .w(px(420.))
+                        .pl(t.space.lg)
+                        .text_size(t.text.caption)
+                        .text_color(t.extra.danger)
+                        .children(self.error),
                 )
                 .child(
-                    theme::primary_button(&t, if returning { "Save" } else { "Continue" })
-                        .id("onboarding-continue")
-                        .w_full()
+                    div()
+                        .mt(t.space.md)
                         .flex()
-                        .justify_center()
-                        .py(t.space.sm)
-                        .on_click(cx.listener(|this, _, window, cx| this.submit(window, cx))),
+                        .items_center()
+                        .gap(t.space.xs)
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_subtle)
+                        .child("Press")
+                        .child(kbd_chip(&t, "Enter"))
+                        .child("to continue · change it later with")
+                        .child(kbd_chip(&t, shortcut("K"))),
                 )
-                .child(div().text_size(t.text.caption).text_color(t.colors.text_subtle).child("You can change it any time from the command palette.")),
+                .with_animation("onboarding-in", Animation::new(Duration::from_millis(t.motion_ms * 2)).with_easing(gpui::ease_out_quint()), |d, delta| {
+                    d.opacity(delta).mt(px(10. * (1. - delta)))
+                }),
         )
     }
+}
+
+/// A key, drawn as a small chip.
+fn kbd_chip(t: &crate::theme::Theme, label: impl Into<gpui::SharedString>) -> impl IntoElement {
+    div()
+        .px(t.space.xs + px(2.))
+        .rounded(t.radius.small)
+        .border_1()
+        .border_color(t.colors.border)
+        .bg(t.colors.surface)
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(t.colors.text_muted)
+        .child(label.into())
 }
