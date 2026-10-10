@@ -3,6 +3,7 @@
 
 mod assets;
 mod profile;
+mod rules;
 mod state;
 mod theme;
 mod ui;
@@ -22,6 +23,7 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("secondary-/", ToggleModelPicker, None),
         KeyBinding::new("secondary-shift-c", CopyLastReply, None),
         KeyBinding::new("secondary-,", OpenSettings, None),
+        KeyBinding::new("secondary-shift-r", OpenRules, None),
         KeyBinding::new("secondary-q", Quit, None),
         KeyBinding::new("shift-tab", CycleMode, Some("Composer")),
         KeyBinding::new("escape", StopReply, Some("Workspace")),

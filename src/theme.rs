@@ -266,6 +266,8 @@ pub struct Sizes {
     pub dot: Pixels,           // timeline status dot
     pub line_height_chat: f32, // 1.6 for prose
     pub display: Pixels,       // 40: the welcome headline
+    pub rules_list: Pixels,    // 340: the Rules screen's file list
+    pub editor: Pixels,        // 420: a file editor's height
 }
 
 impl Default for Sizes {
@@ -285,6 +287,8 @@ impl Default for Sizes {
             dot: px(7.),
             line_height_chat: 1.6,
             display: px(40.),
+            rules_list: px(340.),
+            editor: px(420.),
         }
     }
 }

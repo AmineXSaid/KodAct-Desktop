@@ -99,6 +99,7 @@ impl CommandPalette {
             act("Focus the composer", "icons/pencil.svg", Some(shortcut("L")), Box::new(FocusComposer)),
             act("Next permission mode", "icons/shield-check.svg", Some("Shift Tab".into()), Box::new(CycleMode)),
             act("Copy the last reply", "icons/copy.svg", Some(shortcut("Shift C")), Box::new(CopyLastReply)),
+            act("Rules and memory", "icons/list-todo.svg", Some(shortcut("Shift R")), Box::new(OpenRules)),
             act("Open settings", "icons/settings.svg", Some(shortcut(",")), Box::new(OpenSettings)),
             act("Change your name", "icons/pencil.svg", None, Box::new(ChangeName)),
             act("Quit", "icons/x.svg", Some(shortcut("Q")), Box::new(Quit)),

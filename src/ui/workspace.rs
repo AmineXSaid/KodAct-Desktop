@@ -12,9 +12,10 @@ use super::chat_view::ChatView;
 use super::command_palette::CommandPalette;
 use super::composer::Composer;
 use super::onboarding::Onboarding;
+use super::rules_view::RulesView;
 use super::sidebar::Sidebar;
 use super::*;
-use crate::state::AppState;
+use crate::state::{AppState, Screen};
 use crate::theme::{self, ActiveTheme};
 
 pub struct Workspace {
@@ -24,6 +25,7 @@ pub struct Workspace {
     composer: Entity<Composer>,
     palette: Entity<CommandPalette>,
     onboarding: Entity<Onboarding>,
+    rules: Entity<RulesView>,
     focus: FocusHandle,
 }
 
@@ -43,8 +45,9 @@ impl Workspace {
         let composer = cx.new(|cx| Composer::new(state.clone(), window, cx));
         let palette = cx.new(|cx| CommandPalette::new(state.clone(), window, cx));
         let onboarding = cx.new(|cx| Onboarding::new(state.clone(), window, cx));
+        let rules = cx.new(|cx| RulesView::new(state.clone(), window, cx));
         let first_run = state.read(cx).onboarding;
-        let ws = Self { state, sidebar, chat, composer, palette, onboarding, focus: cx.focus_handle() };
+        let ws = Self { state, sidebar, chat, composer, palette, onboarding, rules, focus: cx.focus_handle() };
         if first_run {
             ws.onboarding.update(cx, |o, cx| o.open(window, cx));
         } else {
@@ -144,6 +147,7 @@ impl Workspace {
     fn welcome(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let project = self.state.read(cx).project.clone();
+        let where_ = crate::rules::display_path(&self.state.read(cx).project_dir, crate::rules::home_dir().as_deref());
         let name = self.state.read(cx).user_name.clone().unwrap_or_default();
         let composer = self.composer.clone();
         div()
@@ -202,7 +206,7 @@ impl Workspace {
                             .line_height(relative(1.56))
                             .text_color(t.colors.text_body)
                             .pb(t.space.md)
-                            .child(format!("Forge works in ~/dev/{project} and asks before it changes anything.")),
+                            .child(format!("Forge works in {where_} and asks before it changes anything.")),
                     )
                     .child(self.composer.clone())
                     .child(
@@ -250,11 +254,13 @@ impl Render for Workspace {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let s = self.state.read(cx);
-        let (sidebar_open, palette_open, onboarding) = (s.sidebar_open, s.palette_open, s.onboarding);
+        let (sidebar_open, palette_open, onboarding, screen) = (s.sidebar_open, s.palette_open, s.onboarding, s.screen);
         let empty = s.chat().is_none_or(|c| c.messages.is_empty());
 
         let main = div().flex_1().min_w_0().flex().flex_col().bg(t.colors.canvas);
-        let main = if empty {
+        let main = if screen == Screen::Rules {
+            main.child(self.rules.clone())
+        } else if empty {
             main.child(self.welcome(cx))
         } else {
             main.child(self.chat.clone()).child(
@@ -356,6 +362,15 @@ impl Render for Workspace {
                     cx.notify();
                 });
                 this.onboarding.update(cx, |o, cx| o.open(window, cx));
+            }))
+            .on_action(cx.listener(|this, _: &OpenRules, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.screen = Screen::Rules;
+                    s.palette_open = false;
+                    s.picker_open = false;
+                    cx.notify();
+                });
+                this.rules.update(cx, |r, cx| r.reload(cx));
             }))
             .on_action(cx.listener(|_, _: &Quit, _, cx| cx.quit()))
             .child(self.title_bar(cx))

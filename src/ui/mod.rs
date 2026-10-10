@@ -7,6 +7,7 @@ pub mod hammer;
 pub mod markdown;
 pub mod message;
 pub mod onboarding;
+pub mod rules_view;
 pub mod sidebar;
 pub mod workspace;
 
@@ -28,6 +29,7 @@ gpui::actions!(
         OpenSettings,
         CopyLastReply,
         ChangeName,
+        OpenRules,
         Quit,
     ]
 );

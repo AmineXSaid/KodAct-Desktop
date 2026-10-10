@@ -173,6 +173,14 @@ pub const MODELS: &[Model] = &[
     Model { id: "ollama/gpt-oss:20b", name: "gpt-oss 20b", provider: "Ollama on this PC", note: "Local, private", context: "128k" },
 ];
 
+/// What fills the main area.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Screen {
+    Chat,
+    /// What Claude Code reads in this project, and when (`ui/rules_view.rs`).
+    Rules,
+}
+
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Mode {
     Ask,
@@ -220,7 +228,11 @@ pub struct AppState {
     pub user_name: Option<SharedString>,
     /// The first-run screen is showing (also reopened to change the name).
     pub onboarding: bool,
+    /// The project's folder name, shown in the title bar.
     pub project: SharedString,
+    /// The project's folder: `FORGE_PROJECT_DIR`, else where Forge started.
+    pub project_dir: std::path::PathBuf,
+    pub screen: Screen,
     pub branch: SharedString,
     pub chats: Vec<Chat>,
     pub current: Option<usize>,
@@ -251,10 +263,16 @@ impl AppState {
         let chats = mock_chats();
         let next_id = chats.len() + 1;
         let user_name: Option<SharedString> = crate::profile::load_name().map(Into::into);
+        let project_dir = std::env::var_os("FORGE_PROJECT_DIR")
+            .map(std::path::PathBuf::from)
+            .or_else(|| std::env::current_dir().ok())
+            .unwrap_or_default();
         Self {
             onboarding: user_name.is_none(),
             user_name,
-            project: "kryptonite".into(),
+            project: project_dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "project".into()).into(),
+            project_dir,
+            screen: Screen::Chat,
             branch: "fix/hermes_upgrade".into(),
             current: Some(chats[0].id),
             chats,
@@ -290,12 +308,14 @@ impl AppState {
 
     pub fn open_chat(&mut self, id: usize, cx: &mut Context<Self>) {
         self.stop(cx);
+        self.screen = Screen::Chat;
         self.current = Some(id);
         cx.notify();
     }
 
     pub fn new_chat(&mut self, cx: &mut Context<Self>) {
         self.stop(cx);
+        self.screen = Screen::Chat;
         self.current = None;
         cx.notify();
     }

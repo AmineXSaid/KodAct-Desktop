@@ -5,7 +5,7 @@ use gpui::component::input::{Input, InputEvent, InputState};
 use gpui::{div, prelude::*, px, Context, Entity, FontWeight, IntoElement, Render, SharedString, Subscription, Window};
 
 use super::*;
-use crate::state::AppState;
+use crate::state::{AppState, Screen};
 use crate::theme::ActiveTheme;
 
 pub struct Sidebar {
@@ -42,6 +42,7 @@ impl Render for Sidebar {
         let q = s.search.to_lowercase();
         let name: SharedString = s.user_name.clone().unwrap_or_else(|| "Welcome".into());
         let hover = t.colors.hover;
+        let rules_open = s.screen == Screen::Rules;
 
         let mut list = div().id("chat-list").flex_1().min_h_0().overflow_y_scroll().px(t.space.sm).pb(t.space.md);
         let mut any = false;
@@ -63,7 +64,7 @@ impl Render for Sidebar {
             );
             for c in rows {
                 let id = c.id;
-                let selected = s.current == Some(id);
+                let selected = s.screen == Screen::Chat && s.current == Some(id);
                 let pinned = c.pinned;
                 let state = self.state.clone();
                 let state_pin = self.state.clone();
@@ -162,6 +163,24 @@ impl Render for Sidebar {
                             .rounded(t.radius.button)
                             .child(icon("icons/search.svg", t.size.icon_sm, t.colors.text_subtle))
                             .child(div().flex_1().child(Input::new(&self.search).appearance(false).cleanable(true))),
+                    )
+                    .child(
+                        div()
+                            .id("nav-rules")
+                            .flex()
+                            .items_center()
+                            .gap(t.space.sm)
+                            .h(t.size.row)
+                            .px(t.space.md)
+                            .rounded(t.radius.button)
+                            .cursor_pointer()
+                            .text_color(if rules_open { t.colors.text_strong } else { t.colors.text_muted })
+                            .when(rules_open, |d| d.bg(t.extra.selected).border_1().border_color(t.colors.border).font_weight(FontWeight::MEDIUM))
+                            .when(!rules_open, |d| d.hover(move |st| st.bg(hover)))
+                            .child(icon("icons/list-todo.svg", t.size.icon_sm, if rules_open { t.colors.text_strong } else { t.colors.text_subtle }))
+                            .child(div().flex_1().child("Rules and memory"))
+                            .child(kbd(&t, shortcut("Shift R")))
+                            .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenRules), cx)),
                     ),
             )
             .child(list)

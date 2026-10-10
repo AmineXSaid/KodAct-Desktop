@@ -12,6 +12,9 @@ publish = false
 # and GPUI's macros resolve through it.
 gpui = { package = "gpui-kit", version = "=0.7.1" }
 pulldown-cmark = { version = "0.13", default-features = false }
+# The Rules screen: rule globs, and walking a project the way git sees it.
+globset = "=0.4.20"
+ignore = "=0.4.33"
 
 [profile.dev]
 # GPUI is heavy in debug; optimise dependencies, keep our crate fast to build.
