@@ -18,6 +18,8 @@ pub enum ToolStatus {
     Running,
     Done,
     Failed,
+    /// You said no when Forge asked, so it never ran.
+    Declined,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -33,6 +35,9 @@ pub enum ToolKind {
 impl ToolKind {
     /// The verb Forge shows: present tense while running, past when done.
     pub fn verb(self, status: ToolStatus) -> &'static str {
+        if status == ToolStatus::Declined {
+            return "Skipped";
+        }
         let running = status == ToolStatus::Running;
         match (self, running) {
             (ToolKind::Read, true) => "Reading",
@@ -511,8 +516,8 @@ impl AppState {
             (Step::Ask(title, detail), Some(blocks)) => blocks.push(Block::Permission { title: title.into(), detail: detail.into(), verdict: Verdict::Pending }),
             (Step::Denied, Some(blocks)) => {
                 if let Some(Block::Tool(t)) = blocks.iter_mut().rev().find(|b| matches!(b, Block::Tool(_))) {
-                    t.status = ToolStatus::Failed;
-                    t.output = "The user declined this edit.".into();
+                    t.status = ToolStatus::Declined;
+                    t.output = "You declined this edit.".into();
                 }
                 blocks.push(Block::Text("Understood, I won't change the file. Tell me how you'd like to proceed.".into()));
             }

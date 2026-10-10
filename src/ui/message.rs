@@ -72,6 +72,7 @@ fn dot_color(status: Option<ToolStatus>, t: &Theme) -> Hsla {
     match status {
         Some(ToolStatus::Done) => t.extra.success,
         Some(ToolStatus::Failed) => t.extra.danger,
+        Some(ToolStatus::Declined) => t.colors.text_subtle,
         Some(ToolStatus::Running) => t.colors.sky,
         None => t.colors.text_subtle,
     }
@@ -166,6 +167,7 @@ fn status_icon(status: ToolStatus, t: &Theme) -> AnyElement {
             .into_any_element(),
         ToolStatus::Done => icon("icons/circle-check.svg", t.size.icon_sm, t.extra.success).into_any_element(),
         ToolStatus::Failed => icon("icons/circle-x.svg", t.size.icon_sm, t.extra.danger).into_any_element(),
+        ToolStatus::Declined => icon("icons/circle-slash.svg", t.size.icon_sm, t.colors.text_subtle).into_any_element(),
     }
 }
 
