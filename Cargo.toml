@@ -1,0 +1,20 @@
+[package]
+name = "forge-gpui"
+version = "0.1.0"
+edition = "2021"
+description = "Forge: a desktop chat shell for Claude Code, in GPUI (UI only, mock data)."
+license = "UNLICENSED"
+publish = false
+
+[dependencies]
+# GPUI Kit (Apache-2.0) re-exports its pinned GPUI snapshot (`gpui-pre` 0.3.8)
+# and gpui-component. Aliased as `gpui`, as its README advises, so `use gpui::...`
+# and GPUI's macros resolve through it.
+gpui = { package = "gpui-kit", version = "=0.7.1" }
+pulldown-cmark = { version = "0.13", default-features = false }
+
+[profile.dev]
+# GPUI is heavy in debug; optimise dependencies, keep our crate fast to build.
+opt-level = 0
+[profile.dev.package."*"]
+opt-level = 2
