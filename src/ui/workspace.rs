@@ -185,8 +185,14 @@ impl Workspace {
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(t.colors.text_strong)
                             .child("What should we build in")
-                            .child(div().px(t.space.md).rounded(t.radius.pill).bg(t.extra.highlight).child(project.clone()))
-                            .child("?"),
+                            // The pill and the "?" wrap together.
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .child(div().px(t.space.md).rounded(t.radius.pill).bg(t.extra.highlight).child(project.clone()))
+                                    .child("?"),
+                            ),
                     )
                     .child(
                         div()

@@ -61,12 +61,12 @@ impl CommandPalette {
         let query = cx.new(|cx| InputState::new(window, cx).placeholder("Search commands, chats, models…"));
         let subs = vec![
             cx.observe(&state, |_, _, cx| cx.notify()),
-            cx.subscribe_in(&query, window, |this, _, ev: &InputEvent, window, cx| match ev {
+            cx.subscribe_in(&query, window, |this, _, ev: &InputEvent, _, cx| match ev {
                 InputEvent::Change => {
                     this.selected = 0;
                     cx.notify();
                 }
-                InputEvent::PressEnter { .. } => this.run(window, cx),
+                // Enter is handled once, in the key capture below.
                 _ => {}
             }),
         ];
@@ -232,6 +232,7 @@ impl Render for CommandPalette {
             .bg(t.extra.scrim)
             .flex()
             .justify_center()
+            .items_start()
             .pt(t.size.titlebar * 3.)
             .key_context("CommandPalette")
             .capture_key_down(cx.listener(move |this, ev: &KeyDownEvent, window, cx| {
