@@ -3,7 +3,7 @@
 
 use gpui::component::input::{Input, InputEvent, InputState};
 use gpui::{
-    div, font, prelude::*, px, Action, Context, Entity, FontWeight, IntoElement, KeyDownEvent, Render, SharedString,
+    div, font, prelude::*, px, Action, AnimationExt, Context, Entity, FontWeight, IntoElement, KeyDownEvent, Render, SharedString,
     StyledText, Subscription, TextRun, Window,
 };
 
@@ -100,6 +100,7 @@ impl CommandPalette {
             act("Next permission mode", "icons/shield-check.svg", Some("Shift Tab".into()), Box::new(CycleMode)),
             act("Copy the last reply", "icons/copy.svg", Some(shortcut("Shift C")), Box::new(CopyLastReply)),
             act("Open settings", "icons/settings.svg", Some(shortcut(",")), Box::new(OpenSettings)),
+            act("Change your name", "icons/pencil.svg", None, Box::new(ChangeName)),
             act("Quit", "icons/x.svg", Some(shortcut("Q")), Box::new(Quit)),
         ];
         if s.busy() {
@@ -223,6 +224,7 @@ impl Render for CommandPalette {
             list = list.child(div().px(t.space.md).py(t.space.lg).text_color(t.colors.text_subtle).child("Nothing matches."));
         }
 
+        let fade = std::time::Duration::from_millis(t.motion_ms);
         div()
             .id("palette-scrim")
             .absolute()
@@ -288,7 +290,8 @@ impl Render for CommandPalette {
                             .child("Esc close")
                             .child(div().flex_1())
                             .child(format!("{count} result{}", if count == 1 { "" } else { "s" })),
-                    ),
+                    )
+                    .with_animation("palette-in", gpui::Animation::new(fade).with_easing(gpui::ease_in_out), |d, delta| d.opacity(delta)),
             )
     }
 }

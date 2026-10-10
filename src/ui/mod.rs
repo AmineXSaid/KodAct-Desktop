@@ -3,8 +3,10 @@
 pub mod chat_view;
 pub mod command_palette;
 pub mod composer;
+pub mod hammer;
 pub mod markdown;
 pub mod message;
+pub mod onboarding;
 pub mod sidebar;
 pub mod workspace;
 
@@ -25,6 +27,7 @@ gpui::actions!(
         StopReply,
         OpenSettings,
         CopyLastReply,
+        ChangeName,
         Quit,
     ]
 );

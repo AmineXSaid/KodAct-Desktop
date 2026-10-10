@@ -161,9 +161,9 @@ pub struct Model {
 }
 
 pub const MODELS: &[Model] = &[
-    Model { id: "opus", name: "Opus 5.5", provider: "Claude account", note: "Most capable, for complex work", context: "200k" },
-    Model { id: "sonnet", name: "Sonnet 5.5", provider: "Claude account", note: "Fast and capable", context: "1M" },
-    Model { id: "haiku", name: "Haiku 5.5", provider: "Claude account", note: "Fastest, for quick answers", context: "200k" },
+    Model { id: "opus", name: "Opus 5.5", provider: "Anthropic", note: "Most capable, for complex work", context: "200k" },
+    Model { id: "sonnet", name: "Sonnet 5.5", provider: "Anthropic", note: "Fast and capable", context: "1M" },
+    Model { id: "haiku", name: "Haiku 5.5", provider: "Anthropic", note: "Fastest, for quick answers", context: "200k" },
     Model { id: "openrouter/qwen/qwen3-coder", name: "Qwen3 Coder", provider: "OpenRouter", note: "Open weights, tool calling", context: "262k" },
     Model { id: "ollama/gpt-oss:20b", name: "gpt-oss 20b", provider: "Ollama on this PC", note: "Local, private", context: "128k" },
 ];
@@ -211,6 +211,10 @@ impl Mode {
 // ---------------------------------------------------------------- the state
 
 pub struct AppState {
+    /// What Forge calls the person; None until the first-run screen sets it.
+    pub user_name: Option<SharedString>,
+    /// The first-run screen is showing (also reopened to change the name).
+    pub onboarding: bool,
     pub project: SharedString,
     pub branch: SharedString,
     pub chats: Vec<Chat>,
@@ -241,7 +245,10 @@ impl AppState {
     pub fn new() -> Self {
         let chats = mock_chats();
         let next_id = chats.len() + 1;
+        let user_name: Option<SharedString> = crate::profile::load_name().map(Into::into);
         Self {
+            onboarding: user_name.is_none(),
+            user_name,
             project: "kryptonite".into(),
             branch: "fix/hermes_upgrade".into(),
             current: Some(chats[0].id),
@@ -293,6 +300,19 @@ impl AppState {
             c.pinned = !c.pinned;
         }
         cx.notify();
+    }
+
+    /// Save the name from the first-run screen. Returns an error to show.
+    pub fn set_user_name(&mut self, name: &str, cx: &mut Context<Self>) -> Result<(), &'static str> {
+        let name = crate::profile::clean(name).ok_or("Type a name first.")?;
+        if crate::profile::save_name(&name).is_err() {
+            // Still usable for this run; the next launch asks again.
+            self.show_toast("Your name could not be saved; Forge will ask again next time.", cx);
+        }
+        self.user_name = Some(name.into());
+        self.onboarding = false;
+        cx.notify();
+        Ok(())
     }
 
     pub fn mark_copied(&mut self, key: SharedString, cx: &mut Context<Self>) {
@@ -378,7 +398,7 @@ impl AppState {
                         }
                     }
                 }
-                c.messages.push(Message::Notice { text: "Interrupted. Tell Claude what to do instead.".into(), error: false });
+                c.messages.push(Message::Notice { text: "Interrupted. Tell Forge what to do instead.".into(), error: false });
                 c.version += 1;
             }
         }
@@ -637,6 +657,8 @@ fn mock_chats() -> Vec<Chat> {
         Message::User { text: "Can you also check the hermes review pipeline for unused imports?".into() },
         Message::Assistant {
             blocks: vec![
+                Block::Tool(ToolCall { kind: ToolKind::Web, target: "https://eslint.org/docs/latest/rules/no-unused-vars".into(), note: None, status: ToolStatus::Done, output: "no-unused-vars: disallow unused variables, including imports.".into(), diff: vec![], open: false }),
+                Block::Tool(ToolCall { kind: ToolKind::Write, target: "docs/lint-notes.md".into(), note: None, status: ToolStatus::Done, output: "".into(), diff: diff(&[(DiffKind::Add, "# Lint notes"), (DiffKind::Add, ""), (DiffKind::Add, "Run `pnpm lint --filter hermes` before pushing.")]), open: false }),
                 Block::Tool(ToolCall { kind: ToolKind::Search, target: "^use .*;$ in src/hermes".into(), note: None, status: ToolStatus::Done, output: "src/hermes/review.ts:3\nsrc/hermes/store.ts:1".into(), diff: vec![], open: false }),
                 Block::Tool(ToolCall { kind: ToolKind::Bash, target: "pnpm lint --filter hermes".into(), note: Some("Lint the package".into()), status: ToolStatus::Failed, output: "src/hermes/review.ts\n  3:10  error  'diffLines' is defined but never used\n\n✖ 1 problem (1 error, 0 warnings)".into(), diff: vec![], open: true }),
                 Block::Text("One unused import: `diffLines` in `src/hermes/review.ts`. Want me to remove it?".into()),

@@ -5,7 +5,7 @@
 
 use gpui::component::input::{InputEvent, Textarea, TextareaState};
 use gpui::{
-    div, prelude::*, px, relative, Context, Entity, FontWeight, IntoElement, Render, SharedString,
+    div, prelude::*, px, relative, AnimationExt, Context, Entity, FontWeight, IntoElement, Render, SharedString,
     Subscription, Window,
 };
 
@@ -24,7 +24,7 @@ impl Composer {
         let t = cx.theme().clone();
         // The tallest the input grows, in lines of chat text.
         let max_rows = (f32::from(t.size.composer_max) / (f32::from(t.text.body) * 1.5)).floor().max(2.) as usize;
-        let input = cx.new(|cx| TextareaState::new(window, cx).auto_grow(1, max_rows).placeholder("Reply to Claude… (@ to mention a file)").submit_on_enter(true));
+        let input = cx.new(|cx| TextareaState::new(window, cx).auto_grow(1, max_rows).placeholder("Ask Forge anything… (@ to mention a file)").submit_on_enter(true));
         let subs = vec![
             cx.observe(&state, |_, _, cx| cx.notify()),
             cx.subscribe_in(&input, window, |this, _, ev: &InputEvent, window, cx| match ev {
@@ -65,7 +65,7 @@ impl Composer {
         self.input.update(cx, |i, cx| i.set_value("", window, cx));
     }
 
-    fn model_picker(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn model_picker(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let t = cx.theme().clone();
         let current = self.state.read(cx).model;
         let hover = t.colors.hover;
@@ -103,7 +103,8 @@ impl Composer {
                             .flex()
                             .flex_col()
                             .child(div().child(m.name))
-                            .child(div().text_size(t.text.caption).text_color(t.colors.text_subtle).child(m.note)),
+                            .child(div().text_size(t.text.caption).text_color(t.colors.text_subtle).child(m.note))
+                            .child(div().text_size(t.text.caption - px(1.)).font_family(t.font_mono.clone()).text_color(t.colors.text_subtle).child(m.id)),
                     )
                     .child(div().text_size(t.text.caption).font_family(t.font_mono.clone()).text_color(t.colors.text_subtle).child(m.context))
                     .child(div().w(t.size.icon).when(i == current, |d| d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.primary))))
@@ -116,6 +117,7 @@ impl Composer {
                     }),
             );
         }
+        let fade = std::time::Duration::from_millis(t.motion_ms);
         theme::popover(&t)
             .absolute()
             .bottom(t.size.control + t.space.md)
@@ -137,6 +139,7 @@ impl Composer {
                     .child("Providers are set up in Settings")
                     .child(shortcut("/")),
             )
+            .with_animation("picker-in", gpui::Animation::new(fade).with_easing(gpui::ease_in_out), |d, delta| d.opacity(delta))
     }
 }
 

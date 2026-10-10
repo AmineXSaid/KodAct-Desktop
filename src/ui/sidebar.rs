@@ -40,6 +40,7 @@ impl Render for Sidebar {
         let t = cx.theme().clone();
         let s = self.state.read(cx);
         let q = s.search.to_lowercase();
+        let name: SharedString = s.user_name.clone().unwrap_or_else(|| "Welcome".into());
         let hover = t.colors.hover;
 
         let mut list = div().id("chat-list").flex_1().min_h_0().overflow_y_scroll().px(t.space.sm).pb(t.space.md);
@@ -180,22 +181,14 @@ impl Render for Sidebar {
                             .rounded(t.radius.button)
                             .cursor_pointer()
                             .hover(move |st| st.bg(hover))
-                            .child(
-                                div()
-                                    .size(t.size.control)
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .rounded(t.radius.button)
-                                    .bg(t.colors.primary_tint)
-                                    .child(icon("icons/sparkles.svg", t.size.icon_sm, t.colors.primary)),
-                            )
+                            .child(super::hammer::hammer(&t, t.size.control))
                             .child(
                                 div()
                                     .flex_1()
+                                    .min_w_0()
                                     .flex()
                                     .flex_col()
-                                    .child(div().font_weight(FontWeight::MEDIUM).child("Claude account"))
+                                    .child(div().font_weight(FontWeight::MEDIUM).text_color(t.colors.text_strong).overflow_hidden().whitespace_nowrap().text_ellipsis().child(name))
                                     .child(div().text_size(t.text.caption).text_color(t.colors.text_subtle).child("Settings and providers")),
                             )
                             .child(icon("icons/settings.svg", t.size.icon, t.colors.text_subtle))

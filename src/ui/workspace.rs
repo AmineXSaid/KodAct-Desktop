@@ -11,6 +11,7 @@ use gpui::{
 use super::chat_view::ChatView;
 use super::command_palette::CommandPalette;
 use super::composer::Composer;
+use super::onboarding::Onboarding;
 use super::sidebar::Sidebar;
 use super::*;
 use crate::state::AppState;
@@ -22,6 +23,7 @@ pub struct Workspace {
     chat: Entity<ChatView>,
     composer: Entity<Composer>,
     palette: Entity<CommandPalette>,
+    onboarding: Entity<Onboarding>,
     focus: FocusHandle,
 }
 
@@ -40,8 +42,14 @@ impl Workspace {
         let chat = cx.new(|cx| ChatView::new(state.clone(), cx));
         let composer = cx.new(|cx| Composer::new(state.clone(), window, cx));
         let palette = cx.new(|cx| CommandPalette::new(state.clone(), window, cx));
-        let ws = Self { state, sidebar, chat, composer, palette, focus: cx.focus_handle() };
-        ws.composer.update(cx, |c, cx| c.focus(window, cx));
+        let onboarding = cx.new(|cx| Onboarding::new(state.clone(), window, cx));
+        let first_run = state.read(cx).onboarding;
+        let ws = Self { state, sidebar, chat, composer, palette, onboarding, focus: cx.focus_handle() };
+        if first_run {
+            ws.onboarding.update(cx, |o, cx| o.open(window, cx));
+        } else {
+            ws.composer.update(cx, |c, cx| c.focus(window, cx));
+        }
         ws
     }
 
@@ -136,6 +144,7 @@ impl Workspace {
     fn welcome(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let project = self.state.read(cx).project.clone();
+        let name = self.state.read(cx).user_name.clone().unwrap_or_default();
         let composer = self.composer.clone();
         div()
             .flex_1()
@@ -152,6 +161,18 @@ impl Workspace {
                     .flex()
                     .flex_col()
                     .gap(t.space.lg)
+                    .child(
+                        div()
+                            .flex()
+                            .justify_center()
+                            .items_center()
+                            .gap(t.space.sm)
+                            .font_family(t.font_serif.clone())
+                            .text_size(t.text.subheading - px(2.))
+                            .text_color(t.colors.text_body)
+                            .child(super::hammer::hammer(&t, px(32.)))
+                            .child(format!("Welcome back, {name}")),
+                    )
                     .child(
                         div()
                             .flex()
@@ -175,7 +196,7 @@ impl Workspace {
                             .line_height(relative(1.56))
                             .text_color(t.colors.text_body)
                             .pb(t.space.md)
-                            .child(format!("Claude works in ~/dev/{project} and asks before it changes anything.")),
+                            .child(format!("Forge works in ~/dev/{project} and asks before it changes anything.")),
                     )
                     .child(self.composer.clone())
                     .child(
@@ -223,7 +244,7 @@ impl Render for Workspace {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let s = self.state.read(cx);
-        let (sidebar_open, palette_open) = (s.sidebar_open, s.palette_open);
+        let (sidebar_open, palette_open, onboarding) = (s.sidebar_open, s.palette_open, s.onboarding);
         let empty = s.chat().is_none_or(|c| c.messages.is_empty());
 
         let main = div().flex_1().min_w_0().flex().flex_col().bg(t.colors.canvas);
@@ -322,16 +343,27 @@ impl Render for Workspace {
                     None => s.show_toast("No reply to copy yet.", cx),
                 });
             }))
+            .on_action(cx.listener(|this, _: &ChangeName, window, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.onboarding = true;
+                    s.palette_open = false;
+                    cx.notify();
+                });
+                this.onboarding.update(cx, |o, cx| o.open(window, cx));
+            }))
             .on_action(cx.listener(|_, _: &Quit, _, cx| cx.quit()))
             .child(self.title_bar(cx))
-            .child(
-                div()
-                    .flex_1()
-                    .min_h_0()
-                    .flex()
-                    .when(sidebar_open, |d| d.child(self.sidebar.clone()))
-                    .child(main),
-            )
+            .when(onboarding, |d| d.child(self.onboarding.clone()))
+            .when(!onboarding, |d| {
+                d.child(
+                    div()
+                        .flex_1()
+                        .min_h_0()
+                        .flex()
+                        .when(sidebar_open, |d| d.child(self.sidebar.clone()))
+                        .child(main),
+                )
+            })
             .when(palette_open, |d| d.child(self.palette.clone()))
             .children(self.toast(cx))
     }

@@ -2,6 +2,7 @@
 //! UI only: the conversation, models and replies are mock data (`state.rs`).
 
 mod assets;
+mod profile;
 mod state;
 mod theme;
 mod ui;
