@@ -194,12 +194,12 @@ fn tool(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
         .cursor_pointer()
         .hover(move |s| s.bg(hover))
         .child(icon(call.kind.icon(), t.size.icon_sm, t.colors.text_muted))
-        .child(div().flex_none().font_weight(FontWeight::MEDIUM).child(call.kind.verb(call.status)))
         .map(|d| match (&call.note, shell) {
-            // A command shows its description here; the command itself is
-            // in the terminal block.
-            (Some(note), true) => d.child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(t.colors.text_muted).child(note.clone())),
+            // A command is headed by its description alone; the command
+            // itself is in the terminal block below.
+            (Some(note), true) => d.child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().font_weight(FontWeight::MEDIUM).child(note.clone())),
             _ => d
+                .child(div().flex_none().font_weight(FontWeight::MEDIUM).child(call.kind.verb(call.status)))
                 .child(
                     div()
                         .min_w_0()
