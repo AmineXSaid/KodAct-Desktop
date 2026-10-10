@@ -90,6 +90,8 @@ pub struct ToolCall {
     pub output: SharedString,
     pub diff: Vec<DiffLine>,
     pub open: bool,
+    /// Long output shows its last lines; this shows all of it.
+    pub full: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -378,6 +380,19 @@ impl AppState {
         cx.notify();
     }
 
+    /// Show all of a tool's output, or only its last lines again.
+    pub fn toggle_full(&mut self, chat: usize, msg: usize, block: usize, cx: &mut Context<Self>) {
+        if let Some(c) = self.chat_mut(chat) {
+            if let Some(Message::Assistant { blocks }) = c.messages.get_mut(msg) {
+                if let Some(Block::Tool(t)) = blocks.get_mut(block) {
+                    t.full = !t.full;
+                }
+                c.version += 1;
+            }
+        }
+        cx.notify();
+    }
+
     /// Answer the permission prompt the reply is waiting on.
     pub fn answer(&mut self, chat: usize, msg: usize, block: usize, verdict: Verdict, cx: &mut Context<Self>) {
         if let Some(c) = self.chat_mut(chat) {
@@ -512,7 +527,9 @@ impl AppState {
                 status: ToolStatus::Running,
                 output: "".into(),
                 diff: vec![],
-                open: false,
+                // A command's terminal block is open from the start, as in Forge.
+                open: kind == ToolKind::Bash,
+                full: false,
             })),
             (Step::ToolDone(output, diff), Some(blocks)) => {
                 if let Some(Block::Tool(t)) = blocks.iter_mut().rev().find(|b| matches!(b, Block::Tool(_))) {
@@ -610,7 +627,7 @@ fn script(prompt: &str) -> Vec<Step> {
         ]),
     ));
     s.push(Step::ToolStart(ToolKind::Bash, "cargo test".into(), Some("Run the tests".into())));
-    s.push(Step::ToolDone("running 1 test\ntest tests::greets_by_name ... ok\n\ntest result: ok. 1 passed; 0 failed".into(), vec![]));
+    s.push(Step::ToolDone("   \x1b[1;32mCompiling\x1b[0m hello v0.1.0 (/home/amine/dev/kryptonite)\n    \x1b[1;32mFinished\x1b[0m `test` profile [unoptimized + debuginfo] target(s) in 1.84s\n     \x1b[1;32mRunning\x1b[0m unittests src/main.rs (target/debug/deps/hello-3f2a9c1e)\n\nrunning 3 tests\ntest tests::greets_by_name ... \x1b[32mok\x1b[0m\ntest tests::greeting_is_static ... \x1b[32mok\x1b[0m\ntest tests::main_prints_the_greeting ... \x1b[32mok\x1b[0m\n\ntest result: \x1b[32mok\x1b[0m. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n   \x1b[1;32mDoc-tests\x1b[0m hello\n\nrunning 0 tests\n\ntest result: \x1b[32mok\x1b[0m. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s".into(), vec![]));
     s.extend(words(
         "Done. The greeting now lives in `greeting()` and `main` prints it.\n\n**What changed**\n- `src/main.rs`: a new `greeting()` function, used by `main`.\n- A unit test, `greets_by_name`, checks the text.\n\n```rust\npub fn greeting() -> &'static str {\n    \"Hello, Forge\"\n}\n```\n\nAll tests pass.",
         Step::Say,
@@ -631,7 +648,7 @@ fn mock_chats() -> Vec<Chat> {
                     open: false,
                 },
                 Block::Text("I'll move the greeting into a small function so it can be tested, then update `main`.".into()),
-                Block::Tool(ToolCall { kind: ToolKind::Read, target: "src/main.rs".into(), note: None, status: ToolStatus::Done, output: "fn main() {\n    println!(\"Hello, world\");\n}\n".into(), diff: vec![], open: false }),
+                Block::Tool(ToolCall { kind: ToolKind::Read, target: "src/main.rs".into(), note: None, status: ToolStatus::Done, output: "fn main() {\n    println!(\"Hello, world\");\n}\n".into(), diff: vec![], open: false, full: false }),
                 Block::Tool(ToolCall {
                     kind: ToolKind::Edit,
                     target: "src/main.rs".into(),
@@ -649,15 +666,17 @@ fn mock_chats() -> Vec<Chat> {
                         (DiffKind::Same, "}"),
                     ]),
                     open: true,
+                    full: false,
                 }),
                 Block::Tool(ToolCall {
                     kind: ToolKind::Bash,
                     target: "cargo test".into(),
                     note: Some("Run the tests".into()),
                     status: ToolStatus::Done,
-                    output: "running 1 test\ntest tests::greets_by_name ... ok\n\ntest result: ok. 1 passed; 0 failed".into(),
+                    output: "   \x1b[1;32mCompiling\x1b[0m hello v0.1.0 (/home/amine/dev/kryptonite)\n    \x1b[1;32mFinished\x1b[0m `test` profile [unoptimized + debuginfo] target(s) in 1.84s\n     \x1b[1;32mRunning\x1b[0m unittests src/main.rs (target/debug/deps/hello-3f2a9c1e)\n\nrunning 3 tests\ntest tests::greets_by_name ... \x1b[32mok\x1b[0m\ntest tests::greeting_is_static ... \x1b[32mok\x1b[0m\ntest tests::main_prints_the_greeting ... \x1b[32mok\x1b[0m\n\ntest result: \x1b[32mok\x1b[0m. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n   \x1b[1;32mDoc-tests\x1b[0m hello\n\nrunning 0 tests\n\ntest result: \x1b[32mok\x1b[0m. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s".into(),
                     diff: vec![],
-                    open: false,
+                    open: true,
+                    full: false,
                 }),
             ],
         },
@@ -670,10 +689,10 @@ fn mock_chats() -> Vec<Chat> {
         Message::User { text: "Can you also check the hermes review pipeline for unused imports?".into() },
         Message::Assistant {
             blocks: vec![
-                Block::Tool(ToolCall { kind: ToolKind::Web, target: "https://eslint.org/docs/latest/rules/no-unused-vars".into(), note: None, status: ToolStatus::Done, output: "no-unused-vars: disallow unused variables, including imports.".into(), diff: vec![], open: false }),
-                Block::Tool(ToolCall { kind: ToolKind::Write, target: "docs/lint-notes.md".into(), note: None, status: ToolStatus::Done, output: "".into(), diff: diff(&[(DiffKind::Add, "# Lint notes"), (DiffKind::Add, ""), (DiffKind::Add, "Run `pnpm lint --filter hermes` before pushing.")]), open: false }),
-                Block::Tool(ToolCall { kind: ToolKind::Search, target: "^use .*;$ in src/hermes".into(), note: None, status: ToolStatus::Done, output: "src/hermes/review.ts:3\nsrc/hermes/store.ts:1".into(), diff: vec![], open: false }),
-                Block::Tool(ToolCall { kind: ToolKind::Bash, target: "pnpm lint --filter hermes".into(), note: Some("Lint the package".into()), status: ToolStatus::Failed, output: "src/hermes/review.ts\n  3:10  error  'diffLines' is defined but never used\n\n✖ 1 problem (1 error, 0 warnings)".into(), diff: vec![], open: true }),
+                Block::Tool(ToolCall { kind: ToolKind::Web, target: "https://eslint.org/docs/latest/rules/no-unused-vars".into(), note: None, status: ToolStatus::Done, output: "no-unused-vars: disallow unused variables, including imports.".into(), diff: vec![], open: false, full: false }),
+                Block::Tool(ToolCall { kind: ToolKind::Write, target: "docs/lint-notes.md".into(), note: None, status: ToolStatus::Done, output: "".into(), diff: diff(&[(DiffKind::Add, "# Lint notes"), (DiffKind::Add, ""), (DiffKind::Add, "Run `pnpm lint --filter hermes` before pushing.")]), open: false, full: false }),
+                Block::Tool(ToolCall { kind: ToolKind::Search, target: "^use .*;$ in src/hermes".into(), note: None, status: ToolStatus::Done, output: "src/hermes/review.ts:3\nsrc/hermes/store.ts:1".into(), diff: vec![], open: false, full: false }),
+                Block::Tool(ToolCall { kind: ToolKind::Bash, target: "pnpm lint --filter hermes".into(), note: Some("Lint the package".into()), status: ToolStatus::Failed, output: "\x1b[4msrc/hermes/review.ts\x1b[24m\n  \x1b[2m3:10\x1b[22m  \x1b[31merror\x1b[39m  'diffLines' is defined but never used  \x1b[2m@typescript-eslint/no-unused-vars\x1b[22m\n\n\x1b[31m\x1b[1m✖ 1 problem (1 error, 0 warnings)\x1b[22m\x1b[39m\n\x1b[2m ELIFECYCLE \x1b[22m Command failed with exit code 1.".into(), diff: vec![], open: true, full: false }),
                 Block::Text("One unused import: `diffLines` in `src/hermes/review.ts`. Want me to remove it?".into()),
             ],
         },

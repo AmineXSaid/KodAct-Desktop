@@ -72,6 +72,7 @@ pub struct Theme {
     // Forge additions (see the section at the end of the tokens).
     pub font_mono: SharedString,  // JetBrains Mono: code, paths, commands
     pub extra: ExtraColors,
+    pub terminal: TerminalColors,
     pub size: Sizes,
 }
 
@@ -115,6 +116,7 @@ impl Theme {
             motion_ms: 200,
             font_mono: "JetBrains Mono".into(),
             extra: ExtraColors::for_mode(is_dark),
+            terminal: TerminalColors::for_mode(is_dark),
             size: Sizes::default(),
         }
     }
@@ -245,6 +247,68 @@ impl ExtraColors {
                 diff_del: hsla(7. / 360., 0.92, 0.58, 0.1),
                 scrim: hsla(30. / 360., 0.1, 0.05, 0.32),
                 selected: rgb(0xffffff).into(),
+            }
+        }
+    }
+}
+
+/// The shell tool's terminal block: Forge's terminal palette (the same
+/// Pajamas stops Forge for VS Code uses). Light themes get the darker stops.
+#[derive(Clone, Copy)]
+pub struct TerminalColors {
+    pub background: Hsla,
+    pub foreground: Hsla,
+    pub muted: Hsla,
+    pub divider: Hsla,
+    pub prompt: Hsla, // the `$`, and the running cursor
+    pub command: Hsla,
+    pub keyword: Hsla,
+    pub flag: Hsla,
+    pub string: Hsla,
+    pub variable: Hsla,
+    pub operator: Hsla,
+    pub number: Hsla,
+    pub comment: Hsla,
+    /// Output colours, by ANSI number: black, red, green, yellow, blue,
+    /// magenta, cyan, white. A program's red or green is Forge's.
+    pub ansi: [Hsla; 8],
+}
+
+impl TerminalColors {
+    fn for_mode(is_dark: bool) -> Self {
+        if is_dark {
+            Self {
+                background: rgb(0x18171d).into(),
+                foreground: rgb(0xdcdbd9).into(),
+                muted: rgb(0x8a8888).into(),
+                divider: hsla(30. / 360., 0.04, 0.92, 0.1),
+                prompt: rgb(0xac93e6).into(),
+                command: rgb(0x52b87a).into(),
+                keyword: rgb(0xac93e6).into(),
+                flag: rgb(0x63a6e9).into(),
+                string: rgb(0xe9be74).into(),
+                variable: rgb(0xcbbbf2).into(),
+                operator: rgb(0xf6806d).into(),
+                number: rgb(0xd99530).into(),
+                comment: rgb(0x747273).into(),
+                ansi: [0x646163, 0xec5941, 0x2da160, 0xd99530, 0x428fdc, 0x9475db, 0x63a6e9, 0xc1bfbe].map(|c| rgb(c).into()),
+            }
+        } else {
+            Self {
+                background: rgb(0xecebea).into(),
+                foreground: rgb(0x28272d).into(),
+                muted: rgb(0x747273).into(),
+                divider: hsla(250. / 360., 0.07, 0.16, 0.12),
+                prompt: rgb(0x7759c2).into(),
+                command: rgb(0x2f7549).into(),
+                keyword: rgb(0x6a4fb4).into(),
+                flag: rgb(0x2f68b4).into(),
+                string: rgb(0x995715).into(),
+                variable: rgb(0x7b58cf).into(),
+                operator: rgb(0xc02f12).into(),
+                number: rgb(0xab6100).into(),
+                comment: rgb(0x747273).into(),
+                ansi: [0x28272d, 0xc02f12, 0x2f7549, 0xab6100, 0x2f68b4, 0x6a4fb4, 0x1f75cb, 0x747273].map(|c| rgb(c).into()),
             }
         }
     }

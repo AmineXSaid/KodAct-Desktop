@@ -9,6 +9,7 @@ pub mod message;
 pub mod onboarding;
 pub mod rules_view;
 pub mod sidebar;
+pub mod terminal;
 pub mod workspace;
 
 use gpui::{div, prelude::*, svg, App, Div, Hsla, Pixels, SharedString, Svg};

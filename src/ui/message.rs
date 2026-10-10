@@ -16,7 +16,8 @@ use gpui::{
 
 use super::icon;
 use super::markdown::{self, CopyContext};
-use crate::state::{AppState, Block, DiffKind, Message, ToolCall, ToolStatus, Verdict};
+use super::terminal;
+use crate::state::{AppState, Block, DiffKind, Message, ToolCall, ToolKind, ToolStatus, Verdict};
 use crate::theme::{self, Theme};
 
 pub struct ItemContext {
@@ -180,7 +181,9 @@ fn tool(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
     let hover = t.colors.hover;
     let adds = call.diff.iter().filter(|l| l.kind == DiffKind::Add).count();
     let dels = call.diff.iter().filter(|l| l.kind == DiffKind::Del).count();
-    let has_body = !call.diff.is_empty() || !call.output.is_empty();
+    let shell = call.kind == ToolKind::Bash;
+    // A command always has a body: its terminal block.
+    let has_body = shell || !call.diff.is_empty() || !call.output.is_empty();
     let header = div()
         .id(SharedString::from(format!("tool-{}-{}-{b}", cx.chat, cx.index)))
         .flex()
@@ -192,18 +195,24 @@ fn tool(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
         .hover(move |s| s.bg(hover))
         .child(icon(call.kind.icon(), t.size.icon_sm, t.colors.text_muted))
         .child(div().flex_none().font_weight(FontWeight::MEDIUM).child(call.kind.verb(call.status)))
-        .child(
-            div()
-                .min_w_0()
-                .overflow_hidden()
-                .whitespace_nowrap()
-                .text_ellipsis()
-                .font_family(t.font_mono.clone())
-                .text_size(t.text.caption + px(0.5))
-                .text_color(t.colors.text_muted)
-                .child(call.target.clone()),
-        )
-        .children(call.note.clone().map(|n| div().flex_none().text_color(t.colors.text_subtle).text_size(t.text.caption).child(n)))
+        .map(|d| match (&call.note, shell) {
+            // A command shows its description here; the command itself is
+            // in the terminal block.
+            (Some(note), true) => d.child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(t.colors.text_muted).child(note.clone())),
+            _ => d
+                .child(
+                    div()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .font_family(t.font_mono.clone())
+                        .text_size(t.text.caption + px(0.5))
+                        .text_color(t.colors.text_muted)
+                        .child(call.target.clone()),
+                )
+                .children(call.note.clone().map(|n| div().flex_none().text_color(t.colors.text_subtle).text_size(t.text.caption).child(n))),
+        })
         .child(div().flex_1())
         .when(adds + dels > 0, |d| {
             d.child(
@@ -221,7 +230,10 @@ fn tool(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
         .on_click(toggle(cx, b));
 
     let body = (call.open && has_body).then(|| {
-        if !call.diff.is_empty() {
+        if shell {
+            let at = terminal::Where { state: cx.state.clone(), chat: cx.chat, msg: cx.index, block: b, copied: cx.copied.clone() };
+            terminal::block(call, &at, t)
+        } else if !call.diff.is_empty() {
             div()
                 .border_t_1()
                 .border_color(t.colors.border)
