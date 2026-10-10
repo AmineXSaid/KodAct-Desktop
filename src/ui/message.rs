@@ -1,16 +1,17 @@
 //! One transcript item, as Forge draws it:
 //! - your message: a white card on the right;
-//! - a reply: a timeline row whose dot shows its first tool call's status,
-//!   holding text (markdown), thinking (a disclosure), tool calls (one row
-//!   each, opening to the diff or the output) and permission prompts;
+//! - a reply: flush with the column, under a small "Forge" header on the
+//!   first reply of a turn; it holds text (markdown), thinking (a
+//!   disclosure), tool calls (one row each; Bash as a terminal block) and
+//!   permission prompts;
 //! - the end of a turn: how long it took and what it cost;
 //! - a notice (interrupted, an error).
 
 use std::time::Duration;
 
 use gpui::{
-    div, percentage, prelude::*, px, relative, Animation, AnimationExt, AnyElement, Entity, FontWeight, Hsla,
-    SharedString, Transformation,
+    div, percentage, prelude::*, px, relative, Animation, AnimationExt, AnyElement, Entity, FontWeight, SharedString,
+    Transformation,
 };
 
 use super::icon;
@@ -25,6 +26,10 @@ pub struct ItemContext {
     pub copied: Option<SharedString>,
     pub busy: bool,
     pub last: bool,
+    /// The first reply after your message: it carries the turn's header.
+    pub first_in_turn: bool,
+    /// This turn is the one still running.
+    pub live_turn: bool,
 }
 
 pub fn render(m: &Message, cx: &ItemContext, t: &Theme) -> AnyElement {
@@ -35,20 +40,19 @@ pub fn render(m: &Message, cx: &ItemContext, t: &Theme) -> AnyElement {
             .child(
                 div()
                     .max_w(relative(0.85))
-                    .px(t.space.lg)
-                    .py(t.space.md)
+                    .px(t.space.md + px(2.))
+                    .py(t.space.sm + px(2.))
                     .bg(t.colors.surface)
                     .border_1()
                     .border_color(t.colors.border)
                     .rounded(t.radius.card)
-                    .text_size(t.text.body)
+                    .text_size(t.text.body_sm)
                     .line_height(relative(t.size.line_height_chat))
                     .child(text.clone()),
             )
             .into_any_element(),
-        Message::Assistant { blocks } => assistant(m, blocks, cx, t),
+        Message::Assistant { blocks } => assistant(blocks, cx, t),
         Message::TurnEnd { seconds, cost } => div()
-            .pl(t.space.xl)
             .text_size(t.text.caption)
             .text_color(t.colors.text_subtle)
             .child(format!("{seconds:.1}s · ${cost:.4}"))
@@ -68,40 +72,41 @@ pub fn render(m: &Message, cx: &ItemContext, t: &Theme) -> AnyElement {
     }
 }
 
-fn dot_color(status: Option<ToolStatus>, t: &Theme) -> Hsla {
-    match status {
-        Some(ToolStatus::Done) => t.extra.success,
-        Some(ToolStatus::Failed) => t.extra.danger,
-        Some(ToolStatus::Declined) => t.colors.text_subtle,
-        Some(ToolStatus::Running) => t.colors.sky,
-        None => t.colors.text_subtle,
-    }
-}
-
-fn assistant(m: &Message, blocks: &[Block], cx: &ItemContext, t: &Theme) -> AnyElement {
-    let gutter = t.space.xl;
+/// The head of a turn: Forge's mark and name. The mark breathes while the
+/// turn runs.
+fn turn_header(cx: &ItemContext, t: &Theme) -> AnyElement {
+    let mark = super::mark::mark(t, t.size.icon);
+    let mark: AnyElement = if cx.live_turn {
+        div()
+            .child(mark)
+            .with_animation(
+                SharedString::from(format!("mark-{}-{}", cx.chat, cx.index)),
+                Animation::new(Duration::from_millis(1800)).repeat().with_easing(gpui::ease_in_out),
+                |d, delta| d.opacity(0.55 + 0.45 * (1. - (delta * 2. - 1.).abs())),
+            )
+            .into_any_element()
+    } else {
+        mark.into_any_element()
+    };
     div()
         .flex()
-        .gap(t.space.xs)
-        .child(
-            // The timeline: a dot level with the first line.
-            div()
-                .w(gutter - t.space.xs)
-                .flex_none()
-                .flex()
-                .justify_center()
-                .pt(t.space.sm + px(2.))
-                .child(div().size(t.size.dot).rounded(t.radius.pill).bg(dot_color(m.dot(), t))),
-        )
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
-                .gap(t.space.md)
-                .children(blocks.iter().enumerate().map(|(b, block)| self::block(block, b, cx, t))),
-        )
+        .items_center()
+        .gap(t.space.sm)
+        .text_size(t.text.caption + px(1.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(t.colors.text_muted)
+        .child(mark)
+        .child("Forge")
+        .into_any_element()
+}
+
+fn assistant(blocks: &[Block], cx: &ItemContext, t: &Theme) -> AnyElement {
+    div()
+        .flex()
+        .flex_col()
+        .gap(t.space.sm + px(2.))
+        .when(cx.first_in_turn, |d| d.child(turn_header(cx, t)))
+        .children(blocks.iter().enumerate().map(|(b, block)| self::block(block, b, cx, t)))
         .into_any_element()
 }
 

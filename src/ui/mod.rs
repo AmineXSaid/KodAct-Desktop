@@ -3,7 +3,7 @@
 pub mod chat_view;
 pub mod command_palette;
 pub mod composer;
-pub mod hammer;
+pub mod mark;
 pub mod markdown;
 pub mod message;
 pub mod onboarding;

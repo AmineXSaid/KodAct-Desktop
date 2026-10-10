@@ -174,7 +174,7 @@ impl Workspace {
                             .font_family(t.font_serif.clone())
                             .text_size(t.text.subheading - px(2.))
                             .text_color(t.colors.text_body)
-                            .child(super::hammer::hammer(&t, px(32.)))
+                            .child(super::mark::mark(&t, px(32.)))
                             .child(format!("Welcome back, {name}")),
                     )
                     .child(

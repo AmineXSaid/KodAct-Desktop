@@ -200,7 +200,7 @@ impl Render for Sidebar {
                             .rounded(t.radius.button)
                             .cursor_pointer()
                             .hover(move |st| st.bg(hover))
-                            .child(super::hammer::hammer(&t, t.size.control))
+                            .child(super::mark::mark(&t, px(32.)))
                             .child(
                                 div()
                                     .flex_1()

@@ -11,7 +11,7 @@ use gpui::{
 
 use super::message::{self, ItemContext};
 use super::*;
-use crate::state::AppState;
+use crate::state::{AppState, Message};
 use crate::theme::ActiveTheme;
 
 pub struct ChatView {
@@ -83,6 +83,8 @@ impl Render for ChatView {
             let Some(chat) = s.chat() else { return div().into_any_element() };
             let body = match chat.messages.get(ix) {
                 Some(m) => {
+                    let after_user = ix == 0 || matches!(chat.messages.get(ix - 1), Some(Message::User { .. }));
+                    let last_user = chat.messages.iter().rposition(|m| matches!(m, Message::User { .. }));
                     let ctx = ItemContext {
                         state: state.clone(),
                         chat: chat.id,
@@ -90,6 +92,8 @@ impl Render for ChatView {
                         copied: s.copied.clone(),
                         busy: s.busy(),
                         last: ix + 1 == chat.messages.len(),
+                        first_in_turn: after_user && matches!(m, Message::Assistant { .. }),
+                        live_turn: s.busy() && last_user.is_none_or(|u| ix > u),
                     };
                     message::render(m, &ctx, &t)
                 }

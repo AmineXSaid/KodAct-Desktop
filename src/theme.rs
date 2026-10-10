@@ -26,6 +26,7 @@ pub struct Colors {
     pub primary_fg: Hsla,
     pub primary_tint: Hsla,  // ghost CTA bg, selection wash
     pub marigold: Hsla,
+    #[allow(dead_code)] // in the palette; nothing draws with it since the hammer's grip went
     pub coral: Hsla,
     pub sky: Hsla,
     pub midnight: Hsla,
@@ -263,8 +264,7 @@ pub struct Sizes {
     pub palette: Pixels,       // command palette width
     pub picker: Pixels,        // model picker width
     pub hairline: Pixels,      // 1
-    pub dot: Pixels,           // timeline status dot
-    pub line_height_chat: f32, // 1.6 for prose
+    pub line_height_chat: f32, // 1.55 for prose
     pub display: Pixels,       // 40: the welcome headline
     pub rules_list: Pixels,    // 340: the Rules screen's file list
     pub editor: Pixels,        // 420: a file editor's height
@@ -284,8 +284,7 @@ impl Default for Sizes {
             palette: px(560.),
             picker: px(340.),
             hairline: px(1.),
-            dot: px(7.),
-            line_height_chat: 1.6,
+            line_height_chat: 1.55,
             display: px(40.),
             rules_list: px(340.),
             editor: px(420.),

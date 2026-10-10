@@ -118,18 +118,6 @@ pub enum Message {
     Notice { text: SharedString, error: bool },
 }
 
-impl Message {
-    /// The timeline dot: the status of the turn's first tool call, as in Forge.
-    pub fn dot(&self) -> Option<ToolStatus> {
-        match self {
-            Message::Assistant { blocks } => blocks.iter().find_map(|b| match b {
-                Block::Tool(t) => Some(t.status),
-                _ => None,
-            }),
-            _ => None,
-        }
-    }
-}
 
 pub struct Chat {
     pub id: usize,

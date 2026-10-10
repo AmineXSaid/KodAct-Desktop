@@ -5,7 +5,7 @@
 use gpui::component::input::{Input, InputEvent, InputState};
 use gpui::{div, prelude::*, px, relative, Context, Entity, FontWeight, IntoElement, Render, Subscription, Window};
 
-use super::hammer::hammer;
+use super::mark::mark;
 use crate::state::AppState;
 use crate::theme::{self, ActiveTheme};
 
@@ -64,10 +64,11 @@ impl Render for Onboarding {
                 .flex_col()
                 .items_center()
                 .gap(t.space.lg)
-                .child(hammer(&t, px(64.)))
+                .child(mark(&t, px(64.)))
                 .child(
                     div()
-                        .text_size(t.text.heading_sm + px(6.))
+                        .text_center()
+                        .text_size(t.text.heading_sm + px(2.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(t.colors.text_strong)
                         .child(if returning { "What should Forge call you?" } else { "Welcome to Forge" }),

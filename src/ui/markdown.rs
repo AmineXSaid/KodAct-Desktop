@@ -182,14 +182,31 @@ fn runs(spans: &[Span], t: &Theme, base_weight: FontWeight, color: gpui::Hsla) -
 
 pub fn render(src: &str, t: &Theme, copy: &CopyContext) -> AnyElement {
     let blocks = parse(src);
-    let mut col = div().flex().flex_col().gap(t.space.md).w_full().text_size(t.text.body).line_height(relative(t.size.line_height_chat));
+    let mut col = div().flex().flex_col().w_full().text_size(t.text.body_sm).line_height(relative(t.size.line_height_chat));
+    let mut prev: Option<&'static str> = None;
     for (n, b) in blocks.into_iter().enumerate() {
+        // Space above a block depends on what it follows: list items sit
+        // close together, headings and code get room above them.
+        let kind = match &b {
+            Block::Item { .. } => "item",
+            Block::Heading(..) => "heading",
+            Block::Code { .. } => "code",
+            _ => "text",
+        };
+        let gap = match (prev, kind) {
+            (None, _) => px(0.),
+            (Some("item"), "item") => t.space.xs,
+            (_, "heading") => t.space.lg,
+            (Some("heading"), _) => t.space.xs + px(2.),
+            (_, "code") | (Some("code"), _) => t.space.md,
+            _ => t.space.sm + px(2.),
+        };
+        prev = Some(kind);
         let el: AnyElement = match b {
             Block::Para(spans) => div().child(runs(&spans, t, FontWeight::NORMAL, t.colors.text)).into_any_element(),
             Block::Heading(level, spans) => div()
-                .pt(t.space.sm)
-                .text_size(if level == 1 { t.text.heading_sm } else if level == 2 { t.text.subheading } else { t.text.body })
-                .line_height(relative(1.27))
+                .text_size(if level == 1 { t.text.body + px(2.) } else if level == 2 { t.text.body } else { t.text.body_sm })
+                .line_height(relative(1.35))
                 .child(runs(&spans, t, FontWeight::SEMIBOLD, t.colors.text_strong))
                 .into_any_element(),
             Block::Item { number, depth, spans } => div()
@@ -217,7 +234,7 @@ pub fn render(src: &str, t: &Theme, copy: &CopyContext) -> AnyElement {
             Block::Rule => div().h(t.size.hairline).bg(t.colors.border).into_any_element(),
             Block::Code { lang, code } => code_block(&lang, code, &format!("{}-{n}", copy.key), t, copy),
         };
-        col = col.child(el);
+        col = col.child(div().mt(gap).child(el));
     }
     col.into_any_element()
 }
@@ -272,12 +289,12 @@ fn code_block(lang: &str, code: String, key: &str, t: &Theme, copy: &CopyContext
             div()
                 .id(SharedString::from(format!("code-{key}")))
                 .overflow_x_scroll()
-                .px(t.space.lg)
-                .py(t.space.md)
+                .px(t.space.md)
+                .py(t.space.sm + px(2.))
                 .bg(t.extra.inset)
                 .font_family(t.font_mono.clone())
-                .text_size(t.text.body_sm - px(1.))
-                .line_height(relative(1.6))
+                .text_size(t.text.caption + px(0.5))
+                .line_height(relative(1.55))
                 .text_color(t.colors.text)
                 .whitespace_nowrap()
                 .child(shown),
