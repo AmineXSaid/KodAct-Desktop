@@ -20,6 +20,8 @@ icons!(
     "loader-circle", "map", "maximize-2", "message-square", "minus", "moon", "panel-left", "paperclip", "pencil",
     "pin", "plus", "refresh-cw", "rotate-ccw", "search", "settings", "shield-check", "sparkles", "split", "square",
     "sun", "terminal", "trash", "triangle-alert", "x", "zap",
+    // The title bar's minimize / maximize / restore / close (gpui-kit-assets, Apache-2.0).
+    "window-close", "window-maximize", "window-minimize", "window-restore",
 );
 
 pub struct Assets;

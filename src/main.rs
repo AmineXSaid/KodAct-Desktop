@@ -9,7 +9,7 @@ mod theme;
 mod ui;
 
 use gpui::component::TitleBar;
-use gpui::{px, size, App, AppContext, Bounds, KeyBinding, WindowBounds, WindowOptions};
+use gpui::{px, size, App, AppContext, Bounds, KeyBinding, WindowBounds, WindowDecorations, WindowOptions};
 
 use ui::*;
 
@@ -43,6 +43,10 @@ fn main() {
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             window_min_size: Some(size(px(720.), px(520.))),
+            // Draw our own frame, so the title bar's minimize / maximize /
+            // close buttons show on Linux as they do on Windows. GPUI falls
+            // back to the system frame where the desktop can't support it.
+            window_decorations: Some(WindowDecorations::Client),
             ..TitleBar::window_options()
         };
         gpui::open_window(options, cx, |window, cx| cx.new(|cx| ui::workspace::Workspace::new(window, cx))).expect("the window opens");
