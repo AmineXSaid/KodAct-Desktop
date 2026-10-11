@@ -237,7 +237,7 @@ impl Render for Composer {
         };
         let send = div()
             .id("send")
-            .size(px(32.))
+            .size(px(30.))
             .flex_none()
             .flex()
             .items_center()
@@ -330,7 +330,6 @@ impl Render for Composer {
                 div()
                     .flex()
                     .flex_col()
-                    .gap(t.space.sm)
                     .bg(t.colors.surface)
                     .border_1()
                     // The mode tints the box's edge, as it tints the extension's focus ring.
@@ -339,21 +338,25 @@ impl Render for Composer {
                     .child(
                         div()
                             .px(px(18.))
-                            .pt(px(16.))
+                            .pt(px(14.))
+                            .pb(px(12.))
                             .text_size(t.text.body)
                             .line_height(relative(1.5))
                             .child(Textarea::new(&self.input).appearance(false).text_size(t.text.body)),
                     )
+                    // A soft rule between what you write and the tools under it,
+                    // fading out at both ends, with a faint shade beneath.
+                    .child(divider(t.colors.border))
                     .child(
                         div()
                             .flex()
                             .items_center()
                             .px(px(10.))
-                            .pb(px(10.))
+                            .py(px(6.))
                             .child(
                                 div()
                                     .id("attach")
-                                    .size(px(32.))
+                                    .size(px(30.))
                                     .flex()
                                     .items_center()
                                     .justify_center()
@@ -381,4 +384,16 @@ impl Render for Composer {
                     .child(div().relative().child(mode_trigger).children(modes_menu)),
             )
     }
+}
+
+/// A hairline that fades in from the left and out to the right, over a
+/// fainter one: the composer's rule between text and tools.
+fn divider(color: gpui::Hsla) -> impl IntoElement {
+    use gpui::{linear_color_stop, linear_gradient};
+    let half = |c: gpui::Hsla, out: bool| {
+        let (a, b) = if out { (c, c.opacity(0.)) } else { (c.opacity(0.), c) };
+        div().h_full().w(relative(0.5)).bg(linear_gradient(90., linear_color_stop(a, 0.), linear_color_stop(b, 1.)))
+    };
+    let line = |c: gpui::Hsla| div().h(px(1.)).w_full().flex().child(half(c, false)).child(half(c, true));
+    div().mx(px(14.)).flex().flex_col().child(line(color)).child(line(color.opacity(0.35)))
 }
