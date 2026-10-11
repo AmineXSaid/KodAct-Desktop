@@ -68,12 +68,12 @@ pub struct Theme {
     pub text: TypeScale,
     pub space: Space,
     pub radius: Radius,
-    pub font_sans: SharedString,  // Hanken Grotesk (OFL): warm, crisp at small sizes
+    pub font_sans: SharedString,  // Anthropic Sans when on this PC, else Hanken Grotesk (`fonts.rs`)
     pub font_serif: SharedString, // Source Serif (substitute for Lyon Text)
     pub motion_ms: u64,           // 200ms ease for hovers/transitions
     // Forge additions (see the section at the end of the tokens).
     pub font_mono: SharedString,  // JetBrains Mono: code, paths, commands
-    pub font_display: SharedString, // Source Serif 4 Display: the serif cut for large lines (the greeting)
+    pub font_display: SharedString, // large serif lines (the greeting): Anthropic Serif when on this PC, else Source Serif 4 Display
     pub extra: ExtraColors,
     pub terminal: TerminalColors,
     pub code: CodeColors,
@@ -115,11 +115,11 @@ impl Theme {
                 card: px(12.),
                 pill: px(9999.),
             },
-            font_sans: "Hanken Grotesk".into(),
+            font_sans: crate::fonts::sans(),
             font_serif: "Source Serif 4".into(),
             motion_ms: 200,
             font_mono: "JetBrains Mono".into(),
-            font_display: "Source Serif 4 Display".into(),
+            font_display: crate::fonts::display(),
             extra: ExtraColors::for_mode(is_dark),
             terminal: TerminalColors::for_mode(is_dark),
             code: CodeColors::for_mode(is_dark),

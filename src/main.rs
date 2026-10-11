@@ -9,6 +9,7 @@ mod approve;
 mod assets;
 mod context;
 mod endpoints;
+mod fonts;
 mod greeting;
 mod health;
 mod highlight;
@@ -46,6 +47,7 @@ fn main() {
     gpui::application().with_assets(assets::Assets).run(|cx: &mut App| {
         gpui::init(cx);
         assets::load_fonts(cx);
+        fonts::choose(cx);
         highlight::warm_up();
         theme::init(cx);
         ui::sync_component_theme(cx);
