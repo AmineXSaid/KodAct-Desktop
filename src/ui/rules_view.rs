@@ -546,7 +546,7 @@ impl Render for RulesView {
         root = root.child(self.header(&t, where_.clone(), cx));
 
         let Some(scan) = scan else {
-            return root.child(div().text_color(t.colors.text_subtle).child("Reading the project…"));
+            return root.child(div().w(t.size.rules_list).child(super::skeleton::file_list(&t)));
         };
 
         root = root.child(

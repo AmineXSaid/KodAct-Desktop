@@ -40,7 +40,11 @@ const SUGGESTIONS: &[&str] = &[
 
 impl Workspace {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let state = cx.new(|_| AppState::new());
+        let state = cx.new(|cx| {
+            let mut s = AppState::new();
+            s.load(cx);
+            s
+        });
         cx.observe(&state, |_, _, cx| cx.notify()).detach();
         let sidebar = cx.new(|cx| Sidebar::new(state.clone(), window, cx));
         let chat = cx.new(|cx| ChatView::new(state.clone(), cx));
@@ -340,7 +344,7 @@ impl Render for Workspace {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let s = self.state.read(cx);
-        let (sidebar_open, palette_open, onboarding, screen) = (s.sidebar_open, s.palette_open, s.onboarding, s.screen);
+        let (sidebar_open, palette_open, onboarding, screen, loading) = (s.sidebar_open, s.palette_open, s.onboarding, s.screen, s.loading);
         let empty = s.chat().is_none_or(|c| c.messages.is_empty());
 
         let main = div().flex_1().min_w_0().flex().flex_col().bg(t.colors.canvas);
@@ -350,8 +354,26 @@ impl Render for Workspace {
             main.child(self.projects.clone())
         } else if empty {
             main.child(self.welcome(cx))
+        } else if loading {
+            main.child(div().flex_1().min_h_0().child(super::skeleton::transcript(&t))).child(
+                div()
+                    .flex()
+                    .justify_center()
+                    .px(t.space.xl)
+                    .pb(t.space.lg)
+                    .child(div().w_full().max_w(t.size.column).child(self.composer.clone())),
+            )
         } else {
-            main.child(self.chat.clone()).child(
+            main.child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .flex()
+                    .flex_col()
+                    .child(self.chat.clone())
+                    .with_animation("transcript-in", gpui::Animation::new(std::time::Duration::from_millis(t.motion_ms)), |d, delta| d.opacity(delta)),
+            )
+            .child(
                 div()
                     .flex()
                     .justify_center()

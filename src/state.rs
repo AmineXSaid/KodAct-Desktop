@@ -288,6 +288,9 @@ pub struct AppState {
     replies: std::collections::HashMap<usize, Task<()>>,
     /// Text for the composer to take (an edited message).
     pub draft: Option<String>,
+    /// Chats are still loading: screens show placeholders.
+    pub loading: bool,
+    load: Option<Task<()>>,
     next_id: usize,
 }
 
@@ -329,8 +332,24 @@ impl AppState {
             context_used: 0.31,
             replies: Default::default(),
             draft: None,
+            loading: true,
+            load: None,
             next_id,
         }
+    }
+
+    /// Load the chats. In the full app this reads the session index off the
+    /// UI thread; this shell's chats are built in, so it only stands in for
+    /// that read's time, so the loading placeholders can be seen.
+    pub fn load(&mut self, cx: &mut Context<Self>) {
+        const MOCK_INDEX_READ: Duration = Duration::from_millis(700);
+        self.load = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(MOCK_INDEX_READ).await;
+            let _ = this.update(cx, |s, cx| {
+                s.loading = false;
+                cx.notify();
+            });
+        }));
     }
 
     pub fn chat(&self) -> Option<&Chat> {

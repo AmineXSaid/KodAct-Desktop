@@ -120,6 +120,7 @@ impl Render for Sidebar {
         let hover = t.colors.hover;
         let rules_open = s.screen == Screen::Rules;
         let projects_open = matches!(s.screen, Screen::Projects | Screen::Project(_));
+        let loading = s.loading;
 
         let mut list = div().id("chat-list").flex_1().min_h_0().overflow_y_scroll().px(t.space.sm).pb(t.space.md);
         // Chats of this project (or of every project, by the filter).
@@ -322,7 +323,17 @@ impl Render for Sidebar {
                             .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenRules), cx)),
                     ),
             )
-            .child(list)
+            .map(|d| {
+                if loading {
+                    d.child(div().flex_1().min_h_0().child(super::skeleton::chat_list(&t)))
+                } else {
+                    d.child(div().flex_1().min_h_0().flex().flex_col().child(list).with_animation(
+                        "chats-in",
+                        Animation::new(Duration::from_millis(t.motion_ms)),
+                        |d, delta| d.opacity(delta),
+                    ))
+                }
+            })
             .child(
                 div()
                     .border_t_1()
