@@ -230,6 +230,10 @@ pub struct AppState {
     /// Each profile's newest check, so an older one's result is dropped.
     check_gen: std::collections::HashMap<String, u64>,
     sync_timer: Option<Task<()>>,
+    /// Picks the new-chat greeting (`greeting.rs`): changes with each new
+    /// chat, and every few minutes while the greeting shows.
+    pub greeting_seed: u64,
+    greeting_timer: Option<Task<()>>,
     /// The current chat's mode (Expert, Manual, Edit automatically, Plan, Bypass).
     pub mode: ModeId,
     /// Modes chats keep when reopened (see `ModeId::kept`), by chat.
@@ -294,6 +298,8 @@ impl AppState {
             checks_running: 0,
             check_gen: Default::default(),
             sync_timer: None,
+            greeting_seed: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0),
+            greeting_timer: None,
             mode: ModeId::Manual,
             kept_modes: Default::default(),
             default_mode: ModeId::Manual,
@@ -328,6 +334,20 @@ impl AppState {
             });
         }));
         self.load_endpoints(cx);
+        // A fresh greeting every few minutes while the new-chat screen shows.
+        const GREETING_EVERY: Duration = Duration::from_secs(5 * 60);
+        self.greeting_timer = Some(cx.spawn(async move |this, cx| loop {
+            cx.background_executor().timer(GREETING_EVERY).await;
+            let shown = this.update(cx, |s, cx| {
+                if s.screen == Screen::Chat && s.current.is_none() {
+                    s.greeting_seed = s.greeting_seed.wrapping_add(1);
+                    cx.notify();
+                }
+            });
+            if shown.is_err() {
+                break;
+            }
+        }));
     }
 
     // ------------------------------------------------------------ models
@@ -548,6 +568,7 @@ impl AppState {
     pub fn new_chat(&mut self, cx: &mut Context<Self>) {
         self.screen = Screen::Chat;
         self.current = None;
+        self.greeting_seed = self.greeting_seed.wrapping_add(1);
         self.sync_mode();
         cx.notify();
     }

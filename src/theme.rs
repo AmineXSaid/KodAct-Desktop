@@ -13,6 +13,7 @@ use gpui::{
 pub struct Colors {
     pub canvas: Hsla,        // page / window background (warm paper)
     pub surface: Hsla,       // cards, panels, popovers
+    #[allow(dead_code)] // in the palette; the sidebar now uses `ExtraColors::pane`
     pub sidebar: Hsla,       // app-specific: sidebar sits between canvas and surface
     pub text: Hsla,          // ink 95%
     pub text_strong: Hsla,   // ink 100% (headings)
@@ -67,7 +68,7 @@ pub struct Theme {
     pub text: TypeScale,
     pub space: Space,
     pub radius: Radius,
-    pub font_sans: SharedString,  // Inter (substitute for NotionInter)
+    pub font_sans: SharedString,  // Hanken Grotesk (OFL): warm, crisp at small sizes
     pub font_serif: SharedString, // Source Serif (substitute for Lyon Text)
     pub motion_ms: u64,           // 200ms ease for hovers/transitions
     // Forge additions (see the section at the end of the tokens).
@@ -113,7 +114,7 @@ impl Theme {
                 card: px(12.),
                 pill: px(9999.),
             },
-            font_sans: "Inter".into(),
+            font_sans: "Hanken Grotesk".into(),
             font_serif: "Source Serif 4".into(),
             motion_ms: 200,
             font_mono: "JetBrains Mono".into(),
@@ -206,7 +207,6 @@ impl Theme {
 #[derive(Clone, Copy)]
 pub struct ExtraColors {
     pub inset: Hsla,         // a quiet well inside a card: code blocks, terminal output
-    pub highlight: Hsla,     // peach hero pill behind the project name
     pub success: Hsla,       // text/icon on success
     pub success_tint: Hsla,
     pub danger: Hsla,
@@ -217,6 +217,12 @@ pub struct ExtraColors {
     pub diff_del: Hsla,      // removed line background
     pub scrim: Hsla,         // behind the command palette
     pub selected: Hsla,      // selected row: a white sticky note on the sidebar
+    // The window's three surfaces, a clear step apart so each area reads as
+    // its own: the title bar darkest, then the sidebar, then the session.
+    // Cards and the composer sit on top in `surface`.
+    pub chrome: Hsla,        // the title bar
+    pub pane: Hsla,          // the sidebar
+    pub stage: Hsla,         // the session: the chat, the welcome, Rules, Projects
     // Permission modes, as Forge for VS Code tints them (forge-tokens.css).
     pub mode_edit: Hsla,     // Edit automatically
     pub mode_plan: Hsla,     // Plan
@@ -236,7 +242,6 @@ impl ExtraColors {
         if is_dark {
             Self {
                 inset: hsla(0., 0., 1., 0.035),
-                highlight: rgb(0x5a4636).into(),
                 success: rgb(0x6fd389).into(),
                 success_tint: hsla(134. / 360., 0.5, 0.5, 0.16),
                 danger: rgb(0xff8a78).into(),
@@ -247,6 +252,9 @@ impl ExtraColors {
                 diff_del: hsla(7. / 360., 0.92, 0.58, 0.16),
                 scrim: ink(0.55),
                 selected: rgb(0x2a2927).into(),
+                chrome: rgb(0x0f0f0e).into(),
+                pane: rgb(0x151514).into(),
+                stage: rgb(0x1b1b1a).into(),
                 mode_edit: rgb(0x2da160).into(),
                 mode_plan: rgb(0x428fdc).into(),
                 mode_bypass: rgb(0xec5941).into(),
@@ -261,7 +269,6 @@ impl ExtraColors {
         } else {
             Self {
                 inset: ink(0.028),
-                highlight: rgb(0xf6d5b8).into(),
                 success: rgb(0x1f7a35).into(),
                 success_tint: hsla(134. / 360., 0.55, 0.4, 0.12),
                 danger: rgb(0xc42a14).into(),
@@ -272,6 +279,9 @@ impl ExtraColors {
                 diff_del: hsla(7. / 360., 0.92, 0.58, 0.1),
                 scrim: hsla(30. / 360., 0.1, 0.05, 0.32),
                 selected: rgb(0xffffff).into(),
+                chrome: rgb(0xe8e5e0).into(),
+                pane: rgb(0xf0eee9).into(),
+                stage: rgb(0xf9f8f6).into(),
                 mode_edit: rgb(0x108548).into(),
                 mode_plan: rgb(0x1f75cb).into(),
                 mode_bypass: rgb(0xa32c12).into(),
@@ -391,8 +401,8 @@ pub struct Sizes {
     pub palette: Pixels,       // command palette width
     pub hairline: Pixels,      // 1
     pub line_height_chat: f32, // 1.45 for prose
-    pub chat_text: Pixels,     // 13: replies and your messages, as Forge for VS Code
-    pub display: Pixels,       // 40: the welcome headline
+    pub chat_text: Pixels,     // 14: replies and your messages (Hanken Grotesk sets small; 14 reads as 13 did in Inter)
+    pub greeting: Pixels,      // 30: the new-chat greeting, in the serif
     pub rules_list: Pixels,    // 340: the Rules screen's file list
     pub editor: Pixels,        // 420: a file editor's height
 }
@@ -411,8 +421,8 @@ impl Default for Sizes {
             palette: px(560.),
             hairline: px(1.),
             line_height_chat: 1.45,
-            chat_text: px(13.),
-            display: px(40.),
+            chat_text: px(14.),
+            greeting: px(30.),
             rules_list: px(340.),
             editor: px(420.),
         }

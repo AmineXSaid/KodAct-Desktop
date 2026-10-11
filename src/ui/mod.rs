@@ -85,7 +85,7 @@ pub fn sync_component_theme(cx: &mut App) {
         c.radius = t.radius.button;
         c.radius_lg = t.radius.card;
         c.shadow = false;
-        c.background = t.colors.canvas;
+        c.background = t.extra.stage;
         c.foreground = t.colors.text;
         c.border = t.colors.border;
         c.input = t.colors.border;
@@ -101,10 +101,10 @@ pub fn sync_component_theme(cx: &mut App) {
         c.popover_foreground = t.colors.text;
         c.accent = t.colors.hover;
         c.accent_foreground = t.colors.text;
-        c.title_bar = t.colors.canvas;
-        c.title_bar_border = t.colors.canvas;
+        c.title_bar = t.extra.chrome;
+        c.title_bar_border = t.colors.border;
         c.window_border = t.colors.border;
-        c.scrollbar = t.colors.canvas.opacity(0.);
+        c.scrollbar = t.extra.stage.opacity(0.);
         c.scrollbar_thumb = t.colors.text_subtle.opacity(0.35);
         c.scrollbar_thumb_hover = t.colors.text_subtle.opacity(0.6);
     });

@@ -33,7 +33,7 @@ folder (`%APPDATA%\Forge` on Windows; `FORGE_CONFIG_DIR` overrides it).
 - `src/theme.rs`: every colour, size, radius and font. Nothing else hardcodes them.
 - `src/state.rs`: the app state, the transcript model, mock chats and the scripted reply.
 - `src/profile.rs`: your name on disk.
-- `src/assets.rs`: bundled icons (Lucide, ISC) and fonts (Inter, JetBrains Mono, Source Serif 4; OFL).
+- `src/assets.rs`: bundled icons (Lucide, ISC) and fonts (Hanken Grotesk, JetBrains Mono, Source Serif 4; OFL).
 - `src/ui/`: one file per part: `workspace` (title bar, welcome), `sidebar`,
   `chat_view`, `message`, `markdown`, `composer`, `command_palette`,
   `onboarding`, `hammer` (the Forge mark).

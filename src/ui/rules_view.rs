@@ -398,7 +398,7 @@ impl RulesView {
                 .border_1()
                 .border_color(t.colors.border)
                 .rounded(t.radius.button)
-                .bg(t.colors.canvas)
+                .bg(t.extra.stage)
                 .p(t.space.sm)
                 .font_family(t.font_mono.clone())
                 .text_size(t.text.body_sm - px(1.))
@@ -542,7 +542,7 @@ impl Render for RulesView {
         let scan = self.scan.clone();
         let test = scan.as_ref().map(|sc| sc.relative(&self.tester.read(cx).value())).unwrap_or_default();
 
-        let mut root = div().flex_1().min_h_0().flex().flex_col().gap(t.space.md).px(t.space.xl).pt(t.space.xl).pb(t.space.lg).bg(t.colors.canvas);
+        let mut root = div().flex_1().min_h_0().flex().flex_col().gap(t.space.md).px(t.space.xl).pt(t.space.xl).pb(t.space.lg).bg(t.extra.stage);
         root = root.child(self.header(&t, where_.clone(), cx));
 
         let Some(scan) = scan else {

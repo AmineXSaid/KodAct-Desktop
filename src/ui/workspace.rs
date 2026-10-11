@@ -4,7 +4,7 @@
 
 use gpui::component::TitleBar;
 use gpui::{
-    div, prelude::*, px, relative, AnimationExt, ClipboardItem, Context, Entity, FocusHandle, FontWeight, IntoElement, Render,
+    div, prelude::*, px, AnimationExt, ClipboardItem, Context, Entity, FocusHandle, FontWeight, IntoElement, Render,
     SharedString, Window,
 };
 
@@ -30,13 +30,6 @@ pub struct Workspace {
     projects: Entity<ProjectsView>,
     focus: FocusHandle,
 }
-
-const SUGGESTIONS: &[&str] = &[
-    "Explain how this project is structured",
-    "Find and fix a failing test",
-    "Review my uncommitted changes",
-    "Write a README for this project",
-];
 
 impl Workspace {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -172,12 +165,11 @@ impl Workspace {
         )
     }
 
+    /// A new chat: one line greeting you, with your cube, and the composer.
     fn welcome(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
-        let project = self.state.read(cx).project.clone();
-        let where_ = crate::rules::display_path(&self.state.read(cx).project_dir, crate::rules::home_dir().as_deref());
-        let name = self.state.read(cx).user_name.clone().unwrap_or_default();
-        let composer = self.composer.clone();
+        let s = self.state.read(cx);
+        let line = crate::greeting::pick(s.user_name.as_deref().unwrap_or_default(), crate::greeting::hour_now(), s.greeting_seed);
         div()
             .flex_1()
             .flex()
@@ -192,71 +184,20 @@ impl Workspace {
                     .max_w(t.size.column - t.space.xxl * 2.)
                     .flex()
                     .flex_col()
-                    .gap(t.space.lg)
+                    .gap(t.space.xl)
                     .child(
                         div()
                             .flex()
                             .justify_center()
                             .items_center()
-                            .gap(t.space.sm)
+                            .gap(t.space.md)
                             .font_family(t.font_serif.clone())
-                            .text_size(t.text.subheading - px(2.))
-                            .text_color(t.colors.text_body)
-                            .child(super::cube_image(32., window))
-                            .child(format!("Welcome back, {name}")),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .flex_wrap()
-                            .justify_center()
-                            .items_center()
-                            .gap(t.space.sm)
-                            .text_size(t.size.display)
-                            .line_height(relative(1.2))
-                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_size(t.size.greeting)
                             .text_color(t.colors.text_strong)
-                            .child("What should we build in")
-                            // The pill and the "?" wrap together.
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .child(div().px(t.space.md).rounded(t.radius.pill).bg(t.extra.highlight).child(project.clone()))
-                                    .child("?"),
-                            ),
+                            .child(super::cube_image(32., window))
+                            .child(line),
                     )
-                    .child(
-                        div()
-                            .text_center()
-                            .font_family(t.font_serif.clone())
-                            .text_size(t.text.subheading - px(2.))
-                            .line_height(relative(1.56))
-                            .text_color(t.colors.text_body)
-                            .pb(t.space.md)
-                            .child(format!("Forge works in {where_} and asks before it changes anything.")),
-                    )
-                    .child(self.composer.clone())
-                    .child(
-                        div().flex().flex_wrap().justify_center().gap(t.space.sm).children(SUGGESTIONS.iter().enumerate().map(|(i, s)| {
-                            let hover = t.colors.text_subtle;
-                            let composer = composer.clone();
-                            div()
-                                .id(("suggestion", i))
-                                .px(t.space.md)
-                                .py(t.space.xs + px(2.))
-                                .rounded(t.radius.pill)
-                                .bg(t.colors.surface)
-                                .border_1()
-                                .border_color(t.colors.border)
-                                .text_color(t.colors.text_muted)
-                                .text_size(t.text.body_sm - px(1.))
-                                .cursor_pointer()
-                                .hover(move |st| st.border_color(hover))
-                                .child(*s)
-                                .on_click(move |_, window, cx| composer.update(cx, |c, cx| c.fill(s, window, cx)))
-                        })),
-                    ),
+                    .child(self.composer.clone()),
             )
     }
 
@@ -347,7 +288,7 @@ impl Render for Workspace {
         let (sidebar_open, palette_open, onboarding, screen, loading) = (s.sidebar_open, s.palette_open, s.onboarding, s.screen, s.loading);
         let empty = s.chat().is_none_or(|c| c.messages.is_empty());
 
-        let main = div().flex_1().min_w_0().flex().flex_col().bg(t.colors.canvas);
+        let main = div().flex_1().min_w_0().flex().flex_col().bg(t.extra.stage);
         let main = if screen == Screen::Rules {
             main.child(self.rules.clone())
         } else if matches!(screen, Screen::Projects | Screen::Project(_)) {

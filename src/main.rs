@@ -9,6 +9,7 @@ mod approve;
 mod assets;
 mod context;
 mod endpoints;
+mod greeting;
 mod health;
 mod highlight;
 mod modes;

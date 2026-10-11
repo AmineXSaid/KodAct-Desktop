@@ -5,10 +5,10 @@
 use gpui::component::input::{Input, InputEvent, InputState};
 use std::time::Duration;
 
-use gpui::{div, prelude::*, px, relative, Animation, AnimationExt, Context, Entity, FontWeight, IntoElement, Render, Subscription, Window};
+use gpui::{div, prelude::*, px, relative, Animation, AnimationExt, Context, Entity, IntoElement, Render, Subscription, Window};
 
 use crate::state::AppState;
-use super::{icon, shortcut};
+use super::icon;
 use crate::theme::ActiveTheme;
 
 pub struct Onboarding {
@@ -93,7 +93,7 @@ impl Render for Onboarding {
                     .on_click(cx.listener(|this, _, window, cx| this.submit(window, cx))),
             );
 
-        div().flex_1().flex().items_center().justify_center().bg(t.colors.canvas).pb(t.space.xxl * 2.).child(
+        div().flex_1().flex().items_center().justify_center().bg(t.extra.stage).pb(t.space.xxl * 2.).child(
             div()
                 .w(px(480.))
                 .flex()
@@ -102,30 +102,13 @@ impl Render for Onboarding {
                 .child(logo)
                 .child(
                     div()
-                        .mt(t.space.xl + t.space.sm)
-                        .text_size(t.text.caption)
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(t.colors.primary)
-                        .child(if returning { "YOUR NAME" } else { "WELCOME TO FORGE" }),
-                )
-                .child(
-                    div()
-                        .mt(t.space.sm)
+                        .mt(t.space.xl)
                         .text_center()
                         .font_family(t.font_serif.clone())
-                        .text_size(t.size.display - px(8.))
-                        .line_height(relative(1.15))
+                        .text_size(t.size.greeting)
+                        .line_height(relative(1.2))
                         .text_color(t.colors.text_strong)
                         .child(if returning { "What should we call you now?" } else { "Hello. What should we call you?" }),
-                )
-                .child(
-                    div()
-                        .mt(t.space.md)
-                        .text_center()
-                        .text_size(t.text.body_sm)
-                        .line_height(relative(1.55))
-                        .text_color(t.colors.text_muted)
-                        .child("Forge greets you by name and shows it in the sidebar. It stays on this computer."),
                 )
                 .child(div().mt(t.space.xl).w(px(420.)).child(field))
                 .child(
@@ -138,35 +121,9 @@ impl Render for Onboarding {
                         .text_color(t.extra.danger)
                         .children(self.error),
                 )
-                .child(
-                    div()
-                        .mt(t.space.md)
-                        .flex()
-                        .items_center()
-                        .gap(t.space.xs)
-                        .text_size(t.text.caption)
-                        .text_color(t.colors.text_subtle)
-                        .child("Press")
-                        .child(kbd_chip(&t, "Enter"))
-                        .child("to continue · change it later with")
-                        .child(kbd_chip(&t, shortcut("K"))),
-                )
                 .with_animation("onboarding-in", Animation::new(Duration::from_millis(t.motion_ms * 2)).with_easing(gpui::ease_out_quint()), |d, delta| {
                     d.opacity(delta).mt(px(10. * (1. - delta)))
                 }),
         )
     }
-}
-
-/// A key, drawn as a small chip.
-fn kbd_chip(t: &crate::theme::Theme, label: impl Into<gpui::SharedString>) -> impl IntoElement {
-    div()
-        .px(t.space.xs + px(2.))
-        .rounded(t.radius.small)
-        .border_1()
-        .border_color(t.colors.border)
-        .bg(t.colors.surface)
-        .font_weight(FontWeight::MEDIUM)
-        .text_color(t.colors.text_muted)
-        .child(label.into())
 }

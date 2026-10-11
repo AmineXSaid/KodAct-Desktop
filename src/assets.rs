@@ -54,11 +54,11 @@ impl AssetSource for Assets {
 /// Register the bundled faces, so the app looks the same on every machine.
 pub fn load_fonts(cx: &App) {
     let fonts: Vec<Cow<'static, [u8]>> = vec![
-        Cow::Borrowed(include_bytes!("../assets/fonts/Inter-Regular.otf")),
-        Cow::Borrowed(include_bytes!("../assets/fonts/Inter-Medium.otf")),
-        Cow::Borrowed(include_bytes!("../assets/fonts/Inter-SemiBold.otf")),
-        Cow::Borrowed(include_bytes!("../assets/fonts/Inter-Bold.otf")),
-        Cow::Borrowed(include_bytes!("../assets/fonts/Inter-Italic.otf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/HankenGrotesk-Regular.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/HankenGrotesk-Medium.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/HankenGrotesk-SemiBold.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/HankenGrotesk-Bold.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/HankenGrotesk-Italic.ttf")),
         Cow::Borrowed(include_bytes!("../assets/fonts/JetBrainsMono-Regular.ttf")),
         Cow::Borrowed(include_bytes!("../assets/fonts/JetBrainsMono-Bold.ttf")),
         Cow::Borrowed(include_bytes!("../assets/fonts/SourceSerif4-Regular.ttf")),

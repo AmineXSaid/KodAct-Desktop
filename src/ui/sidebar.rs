@@ -246,7 +246,7 @@ impl Render for Sidebar {
             .h_full()
             .flex()
             .flex_col()
-            .bg(t.colors.sidebar)
+            .bg(t.extra.pane)
             .border_r_1()
             .border_color(t.colors.border)
             .child(
