@@ -4,7 +4,6 @@ pub mod chat_view;
 pub mod command_palette;
 pub mod composer;
 pub mod forge_cube;
-pub mod mark;
 pub mod mode_menu;
 pub mod model_menu;
 pub mod motion;

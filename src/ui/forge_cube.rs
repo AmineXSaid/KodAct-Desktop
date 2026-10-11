@@ -285,6 +285,11 @@ fn still(t: &Theme, size: Pixels, color: Hsla, frame: Frame) -> impl IntoElement
     canvas(|_, _, _| {}, move |bounds, _, window, _| draw(bounds, frame, &inks, window)).size(size).flex_none()
 }
 
+/// The finished cube, still: a reply that is done.
+pub fn finished(t: &Theme, size: Pixels, color: Hsla) -> AnyElement {
+    still(t, size, color, RESTING).into_any_element()
+}
+
 /// The working cube at `size` (24px beside the working line), painted in
 /// `color` (Forge blue, or the mode's tint). Reduced motion: the finished cube.
 pub fn cube(t: &Theme, size: Pixels, color: Hsla, id: impl Into<ElementId>) -> AnyElement {

@@ -29,6 +29,7 @@ pub struct Colors {
     #[allow(dead_code)] // in the palette; nothing is coral right now
     pub coral: Hsla,
     pub sky: Hsla,
+    #[allow(dead_code)] // in the palette; nothing uses it right now
     pub midnight: Hsla,
 }
 

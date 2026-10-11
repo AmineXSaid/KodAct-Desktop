@@ -7,6 +7,7 @@
 #[cfg_attr(not(test), allow(dead_code))]
 mod approve;
 mod assets;
+mod context;
 mod endpoints;
 mod health;
 mod highlight;

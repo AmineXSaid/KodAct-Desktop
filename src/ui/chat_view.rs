@@ -216,6 +216,7 @@ impl Render for ChatView {
                         last: ix + 1 == chat.messages.len(),
                         first_in_turn: after_user && matches!(m, Message::Assistant { .. }),
                         live_turn: s.busy() && last_user.is_none_or(|u| ix > u),
+                        cube: super::mode_menu::cube_color(&t, s.mode),
                     };
                     message::render(m, &ctx, &t)
                 }

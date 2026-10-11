@@ -116,8 +116,9 @@ pub enum Block {
 pub enum Message {
     User { text: SharedString, sent: SystemTime },
     Assistant { blocks: Vec<Block> },
-    /// The end of a turn: how long it took and what it cost.
-    TurnEnd { seconds: f32, cost: f32 },
+    /// The end of a turn: how long it took, and the usage the model
+    /// reported for it (`context.rs`).
+    TurnEnd { seconds: f32, usage: Option<crate::context::Usage> },
     /// Something the app says (interrupted, an error).
     Notice { text: SharedString, error: bool },
 }
@@ -249,8 +250,6 @@ pub struct AppState {
     /// A short message at the bottom of the window (stubs say what they would do).
     pub toast: Option<SharedString>,
     toast_reset: Option<Task<()>>,
-    /// Tokens used / context size, for the composer's meter.
-    pub context_used: f32,
     /// The replies being played, by chat. Each keeps going while you look at
     /// another chat; dropping one stops it.
     replies: std::collections::HashMap<usize, Task<()>>,
@@ -308,7 +307,6 @@ impl AppState {
             copied_reset: None,
             toast: None,
             toast_reset: None,
-            context_used: 0.31,
             replies: Default::default(),
             draft: None,
             loading: true,
@@ -443,11 +441,11 @@ impl AppState {
             cx.spawn(async move |this, cx| {
                 let timeout = crate::health::timeout_for(&profile, background);
                 let probed = profile.clone();
-                let outcome = cx.background_spawn(async move { crate::health::probe(&probed, timeout) }).await;
+                let (outcome, listed) = cx.background_spawn(async move { (crate::health::probe(&probed, timeout), crate::health::listed_context(&probed, timeout)) }).await;
                 let _ = this.update(cx, |s, cx| {
                     s.checks_running -= 1;
                     if s.check_gen.get(&profile.name) == Some(&generation) {
-                        crate::health::apply(&mut s.health, &profile, outcome);
+                        crate::health::apply(&mut s.health, &profile, outcome, listed);
                         let store = s.health.clone();
                         cx.background_spawn(async move { crate::health::save(&store) }).detach();
                     }
@@ -865,9 +863,10 @@ impl AppState {
                 }
                 blocks.push(Block::Text("Understood, I won't change the file. Tell me how you'd like to proceed.".into()));
             }
-            (Step::End { seconds, cost }, _) => {
-                c.messages.push(Message::TurnEnd { seconds, cost });
-                self.context_used = (self.context_used + 0.04).min(0.97);
+            (Step::End { seconds }, _) => {
+                // A mock reply has no model to report usage: count it from the text.
+                let usage = crate::context::estimate(&c.messages);
+                c.messages.push(Message::TurnEnd { seconds, usage: Some(usage) });
             }
             _ => {}
         }
@@ -887,7 +886,7 @@ enum Step {
     ToolDone(String, Vec<DiffLine>),
     Ask(String, String),
     Denied,
-    End { seconds: f32, cost: f32 },
+    End { seconds: f32 },
 }
 
 impl Step {
@@ -951,7 +950,7 @@ fn script(prompt: &str) -> Vec<Step> {
         "Done. The greeting now lives in `greeting()` and `main` prints it.\n\n**What changed**\n- `src/main.rs`: a new `greeting()` function, used by `main`.\n- A unit test, `greets_by_name`, checks the text.\n\n```rust\npub fn greeting() -> &'static str {\n    \"Hello, Forge\"\n}\n```\n\nAll tests pass.",
         Step::Say,
     ));
-    s.push(Step::End { seconds: 14.2, cost: 0.0312 });
+    s.push(Step::End { seconds: 14.2 });
     s
 }
 
@@ -1028,7 +1027,7 @@ fn mock_chats() -> Vec<Chat> {
                 "Done. The greeting now lives in `greeting()` and `main` prints it.\n\n## What changed\n\n- `src/main.rs`: new **`greeting()`** function, used by `main`.\n- A unit test, *greets_by_name*, checks the text.\n\n```rust\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn greets_by_name() {\n        assert_eq!(super::greeting(), \"Hello, Forge\");\n    }\n}\n```\n\n> Run `cargo test` any time to check it again.\n\n1. Build with `cargo build`.\n2. Run it with `cargo run`.".into(),
             )],
         },
-        Message::TurnEnd { seconds: 18.4, cost: 0.0412 },
+        Message::TurnEnd { seconds: 18.4, usage: None },
         Message::User { text: "Can you also check the hermes review pipeline for unused imports?".into(), sent: minutes_ago(4) },
         Message::Assistant {
             blocks: vec![
@@ -1039,13 +1038,13 @@ fn mock_chats() -> Vec<Chat> {
                 Block::Text("One unused import: `diffLines` in `src/hermes/review.ts`. Want me to remove it?".into()),
             ],
         },
-        Message::TurnEnd { seconds: 6.1, cost: 0.0087 },
+        Message::TurnEnd { seconds: 6.1, usage: None },
     ];
     let simple = |title: &str, minutes: u32| {
         vec![
             Message::User { text: title.to_string().into(), sent: minutes_ago(minutes) },
             Message::Assistant { blocks: vec![Block::Text(format!("This is an older conversation about *{}*.", title.to_lowercase()).into())] },
-            Message::TurnEnd { seconds: 3.2, cost: 0.004 },
+            Message::TurnEnd { seconds: 3.2, usage: None },
         ]
     };
     let with_error = |mut m: Vec<Message>| {
@@ -1061,6 +1060,14 @@ fn mock_chats() -> Vec<Chat> {
         Chat { id: 6, project: 1, title: "Migrate settings to the new schema".into(), minutes_ago: 5000, pinned: false, messages: simple("Migrate settings to the new schema", 5000), version: 0, unread: false },
         Chat { id: 7, project: 2, title: "Genesis redesign: landing page".into(), minutes_ago: 20000, pinned: false, messages: simple("Genesis redesign: landing page", 20000), version: 0, unread: false },
     ];
+    // The mock replies' usage, counted from their text as each turn ended.
+    for c in &mut chats {
+        for i in 0..c.messages.len() {
+            if let Message::TurnEnd { usage: None, seconds } = c.messages[i] {
+                c.messages[i] = Message::TurnEnd { seconds, usage: Some(crate::context::estimate(&c.messages[..i])) };
+            }
+        }
+    }
     chats.sort_by_key(|c| (!c.pinned, c.minutes_ago));
     chats
 }

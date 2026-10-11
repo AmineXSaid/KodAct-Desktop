@@ -4,7 +4,7 @@
 //!   first reply of a turn; it holds text (markdown), thinking (a
 //!   disclosure), tool calls (one row each; Bash as a terminal block) and
 //!   permission prompts;
-//! - the end of a turn: how long it took and what it cost;
+//! - the end of a turn: how long it took;
 //! - a notice (interrupted, an error).
 
 use std::time::{Duration, SystemTime};
@@ -31,16 +31,18 @@ pub struct ItemContext {
     pub first_in_turn: bool,
     /// This turn is the one still running.
     pub live_turn: bool,
+    /// The colour the cube is painted while this turn runs (the mode's).
+    pub cube: gpui::Hsla,
 }
 
 pub fn render(m: &Message, cx: &ItemContext, t: &Theme) -> AnyElement {
     match m {
         Message::User { text, sent } => user(text, *sent, cx, t),
         Message::Assistant { blocks } => assistant(blocks, cx, t),
-        Message::TurnEnd { seconds, cost } => div()
+        Message::TurnEnd { seconds, .. } => div()
             .text_size(t.text.caption)
             .text_color(t.colors.text_subtle)
-            .child(format!("{seconds:.1}s · ${cost:.4}"))
+            .child(format!("{seconds:.1}s"))
             .into_any_element(),
         Message::Notice { text, error } => div()
             .flex()
@@ -139,21 +141,14 @@ fn user(text: &SharedString, sent: SystemTime, cx: &ItemContext, t: &Theme) -> A
         .into_any_element()
 }
 
-/// The head of a turn: Forge's mark and name. The mark breathes while the
-/// turn runs.
+/// The head of a turn: Forge's cube and name. The cube is Forge for VS
+/// Code's: struck into shape while the turn runs, finished and still after.
 fn turn_header(cx: &ItemContext, t: &Theme) -> AnyElement {
-    let mark = super::mark::mark(t, t.size.icon);
-    let mark: AnyElement = if cx.live_turn {
-        div()
-            .child(mark)
-            .with_animation(
-                SharedString::from(format!("mark-{}-{}", cx.chat, cx.index)),
-                Animation::new(Duration::from_millis(1800)).repeat().with_easing(gpui::ease_in_out),
-                |d, delta| d.opacity(0.55 + 0.45 * (1. - (delta * 2. - 1.).abs())),
-            )
-            .into_any_element()
+    const CUBE: f32 = 20.;
+    let mark = if cx.live_turn {
+        super::forge_cube::cube(t, px(CUBE), cx.cube, SharedString::from(format!("turn-cube-{}-{}", cx.chat, cx.index)))
     } else {
-        mark.into_any_element()
+        super::forge_cube::finished(t, px(CUBE), t.colors.primary)
     };
     div()
         .flex()

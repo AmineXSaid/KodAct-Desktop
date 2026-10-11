@@ -1918,6 +1918,7 @@ dependencies = [
  "globset",
  "gpui-kit",
  "ignore",
+ "image",
  "pulldown-cmark",
  "serde",
  "serde_json",

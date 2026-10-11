@@ -24,6 +24,10 @@ serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 ureq = { version = "=2.12.1", default-features = false, features = ["tls", "json"] }
 
+[dev-dependencies]
+# Tests only: decode the cube picture and its renderings to check them pixel by pixel.
+image = { version = "=0.25.10", default-features = false, features = ["png", "webp"] }
+
 [profile.dev]
 # GPUI is heavy in debug; optimise dependencies, keep our crate fast to build.
 opt-level = 0

@@ -41,6 +41,27 @@ fn key(t: &Theme, text: &'static str) -> impl IntoElement {
     div().px(px(4.)).py(px(1.)).border_1().border_color(t.colors.border).rounded(px(3.)).child(text)
 }
 
+/// A compact button for the warning's two answers: both the same height
+/// and text, the filled one in `fill`, the other a quiet text button.
+fn small_button(t: &Theme, id: &'static str, label: &'static str, fill: Option<Hsla>) -> gpui::Stateful<gpui::Div> {
+    let hover = t.colors.hover;
+    div()
+        .id(id)
+        .h(px(28.))
+        .px(px(12.))
+        .flex()
+        .items_center()
+        .rounded(t.radius.button)
+        .text_size(t.text.caption)
+        .font_weight(FontWeight::MEDIUM)
+        .cursor_pointer()
+        .map(|d| match fill {
+            Some(c) => d.bg(c).text_color(t.colors.primary_fg).hover(|st| st.opacity(0.9)),
+            None => d.text_color(t.colors.text).hover(move |st| st.bg(hover)),
+        })
+        .child(label)
+}
+
 /// The footer button. `skip` says a click is the one that just closed the
 /// menu (pressing the button while it's open), so it doesn't reopen it.
 pub fn trigger(t: &Theme, state: &Entity<AppState>, cx: &App, skip: impl Fn(&gpui::ClickEvent, &mut App) -> bool + 'static) -> impl IntoElement {
@@ -148,26 +169,13 @@ pub fn menu(t: &Theme, state: &Entity<AppState>, cx: &App, on_out: impl Fn(gpui:
                     .flex()
                     .justify_end()
                     .gap(px(6.))
-                    .child(crate::theme::ghost_button(t, "Cancel").id("bypass-cancel").on_click(move |_, _, cx| {
+                    .child(small_button(t, "bypass-cancel", "Cancel", None).on_click(move |_, _, cx| {
                         cancel.update(cx, |s, cx| {
                             s.bypass_warning = false;
                             cx.notify();
                         })
                     }))
-                    .child(
-                        div()
-                            .id("bypass-allow")
-                            .px(px(10.))
-                            .py(px(4.))
-                            .rounded(t.radius.button)
-                            .bg(danger)
-                            .text_color(t.colors.primary_fg)
-                            .text_size(t.text.caption)
-                            .font_weight(FontWeight::MEDIUM)
-                            .cursor_pointer()
-                            .child("Allow bypass")
-                            .on_click(move |_, _, cx| allow.update(cx, |s, cx| s.allow_bypass(cx))),
-                    ),
+                    .child(small_button(t, "bypass-allow", "Allow bypass", Some(danger)).on_click(move |_, _, cx| allow.update(cx, |s, cx| s.allow_bypass(cx)))),
             )
     });
 

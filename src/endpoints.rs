@@ -44,6 +44,8 @@ pub enum Auth {
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Capabilities {
+    /// The model's context window in tokens, when the profile states it.
+    pub context_window: Option<u64>,
     pub effort: bool,
     pub effort_levels: Option<Vec<Effort>>,
     pub fast: bool,
@@ -152,6 +154,23 @@ impl Profile {
     /// What you read in the picker: the model.
     pub fn display(&self) -> &str {
         self.display_name.as_deref().unwrap_or(&self.model)
+    }
+
+    /// The model's context window: what the profile states, else what the
+    /// endpoint lists for it (read during its check). None when neither says.
+    pub fn context_window(&self, health: Option<&crate::health::EndpointHealth>) -> Option<u64> {
+        self.capabilities.context_window.filter(|w| *w > 0).or_else(|| health.and_then(|h| h.listed_context).filter(|w| *w > 0))
+    }
+
+    /// Where the endpoint lists its models: `/v1/models` (one version
+    /// segment, whichever way the base URL is written).
+    pub fn models_url(&self) -> String {
+        let base = self.base_url.trim_end_matches('/');
+        match self.wire {
+            Wire::Anthropic => anthropic_url(base, "/v1/models"),
+            Wire::Openai if ends_in_version(base) => format!("{base}/models"),
+            Wire::Openai => format!("{base}/v1/models"),
+        }
     }
 
     /// The effort levels this pair offers: none without effort support, else
@@ -281,10 +300,22 @@ mod tests {
     }
 
     #[test]
+    fn the_context_window_is_stated_or_listed_never_guessed() {
+        let mut p = profile("https://h/v1", Wire::Openai);
+        assert_eq!(p.context_window(None), None);
+        let listed = crate::health::EndpointHealth { listed_context: Some(131_072), ..Default::default() };
+        assert_eq!(p.context_window(Some(&listed)), Some(131_072));
+        p.capabilities.context_window = Some(64_000);
+        assert_eq!(p.context_window(Some(&listed)), Some(64_000));
+        assert_eq!(p.models_url(), "https://h/v1/models");
+        assert_eq!(profile("https://h", Wire::Anthropic).models_url(), "https://h/v1/models");
+    }
+
+    #[test]
     fn chips_follow_capabilities() {
         let mut p = profile("u", Wire::Openai);
         assert!(p.chips().is_empty() && p.effort_levels().is_empty());
-        p.capabilities = Capabilities { effort: true, effort_levels: Some(vec![Effort::Max, Effort::Low, Effort::Xhigh]), fast: true };
+        p.capabilities = Capabilities { context_window: None, effort: true, effort_levels: Some(vec![Effort::Max, Effort::Low, Effort::Xhigh]), fast: true };
         assert_eq!(p.effort_levels(), [Effort::Low, Effort::Xhigh, Effort::Max]);
         assert_eq!(p.chips(), ["Max", "Ultracode", "Fast"]);
     }

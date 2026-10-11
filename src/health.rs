@@ -62,6 +62,10 @@ pub struct EndpointHealth {
     pub error: Option<String>,
     #[serde(default)]
     pub models: Vec<ModelHealth>,
+    /// The context window the endpoint lists for the model (its `/v1/models`
+    /// entry), read during the check.
+    #[serde(default)]
+    pub listed_context: Option<u64>,
     /// A check is running now. Not saved.
     #[serde(skip)]
     pub syncing: bool,
@@ -183,13 +187,17 @@ pub fn save(store: &Store) {
 }
 
 /// Fold a finished check into the record. A check that could not be sent
-/// keeps the old verdicts and records why.
-pub fn apply(store: &mut Store, profile: &Profile, outcome: Result<ModelHealth, String>) {
+/// keeps the old verdicts and records why; a model list that couldn't be
+/// read keeps the context window read before.
+pub fn apply(store: &mut Store, profile: &Profile, outcome: Result<ModelHealth, String>, listed_context: Option<u64>) {
     let entry = store.entry(profile.name.clone()).or_default();
     if entry.fingerprint != profile.fingerprint() {
         *entry = EndpointHealth { fingerprint: profile.fingerprint(), ..Default::default() };
     }
     entry.syncing = false;
+    if listed_context.is_some() {
+        entry.listed_context = listed_context;
+    }
     match outcome {
         Ok(verdict) => {
             entry.error = None;
@@ -215,24 +223,50 @@ fn token(auth: &Auth) -> Result<Option<String>, String> {
     }
 }
 
-/// Check one pair: Ok with its verdict (answered or not), or Err when the
-/// request could not be sent at all. Blocking; run it off the UI thread.
-pub fn probe(profile: &Profile, timeout: Duration) -> Result<ModelHealth, String> {
-    let token = token(&profile.auth)?;
-    let agent = ureq::AgentBuilder::new().timeout_connect(CONNECT_TIMEOUT).timeout(timeout).build();
-    let mut req = agent.post(&profile.chat_url()).set("content-type", "application/json");
+/// A request to the endpoint with its headers and key.
+fn request(agent: &ureq::Agent, method: &str, url: &str, profile: &Profile, token: Option<&str>) -> ureq::Request {
+    let mut req = agent.request(method, url);
     if profile.wire == Wire::Anthropic {
         req = req.set("anthropic-version", "2023-06-01");
     }
     for (k, v) in &profile.headers {
         req = req.set(k, v);
     }
-    if let Some(t) = &token {
+    if let Some(t) = token {
         req = match profile.wire {
             Wire::Anthropic => req.set("x-api-key", t).set("authorization", &format!("Bearer {t}")),
             Wire::Openai => req.set("authorization", &format!("Bearer {t}")),
         };
     }
+    req
+}
+
+/// The context window an endpoint's model list states for `model`: its
+/// entry's `context_length`, `max_input_tokens` or `context_window`.
+pub fn context_from_listing(listing: &serde_json::Value, model: &str) -> Option<u64> {
+    let entries = listing.get("data").or_else(|| listing.get("models")).and_then(|d| d.as_array())?;
+    let entry = entries.iter().find(|e| [e.get("id"), e.get("name")].into_iter().flatten().any(|v| v.as_str() == Some(model)))?;
+    ["context_length", "max_input_tokens", "context_window"].iter().find_map(|k| entry.get(*k).and_then(|v| v.as_u64())).filter(|n| *n > 0)
+}
+
+/// Read the model's context window from the endpoint's model list, when
+/// the profile doesn't state it. None when it can't be read. Blocking.
+pub fn listed_context(profile: &Profile, timeout: Duration) -> Option<u64> {
+    if profile.capabilities.context_window.is_some() {
+        return None;
+    }
+    let token = token(&profile.auth).ok()?;
+    let agent = ureq::AgentBuilder::new().timeout_connect(CONNECT_TIMEOUT).timeout(timeout).build();
+    let text = request(&agent, "GET", &profile.models_url(), profile, token.as_deref()).call().ok()?.into_string().ok()?;
+    context_from_listing(&serde_json::from_str(&text).ok()?, &profile.model)
+}
+
+/// Check one pair: Ok with its verdict (answered or not), or Err when the
+/// request could not be sent at all. Blocking; run it off the UI thread.
+pub fn probe(profile: &Profile, timeout: Duration) -> Result<ModelHealth, String> {
+    let token = token(&profile.auth)?;
+    let agent = ureq::AgentBuilder::new().timeout_connect(CONNECT_TIMEOUT).timeout(timeout).build();
+    let req = request(&agent, "POST", &profile.chat_url(), profile, token.as_deref()).set("content-type", "application/json");
     let body = serde_json::json!({ "model": profile.model, "max_tokens": 4, "messages": [{ "role": "user", "content": "hi" }] });
     let started = Instant::now();
     let result = req.send_string(&body.to_string());
@@ -274,7 +308,7 @@ mod tests {
     use super::*;
 
     fn record(error: Option<&str>, models: Vec<ModelHealth>, syncing: bool) -> EndpointHealth {
-        EndpointHealth { fingerprint: String::new(), last_synced_at: None, error: error.map(Into::into), models, syncing }
+        EndpointHealth { error: error.map(Into::into), models, syncing, ..Default::default() }
     }
 
     fn verdict(id: &str, servable: bool, ms: u64) -> ModelHealth {
@@ -318,6 +352,17 @@ mod tests {
         // A short interval waits at least half of it.
         assert!(!is_due(Some(0), 29_000, 1.));
         assert!(is_due(Some(0), 30_000, 1.));
+    }
+
+    #[test]
+    fn the_listed_window_is_read_from_either_list_shape() {
+        let openai = serde_json::json!({ "data": [{ "id": "other", "context_length": 8192 }, { "id": "qwen3", "context_length": 262144 }] });
+        assert_eq!(context_from_listing(&openai, "qwen3"), Some(262_144));
+        let anthropic = serde_json::json!({ "data": [{ "id": "m", "max_input_tokens": 200000 }] });
+        assert_eq!(context_from_listing(&anthropic, "m"), Some(200_000));
+        let ollama = serde_json::json!({ "models": [{ "name": "gpt-oss:20b" }] });
+        assert_eq!(context_from_listing(&ollama, "gpt-oss:20b"), None);
+        assert_eq!(context_from_listing(&openai, "missing"), None);
     }
 
     #[test]

@@ -1,6 +1,6 @@
 //! The composer: a white card with a multi-line input that grows up to a
-//! limit, and a row of controls: attach (ghost), permission mode, the model
-//! picker (a popover), the context meter, and Send, the one filled button
+//! limit, and a row of controls: attach (ghost), the model picker (a
+//! popover), the context meter (when it's known), the Modes menu, and Send, the one filled button
 //! (Stop while a reply plays). Enter sends; Shift+Enter adds a line.
 
 use gpui::component::input::{Input, InputEvent, InputState, Textarea, TextareaState};
@@ -211,7 +211,7 @@ impl Render for Composer {
             });
         };
         let s = self.state.read(cx);
-        let (busy, mode, picker_open, used) = (s.busy(), s.mode, s.picker_open, s.context_used);
+        let (busy, mode, picker_open) = (s.busy(), s.mode, s.picker_open);
         let model_menu = picker_open.then(|| super::model_menu::render(&t, &state, s, &query, self.active.as_deref(), search, on_hover, move |pos, cx| dismiss_models(pos, true, cx)));
         let model_name: SharedString = match (&s.endpoints, s.active_profile()) {
             (None, _) => "Model".into(),
@@ -220,6 +220,14 @@ impl Render for Composer {
         };
         let pill_effort = super::model_menu::pill_effort(&t, s);
         let tint = super::mode_menu::tint(&t, mode);
+        // The context meter: this conversation against the window of the
+        // model picked now. Hidden when either isn't known.
+        let profile = s.active_profile();
+        let meter = crate::context::meter(
+            s.chat().and_then(|c| crate::context::last_usage(&c.messages)),
+            profile.and_then(|p| p.context_window(s.health.get(&p.name))),
+        )
+        .map(|m| (m, profile.map(|p| p.display().to_string()).unwrap_or_default()));
 
         let send_ready = busy || !empty;
         // The send button takes the mode's colour, as in the extension.
@@ -317,25 +325,36 @@ impl Render for Composer {
                     )
                     .child(model_pill)
                     .child(div().flex_1())
-                    // The context meter: how full the window is.
-                    .child(
+                    .children(meter.map(|(m, model)| {
+                        let f = m.fraction();
+                        let colour = if f > 1. { t.extra.danger } else if f > 0.8 { t.extra.warning } else { t.colors.text_subtle };
+                        let tip: SharedString = format!(
+                            "{}{} / {} context used · {model}{}",
+                            if m.estimated { "About " } else { "" },
+                            crate::context::short(m.used),
+                            crate::context::short(m.window),
+                            if f > 1. { ". More than this model's window: the conversation will be compacted" } else { "" },
+                        )
+                        .into();
                         div()
+                            .id("context-meter")
                             .flex()
                             .items_center()
                             .gap(t.space.sm)
                             .mr(t.space.xs)
                             .text_size(t.text.caption)
-                            .text_color(if used > 0.8 { t.extra.warning } else { t.colors.text_subtle })
+                            .text_color(colour)
                             .child(
                                 div()
                                     .w(px(36.))
                                     .h(px(4.))
                                     .rounded(t.radius.pill)
                                     .bg(t.colors.border)
-                                    .child(div().h_full().w(relative(used)).rounded(t.radius.pill).bg(if used > 0.8 { t.colors.marigold } else { t.colors.text_subtle })),
+                                    .child(div().h_full().w(relative(f.min(1.))).rounded(t.radius.pill).bg(if f > 0.8 { colour } else { t.colors.text_subtle })),
                             )
-                            .child(format!("{:.0}%", used * 100.)),
-                    )
+                            .child(if f > 0. && f < 0.01 { "<1%".to_string() } else { format!("{:.0}%", (f * 100.).round()) })
+                            .tooltip(move |window, cx| gpui::component::tooltip::Tooltip::new(tip.clone()).build(window, cx))
+                    }))
                     // Modes: the button and its menu above it.
                     .child(
                         div()
