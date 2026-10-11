@@ -104,7 +104,7 @@ impl Render for Onboarding {
                     div()
                         .mt(t.space.xl)
                         .text_center()
-                        .font_family(t.font_serif.clone())
+                        .font_family(t.font_display.clone())
                         .text_size(t.size.greeting)
                         .line_height(relative(1.2))
                         .text_color(t.colors.text_strong)

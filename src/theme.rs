@@ -73,6 +73,7 @@ pub struct Theme {
     pub motion_ms: u64,           // 200ms ease for hovers/transitions
     // Forge additions (see the section at the end of the tokens).
     pub font_mono: SharedString,  // JetBrains Mono: code, paths, commands
+    pub font_display: SharedString, // Source Serif 4 Display: the serif cut for large lines (the greeting)
     pub extra: ExtraColors,
     pub terminal: TerminalColors,
     pub code: CodeColors,
@@ -118,6 +119,7 @@ impl Theme {
             font_serif: "Source Serif 4".into(),
             motion_ms: 200,
             font_mono: "JetBrains Mono".into(),
+            font_display: "Source Serif 4 Display".into(),
             extra: ExtraColors::for_mode(is_dark),
             terminal: TerminalColors::for_mode(is_dark),
             code: CodeColors::for_mode(is_dark),
@@ -398,11 +400,12 @@ pub struct Sizes {
     pub icon_sm: Pixels,       // 14
     pub icon: Pixels,          // 16
     pub composer_max: Pixels,  // the composer's tallest input
+    pub composer_radius: Pixels, // 18: the composer box's corners
     pub palette: Pixels,       // command palette width
     pub hairline: Pixels,      // 1
     pub line_height_chat: f32, // 1.45 for prose
     pub chat_text: Pixels,     // 14: replies and your messages (Hanken Grotesk sets small; 14 reads as 13 did in Inter)
-    pub greeting: Pixels,      // 30: the new-chat greeting, in the serif
+    pub greeting: Pixels,      // 34: the new-chat greeting, in the display serif
     pub rules_list: Pixels,    // 340: the Rules screen's file list
     pub editor: Pixels,        // 420: a file editor's height
 }
@@ -418,11 +421,12 @@ impl Default for Sizes {
             icon_sm: px(14.),
             icon: px(16.),
             composer_max: px(240.),
+            composer_radius: px(18.),
             palette: px(560.),
             hairline: px(1.),
             line_height_chat: 1.45,
             chat_text: px(14.),
-            greeting: px(30.),
+            greeting: px(34.),
             rules_list: px(340.),
             editor: px(420.),
         }

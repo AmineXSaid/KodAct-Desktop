@@ -62,6 +62,7 @@ pub fn load_fonts(cx: &App) {
         Cow::Borrowed(include_bytes!("../assets/fonts/JetBrainsMono-Regular.ttf")),
         Cow::Borrowed(include_bytes!("../assets/fonts/JetBrainsMono-Bold.ttf")),
         Cow::Borrowed(include_bytes!("../assets/fonts/SourceSerif4-Regular.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/SourceSerif4Display-Regular.ttf")),
     ];
     if let Err(e) = cx.text_system().add_fonts(fonts) {
         eprintln!("could not load the bundled fonts: {e}");

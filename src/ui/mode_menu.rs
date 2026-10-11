@@ -67,22 +67,21 @@ fn small_button(t: &Theme, id: &'static str, label: &'static str, fill: Option<H
 pub fn trigger(t: &Theme, state: &Entity<AppState>, cx: &App, skip: impl Fn(&gpui::ClickEvent, &mut App) -> bool + 'static) -> impl IntoElement {
     let s = state.read(cx);
     let (mode, open) = (s.mode, s.modes_open);
-    let fg = tint(t, mode).unwrap_or(t.colors.text_muted);
+    let fg = tint(t, mode).unwrap_or(t.colors.text);
     let hover = t.colors.hover;
     let state = state.clone();
     div()
         .id("mode-trigger")
         .flex()
         .items_center()
-        .h(px(26.))
-        .pr(px(8.))
-        .rounded(px(5.))
+        .h(px(28.))
+        .px(px(8.))
+        .rounded(t.radius.button)
         .cursor_pointer()
-        .text_size(t.text.body_sm - px(1.))
+        .text_size(t.text.body_sm)
         .text_color(fg)
         .when(open, |d| d.bg(hover))
         .hover(move |st| st.bg(hover))
-        .child(div().size(px(26.)).flex().items_center().justify_center().child(icon(mode.icon(), px(14.), fg)))
         .child(div().max_w(px(200.)).overflow_hidden().whitespace_nowrap().text_ellipsis().child(mode.label()))
         .tooltip({
             let tip: SharedString = format!("{}. Click to change, or press Shift+Tab to cycle.", mode.description()).into();

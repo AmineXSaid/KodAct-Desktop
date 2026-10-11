@@ -191,7 +191,7 @@ impl Workspace {
                             .justify_center()
                             .items_center()
                             .gap(t.space.md)
-                            .font_family(t.font_serif.clone())
+                            .font_family(t.font_display.clone())
                             .text_size(t.size.greeting)
                             .text_color(t.colors.text_strong)
                             .child(super::cube_image(32., window))

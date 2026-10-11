@@ -34,7 +34,7 @@ impl Composer {
         let t = cx.theme().clone();
         // The tallest the input grows, in lines of chat text.
         let max_rows = (f32::from(t.size.composer_max) / (f32::from(t.text.body) * 1.5)).floor().max(2.) as usize;
-        let input = cx.new(|cx| TextareaState::new(window, cx).auto_grow(1, max_rows).placeholder("Ask Forge anything… (@ to mention a file)").submit_on_enter(true));
+        let input = cx.new(|cx| TextareaState::new(window, cx).auto_grow(1, max_rows).placeholder("What should we build today?").submit_on_enter(true));
         let filter = cx.new(|cx| InputState::new(window, cx).placeholder("Search models…"));
         let subs = vec![
             cx.observe_in(&state, window, |this, state, window, cx| {
@@ -237,13 +237,14 @@ impl Render for Composer {
         };
         let send = div()
             .id("send")
-            .size(t.size.control + px(4.))
+            .size(px(32.))
+            .flex_none()
             .flex()
             .items_center()
             .justify_center()
-            .rounded(t.radius.button)
+            .rounded(t.radius.pill)
             .when(busy, |d| {
-                d.bg(t.colors.surface).border_1().border_color(t.colors.border).cursor_pointer().child(icon("icons/square.svg", t.size.icon_sm, t.colors.text))
+                d.bg(t.colors.text_strong).cursor_pointer().child(div().size(px(10.)).rounded(px(2.)).bg(t.colors.surface))
             })
             .when(!busy, |d| {
                 d.bg(if send_ready { send_bg } else { t.colors.hover })
@@ -258,26 +259,61 @@ impl Render for Composer {
                 }
             }));
 
-        let model_pill = div()
-            .id("model")
-            .flex()
-            .items_center()
-            .gap(px(4.))
-            .h(px(20.))
-            .px(px(8.))
-            .rounded(t.radius.pill)
-            .cursor_pointer()
-            .text_size(t.text.body_sm - px(1.))
-            .text_color(if picker_open { t.colors.primary } else { t.colors.text })
-            .bg(if picker_open { t.colors.primary_tint } else { t.colors.hover })
-            .hover(move |st| st.opacity(0.85))
-            .child(model_name)
-            .children(pill_effort.map(|(label, color)| div().text_color(color).child(label)))
+        // Under the box: quiet text buttons, no fills until hovered.
+        let quiet = |id: &'static str, open: bool| {
+            div()
+                .id(id)
+                .flex()
+                .items_center()
+                .gap(px(6.))
+                .h(px(28.))
+                .px(px(8.))
+                .rounded(t.radius.button)
+                .cursor_pointer()
+                .text_size(t.text.body_sm)
+                .when(open, |d| d.bg(hover))
+                .hover(move |st| st.bg(hover))
+        };
+        let model_button = quiet("model", picker_open)
+            .child(div().text_color(t.colors.text).child(model_name))
+            .children(pill_effort.map(|(label, color)| div().text_color(if color == t.colors.text_subtle { t.colors.text_muted } else { color }).child(label)))
             .on_click(cx.listener(|this, ev: &gpui::ClickEvent, window, cx| {
                 if !this.just_dismissed(ev) {
                     window.dispatch_action(Box::new(ToggleModelPicker), cx);
                 }
             }));
+
+        let meter = meter.map(|(m, model)| {
+            let f = m.fraction();
+            let colour = if f > 1. { t.extra.danger } else if f > 0.8 { t.extra.warning } else { t.colors.text_subtle };
+            let tip: SharedString = format!(
+                "{}{} / {} context used · {model}{}",
+                if m.estimated { "About " } else { "" },
+                crate::context::short(m.used),
+                crate::context::short(m.window),
+                if f > 1. { ". More than this model's window: the conversation will be compacted" } else { "" },
+            )
+            .into();
+            div()
+                .id("context-meter")
+                .flex()
+                .items_center()
+                .gap(t.space.sm)
+                .h(px(28.))
+                .px(px(8.))
+                .text_size(t.text.caption)
+                .text_color(colour)
+                .child(
+                    div()
+                        .w(px(36.))
+                        .h(px(4.))
+                        .rounded(t.radius.pill)
+                        .bg(t.colors.border)
+                        .child(div().h_full().w(relative(f.min(1.))).rounded(t.radius.pill).bg(if f > 0.8 { colour } else { t.colors.text_subtle })),
+                )
+                .child(if f > 0. && f < 0.01 { "<1%".to_string() } else { format!("{:.0}%", (f * 100.).round()) })
+                .tooltip(move |window, cx| gpui::component::tooltip::Tooltip::new(tip.clone()).build(window, cx))
+        });
 
         div()
             .key_context("Composer")
@@ -286,83 +322,63 @@ impl Render for Composer {
             .w_full()
             .flex()
             .flex_col()
-            .bg(t.colors.surface)
-            .border_1()
-            // The mode tints the composer's edge, as it tints the extension's focus ring.
-            .border_color(tint.map(|c| c.opacity(0.55)).unwrap_or(t.colors.border))
-            .rounded(t.radius.card)
+            .gap(px(6.))
             .capture_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, window, cx| this.menu_key(ev, window, cx)))
             .children(model_menu)
+            // The box: what you write, attach on the left, send on the right.
             .child(
                 div()
-                    .px(t.space.lg)
-                    .pt(t.space.md)
-                    .text_size(t.text.body)
-                    .line_height(relative(1.5))
-                    .child(Textarea::new(&self.input).appearance(false)),
+                    .flex()
+                    .flex_col()
+                    .gap(t.space.sm)
+                    .bg(t.colors.surface)
+                    .border_1()
+                    // The mode tints the box's edge, as it tints the extension's focus ring.
+                    .border_color(tint.map(|c| c.opacity(0.55)).unwrap_or(t.colors.border))
+                    .rounded(t.size.composer_radius)
+                    .child(
+                        div()
+                            .px(px(18.))
+                            .pt(px(16.))
+                            .text_size(t.text.body)
+                            .line_height(relative(1.5))
+                            .child(Textarea::new(&self.input).appearance(false).text_size(t.text.body)),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .px(px(10.))
+                            .pb(px(10.))
+                            .child(
+                                div()
+                                    .id("attach")
+                                    .size(px(32.))
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .rounded(t.radius.pill)
+                                    .cursor_pointer()
+                                    .hover(move |st| st.bg(hover))
+                                    .child(icon("icons/plus.svg", px(18.), t.colors.text_muted))
+                                    .on_click(cx.listener(|this, _, _, cx| this.state.update(cx, |s, cx| s.show_toast("Attaching files and images is a stub in this UI shell.", cx)))),
+                            )
+                            .child(div().flex_1())
+                            .child(send),
+                    ),
             )
+            // Under it: the context meter, the model (and its effort), the mode.
             .child(
                 div()
                     .flex()
                     .items_center()
-                    .gap(t.space.xs)
-                    .px(t.space.sm)
-                    .pt(t.space.xs)
-                    .pb(t.space.sm)
-                    // Attach: the ghost action.
-                    .child(
-                        div()
-                            .id("attach")
-                            .size(t.size.control)
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .rounded(t.radius.button)
-                            .cursor_pointer()
-                            .hover(move |st| st.bg(hover))
-                            .child(icon("icons/paperclip.svg", t.size.icon_sm, t.colors.text_muted))
-                            .on_click(cx.listener(|this, _, _, cx| this.state.update(cx, |s, cx| s.show_toast("Attaching files and images is a stub in this UI shell.", cx)))),
-                    )
-                    .child(model_pill)
+                    .gap(px(2.))
+                    .px(px(6.))
+                    .children(meter)
                     .child(div().flex_1())
-                    .children(meter.map(|(m, model)| {
-                        let f = m.fraction();
-                        let colour = if f > 1. { t.extra.danger } else if f > 0.8 { t.extra.warning } else { t.colors.text_subtle };
-                        let tip: SharedString = format!(
-                            "{}{} / {} context used · {model}{}",
-                            if m.estimated { "About " } else { "" },
-                            crate::context::short(m.used),
-                            crate::context::short(m.window),
-                            if f > 1. { ". More than this model's window: the conversation will be compacted" } else { "" },
-                        )
-                        .into();
-                        div()
-                            .id("context-meter")
-                            .flex()
-                            .items_center()
-                            .gap(t.space.sm)
-                            .mr(t.space.xs)
-                            .text_size(t.text.caption)
-                            .text_color(colour)
-                            .child(
-                                div()
-                                    .w(px(36.))
-                                    .h(px(4.))
-                                    .rounded(t.radius.pill)
-                                    .bg(t.colors.border)
-                                    .child(div().h_full().w(relative(f.min(1.))).rounded(t.radius.pill).bg(if f > 0.8 { colour } else { t.colors.text_subtle })),
-                            )
-                            .child(if f > 0. && f < 0.01 { "<1%".to_string() } else { format!("{:.0}%", (f * 100.).round()) })
-                            .tooltip(move |window, cx| gpui::component::tooltip::Tooltip::new(tip.clone()).build(window, cx))
-                    }))
+                    .child(model_button)
                     // Modes: the button and its menu above it.
-                    .child(
-                        div()
-                            .relative()
-                            .child(mode_trigger)
-                            .children(modes_menu),
-                    )
-                    .child(send),
+                    .child(div().relative().child(mode_trigger).children(modes_menu)),
             )
     }
 }
