@@ -295,6 +295,7 @@ fn tool(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
         .when(has_body, |d| d.child(chevron(call.open, t)))
         .on_click(toggle(cx, b));
 
+    let lang = markdown::lang_of(&call.target);
     let body = (call.open && has_body).then(|| {
         if shell {
             let at = terminal::Where { state: cx.state.clone(), chat: cx.chat, msg: cx.index, block: b, copied: cx.copied.clone() };
@@ -318,7 +319,7 @@ fn tool(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
                         .px(t.space.md)
                         .when_some(bg, |d, bg| d.bg(bg))
                         .child(div().w(t.space.lg).flex_none().text_color(fg).child(sign))
-                        .child(div().whitespace_nowrap().child(if l.text.is_empty() { SharedString::from(" ") } else { l.text.clone() }))
+                        .child(div().whitespace_nowrap().child(markdown::code_text(if l.text.is_empty() { " " } else { &l.text }, lang, t)))
                 }))
                 .into_any_element()
         } else {
@@ -327,8 +328,9 @@ fn tool(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
                 .border_color(t.colors.border)
                 .flex()
                 .flex_col()
-                .child(io_row("IN", call.target.clone(), t))
-                .child(io_row("OUT", call.output.clone(), t))
+                .child(io_row("IN", call.target.clone(), "", t))
+                // A file's contents are coloured by its language.
+                .child(io_row("OUT", call.output.clone(), if call.kind == ToolKind::Read { lang } else { "" }, t))
                 .into_any_element()
         }
     });
@@ -345,7 +347,7 @@ fn tool(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
 }
 
 /// Forge's tool I/O row: a small label, then the text in a quiet well.
-fn io_row(label: &'static str, text: SharedString, t: &Theme) -> impl IntoElement {
+fn io_row(label: &'static str, text: SharedString, lang: &str, t: &Theme) -> impl IntoElement {
     div()
         .flex()
         .gap(t.space.md)
@@ -361,10 +363,10 @@ fn io_row(label: &'static str, text: SharedString, t: &Theme) -> impl IntoElemen
                 .rounded(t.radius.button)
                 .bg(t.extra.inset)
                 .font_family(t.font_mono.clone())
-                .text_size(t.text.caption + px(0.5))
-                .line_height(relative(1.6))
+                .text_size(t.text.caption)
+                .line_height(relative(1.5))
                 .text_color(t.colors.text)
-                .child(text),
+                .child(markdown::code_text(text.trim_end(), lang, t)),
         )
 }
 

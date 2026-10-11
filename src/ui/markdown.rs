@@ -195,11 +195,11 @@ pub fn render(src: &str, t: &Theme, copy: &CopyContext) -> AnyElement {
         };
         let gap = match (prev, kind) {
             (None, _) => px(0.),
-            (Some("item"), "item") => px(3.),
-            (_, "heading") => t.space.md + px(2.),
+            (Some("item"), "item") => px(2.),
+            (_, "heading") => t.space.md,
             (Some("heading"), _) => t.space.xs,
-            (_, "code") | (Some("code"), _) => t.space.sm + px(2.),
-            _ => t.space.sm,
+            (_, "code") | (Some("code"), _) => t.space.sm,
+            _ => t.space.sm - px(2.),
         };
         prev = Some(kind);
         let el: AnyElement = match b {
@@ -290,16 +290,52 @@ fn code_block(lang: &str, code: String, key: &str, t: &Theme, copy: &CopyContext
                 .id(SharedString::from(format!("code-{key}")))
                 .overflow_x_scroll()
                 .px(t.space.md)
-                .py(t.space.sm + px(2.))
+                .py(t.space.sm)
                 .bg(t.extra.inset)
                 .font_family(t.font_mono.clone())
-                .text_size(t.text.caption + px(0.5))
-                .line_height(relative(1.55))
+                .text_size(t.text.caption)
+                .line_height(relative(1.5))
                 .text_color(t.colors.text)
                 .whitespace_nowrap()
-                .child(shown),
+                .child(code_text(&shown, lang, t)),
         )
         .into_any_element()
+}
+
+/// Code in `lang`, coloured with Forge's code palette (comments italic).
+pub fn code_text(code: &str, lang: &str, t: &Theme) -> StyledText {
+    use crate::highlight::{highlight, Kind};
+    let k = &t.code;
+    let runs = highlight(code, lang)
+        .iter()
+        .map(|(range, kind)| {
+            let mut f = font(t.font_mono.clone());
+            if *kind == Kind::Comment {
+                f.style = FontStyle::Italic;
+            }
+            let color = match kind {
+                Kind::Plain => t.colors.text,
+                Kind::Keyword => k.keyword,
+                Kind::Str => k.string,
+                Kind::Number => k.number,
+                Kind::Comment => k.comment,
+                Kind::Function => k.function,
+                Kind::Type => k.type_,
+                Kind::Variable => k.variable,
+                Kind::Operator => k.operator,
+                Kind::Meta => k.meta,
+                Kind::Added => k.added,
+                Kind::Removed => k.removed,
+            };
+            TextRun { len: range.len(), font: f, color, background_color: None, underline: None, strikethrough: None }
+        })
+        .collect::<Vec<_>>();
+    StyledText::new(code.to_string()).with_runs(runs)
+}
+
+/// The language of a file, by its extension (for colouring its contents).
+pub fn lang_of(path: &str) -> &str {
+    path.rsplit_once('.').map(|(_, ext)| ext).filter(|e| !e.contains('/')).unwrap_or("")
 }
 
 #[cfg(test)]

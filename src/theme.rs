@@ -73,6 +73,7 @@ pub struct Theme {
     pub font_mono: SharedString,  // JetBrains Mono: code, paths, commands
     pub extra: ExtraColors,
     pub terminal: TerminalColors,
+    pub code: CodeColors,
     pub size: Sizes,
 }
 
@@ -117,6 +118,7 @@ impl Theme {
             font_mono: "JetBrains Mono".into(),
             extra: ExtraColors::for_mode(is_dark),
             terminal: TerminalColors::for_mode(is_dark),
+            code: CodeColors::for_mode(is_dark),
             size: Sizes::default(),
         }
     }
@@ -314,6 +316,34 @@ impl TerminalColors {
     }
 }
 
+/// Code colours, by token kind (`highlight.rs`): Forge's code palette, the
+/// terminal's stops plus a blue for functions and a green for types.
+#[derive(Clone, Copy)]
+pub struct CodeColors {
+    pub keyword: Hsla,
+    pub string: Hsla,
+    pub number: Hsla,
+    pub comment: Hsla,
+    pub function: Hsla,
+    pub type_: Hsla,
+    pub variable: Hsla,
+    pub operator: Hsla,
+    pub meta: Hsla,
+    pub added: Hsla,
+    pub removed: Hsla,
+}
+
+impl CodeColors {
+    fn for_mode(is_dark: bool) -> Self {
+        let c = |x: u32| -> Hsla { rgb(x).into() };
+        if is_dark {
+            Self { keyword: c(0xac93e6), string: c(0xe9be74), number: c(0xd99530), comment: c(0x8a8888), function: c(0x63a6e9), type_: c(0x52b87a), variable: c(0xcbbbf2), operator: c(0xf6806d), meta: c(0x8a8888), added: c(0x52b87a), removed: c(0xf6806d) }
+        } else {
+            Self { keyword: c(0x6a4fb4), string: c(0x995715), number: c(0xab6100), comment: c(0x747273), function: c(0x2f68b4), type_: c(0x2f7549), variable: c(0x7b58cf), operator: c(0xc02f12), meta: c(0x747273), added: c(0x2f7549), removed: c(0xc02f12) }
+        }
+    }
+}
+
 /// The app's fixed dimensions.
 #[derive(Clone, Copy)]
 pub struct Sizes {
@@ -328,8 +358,8 @@ pub struct Sizes {
     pub palette: Pixels,       // command palette width
     pub picker: Pixels,        // model picker width
     pub hairline: Pixels,      // 1
-    pub line_height_chat: f32, // 1.5 for prose
-    pub chat_text: Pixels,     // 13.5: replies and your messages
+    pub line_height_chat: f32, // 1.45 for prose
+    pub chat_text: Pixels,     // 13: replies and your messages, as Forge for VS Code
     pub display: Pixels,       // 40: the welcome headline
     pub rules_list: Pixels,    // 340: the Rules screen's file list
     pub editor: Pixels,        // 420: a file editor's height
@@ -349,8 +379,8 @@ impl Default for Sizes {
             palette: px(560.),
             picker: px(340.),
             hairline: px(1.),
-            line_height_chat: 1.5,
-            chat_text: px(13.5),
+            line_height_chat: 1.45,
+            chat_text: px(13.),
             display: px(40.),
             rules_list: px(340.),
             editor: px(420.),

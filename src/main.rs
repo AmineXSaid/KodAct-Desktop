@@ -2,6 +2,7 @@
 //! UI only: the conversation, models and replies are mock data (`state.rs`).
 
 mod assets;
+mod highlight;
 mod profile;
 mod rules;
 mod state;
@@ -35,6 +36,7 @@ fn main() {
     gpui::application().with_assets(assets::Assets).run(|cx: &mut App| {
         gpui::init(cx);
         assets::load_fonts(cx);
+        highlight::warm_up();
         theme::init(cx);
         ui::sync_component_theme(cx);
         bind_keys(cx);

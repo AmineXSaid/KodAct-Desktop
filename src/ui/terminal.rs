@@ -362,7 +362,7 @@ pub fn block(call: &ToolCall, at: &Where, t: &Theme) -> AnyElement {
         .bg(k.background)
         .font_family(t.font_mono.clone())
         .text_size(px(12.))
-        .line_height(relative(1.55))
+        .line_height(relative(1.45))
         .text_color(k.foreground)
         .child(input)
         .child(div().h(px(1.)).bg(k.divider))
