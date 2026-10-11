@@ -8,14 +8,15 @@ use gpui::{
 };
 
 use super::*;
-use crate::state::{AppState, Mode, MODELS};
+use crate::modes::ModeId;
+use crate::state::AppState;
 use crate::theme::{self, ActiveTheme, Theme};
 
 enum Target {
     Action(Box<dyn Action>),
     Chat(usize),
-    Model(usize),
-    Mode(Mode),
+    Model(String),
+    Mode(ModeId),
 }
 
 struct Command {
@@ -108,11 +109,16 @@ impl CommandPalette {
         if s.busy() {
             out.insert(0, act("Stop the reply", "icons/square.svg", Some("Esc".into()), Box::new(StopReply)));
         }
-        for m in Mode::ALL {
-            out.push(Command { label: format!("Permission mode: {}", m.label()).into(), group: "Modes", icon: m.icon(), hint: (m == s.mode).then(|| "current".into()), target: Target::Mode(m) });
+        for m in ModeId::ALL.into_iter().filter(|m| *m != ModeId::Bypass || s.bypass_allowed) {
+            out.push(Command { label: format!("Mode: {}", m.label()).into(), group: "Modes", icon: m.icon(), hint: (m == s.mode).then(|| "current".into()), target: Target::Mode(m) });
         }
-        for (i, m) in MODELS.iter().enumerate() {
-            out.push(Command { label: format!("Model: {} · {}", m.name, m.provider).into(), group: "Models", icon: "icons/cpu.svg", hint: (i == s.model).then(|| "current".into()), target: Target::Model(i) });
+        let current = s.active_profile().map(|p| p.name.clone());
+        for row in super::model_menu::rows(s, "").0 {
+            if row.disabled {
+                continue;
+            }
+            let hint = (current.as_deref() == Some(row.name.as_str())).then(|| "current".into());
+            out.push(Command { label: format!("Model: {} · {}", row.display, row.name).into(), group: "Models", icon: "icons/cpu.svg", hint, target: Target::Model(row.name) });
         }
         for c in &s.chats {
             out.push(Command { label: c.title.clone(), group: "Chats", icon: "icons/message-square.svg", hint: Some(c.group().into()), target: Target::Chat(c.id) });
@@ -153,14 +159,8 @@ impl CommandPalette {
         match cmd.target {
             Target::Action(a) => window.dispatch_action(a, cx),
             Target::Chat(id) => self.state.update(cx, |s, cx| s.open_chat(id, cx)),
-            Target::Model(i) => self.state.update(cx, |s, cx| {
-                s.model = i;
-                cx.notify();
-            }),
-            Target::Mode(m) => self.state.update(cx, |s, cx| {
-                s.mode = m;
-                cx.notify();
-            }),
+            Target::Model(name) => self.state.update(cx, |s, cx| s.select_profile(&name, cx)),
+            Target::Mode(m) => self.state.update(cx, |s, cx| s.set_mode(m, cx)),
         }
     }
 }

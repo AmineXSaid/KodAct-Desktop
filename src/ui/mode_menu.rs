@@ -1,0 +1,211 @@
+//! The Modes menu, as Forge for VS Code has it: a footer button (the mode's
+//! icon and name) that opens a menu above it, right-aligned. A "Modes"
+//! header with the Shift+Tab hint, then one row per mode: icon, name over
+//! its description, and a check on the current one. Picking Bypass the
+//! first time shows its warning in the menu before it is allowed.
+
+use std::time::Duration;
+
+use gpui::{div, prelude::*, px, Animation, AnimationExt, App, Entity, FontWeight, Hsla, IntoElement, SharedString};
+
+use super::icon;
+use crate::modes::ModeId;
+use crate::state::AppState;
+use crate::theme::Theme;
+
+/// A mode's tint (Manual has none), as the extension tints its footer,
+/// focus ring and send button.
+pub fn tint(t: &Theme, mode: ModeId) -> Option<Hsla> {
+    match mode {
+        ModeId::Manual => None,
+        ModeId::Expert => Some(t.extra.mode_expert),
+        ModeId::AcceptEdits => Some(t.extra.mode_edit),
+        ModeId::Plan => Some(t.extra.mode_plan),
+        ModeId::Bypass => Some(t.extra.mode_bypass),
+    }
+}
+
+/// The colour the working cube is painted in this mode: Forge blue, the
+/// foreground in Edit automatically, Plan's blue, Bypass's red.
+pub fn cube_color(t: &Theme, mode: ModeId) -> Hsla {
+    match mode {
+        ModeId::Manual | ModeId::Expert => t.colors.primary,
+        ModeId::AcceptEdits => t.colors.text_strong,
+        ModeId::Plan => t.extra.mode_plan,
+        ModeId::Bypass => t.extra.mode_bypass,
+    }
+}
+
+/// `⇧`, `tab`: a key in the header hint.
+fn key(t: &Theme, text: &'static str) -> impl IntoElement {
+    div().px(px(4.)).py(px(1.)).border_1().border_color(t.colors.border).rounded(px(3.)).child(text)
+}
+
+/// The footer button.
+pub fn trigger(t: &Theme, state: &Entity<AppState>, cx: &App) -> impl IntoElement {
+    let s = state.read(cx);
+    let (mode, open) = (s.mode, s.modes_open);
+    let fg = tint(t, mode).unwrap_or(t.colors.text_muted);
+    let hover = t.colors.hover;
+    let state = state.clone();
+    div()
+        .id("mode-trigger")
+        .flex()
+        .items_center()
+        .h(px(26.))
+        .pr(px(8.))
+        .rounded(px(5.))
+        .cursor_pointer()
+        .text_size(t.text.body_sm - px(1.))
+        .text_color(fg)
+        .when(open, |d| d.bg(hover))
+        .hover(move |st| st.bg(hover))
+        .child(div().size(px(26.)).flex().items_center().justify_center().child(icon(mode.icon(), px(14.), fg)))
+        .child(div().max_w(px(200.)).overflow_hidden().whitespace_nowrap().text_ellipsis().child(mode.label()))
+        .tooltip({
+            let tip: SharedString = format!("{}. Click to change, or press Shift+Tab to cycle.", mode.description()).into();
+            move |window, cx| gpui::component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
+        })
+        .on_click(move |_, _, cx| {
+            state.update(cx, |s, cx| {
+                s.modes_open = !s.modes_open;
+                s.bypass_warning = false;
+                s.picker_open = false;
+                cx.notify();
+            })
+        })
+}
+
+/// The menu, above the trigger.
+pub fn menu(t: &Theme, state: &Entity<AppState>, cx: &App) -> impl IntoElement {
+    let s = state.read(cx);
+    let (current, allowed, warning) = (s.mode, s.bypass_allowed, s.bypass_warning);
+    let active_bg = t.colors.hover;
+    let mut rows = div().flex().flex_col().gap(px(2.));
+    for mode in ModeId::ALL {
+        let picked = mode == current;
+        let st = state.clone();
+        let row_fg = tint(t, mode).unwrap_or(t.colors.text);
+        rows = rows.child(
+            div()
+                .id(SharedString::from(format!("mode-{}", mode.label())))
+                .mx(px(4.))
+                .px(px(8.))
+                .py(px(5.))
+                .flex()
+                .items_center()
+                .gap(px(10.))
+                .rounded(px(4.))
+                .cursor_pointer()
+                .when(picked, |d| d.bg(active_bg))
+                .hover(move |d| d.bg(active_bg))
+                .child(icon(mode.icon(), px(18.), row_fg))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .child(div().text_color(t.colors.text_strong).font_weight(if picked { FontWeight::MEDIUM } else { FontWeight::NORMAL }).child(mode.label()))
+                        .child(div().text_size(t.text.caption).text_color(t.colors.text_subtle).child(match mode {
+                            ModeId::Bypass if !allowed => "Asks you first. Forge will not ask for approval before running potentially dangerous commands",
+                            m => m.description(),
+                        })),
+                )
+                .child(div().w(px(14.)).flex_none().when(picked, |d| d.child(icon("icons/check.svg", px(14.), t.colors.text))))
+                .on_click(move |_, _, cx| st.update(cx, |s, cx| s.set_mode(mode, cx))),
+        );
+    }
+
+    let warning_card = warning.then(|| {
+        let (allow, cancel) = (state.clone(), state.clone());
+        let danger = t.extra.mode_bypass;
+        div()
+            .mx(px(8.))
+            .mt(px(6.))
+            .p(px(10.))
+            .flex()
+            .flex_col()
+            .gap(px(8.))
+            .rounded(t.radius.button)
+            .bg(t.extra.danger_tint)
+            .child(
+                div()
+                    .flex()
+                    .items_start()
+                    .gap(px(8.))
+                    .child(icon("icons/triangle-alert.svg", px(14.), danger))
+                    .child(div().flex_1().min_w_0().text_size(t.text.caption).text_color(t.colors.text).child(
+                        "Bypass permissions lets Forge run any command and edit any file without asking, including commands that delete files or reach the network. Use it only in a sandbox or a throwaway copy.",
+                    )),
+            )
+            .child(
+                div()
+                    .flex()
+                    .justify_end()
+                    .gap(px(6.))
+                    .child(crate::theme::ghost_button(t, "Cancel").id("bypass-cancel").on_click(move |_, _, cx| {
+                        cancel.update(cx, |s, cx| {
+                            s.bypass_warning = false;
+                            cx.notify();
+                        })
+                    }))
+                    .child(
+                        div()
+                            .id("bypass-allow")
+                            .px(px(10.))
+                            .py(px(4.))
+                            .rounded(t.radius.button)
+                            .bg(danger)
+                            .text_color(t.colors.primary_fg)
+                            .text_size(t.text.caption)
+                            .font_weight(FontWeight::MEDIUM)
+                            .cursor_pointer()
+                            .child("Allow bypass")
+                            .on_click(move |_, _, cx| allow.update(cx, |s, cx| s.allow_bypass(cx))),
+                    ),
+            )
+    });
+
+    div()
+        .id("modes-menu")
+        .absolute()
+        .bottom_full()
+        .right_0()
+        .mb(px(8.))
+        .w(px(320.))
+        .pt(px(6.))
+        .pb(px(4.))
+        .bg(t.colors.surface)
+        .border_1()
+        .border_color(t.colors.border)
+        .rounded(t.radius.card)
+        .shadow_lg()
+        .occlude()
+        .text_size(t.text.body_sm)
+        .child(
+            div()
+                .px(px(12.))
+                .py(px(4.))
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(div().text_size(t.text.caption).text_color(t.colors.text_subtle).child("Modes"))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(3.))
+                        .text_size(t.text.caption - px(1.))
+                        .text_color(t.colors.text_subtle)
+                        .opacity(0.8)
+                        .child(key(t, "⇧"))
+                        .child("+")
+                        .child(key(t, "tab"))
+                        .child("to switch"),
+                ),
+        )
+        .child(rows)
+        .children(warning_card)
+        .with_animation("modes-in", Animation::new(Duration::from_millis(170)).with_easing(gpui::ease_out_quint()), |d, k| d.opacity(k).mb(px(8. - 6. * (1. - k))))
+}

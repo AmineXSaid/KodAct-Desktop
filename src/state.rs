@@ -9,7 +9,9 @@
 
 use std::time::{Duration, SystemTime};
 
-use gpui::{Context, SharedString, Task};
+use gpui::{AppContext, Context, SharedString, Task};
+
+use crate::modes::ModeId;
 
 // ---------------------------------------------------------------- transcript
 
@@ -165,22 +167,6 @@ impl Chat {
 
 // ---------------------------------------------------------------- models and modes
 
-pub struct Model {
-    pub id: &'static str,
-    pub name: &'static str,
-    pub provider: &'static str,
-    pub note: &'static str,
-    pub context: &'static str,
-}
-
-pub const MODELS: &[Model] = &[
-    Model { id: "opus", name: "Opus 5.5", provider: "Anthropic", note: "Most capable, for complex work", context: "200k" },
-    Model { id: "sonnet", name: "Sonnet 5.5", provider: "Anthropic", note: "Fast and capable", context: "1M" },
-    Model { id: "haiku", name: "Haiku 5.5", provider: "Anthropic", note: "Fastest, for quick answers", context: "200k" },
-    Model { id: "openrouter/qwen/qwen3-coder", name: "Qwen3 Coder", provider: "OpenRouter", note: "Open weights, tool calling", context: "262k" },
-    Model { id: "ollama/gpt-oss:20b", name: "gpt-oss 20b", provider: "Ollama on this PC", note: "Local, private", context: "128k" },
-];
-
 /// What fills the main area.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Screen {
@@ -203,46 +189,6 @@ pub struct Project {
     pub pinned: bool,
     /// When it was last opened, in minutes before now.
     pub opened_minutes_ago: u32,
-}
-
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum Mode {
-    Ask,
-    AcceptEdits,
-    Plan,
-    Auto,
-}
-
-impl Mode {
-    pub const ALL: [Mode; 4] = [Mode::Ask, Mode::AcceptEdits, Mode::Plan, Mode::Auto];
-    pub fn label(self) -> &'static str {
-        match self {
-            Mode::Ask => "Ask before edits",
-            Mode::AcceptEdits => "Edit automatically",
-            Mode::Plan => "Plan mode",
-            Mode::Auto => "Auto",
-        }
-    }
-    pub fn short(self) -> &'static str {
-        match self {
-            Mode::Ask => "Ask",
-            Mode::AcceptEdits => "Accept edits",
-            Mode::Plan => "Plan",
-            Mode::Auto => "Auto",
-        }
-    }
-    pub fn icon(self) -> &'static str {
-        match self {
-            Mode::Ask => "icons/hand.svg",
-            Mode::AcceptEdits => "icons/file-pen.svg",
-            Mode::Plan => "icons/map.svg",
-            Mode::Auto => "icons/zap.svg",
-        }
-    }
-    pub fn next(self) -> Mode {
-        let i = Mode::ALL.iter().position(|m| *m == self).unwrap_or(0);
-        Mode::ALL[(i + 1) % Mode::ALL.len()]
-    }
 }
 
 // ---------------------------------------------------------------- the state
@@ -270,8 +216,30 @@ pub struct AppState {
     pub current: Option<usize>,
     pub sidebar_open: bool,
     pub search: SharedString,
-    pub model: usize,
-    pub mode: Mode,
+    /// Endpoint profiles (each one endpoint and its model); None while
+    /// they load. No model is built in.
+    pub endpoints: Option<crate::endpoints::Endpoints>,
+    /// Each profile's last check (`health.rs`).
+    pub health: crate::health::Store,
+    /// The effort level, when the model takes one; None is Auto.
+    pub effort: Option<crate::endpoints::Effort>,
+    /// Checks waiting for a slot, and how many are running.
+    check_queue: std::collections::VecDeque<(String, bool)>,
+    checks_running: usize,
+    /// Each profile's newest check, so an older one's result is dropped.
+    check_gen: std::collections::HashMap<String, u64>,
+    sync_timer: Option<Task<()>>,
+    /// The current chat's mode (Expert, Manual, Edit automatically, Plan, Bypass).
+    pub mode: ModeId,
+    /// Modes chats keep when reopened (see `ModeId::kept`), by chat.
+    kept_modes: std::collections::HashMap<usize, ModeId>,
+    /// The mode new chats start in (Settings > General).
+    pub default_mode: ModeId,
+    /// Bypass permissions has been allowed, behind its warning.
+    pub bypass_allowed: bool,
+    /// The Modes menu is open; its Bypass warning is showing.
+    pub modes_open: bool,
+    pub bypass_warning: bool,
     pub dark: bool,
     pub palette_open: bool,
     pub picker_open: bool,
@@ -320,8 +288,19 @@ impl AppState {
             chats,
             sidebar_open: true,
             search: "".into(),
-            model: 0,
-            mode: Mode::Ask,
+            endpoints: None,
+            health: Default::default(),
+            effort: None,
+            check_queue: Default::default(),
+            checks_running: 0,
+            check_gen: Default::default(),
+            sync_timer: None,
+            mode: ModeId::Manual,
+            kept_modes: Default::default(),
+            default_mode: ModeId::Manual,
+            bypass_allowed: false,
+            modes_open: false,
+            bypass_warning: false,
             dark: false,
             palette_open: false,
             picker_open: false,
@@ -350,6 +329,128 @@ impl AppState {
                 cx.notify();
             });
         }));
+        self.load_endpoints(cx);
+    }
+
+    // ------------------------------------------------------------ models
+
+    /// Read the profiles and their saved checks off the UI thread, then
+    /// check whatever is due and keep checking on the interval.
+    pub fn load_endpoints(&mut self, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let (endpoints, health) = cx
+                .background_spawn(async move {
+                    let e = crate::endpoints::load();
+                    let h = crate::health::load(&e.profiles);
+                    (e, h)
+                })
+                .await;
+            let _ = this.update(cx, |s, cx| {
+                let minutes = endpoints.sync_interval_minutes;
+                s.endpoints = Some(endpoints);
+                s.health = health;
+                s.sync_due(cx);
+                if minutes > 0. {
+                    let every = Duration::from_secs_f64(minutes * 60.);
+                    s.sync_timer = Some(cx.spawn(async move |this, cx| loop {
+                        cx.background_executor().timer(every).await;
+                        if this.update(cx, |s, cx| s.sync_due(cx)).is_err() {
+                            break;
+                        }
+                    }));
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// The profile in use.
+    pub fn active_profile(&self) -> Option<&crate::endpoints::Profile> {
+        self.endpoints.as_ref().and_then(|e| e.active())
+    }
+
+    /// Pick a profile (the model window's row); kept for next time.
+    pub fn select_profile(&mut self, name: &str, cx: &mut Context<Self>) {
+        let Some(e) = self.endpoints.as_mut() else { return };
+        if !e.profiles.iter().any(|p| p.name == name) {
+            return;
+        }
+        e.selected = Some(name.to_string());
+        self.picker_open = false;
+        // An effort the new model doesn't take is dropped.
+        let levels = self.active_profile().map(|p| p.effort_levels()).unwrap_or_default();
+        if self.effort.is_some_and(|l| !levels.contains(&l)) {
+            self.effort = None;
+        }
+        let name = name.to_string();
+        cx.background_spawn(async move {
+            let _ = crate::endpoints::save_selected(&name);
+        })
+        .detach();
+        cx.notify();
+    }
+
+    /// Check every profile that is due (at start, and on the timer).
+    pub fn sync_due(&mut self, cx: &mut Context<Self>) {
+        let Some(e) = &self.endpoints else { return };
+        let now = crate::health::now_ms();
+        let due: Vec<String> = e.profiles.iter().filter(|p| crate::health::is_due(self.health.get(&p.name).and_then(|h| h.last_synced_at), now, e.sync_interval_minutes)).map(|p| p.name.clone()).collect();
+        self.check(due, true, cx);
+    }
+
+    /// The model window's refresh: check them all now.
+    pub fn sync_all(&mut self, cx: &mut Context<Self>) {
+        let names = self.endpoints.as_ref().map(|e| e.profiles.iter().map(|p| p.name.clone()).collect()).unwrap_or_default();
+        self.check(names, false, cx);
+    }
+
+    /// Any check is running (the refresh button turns).
+    pub fn checking(&self) -> bool {
+        self.health.values().any(|h| h.syncing)
+    }
+
+    fn check(&mut self, names: Vec<String>, background: bool, cx: &mut Context<Self>) {
+        for name in names {
+            // A new check of a profile replaces one still waiting.
+            self.check_queue.retain(|(n, _)| *n != name);
+            *self.check_gen.entry(name.clone()).or_default() += 1;
+            let fingerprint = self.endpoints.as_ref().and_then(|e| e.profiles.iter().find(|p| p.name == name)).map(|p| p.fingerprint()).unwrap_or_default();
+            let entry = self.health.entry(name.clone()).or_default();
+            if entry.fingerprint != fingerprint {
+                *entry = crate::health::EndpointHealth { fingerprint, ..Default::default() };
+            }
+            entry.syncing = true;
+            self.check_queue.push_back((name, background));
+        }
+        self.pump_checks(cx);
+        cx.notify();
+    }
+
+    /// Start waiting checks while there are free slots.
+    fn pump_checks(&mut self, cx: &mut Context<Self>) {
+        while self.checks_running < crate::health::SWEEP_PARALLELISM {
+            let Some((name, background)) = self.check_queue.pop_front() else { break };
+            let Some(profile) = self.endpoints.as_ref().and_then(|e| e.profiles.iter().find(|p| p.name == name)).cloned() else { continue };
+            let generation = self.check_gen.get(&name).copied().unwrap_or_default();
+            self.checks_running += 1;
+            cx.spawn(async move |this, cx| {
+                let timeout = crate::health::timeout_for(&profile, background);
+                let probed = profile.clone();
+                let outcome = cx.background_spawn(async move { crate::health::probe(&probed, timeout) }).await;
+                let _ = this.update(cx, |s, cx| {
+                    s.checks_running -= 1;
+                    if s.check_gen.get(&profile.name) == Some(&generation) {
+                        crate::health::apply(&mut s.health, &profile, outcome);
+                        let store = s.health.clone();
+                        cx.background_spawn(async move { crate::health::save(&store) }).detach();
+                    }
+                    s.pump_checks(cx);
+                    cx.notify();
+                });
+            })
+            .detach();
+        }
     }
 
     pub fn chat(&self) -> Option<&Chat> {
@@ -394,6 +495,7 @@ impl AppState {
         self.switcher_open = false;
         if self.chat().is_some_and(|c| c.project != id) {
             self.current = None;
+            self.sync_mode();
         }
         cx.notify();
     }
@@ -432,6 +534,7 @@ impl AppState {
         }
         self.screen = Screen::Chat;
         self.current = Some(id);
+        self.sync_mode();
         if let Some(c) = self.chat_mut(id) {
             c.unread = false;
         }
@@ -441,7 +544,48 @@ impl AppState {
     pub fn new_chat(&mut self, cx: &mut Context<Self>) {
         self.screen = Screen::Chat;
         self.current = None;
+        self.sync_mode();
         cx.notify();
+    }
+
+    /// The mode for the chat now showing: what it kept, else the setting's.
+    fn sync_mode(&mut self) {
+        self.mode = self.current.and_then(|id| self.kept_modes.get(&id).copied()).unwrap_or_else(|| crate::modes::initial(self.default_mode, self.bypass_allowed));
+    }
+
+    fn keep_mode(&mut self) {
+        let Some(id) = self.current else { return };
+        if self.mode.kept(self.bypass_allowed) {
+            self.kept_modes.insert(id, self.mode);
+        } else {
+            self.kept_modes.remove(&id);
+        }
+    }
+
+    /// Pick a mode. Bypass, not yet allowed, shows its warning instead.
+    pub fn set_mode(&mut self, mode: ModeId, cx: &mut Context<Self>) {
+        if mode == ModeId::Bypass && !self.bypass_allowed {
+            self.modes_open = true;
+            self.bypass_warning = true;
+        } else {
+            self.mode = mode;
+            self.modes_open = false;
+            self.bypass_warning = false;
+            self.keep_mode();
+        }
+        cx.notify();
+    }
+
+    /// Shift+Tab.
+    pub fn cycle_mode(&mut self, cx: &mut Context<Self>) {
+        let next = crate::modes::next(self.mode, self.bypass_allowed);
+        self.set_mode(next, cx);
+    }
+
+    /// The Bypass warning's "Allow": from now on Bypass is offered.
+    pub fn allow_bypass(&mut self, cx: &mut Context<Self>) {
+        self.bypass_allowed = true;
+        self.set_mode(ModeId::Bypass, cx);
     }
 
     pub fn toggle_pin(&mut self, id: usize, cx: &mut Context<Self>) {
@@ -610,6 +754,7 @@ impl AppState {
                 let title: String = text.lines().next().unwrap_or_default().chars().take(48).collect();
                 self.chats.insert(0, Chat { id, project: self.current_project, title: title.into(), minutes_ago: 0, pinned: false, messages: vec![], version: 0, unread: false });
                 self.current = Some(id);
+                self.keep_mode();
                 id
             }
         };

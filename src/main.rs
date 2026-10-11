@@ -1,8 +1,16 @@
 //! Forge: a desktop chat shell for Claude Code, built on GPUI.
 //! UI only: the conversation, models and replies are mock data (`state.rs`).
 
+// Which shell commands run without asking, per mode (Forge for VS Code's
+// rules). Called when a chat's CLI asks for permission; this UI shell has no
+// CLI yet, so outside its tests nothing calls it.
+#[cfg_attr(not(test), allow(dead_code))]
+mod approve;
 mod assets;
+mod endpoints;
+mod health;
 mod highlight;
+mod modes;
 mod profile;
 mod rules;
 mod state;

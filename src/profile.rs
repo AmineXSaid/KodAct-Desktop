@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 const MAX_NAME: usize = 40;
 
-fn dir() -> Option<PathBuf> {
+pub(crate) fn dir() -> Option<PathBuf> {
     if let Some(d) = std::env::var_os("FORGE_CONFIG_DIR") {
         return Some(PathBuf::from(d));
     }

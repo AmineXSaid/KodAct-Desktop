@@ -5,8 +5,8 @@ use gpui::component::input::{Input, InputEvent, InputState};
 use std::time::Duration;
 
 use gpui::{
-    div, percentage, prelude::*, px, Animation, AnimationExt, Context, Entity, FontWeight, IntoElement, Render, SharedString,
-    Subscription, Transformation, Window,
+    div, prelude::*, px, Animation, AnimationExt, Context, Entity, FontWeight, IntoElement, Render, SharedString,
+    Subscription, Window,
 };
 
 use super::*;
@@ -111,7 +111,7 @@ impl Sidebar {
 }
 
 impl Render for Sidebar {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let mut filter = Some(self.filter(&t, cx).into_any_element());
         let s = self.state.read(cx);
@@ -350,7 +350,7 @@ impl Render for Sidebar {
                             .rounded(t.radius.button)
                             .cursor_pointer()
                             .hover(move |st| st.bg(hover))
-                            .child(super::mark::mark(&t, px(32.)))
+                            .child(super::cube_image(32., window))
                             .child(
                                 div()
                                     .flex_1()
@@ -367,15 +367,13 @@ impl Render for Sidebar {
     }
 }
 
-/// A chat's status, in a fixed slot before its title: a turning loader
-/// while it works, a breathing amber dot when it needs you, a warning when it
+/// A chat's status, in a fixed slot before its title: a voxel stepping
+/// round while it works, a breathing amber dot when it needs you, a warning when it
 /// ended on an error, a blue dot when a reply is unread, a faint ring at rest.
 pub fn status_mark(status: ChatStatus, id: usize, t: &crate::theme::Theme) -> gpui::AnyElement {
     let dot = || div().size(px(7.)).rounded(t.radius.pill);
     let inner: gpui::AnyElement = match status {
-        ChatStatus::Working => icon("icons/loader-circle.svg", px(12.), t.colors.sky)
-            .with_animation(("chat-working", id), Animation::new(Duration::from_millis(900)).repeat(), |svg, d| svg.with_transformation(Transformation::rotate(percentage(d))))
-            .into_any_element(),
+        ChatStatus::Working => super::voxels::running(t.colors.sky, ("chat-working", id)),
         ChatStatus::NeedsYou => dot()
             .bg(t.colors.marigold)
             .with_animation(("chat-needs", id), Animation::new(Duration::from_millis(1600)).repeat().with_easing(gpui::ease_in_out), |d, delta| {

@@ -172,7 +172,7 @@ impl Workspace {
         )
     }
 
-    fn welcome(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn welcome(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let project = self.state.read(cx).project.clone();
         let where_ = crate::rules::display_path(&self.state.read(cx).project_dir, crate::rules::home_dir().as_deref());
@@ -202,7 +202,7 @@ impl Workspace {
                             .font_family(t.font_serif.clone())
                             .text_size(t.text.subheading - px(2.))
                             .text_color(t.colors.text_body)
-                            .child(super::mark::mark(&t, px(32.)))
+                            .child(super::cube_image(32., window))
                             .child(format!("Welcome back, {name}")),
                     )
                     .child(
@@ -341,7 +341,7 @@ impl Workspace {
 }
 
 impl Render for Workspace {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let s = self.state.read(cx);
         let (sidebar_open, palette_open, onboarding, screen, loading) = (s.sidebar_open, s.palette_open, s.onboarding, s.screen, s.loading);
@@ -353,7 +353,7 @@ impl Render for Workspace {
         } else if matches!(screen, Screen::Projects | Screen::Project(_)) {
             main.child(self.projects.clone())
         } else if empty {
-            main.child(self.welcome(cx))
+            main.child(self.welcome(window, cx))
         } else if loading {
             main.child(div().flex_1().min_h_0().child(super::skeleton::transcript(&t))).child(
                 div()
@@ -425,14 +425,12 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &ToggleModelPicker, _, cx| {
                 this.state.update(cx, |s, cx| {
                     s.picker_open = !s.picker_open;
+                    s.modes_open = false;
                     cx.notify();
                 })
             }))
             .on_action(cx.listener(|this, _: &CycleMode, _, cx| {
-                this.state.update(cx, |s, cx| {
-                    s.mode = s.mode.next();
-                    cx.notify();
-                })
+                this.state.update(cx, |s, cx| s.cycle_mode(cx))
             }))
             .on_action(cx.listener(|this, _: &StopReply, window, cx| {
                 let (palette, picker) = {

@@ -26,6 +26,7 @@ pub struct Colors {
     pub primary_fg: Hsla,
     pub primary_tint: Hsla,  // ghost CTA bg, selection wash
     pub marigold: Hsla,
+    #[allow(dead_code)] // in the palette; nothing is coral right now
     pub coral: Hsla,
     pub sky: Hsla,
     pub midnight: Hsla,
@@ -215,6 +216,18 @@ pub struct ExtraColors {
     pub diff_del: Hsla,      // removed line background
     pub scrim: Hsla,         // behind the command palette
     pub selected: Hsla,      // selected row: a white sticky note on the sidebar
+    // Permission modes, as Forge for VS Code tints them (forge-tokens.css).
+    pub mode_edit: Hsla,     // Edit automatically
+    pub mode_plan: Hsla,     // Plan
+    pub mode_bypass: Hsla,   // Bypass permissions
+    pub mode_expert: Hsla,   // Expert
+    // A model's ping chip: answered fast, fair, slow (never red).
+    pub ping_fast_bg: Hsla,
+    pub ping_fast_fg: Hsla,
+    pub ping_fair_bg: Hsla,
+    pub ping_fair_fg: Hsla,
+    pub ping_slow_bg: Hsla,
+    pub ping_slow_fg: Hsla,
 }
 
 impl ExtraColors {
@@ -233,6 +246,16 @@ impl ExtraColors {
                 diff_del: hsla(7. / 360., 0.92, 0.58, 0.16),
                 scrim: ink(0.55),
                 selected: rgb(0x2a2927).into(),
+                mode_edit: rgb(0x2da160).into(),
+                mode_plan: rgb(0x428fdc).into(),
+                mode_bypass: rgb(0xec5941).into(),
+                mode_expert: rgb(0xd99530).into(),
+                ping_fast_bg: hsla(148. / 360., 0.78, 0.29, 0.22),
+                ping_fast_fg: rgb(0x91d4a8).into(),
+                ping_fair_bg: hsla(30. / 360., 0.04, 0.92, 0.1),
+                ping_fair_fg: rgb(0xdcdbd9).into(),
+                ping_slow_bg: hsla(34. / 360., 1., 0.34, 0.22),
+                ping_slow_fg: rgb(0xe9be74).into(),
             }
         } else {
             Self {
@@ -248,6 +271,16 @@ impl ExtraColors {
                 diff_del: hsla(7. / 360., 0.92, 0.58, 0.1),
                 scrim: hsla(30. / 360., 0.1, 0.05, 0.32),
                 selected: rgb(0xffffff).into(),
+                mode_edit: rgb(0x108548).into(),
+                mode_plan: rgb(0x1f75cb).into(),
+                mode_bypass: rgb(0xa32c12).into(),
+                mode_expert: rgb(0xc17d10).into(),
+                ping_fast_bg: rgb(0xc3e6cd).into(),
+                ping_fast_fg: rgb(0x306440).into(),
+                ping_fair_bg: rgb(0xdcdbd9).into(),
+                ping_fair_fg: rgb(0x4d4b4e).into(),
+                ping_slow_bg: rgb(0xf5d9a8).into(),
+                ping_slow_fg: rgb(0x894b16).into(),
             }
         }
     }
@@ -355,7 +388,6 @@ pub struct Sizes {
     pub icon: Pixels,          // 16
     pub composer_max: Pixels,  // the composer's tallest input
     pub palette: Pixels,       // command palette width
-    pub picker: Pixels,        // model picker width
     pub hairline: Pixels,      // 1
     pub line_height_chat: f32, // 1.45 for prose
     pub chat_text: Pixels,     // 13: replies and your messages, as Forge for VS Code
@@ -376,7 +408,6 @@ impl Default for Sizes {
             icon: px(16.),
             composer_max: px(240.),
             palette: px(560.),
-            picker: px(340.),
             hairline: px(1.),
             line_height_chat: 1.45,
             chat_text: px(13.),

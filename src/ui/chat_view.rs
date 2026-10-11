@@ -77,7 +77,7 @@ impl ChatView {
         }
 
         // Follow the step, restarting its timer when it changes.
-        let step = if busy { self.state.read(cx).chat().and_then(|c| step_label(c, s_turn_seed(c))) } else { None };
+        let step = if busy { self.state.read(cx).chat().and_then(step_label) } else { None };
         match (&step, &self.step) {
             (Some(label), Some((shown, _))) if label == shown => {}
             (Some(label), _) => self.step = Some((label.clone(), Instant::now())),
@@ -92,12 +92,84 @@ fn s_turn_seed(c: &Chat) -> usize {
     c.messages.iter().filter(|m| matches!(m, Message::User { .. })).count()
 }
 
-/// Forge's idle verbs, between steps.
-const VERBS: &[&str] = &["Forging", "Tempering", "Smelting", "Hammering", "Annealing", "Quenching", "Shaping", "Polishing", "Mining", "Casting"];
+/// The verbs the working line types while no step is named (the
+/// extension's list).
+const VERBS: &[&str] = &[
+    "Accomplishing", "Actioning", "Actualizing", "Baking", "Booping", "Brewing", "Calculating", "Cerebrating", "Channelling", "Churning", "Coalescing",
+    "Cogitating", "Computing", "Combobulating", "Concocting", "Considering", "Contemplating", "Cooking", "Crafting", "Creating", "Crunching", "Deciphering",
+    "Deliberating", "Determining", "Discombobulating", "Doing", "Effecting", "Elucidating", "Enchanting", "Envisioning", "Finagling", "Flibbertigibbeting",
+    "Forging", "Forming", "Frolicking", "Generating", "Germinating", "Hammering", "Hatching", "Herding", "Honking", "Ideating", "Imagining", "Incubating",
+    "Inferring", "Manifesting", "Marinating", "Meandering", "Moseying", "Mulling", "Mustering", "Musing", "Noodling", "Percolating", "Perusing",
+    "Philosophising", "Pontificating", "Pondering", "Processing", "Puttering", "Puzzling", "Reticulating", "Ruminating", "Scheming", "Schlepping",
+    "Shimmying", "Simmering", "Smooshing", "Spelunking", "Spinning", "Stewing", "Sussing", "Synthesizing", "Thinking", "Tinkering", "Transmuting",
+    "Unfurling", "Unravelling", "Vibing", "Wandering", "Whirring", "Wibbling", "Working", "Wrangling",
+];
+
+/// A small deterministic hash, for the verb picks and the typing's noise.
+fn mix_hash(a: u64) -> u64 {
+    let mut x = a.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    x ^= x >> 31;
+    x = x.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    x ^ (x >> 29)
+}
+
+/// Which verb is showing `ms` into the wait, and since when: it changes
+/// after 2s, then 3s, then 5s, then every 5s.
+fn verb_at(seed: usize, ms: u64) -> (usize, u64) {
+    let mut start = 0;
+    let mut k = 0u64;
+    for step in [2000u64, 3000, 5000].into_iter().chain(std::iter::repeat(5000)) {
+        if ms < start + step {
+            break;
+        }
+        start += step;
+        k += 1;
+    }
+    let pick = |k: u64| (mix_hash(seed as u64 * 7919 + k) % VERBS.len() as u64) as usize;
+    (pick(k), start)
+}
+
+/// The typed verb `ms` into the wait: a sweep crosses it a character every
+/// 40ms, each cell going `▌`, then noise (`.`, `_` or the letter), then the
+/// letter; cells it hasn't reached still show the last verb.
+fn typed_verb(seed: usize, ms: u64) -> String {
+    let width = VERBS.iter().map(|v| v.len()).max().unwrap_or(0) + 3;
+    let pad = |v: &str| format!("{v:<width$}");
+    let (verb, since) = verb_at(seed, ms);
+    let target: Vec<char> = pad(&format!("{}...", VERBS[verb])).chars().collect();
+    let previous: Vec<char> = if since == 0 {
+        vec![' '; width]
+    } else {
+        let (prev, _) = verb_at(seed, since - 1);
+        pad(&format!("{}...", VERBS[prev])).chars().collect()
+    };
+    let d = ((ms - since) / 40) as i64;
+    (0..width)
+        .map(|p| {
+            let phase = d - p as i64;
+            let want = target[p];
+            if want == ' ' && phase >= 0 {
+                return ' ';
+            }
+            match phase {
+                i64::MIN..=-1 => previous[p],
+                0 => '▌',
+                1 | 2 => match mix_hash((seed as u64) << 20 ^ (since << 8) ^ (p as u64 * 4 + phase as u64)) % 3 {
+                    0 => '.',
+                    1 => '_',
+                    _ => want,
+                },
+                _ => want,
+            }
+        })
+        .collect::<String>()
+        .trim_end()
+        .to_string()
+}
 
 /// What the reply is doing right now, as the working line says it; `None`
 /// while it waits on you (the permission card says that).
-fn step_label(c: &Chat, seed: usize) -> Option<String> {
+fn step_label(c: &Chat) -> Option<String> {
     let blocks = match c.messages.last() {
         Some(Message::Assistant { blocks }) => blocks.as_slice(),
         _ => &[],
@@ -117,7 +189,8 @@ fn step_label(c: &Chat, seed: usize) -> Option<String> {
             ToolKind::Web => format!("Fetching {}", t.target.split("://").nth(1).unwrap_or(&t.target).split('/').next().unwrap_or_default()),
         },
         Some(Block::Thinking { .. }) => "Thinking".into(),
-        _ => VERBS[seed % VERBS.len()].to_string(),
+        // No step to name: the line types a verb instead.
+        _ => String::new(),
     };
     Some(label)
 }
@@ -147,7 +220,7 @@ impl Render for ChatView {
                     message::render(m, &ctx, &t)
                 }
                 None => match &step {
-                    Some((label, since)) => working_line(&t, label, since.elapsed().as_secs()),
+                    Some((label, since)) => working_line(&t, label, *since, s_turn_seed(chat), super::mode_menu::cube_color(&t, s.mode)),
                     None => div().into_any_element(),
                 },
             };
@@ -189,37 +262,48 @@ fn shimmer(label: &str, sweep: f32, t: &crate::theme::Theme) -> StyledText {
     StyledText::new(label.to_string()).with_runs(runs)
 }
 
-/// Forge's working line: the cube breaking apart and reassembling, what the reply is doing (with a
-/// light sweeping across it), and how long that has taken.
-fn working_line(t: &crate::theme::Theme, label: &str, seconds: u64) -> gpui::AnyElement {
+/// Forge's working line, as the extension draws it: the cube being
+/// struck into shape (tinted by the mode), then what the reply is doing and
+/// for how long, or, between steps, a verb typing itself in. A light
+/// sweeps across the words.
+fn working_line(t: &crate::theme::Theme, label: &str, since: Instant, seed: usize, cube: gpui::Hsla) -> gpui::AnyElement {
     let theme = t.clone();
     let text = label.to_string();
     div()
         .flex()
         .items_center()
-        .gap(t.space.md)
-        .py(t.space.sm)
-        .child({
-            // The cube breaks apart and comes back together while Forge works.
-            let cube_theme = t.clone();
-            // Room around it, so the pieces never touch the words.
-            div().size(px(44.)).flex_none().relative().with_animation("working-cube", Animation::new(Duration::from_millis(2400)).repeat(), move |d, delta| {
-                d.child(div().absolute().left(px(6.)).top(px(6.)).child(super::mark::fractured(&cube_theme, px(32.), super::mark::fracture_spread(delta))))
-            })
-        })
-        .child(
-            div().with_animation(SharedString::from(format!("working-{label}")), Animation::new(Duration::from_millis(2200)).repeat(), move |d, delta| {
-                d.child(shimmer(&text, -0.3 + delta * 1.6, &theme))
-            }),
-        )
-        .child(div().text_color(t.colors.text_subtle).child(elapsed(seconds)))
-        .child(div().text_color(t.colors.text_subtle).opacity(0.7).child("· Esc to stop"))
+        .gap(px(4.))
+        .h(px(24.))
+        .mt(px(4.))
+        .child(super::forge_cube::cube(t, px(24.), cube, "working-cube"))
+        .child(div().font_weight(FontWeight::MEDIUM).with_animation(SharedString::from(format!("working-{label}")), Animation::new(Duration::from_millis(2200)).repeat(), move |d, delta| {
+            let words = if text.is_empty() { typed_verb(seed, since.elapsed().as_millis() as u64) } else { text.clone() };
+            d.child(shimmer(&words, -0.3 + delta * 1.6, &theme))
+        }))
+        .when(!label.is_empty(), |d| d.child(div().ml(px(4.)).text_color(t.colors.text_subtle).child(elapsed(since.elapsed().as_secs()))))
         .into_any_element()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::elapsed;
+    use super::{elapsed, typed_verb, verb_at};
+
+    #[test]
+    fn the_verb_changes_on_the_extensions_cadence() {
+        assert_eq!(verb_at(1, 0).1, 0);
+        assert_eq!(verb_at(1, 1999).1, 0);
+        assert_eq!(verb_at(1, 2000).1, 2000);
+        assert_eq!(verb_at(1, 5000).1, 5000);
+        assert_eq!(verb_at(1, 10_000).1, 10_000);
+        assert_eq!(verb_at(1, 15_500).1, 15_000);
+    }
+
+    #[test]
+    fn the_verb_types_itself_in() {
+        assert_eq!(typed_verb(3, 0), "▌");
+        let done = typed_verb(3, 1900);
+        assert!(done.ends_with("...") && !done.contains('▌'), "{done}");
+    }
 
     #[test]
     fn elapsed_reads_short() {

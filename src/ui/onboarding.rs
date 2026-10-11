@@ -15,8 +15,6 @@ pub struct Onboarding {
     state: Entity<AppState>,
     input: Entity<InputState>,
     error: Option<&'static str>,
-    /// Bumped to play the logo moment again.
-    replays: usize,
     _subs: Vec<Subscription>,
 }
 
@@ -31,15 +29,13 @@ impl Onboarding {
             }
             _ => {}
         })];
-        Self { state, input, error: None, replays: 0, _subs: subs }
+        Self { state, input, error: None, _subs: subs }
     }
 
     /// Show it: the current name filled in, the field focused.
     pub fn open(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let current = self.state.read(cx).user_name.clone().unwrap_or_default();
         self.error = None;
-        self.replays += 1;
-        self.replays += 1;
         self.input.update(cx, |i, cx| {
             i.set_value(current, window, cx);
             i.focus(window, cx);
@@ -59,21 +55,14 @@ impl Onboarding {
 }
 
 impl Render for Onboarding {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let returning = self.state.read(cx).user_name.is_some();
         let empty = self.input.read(cx).value().trim().is_empty();
         let hover = t.colors.primary_hover;
 
-        // The logo moment: the hammer smashes the cube (click to replay).
-        let logo = div()
-            .id("smash-logo")
-            .cursor_pointer()
-            .child(super::smash::animated(&t, self.replays))
-            .on_click(cx.listener(|this, _, _, cx| {
-                this.replays += 1;
-                cx.notify();
-            }));
+        // Forge's cube, still.
+        let logo = super::cube_image(96., window);
 
         let field = div()
             .w_full()

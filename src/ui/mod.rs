@@ -3,7 +3,11 @@
 pub mod chat_view;
 pub mod command_palette;
 pub mod composer;
+pub mod forge_cube;
 pub mod mark;
+pub mod mode_menu;
+pub mod model_menu;
+pub mod motion;
 pub mod markdown;
 pub mod message;
 pub mod onboarding;
@@ -11,8 +15,8 @@ pub mod projects;
 pub mod rules_view;
 pub mod sidebar;
 pub mod skeleton;
-pub mod smash;
 pub mod terminal;
+pub mod voxels;
 pub mod workspace;
 
 use gpui::{div, prelude::*, svg, App, Div, Hsla, Pixels, SharedString, Svg};
@@ -42,6 +46,16 @@ gpui::actions!(
 /// A Lucide icon from the bundled set, tinted with a theme colour.
 pub fn icon(path: &'static str, size: Pixels, color: Hsla) -> Svg {
     svg().path(path).size(size).flex_none().text_color(color)
+}
+
+/// The Forge cube picture (beside your name, and on the welcome card), at
+/// 32 or 96px. It uses the rendering made for this screen's density, so the
+/// picture is shown pixel for pixel, never squeezed.
+pub fn cube_image(size: f32, window: &gpui::Window) -> gpui::Img {
+    const MADE: [u32; 13] = [32, 40, 48, 56, 64, 80, 96, 120, 144, 168, 192, 240, 288];
+    let want = (size * window.scale_factor()).round() as u32;
+    let file = MADE.iter().copied().find(|n| *n >= want).unwrap_or(288);
+    gpui::img(SharedString::from(format!("images/cube-{file}.png"))).size(gpui::px(size)).flex_none()
 }
 
 /// The platform's name for the main modifier.

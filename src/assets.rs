@@ -15,7 +15,7 @@ macro_rules! icons {
 
 icons!(
     "archive", "arrow-right", "arrow-up", "at-sign", "bot", "brain", "check", "chevron-down", "chevron-right", "chevron-up",
-    "circle-check", "circle-pause", "circle-slash", "circle-x", "clock", "command", "copy", "cpu", "ellipsis", "eye", "file-pen",
+    "circle-check", "circle-pause", "code-xml", "graduation-cap", "route", "scroll-text", "circle-slash", "circle-x", "clock", "command", "copy", "cpu", "ellipsis", "eye", "file-pen",
     "file-text", "folder-open", "git-branch", "globe", "hand", "image", "info", "keyboard", "list-todo",
     "loader-circle", "map", "maximize-2", "message-square", "minus", "moon", "panel-left", "paperclip", "pencil",
     "pin", "plus", "refresh-cw", "rotate-ccw", "search", "settings", "shield-check", "sliders-horizontal", "sparkles", "split", "square",
@@ -24,19 +24,30 @@ icons!(
     "window-close", "window-maximize", "window-minimize", "window-restore",
 );
 
+macro_rules! images {
+    ($($name:literal),* $(,)?) => {
+        /// Pictures: the Forge cube, rendered from `assets/images/cube-original.webp`
+        /// at each size the app shows it (32 and 96, at 1x to 3x), so it is never
+        /// scaled at draw time.
+        const IMAGES: &[(&str, &[u8])] = &[
+            $((concat!("images/", $name, ".png"), include_bytes!(concat!("../assets/images/", $name, ".png"))),)*
+        ];
+    };
+}
+
+images!(
+    "cube-32", "cube-40", "cube-48", "cube-56", "cube-64", "cube-80", "cube-96", "cube-120", "cube-144", "cube-168", "cube-192", "cube-240", "cube-288",
+);
+
 pub struct Assets;
 
 impl AssetSource for Assets {
     fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
-        if path.starts_with("smash/") {
-            // The logo animation's sprite layers, generated from its pixel art.
-            return Ok(crate::ui::smash::svg_asset(path).map(Cow::Owned));
-        }
-        Ok(ICONS.iter().find(|(p, _)| *p == path).map(|(_, bytes)| Cow::Borrowed(*bytes)))
+        Ok(ICONS.iter().chain(IMAGES).find(|(p, _)| *p == path).map(|(_, bytes)| Cow::Borrowed(*bytes)))
     }
 
     fn list(&self, path: &str) -> Result<Vec<SharedString>> {
-        Ok(ICONS.iter().filter(|(p, _)| p.starts_with(path)).map(|(p, _)| SharedString::from(*p)).collect())
+        Ok(ICONS.iter().chain(IMAGES).filter(|(p, _)| p.starts_with(path)).map(|(p, _)| SharedString::from(*p)).collect())
     }
 }
 
