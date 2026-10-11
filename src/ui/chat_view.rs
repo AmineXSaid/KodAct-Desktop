@@ -189,7 +189,7 @@ fn shimmer(label: &str, sweep: f32, t: &crate::theme::Theme) -> StyledText {
     StyledText::new(label.to_string()).with_runs(runs)
 }
 
-/// Forge's working line: the cube at work, what the reply is doing (with a
+/// Forge's working line: the cube breaking apart and reassembling, what the reply is doing (with a
 /// light sweeping across it), and how long that has taken.
 fn working_line(t: &crate::theme::Theme, label: &str, seconds: u64) -> gpui::AnyElement {
     let theme = t.clone();
@@ -197,22 +197,16 @@ fn working_line(t: &crate::theme::Theme, label: &str, seconds: u64) -> gpui::Any
     div()
         .flex()
         .items_center()
-        .gap(t.space.sm)
-        .child(
-            div()
-                .relative()
-                .size(t.size.icon)
-                .child(
-                    div()
-                        .absolute()
-                        .child(super::mark::mark(t, t.size.icon))
-                        .with_animation("working-cube", Animation::new(Duration::from_millis(650)).repeat(), |d, delta| {
-                            // A strike: lift, then drop back quickly.
-                            let lift = if delta < 0.7 { delta / 0.7 } else { 1. - (delta - 0.7) / 0.3 };
-                            d.top(px(-2.5 * lift))
-                        }),
-                ),
-        )
+        .gap(t.space.md)
+        .py(t.space.sm)
+        .child({
+            // The cube breaks apart and comes back together while Forge works.
+            let cube_theme = t.clone();
+            // Room around it, so the pieces never touch the words.
+            div().size(px(44.)).flex_none().relative().with_animation("working-cube", Animation::new(Duration::from_millis(2400)).repeat(), move |d, delta| {
+                d.child(div().absolute().left(px(6.)).top(px(6.)).child(super::mark::fractured(&cube_theme, px(32.), super::mark::fracture_spread(delta))))
+            })
+        })
         .child(
             div().with_animation(SharedString::from(format!("working-{label}")), Animation::new(Duration::from_millis(2200)).repeat(), move |d, delta| {
                 d.child(shimmer(&text, -0.3 + delta * 1.6, &theme))

@@ -129,9 +129,76 @@ pub fn mark(t: &Theme, size: Pixels) -> Div {
     root
 }
 
+/// The detailed cube broken into a 4x4 grid of fragments, pushed out from
+/// its centre by `spread` (0 whole, 1 fully apart). Each fragment drifts a
+/// little on its own, so the burst doesn't look like a simple zoom.
+pub fn fractured(t: &Theme, size: Pixels, spread: f32) -> Div {
+    let n = ART32.len();
+    let cell = size / n as f32;
+    let frag = n / 4;
+    let mut root = div().relative().size(size).flex_none();
+    for fy in 0..4 {
+        for fx in 0..4 {
+            // Out from the centre, plus a fixed per-fragment wobble.
+            let (cx, cy) = ((fx * frag) as f32 + frag as f32 / 2. - n as f32 / 2., (fy * frag) as f32 + frag as f32 / 2. - n as f32 / 2.);
+            let seed = (fx * 7 + fy * 13) as f32;
+            let (jx, jy) = ((seed * 1.7).sin(), (seed * 2.3).cos());
+            let dx = (cx / n as f32 * 0.5 + jx * 0.06) * spread;
+            let dy = (cy / n as f32 * 0.5 + jy * 0.06 - 0.04) * spread;
+            let (ox, oy) = (size * dx, size * dy);
+            for y in fy * frag..(fy + 1) * frag {
+                let chars: Vec<char> = ART32[y].chars().collect();
+                let mut x = fx * frag;
+                let end = (fx + 1) * frag;
+                while x < end {
+                    let c = chars[x];
+                    let start = x;
+                    while x < end && chars[x] == c {
+                        x += 1;
+                    }
+                    if let Some(color) = ink(c, t) {
+                        root = root.child(
+                            div()
+                                .absolute()
+                                .left(cell * start as f32 + ox)
+                                .top(cell * y as f32 + oy)
+                                .w(cell * (x - start) as f32)
+                                .h(cell)
+                                .bg(color),
+                        );
+                    }
+                }
+            }
+        }
+    }
+    root
+}
+
+/// How far apart the cube is at `delta` (0..1) of its loop: whole, burst
+/// out, hang, ease back together, whole.
+pub fn fracture_spread(delta: f32) -> f32 {
+    let ease_out = |x: f32| 1. - (1. - x).powi(3);
+    let ease_in_out = |x: f32| if x < 0.5 { 4. * x * x * x } else { 1. - (-2. * x + 2.).powi(3) / 2. };
+    match delta {
+        d if d < 0.28 => 0.,
+        d if d < 0.48 => ease_out((d - 0.28) / 0.2),
+        d if d < 0.6 => 1.,
+        d if d < 0.86 => 1. - ease_in_out((d - 0.6) / 0.26),
+        _ => 0.,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{ART, ART32};
+
+    #[test]
+    fn the_fracture_loop_starts_and_ends_whole() {
+        use super::fracture_spread;
+        assert_eq!(fracture_spread(0.), 0.);
+        assert_eq!(fracture_spread(0.55), 1.);
+        assert!(fracture_spread(0.99) == 0. && fracture_spread(0.38) > 0.);
+    }
 
     #[test]
     fn the_sprites_are_square_and_symmetric_in_shape() {
