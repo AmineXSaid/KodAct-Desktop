@@ -36,6 +36,7 @@ gpui::actions!(
         OpenSettings,
         CopyLastReply,
         ChangeName,
+        ChangeAvatar,
         OpenRules,
         OpenProjects,
         Quit,
@@ -51,10 +52,16 @@ pub fn icon(path: &'static str, size: Pixels, color: Hsla) -> Svg {
 /// 32 or 96px. It uses the rendering made for this screen's density, so the
 /// picture is shown pixel for pixel, never squeezed.
 pub fn cube_image(size: f32, window: &gpui::Window) -> gpui::Img {
-    const MADE: [u32; 13] = [32, 40, 48, 56, 64, 80, 96, 120, 144, 168, 192, 240, 288];
+    const MADE: [u32; 16] = [32, 40, 48, 56, 60, 64, 72, 80, 84, 96, 120, 144, 168, 192, 240, 288];
     let want = (size * window.scale_factor()).round() as u32;
     let file = MADE.iter().copied().find(|n| *n >= want).unwrap_or(288);
     gpui::img(SharedString::from(format!("images/cube-{file}.png"))).size(gpui::px(size)).flex_none()
+}
+
+/// Your avatar, drawn `size` px square at this screen's density.
+pub fn avatar_image(name: &str, size: f32, window: &gpui::Window) -> gpui::Img {
+    let px = (size * window.scale_factor()).round() as u32;
+    gpui::img(SharedString::from(crate::avatars::path(name, px))).size(gpui::px(size)).flex_none()
 }
 
 /// The platform's name for the main modifier.

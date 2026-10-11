@@ -27,7 +27,7 @@ icons!(
 macro_rules! images {
     ($($name:literal),* $(,)?) => {
         /// Pictures: the Forge cube, rendered from `assets/images/cube-original.webp`
-        /// at each size the app shows it (32 and 96, at 1x to 3x), so it is never
+        /// at each size the app shows it (32, 48 and 96, at 1x to 3x), so it is never
         /// scaled at draw time.
         const IMAGES: &[(&str, &[u8])] = &[
             $((concat!("images/", $name, ".png"), include_bytes!(concat!("../assets/images/", $name, ".png"))),)*
@@ -36,13 +36,17 @@ macro_rules! images {
 }
 
 images!(
-    "cube-32", "cube-40", "cube-48", "cube-56", "cube-64", "cube-80", "cube-96", "cube-120", "cube-144", "cube-168", "cube-192", "cube-240", "cube-288",
+    "cube-32", "cube-40", "cube-48", "cube-56", "cube-60", "cube-64", "cube-72", "cube-80", "cube-84", "cube-96", "cube-120", "cube-144", "cube-168", "cube-192", "cube-240", "cube-288",
 );
 
 pub struct Assets;
 
 impl AssetSource for Assets {
     fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
+        if path.starts_with("avatars/") {
+            // Sized to the pixels they're drawn at (`avatars.rs`).
+            return Ok(crate::avatars::load(path).map(Cow::Owned));
+        }
         Ok(ICONS.iter().chain(IMAGES).find(|(p, _)| *p == path).map(|(_, bytes)| Cow::Borrowed(*bytes)))
     }
 

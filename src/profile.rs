@@ -1,5 +1,5 @@
-//! The person's profile, kept between launches: for now, the name Forge
-//! calls them. A plain text file in the platform's config folder
+//! The person's profile, kept between launches: the name Forge calls
+//! them, and their avatar. A plain text file in the platform's config folder
 //! (`FORGE_CONFIG_DIR` overrides it, for tests and portable installs).
 
 use std::path::PathBuf;
@@ -37,6 +37,19 @@ pub fn save_name(name: &str) -> std::io::Result<()> {
     let dir = dir().ok_or_else(|| std::io::Error::other("no config folder"))?;
     std::fs::create_dir_all(&dir)?;
     std::fs::write(dir.join("name.txt"), name)
+}
+
+/// The avatar chosen (or given at random), if one was saved and still exists.
+pub fn load_avatar() -> Option<String> {
+    let name = std::fs::read_to_string(dir()?.join("avatar.txt")).ok()?;
+    let name = name.trim();
+    crate::avatars::is_known(name).then(|| name.to_string())
+}
+
+pub fn save_avatar(name: &str) -> std::io::Result<()> {
+    let dir = dir().ok_or_else(|| std::io::Error::other("no config folder"))?;
+    std::fs::create_dir_all(&dir)?;
+    std::fs::write(dir.join("avatar.txt"), name)
 }
 
 #[cfg(test)]

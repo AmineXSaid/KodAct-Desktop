@@ -10,8 +10,8 @@
 use image::{ImageReader, Rgba32FImage, RgbaImage};
 
 const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/images");
-/// Every size rendered: 32 and 96px at 1x, 1.25x, 1.5x, 1.75x, 2x, 2.5x, 3x.
-const SIZES: [u32; 13] = [32, 40, 48, 56, 64, 80, 96, 120, 144, 168, 192, 240, 288];
+/// Every size rendered: 32, 48 and 96px at 1x, 1.25x, 1.5x, 1.75x, 2x, 2.5x, 3x.
+const SIZES: [u32; 16] = [32, 40, 48, 56, 60, 64, 72, 80, 84, 96, 120, 144, 168, 192, 240, 288];
 
 fn load(name: &str) -> RgbaImage {
     ImageReader::open(format!("{DIR}/{name}")).unwrap_or_else(|e| panic!("{name}: {e}")).decode().unwrap_or_else(|e| panic!("{name}: {e}")).into_rgba8()

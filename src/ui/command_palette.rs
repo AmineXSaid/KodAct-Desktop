@@ -104,6 +104,7 @@ impl CommandPalette {
             act("Rules and memory", "icons/list-todo.svg", Some(shortcut("Shift R")), Box::new(OpenRules)),
             act("Open settings", "icons/settings.svg", Some(shortcut(",")), Box::new(OpenSettings)),
             act("Change your name", "icons/pencil.svg", None, Box::new(ChangeName)),
+            act("Change your avatar", "icons/sparkles.svg", None, Box::new(ChangeAvatar)),
             act("Quit", "icons/x.svg", Some(shortcut("Q")), Box::new(Quit)),
         ];
         if s.busy() {

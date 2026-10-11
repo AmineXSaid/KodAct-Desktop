@@ -117,6 +117,7 @@ impl Render for Sidebar {
         let s = self.state.read(cx);
         let q = s.search.to_lowercase();
         let name: SharedString = s.user_name.clone().unwrap_or_else(|| "Welcome".into());
+        let avatar = s.avatar.clone();
         let hover = t.colors.hover;
         let rules_open = s.screen == Screen::Rules;
         let projects_open = matches!(s.screen, Screen::Projects | Screen::Project(_));
@@ -350,7 +351,7 @@ impl Render for Sidebar {
                             .rounded(t.radius.button)
                             .cursor_pointer()
                             .hover(move |st| st.bg(hover))
-                            .child(super::cube_image(32., window))
+                            .child(super::avatar_image(&avatar, 32., window))
                             .child(
                                 div()
                                     .flex_1()

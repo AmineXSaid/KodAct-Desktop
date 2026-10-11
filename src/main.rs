@@ -7,6 +7,7 @@
 #[cfg_attr(not(test), allow(dead_code))]
 mod approve;
 mod assets;
+mod avatars;
 mod context;
 mod endpoints;
 mod fonts;

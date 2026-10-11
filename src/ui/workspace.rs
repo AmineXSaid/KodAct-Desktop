@@ -194,7 +194,8 @@ impl Workspace {
                             .font_family(t.font_display.clone())
                             .text_size(t.size.greeting)
                             .text_color(t.colors.text_strong)
-                            .child(super::cube_image(32., window))
+                            // Large enough that the cube's block edges read clearly.
+                            .child(super::cube_image(48., window))
                             .child(line),
                     )
                     .child(self.composer.clone()),
@@ -411,6 +412,14 @@ impl Render for Workspace {
                     cx.notify();
                 });
                 this.onboarding.update(cx, |o, cx| o.open(window, cx));
+            }))
+            .on_action(cx.listener(|this, _: &ChangeAvatar, window, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.onboarding = true;
+                    s.palette_open = false;
+                    cx.notify();
+                });
+                this.onboarding.update(cx, |o, cx| o.open_avatar(window, cx));
             }))
             .on_action(cx.listener(|this, _: &OpenProjects, _, cx| {
                 this.state.update(cx, |s, cx| {

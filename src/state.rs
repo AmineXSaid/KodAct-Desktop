@@ -197,6 +197,12 @@ pub struct Project {
 pub struct AppState {
     /// What Forge calls the person; None until the first-run screen sets it.
     pub user_name: Option<SharedString>,
+    /// Their avatar (`avatars.rs`): chosen on the first-run screen, else one
+    /// given at random and kept.
+    pub avatar: SharedString,
+    avatar_saved: bool,
+    /// This launch began on the first-run screen.
+    first_run: bool,
     /// The first-run screen is showing (also reopened to change the name).
     pub onboarding: bool,
     pub projects: Vec<Project>,
@@ -270,6 +276,7 @@ impl AppState {
         let chats = mock_chats();
         let next_id = chats.len() + 1;
         let user_name: Option<SharedString> = crate::profile::load_name().map(Into::into);
+        let saved_avatar = crate::profile::load_avatar();
         let project_dir = std::env::var_os("FORGE_PROJECT_DIR")
             .map(std::path::PathBuf::from)
             .or_else(|| std::env::current_dir().ok())
@@ -277,7 +284,10 @@ impl AppState {
         let projects = mock_projects(&project_dir);
         Self {
             onboarding: user_name.is_none(),
+            first_run: user_name.is_none(),
             user_name,
+            avatar_saved: saved_avatar.is_some(),
+            avatar: saved_avatar.unwrap_or_else(|| crate::avatars::random(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(7)).to_string()).into(),
             project: projects[0].name.clone(),
             project_dir,
             branch: projects[0].branch.clone(),
@@ -334,6 +344,10 @@ impl AppState {
             });
         }));
         self.load_endpoints(cx);
+        // Someone who never chose keeps the avatar they were given.
+        if !self.avatar_saved && !self.onboarding {
+            self.save_avatar(cx);
+        }
         // A fresh greeting every few minutes while the new-chat screen shows.
         const GREETING_EVERY: Duration = Duration::from_secs(5 * 60);
         self.greeting_timer = Some(cx.spawn(async move |this, cx| loop {
@@ -628,9 +642,37 @@ impl AppState {
             self.show_toast("Your name could not be saved; Forge will ask again next time.", cx);
         }
         self.user_name = Some(name.into());
-        self.onboarding = false;
         cx.notify();
         Ok(())
+    }
+
+    /// Pick an avatar (the first-run screen, or "Change your avatar").
+    pub fn set_avatar(&mut self, name: &str, cx: &mut Context<Self>) {
+        if !crate::avatars::is_known(name) {
+            return;
+        }
+        self.avatar = name.to_string().into();
+        self.save_avatar(cx);
+        cx.notify();
+    }
+
+    fn save_avatar(&mut self, cx: &mut Context<Self>) {
+        self.avatar_saved = true;
+        let name = self.avatar.to_string();
+        cx.background_spawn(async move {
+            let _ = crate::profile::save_avatar(&name);
+        })
+        .detach();
+    }
+
+    /// The first-run screen is done. A first run ends on a new chat, greeting
+    /// you; changing your name or avatar returns to where you were.
+    pub fn finish_onboarding(&mut self, cx: &mut Context<Self>) {
+        self.onboarding = false;
+        if std::mem::take(&mut self.first_run) {
+            self.new_chat(cx);
+        }
+        cx.notify();
     }
 
     /// Run the reply to one of your messages again: the conversation goes
