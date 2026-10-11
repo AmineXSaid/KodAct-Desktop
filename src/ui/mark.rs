@@ -12,7 +12,7 @@ use crate::theme::Theme;
 /// The detailed sprite: an isometric cube whose faces carry an original
 /// 16x16 ore texture, supersampled down. `.` empty, `O` outline, `1`-`9`
 /// stone from dark to light, `a`-`d` crystal from deep to glint.
-const ART32: [&str; 32] = [
+pub(crate) const ART32: [&str; 32] = [
     "...............OO...............",
     ".............OO77OO.............",
     "...........OO776666OO...........",
@@ -82,7 +82,7 @@ fn stone(t: &Theme, light: f32) -> Hsla {
     Hsla { s: c.s * 0.35, ..c }
 }
 
-fn ink(c: char, t: &Theme) -> Option<Hsla> {
+pub(crate) fn ink(c: char, t: &Theme) -> Option<Hsla> {
     let k = &t.colors;
     let white = k.primary_fg;
     Some(match c {

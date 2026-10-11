@@ -26,7 +26,6 @@ pub struct Colors {
     pub primary_fg: Hsla,
     pub primary_tint: Hsla,  // ghost CTA bg, selection wash
     pub marigold: Hsla,
-    #[allow(dead_code)] // in the palette; nothing draws with it since the hammer's grip went
     pub coral: Hsla,
     pub sky: Hsla,
     pub midnight: Hsla,

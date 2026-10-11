@@ -5,9 +5,8 @@
 use gpui::component::input::{Input, InputEvent, InputState};
 use std::time::Duration;
 
-use gpui::{div, point, prelude::*, px, relative, Animation, AnimationExt, BoxShadow, Context, Entity, FontWeight, IntoElement, Render, Subscription, Window};
+use gpui::{div, prelude::*, px, relative, Animation, AnimationExt, Context, Entity, FontWeight, IntoElement, Render, Subscription, Window};
 
-use super::mark::mark;
 use crate::state::AppState;
 use super::{icon, shortcut};
 use crate::theme::ActiveTheme;
@@ -16,6 +15,8 @@ pub struct Onboarding {
     state: Entity<AppState>,
     input: Entity<InputState>,
     error: Option<&'static str>,
+    /// Bumped to play the logo moment again.
+    replays: usize,
     _subs: Vec<Subscription>,
 }
 
@@ -30,13 +31,15 @@ impl Onboarding {
             }
             _ => {}
         })];
-        Self { state, input, error: None, _subs: subs }
+        Self { state, input, error: None, replays: 0, _subs: subs }
     }
 
     /// Show it: the current name filled in, the field focused.
     pub fn open(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let current = self.state.read(cx).user_name.clone().unwrap_or_default();
         self.error = None;
+        self.replays += 1;
+        self.replays += 1;
         self.input.update(cx, |i, cx| {
             i.set_value(current, window, cx);
             i.focus(window, cx);
@@ -61,39 +64,16 @@ impl Render for Onboarding {
         let returning = self.state.read(cx).user_name.is_some();
         let empty = self.input.read(cx).value().trim().is_empty();
         let hover = t.colors.primary_hover;
-        let glow = t.colors.sky;
 
-        // The cube floats over its shadow; a faint crystal glow sits behind it.
-        let float = Duration::from_millis(3200);
-        let cube = div()
-            .relative()
-            .size(px(96.))
-            .child(
-                div()
-                    .absolute()
-                    .top(px(28.))
-                    .left(px(28.))
-                    .size(px(40.))
-                    .rounded(t.radius.pill)
-                    .shadow(vec![BoxShadow { color: glow.opacity(if t.is_dark { 0.35 } else { 0.28 }), offset: point(px(0.), px(0.)), blur_radius: px(48.), spread_radius: px(14.), inset: false }]),
-            )
-            .child(
-                div()
-                    .absolute()
-                    .left(px(0.))
-                    .child(mark(&t, px(96.)))
-                    .with_animation("cube-float", Animation::new(float).repeat().with_easing(gpui::ease_in_out), |d, delta| {
-                        d.top(px(-4. * (1. - (delta * 2. - 1.).abs())))
-                    }),
-            );
-        let shadow = div()
-            .w(px(56.))
-            .h(px(6.))
-            .rounded(t.radius.pill)
-            .shadow(vec![BoxShadow { color: t.colors.midnight.opacity(if t.is_dark { 0.5 } else { 0.18 }), offset: point(px(0.), px(0.)), blur_radius: px(10.), spread_radius: px(0.), inset: false }])
-            .with_animation("cube-shadow", Animation::new(float).repeat().with_easing(gpui::ease_in_out), |d, delta| {
-                d.opacity(1. - 0.35 * (1. - (delta * 2. - 1.).abs()))
-            });
+        // The logo moment: the hammer smashes the cube (click to replay).
+        let logo = div()
+            .id("smash-logo")
+            .cursor_pointer()
+            .child(super::smash::animated(&t, self.replays))
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.replays += 1;
+                cx.notify();
+            }));
 
         let field = div()
             .w_full()
@@ -130,8 +110,7 @@ impl Render for Onboarding {
                 .flex()
                 .flex_col()
                 .items_center()
-                .child(cube)
-                .child(div().mt(t.space.md).child(shadow))
+                .child(logo)
                 .child(
                     div()
                         .mt(t.space.xl + t.space.sm)

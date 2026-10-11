@@ -28,6 +28,10 @@ pub struct Assets;
 
 impl AssetSource for Assets {
     fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
+        if path.starts_with("smash/") {
+            // The logo animation's sprite layers, generated from its pixel art.
+            return Ok(crate::ui::smash::svg_asset(path).map(Cow::Owned));
+        }
         Ok(ICONS.iter().find(|(p, _)| *p == path).map(|(_, bytes)| Cow::Borrowed(*bytes)))
     }
 

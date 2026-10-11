@@ -11,6 +11,7 @@ pub mod projects;
 pub mod rules_view;
 pub mod sidebar;
 pub mod skeleton;
+pub mod smash;
 pub mod terminal;
 pub mod workspace;
 
