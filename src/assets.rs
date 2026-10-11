@@ -18,7 +18,7 @@ icons!(
     "circle-check", "circle-pause", "circle-slash", "circle-x", "clock", "command", "copy", "cpu", "ellipsis", "eye", "file-pen",
     "file-text", "folder-open", "git-branch", "globe", "hand", "image", "info", "keyboard", "list-todo",
     "loader-circle", "map", "maximize-2", "message-square", "minus", "moon", "panel-left", "paperclip", "pencil",
-    "pin", "plus", "refresh-cw", "rotate-ccw", "search", "settings", "shield-check", "sparkles", "split", "square",
+    "pin", "plus", "refresh-cw", "rotate-ccw", "search", "settings", "shield-check", "sliders-horizontal", "sparkles", "split", "square",
     "sun", "terminal", "trash", "triangle-alert", "x", "zap",
     // The title bar's minimize / maximize / restore / close (gpui-kit-assets, Apache-2.0).
     "window-close", "window-maximize", "window-minimize", "window-restore",

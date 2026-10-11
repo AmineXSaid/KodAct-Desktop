@@ -7,6 +7,7 @@ pub mod mark;
 pub mod markdown;
 pub mod message;
 pub mod onboarding;
+pub mod projects;
 pub mod rules_view;
 pub mod sidebar;
 pub mod terminal;
@@ -31,6 +32,7 @@ gpui::actions!(
         CopyLastReply,
         ChangeName,
         OpenRules,
+        OpenProjects,
         Quit,
     ]
 );

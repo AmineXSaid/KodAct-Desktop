@@ -123,6 +123,8 @@ pub enum Message {
 
 pub struct Chat {
     pub id: usize,
+    /// The project it belongs to.
+    pub project: usize,
     pub title: SharedString,
     pub minutes_ago: u32,
     pub pinned: bool,
@@ -185,6 +187,22 @@ pub enum Screen {
     Chat,
     /// What Claude Code reads in this project, and when (`ui/rules_view.rs`).
     Rules,
+    /// Every project (`ui/projects.rs`).
+    Projects,
+    /// One project: its chats, and a composer to start another.
+    Project(usize),
+}
+
+/// A folder Forge works in. Its chats, rules and memory belong to it.
+#[derive(Clone, Debug)]
+pub struct Project {
+    pub id: usize,
+    pub name: SharedString,
+    pub path: std::path::PathBuf,
+    pub branch: SharedString,
+    pub pinned: bool,
+    /// When it was last opened, in minutes before now.
+    pub opened_minutes_ago: u32,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -234,7 +252,15 @@ pub struct AppState {
     pub user_name: Option<SharedString>,
     /// The first-run screen is showing (also reopened to change the name).
     pub onboarding: bool,
-    /// The project's folder name, shown in the title bar.
+    pub projects: Vec<Project>,
+    /// The project you're in.
+    pub current_project: usize,
+    /// The sidebar lists every project's chats, not only this project's.
+    pub all_chats: bool,
+    /// The title bar's project switcher, and the sidebar's chat filter, are open.
+    pub switcher_open: bool,
+    pub filter_open: bool,
+    /// The current project's name, shown in the title bar.
     pub project: SharedString,
     /// The project's folder: `FORGE_PROJECT_DIR`, else where Forge started.
     pub project_dir: std::path::PathBuf,
@@ -274,13 +300,19 @@ impl AppState {
             .map(std::path::PathBuf::from)
             .or_else(|| std::env::current_dir().ok())
             .unwrap_or_default();
+        let projects = mock_projects(&project_dir);
         Self {
             onboarding: user_name.is_none(),
             user_name,
-            project: project_dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "project".into()).into(),
+            project: projects[0].name.clone(),
             project_dir,
+            branch: projects[0].branch.clone(),
+            current_project: projects[0].id,
+            projects,
+            all_chats: false,
+            switcher_open: false,
+            filter_open: false,
             screen: Screen::Chat,
-            branch: "fix/hermes_upgrade".into(),
             current: Some(chats[0].id),
             chats,
             sidebar_open: true,
@@ -326,7 +358,59 @@ impl AppState {
         }
     }
 
+    pub fn project(&self, id: usize) -> Option<&Project> {
+        self.projects.iter().find(|p| p.id == id)
+    }
+
+    /// Work in another project: the title bar, the Rules screen and new
+    /// chats follow it. The open chat stays only if it belongs there.
+    pub fn select_project(&mut self, id: usize, cx: &mut Context<Self>) {
+        let Some(p) = self.projects.iter_mut().find(|p| p.id == id) else { return };
+        p.opened_minutes_ago = 0;
+        let (name, path, branch) = (p.name.clone(), p.path.clone(), p.branch.clone());
+        self.current_project = id;
+        self.project = name;
+        self.project_dir = path;
+        self.branch = branch;
+        self.switcher_open = false;
+        if self.chat().is_some_and(|c| c.project != id) {
+            self.current = None;
+        }
+        cx.notify();
+    }
+
+    /// Open a project's page.
+    pub fn show_project(&mut self, id: usize, cx: &mut Context<Self>) {
+        self.select_project(id, cx);
+        self.screen = Screen::Project(id);
+        cx.notify();
+    }
+
+    /// Add a folder as a project (or open it, if it already is one).
+    pub fn add_project(&mut self, path: std::path::PathBuf, cx: &mut Context<Self>) {
+        if let Some(p) = self.projects.iter().find(|p| p.path == path) {
+            let id = p.id;
+            return self.show_project(id, cx);
+        }
+        let id = self.projects.iter().map(|p| p.id).max().unwrap_or(0) + 1;
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.display().to_string());
+        self.projects.push(Project { id, name: name.into(), path, branch: "main".into(), pinned: false, opened_minutes_ago: 0 });
+        self.show_project(id, cx);
+    }
+
+    pub fn toggle_project_pin(&mut self, id: usize, cx: &mut Context<Self>) {
+        if let Some(p) = self.projects.iter_mut().find(|p| p.id == id) {
+            p.pinned = !p.pinned;
+        }
+        cx.notify();
+    }
+
     pub fn open_chat(&mut self, id: usize, cx: &mut Context<Self>) {
+        if let Some(project) = self.chats.iter().find(|c| c.id == id).map(|c| c.project) {
+            if project != self.current_project {
+                self.select_project(project, cx);
+            }
+        }
         self.screen = Screen::Chat;
         self.current = Some(id);
         if let Some(c) = self.chat_mut(id) {
@@ -505,11 +589,12 @@ impl AppState {
                 let id = self.next_id;
                 self.next_id += 1;
                 let title: String = text.lines().next().unwrap_or_default().chars().take(48).collect();
-                self.chats.insert(0, Chat { id, title: title.into(), minutes_ago: 0, pinned: false, messages: vec![], version: 0, unread: false });
+                self.chats.insert(0, Chat { id, project: self.current_project, title: title.into(), minutes_ago: 0, pinned: false, messages: vec![], version: 0, unread: false });
                 self.current = Some(id);
                 id
             }
         };
+        self.screen = Screen::Chat;
         if let Some(c) = self.chat_mut(id) {
             c.messages.push(Message::User { text: text.clone().into(), sent: SystemTime::now() });
             c.minutes_ago = 0;
@@ -702,6 +787,26 @@ fn script(prompt: &str) -> Vec<Step> {
 
 // ---------------------------------------------------------------- mock chats
 
+/// The folder Forge started in, and a few others to switch between.
+fn mock_projects(here: &std::path::Path) -> Vec<Project> {
+    let home = crate::rules::home_dir().unwrap_or_default();
+    let name = here.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "project".into());
+    let p = |id, name: &str, branch: &str, pinned, opened| Project {
+        id,
+        name: name.to_string().into(),
+        path: home.join("dev").join(name),
+        branch: branch.to_string().into(),
+        pinned,
+        opened_minutes_ago: opened,
+    };
+    vec![
+        Project { id: 1, name: name.into(), path: here.to_path_buf(), branch: "fix/hermes_upgrade".into(), pinned: false, opened_minutes_ago: 0 },
+        p(2, "genesis", "main", true, 600),
+        p(3, "forge-cli", "feat/model-evals", false, 1500),
+        p(4, "hermes", "main", false, 3000),
+    ]
+}
+
 fn minutes_ago(minutes: u32) -> SystemTime {
     SystemTime::now() - Duration::from_secs(minutes as u64 * 60)
 }
@@ -778,13 +883,13 @@ fn mock_chats() -> Vec<Chat> {
         m
     };
     let mut chats = vec![
-        Chat { id: 1, title: "Fix the greeting and add a test".into(), minutes_ago: 4, pinned: true, messages: rich, version: 0, unread: false },
-        Chat { id: 2, title: "Explain the hermes review pipeline".into(), minutes_ago: 120, pinned: false, messages: simple("Explain the hermes review pipeline", 120), version: 0, unread: true },
-        Chat { id: 3, title: "Speed up the session store".into(), minutes_ago: 300, pinned: false, messages: simple("Speed up the session store", 300), version: 0, unread: false },
-        Chat { id: 4, title: "Write a README for the CLI".into(), minutes_ago: 1500, pinned: false, messages: simple("Write a README for the CLI", 1500), version: 0, unread: false },
-        Chat { id: 5, title: "Why does cargo test hang on Windows?".into(), minutes_ago: 1800, pinned: false, messages: with_error(simple("Why does cargo test hang on Windows?", 1800)), version: 0, unread: false },
-        Chat { id: 6, title: "Migrate settings to the new schema".into(), minutes_ago: 5000, pinned: false, messages: simple("Migrate settings to the new schema", 5000), version: 0, unread: false },
-        Chat { id: 7, title: "Genesis redesign: landing page".into(), minutes_ago: 20000, pinned: false, messages: simple("Genesis redesign: landing page", 20000), version: 0, unread: false },
+        Chat { id: 1, project: 1, title: "Fix the greeting and add a test".into(), minutes_ago: 4, pinned: true, messages: rich, version: 0, unread: false },
+        Chat { id: 2, project: 4, title: "Explain the hermes review pipeline".into(), minutes_ago: 120, pinned: false, messages: simple("Explain the hermes review pipeline", 120), version: 0, unread: true },
+        Chat { id: 3, project: 1, title: "Speed up the session store".into(), minutes_ago: 300, pinned: false, messages: simple("Speed up the session store", 300), version: 0, unread: false },
+        Chat { id: 4, project: 3, title: "Write a README for the CLI".into(), minutes_ago: 1500, pinned: false, messages: simple("Write a README for the CLI", 1500), version: 0, unread: false },
+        Chat { id: 5, project: 1, title: "Why does cargo test hang on Windows?".into(), minutes_ago: 1800, pinned: false, messages: with_error(simple("Why does cargo test hang on Windows?", 1800)), version: 0, unread: false },
+        Chat { id: 6, project: 1, title: "Migrate settings to the new schema".into(), minutes_ago: 5000, pinned: false, messages: simple("Migrate settings to the new schema", 5000), version: 0, unread: false },
+        Chat { id: 7, project: 2, title: "Genesis redesign: landing page".into(), minutes_ago: 20000, pinned: false, messages: simple("Genesis redesign: landing page", 20000), version: 0, unread: false },
     ];
     chats.sort_by_key(|c| (!c.pinned, c.minutes_ago));
     chats

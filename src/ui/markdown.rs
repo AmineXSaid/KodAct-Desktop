@@ -182,7 +182,7 @@ fn runs(spans: &[Span], t: &Theme, base_weight: FontWeight, color: gpui::Hsla) -
 
 pub fn render(src: &str, t: &Theme, copy: &CopyContext) -> AnyElement {
     let blocks = parse(src);
-    let mut col = div().flex().flex_col().w_full().text_size(t.text.body_sm).line_height(relative(t.size.line_height_chat));
+    let mut col = div().flex().flex_col().w_full().text_size(t.size.chat_text).line_height(relative(t.size.line_height_chat));
     let mut prev: Option<&'static str> = None;
     for (n, b) in blocks.into_iter().enumerate() {
         // Space above a block depends on what it follows: list items sit
@@ -195,17 +195,17 @@ pub fn render(src: &str, t: &Theme, copy: &CopyContext) -> AnyElement {
         };
         let gap = match (prev, kind) {
             (None, _) => px(0.),
-            (Some("item"), "item") => t.space.xs,
-            (_, "heading") => t.space.lg,
-            (Some("heading"), _) => t.space.xs + px(2.),
-            (_, "code") | (Some("code"), _) => t.space.md,
-            _ => t.space.sm + px(2.),
+            (Some("item"), "item") => px(3.),
+            (_, "heading") => t.space.md + px(2.),
+            (Some("heading"), _) => t.space.xs,
+            (_, "code") | (Some("code"), _) => t.space.sm + px(2.),
+            _ => t.space.sm,
         };
         prev = Some(kind);
         let el: AnyElement = match b {
             Block::Para(spans) => div().child(runs(&spans, t, FontWeight::NORMAL, t.colors.text)).into_any_element(),
             Block::Heading(level, spans) => div()
-                .text_size(if level == 1 { t.text.body + px(2.) } else if level == 2 { t.text.body } else { t.text.body_sm })
+                .text_size(if level == 1 { t.text.body + px(1.) } else if level == 2 { t.text.body_sm + px(1.) } else { t.size.chat_text })
                 .line_height(relative(1.35))
                 .child(runs(&spans, t, FontWeight::SEMIBOLD, t.colors.text_strong))
                 .into_any_element(),

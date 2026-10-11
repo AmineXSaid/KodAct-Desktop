@@ -328,7 +328,8 @@ pub struct Sizes {
     pub palette: Pixels,       // command palette width
     pub picker: Pixels,        // model picker width
     pub hairline: Pixels,      // 1
-    pub line_height_chat: f32, // 1.55 for prose
+    pub line_height_chat: f32, // 1.5 for prose
+    pub chat_text: Pixels,     // 13.5: replies and your messages
     pub display: Pixels,       // 40: the welcome headline
     pub rules_list: Pixels,    // 340: the Rules screen's file list
     pub editor: Pixels,        // 420: a file editor's height
@@ -348,7 +349,8 @@ impl Default for Sizes {
             palette: px(560.),
             picker: px(340.),
             hairline: px(1.),
-            line_height_chat: 1.55,
+            line_height_chat: 1.5,
+            chat_text: px(13.5),
             display: px(40.),
             rules_list: px(340.),
             editor: px(420.),

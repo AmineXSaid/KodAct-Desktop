@@ -4,7 +4,7 @@
 
 use gpui::component::TitleBar;
 use gpui::{
-    div, prelude::*, px, relative, ClipboardItem, Context, Entity, FocusHandle, FontWeight, IntoElement, Render,
+    div, prelude::*, px, relative, AnimationExt, ClipboardItem, Context, Entity, FocusHandle, FontWeight, IntoElement, Render,
     SharedString, Window,
 };
 
@@ -12,6 +12,7 @@ use super::chat_view::ChatView;
 use super::command_palette::CommandPalette;
 use super::composer::Composer;
 use super::onboarding::Onboarding;
+use super::projects::ProjectsView;
 use super::rules_view::RulesView;
 use super::sidebar::Sidebar;
 use super::*;
@@ -26,6 +27,7 @@ pub struct Workspace {
     palette: Entity<CommandPalette>,
     onboarding: Entity<Onboarding>,
     rules: Entity<RulesView>,
+    projects: Entity<ProjectsView>,
     focus: FocusHandle,
 }
 
@@ -46,8 +48,9 @@ impl Workspace {
         let palette = cx.new(|cx| CommandPalette::new(state.clone(), window, cx));
         let onboarding = cx.new(|cx| Onboarding::new(state.clone(), window, cx));
         let rules = cx.new(|cx| RulesView::new(state.clone(), window, cx));
+        let projects = cx.new(|cx| ProjectsView::new(state.clone(), composer.clone(), cx));
         let first_run = state.read(cx).onboarding;
-        let ws = Self { state, sidebar, chat, composer, palette, onboarding, rules, focus: cx.focus_handle() };
+        let ws = Self { state, sidebar, chat, composer, palette, onboarding, rules, projects, focus: cx.focus_handle() };
         if first_run {
             ws.onboarding.update(cx, |o, cx| o.open(window, cx));
         } else {
@@ -62,6 +65,8 @@ impl Workspace {
 
     fn title_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
+        // Deferred so it paints above the page under the title bar.
+        let switcher = self.state.read(cx).switcher_open.then(|| gpui::deferred(self.switcher(cx)).with_priority(1));
         let s = self.state.read(cx);
         let hover = t.colors.hover;
         let button = |id: &'static str, path: &'static str| {
@@ -86,20 +91,39 @@ impl Workspace {
                 .child(button("toggle-sidebar", "icons/panel-left.svg").on_click(cx.listener(|_, _, window, cx| window.dispatch_action(Box::new(ToggleSidebar), cx))))
                 .child(
                     div()
-                        .id("project")
-                        .flex()
-                        .items_center()
-                        .gap(t.space.xs)
-                        .px(t.space.sm)
-                        .h(t.size.control)
-                        .rounded(t.radius.button)
-                        .cursor_pointer()
-                        .hover(move |st| st.bg(hover))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(t.colors.text_strong)
-                        .child(s.project.clone())
-                        .child(icon("icons/chevron-down.svg", t.size.icon_sm, t.colors.text_subtle))
-                        .on_click(cx.listener(|this, _, _, cx| this.state.update(cx, |s, cx| s.show_toast("Switching projects is a stub in this UI shell.", cx)))),
+                        .relative()
+                        .on_mouse_down_out(cx.listener(|this, _, _, cx| {
+                            if this.state.read(cx).switcher_open {
+                                this.state.update(cx, |s, cx| {
+                                    s.switcher_open = false;
+                                    cx.notify();
+                                });
+                            }
+                        }))
+                        .child(
+                            div()
+                                .id("project")
+                                .flex()
+                                .items_center()
+                                .gap(t.space.xs)
+                                .px(t.space.sm)
+                                .h(t.size.control)
+                                .rounded(t.radius.button)
+                                .cursor_pointer()
+                                .hover(move |st| st.bg(hover))
+                                .when(s.switcher_open, |d| d.bg(hover))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(t.colors.text_strong)
+                                .child(s.project.clone())
+                                .child(icon(if s.switcher_open { "icons/chevron-up.svg" } else { "icons/chevron-down.svg" }, t.size.icon_sm, t.colors.text_subtle))
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.state.update(cx, |s, cx| {
+                                        s.switcher_open = !s.switcher_open;
+                                        cx.notify();
+                                    })
+                                })),
+                        )
+                        .children(switcher),
                 )
                 .child(
                     div()
@@ -232,6 +256,68 @@ impl Workspace {
             )
     }
 
+    /// The title bar's project switcher: every project, then All projects
+    /// and Open folder….
+    fn switcher(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        let t = cx.theme().clone();
+        let s = self.state.read(cx);
+        let home = crate::rules::home_dir();
+        let hover = t.colors.hover;
+        let mut projects = s.projects.clone();
+        projects.sort_by_key(|p| (p.id != s.current_project, !p.pinned, p.opened_minutes_ago));
+        let row = |id: SharedString| div().id(id).flex().items_center().gap(t.space.sm).px(t.space.md).py(t.space.sm).rounded(t.radius.button).cursor_pointer().hover(move |st| st.bg(hover));
+        let mut list = div().flex().flex_col().child(div().px(t.space.md).pt(t.space.sm).pb(t.space.xs).text_size(t.text.caption).font_weight(FontWeight::MEDIUM).text_color(t.colors.text_subtle).child("Projects"));
+        for p in projects {
+            let (state, id) = (self.state.clone(), p.id);
+            let current = p.id == s.current_project;
+            list = list.child(
+                row(format!("switch-{}", p.id).into())
+                    .child(icon("icons/folder-open.svg", t.size.icon_sm, if current { t.colors.primary } else { t.colors.text_muted }))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .child(div().text_color(t.colors.text_strong).child(p.name.clone()))
+                            .child(div().overflow_hidden().whitespace_nowrap().text_ellipsis().font_family(t.font_mono.clone()).text_size(t.text.caption).text_color(t.colors.text_subtle).child(crate::rules::display_path(&p.path, home.as_deref()))),
+                    )
+                    .child(div().w(t.size.icon).when(current, |d| d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.primary))))
+                    .on_click(move |_, _, cx| {
+                        state.update(cx, |s, cx| {
+                            s.select_project(id, cx);
+                            if !matches!(s.screen, Screen::Rules) {
+                                s.screen = Screen::Chat;
+                            }
+                        })
+                    }),
+            );
+        }
+        let (all, open) = (self.state.clone(), self.state.clone());
+        theme::popover(&t)
+            .absolute()
+            .top(t.size.control + t.space.xs)
+            .left_0()
+            .w(px(320.))
+            .child(list)
+            .child(div().my(t.space.xs).h(t.size.hairline).bg(t.colors.border))
+            .child(row("switch-all".into()).child(icon("icons/list-todo.svg", t.size.icon_sm, t.colors.text_muted)).child("All projects").on_click(move |_, _, cx| {
+                all.update(cx, |s, cx| {
+                    s.switcher_open = false;
+                    s.screen = Screen::Projects;
+                    cx.notify();
+                })
+            }))
+            .child(row("switch-open".into()).child(icon("icons/plus.svg", t.size.icon_sm, t.colors.text_muted)).child("Open folder…").on_click(move |_, _, cx| {
+                open.update(cx, |s, cx| {
+                    s.switcher_open = false;
+                    cx.notify();
+                });
+                super::projects::open_folder(open.clone(), cx);
+            }))
+            .with_animation("switcher-in", gpui::Animation::new(std::time::Duration::from_millis(t.motion_ms)).with_easing(gpui::ease_in_out), |d, delta| d.opacity(delta))
+    }
+
     fn toast(&self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         let t = cx.theme().clone();
         let text: SharedString = self.state.read(cx).toast.clone()?;
@@ -260,6 +346,8 @@ impl Render for Workspace {
         let main = div().flex_1().min_w_0().flex().flex_col().bg(t.colors.canvas);
         let main = if screen == Screen::Rules {
             main.child(self.rules.clone())
+        } else if matches!(screen, Screen::Projects | Screen::Project(_)) {
+            main.child(self.projects.clone())
         } else if empty {
             main.child(self.welcome(cx))
         } else {
@@ -362,6 +450,14 @@ impl Render for Workspace {
                     cx.notify();
                 });
                 this.onboarding.update(cx, |o, cx| o.open(window, cx));
+            }))
+            .on_action(cx.listener(|this, _: &OpenProjects, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.screen = Screen::Projects;
+                    s.palette_open = false;
+                    s.switcher_open = false;
+                    cx.notify();
+                })
             }))
             .on_action(cx.listener(|this, _: &OpenRules, _, cx| {
                 this.state.update(cx, |s, cx| {

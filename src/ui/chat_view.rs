@@ -157,7 +157,7 @@ impl Render for ChatView {
                 .justify_center()
                 .px(t.space.xl)
                 .when(ix == 0, |d| d.pt(t.space.xl))
-                .child(div().w_full().max_w(t.size.column).pb(t.space.lg).child(body))
+                .child(div().w_full().max_w(t.size.column).pb(t.space.md).child(body))
                 .into_any_element()
         })
         .size_full()
