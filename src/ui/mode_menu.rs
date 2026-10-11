@@ -41,8 +41,9 @@ fn key(t: &Theme, text: &'static str) -> impl IntoElement {
     div().px(px(4.)).py(px(1.)).border_1().border_color(t.colors.border).rounded(px(3.)).child(text)
 }
 
-/// The footer button.
-pub fn trigger(t: &Theme, state: &Entity<AppState>, cx: &App) -> impl IntoElement {
+/// The footer button. `skip` says a click is the one that just closed the
+/// menu (pressing the button while it's open), so it doesn't reopen it.
+pub fn trigger(t: &Theme, state: &Entity<AppState>, cx: &App, skip: impl Fn(&gpui::ClickEvent, &mut App) -> bool + 'static) -> impl IntoElement {
     let s = state.read(cx);
     let (mode, open) = (s.mode, s.modes_open);
     let fg = tint(t, mode).unwrap_or(t.colors.text_muted);
@@ -66,7 +67,10 @@ pub fn trigger(t: &Theme, state: &Entity<AppState>, cx: &App) -> impl IntoElemen
             let tip: SharedString = format!("{}. Click to change, or press Shift+Tab to cycle.", mode.description()).into();
             move |window, cx| gpui::component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
         })
-        .on_click(move |_, _, cx| {
+        .on_click(move |ev, _, cx| {
+            if skip(ev, cx) {
+                return;
+            }
             state.update(cx, |s, cx| {
                 s.modes_open = !s.modes_open;
                 s.bypass_warning = false;
@@ -76,8 +80,8 @@ pub fn trigger(t: &Theme, state: &Entity<AppState>, cx: &App) -> impl IntoElemen
         })
 }
 
-/// The menu, above the trigger.
-pub fn menu(t: &Theme, state: &Entity<AppState>, cx: &App) -> impl IntoElement {
+/// The menu, above the trigger. A press anywhere outside it calls `on_out`.
+pub fn menu(t: &Theme, state: &Entity<AppState>, cx: &App, on_out: impl Fn(gpui::Point<gpui::Pixels>, &mut App) + 'static) -> impl IntoElement {
     let s = state.read(cx);
     let (current, allowed, warning) = (s.mode, s.bypass_allowed, s.bypass_warning);
     let active_bg = t.colors.hover;
@@ -169,6 +173,7 @@ pub fn menu(t: &Theme, state: &Entity<AppState>, cx: &App) -> impl IntoElement {
 
     div()
         .id("modes-menu")
+        .on_mouse_down_out(move |ev, _, cx| on_out(ev.position, cx))
         .absolute()
         .bottom_full()
         .right_0()

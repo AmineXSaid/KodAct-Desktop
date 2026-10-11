@@ -112,9 +112,10 @@ fn chip(t: &Theme, text: impl Into<SharedString>, bg: Hsla, fg: Hsla, border: Op
 }
 
 /// The menu. `active` is the row under the keyboard or pointer; `search`
-/// the search box, shown above eight rows.
+/// the search box, shown above eight rows; `on_out` runs on a press
+/// anywhere outside the menu.
 #[allow(clippy::too_many_arguments)]
-pub fn render(t: &Theme, state: &Entity<AppState>, s: &AppState, query: &str, active: Option<&str>, search: AnyElement, on_hover: impl Fn(String, &mut gpui::App) + Clone + 'static) -> impl IntoElement {
+pub fn render(t: &Theme, state: &Entity<AppState>, s: &AppState, query: &str, active: Option<&str>, search: AnyElement, on_hover: impl Fn(String, &mut gpui::App) + Clone + 'static, on_out: impl Fn(gpui::Point<gpui::Pixels>, &mut gpui::App) + 'static) -> impl IntoElement {
     let (rows, total) = rows(s, query);
     let checking = s.checking();
     let loading = s.endpoints.is_none();
@@ -273,6 +274,7 @@ pub fn render(t: &Theme, state: &Entity<AppState>, s: &AppState, query: &str, ac
 
     div()
         .id("models-menu")
+        .on_mouse_down_out(move |ev, _, cx| on_out(ev.position, cx))
         .absolute()
         .bottom_full()
         .left_0()

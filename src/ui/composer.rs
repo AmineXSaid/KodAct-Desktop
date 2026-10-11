@@ -20,6 +20,9 @@ pub struct Composer {
     filter: Entity<InputState>,
     active: Option<String>,
     picker_was_open: bool,
+    /// Where the press that just closed a menu happened: the click it ends
+    /// in, on that menu's own button, must not open it again.
+    dismissed_at: Option<gpui::Point<gpui::Pixels>>,
     /// Holds the keyboard while the model window is open (no search box),
     /// so the arrows move through it instead of the text.
     menu_focus: gpui::FocusHandle,
@@ -69,7 +72,7 @@ impl Composer {
                 _ => {}
             }),
         ];
-        Self { state, input, filter, active: None, picker_was_open: false, menu_focus: cx.focus_handle(), _subs: subs }
+        Self { state, input, filter, active: None, picker_was_open: false, dismissed_at: None, menu_focus: cx.focus_handle(), _subs: subs }
     }
 
     pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
@@ -99,6 +102,13 @@ impl Composer {
         }
         self.state.update(cx, |s, cx| s.send(text, cx));
         self.input.update(cx, |i, cx| i.set_value("", window, cx));
+    }
+
+    /// Whether this click ends the press that just closed a menu (and so
+    /// should do nothing). Clears the record either way.
+    fn just_dismissed(&mut self, ev: &gpui::ClickEvent) -> bool {
+        let at = self.dismissed_at.take();
+        matches!(ev, gpui::ClickEvent::Mouse(m) if Some(m.down.position) == at)
     }
 
     /// The model window's keys: arrows move (wrapping, through the effort
@@ -158,9 +168,30 @@ impl Render for Composer {
         let empty = self.text(cx).trim().is_empty();
         let hover = t.colors.hover;
 
+        // A menu closes on a press outside it (each listens on itself: it
+        // floats above the composer, outside the composer's own box).
+        let me = cx.entity().downgrade();
+        let dismiss = move |pos: gpui::Point<gpui::Pixels>, models: bool, cx: &mut gpui::App| {
+            let _ = me.update(cx, |c, cx| {
+                c.dismissed_at = Some(pos);
+                c.state.update(cx, |s, cx| {
+                    if models {
+                        s.picker_open = false;
+                    } else {
+                        s.modes_open = false;
+                        s.bypass_warning = false;
+                    }
+                    cx.notify();
+                });
+            });
+        };
+        let (dismiss_models, dismiss_modes) = (dismiss.clone(), dismiss);
+        let me = cx.entity().downgrade();
+        let skip = move |ev: &gpui::ClickEvent, cx: &mut gpui::App| -> bool { me.update(cx, |c, _| c.just_dismissed(ev)).unwrap_or(false) };
+
         // The pieces that read the state are built first.
-        let mode_trigger = super::mode_menu::trigger(&t, &state, cx);
-        let modes_menu = self.state.read(cx).modes_open.then(|| super::mode_menu::menu(&t, &state, cx));
+        let mode_trigger = super::mode_menu::trigger(&t, &state, cx, skip);
+        let modes_menu = self.state.read(cx).modes_open.then(|| super::mode_menu::menu(&t, &state, cx, move |pos, cx| dismiss_modes(pos, false, cx)));
         let query = self.filter.read(cx).value().to_string();
         let search = div()
             .m(px(4.))
@@ -181,7 +212,7 @@ impl Render for Composer {
         };
         let s = self.state.read(cx);
         let (busy, mode, picker_open, used) = (s.busy(), s.mode, s.picker_open, s.context_used);
-        let model_menu = picker_open.then(|| super::model_menu::render(&t, &state, s, &query, self.active.as_deref(), search, on_hover));
+        let model_menu = picker_open.then(|| super::model_menu::render(&t, &state, s, &query, self.active.as_deref(), search, on_hover, move |pos, cx| dismiss_models(pos, true, cx)));
         let model_name: SharedString = match (&s.endpoints, s.active_profile()) {
             (None, _) => "Model".into(),
             (Some(_), None) => "Set up an endpoint first".into(),
@@ -234,7 +265,11 @@ impl Render for Composer {
             .hover(move |st| st.opacity(0.85))
             .child(model_name)
             .children(pill_effort.map(|(label, color)| div().text_color(color).child(label)))
-            .on_click(|_, window, cx| window.dispatch_action(Box::new(ToggleModelPicker), cx));
+            .on_click(cx.listener(|this, ev: &gpui::ClickEvent, window, cx| {
+                if !this.just_dismissed(ev) {
+                    window.dispatch_action(Box::new(ToggleModelPicker), cx);
+                }
+            }));
 
         div()
             .key_context("Composer")
@@ -249,14 +284,6 @@ impl Render for Composer {
             .border_color(tint.map(|c| c.opacity(0.55)).unwrap_or(t.colors.border))
             .rounded(t.radius.card)
             .capture_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, window, cx| this.menu_key(ev, window, cx)))
-            .on_mouse_down_out(cx.listener(|this, _, _, cx| {
-                if this.state.read(cx).picker_open {
-                    this.state.update(cx, |s, cx| {
-                        s.picker_open = false;
-                        cx.notify();
-                    });
-                }
-            }))
             .children(model_menu)
             .child(
                 div()
@@ -309,19 +336,10 @@ impl Render for Composer {
                             )
                             .child(format!("{:.0}%", used * 100.)),
                     )
-                    // Modes: the button and its menu, which closes on a click elsewhere.
+                    // Modes: the button and its menu above it.
                     .child(
                         div()
                             .relative()
-                            .on_mouse_down_out(cx.listener(|this, _, _, cx| {
-                                if this.state.read(cx).modes_open {
-                                    this.state.update(cx, |s, cx| {
-                                        s.modes_open = false;
-                                        s.bypass_warning = false;
-                                        cx.notify();
-                                    });
-                                }
-                            }))
                             .child(mode_trigger)
                             .children(modes_menu),
                     )

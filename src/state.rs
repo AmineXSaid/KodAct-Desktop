@@ -431,7 +431,13 @@ impl AppState {
     fn pump_checks(&mut self, cx: &mut Context<Self>) {
         while self.checks_running < crate::health::SWEEP_PARALLELISM {
             let Some((name, background)) = self.check_queue.pop_front() else { break };
-            let Some(profile) = self.endpoints.as_ref().and_then(|e| e.profiles.iter().find(|p| p.name == name)).cloned() else { continue };
+            let Some(profile) = self.endpoints.as_ref().and_then(|e| e.profiles.iter().find(|p| p.name == name)).cloned() else {
+                // Gone from the list: nothing to check, so stop showing it as checking.
+                if let Some(h) = self.health.get_mut(&name) {
+                    h.syncing = false;
+                }
+                continue;
+            };
             let generation = self.check_gen.get(&name).copied().unwrap_or_default();
             self.checks_running += 1;
             cx.spawn(async move |this, cx| {
