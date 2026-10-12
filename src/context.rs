@@ -52,6 +52,8 @@ fn block_text(b: &Block) -> u64 {
         Block::Thinking { text, .. } => tokens(text),
         Block::Tool(t) => tokens(&t.target) + t.note.as_ref().map_or(0, |n| tokens(n)) + tokens(&t.output),
         Block::Permission { title, detail, .. } => tokens(title) + tokens(detail),
+        // The model wrote the file's text, so it counts as what it said.
+        Block::File(f) => tokens(&f.content),
     }
 }
 

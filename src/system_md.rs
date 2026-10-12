@@ -66,6 +66,8 @@ fn render() -> String {
         ("control", z.control, "small buttons, pills, title-bar controls"),
         ("palette", z.palette, "the command palette's width"),
         ("hairline", z.hairline, "every border"),
+        ("doc_pane", z.doc_pane, "the document panel's narrowest (it takes half the session)"),
+        ("doc_measure", z.doc_measure, "a document's widest line"),
     ] {
         let _ = writeln!(w, "- `{name}`: {}px, {role}", px(v));
     }
@@ -118,6 +120,8 @@ fn render() -> String {
     let _ = writeln!(w, "### Composer\n- Width: up to {}px, centred\n- Radius: {}px; 1px `border`, tinted by the mode when one is set\n- Text: {}px, inset to start where the + glyph starts\n- A soft rule, fading at both ends, between the text and its tools\n- Tools: + ({}px glyph) left, a 30px round send button right, 9px from both edges of its corner\n", px(z.composer_width), px(z.composer_radius), px(tx.body), px(z.icon_lg));
     let _ = writeln!(w, "### Card Default\n- Border: 1px `border`\n- Padding: {}px\n- Radius: {}px\n- Background: `surface`\n- Usage: tool calls, file cards, code blocks\n", px(sp.xl), px(r.card));
     let _ = writeln!(w, "### Popover\n- Border: 1px `border`, radius {}px, padding {}px\n- Background: `surface`, with the two-layer popover shadow\n- Usage: menus, pickers, the command palette\n", px(r.card), px(sp.xs));
+    let _ = writeln!(w, "### File Card\n- A file Forge made, in its reply: up to 440px, `surface`, 1px `border`, radius {}px, padding {}px\n- A 36x44 page tile (radius {}px, concentric with the card) previews it, its type in mono `primary`\n- Title 600 `text_strong`; \"Document · MD\" caption `text_muted`; a bordered Download button\n- Open: the edge turns `primary` at 60%\n", px(r.card), px(sp.sm), px(r.small));
+    let _ = writeln!(w, "### Document Pane\n- Beside the conversation, half the session, at least {}px; `surface` with a hairline on its left\n- Header 48px: file icon, title, type; Copy, Download, Close as {}px quiet buttons\n- Text {}px at {} leading, lines up to {}px; the title in the display serif at {}px\n- Enters with a 220ms ease-out, fading in from 16px to the right; Escape closes it\n", px(z.doc_pane), px(z.control), px(z.doc_text), z.line_height_doc, px(z.doc_measure), px(z.doc_title));
     let _ = writeln!(w, "### Sidebar Row\n- Height: {}px, radius {}px\n- Selected: `selected` with a hairline, 500 weight\n- Group labels: {}px caption\n", px(z.row), px(r.button), px(tx.caption));
 
     let _ = writeln!(w, "## Decisions\n");
@@ -126,7 +130,7 @@ fn render() -> String {
         ("Borders-only depth", "A desktop tool read for hours: hairlines separate without adding weight; shadows are kept to show what floats.", "2026-09-28"),
         ("Three surfaces, one step apart", "Title bar, sidebar and session must read as separate areas at a glance; even OKLab steps make the split clear without contrast jumps.", "2026-10-12"),
         ("A deeper fill for dark buttons", "White on the dark theme's link blue is 3.3:1; the fill is the same hue at 5.5:1 and links keep the brighter blue.", "2026-10-12"),
-        ("Display serif for the greeting only", "One warm, human line on the welcome; everything else stays in the interface face.", "2026-10-11"),
+        ("Display serif for one line per view", "The greeting, and a document's title: one warm, human line; everything else stays in the interface face.", "2026-10-12"),
         ("Composer at 620px", "A comfortable measure for a prompt, the same in a chat and on the welcome page.", "2026-10-11"),
         ("Icons on a 12/14/16/20 scale", "Desktop density: 14 in rows, 16 in controls, 20 for the composer's +; 12 inside captions.", "2026-10-12"),
     ] {

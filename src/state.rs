@@ -110,6 +110,41 @@ pub enum Block {
     Thinking { text: SharedString, open: bool },
     Tool(ToolCall),
     Permission { title: SharedString, detail: SharedString, verdict: Verdict },
+    /// A file Forge made for you: a card in the reply, opened beside the chat.
+    File(FileRef),
+}
+
+/// A file Forge made: shown as a card in the reply (`ui/file_card.rs`),
+/// opened in the side panel (`ui/doc_pane.rs`), saved by Download.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FileRef {
+    /// Its file name: `settings-migration-plan.md`.
+    pub name: SharedString,
+    /// Where it was written in the project, if it was.
+    pub path: Option<SharedString>,
+    pub content: SharedString,
+}
+
+impl FileRef {
+    /// What the card calls it: the document's first heading, else its name
+    /// without the extension.
+    pub fn title(&self) -> SharedString {
+        if self.is_markdown() {
+            if let Some(h) = self.content.lines().find_map(|l| l.strip_prefix("# ")) {
+                return h.trim().to_string().into();
+            }
+        }
+        self.name.rsplit_once('.').map_or(self.name.to_string(), |(stem, _)| stem.to_string()).into()
+    }
+
+    /// Its type, as the card labels it: `MD`, `PDF`, `DOCX`.
+    pub fn kind(&self) -> SharedString {
+        self.name.rsplit_once('.').map_or("FILE".to_string(), |(_, ext)| ext.to_ascii_uppercase()).into()
+    }
+
+    pub fn is_markdown(&self) -> bool {
+        matches!(self.kind().as_ref(), "MD" | "MARKDOWN")
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -256,6 +291,8 @@ pub struct AppState {
     pub picker_open: bool,
     /// The code block whose Copy was just pressed (shows "Copied" briefly).
     pub copied: Option<SharedString>,
+    /// The file open in the side panel, beside the chat.
+    pub doc: Option<FileRef>,
     copied_reset: Option<Task<()>>,
     /// A short message at the bottom of the window (stubs say what they would do).
     pub toast: Option<SharedString>,
@@ -320,6 +357,7 @@ impl AppState {
             palette_open: false,
             picker_open: false,
             copied: None,
+            doc: None,
             copied_reset: None,
             toast: None,
             toast_reset: None,
@@ -571,6 +609,9 @@ impl AppState {
             }
         }
         self.screen = Screen::Chat;
+        if self.current != Some(id) {
+            self.doc = None;
+        }
         self.current = Some(id);
         self.sync_mode();
         if let Some(c) = self.chat_mut(id) {
@@ -582,6 +623,7 @@ impl AppState {
     pub fn new_chat(&mut self, cx: &mut Context<Self>) {
         self.screen = Screen::Chat;
         self.current = None;
+        self.doc = None;
         self.greeting_seed = self.greeting_seed.wrapping_add(1);
         self.sync_mode();
         cx.notify();
@@ -714,6 +756,35 @@ impl AppState {
             });
         }));
         cx.notify();
+    }
+
+    /// Open a file in the side panel (the same file again closes it).
+    pub fn open_doc(&mut self, file: FileRef, cx: &mut Context<Self>) {
+        self.doc = if self.doc.as_ref() == Some(&file) { None } else { Some(file) };
+        cx.notify();
+    }
+
+    pub fn close_doc(&mut self, cx: &mut Context<Self>) {
+        if self.doc.take().is_some() {
+            cx.notify();
+        }
+    }
+
+    /// Save a copy into Downloads, off the UI thread, and say where it went.
+    pub fn download(&mut self, file: &FileRef, cx: &mut Context<Self>) {
+        let Some(dir) = crate::downloads::dir() else {
+            self.show_toast("Could not find your Downloads folder.", cx);
+            return;
+        };
+        let (name, bytes) = (file.name.to_string(), file.content.as_bytes().to_vec());
+        cx.spawn(async move |this, cx| {
+            let saved = cx.background_spawn(async move { crate::downloads::save(&dir, &name, &bytes) }).await;
+            let _ = this.update(cx, |s, cx| match saved {
+                Ok(path) => s.show_toast(format!("Saved to Downloads as {}", path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()), cx),
+                Err(e) => s.show_toast(format!("Could not save it: {e}"), cx),
+            });
+        })
+        .detach();
     }
 
     pub fn show_toast(&mut self, text: impl Into<SharedString>, cx: &mut Context<Self>) {
@@ -1110,6 +1181,29 @@ fn mock_chats() -> Vec<Chat> {
             Message::TurnEnd { seconds: 3.2, usage: None },
         ]
     };
+    // A reply that wrote a plan: the write, a short note, and the file's card.
+    const PLAN: &str = include_str!("../assets/docs/settings-migration-plan.md");
+    let plan = vec![
+        Message::User { text: "Plan the migration of our settings to the new schema. Write it up so I can review it.".into(), sent: minutes_ago(41) },
+        Message::Assistant {
+            blocks: vec![
+                Block::Tool(ToolCall { kind: ToolKind::Read, target: "src/settings.rs".into(), note: None, status: ToolStatus::Done, output: "pub struct Settings { pub theme: String, pub model: String, pub permissions: Vec<String> }".into(), diff: vec![], open: false, full: false }),
+                Block::Tool(ToolCall {
+                    kind: ToolKind::Write,
+                    target: "docs/settings-migration-plan.md".into(),
+                    note: None,
+                    status: ToolStatus::Done,
+                    output: "".into(),
+                    diff: diff(&PLAN.lines().take(6).map(|l| (DiffKind::Add, l)).collect::<Vec<_>>()),
+                    open: false,
+                    full: false,
+                }),
+                Block::Text("Here is the plan. It moves every setting to the v2 schema without losing anything, and keeps a backup for one release. Two checklist items are still open: the round-trip test and a Windows run with a read-only file.".into()),
+                Block::File(FileRef { name: "settings-migration-plan.md".into(), path: Some("docs/settings-migration-plan.md".into()), content: PLAN.into() }),
+            ],
+        },
+        Message::TurnEnd { seconds: 24.7, usage: None },
+    ];
     let with_error = |mut m: Vec<Message>| {
         m.push(Message::Notice { text: "The agent stopped unexpectedly (exit code 1). Send a message to try again.".into(), error: true });
         m
@@ -1120,7 +1214,7 @@ fn mock_chats() -> Vec<Chat> {
         Chat { id: 3, project: 1, title: "Speed up the session store".into(), minutes_ago: 300, pinned: false, messages: simple("Speed up the session store", 300), version: 0, unread: false },
         Chat { id: 4, project: 3, title: "Write a README for the CLI".into(), minutes_ago: 1500, pinned: false, messages: simple("Write a README for the CLI", 1500), version: 0, unread: false },
         Chat { id: 5, project: 1, title: "Why does cargo test hang on Windows?".into(), minutes_ago: 1800, pinned: false, messages: with_error(simple("Why does cargo test hang on Windows?", 1800)), version: 0, unread: false },
-        Chat { id: 6, project: 1, title: "Migrate settings to the new schema".into(), minutes_ago: 5000, pinned: false, messages: simple("Migrate settings to the new schema", 5000), version: 0, unread: false },
+        Chat { id: 6, project: 1, title: "Migrate settings to the new schema".into(), minutes_ago: 40, pinned: false, messages: plan, version: 0, unread: false },
         Chat { id: 7, project: 2, title: "Genesis redesign: landing page".into(), minutes_ago: 20000, pinned: false, messages: simple("Genesis redesign: landing page", 20000), version: 0, unread: false },
     ];
     // The mock replies' usage, counted from their text as each turn ended.

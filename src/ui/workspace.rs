@@ -307,23 +307,33 @@ impl Render for Workspace {
                     .child(div().w_full().max_w(t.size.column).child(self.composer.clone())),
             )
         } else {
-            main.child(
-                div()
-                    .flex_1()
-                    .min_h_0()
-                    .flex()
-                    .flex_col()
-                    .child(self.chat.clone())
-                    .with_animation("transcript-in", gpui::Animation::new(std::time::Duration::from_millis(t.motion_ms)), |d, delta| d.opacity(delta)),
-            )
-            .child(
-                div()
-                    .flex()
-                    .justify_center()
-                    .px(t.space.xl)
-                    .pb(t.space.lg)
-                    .child(div().w_full().max_w(t.size.column).child(self.composer.clone())),
-            )
+            let conversation = div()
+                .flex_1()
+                .min_w_0()
+                .min_h_0()
+                .flex()
+                .flex_col()
+                .child(
+                    div()
+                        .flex_1()
+                        .min_h_0()
+                        .flex()
+                        .flex_col()
+                        .child(self.chat.clone())
+                        .with_animation("transcript-in", gpui::Animation::new(std::time::Duration::from_millis(t.motion_ms)), |d, delta| d.opacity(delta)),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .justify_center()
+                        .px(t.space.xl)
+                        .pb(t.space.lg)
+                        .child(div().w_full().max_w(t.size.column).child(self.composer.clone())),
+                );
+            // A file opened from a reply sits beside the conversation.
+            let s = self.state.read(cx);
+            let pane = s.doc.as_ref().map(|f| super::doc_pane::render(f, self.state.clone(), s.copied.clone(), &t));
+            main.child(div().flex_1().min_h_0().flex().child(conversation).children(pane))
         };
 
         theme::app_root(&t)
@@ -385,6 +395,8 @@ impl Render for Workspace {
                         s.palette_open = false;
                         s.picker_open = false;
                         cx.notify();
+                    } else if s.doc.is_some() && !s.busy() {
+                        s.close_doc(cx);
                     } else {
                         s.stop(cx);
                     }

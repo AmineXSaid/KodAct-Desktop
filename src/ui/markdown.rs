@@ -5,12 +5,16 @@
 //!
 //! Partial input is fine: a reply is re-parsed as it streams, and an
 //! unclosed fence simply runs to the end.
+//!
+//! Two looks: `Chat` for replies, and `Document` for a file opened in the
+//! side panel (`doc_pane.rs`): a larger reading size, more leading, and the
+//! title in the display serif. Both draw tables and task lists.
 
 use gpui::{
     div, font, prelude::*, px, relative, AnyElement, App, ClipboardItem, Entity, FontStyle, FontWeight, SharedString,
     StrikethroughStyle, StyledText, TextRun, UnderlineStyle,
 };
-use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
 use super::icon;
 use crate::state::AppState;
@@ -30,10 +34,29 @@ struct Span {
 enum Block {
     Para(Vec<Span>),
     Heading(u8, Vec<Span>),
-    Item { number: Option<u64>, depth: usize, spans: Vec<Span> },
+    /// A list item; `task` is its checkbox, when it has one.
+    Item { number: Option<u64>, depth: usize, spans: Vec<Span>, task: Option<bool> },
     Code { lang: String, code: String },
     Quote(Vec<Span>),
     Rule,
+    Table { align: Vec<Alignment>, head: Vec<Vec<Span>>, rows: Vec<Vec<Vec<Span>>> },
+}
+
+/// How a piece of markdown is drawn.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Look {
+    /// A reply in the transcript.
+    Chat,
+    /// A document in the side panel.
+    Document,
+}
+
+#[derive(Default)]
+struct TableBuild {
+    align: Vec<Alignment>,
+    head: Vec<Vec<Span>>,
+    rows: Vec<Vec<Vec<Span>>>,
+    in_head: bool,
 }
 
 fn parse(src: &str) -> Vec<Block> {
@@ -45,6 +68,8 @@ fn parse(src: &str) -> Vec<Block> {
     let mut quote = 0usize;
     let mut code: Option<(String, String)> = None;
     let mut heading: Option<u8> = None;
+    let mut table: Option<TableBuild> = None;
+    let mut task: Option<bool> = None;
 
     let push = |spans: &mut Vec<Span>, text: &str, s: Span| {
         if text.is_empty() {
@@ -56,7 +81,7 @@ fn parse(src: &str) -> Vec<Block> {
         }
     };
 
-    for ev in Parser::new_ext(src, Options::ENABLE_STRIKETHROUGH) {
+    for ev in Parser::new_ext(src, Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS) {
         let style = Span { text: String::new(), bold, italic, code: false, strike, link };
         match ev {
             Event::Start(Tag::CodeBlock(kind)) => {
@@ -98,16 +123,48 @@ fn parse(src: &str) -> Vec<Block> {
                 if !spans.is_empty() {
                     // A nested list starts: flush the parent item's text first.
                     if let Some(num) = item_number.take() {
-                        out.push(Block::Item { number: num, depth: lists.len().saturating_sub(2), spans: std::mem::take(&mut spans) });
+                        out.push(Block::Item { number: num, depth: lists.len().saturating_sub(2), spans: std::mem::take(&mut spans), task: task.take() });
                     }
                 }
                 item_number = Some(n);
             }
             Event::End(TagEnd::Item) => {
                 if let Some(num) = item_number.take() {
-                    out.push(Block::Item { number: num, depth: lists.len().saturating_sub(1), spans: std::mem::take(&mut spans) });
+                    out.push(Block::Item { number: num, depth: lists.len().saturating_sub(1), spans: std::mem::take(&mut spans), task: task.take() });
                 } else {
                     spans.clear();
+                }
+            }
+            Event::TaskListMarker(done) => task = Some(done),
+            Event::Start(Tag::Table(align)) => table = Some(TableBuild { align, ..Default::default() }),
+            Event::Start(Tag::TableHead) => {
+                if let Some(t) = table.as_mut() {
+                    t.in_head = true;
+                }
+            }
+            Event::End(TagEnd::TableHead) => {
+                if let Some(t) = table.as_mut() {
+                    t.in_head = false;
+                }
+            }
+            Event::Start(Tag::TableRow) => {
+                if let Some(t) = table.as_mut() {
+                    t.rows.push(vec![]);
+                }
+            }
+            Event::End(TagEnd::TableCell) => {
+                if let Some(t) = table.as_mut() {
+                    let cell = std::mem::take(&mut spans);
+                    if t.in_head {
+                        t.head.push(cell);
+                    } else if let Some(row) = t.rows.last_mut() {
+                        row.push(cell);
+                    }
+                }
+            }
+            Event::End(TagEnd::Table) => {
+                if let Some(t) = table.take() {
+                    out.push(Block::Table { align: t.align, head: t.head, rows: t.rows });
                 }
             }
             Event::Start(Tag::BlockQuote(_)) => quote += 1,
@@ -156,6 +213,11 @@ pub struct CopyContext {
 }
 
 fn runs(spans: &[Span], t: &Theme, base_weight: FontWeight, color: gpui::Hsla) -> StyledText {
+    runs_in(spans, t, &t.font_sans, base_weight, color)
+}
+
+/// Text runs in `family` (code spans stay in the mono face).
+fn runs_in(spans: &[Span], t: &Theme, family: &SharedString, base_weight: FontWeight, color: gpui::Hsla) -> StyledText {
     let mut text = String::new();
     let mut runs = vec![];
     for s in spans {
@@ -163,7 +225,7 @@ fn runs(spans: &[Span], t: &Theme, base_weight: FontWeight, color: gpui::Hsla) -
             continue;
         }
         text.push_str(&s.text);
-        let mut f = font(if s.code { t.font_mono.clone() } else { t.font_sans.clone() });
+        let mut f = font(if s.code { t.font_mono.clone() } else { family.clone() });
         f.weight = if s.bold { FontWeight::SEMIBOLD } else { base_weight };
         if s.italic {
             f.style = FontStyle::Italic;
@@ -181,8 +243,14 @@ fn runs(spans: &[Span], t: &Theme, base_weight: FontWeight, color: gpui::Hsla) -
 }
 
 pub fn render(src: &str, t: &Theme, copy: &CopyContext) -> AnyElement {
+    render_as(src, t, copy, Look::Chat)
+}
+
+pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyElement {
+    let doc = look == Look::Document;
     let blocks = parse(src);
-    let mut col = div().flex().flex_col().w_full().text_size(t.size.chat_text).line_height(relative(t.size.line_height_chat));
+    let (size, leading) = if doc { (t.size.doc_text, t.size.line_height_doc) } else { (t.size.chat_text, t.size.line_height_chat) };
+    let mut col = div().flex().flex_col().w_full().text_size(size).line_height(relative(leading));
     let mut prev: Option<&'static str> = None;
     for (n, b) in blocks.into_iter().enumerate() {
         // Space above a block depends on what it follows: list items sit
@@ -190,40 +258,66 @@ pub fn render(src: &str, t: &Theme, copy: &CopyContext) -> AnyElement {
         let kind = match &b {
             Block::Item { .. } => "item",
             Block::Heading(..) => "heading",
-            Block::Code { .. } => "code",
+            Block::Code { .. } | Block::Table { .. } => "code",
             _ => "text",
         };
-        let gap = match (prev, kind) {
-            (None, _) => px(0.),
-            (Some("item"), "item") => px(2.),
-            (_, "heading") => t.space.md,
-            (Some("heading"), _) => t.space.xs,
-            (_, "code") | (Some("code"), _) => t.space.sm,
-            _ => t.space.sm - px(2.),
+        let gap = match (prev, kind, doc) {
+            (None, _, _) => px(0.),
+            (Some("item"), "item", false) => px(2.),
+            (Some("item"), "item", true) => px(6.),
+            (_, "heading", false) => t.space.md,
+            (_, "heading", true) => t.space.xl + t.space.xs,
+            (Some("heading"), _, false) => t.space.xs,
+            (Some("heading"), _, true) => t.space.sm + px(2.),
+            (_, "code", false) | (Some("code"), _, false) => t.space.sm,
+            (_, "code", true) | (Some("code"), _, true) => t.space.lg,
+            (_, _, false) => t.space.sm - px(2.),
+            (_, _, true) => t.space.md,
         };
         prev = Some(kind);
         let el: AnyElement = match b {
             Block::Para(spans) => div().child(runs(&spans, t, FontWeight::NORMAL, t.colors.text)).into_any_element(),
+            // A document's title is set in the display serif, as the greeting is.
+            Block::Heading(1, spans) if doc => div()
+                .text_size(t.size.doc_title)
+                .line_height(relative(1.2))
+                .child(runs_in(&spans, t, &t.font_display, FontWeight::NORMAL, t.colors.text_strong))
+                .into_any_element(),
             Block::Heading(level, spans) => div()
-                .text_size(if level == 1 { t.text.body + px(1.) } else if level == 2 { t.text.body_sm + px(1.) } else { t.size.chat_text })
+                .text_size(match (level, doc) {
+                    (1, false) => t.text.body + px(1.),
+                    (2, false) => t.text.body_sm + px(1.),
+                    (_, false) => t.size.chat_text,
+                    (2, true) => t.text.subheading,
+                    (_, true) => t.text.body,
+                })
                 .line_height(relative(1.35))
                 .child(runs(&spans, t, FontWeight::SEMIBOLD, t.colors.text_strong))
                 .into_any_element(),
-            Block::Item { number, depth, spans } => div()
+            Block::Item { number, depth, spans, task } => div()
                 .flex()
                 .gap(t.space.sm)
                 .pl(t.space.xs + t.space.lg * depth as f32)
-                .child(
-                    div()
+                .child(match task {
+                    // A checkbox, centred on the first line.
+                    Some(done) => div()
+                        .flex_none()
+                        .h(relative(1.))
+                        .min_w(t.space.lg)
+                        .pt((size * leading - t.size.icon_sm) / 2.)
+                        .child(icon(if done { "icons/square-check.svg" } else { "icons/square.svg" }, t.size.icon_sm, if done { t.colors.primary } else { t.colors.text_subtle }))
+                        .into_any_element(),
+                    None => div()
                         .flex_none()
                         .min_w(t.space.lg)
                         .text_color(t.colors.text_subtle)
                         .child(match number {
                             Some(n) => format!("{n}."),
                             None => "•".to_string(),
-                        }),
-                )
-                .child(div().flex_1().min_w_0().child(runs(&spans, t, FontWeight::NORMAL, t.colors.text)))
+                        })
+                        .into_any_element(),
+                })
+                .child(div().flex_1().min_w_0().child(runs(&spans, t, FontWeight::NORMAL, if task == Some(true) { t.colors.text_muted } else { t.colors.text })))
                 .into_any_element(),
             Block::Quote(spans) => div()
                 .border_l_2()
@@ -233,10 +327,53 @@ pub fn render(src: &str, t: &Theme, copy: &CopyContext) -> AnyElement {
                 .into_any_element(),
             Block::Rule => div().h(t.size.hairline).bg(t.colors.border).into_any_element(),
             Block::Code { lang, code } => code_block(&lang, code, &format!("{}-{n}", copy.key), t, copy),
+            Block::Table { align, head, rows } => table(&align, &head, &rows, t),
         };
         col = col.child(div().mt(gap).child(el));
     }
     col.into_any_element()
+}
+
+/// A table: equal columns, a tinted header, hairlines between rows.
+fn table(align: &[Alignment], head: &[Vec<Span>], rows: &[Vec<Vec<Span>>], t: &Theme) -> AnyElement {
+    let columns = head.len().max(rows.iter().map(|r| r.len()).max().unwrap_or(0)).max(1);
+    let row = |cells: &[Vec<Span>], header: bool| {
+        let mut r = div().flex().w_full();
+        for i in 0..columns {
+            let spans = cells.get(i).map(|c| c.as_slice()).unwrap_or(&[]);
+            // A block, not a flex row, so long cells wrap inside their column.
+            let cell = div()
+                .flex_1()
+                .min_w_0()
+                .px(t.space.md)
+                .py(t.space.sm)
+                .map(|d| match align.get(i) {
+                    Some(Alignment::Right) => d.text_right(),
+                    Some(Alignment::Center) => d.text_center(),
+                    _ => d,
+                })
+                .child(runs(spans, t, if header { FontWeight::SEMIBOLD } else { FontWeight::NORMAL }, if header { t.colors.text_strong } else { t.colors.text }));
+            r = r.child(cell);
+        }
+        r
+    };
+    let mut out = div()
+        .w_full()
+        .flex()
+        .flex_col()
+        .border_1()
+        .border_color(t.colors.border)
+        .rounded(t.radius.button)
+        .overflow_hidden()
+        .text_size(t.text.body_sm)
+        .line_height(relative(1.45));
+    if !head.is_empty() {
+        out = out.child(row(head, true).bg(t.extra.inset));
+    }
+    for r in rows {
+        out = out.child(row(r, false).border_t_1().border_color(t.colors.border));
+    }
+    out.into_any_element()
 }
 
 fn code_block(lang: &str, code: String, key: &str, t: &Theme, copy: &CopyContext) -> AnyElement {
@@ -355,6 +492,20 @@ mod tests {
         assert_eq!(b[6], Block::Code { lang: "rust".into(), code: "fn x() {}".into() });
         assert!(matches!(&b[7], Block::Quote(_)));
         assert_eq!(b[8], Block::Rule);
+    }
+
+    #[test]
+    fn tables_and_task_lists() {
+        let b = parse("| Field | Old | New |\n|:--|:-:|--:|\n| `theme` | string | enum |\n| fonts | – | list |\n\n- [x] Read the old file\n- [ ] Write the new one");
+        let Block::Table { align, head, rows } = &b[0] else { panic!("{:?}", b[0]) };
+        assert_eq!(align, &vec![Alignment::Left, Alignment::Center, Alignment::Right]);
+        assert_eq!(head.len(), 3);
+        assert_eq!(head[0][0].text, "Field");
+        assert_eq!(rows.len(), 2);
+        assert!(rows[0][0][0].code && rows[0][0][0].text == "theme");
+        assert_eq!(rows[1][2][0].text, "list");
+        assert!(matches!(&b[1], Block::Item { task: Some(true), .. }));
+        assert!(matches!(&b[2], Block::Item { task: Some(false), .. }));
     }
 
     #[test]

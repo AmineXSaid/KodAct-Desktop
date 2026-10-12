@@ -426,6 +426,11 @@ pub struct Sizes {
     pub line_height_chat: f32, // 1.45 for prose
     pub chat_text: Pixels,     // 14: replies and your messages (Hanken Grotesk sets small; 14 reads as 13 did in Inter)
     pub greeting: Pixels,      // 34: the new-chat greeting, in the display serif
+    pub doc_text: Pixels,      // 15: a document in the side panel
+    pub doc_title: Pixels,     // 28: its title, in the display serif
+    pub line_height_doc: f32,  // 1.65: a document's leading
+    pub doc_pane: Pixels,      // 460: the side panel's narrowest
+    pub doc_measure: Pixels,   // 680: a document's widest line
     pub rules_list: Pixels,    // 340: the Rules screen's file list
     pub editor: Pixels,        // 420: a file editor's height
 }
@@ -450,6 +455,11 @@ impl Default for Sizes {
             line_height_chat: 1.45,
             chat_text: px(14.),
             greeting: px(34.),
+            doc_text: px(15.),
+            doc_title: px(28.),
+            line_height_doc: 1.65,
+            doc_pane: px(460.),
+            doc_measure: px(680.),
             rules_list: px(340.),
             editor: px(420.),
         }

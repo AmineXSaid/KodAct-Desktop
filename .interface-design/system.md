@@ -41,6 +41,8 @@ Lucide, 2px stroke as drawn. Sizes: 12 / 14 / 16 / 20 only.
 - `control`: 28px, small buttons, pills, title-bar controls
 - `palette`: 560px, the command palette's width
 - `hairline`: 1px, every border
+- `doc_pane`: 460px, the document panel's narrowest (it takes half the session)
+- `doc_measure`: 680px, a document's widest line
 
 ### Surfaces
 One ladder, darkest at the top of the window, even steps in OKLab lightness.
@@ -115,6 +117,18 @@ Contrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of w
 - Background: `surface`, with the two-layer popover shadow
 - Usage: menus, pickers, the command palette
 
+### File Card
+- A file Forge made, in its reply: up to 440px, `surface`, 1px `border`, radius 12px, padding 8px
+- A 36x44 page tile (radius 4px, concentric with the card) previews it, its type in mono `primary`
+- Title 600 `text_strong`; "Document · MD" caption `text_muted`; a bordered Download button
+- Open: the edge turns `primary` at 60%
+
+### Document Pane
+- Beside the conversation, half the session, at least 460px; `surface` with a hairline on its left
+- Header 48px: file icon, title, type; Copy, Download, Close as 28px quiet buttons
+- Text 15px at 1.65 leading, lines up to 680px; the title in the display serif at 28px
+- Enters with a 220ms ease-out, fading in from 16px to the right; Escape closes it
+
 ### Sidebar Row
 - Height: 32px, radius 8px
 - Selected: `selected` with a hairline, 500 weight
@@ -127,6 +141,6 @@ Contrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of w
 | Borders-only depth | A desktop tool read for hours: hairlines separate without adding weight; shadows are kept to show what floats. | 2026-09-28 |
 | Three surfaces, one step apart | Title bar, sidebar and session must read as separate areas at a glance; even OKLab steps make the split clear without contrast jumps. | 2026-10-12 |
 | A deeper fill for dark buttons | White on the dark theme's link blue is 3.3:1; the fill is the same hue at 5.5:1 and links keep the brighter blue. | 2026-10-12 |
-| Display serif for the greeting only | One warm, human line on the welcome; everything else stays in the interface face. | 2026-10-11 |
+| Display serif for one line per view | The greeting, and a document's title: one warm, human line; everything else stays in the interface face. | 2026-10-12 |
 | Composer at 620px | A comfortable measure for a prompt, the same in a chat and on the welcome page. | 2026-10-11 |
 | Icons on a 12/14/16/20 scale | Desktop density: 14 in rows, 16 in controls, 20 for the composer's +; 12 inside captions. | 2026-10-12 |
