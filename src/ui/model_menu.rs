@@ -125,7 +125,7 @@ pub fn render(t: &Theme, state: &Entity<AppState>, s: &AppState, query: &str, ac
 
     let refresh = {
         let st = state.clone();
-        let spin = icon("icons/refresh-cw.svg", px(13.), if checking { brand } else { t.colors.text_subtle });
+        let spin = icon("icons/refresh-cw.svg", t.size.icon_sm, if checking { brand } else { t.colors.text_subtle });
         div()
             .id("models-refresh")
             .flex_none()
@@ -218,7 +218,7 @@ pub fn render(t: &Theme, state: &Entity<AppState>, s: &AppState, query: &str, ac
                             )
                             .child(div().text_size(t.text.caption).text_color(t.colors.text_subtle).when(row.disabled, |d| d.text_color(t.colors.text)).overflow_hidden().whitespace_nowrap().text_ellipsis().child(row.description)),
                     )
-                    .child(div().w(px(24.)).flex_none().flex().justify_end().when(row.current, |d| d.child(icon("icons/check.svg", px(16.), t.colors.text))))
+                    .child(div().w(px(24.)).flex_none().flex().justify_end().when(row.current, |d| d.child(icon("icons/check.svg", t.size.icon, t.colors.text))))
                     .when(!row.disabled, |d| {
                         let name = key.clone();
                         d.on_click(move |_, _, cx| st.update(cx, |s, cx| s.select_profile(&name, cx)))
@@ -252,7 +252,7 @@ pub fn render(t: &Theme, state: &Entity<AppState>, s: &AppState, query: &str, ac
                     .cursor_pointer()
                     .when(is_active, |d| d.bg(active_bg))
                     .on_mouse_move(move |_, _, cx| hover(EFFORT_ROW.to_string(), cx))
-                    .child(icon("icons/brain.svg", px(14.), t.colors.text_muted))
+                    .child(icon("icons/brain.svg", t.size.icon_sm, t.colors.text_muted))
                     .child(
                         div()
                             .flex_1()

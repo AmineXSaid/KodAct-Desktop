@@ -17,6 +17,8 @@ mod highlight;
 mod modes;
 #[cfg(test)]
 mod palette_check;
+#[cfg(test)]
+mod system_md;
 mod profile;
 mod rules;
 mod state;

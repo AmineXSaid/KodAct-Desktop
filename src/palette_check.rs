@@ -18,12 +18,12 @@ use crate::theme::Theme;
 const AA_TEXT: f32 = 4.5;
 const AA_UI: f32 = 3.0;
 
-fn rgba(c: Hsla) -> Rgba {
+pub(crate) fn rgba(c: Hsla) -> Rgba {
     c.to_rgb()
 }
 
 /// `fg` painted over an opaque `bg`.
-fn over(fg: Hsla, bg: Hsla) -> Rgba {
+pub(crate) fn over(fg: Hsla, bg: Hsla) -> Rgba {
     let (f, b) = (rgba(fg), rgba(bg));
     let a = f.a;
     Rgba { r: f.r * a + b.r * (1. - a), g: f.g * a + b.g * (1. - a), b: f.b * a + b.b * (1. - a), a: 1. }
@@ -38,13 +38,13 @@ fn luminance(c: Rgba) -> f32 {
 }
 
 /// The WCAG contrast ratio of `fg` (possibly translucent) on opaque `bg`.
-fn contrast(fg: Hsla, bg: Hsla) -> f32 {
+pub(crate) fn contrast(fg: Hsla, bg: Hsla) -> f32 {
     let (a, b) = (luminance(over(fg, bg)), luminance(rgba(bg)));
     (a.max(b) + 0.05) / (a.min(b) + 0.05)
 }
 
 /// OKLab lightness and chroma.
-fn oklab(c: Rgba) -> (f32, f32) {
+pub(crate) fn oklab(c: Rgba) -> (f32, f32) {
     let (r, g, b) = (linear(c.r), linear(c.g), linear(c.b));
     let l = (0.412_221_46 * r + 0.536_332_55 * g + 0.051_445_995 * b).cbrt();
     let m = (0.211_903_5 * r + 0.680_699_5 * g + 0.107_396_96 * b).cbrt();

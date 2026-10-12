@@ -413,8 +413,11 @@ pub struct Sizes {
     pub column: Pixels,        // 760: the reading column
     pub row: Pixels,           // 32: sidebar rows, menu items
     pub control: Pixels,       // 28: pills, small buttons
+    // Icons: one scale, 12 / 14 / 16 / 20, and Lucide's own 2px stroke.
+    pub icon_xs: Pixels,       // 12: inside captions and chips
     pub icon_sm: Pixels,       // 14
     pub icon: Pixels,          // 16
+    pub icon_lg: Pixels,       // 20: the composer's +
     pub composer_max: Pixels,  // the composer's tallest input
     pub composer_radius: Pixels, // 18: the composer box's corners
     pub composer_width: Pixels,  // 620: the composer's widest, wherever it sits
@@ -435,8 +438,10 @@ impl Default for Sizes {
             column: px(760.),
             row: px(32.),
             control: px(28.),
+            icon_xs: px(12.),
             icon_sm: px(14.),
             icon: px(16.),
+            icon_lg: px(20.),
             composer_max: px(240.),
             composer_radius: px(18.),
             composer_width: px(620.),

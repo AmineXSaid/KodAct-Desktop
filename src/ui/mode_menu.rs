@@ -123,7 +123,7 @@ pub fn menu(t: &Theme, state: &Entity<AppState>, cx: &App, on_out: impl Fn(gpui:
                 .cursor_pointer()
                 .when(picked, |d| d.bg(active_bg))
                 .hover(move |d| d.bg(active_bg))
-                .child(icon(mode.icon(), px(18.), row_fg))
+                .child(icon(mode.icon(), t.size.icon_lg, row_fg))
                 .child(
                     div()
                         .flex_1()
@@ -136,7 +136,7 @@ pub fn menu(t: &Theme, state: &Entity<AppState>, cx: &App, on_out: impl Fn(gpui:
                             m => m.description(),
                         })),
                 )
-                .child(div().w(px(14.)).flex_none().when(picked, |d| d.child(icon("icons/check.svg", px(14.), t.colors.text))))
+                .child(div().w(px(14.)).flex_none().when(picked, |d| d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.text))))
                 .on_click(move |_, _, cx| st.update(cx, |s, cx| s.set_mode(mode, cx))),
         );
     }
@@ -158,7 +158,7 @@ pub fn menu(t: &Theme, state: &Entity<AppState>, cx: &App, on_out: impl Fn(gpui:
                     .flex()
                     .items_start()
                     .gap(px(8.))
-                    .child(icon("icons/triangle-alert.svg", px(14.), danger))
+                    .child(icon("icons/triangle-alert.svg", t.size.icon_sm, danger))
                     .child(div().flex_1().min_w_0().text_size(t.text.caption).text_color(t.colors.text).child(
                         "Bypass permissions lets Forge run any command and edit any file without asking, including commands that delete files or reach the network. Use it only in a sandbox or a throwaway copy.",
                     )),

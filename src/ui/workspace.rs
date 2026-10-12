@@ -135,7 +135,7 @@ impl Workspace {
                         .text_size(t.text.caption)
                         .font_family(t.font_mono.clone())
                         .text_color(t.colors.text_muted)
-                        .child(icon("icons/git-branch.svg", t.size.icon_sm - px(2.), t.colors.text_muted))
+                        .child(icon("icons/git-branch.svg", t.size.icon_xs, t.colors.text_muted))
                         .child(s.branch.clone()),
                 )
                 .child(div().flex_1())

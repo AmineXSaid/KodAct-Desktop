@@ -74,7 +74,7 @@ fn branch_pill(t: &Theme, branch: SharedString) -> impl IntoElement {
         .font_family(t.font_mono.clone())
         .text_size(t.text.caption)
         .text_color(t.colors.text_muted)
-        .child(icon("icons/git-branch.svg", t.size.icon_sm - px(2.), t.colors.text_muted))
+        .child(icon("icons/git-branch.svg", t.size.icon_xs, t.colors.text_muted))
         .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(branch))
 }
 
@@ -252,7 +252,7 @@ impl ProjectsView {
                             .cursor_pointer()
                             .hover(|st| st.underline())
                             .child("Projects")
-                            .child(icon("icons/chevron-right.svg", t.size.icon_sm - px(2.), t.colors.text_subtle))
+                            .child(icon("icons/chevron-right.svg", t.size.icon_xs, t.colors.text_subtle))
                             .child(div().text_color(t.colors.text_muted).child(p.name.clone()))
                             .on_click(move |_, _, cx| {
                                 back_state.update(cx, |s, cx| {

@@ -1,0 +1,148 @@
+//! `.interface-design/system.md`, written from `theme.rs`.
+//!
+//! The design skills read that file as the system's tokens; the app reads
+//! `theme.rs`. So the file is generated, and this test fails when the two
+//! disagree. After changing a token, rewrite it with
+//! `UPDATE_SYSTEM_MD=1 cargo test system_md`.
+
+use std::fmt::Write as _;
+
+use gpui::{Hsla, Pixels};
+
+use crate::palette_check::{contrast, oklab, rgba};
+use crate::theme::Theme;
+
+const PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/.interface-design/system.md");
+
+fn hex(c: Hsla) -> String {
+    let c = rgba(c);
+    let b = |v: f32| (v.clamp(0., 1.) * 255.).round() as u8;
+    let base = format!("#{:02x}{:02x}{:02x}", b(c.r), b(c.g), b(c.b));
+    if c.a >= 0.999 { base } else { format!("{base} @ {:.1}%", c.a * 100.) }
+}
+
+fn px(p: Pixels) -> String {
+    let v = f32::from(p);
+    if v.fract() == 0. { format!("{v:.0}") } else { format!("{v}") }
+}
+
+fn render() -> String {
+    let (l, d) = (Theme::light(), Theme::dark());
+    let mut s = String::new();
+    let w = &mut s;
+    let _ = writeln!(w, "# Design System: Forge desktop (forge-gpui)\n");
+    let _ = writeln!(w, "> Generated from `src/theme.rs` by `src/system_md.rs`. Change a token in theme.rs, then run");
+    let _ = writeln!(w, "> `UPDATE_SYSTEM_MD=1 cargo test system_md`; `cargo test` fails while this file is stale.");
+    let _ = writeln!(w, "> Every colour pair below is held to its floor by `src/palette_check.rs`.\n");
+
+    let _ = writeln!(w, "## Direction\n");
+    let _ = writeln!(w, "**Personality:** Warmth & Approachability, with the Precision & Density of a desktop tool. A calm room to build in with an agent.\n");
+    let _ = writeln!(w, "**Foundation:** warm. Paper surfaces in one warm hue, chroma under 0.01 (OKLCH); colour is kept for meaning: the one blue action, modes, status.\n");
+    let _ = writeln!(w, "**Depth:** borders-only for content (1px hairlines); shadows only on popovers, menus and the command palette.\n");
+
+    let _ = writeln!(w, "## Tokens\n");
+    let sp = &l.space;
+    let _ = writeln!(w, "### Spacing\nBase: 4px\nScale: {}, {}, {}, {}, {}, {}\n", px(sp.xs), px(sp.sm), px(sp.md), px(sp.lg), px(sp.xl), px(sp.xxl));
+    let r = &l.radius;
+    let z = &l.size;
+    let _ = writeln!(w, "### Radius\nScale: {}px (small), {}px (buttons, rows), {}px (cards, popovers), {}px (the composer), pill\n", px(r.small), px(r.button), px(r.card), px(z.composer_radius));
+
+    let _ = writeln!(w, "### Typography");
+    let _ = writeln!(w, "Interface: {} (Anthropic Sans when installed or in Forge's `fonts` folder; never bundled)", l.font_sans);
+    let _ = writeln!(w, "Display: {} (the greeting)\nCode: {}", l.font_display, l.font_mono);
+    let tx = &l.text;
+    let _ = writeln!(w, "Scale: {} caption, {} UI and chat, {} input, {} subheading, {} heading, {} greeting", px(tx.caption), px(tx.body_sm), px(tx.body), px(tx.subheading), px(tx.heading_sm), px(z.greeting));
+    let _ = writeln!(w, "Weights: 400, 500 (labels, buttons), 600 (headings, the project name)\nProse line height: {}\n", z.line_height_chat);
+
+    let _ = writeln!(w, "### Icons\nLucide, 2px stroke as drawn. Sizes: {} / {} / {} / {} only.\n", px(z.icon_xs), px(z.icon_sm), px(z.icon), px(z.icon_lg));
+
+    let _ = writeln!(w, "### Sizes");
+    for (name, v, role) in [
+        ("titlebar", z.titlebar, "the title bar's height"),
+        ("sidebar", z.sidebar, "the sidebar's width"),
+        ("column", z.column, "the reading column"),
+        ("composer_width", z.composer_width, "the composer's widest"),
+        ("row", z.row, "sidebar rows, menu items"),
+        ("control", z.control, "small buttons, pills, title-bar controls"),
+        ("palette", z.palette, "the command palette's width"),
+        ("hairline", z.hairline, "every border"),
+    ] {
+        let _ = writeln!(w, "- `{name}`: {}px, {role}", px(v));
+    }
+    let _ = writeln!(w);
+
+    let _ = writeln!(w, "### Surfaces\nOne ladder, darkest at the top of the window, even steps in OKLab lightness.\n");
+    let _ = writeln!(w, "| Token | Light | L | Dark | L | Role |\n|---|---|---|---|---|---|");
+    for (name, a, b, role) in [
+        ("chrome", l.extra.chrome, d.extra.chrome, "the title bar"),
+        ("pane", l.extra.pane, d.extra.pane, "the sidebar"),
+        ("stage", l.extra.stage, d.extra.stage, "the session: chat, welcome, Rules, Projects"),
+        ("surface", l.colors.surface, d.colors.surface, "cards, the composer, popovers"),
+        ("selected", l.extra.selected, d.extra.selected, "the selected sidebar row"),
+    ] {
+        let _ = writeln!(w, "| `{name}` | `{}` | {:.3} | `{}` | {:.3} | {role} |", hex(a), oklab(rgba(a)).0, hex(b), oklab(rgba(b)).0);
+    }
+    let _ = writeln!(w);
+
+    let _ = writeln!(w, "### Colors\nContrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of white text on a fill.\n");
+    let _ = writeln!(w, "| Token | Light | Contrast | Dark | Contrast | Role |\n|---|---|---|---|---|---|");
+    // Each row: the token, then the pair whose contrast is shown.
+    type Pick = fn(&Theme) -> Hsla;
+    let rows: [(&str, Pick, Pick, Pick, &str); 14] = [
+        ("text_strong", |t| t.colors.text_strong, |t| t.colors.text_strong, |t| t.extra.stage, "headings, names"),
+        ("text", |t| t.colors.text, |t| t.colors.text, |t| t.extra.stage, "body text"),
+        ("text_body", |t| t.colors.text_body, |t| t.colors.text_body, |t| t.extra.stage, "secondary prose"),
+        ("text_muted", |t| t.colors.text_muted, |t| t.colors.text_muted, |t| t.extra.stage, "labels, captions, icons"),
+        ("text_subtle", |t| t.colors.text_subtle, |t| t.colors.text_subtle, |t| t.extra.stage, "placeholders and disabled only"),
+        ("border", |t| t.colors.border, |t| t.colors.border, |t| t.extra.stage, "hairlines"),
+        ("primary", |t| t.colors.primary, |t| t.colors.primary, |t| t.colors.surface, "links, the one accent"),
+        ("fill", |t| t.extra.fill, |t| t.colors.primary_fg, |t| t.extra.fill, "filled buttons (white text on it)"),
+        ("fill_danger", |t| t.extra.fill_danger, |t| t.colors.primary_fg, |t| t.extra.fill_danger, "destructive confirms"),
+        ("success", |t| t.extra.success, |t| t.extra.success, |t| t.colors.surface, "done, passed"),
+        ("danger", |t| t.extra.danger, |t| t.extra.danger, |t| t.colors.surface, "failed, errors"),
+        ("warning", |t| t.extra.warning, |t| t.extra.warning, |t| t.colors.surface, "needs you"),
+        ("mode_plan", |t| t.extra.mode_plan, |t| t.extra.mode_plan, |t| t.colors.surface, "Plan mode"),
+        ("mode_bypass", |t| t.extra.mode_bypass, |t| t.extra.mode_bypass, |t| t.colors.surface, "Bypass permissions"),
+    ];
+    let ratio = |t: &Theme, fg: Pick, bg: Pick| format!("{:.1}:1", contrast(fg(t), bg(t)));
+    for (name, token, fg, bg, role) in rows {
+        let _ = writeln!(w, "| `{name}` | `{}` | {} | `{}` | {} | {role} |", hex(token(&l)), ratio(&l, fg, bg), hex(token(&d)), ratio(&d, fg, bg));
+    }
+    let _ = writeln!(w);
+
+    let _ = writeln!(w, "### Contrast floors\n- Meaningful text: 4.5:1 on every surface and hover wash.\n- Icons, mode edges, the send arrow: 3:1.\n- Placeholders and disabled text (`text_subtle`): 2.5:1, never body copy.\n- Hairlines: 1.15:1 on every surface.\n- Surface steps: at least 0.02 OKLab L apart, each within 0.004 of the mean step.\n");
+
+    let _ = writeln!(w, "## Patterns\n");
+    let _ = writeln!(w, "### Button Primary\n- Padding: 6px 15px\n- Radius: {}px\n- Font: {}px, 500 weight\n- Background: `fill`, `fill_hover` on hover; text `primary_fg`\n- Usage: one per surface (Allow, Continue, Save, Create)\n", px(r.button), px(tx.body_sm));
+    let _ = writeln!(w, "### Button Quiet\n- Height: {}px\n- Padding: 0 8px\n- Radius: {}px\n- No fill until hover (`hover` wash)\n- Usage: the model and mode under the composer, title-bar icons\n", px(z.control), px(r.button));
+    let _ = writeln!(w, "### Composer\n- Width: up to {}px, centred\n- Radius: {}px; 1px `border`, tinted by the mode when one is set\n- Text: {}px, inset to start where the + glyph starts\n- A soft rule, fading at both ends, between the text and its tools\n- Tools: + ({}px glyph) left, a 30px round send button right, 9px from both edges of its corner\n", px(z.composer_width), px(z.composer_radius), px(tx.body), px(z.icon_lg));
+    let _ = writeln!(w, "### Card Default\n- Border: 1px `border`\n- Padding: {}px\n- Radius: {}px\n- Background: `surface`\n- Usage: tool calls, file cards, code blocks\n", px(sp.xl), px(r.card));
+    let _ = writeln!(w, "### Popover\n- Border: 1px `border`, radius {}px, padding {}px\n- Background: `surface`, with the two-layer popover shadow\n- Usage: menus, pickers, the command palette\n", px(r.card), px(sp.xs));
+    let _ = writeln!(w, "### Sidebar Row\n- Height: {}px, radius {}px\n- Selected: `selected` with a hairline, 500 weight\n- Group labels: {}px caption\n", px(z.row), px(r.button), px(tx.caption));
+
+    let _ = writeln!(w, "## Decisions\n");
+    let _ = writeln!(w, "| Decision | Rationale | Date |\n|----------|-----------|------|");
+    for (what, why, when) in [
+        ("Borders-only depth", "A desktop tool read for hours: hairlines separate without adding weight; shadows are kept to show what floats.", "2026-09-28"),
+        ("Three surfaces, one step apart", "Title bar, sidebar and session must read as separate areas at a glance; even OKLab steps make the split clear without contrast jumps.", "2026-10-12"),
+        ("A deeper fill for dark buttons", "White on the dark theme's link blue is 3.3:1; the fill is the same hue at 5.5:1 and links keep the brighter blue.", "2026-10-12"),
+        ("Display serif for the greeting only", "One warm, human line on the welcome; everything else stays in the interface face.", "2026-10-11"),
+        ("Composer at 620px", "A comfortable measure for a prompt, the same in a chat and on the welcome page.", "2026-10-11"),
+        ("Icons on a 12/14/16/20 scale", "Desktop density: 14 in rows, 16 in controls, 20 for the composer's +; 12 inside captions.", "2026-10-12"),
+    ] {
+        let _ = writeln!(w, "| {what} | {why} | {when} |");
+    }
+    s
+}
+
+#[test]
+fn system_md_matches_the_theme() {
+    let want = render();
+    if std::env::var_os("UPDATE_SYSTEM_MD").is_some() {
+        std::fs::create_dir_all(std::path::Path::new(PATH).parent().unwrap()).unwrap();
+        std::fs::write(PATH, &want).unwrap();
+        return;
+    }
+    let have = std::fs::read_to_string(PATH).unwrap_or_default();
+    assert!(have == want, ".interface-design/system.md is stale; run `UPDATE_SYSTEM_MD=1 cargo test system_md`");
+}

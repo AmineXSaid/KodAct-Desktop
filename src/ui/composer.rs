@@ -340,7 +340,7 @@ impl Render for Composer {
                         // The text starts where the + glyph under it starts
                         // (the textarea adds 10px of its own).
                         div()
-                            .px(px(9.))
+                            .px(px(8.))
                             .pt(px(14.))
                             .pb(px(12.))
                             .text_size(t.text.body)
@@ -367,7 +367,7 @@ impl Render for Composer {
                                     .rounded(t.radius.pill)
                                     .cursor_pointer()
                                     .hover(move |st| st.bg(hover))
-                                    .child(icon("icons/plus.svg", px(18.), t.colors.text_muted))
+                                    .child(icon("icons/plus.svg", t.size.icon_lg, t.colors.text_muted))
                                     .on_click(cx.listener(|this, _, _, cx| this.state.update(cx, |s, cx| s.show_toast("Attaching files and images is a stub in this UI shell.", cx)))),
                             )
                             .child(div().flex_1())

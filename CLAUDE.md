@@ -21,3 +21,18 @@ views), `theme.md` (the tokens).
 5. **Run it and look at it.** For any visible change, run the app and check a
    screenshot, in light and dark. Windows is the release target: say what was
    seen on Windows and what only on Linux.
+
+## Design workflow
+
+- Tokens live in `src/theme.rs`. `.interface-design/system.md` is generated
+  from it (`src/system_md.rs`) and is what the design skills read. Never
+  invent spacing, sizes, radii or colours outside it: add a token to
+  theme.rs, then run `UPDATE_SYSTEM_MD=1 cargo test system_md`.
+- New palette: run `/ui-design:color-palette` (with contrast checks and dark
+  mode), put the result in theme.rs, and keep `src/palette_check.rs` green.
+- Use ui-ux-pro-max only as a reference for icons, UX rules and
+  anti-patterns. Its suggested palettes do not override system.md.
+- Icons: sizes come only from the token scale (12, 14, 16, 20), and the
+  stroke stays Lucide's 2px.
+- Before finishing any UI change, run `/visual-critique:critique-screen` on a
+  screenshot and fix the high-priority items.

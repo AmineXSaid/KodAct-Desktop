@@ -165,7 +165,7 @@ impl Render for Sidebar {
                         .text_color(if active { t.colors.text_strong } else { t.colors.text_muted })
                         .when(active, |d| d.bg(t.extra.selected).border_1().border_color(t.colors.border).font_weight(FontWeight::MEDIUM))
                         .when(!active, |d| d.hover(move |st| st.bg(hover)))
-                        .child(div().w(t.size.icon_sm).flex_none().flex().justify_center().child(icon("icons/folder-open.svg", px(12.), t.colors.primary)))
+                        .child(div().w(t.size.icon_sm).flex_none().flex().justify_center().child(icon("icons/folder-open.svg", t.size.icon_xs, t.colors.primary)))
                         .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(p.name.clone()))
                         .on_click(move |_, _, cx| state.update(cx, |s, cx| s.show_project(id, cx))),
                 );
@@ -381,7 +381,7 @@ pub fn status_mark(status: ChatStatus, id: usize, t: &crate::theme::Theme) -> gp
                 d.opacity(0.45 + 0.55 * (1. - (delta * 2. - 1.).abs()))
             })
             .into_any_element(),
-        ChatStatus::Error => icon("icons/triangle-alert.svg", px(12.), t.extra.danger).into_any_element(),
+        ChatStatus::Error => icon("icons/triangle-alert.svg", t.size.icon_xs, t.extra.danger).into_any_element(),
         ChatStatus::Unread => dot().bg(t.colors.primary).into_any_element(),
         ChatStatus::Idle => dot().border_1().border_color(t.colors.text_subtle.opacity(0.45)).into_any_element(),
     };
