@@ -7,7 +7,6 @@
 //! has allowed it, behind a warning.
 
 /// A permission mode, as the CLI names it (`--permission-mode`).
-#[cfg_attr(not(test), allow(dead_code))] // what a chat's CLI is launched with; this UI shell has no CLI yet
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Permission {
     Default,
@@ -16,7 +15,6 @@ pub enum Permission {
     BypassPermissions,
 }
 
-#[cfg_attr(not(test), allow(dead_code))] // what a chat's CLI is launched with; this UI shell has no CLI yet
 impl Permission {
     pub fn cli_name(self) -> &'static str {
         match self {
@@ -39,10 +37,10 @@ pub enum ModeId {
 }
 
 /// The output style Expert turns on (from the bundled plugin).
-#[cfg_attr(not(test), allow(dead_code))] // what a chat's CLI is launched with; this UI shell has no CLI yet
+#[cfg_attr(not(test), allow(dead_code))] // ForgeCLI has no output styles yet, so Expert runs as Manual
 pub const EXPERT_OUTPUT_STYLE: &str = "forge:Expert";
 /// Its text, for when the CLI is launched with Forge's plugin.
-#[cfg_attr(not(test), allow(dead_code))] // what a chat's CLI is launched with; this UI shell has no CLI yet
+#[cfg_attr(not(test), allow(dead_code))] // ForgeCLI has no output styles yet, so Expert runs as Manual
 pub const EXPERT_STYLE_MD: &str = include_str!("../assets/forge-plugin/output-styles/expert.md");
 
 impl ModeId {
@@ -80,7 +78,6 @@ impl ModeId {
     }
 
     /// What the CLI runs in: Expert is Manual underneath.
-    #[cfg_attr(not(test), allow(dead_code))] // what a chat's CLI is launched with; this UI shell has no CLI yet
     pub fn permission(self) -> Permission {
         match self {
             ModeId::Expert | ModeId::Manual => Permission::Default,
@@ -91,7 +88,7 @@ impl ModeId {
     }
 
     /// The session's output style: Expert's, else none (cleared).
-    #[cfg_attr(not(test), allow(dead_code))] // what a chat's CLI is launched with; this UI shell has no CLI yet
+    #[cfg_attr(not(test), allow(dead_code))] // ForgeCLI has no output styles yet, so Expert runs as Manual
     pub fn output_style(self) -> Option<&'static str> {
         (self == ModeId::Expert).then_some(EXPERT_OUTPUT_STYLE)
     }
@@ -124,9 +121,8 @@ pub fn initial(setting: ModeId, bypass_allowed: bool) -> ModeId {
     }
 }
 
-/// The flags a chat's `claude` process starts with for `mode`. While Bypass
+/// The flags a chat's `forge` process starts with for `mode`. While Bypass
 /// is allowed the switch is always passed, so the mode can change mid-session.
-#[cfg_attr(not(test), allow(dead_code))] // what a chat's CLI is launched with; this UI shell has no CLI yet
 pub fn cli_args(mode: ModeId, bypass_allowed: bool) -> Vec<String> {
     let mut args = vec!["--permission-mode".to_string(), mode.permission().cli_name().to_string()];
     if bypass_allowed {

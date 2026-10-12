@@ -36,11 +36,11 @@ pub struct Colors {
 
 #[derive(Clone, Copy)]
 pub struct TypeScale {
-    pub caption: Pixels,    // 12
-    pub body_sm: Pixels,    // 14 – default UI text in a desktop app
-    pub body: Pixels,       // 16 – chat/message text
-    pub subheading: Pixels, // 20
-    pub heading_sm: Pixels, // 22
+    pub caption: Pixels,    // 11.5
+    pub body_sm: Pixels,    // 13 – default UI text in a desktop app
+    pub body: Pixels,       // 14 – the composer's text
+    pub subheading: Pixels, // 18
+    pub heading_sm: Pixels, // 20
 }
 
 #[derive(Clone, Copy)]
@@ -95,11 +95,11 @@ impl Theme {
             is_dark,
             colors,
             text: TypeScale {
-                caption: px(12.),
-                body_sm: px(14.),
-                body: px(16.),
-                subheading: px(20.),
-                heading_sm: px(22.),
+                caption: px(11.5),
+                body_sm: px(13.),
+                body: px(14.),
+                subheading: px(18.),
+                heading_sm: px(20.),
             },
             space: Space {
                 xs: px(4.),
@@ -408,24 +408,24 @@ impl CodeColors {
 /// The app's fixed dimensions.
 #[derive(Clone, Copy)]
 pub struct Sizes {
-    pub titlebar: Pixels,      // 40
-    pub sidebar: Pixels,       // 260
-    pub column: Pixels,        // 760: the reading column
-    pub row: Pixels,           // 32: sidebar rows, menu items
-    pub control: Pixels,       // 28: pills, small buttons
+    pub titlebar: Pixels,      // 36
+    pub sidebar: Pixels,       // 240
+    pub column: Pixels,        // 680: the reading column
+    pub row: Pixels,           // 30: sidebar rows, menu items
+    pub control: Pixels,       // 26: pills, small buttons
     // Icons: one scale, 12 / 14 / 16 / 20, and Lucide's own 2px stroke.
     pub icon_xs: Pixels,       // 12: inside captions and chips
     pub icon_sm: Pixels,       // 14
     pub icon: Pixels,          // 16
     pub icon_lg: Pixels,       // 20: the composer's +
     pub composer_max: Pixels,  // the composer's tallest input
-    pub composer_radius: Pixels, // 18: the composer box's corners
-    pub composer_width: Pixels,  // 620: the composer's widest, wherever it sits
+    pub composer_radius: Pixels, // 16: the composer box's corners
+    pub composer_width: Pixels,  // 560: the composer's widest, wherever it sits
     pub palette: Pixels,       // command palette width
     pub hairline: Pixels,      // 1
     pub line_height_chat: f32, // 1.45 for prose
-    pub chat_text: Pixels,     // 14: replies and your messages (Hanken Grotesk sets small; 14 reads as 13 did in Inter)
-    pub greeting: Pixels,      // 34: the new-chat greeting, in the display serif
+    pub chat_text: Pixels,     // 13.5: replies and your messages
+    pub greeting: Pixels,      // 28: the new-chat greeting, in the display serif
     pub doc_text: Pixels,      // 15: a document in the side panel
     pub doc_title: Pixels,     // 28: its title, in the display serif
     pub line_height_doc: f32,  // 1.65: a document's leading
@@ -438,23 +438,23 @@ pub struct Sizes {
 impl Default for Sizes {
     fn default() -> Self {
         Self {
-            titlebar: px(40.),
-            sidebar: px(260.),
-            column: px(760.),
-            row: px(32.),
-            control: px(28.),
+            titlebar: px(36.),
+            sidebar: px(240.),
+            column: px(680.),
+            row: px(30.),
+            control: px(26.),
             icon_xs: px(12.),
             icon_sm: px(14.),
             icon: px(16.),
             icon_lg: px(20.),
             composer_max: px(240.),
-            composer_radius: px(18.),
-            composer_width: px(620.),
+            composer_radius: px(16.),
+            composer_width: px(560.),
             palette: px(560.),
             hairline: px(1.),
             line_height_chat: 1.45,
-            chat_text: px(14.),
-            greeting: px(34.),
+            chat_text: px(13.5),
+            greeting: px(28.),
             doc_text: px(15.),
             doc_title: px(28.),
             line_height_doc: 1.65,

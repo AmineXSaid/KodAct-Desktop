@@ -237,7 +237,7 @@ impl Render for Composer {
         };
         let send = div()
             .id("send")
-            .size(px(30.))
+            .size(px(26.))
             .flex_none()
             .flex()
             .items_center()
@@ -259,22 +259,27 @@ impl Render for Composer {
                 }
             }));
 
-        // Under the box: quiet text buttons, no fills until hovered.
+        // Under the box: small outlined chips, filled while open or hovered.
+        let (chip_border, chip_bg) = (t.colors.border, t.colors.surface);
         let quiet = |id: &'static str, open: bool| {
             div()
                 .id(id)
                 .flex()
                 .items_center()
-                .gap(px(6.))
-                .h(px(28.))
-                .px(px(8.))
-                .rounded(t.radius.button)
+                .gap(px(5.))
+                .h(px(24.))
+                .px(px(9.))
+                .rounded(t.radius.pill)
+                .border_1()
+                .border_color(chip_border)
+                .bg(chip_bg)
                 .cursor_pointer()
-                .text_size(t.text.body_sm)
+                .text_size(t.text.caption)
                 .when(open, |d| d.bg(hover))
                 .hover(move |st| st.bg(hover))
         };
         let model_button = quiet("model", picker_open)
+            .child(icon("icons/cpu.svg", t.size.icon_xs, t.colors.text_muted))
             .child(div().text_color(t.colors.text).child(model_name))
             .children(pill_effort.map(|(label, color)| div().text_color(if color == t.colors.text_subtle { t.colors.text_muted } else { color }).child(label)))
             .on_click(cx.listener(|this, ev: &gpui::ClickEvent, window, cx| {
@@ -298,19 +303,12 @@ impl Render for Composer {
                 .id("context-meter")
                 .flex()
                 .items_center()
-                .gap(t.space.sm)
-                .h(px(28.))
-                .px(px(8.))
+                .gap(px(5.))
+                .h(px(24.))
+                .px(px(6.))
                 .text_size(t.text.caption)
                 .text_color(colour)
-                .child(
-                    div()
-                        .w(px(36.))
-                        .h(px(4.))
-                        .rounded(t.radius.pill)
-                        .bg(t.colors.border)
-                        .child(div().h_full().w(relative(f.min(1.))).rounded(t.radius.pill).bg(if f > 0.8 { colour } else { t.colors.text_subtle })),
-                )
+                .child(super::context_ring::ring(px(14.), px(2.), f, t.colors.border, if f > 0.8 { colour } else { t.colors.primary }))
                 .child(if f > 0. && f < 0.01 { "<1%".to_string() } else { format!("{:.0}%", (f * 100.).round()) })
                 .tooltip(move |window, cx| gpui::component::tooltip::Tooltip::new(tip.clone()).build(window, cx))
         });
@@ -341,8 +339,8 @@ impl Render for Composer {
                         // (the textarea adds 10px of its own).
                         div()
                             .px(px(8.))
-                            .pt(px(14.))
-                            .pb(px(12.))
+                            .pt(px(10.))
+                            .pb(px(8.))
                             .text_size(t.text.body)
                             .line_height(relative(1.5))
                             .child(Textarea::new(&self.input).appearance(false).text_size(t.text.body)),
@@ -356,19 +354,19 @@ impl Render for Composer {
                             .items_center()
                             // Equal insets right and below, so the round send
                             // button sits square in the box's corner.
-                            .p(px(8.))
+                            .p(px(7.))
                             .child(
                                 div()
                                     .id("attach")
-                                    .size(px(30.))
+                                    .size(px(26.))
                                     .flex()
                                     .items_center()
                                     .justify_center()
                                     .rounded(t.radius.pill)
                                     .cursor_pointer()
                                     .hover(move |st| st.bg(hover))
-                                    .child(icon("icons/plus.svg", t.size.icon_lg, t.colors.text_muted))
-                                    .on_click(cx.listener(|this, _, _, cx| this.state.update(cx, |s, cx| s.show_toast("Attaching files and images is a stub in this UI shell.", cx)))),
+                                    .child(icon("icons/plus.svg", t.size.icon, t.colors.text_muted))
+                                    .on_click(cx.listener(|this, _, _, cx| this.state.update(cx, |s, cx| s.show_toast("Attaching files and images isn't wired to ForgeCLI yet.", cx)))),
                             )
                             .child(div().flex_1())
                             .child(send),
@@ -379,8 +377,8 @@ impl Render for Composer {
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(2.))
-                    .px(px(9.))
+                    .gap(px(6.))
+                    .px(px(4.))
                     .children(meter)
                     .child(div().flex_1())
                     .child(model_button)

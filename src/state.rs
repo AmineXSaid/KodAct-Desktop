@@ -1,7 +1,8 @@
-//! App state: chats, the transcript model, models and modes, and the stubs
-//! that stand in for a backend. Nothing here talks to a network: `send`
-//! plays a scripted reply on a timer so every part of the UI can be seen
-//! working (streaming text, thinking, tool calls, a permission prompt).
+//! App state: chats, the transcript model, models and modes. `send` hands
+//! your message to the chat's ForgeCLI process (`backend.rs`) and its events
+//! fill the reply; with `FORGE_DEMO=1` it plays a scripted reply instead, so
+//! every part of the UI can be seen working without a model. The chats the
+//! sidebar starts with are demo data.
 //!
 //! The transcript follows Forge's (the VS Code extension): a user turn, then
 //! assistant turns made of blocks. A tool call is one row with its input and
@@ -32,6 +33,8 @@ pub enum ToolKind {
     Bash,
     Search,
     Web,
+    /// Any other tool (a sub-agent, an MCP tool): its name is the target.
+    Other,
 }
 
 impl ToolKind {
@@ -54,6 +57,8 @@ impl ToolKind {
             (ToolKind::Search, false) => "Searched",
             (ToolKind::Web, true) => "Fetching",
             (ToolKind::Web, false) => "Fetched",
+            (ToolKind::Other, true) => "Using",
+            (ToolKind::Other, false) => "Used",
         }
     }
 
@@ -64,6 +69,7 @@ impl ToolKind {
             ToolKind::Bash => "icons/terminal.svg",
             ToolKind::Search => "icons/search.svg",
             ToolKind::Web => "icons/globe.svg",
+            ToolKind::Other => "icons/cpu.svg",
         }
     }
 }
@@ -264,6 +270,31 @@ pub struct Project {
     pub opened_minutes_ago: u32,
 }
 
+// ---------------------------------------------------------------- the engine's bookkeeping
+
+/// A chat's ForgeCLI process, the task applying its events, and the
+/// profile it was started on.
+struct Live {
+    session: crate::backend::Session,
+    _pump: Task<()>,
+    profile: crate::endpoints::Profile,
+}
+
+/// A permission question Forge is waiting on, and where its card is.
+struct Ask {
+    request_id: String,
+    tool_use_id: String,
+    input: serde_json::Value,
+    suggestions: serde_json::Value,
+    msg: usize,
+    block: usize,
+}
+
+/// `FORGE_DEMO=1`: replies are the scripted demo instead of ForgeCLI.
+fn demo_mode() -> bool {
+    std::env::var("FORGE_DEMO").is_ok_and(|v| v == "1")
+}
+
 // ---------------------------------------------------------------- the state
 
 pub struct AppState {
@@ -344,6 +375,20 @@ pub struct AppState {
     /// The replies being played, by chat. Each keeps going while you look at
     /// another chat; dropping one stops it.
     replies: std::collections::HashMap<usize, Task<()>>,
+    /// Each chat's ForgeCLI process (`backend.rs`), kept between turns, and
+    /// the task that applies its events.
+    sessions: std::collections::HashMap<usize, Live>,
+    /// Turn results still to come from interrupted turns, by chat: until
+    /// they arrive, what the process says belongs to the stopped turn.
+    stale_turns: std::collections::HashMap<usize, u32>,
+    /// Where each tool call's row is (message, block), by chat and call id.
+    tool_rows: std::collections::HashMap<(usize, String), (usize, usize)>,
+    /// The permission question each chat is waiting on.
+    asks: std::collections::HashMap<usize, Ask>,
+    /// When each running turn started.
+    turn_started: std::collections::HashMap<usize, std::time::Instant>,
+    /// Chats whose next text starts a new block rather than running on.
+    fresh_block: std::collections::HashSet<usize>,
     /// Text for the composer to take (an edited message).
     pub draft: Option<String>,
     /// Chats are still loading: screens show placeholders.
@@ -409,6 +454,12 @@ impl AppState {
             toast: None,
             toast_reset: None,
             replies: Default::default(),
+            sessions: Default::default(),
+            stale_turns: Default::default(),
+            tool_rows: Default::default(),
+            asks: Default::default(),
+            turn_started: Default::default(),
+            fresh_block: Default::default(),
             draft: None,
             loading: true,
             load: None,
@@ -706,6 +757,9 @@ impl AppState {
             self.modes_open = false;
             self.bypass_warning = false;
             self.keep_mode();
+            if let Some(live) = self.current.and_then(|id| self.sessions.get(&id)) {
+                let _ = live.session.set_mode(mode);
+            }
         }
         cx.notify();
     }
@@ -790,6 +844,12 @@ impl AppState {
     /// its text. Stops a reply in progress first.
     fn take_from(&mut self, chat: usize, msg: usize, cx: &mut Context<Self>) -> Option<String> {
         self.replies.remove(&chat);
+        // Forge's conversation can't be cut back: the next message starts a new one.
+        self.sessions.remove(&chat);
+        self.asks.remove(&chat);
+        self.stale_turns.remove(&chat);
+        self.turn_started.remove(&chat);
+        self.tool_rows.retain(|(c, _), _| *c != chat);
         let c = self.chat_mut(chat)?;
         let Some(Message::User { text, .. }) = c.messages.get(msg) else { return None };
         let text = text.to_string();
@@ -986,6 +1046,24 @@ impl AppState {
             }
             c.version += 1;
         }
+        // A real question: Forge waits on this answer.
+        if self.asks.get(&chat).is_some_and(|a| a.msg == msg && a.block == block) && verdict != Verdict::Pending {
+            let ask = self.asks.remove(&chat).expect("checked above");
+            let allow = matches!(verdict, Verdict::Allowed | Verdict::AllowedAlways);
+            if !allow {
+                if let Some(&(m, b)) = self.tool_rows.get(&(chat, ask.tool_use_id.clone())) {
+                    self.update_tool(chat, m, b, |t| {
+                        t.status = ToolStatus::Declined;
+                        t.output = "You declined this.".into();
+                    });
+                }
+            }
+            let sent = self.sessions.get(&chat).map(|l| l.session.answer(&ask.request_id, allow, verdict == Verdict::AllowedAlways, &ask.input, &ask.suggestions));
+            if let Some(Err(e)) = sent {
+                self.notice(chat, e, true);
+                self.finish_turn(chat, cx);
+            }
+        }
         cx.notify();
     }
 
@@ -994,6 +1072,18 @@ impl AppState {
         let Some(id) = self.current else { return };
         if self.replies.remove(&id).is_none() {
             return;
+        }
+        self.turn_started.remove(&id);
+        if let Some(live) = self.sessions.get(&id) {
+            // What Forge says until the stopped turn's result belongs to that turn.
+            if live.session.interrupt().is_ok() {
+                *self.stale_turns.entry(id).or_default() += 1;
+            } else {
+                self.sessions.remove(&id);
+            }
+        }
+        if let Some(ask) = self.asks.remove(&id) {
+            self.answer(id, ask.msg, ask.block, Verdict::Denied, cx);
         }
         {
             if let Some(c) = self.chat_mut(id) {
@@ -1016,7 +1106,7 @@ impl AppState {
         cx.notify();
     }
 
-    /// Stub for the backend: add the message and play a scripted reply.
+    /// Add your message, and have Forge answer it (`send_to_forge`).
     pub fn send(&mut self, text: String, cx: &mut Context<Self>) {
         let text = text.trim().to_string();
         if text.is_empty() || self.busy() {
@@ -1040,6 +1130,16 @@ impl AppState {
             c.minutes_ago = 0;
             c.version += 1;
         }
+        if demo_mode() {
+            self.play_script(id, text, cx);
+        } else {
+            self.send_to_forge(id, text, cx);
+        }
+        cx.notify();
+    }
+
+    /// `FORGE_DEMO=1`: replies are the scripted demo, no ForgeCLI needed.
+    fn play_script(&mut self, id: usize, text: String, cx: &mut Context<Self>) {
         self.replies.insert(id, cx.spawn(async move |this, cx| {
             for step in script(&text) {
                 let wait = step.delay();
@@ -1075,6 +1175,207 @@ impl AppState {
                 cx.notify();
             });
         }));
+        cx.notify();
+    }
+
+    // ------------------------------------------------------------ the engine
+
+    /// Send your message to the chat's ForgeCLI process, starting it first
+    /// when the chat has none (or the endpoint changed under it).
+    fn send_to_forge(&mut self, id: usize, text: String, cx: &mut Context<Self>) {
+        let Some(profile) = self.active_profile().cloned() else {
+            return self.notice(id, "Set up an endpoint first: Forge needs a model to answer. Open the model menu to add one.", true);
+        };
+        if let Some(live) = self.sessions.get(&id) {
+            if live.profile != profile {
+                let same_endpoint = live.profile.base_url == profile.base_url && live.profile.wire == profile.wire && live.profile.auth == profile.auth && live.profile.headers == profile.headers;
+                if same_endpoint && live.session.set_model(&profile.model).is_ok() {
+                    self.sessions.get_mut(&id).expect("checked above").profile = profile.clone();
+                } else {
+                    self.sessions.remove(&id);
+                    self.notice(id, format!("Now on {}: a new endpoint starts a new conversation, so Forge doesn't see the messages above.", profile.display()), false);
+                }
+            }
+        }
+        if !self.sessions.contains_key(&id) {
+            if let Err(e) = self.start_session(id, profile, cx) {
+                return self.notice(id, e, true);
+            }
+        }
+        let sent = self.sessions.get(&id).map(|l| l.session.send(&text)).unwrap_or(Err("Forge isn't running.".into()));
+        if let Err(e) = sent {
+            self.sessions.remove(&id);
+            return self.notice(id, e, true);
+        }
+        self.replies.insert(id, Task::ready(()));
+        self.turn_started.insert(id, std::time::Instant::now());
+    }
+
+    fn start_session(&mut self, id: usize, profile: crate::endpoints::Profile, cx: &mut Context<Self>) -> Result<(), String> {
+        let exe = crate::backend::find_cli().ok_or("ForgeCLI wasn't found. Put forge.exe beside Forge.exe, or set FORGE_CLI to its path.")?;
+        let launch = crate::backend::launch(&profile, self.mode, self.bypass_allowed)?;
+        let project = self.chats.iter().find(|c| c.id == id).map(|c| c.project);
+        let dir = project.and_then(|p| self.project(p)).map(|p| p.path.clone()).filter(|p| p.is_dir()).unwrap_or_else(|| self.project_dir.clone());
+        let session = crate::backend::Session::spawn(&exe, &launch, &dir)?;
+        let events = session.events.clone();
+        let pump = cx.spawn(async move |this, cx| {
+            while let Ok(ev) = events.recv().await {
+                if this.update(cx, |s, cx| s.on_event(id, ev, cx)).is_err() {
+                    break;
+                }
+            }
+        });
+        self.stale_turns.remove(&id);
+        self.sessions.insert(id, Live { session, _pump: pump, profile });
+        Ok(())
+    }
+
+    fn on_event(&mut self, chat: usize, ev: crate::backend::Event, cx: &mut Context<Self>) {
+        use crate::backend::Event;
+        // After Stop, the stopped turn's last words are dropped up to its result.
+        if let Some(n) = self.stale_turns.get_mut(&chat).filter(|n| **n > 0) {
+            match ev {
+                Event::TurnEnd { .. } => {
+                    *n -= 1;
+                    return;
+                }
+                Event::Ask { request_id, input, suggestions, .. } => {
+                    if let Some(l) = self.sessions.get(&chat) {
+                        let _ = l.session.answer(&request_id, false, false, &input, &suggestions);
+                    }
+                    return;
+                }
+                Event::Exited { .. } => {}
+                _ => return,
+            }
+        }
+        match ev {
+            Event::Break => {
+                self.fresh_block.insert(chat);
+            }
+            Event::Text(t) if self.fresh_block.remove(&chat) => {
+                self.push_block(chat, Block::Text(t.into()));
+            }
+            Event::Thinking(t) if self.fresh_block.remove(&chat) => {
+                self.push_block(chat, Block::Thinking { text: t.into(), open: false });
+            }
+            Event::Text(t) => self.apply(chat, Step::Say(t), cx),
+            Event::Thinking(t) => self.apply(chat, Step::Think(t), cx),
+            Event::ToolUse { id, name, input } => {
+                if let Some(at) = self.push_block(chat, Block::Tool(crate::backend::tool_call(&name, &input))) {
+                    self.tool_rows.insert((chat, id), at);
+                }
+            }
+            Event::ToolResult { id, output, is_error } => {
+                if let Some(&(m, b)) = self.tool_rows.get(&(chat, id)) {
+                    self.update_tool(chat, m, b, |t| {
+                        if t.status != ToolStatus::Declined {
+                            t.status = if is_error { ToolStatus::Failed } else { ToolStatus::Done };
+                            t.output = output.into();
+                        }
+                    });
+                }
+            }
+            Event::Ask { request_id, tool_use_id, tool_name, input, suggestions } => {
+                let (title, detail) = crate::backend::ask_text(&tool_name, &input);
+                if let Some((msg, block)) = self.push_block(chat, Block::Permission { title: title.into(), detail: detail.into(), verdict: Verdict::Pending }) {
+                    self.asks.insert(chat, Ask { request_id, tool_use_id, input, suggestions, msg, block });
+                }
+            }
+            Event::CancelAsk { request_id } => {
+                if let Some(ask) = self.asks.get(&chat).filter(|a| a.request_id == request_id) {
+                    let (m, b) = (ask.msg, ask.block);
+                    self.asks.remove(&chat);
+                    self.answer(chat, m, b, Verdict::Denied, cx);
+                }
+            }
+            Event::TurnEnd { ms, usage, error } => {
+                if let Some(e) = error {
+                    self.notice(chat, e, true);
+                }
+                let seconds = if ms > 0 { ms as f32 / 1000. } else { self.turn_started.get(&chat).map(|t| t.elapsed().as_secs_f32()).unwrap_or(0.) };
+                if let Some(c) = self.chat_mut(chat) {
+                    c.messages.push(Message::TurnEnd { seconds, usage });
+                    c.version += 1;
+                }
+                self.finish_turn(chat, cx);
+            }
+            Event::Error(e) => {
+                self.notice(chat, e, true);
+                self.finish_turn(chat, cx);
+            }
+            Event::Exited { code, detail } => {
+                self.sessions.remove(&chat);
+                self.asks.remove(&chat);
+                self.stale_turns.remove(&chat);
+                if self.replies.contains_key(&chat) {
+                    let why = match code {
+                        Some(c) => format!("Forge stopped (exit code {c})."),
+                        None => "Forge stopped.".to_string(),
+                    };
+                    let text = if detail.is_empty() { why } else { format!("{why}\n{detail}") };
+                    self.notice(chat, text, true);
+                    self.finish_turn(chat, cx);
+                }
+            }
+        }
+        cx.notify();
+    }
+
+    /// Add a block to the reply being written (starting one if needed); where it went.
+    fn push_block(&mut self, chat: usize, block: Block) -> Option<(usize, usize)> {
+        let c = self.chat_mut(chat)?;
+        if !matches!(c.messages.last(), Some(Message::Assistant { .. })) {
+            c.messages.push(Message::Assistant { blocks: vec![] });
+        }
+        let m = c.messages.len() - 1;
+        let Some(Message::Assistant { blocks }) = c.messages.get_mut(m) else { return None };
+        blocks.push(block);
+        let b = blocks.len() - 1;
+        c.version += 1;
+        Some((m, b))
+    }
+
+    fn update_tool(&mut self, chat: usize, msg: usize, block: usize, f: impl FnOnce(&mut ToolCall)) {
+        let Some(c) = self.chat_mut(chat) else { return };
+        if let Some(Message::Assistant { blocks }) = c.messages.get_mut(msg) {
+            if let Some(Block::Tool(t)) = blocks.get_mut(block) {
+                f(t);
+            }
+        }
+        c.version += 1;
+    }
+
+    fn notice(&mut self, chat: usize, text: impl Into<SharedString>, error: bool) {
+        if let Some(c) = self.chat_mut(chat) {
+            c.messages.push(Message::Notice { text: text.into(), error });
+            c.version += 1;
+        }
+    }
+
+    /// The turn is over: the composer is free again.
+    fn finish_turn(&mut self, chat: usize, cx: &mut Context<Self>) {
+        self.replies.remove(&chat);
+        self.turn_started.remove(&chat);
+        if let Some(c) = self.chat_mut(chat) {
+            for m in c.messages.iter_mut() {
+                if let Message::Assistant { blocks } = m {
+                    for b in blocks.iter_mut() {
+                        if let Block::Tool(t) = b {
+                            if t.status == ToolStatus::Running {
+                                t.status = ToolStatus::Failed;
+                            }
+                        }
+                    }
+                }
+            }
+            c.version += 1;
+        }
+        if self.current != Some(chat) {
+            if let Some(c) = self.chat_mut(chat) {
+                c.unread = true;
+            }
+        }
         cx.notify();
     }
 

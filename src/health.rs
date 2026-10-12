@@ -213,7 +213,7 @@ pub fn apply(store: &mut Store, profile: &Profile, outcome: Result<ModelHealth, 
 
 /// `${env:NAME}` read from the environment; anything else is refused, so a
 /// key is never kept in the profile file.
-fn token(auth: &Auth) -> Result<Option<String>, String> {
+pub(crate) fn token(auth: &Auth) -> Result<Option<String>, String> {
     match auth {
         Auth::None => Ok(None),
         Auth::Bearer { token } => {

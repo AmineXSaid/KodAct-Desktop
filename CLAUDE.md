@@ -1,8 +1,9 @@
 # forge-gpui — working rules
 
 The Forge desktop chat UI in Rust, on GPUI and gpui-component (through
-`gpui-kit`). It is a UI shell: chats, replies and models are mock data in
-`src/state.rs`; anything that needs a backend shows a toast saying so.
+`gpui-kit`). Each chat's engine is a ForgeCLI process (`src/backend.rs`,
+`forge -p --input-format stream-json`); the starting chats are demo data in
+`src/state.rs`, and features with no engine behind them yet show a toast.
 
 These rules apply everywhere. Rules for one part of the tree live in
 `.claude/rules/` and load when Claude works on those files: `ui.md` (the

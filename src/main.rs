@@ -1,5 +1,6 @@
-//! Forge: a desktop chat shell for Claude Code, built on GPUI.
-//! UI only: the conversation, models and replies are mock data (`state.rs`).
+//! Forge: a desktop app for ForgeCLI, built on GPUI. Each chat is a `forge`
+//! process (`backend.rs`); the demo chats in the sidebar are mock data
+//! (`state.rs`), and `FORGE_DEMO=1` makes every reply the scripted demo.
 
 // A release build on Windows is a windowed app: no console opens beside it.
 // Debug builds keep the console, for logs.
@@ -12,6 +13,7 @@
 mod approve;
 mod assets;
 mod avatars;
+mod backend;
 mod context;
 mod diagram;
 mod downloads;

@@ -187,6 +187,10 @@ fn step_label(c: &Chat) -> Option<String> {
             },
             ToolKind::Search => format!("Searching for {}", clip(&t.target)),
             ToolKind::Web => format!("Fetching {}", t.target.split("://").nth(1).unwrap_or(&t.target).split('/').next().unwrap_or_default()),
+            ToolKind::Other => match &t.note {
+                Some(note) => clip(note),
+                None => format!("Using {}", clip(&t.target)),
+            },
         },
         Some(Block::Thinking { .. }) => "Thinking".into(),
         // No step to name: the line types a verb instead.
