@@ -68,7 +68,7 @@ fn main() {
         bind_keys(cx);
         cx.on_action(|_: &Quit, cx| cx.quit());
 
-        let bounds = Bounds::centered(None, size(px(1240.), px(820.)), cx);
+        let bounds = Bounds::centered(None, size(px(1120.), px(740.)), cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             window_min_size: Some(size(px(720.), px(520.))),

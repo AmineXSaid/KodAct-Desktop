@@ -93,10 +93,11 @@ impl Composer {
     }
 
     fn submit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.state.read(cx).busy() {
+        let text = self.text(cx);
+        // Only `/btw` goes through while a reply runs.
+        if self.state.read(cx).busy() && crate::state::parse_btw(&text).is_none() {
             return;
         }
-        let text = self.text(cx);
         if text.trim().is_empty() {
             return;
         }

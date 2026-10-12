@@ -18,6 +18,7 @@ pub mod message;
 pub mod onboarding;
 pub mod projects;
 pub mod rules_view;
+pub mod side_chat;
 pub mod sidebar;
 pub mod skeleton;
 pub mod terminal;

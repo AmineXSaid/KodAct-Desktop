@@ -290,6 +290,53 @@ struct Ask {
     block: usize,
 }
 
+// ---------------------------------------------------------------- side questions
+
+/// The side-question card's copy, as Forge for VS Code has it.
+pub const SIDE_TITLE: &str = "Side question";
+pub const SIDE_EMPTY: &str = "Ask a quick side question below without interrupting the conversation.";
+pub const SIDE_PLACEHOLDER: &str = "Ask a side question";
+pub const SIDE_PENDING: &str = "Answering…";
+/// The thread keeps the last 20 exchanges.
+const SIDE_MAX: usize = 20;
+
+/// One `/btw` exchange.
+#[derive(Clone, Debug, PartialEq)]
+pub enum SideItem {
+    Answer { question: SharedString, answer: SharedString },
+    Failed { question: SharedString, message: SharedString },
+}
+
+/// A chat's side questions: answered by ForgeCLI from the conversation,
+/// without tools, while the conversation goes on untouched.
+#[derive(Clone, Debug, Default)]
+pub struct Side {
+    pub visible: bool,
+    /// Folded to its title bar, still asking and answering.
+    pub minimized: bool,
+    pub thread: Vec<SideItem>,
+    /// Questions sent and not yet answered, oldest first.
+    pub pending: std::collections::VecDeque<SharedString>,
+}
+
+impl Side {
+    fn push(&mut self, item: SideItem) {
+        self.thread.push(item);
+        let over = self.thread.len().saturating_sub(SIDE_MAX);
+        self.thread.drain(..over);
+    }
+}
+
+/// `/btw` and its question (empty for a bare `/btw`), or None for anything else.
+pub fn parse_btw(text: &str) -> Option<String> {
+    let t = text.trim();
+    let rest = t.strip_prefix("/btw").or_else(|| t.strip_prefix("/BTW"))?;
+    if !rest.is_empty() && !rest.starts_with(char::is_whitespace) {
+        return None;
+    }
+    Some(rest.trim().to_string())
+}
+
 /// `FORGE_DEMO=1`: replies are the scripted demo instead of ForgeCLI.
 fn demo_mode() -> bool {
     std::env::var("FORGE_DEMO").is_ok_and(|v| v == "1")
@@ -389,6 +436,10 @@ pub struct AppState {
     turn_started: std::collections::HashMap<usize, std::time::Instant>,
     /// Chats whose next text starts a new block rather than running on.
     fresh_block: std::collections::HashSet<usize>,
+    /// Each chat's side questions (`/btw`).
+    pub side: std::collections::HashMap<usize, Side>,
+    /// The side card's input should take focus (it was just opened).
+    pub side_focus: bool,
     /// Text for the composer to take (an edited message).
     pub draft: Option<String>,
     /// Chats are still loading: screens show placeholders.
@@ -460,6 +511,8 @@ impl AppState {
             asks: Default::default(),
             turn_started: Default::default(),
             fresh_block: Default::default(),
+            side: Default::default(),
+            side_focus: false,
             draft: None,
             loading: true,
             load: None,
@@ -846,6 +899,9 @@ impl AppState {
         self.replies.remove(&chat);
         // Forge's conversation can't be cut back: the next message starts a new one.
         self.sessions.remove(&chat);
+        while self.side.get(&chat).is_some_and(|s| !s.pending.is_empty()) {
+            self.answer_side(chat, "The conversation was restarted before it answered.".into(), true);
+        }
         self.asks.remove(&chat);
         self.stale_turns.remove(&chat);
         self.turn_started.remove(&chat);
@@ -1109,6 +1165,10 @@ impl AppState {
     /// Add your message, and have Forge answer it (`send_to_forge`).
     pub fn send(&mut self, text: String, cx: &mut Context<Self>) {
         let text = text.trim().to_string();
+        // `/btw` opens the side card (and asks), even while a reply runs.
+        if let Some(question) = parse_btw(&text) {
+            return self.ask_side(question, cx);
+        }
         if text.is_empty() || self.busy() {
             return;
         }
@@ -1245,7 +1305,7 @@ impl AppState {
                     }
                     return;
                 }
-                Event::Exited { .. } => {}
+                Event::Exited { .. } | Event::Immediate { .. } => {}
                 _ => return,
             }
         }
@@ -1289,6 +1349,7 @@ impl AppState {
                     self.answer(chat, m, b, Verdict::Denied, cx);
                 }
             }
+            Event::Immediate { text, is_error } => self.answer_side(chat, text, is_error),
             Event::TurnEnd { ms, usage, error } => {
                 if let Some(e) = error {
                     self.notice(chat, e, true);
@@ -1306,6 +1367,9 @@ impl AppState {
             }
             Event::Exited { code, detail } => {
                 self.sessions.remove(&chat);
+                while self.side.get(&chat).is_some_and(|s| !s.pending.is_empty()) {
+                    self.answer_side(chat, "Forge stopped before it answered.".into(), true);
+                }
                 self.asks.remove(&chat);
                 self.stale_turns.remove(&chat);
                 if self.replies.contains_key(&chat) {
@@ -1375,6 +1439,87 @@ impl AppState {
             if let Some(c) = self.chat_mut(chat) {
                 c.unread = true;
             }
+        }
+        cx.notify();
+    }
+
+    // ------------------------------------------------------------ side questions
+
+    /// The side card of the chat showing, if it is open.
+    pub fn side_shown(&self) -> Option<&Side> {
+        self.current.and_then(|id| self.side.get(&id)).filter(|s| s.visible)
+    }
+
+    /// Open the side card and, when there is a question, ask it. A new chat
+    /// gets its chat first: side questions belong to a conversation.
+    pub fn ask_side(&mut self, question: String, cx: &mut Context<Self>) {
+        let id = match self.current {
+            Some(id) => id,
+            None => {
+                let id = self.next_id;
+                self.next_id += 1;
+                self.chats.insert(0, Chat { id, project: self.current_project, title: SIDE_TITLE.into(), minutes_ago: 0, pinned: false, messages: vec![], version: 0, unread: false });
+                self.current = Some(id);
+                self.keep_mode();
+                id
+            }
+        };
+        self.screen = Screen::Chat;
+        let side = self.side.entry(id).or_default();
+        side.visible = true;
+        side.minimized = false;
+        self.side_focus = true;
+        let question = question.trim().to_string();
+        if !question.is_empty() {
+            self.side.entry(id).or_default().pending.push_back(question.clone().into());
+            if demo_mode() {
+                self.answer_side(id, format!("(Demo) A side answer to \"{question}\": ForgeCLI answers these from the conversation, without tools."), false);
+            } else if let Err(e) = self.send_side(id, &question, cx) {
+                self.answer_side(id, e, true);
+            }
+        }
+        cx.notify();
+    }
+
+    fn send_side(&mut self, id: usize, question: &str, cx: &mut Context<Self>) -> Result<(), String> {
+        if !self.sessions.contains_key(&id) {
+            let profile = self.active_profile().cloned().ok_or("Set up an endpoint first: side questions need a model.")?;
+            self.start_session(id, profile, cx)?;
+        }
+        let live = self.sessions.get(&id).ok_or("Forge isn't running.")?;
+        live.session.send(&format!("/btw {question}"))
+    }
+
+    /// The oldest waiting question gets its answer (or its error).
+    fn answer_side(&mut self, chat: usize, text: String, is_error: bool) {
+        let Some(side) = self.side.get_mut(&chat) else { return };
+        let Some(question) = side.pending.pop_front() else { return };
+        side.push(if is_error || text.is_empty() {
+            let message = if text.is_empty() { "Forge didn't return an answer for this side question.".to_string() } else { text };
+            SideItem::Failed { question, message: message.into() }
+        } else {
+            SideItem::Answer { question, answer: text.into() }
+        });
+    }
+
+    pub fn close_side(&mut self, cx: &mut Context<Self>) {
+        if let Some(side) = self.current.and_then(|id| self.side.get_mut(&id)) {
+            side.visible = false;
+        }
+        cx.notify();
+    }
+
+    pub fn toggle_side_min(&mut self, cx: &mut Context<Self>) {
+        if let Some(side) = self.current.and_then(|id| self.side.get_mut(&id)) {
+            side.minimized = !side.minimized;
+            self.side_focus = !side.minimized;
+        }
+        cx.notify();
+    }
+
+    pub fn clear_side(&mut self, cx: &mut Context<Self>) {
+        if let Some(side) = self.current.and_then(|id| self.side.get_mut(&id)) {
+            side.thread.clear();
         }
         cx.notify();
     }

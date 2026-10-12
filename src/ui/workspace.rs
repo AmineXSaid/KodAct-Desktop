@@ -14,6 +14,7 @@ use super::composer::Composer;
 use super::onboarding::Onboarding;
 use super::projects::ProjectsView;
 use super::rules_view::RulesView;
+use super::side_chat::SideChat;
 use super::sidebar::Sidebar;
 use super::*;
 use crate::state::{AppState, Screen};
@@ -28,6 +29,7 @@ pub struct Workspace {
     onboarding: Entity<Onboarding>,
     rules: Entity<RulesView>,
     projects: Entity<ProjectsView>,
+    side: Entity<SideChat>,
     focus: FocusHandle,
 }
 
@@ -46,8 +48,9 @@ impl Workspace {
         let onboarding = cx.new(|cx| Onboarding::new(state.clone(), window, cx));
         let rules = cx.new(|cx| RulesView::new(state.clone(), window, cx));
         let projects = cx.new(|cx| ProjectsView::new(state.clone(), composer.clone(), cx));
+        let side = cx.new(|cx| SideChat::new(state.clone(), window, cx));
         let first_run = state.read(cx).onboarding;
-        let ws = Self { state, sidebar, chat, composer, palette, onboarding, rules, projects, focus: cx.focus_handle() };
+        let ws = Self { state, sidebar, chat, composer, palette, onboarding, rules, projects, side, focus: cx.focus_handle() };
         if first_run {
             ws.onboarding.update(cx, |o, cx| o.open(window, cx));
         } else {
@@ -475,6 +478,7 @@ impl Render for Workspace {
                 )
             })
             .when(palette_open, |d| d.child(self.palette.clone()))
+            .child(self.side.clone())
             .children(self.toast(cx))
     }
 }

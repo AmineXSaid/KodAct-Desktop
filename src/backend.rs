@@ -40,6 +40,8 @@ pub enum Event {
     Ask { request_id: String, tool_use_id: String, tool_name: String, input: Value, suggestions: Value },
     /// Forge withdrew a question (the turn was interrupted).
     CancelAsk { request_id: String },
+    /// An immediate command's answer (`/btw`): it ends no turn.
+    Immediate { text: String, is_error: bool },
     /// A turn ended.
     TurnEnd { ms: u64, usage: Option<crate::context::Usage>, error: Option<String> },
     /// The process couldn't start a run (bad key, unknown model...).
@@ -335,6 +337,7 @@ impl Parser {
             Some("result") if !nested => {
                 // An immediate command's answer (`/status`...) is not a turn.
                 if v["immediate"] == true {
+                    out.push(Event::Immediate { text: v["result"].as_str().unwrap_or_default().trim().to_string(), is_error: v["is_error"] == true });
                     return out;
                 }
                 self.streamed = false;
@@ -479,12 +482,12 @@ mod tests {
     }
 
     #[test]
-    fn sub_agent_lines_and_immediate_results_are_skipped() {
+    fn sub_agent_lines_are_skipped_and_immediate_results_end_no_turn() {
         let ev = parse(&[
             json!({"type":"assistant","parent_tool_use_id":"task1","message":{"content":[{"type":"text","text":"inner"}]}}),
-            json!({"type":"result","immediate":true,"num_turns":0}),
+            json!({"type":"result","immediate":true,"num_turns":0,"is_error":false,"result":"The answer.\n"}),
         ]);
-        assert!(ev.is_empty());
+        assert_eq!(ev, vec![Event::Immediate { text: "The answer.".into(), is_error: false }]);
     }
 
     #[test]
