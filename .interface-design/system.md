@@ -19,13 +19,13 @@ Base: 4px
 Scale: 4, 8, 12, 16, 24, 32
 
 ### Radius
-Scale: 4px (small), 8px (buttons, rows), 12px (cards, popovers), 18px (the composer), pill
+Scale: 4px (small), 8px (buttons, rows), 12px (cards, popovers), 16px (the composer), pill
 
 ### Typography
 Interface: Hanken Grotesk (Anthropic Sans when installed or in Forge's `fonts` folder; never bundled)
 Display: Source Serif 4 Display (the greeting)
 Code: JetBrains Mono
-Scale: 12 caption, 14 UI and chat, 16 input, 20 subheading, 22 heading, 34 greeting
+Scale: 11.5 caption, 13 UI and chat, 14 input, 18 subheading, 20 heading, 28 greeting
 Weights: 400, 500 (labels, buttons), 600 (headings, the project name)
 Prose line height: 1.45
 
@@ -33,12 +33,12 @@ Prose line height: 1.45
 Lucide, 2px stroke as drawn. Sizes: 12 / 14 / 16 / 20 only.
 
 ### Sizes
-- `titlebar`: 40px, the title bar's height
-- `sidebar`: 260px, the sidebar's width
-- `column`: 760px, the reading column
-- `composer_width`: 620px, the composer's widest
-- `row`: 32px, sidebar rows, menu items
-- `control`: 28px, small buttons, pills, title-bar controls
+- `titlebar`: 36px, the title bar's height
+- `sidebar`: 240px, the sidebar's width
+- `column`: 680px, the reading column
+- `composer_width`: 560px, the composer's widest
+- `row`: 30px, sidebar rows, menu items
+- `control`: 26px, small buttons, pills, title-bar controls
 - `palette`: 560px, the command palette's width
 - `hairline`: 1px, every border
 - `doc_pane`: 460px, the document panel's narrowest (it takes half the session)
@@ -87,23 +87,24 @@ Contrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of w
 ### Button Primary
 - Padding: 6px 15px
 - Radius: 8px
-- Font: 14px, 500 weight
+- Font: 13px, 500 weight
 - Background: `fill`, `fill_hover` on hover; text `primary_fg`
 - Usage: one per surface (Allow, Continue, Save, Create)
 
 ### Button Quiet
-- Height: 28px
+- Height: 26px
 - Padding: 0 8px
 - Radius: 8px
 - No fill until hover (`hover` wash)
 - Usage: the model and mode under the composer, title-bar icons
 
 ### Composer
-- Width: up to 620px, centred
-- Radius: 18px; 1px `border`, tinted by the mode when one is set
-- Text: 16px, inset to start where the + glyph starts
+- Width: up to 560px, centred
+- Radius: 16px; 1px `border`, tinted by the mode when one is set
+- Text: 14px, inset to start where the + glyph starts
 - A soft rule, fading at both ends, between the text and its tools
-- Tools: + (20px glyph) left, a 30px round send button right, 9px from both edges of its corner
+- Tools: + (16px glyph) left, a 26px round send button right, 7px from both edges of its corner
+- Under it: the context ring (14px, 2px stroke) and its percent, then outlined 24px chips for the model and the mode
 
 ### Card Default
 - Border: 1px `border`
@@ -125,14 +126,14 @@ Contrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of w
 
 ### Document Pane
 - Beside the conversation, half the session, at least 460px; `surface` with a hairline on its left
-- Header 48px: file icon, title, type; Copy, Download, Close as 28px quiet buttons
+- Header 48px: file icon, title, type; Copy, Download, Close as 26px quiet buttons
 - Text 15px at 1.65 leading, lines up to 680px; the title in the display serif at 28px
 - Enters with a 220ms ease-out, fading in from 16px to the right; Escape closes it
 
 ### Sidebar Row
-- Height: 32px, radius 8px
+- Height: 30px, radius 8px
 - Selected: `selected` with a hairline, 500 weight
-- Group labels: 12px caption
+- Group labels: 11.5px caption
 
 ## Decisions
 
