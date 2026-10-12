@@ -225,6 +225,12 @@ pub struct ExtraColors {
     pub chrome: Hsla,        // the title bar
     pub pane: Hsla,          // the sidebar
     pub stage: Hsla,         // the session: the chat, the welcome, Rules, Projects
+    // Filled buttons. Light uses `primary` as is; in dark, white text on
+    // `primary` reads at only 3.3:1, so the fill is the same blue, deeper,
+    // and links keep `primary` (`palette_check.rs` holds both to 4.5:1).
+    pub fill: Hsla,
+    pub fill_hover: Hsla,
+    pub fill_danger: Hsla,   // a destructive confirm ("Allow bypass")
     // Permission modes, as Forge for VS Code tints them (forge-tokens.css).
     pub mode_edit: Hsla,     // Edit automatically
     pub mode_plan: Hsla,     // Plan
@@ -254,9 +260,14 @@ impl ExtraColors {
                 diff_del: hsla(7. / 360., 0.92, 0.58, 0.16),
                 scrim: ink(0.55),
                 selected: rgb(0x2a2927).into(),
-                chrome: rgb(0x0f0f0e).into(),
-                pane: rgb(0x151514).into(),
-                stage: rgb(0x1b1b1a).into(),
+                // OKLab L 0.169 / 0.197 / 0.223, then the card at 0.248:
+                // even steps of 0.026, one warm hue.
+                chrome: rgb(0x100f0e).into(),
+                pane: rgb(0x161514).into(),
+                stage: rgb(0x1c1b19).into(),
+                fill: rgb(0x0069c2).into(),       // 5.5:1 under white
+                fill_hover: rgb(0x0b74cd).into(), // 4.8:1, a step lighter
+                fill_danger: rgb(0xb7331f).into(), // 6.0:1
                 mode_edit: rgb(0x2da160).into(),
                 mode_plan: rgb(0x428fdc).into(),
                 mode_bypass: rgb(0xec5941).into(),
@@ -281,9 +292,14 @@ impl ExtraColors {
                 diff_del: hsla(7. / 360., 0.92, 0.58, 0.1),
                 scrim: hsla(30. / 360., 0.1, 0.05, 0.32),
                 selected: rgb(0xffffff).into(),
-                chrome: rgb(0xe8e5e0).into(),
-                pane: rgb(0xf0eee9).into(),
-                stage: rgb(0xf9f8f6).into(),
+                // OKLab L 0.926 / 0.953 / 0.977, then the white card:
+                // even steps of 0.025, one warm hue, chroma falling to 0.
+                chrome: rgb(0xe9e6e1).into(),
+                pane: rgb(0xf1efeb).into(),
+                stage: rgb(0xf9f7f5).into(),
+                fill: rgb(0x0075de).into(),       // `primary`: 4.6:1 under white
+                fill_hover: rgb(0x005bab).into(), // `primary_hover`: 6.8:1
+                fill_danger: rgb(0xa32c12).into(), // 7.2:1
                 mode_edit: rgb(0x108548).into(),
                 mode_plan: rgb(0x1f75cb).into(),
                 mode_bypass: rgb(0xa32c12).into(),
@@ -473,12 +489,12 @@ pub fn card(t: &Theme) -> Div {
 
 /// The one filled action per screen.
 pub fn primary_button(t: &Theme, label: impl Into<SharedString>) -> Div {
-    let hover = t.colors.primary_hover;
+    let hover = t.extra.fill_hover;
     div()
         .px(px(15.))
         .py(px(6.))
         .rounded(t.radius.button)
-        .bg(t.colors.primary)
+        .bg(t.extra.fill)
         .text_color(t.colors.primary_fg)
         .text_size(t.text.body_sm)
         .font_weight(FontWeight::MEDIUM)

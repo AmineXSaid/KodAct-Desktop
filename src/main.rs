@@ -15,6 +15,8 @@ mod greeting;
 mod health;
 mod highlight;
 mod modes;
+#[cfg(test)]
+mod palette_check;
 mod profile;
 mod rules;
 mod state;

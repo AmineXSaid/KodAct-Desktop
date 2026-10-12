@@ -232,8 +232,8 @@ impl Render for Composer {
         let send_ready = busy || !empty;
         // The send button takes the mode's colour, as in the extension.
         let send_bg = match mode {
-            crate::modes::ModeId::Plan | crate::modes::ModeId::Bypass => tint.unwrap_or(t.colors.primary),
-            _ => t.colors.primary,
+            crate::modes::ModeId::Plan | crate::modes::ModeId::Bypass => tint.unwrap_or(t.extra.fill),
+            _ => t.extra.fill,
         };
         let send = div()
             .id("send")
@@ -337,8 +337,10 @@ impl Render for Composer {
                     .border_color(tint.map(|c| c.opacity(0.55)).unwrap_or(t.colors.border))
                     .rounded(t.size.composer_radius)
                     .child(
+                        // The text starts where the + glyph under it starts
+                        // (the textarea adds 10px of its own).
                         div()
-                            .px(px(18.))
+                            .px(px(9.))
                             .pt(px(14.))
                             .pb(px(12.))
                             .text_size(t.text.body)
@@ -352,8 +354,9 @@ impl Render for Composer {
                         div()
                             .flex()
                             .items_center()
-                            .px(px(10.))
-                            .py(px(6.))
+                            // Equal insets right and below, so the round send
+                            // button sits square in the box's corner.
+                            .p(px(8.))
                             .child(
                                 div()
                                     .id("attach")
@@ -377,7 +380,7 @@ impl Render for Composer {
                     .flex()
                     .items_center()
                     .gap(px(2.))
-                    .px(px(6.))
+                    .px(px(9.))
                     .children(meter)
                     .child(div().flex_1())
                     .child(model_button)

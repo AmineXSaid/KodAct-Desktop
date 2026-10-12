@@ -163,7 +163,7 @@ impl Onboarding {
         let t = cx.theme().clone();
         let returning = self.state.read(cx).user_name.is_some();
         let empty = self.input.read(cx).value().trim().is_empty();
-        let hover = t.colors.primary_hover;
+        let hover = t.extra.fill_hover;
         let field = div()
             .w_full()
             .h(px(52.))
@@ -187,7 +187,7 @@ impl Onboarding {
                     .items_center()
                     .justify_center()
                     .rounded(t.radius.pill)
-                    .bg(if empty { t.colors.hover } else { t.colors.primary })
+                    .bg(if empty { t.colors.hover } else { t.extra.fill })
                     .when(!empty, |d| d.cursor_pointer().hover(move |s| s.bg(hover)))
                     .child(icon("icons/arrow-right.svg", t.size.icon, if empty { t.colors.text_subtle } else { t.colors.primary_fg }))
                     .on_click(cx.listener(|this, _, window, cx| this.submit(window, cx))),

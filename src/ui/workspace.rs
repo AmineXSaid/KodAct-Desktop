@@ -78,7 +78,8 @@ impl Workspace {
                 .hover(move |st| st.bg(hover))
                 .child(icon(path, t.size.icon, t.colors.text_muted))
         };
-        TitleBar::new().h(t.size.titlebar).child(
+        // A flat chrome: the component's own background is a gradient.
+        TitleBar::new().h(t.size.titlebar).bg(t.extra.chrome).child(
             div()
                 .flex()
                 .items_center()
@@ -184,7 +185,7 @@ impl Workspace {
                     .max_w(t.size.column - t.space.xxl * 2.)
                     .flex()
                     .flex_col()
-                    .gap(t.space.xl)
+                    .gap(t.space.xxl)
                     .child(
                         div()
                             .flex()

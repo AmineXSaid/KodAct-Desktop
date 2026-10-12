@@ -174,7 +174,7 @@ pub fn menu(t: &Theme, state: &Entity<AppState>, cx: &App, on_out: impl Fn(gpui:
                             cx.notify();
                         })
                     }))
-                    .child(small_button(t, "bypass-allow", "Allow bypass", Some(danger)).on_click(move |_, _, cx| allow.update(cx, |s, cx| s.allow_bypass(cx)))),
+                    .child(small_button(t, "bypass-allow", "Allow bypass", Some(t.extra.fill_danger)).on_click(move |_, _, cx| allow.update(cx, |s, cx| s.allow_bypass(cx)))),
             )
     });
 
