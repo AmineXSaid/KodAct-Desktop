@@ -211,16 +211,59 @@ pub fn apply(store: &mut Store, profile: &Profile, outcome: Result<ModelHealth, 
 
 // ---------------------------------------------------------------- the check
 
-/// `${env:NAME}` read from the environment; anything else is refused, so a
-/// key is never kept in the profile file.
+/// The key a profile names: `${secret:KEY}` from the secret store
+/// (`secrets.rs`, where Settings puts it), or `${env:NAME}` from the
+/// environment. Anything else is refused, so a key is never kept in the
+/// profile file.
 pub(crate) fn token(auth: &Auth) -> Result<Option<String>, String> {
     match auth {
         Auth::None => Ok(None),
         Auth::Bearer { token } => {
-            let name = token.strip_prefix("${env:").and_then(|t| t.strip_suffix('}')).ok_or("a key must be given as ${env:NAME}, not written into endpoints.json")?;
-            std::env::var(name).map(Some).map_err(|_| format!("the key ${{env:{name}}} is not set"))
+            if let Some(key) = token.strip_prefix("${secret:").and_then(|t| t.strip_suffix('}')) {
+                return crate::secrets::get(key).map(Some).ok_or_else(|| "no key saved for this endpoint: add it in Settings > Models".to_string());
+            }
+            let name = token.strip_prefix("${env:").and_then(|t| t.strip_suffix('}')).ok_or("a key must be saved in Settings or given as ${env:NAME}, not written into endpoints.json")?;
+            env_var(name).map(Some).ok_or_else(|| format!("the key ${{env:{name}}} is not set: add the key in Settings > Models"))
         }
     }
+}
+
+/// An environment variable as it is now. On Windows a variable set with
+/// `setx` (or System Properties) after Forge started is read from the
+/// registry, so it works without restarting Forge.
+pub(crate) fn env_var(name: &str) -> Option<String> {
+    if let Ok(v) = std::env::var(name) {
+        return Some(v);
+    }
+    #[cfg(windows)]
+    {
+        for hive in ["HKCU\\Environment", "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment"] {
+            if let Some(v) = reg_value(hive, name) {
+                return Some(v);
+            }
+        }
+    }
+    None
+}
+
+/// `reg query <hive> /v <name>`'s value, without a console window.
+#[cfg(windows)]
+fn reg_value(hive: &str, name: &str) -> Option<String> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let out = std::process::Command::new("reg").args(["query", hive, "/v", name]).creation_flags(CREATE_NO_WINDOW).output().ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    // "    NAME    REG_SZ    value"
+    text.lines().find_map(|l| {
+        let l = l.trim_start();
+        let rest = l.strip_prefix(name)?.trim_start();
+        let rest = rest.strip_prefix("REG_EXPAND_SZ").or_else(|| rest.strip_prefix("REG_SZ"))?;
+        let v = rest.trim();
+        (!v.is_empty()).then(|| v.to_string())
+    })
 }
 
 /// A request to the endpoint with its headers and key.

@@ -14,6 +14,7 @@ use super::composer::Composer;
 use super::onboarding::Onboarding;
 use super::projects::ProjectsView;
 use super::rules_view::RulesView;
+use super::settings::Settings;
 use super::side_chat::SideChat;
 use super::sidebar::Sidebar;
 use super::*;
@@ -30,6 +31,7 @@ pub struct Workspace {
     rules: Entity<RulesView>,
     projects: Entity<ProjectsView>,
     side: Entity<SideChat>,
+    settings: Entity<Settings>,
     focus: FocusHandle,
 }
 
@@ -49,8 +51,9 @@ impl Workspace {
         let rules = cx.new(|cx| RulesView::new(state.clone(), window, cx));
         let projects = cx.new(|cx| ProjectsView::new(state.clone(), composer.clone(), cx));
         let side = cx.new(|cx| SideChat::new(state.clone(), window, cx));
+        let settings = cx.new(|cx| Settings::new(state.clone(), window, cx));
         let first_run = state.read(cx).onboarding;
-        let ws = Self { state, sidebar, chat, composer, palette, onboarding, rules, projects, side, focus: cx.focus_handle() };
+        let ws = Self { state, sidebar, chat, composer, palette, onboarding, rules, projects, side, settings, focus: cx.focus_handle() };
         if first_run {
             ws.onboarding.update(cx, |o, cx| o.open(window, cx));
         } else {
@@ -126,7 +129,8 @@ impl Workspace {
                         )
                         .children(switcher),
                 )
-                .child(
+                // The branch, when the folder is a repository.
+                .when(!s.branch.is_empty(), |d| d.child(
                     div()
                         .flex()
                         .items_center()
@@ -140,7 +144,7 @@ impl Workspace {
                         .text_color(t.colors.text_muted)
                         .child(icon("icons/git-branch.svg", t.size.icon_xs, t.colors.text_muted))
                         .child(s.branch.clone()),
-                )
+                ))
                 .child(div().flex_1())
                 .child(
                     div()
@@ -170,7 +174,7 @@ impl Workspace {
     }
 
     /// A new chat: one line greeting you, with your cube, and the composer.
-    fn welcome(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn welcome(&self, _window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let s = self.state.read(cx);
         let line = crate::greeting::pick(s.user_name.as_deref().unwrap_or_default(), crate::greeting::hour_now(), s.greeting_seed);
@@ -181,28 +185,29 @@ impl Workspace {
             .items_center()
             .justify_center()
             .px(t.space.xl)
-            .pb(t.space.xxl * 3.)
+            // A little above the middle, where the eye lands.
+            .pb(t.space.xxl * 2.)
             .child(
                 div()
                     .w_full()
                     .max_w(t.size.column - t.space.xxl * 2.)
                     .flex()
                     .flex_col()
-                    .gap(t.space.xxl)
+                    .items_center()
+                    .gap(t.space.xl)
+                    // The cube above the greeting, both centred, turning slowly.
+                    .child(super::forge_cube::turning(&t, px(84.), t.colors.primary, "welcome-cube"))
                     .child(
                         div()
-                            .flex()
-                            .justify_center()
-                            .items_center()
-                            .gap(t.space.md)
+                            .w_full()
+                            .text_center()
                             .font_family(t.font_display.clone())
                             .text_size(t.size.greeting)
                             .text_color(t.colors.text_strong)
-                            // Large enough that the cube's block edges read clearly.
-                            .child(div().flex_none().child(super::cube_image(48., window)))
-                            // In a narrow session (a panel open beside it) the line wraps.
-                            .child(div().min_w_0().line_height(gpui::relative(1.15)).child(line)),
+                            .line_height(gpui::relative(1.15))
+                            .child(line),
                     )
+                    .child(div().h(t.space.sm))
                     .child(self.composer.clone()),
             )
     }
@@ -417,7 +422,7 @@ impl Render for Workspace {
                 }
             }))
             .on_action(cx.listener(|this, _: &OpenSettings, _, cx| {
-                this.state.update(cx, |s, cx| s.show_toast("Settings open in their own window in the full app; this shell stubs them.", cx))
+                this.state.update(cx, |s, cx| s.open_settings(crate::state::SettingsTab::General, cx))
             }))
             .on_action(cx.listener(|this, _: &CopyLastReply, _, cx| {
                 let reply = this.state.read(cx).last_reply();
@@ -462,7 +467,7 @@ impl Render for Workspace {
                 });
                 this.rules.update(cx, |r, cx| r.reload(cx));
             }))
-            .on_action(cx.listener(|this, _: &EndpointGuide, _, cx| this.state.update(cx, |s, cx| s.show_endpoint_guide(cx))))
+            .on_action(cx.listener(|this, _: &EndpointGuide, _, cx| this.state.update(cx, |s, cx| s.add_endpoint(cx))))
             .on_action(cx.listener(|this, _: &OpenEndpointsFile, _, cx| this.state.update(cx, |s, cx| s.open_endpoints_file(cx))))
             .on_action(cx.listener(|_, _: &Quit, _, cx| cx.quit()))
             .child(self.title_bar(cx))
@@ -479,6 +484,7 @@ impl Render for Workspace {
             })
             .when(palette_open, |d| d.child(self.palette.clone()))
             .child(self.side.clone())
+            .child(self.settings.clone())
             .children(self.toast(cx))
     }
 }

@@ -2049,6 +2049,7 @@ dependencies = [
  "gpui-kit",
  "ignore",
  "image",
+ "keyring",
  "lopdf",
  "pulldown-cmark",
  "quick-xml",
@@ -3702,6 +3703,18 @@ dependencies = [
  "cfg-if",
  "futures-util",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "keyring"
+version = "3.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eebcc3aff044e5944a8fbaf69eb277d11986064cba30c468730e8b9909fb551c"
+dependencies = [
+ "byteorder",
+ "log",
+ "windows-sys 0.60.2",
+ "zeroize",
 ]
 
 [[package]]

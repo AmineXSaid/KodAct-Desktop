@@ -34,6 +34,10 @@ lopdf = { version = "=0.45.0", default-features = false }
 # Events from each chat's ForgeCLI process to the UI (backend.rs).
 async-channel = "=2.5.0"
 
+# Endpoint keys, in Windows Credential Manager (secrets.rs). MIT/Apache-2.0.
+[target.'cfg(windows)'.dependencies]
+keyring = { version = "=3.6.3", default-features = false, features = ["windows-native"] }
+
 [dev-dependencies]
 # Tests only: decode the cube picture and its renderings to check them pixel by pixel.
 image = { version = "=0.25.10", default-features = false, features = ["png", "webp"] }

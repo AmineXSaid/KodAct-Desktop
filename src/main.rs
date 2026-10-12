@@ -30,6 +30,7 @@ mod palette_check;
 mod system_md;
 mod profile;
 mod rules;
+mod secrets;
 mod state;
 mod theme;
 mod ui;
@@ -57,7 +58,27 @@ fn bind_keys(cx: &mut App) {
     ]);
 }
 
+/// A crash leaves its reason in `crash.log` in Forge's config folder: a
+/// windowed app on Windows has no console to print it to.
+fn log_crashes() {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        if let Some(dir) = profile::dir() {
+            let _ = std::fs::create_dir_all(&dir);
+            let when = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+            let trace = std::backtrace::Backtrace::force_capture();
+            let entry = format!("--- {when} (Forge {})\n{info}\n{trace}\n", env!("CARGO_PKG_VERSION"));
+            use std::io::Write;
+            if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(dir.join("crash.log")) {
+                let _ = f.write_all(entry.as_bytes());
+            }
+        }
+        default(info);
+    }));
+}
+
 fn main() {
+    log_crashes();
     gpui::application().with_assets(assets::Assets).run(|cx: &mut App| {
         gpui::init(cx);
         assets::load_fonts(cx);

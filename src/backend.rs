@@ -52,19 +52,25 @@ pub enum Event {
 
 // ---------------------------------------------------------------- launching
 
-/// The `forge` executable to run.
+/// The `forge` executable to run. Never this app itself: Windows names are
+/// case-insensitive, so a `Forge.exe` app would also answer to `forge.exe`
+/// (and launching it as the engine opens a second window).
 pub fn find_cli() -> Option<PathBuf> {
-    if let Some(p) = std::env::var_os("FORGE_CLI").map(PathBuf::from) {
+    let me = std::env::current_exe().ok().and_then(|e| e.canonicalize().ok());
+    let not_me = |p: &PathBuf| p.is_file() && p.canonicalize().ok() != me;
+    if let Some(p) = std::env::var_os("FORGE_CLI").map(PathBuf::from).filter(not_me) {
         return Some(p);
     }
     let name = if cfg!(windows) { "forge.exe" } else { "forge" };
-    if let Some(beside) = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join(name))) {
-        if beside.is_file() {
-            return Some(beside);
+    if let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(PathBuf::from)) {
+        for beside in [dir.join(name), dir.join("bin").join(name)] {
+            if not_me(&beside) {
+                return Some(beside);
+            }
         }
     }
     let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path).map(|d| d.join(name)).find(|p| p.is_file())
+    std::env::split_paths(&path).map(|d| d.join(name)).find(not_me)
 }
 
 /// How a chat's process starts: its arguments and the endpoint variables.

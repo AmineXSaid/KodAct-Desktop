@@ -258,6 +258,14 @@ pub enum Screen {
     Project(usize),
 }
 
+/// The Settings window's sections.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum SettingsTab {
+    General,
+    Models,
+    About,
+}
+
 /// A folder Forge works in. Its chats, rules and memory belong to it.
 #[derive(Clone, Debug)]
 pub struct Project {
@@ -436,6 +444,11 @@ pub struct AppState {
     turn_started: std::collections::HashMap<usize, std::time::Instant>,
     /// Chats whose next text starts a new block rather than running on.
     fresh_block: std::collections::HashSet<usize>,
+    /// The Settings window is open, on this section.
+    pub settings_open: bool,
+    pub settings_tab: SettingsTab,
+    /// Settings should open the Add endpoint form (taken by the view).
+    pub settings_add: bool,
     /// Each chat's side questions (`/btw`).
     pub side: std::collections::HashMap<usize, Side>,
     /// The side card's input should take focus (it was just opened).
@@ -450,7 +463,8 @@ pub struct AppState {
 
 impl AppState {
     pub fn new() -> Self {
-        let chats = mock_chats();
+        // No chats until you start one: the demo ones live in tests.
+        let chats: Vec<Chat> = vec![];
         let next_id = chats.len() + 1;
         let user_name: Option<SharedString> = crate::profile::load_name().map(Into::into);
         let saved_avatar = crate::profile::load_avatar();
@@ -458,7 +472,7 @@ impl AppState {
             .map(std::path::PathBuf::from)
             .or_else(|| std::env::current_dir().ok())
             .unwrap_or_default();
-        let projects = mock_projects(&project_dir);
+        let projects = initial_projects(&project_dir);
         Self {
             onboarding: user_name.is_none(),
             first_run: user_name.is_none(),
@@ -474,7 +488,7 @@ impl AppState {
             switcher_open: false,
             filter_open: false,
             screen: Screen::Chat,
-            current: Some(chats[0].id),
+            current: None,
             chats,
             sidebar_open: true,
             search: "".into(),
@@ -511,6 +525,9 @@ impl AppState {
             asks: Default::default(),
             turn_started: Default::default(),
             fresh_block: Default::default(),
+            settings_open: false,
+            settings_tab: SettingsTab::General,
+            settings_add: false,
             side: Default::default(),
             side_focus: false,
             draft: None,
@@ -748,7 +765,9 @@ impl AppState {
         }
         let id = self.projects.iter().map(|p| p.id).max().unwrap_or(0) + 1;
         let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.display().to_string());
-        self.projects.push(Project { id, name: name.into(), path, branch: "main".into(), pinned: false, opened_minutes_ago: 0 });
+        self.projects.push(Project { id, name: name.into(), branch: git_branch(&path).into(), path, pinned: false, opened_minutes_ago: 0 });
+        let paths: Vec<std::path::PathBuf> = self.projects.iter().skip(1).map(|p| p.path.clone()).collect();
+        cx.background_spawn(async move { save_projects(paths) }).detach();
         self.show_project(id, cx);
     }
 
@@ -928,6 +947,21 @@ impl AppState {
     }
 
     /// The endpoint setup guide, in the side panel.
+    pub fn open_settings(&mut self, tab: SettingsTab, cx: &mut Context<Self>) {
+        self.settings_open = true;
+        self.settings_tab = tab;
+        self.picker_open = false;
+        self.modes_open = false;
+        self.palette_open = false;
+        cx.notify();
+    }
+
+    /// Settings > Models, on the Add endpoint form.
+    pub fn add_endpoint(&mut self, cx: &mut Context<Self>) {
+        self.settings_add = true;
+        self.open_settings(SettingsTab::Models, cx);
+    }
+
     pub fn show_endpoint_guide(&mut self, cx: &mut Context<Self>) {
         self.picker_open = false;
         self.palette_open = false;
@@ -1272,7 +1306,7 @@ impl AppState {
     }
 
     fn start_session(&mut self, id: usize, profile: crate::endpoints::Profile, cx: &mut Context<Self>) -> Result<(), String> {
-        let exe = crate::backend::find_cli().ok_or("ForgeCLI wasn't found. Put forge.exe beside Forge.exe, or set FORGE_CLI to its path.")?;
+        let exe = crate::backend::find_cli().ok_or("ForgeCLI wasn't found. Put forge.exe beside ForgeDesktop.exe, or set FORGE_CLI to its path.")?;
         let launch = crate::backend::launch(&profile, self.mode, self.bypass_allowed)?;
         let project = self.chats.iter().find(|c| c.id == id).map(|c| c.project);
         let dir = project.and_then(|p| self.project(p)).map(|p| p.path.clone()).filter(|p| p.is_dir()).unwrap_or_else(|| self.project_dir.clone());
@@ -1328,12 +1362,20 @@ impl AppState {
             }
             Event::ToolResult { id, output, is_error } => {
                 if let Some(&(m, b)) = self.tool_rows.get(&(chat, id)) {
+                    let mut written = None;
                     self.update_tool(chat, m, b, |t| {
                         if t.status != ToolStatus::Declined {
                             t.status = if is_error { ToolStatus::Failed } else { ToolStatus::Done };
                             t.output = output.into();
+                            if !is_error && t.kind == ToolKind::Write {
+                                written = Some(t.target.to_string());
+                            }
                         }
                     });
+                    // A document Forge wrote gets its card in the reply.
+                    if let Some(file) = written.and_then(|p| self.written_file(chat, &p)) {
+                        self.push_block(chat, Block::File(file));
+                    }
                 }
             }
             Event::Ask { request_id, tool_use_id, tool_name, input, suggestions } => {
@@ -1384,6 +1426,26 @@ impl AppState {
             }
         }
         cx.notify();
+    }
+
+    /// A document Forge wrote, read back for its card: Markdown, a diagram,
+    /// an Office file or a PDF. None for anything else (code has its diff).
+    fn written_file(&self, chat: usize, path: &str) -> Option<FileRef> {
+        let name = path.rsplit(['/', '\\']).next()?.to_string();
+        let ext = name.rsplit_once('.')?.1.to_ascii_lowercase();
+        if !matches!(ext.as_str(), "md" | "markdown" | "svg" | "docx" | "xlsx" | "pptx" | "pdf") {
+            return None;
+        }
+        let project = self.chats.iter().find(|c| c.id == chat).and_then(|c| self.project(c.project)).map(|p| p.path.clone()).unwrap_or_else(|| self.project_dir.clone());
+        let full = { let p = std::path::Path::new(path); if p.is_absolute() { p.to_path_buf() } else { project.join(p) } };
+        let bytes = std::fs::read(&full).ok()?;
+        let binary = matches!(ext.as_str(), "docx" | "xlsx" | "pptx" | "pdf");
+        Some(FileRef {
+            name: name.into(),
+            path: Some(full.display().to_string().into()),
+            content: if binary { "".into() } else { String::from_utf8_lossy(&bytes).into_owned().into() },
+            bytes: binary.then(|| std::sync::Arc::from(bytes.into_boxed_slice())),
+        })
     }
 
     /// Add a block to the reply being written (starting one if needed); where it went.
@@ -1675,29 +1737,56 @@ fn script(prompt: &str) -> Vec<Step> {
 // ---------------------------------------------------------------- mock chats
 
 /// The folder Forge started in, and a few others to switch between.
-fn mock_projects(here: &std::path::Path) -> Vec<Project> {
-    let home = crate::rules::home_dir().unwrap_or_default();
-    let name = here.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "project".into());
-    let p = |id, name: &str, branch: &str, pinned, opened| Project {
+/// The projects: the folder Forge started in, then the ones you opened
+/// before (`projects.txt` in the config folder).
+fn initial_projects(here: &std::path::Path) -> Vec<Project> {
+    let project = |id, path: std::path::PathBuf, opened| Project {
         id,
-        name: name.to_string().into(),
-        path: home.join("dev").join(name),
-        branch: branch.to_string().into(),
-        pinned,
+        name: path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.display().to_string()).into(),
+        branch: git_branch(&path).into(),
+        path,
+        pinned: false,
         opened_minutes_ago: opened,
     };
-    vec![
-        Project { id: 1, name: name.into(), path: here.to_path_buf(), branch: "fix/hermes_upgrade".into(), pinned: false, opened_minutes_ago: 0 },
-        p(2, "genesis", "main", true, 600),
-        p(3, "forge-cli", "feat/model-evals", false, 1500),
-        p(4, "hermes", "main", false, 3000),
-    ]
+    let mut out = vec![project(1, here.to_path_buf(), 0)];
+    for path in saved_projects() {
+        if path.is_dir() && !out.iter().any(|p| p.path == path) {
+            out.push(project(out.len() + 1, path, 60));
+        }
+    }
+    out
 }
 
+fn projects_file() -> Option<std::path::PathBuf> {
+    crate::profile::dir().map(|d| d.join("projects.txt"))
+}
+
+fn saved_projects() -> Vec<std::path::PathBuf> {
+    projects_file().and_then(|f| std::fs::read_to_string(f).ok()).map(|t| t.lines().filter(|l| !l.trim().is_empty()).map(std::path::PathBuf::from).collect()).unwrap_or_default()
+}
+
+/// Keep the folders you opened for next time (blocking: off the UI thread).
+fn save_projects(paths: Vec<std::path::PathBuf>) {
+    let Some(f) = projects_file() else { return };
+    if let Some(d) = f.parent() {
+        let _ = std::fs::create_dir_all(d);
+    }
+    let text: Vec<String> = paths.iter().map(|p| p.display().to_string()).collect();
+    let _ = std::fs::write(f, text.join("\n"));
+}
+
+/// The checked-out branch, read from `.git/HEAD`; empty when it isn't a repository.
+pub fn git_branch(dir: &std::path::Path) -> String {
+    let head = dir.join(".git").join("HEAD");
+    std::fs::read_to_string(head).ok().map(|h| h.trim().strip_prefix("ref: refs/heads/").map(str::to_string).unwrap_or_else(|| h.trim().chars().take(7).collect())).unwrap_or_default()
+}
+
+#[cfg(test)]
 fn minutes_ago(minutes: u32) -> SystemTime {
     SystemTime::now() - Duration::from_secs(minutes as u64 * 60)
 }
 
+#[cfg(test)]
 fn mock_chats() -> Vec<Chat> {
     let rich = vec![
         Message::User { text: "Fix the greeting in src/main.rs so it says Hello, Forge, and add a test for it.".into(), sent: minutes_ago(9) },

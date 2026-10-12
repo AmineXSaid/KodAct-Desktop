@@ -304,6 +304,28 @@ pub fn cube(t: &Theme, size: Pixels, color: Hsla, id: impl Into<ElementId>) -> A
         .into_any_element()
 }
 
+/// The finished cube turning half a revolution, slowly, then resting: the
+/// new-chat screen's mark. A half turn lands on the same silhouette, so the
+/// loop is seamless. Reduced motion: still.
+pub fn turning(t: &Theme, size: Pixels, color: Hsla, id: impl Into<ElementId>) -> AnyElement {
+    if super::motion::reduced_motion() {
+        return still(t, size, color, RESTING).into_any_element();
+    }
+    const TURN: f32 = 0.7; // of the loop: the rest is the hold
+    let theme = t.clone();
+    div()
+        .size(size)
+        .flex_none()
+        .with_animation(id, Animation::new(Duration::from_secs(7)).repeat(), move |d, delta| {
+            let p = clamp01(delta / TURN);
+            // Ease in and out: it gathers speed, then settles.
+            let eased = p * p * (3. - 2. * p);
+            let frame = Frame { yaw: REST_YAW + std::f32::consts::PI * eased, ..RESTING };
+            d.child(still(&theme, size, color, frame))
+        })
+        .into_any_element()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

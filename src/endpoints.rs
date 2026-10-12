@@ -175,6 +175,157 @@ pub fn save_selected(name: &str) -> std::io::Result<()> {
     std::fs::write(&path, serde_json::to_string_pretty(&value).map_err(std::io::Error::other)?)
 }
 
+/// Add `profile`, or replace the one named `replaces` (an edit, maybe a
+/// rename), and select it. The rest of the file is left as it was.
+/// Blocking: call it off the UI thread.
+pub fn save_profile(profile: &Profile, replaces: Option<&str>) -> std::io::Result<()> {
+    let path = ensure_file()?;
+    let mut value: serde_json::Value = std::fs::read_to_string(&path).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_else(|| serde_json::json!({}));
+    let obj = value.as_object_mut().ok_or_else(|| std::io::Error::other("endpoints.json is not an object"))?;
+    let new = serde_json::to_value(profile).map_err(std::io::Error::other)?;
+    let list = obj.entry("profiles").or_insert_with(|| serde_json::json!([]));
+    let arr = list.as_array_mut().ok_or_else(|| std::io::Error::other("profiles is not a list"))?;
+    let name_of = |v: &serde_json::Value| v.get("name").and_then(|n| n.as_str()).map(str::to_string);
+    let old = replaces.unwrap_or(&profile.name).to_string();
+    // The starter's untouched example goes once a real endpoint is added.
+    if replaces.is_none() {
+        arr.retain(|v| !(name_of(v).as_deref() == Some("ollama") && v.get("auth").is_none() && v.get("model").and_then(|m| m.as_str()) == Some("qwen3-coder:30b") && profile.name != "ollama"));
+    }
+    match arr.iter_mut().find(|v| name_of(v).as_deref() == Some(old.as_str())) {
+        Some(slot) => *slot = new,
+        None => arr.push(new),
+    }
+    obj.insert("selected".into(), serde_json::Value::String(profile.name.clone()));
+    std::fs::write(&path, serde_json::to_string_pretty(&value).map_err(std::io::Error::other)?)
+}
+
+/// Remove the profile named `name`. Blocking.
+pub fn remove_profile(name: &str) -> std::io::Result<()> {
+    let path = path().ok_or_else(|| std::io::Error::other("no config folder"))?;
+    let mut value: serde_json::Value = std::fs::read_to_string(&path).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_else(|| serde_json::json!({}));
+    if let Some(arr) = value.get_mut("profiles").and_then(|p| p.as_array_mut()) {
+        arr.retain(|v| v.get("name").and_then(|n| n.as_str()) != Some(name));
+    }
+    if value.get("selected").and_then(|s| s.as_str()) == Some(name) {
+        if let Some(obj) = value.as_object_mut() {
+            obj.remove("selected");
+        }
+    }
+    std::fs::write(&path, serde_json::to_string_pretty(&value).map_err(std::io::Error::other)?)
+}
+
+/// A name is what you pick and what the key is filed under: typeable, one each.
+pub fn validate_name(name: &str, taken: &[String]) -> Result<(), String> {
+    let n = name.trim();
+    if n.is_empty() {
+        return Err("A name is required.".into());
+    }
+    if !n.chars().next().is_some_and(|c| c.is_ascii_alphanumeric()) || !n.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')) {
+        return Err("Use letters, digits, dot, dash or underscore.".into());
+    }
+    if taken.iter().any(|t| t == n) {
+        return Err(format!("\"{n}\" already exists."));
+    }
+    Ok(())
+}
+
+pub fn validate_url(url: &str) -> Result<(), String> {
+    let u = url.trim();
+    if u.is_empty() {
+        return Err("A base URL is required.".into());
+    }
+    if !(u.starts_with("http://") || u.starts_with("https://")) || u.len() < 10 {
+        return Err("Use an http:// or https:// URL.".into());
+    }
+    Ok(())
+}
+
+/// A starting point for a new endpoint: the URL and wire are known.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Preset {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub base_url: &'static str,
+    pub wire: Wire,
+    /// Needs a key (a local server doesn't).
+    pub key: bool,
+}
+
+/// Cloud presets, then local runtimes on their documented default ports.
+pub const PRESETS: [Preset; 8] = [
+    Preset { id: "anthropic", label: "Anthropic", base_url: "https://api.anthropic.com", wire: Wire::Anthropic, key: true },
+    Preset { id: "openai", label: "OpenAI", base_url: "https://api.openai.com/v1", wire: Wire::Openai, key: true },
+    Preset { id: "openrouter", label: "OpenRouter", base_url: "https://openrouter.ai/api/v1", wire: Wire::Openai, key: true },
+    Preset { id: "ollama", label: "Ollama", base_url: "http://127.0.0.1:11434/v1", wire: Wire::Openai, key: false },
+    Preset { id: "lmstudio", label: "LM Studio", base_url: "http://127.0.0.1:1234/v1", wire: Wire::Openai, key: false },
+    Preset { id: "llamacpp", label: "llama.cpp", base_url: "http://127.0.0.1:8080/v1", wire: Wire::Openai, key: false },
+    Preset { id: "vllm", label: "vLLM", base_url: "http://127.0.0.1:8000/v1", wire: Wire::Openai, key: false },
+    Preset { id: "jan", label: "Jan", base_url: "http://127.0.0.1:1337/v1", wire: Wire::Openai, key: false },
+];
+
+/// The local runtimes answering right now (each asked for its model list,
+/// briefly). Blocking: off the UI thread.
+pub fn detect_local() -> Vec<&'static str> {
+    let agent = ureq::AgentBuilder::new().timeout_connect(std::time::Duration::from_millis(300)).timeout(std::time::Duration::from_millis(900)).build();
+    std::thread::scope(|scope| {
+        let probes: Vec<_> = PRESETS
+            .iter()
+            .filter(|p| !p.key)
+            .map(|p| {
+                let agent = agent.clone();
+                scope.spawn(move || agent.get(&format!("{}/models", p.base_url)).call().is_ok().then_some(p.id))
+            })
+            .collect();
+        probes.into_iter().filter_map(|h| h.join().ok().flatten()).collect()
+    })
+}
+
+/// The chat models an endpoint lists, with the key given (embedding and
+/// other non-chat models dropped), sorted. Blocking: off the UI thread.
+pub fn list_models(base_url: &str, wire: Wire, key: Option<&str>, headers: &BTreeMap<String, String>) -> Result<Vec<String>, String> {
+    let probe = Profile { name: "probe".into(), base_url: base_url.trim().to_string(), wire, model: String::new(), display_name: None, chat_path: None, headers: headers.clone(), auth: Auth::None, capabilities: Default::default() };
+    let agent = ureq::AgentBuilder::new().timeout_connect(std::time::Duration::from_secs(5)).timeout(std::time::Duration::from_secs(15)).build();
+    let mut req = agent.get(&probe.models_url());
+    if wire == Wire::Anthropic {
+        req = req.set("anthropic-version", "2023-06-01");
+    }
+    for (k, v) in headers {
+        req = req.set(k, v);
+    }
+    if let Some(k) = key.filter(|k| !k.is_empty()) {
+        req = match wire {
+            Wire::Anthropic => req.set("x-api-key", k).set("authorization", &format!("Bearer {k}")),
+            Wire::Openai => req.set("authorization", &format!("Bearer {k}")),
+        };
+    }
+    let body: serde_json::Value = match req.call() {
+        Ok(r) => r.into_json().map_err(|e| format!("the model list could not be read: {e}"))?,
+        Err(ureq::Error::Status(code, r)) => {
+            let text = r.into_string().unwrap_or_default();
+            let msg = serde_json::from_str::<serde_json::Value>(&text).ok().and_then(|v| v.pointer("/error/message").and_then(|m| m.as_str()).map(str::to_string));
+            return Err(match (code, msg) {
+                (401 | 403, _) => "the endpoint refused the key (HTTP 401/403)".to_string(),
+                (_, Some(m)) => m,
+                (c, None) => format!("HTTP {c}"),
+            });
+        }
+        Err(e) => return Err(format!("could not connect: {e}")),
+    };
+    let mut ids: Vec<String> = body
+        .get("data")
+        .or(body.get("models"))
+        .and_then(|d| d.as_array())
+        .map(|a| a.iter().filter_map(|m| m.get("id").or(m.get("name")).and_then(|i| i.as_str()).map(str::to_string)).collect())
+        .unwrap_or_default();
+    ids.retain(|id| {
+        let l = id.to_ascii_lowercase();
+        !(l.contains("embed") || l.contains("whisper") || l.contains("tts") || l.contains("dall-e") || l.contains("moderation") || l.contains("rerank"))
+    });
+    ids.sort();
+    ids.dedup();
+    Ok(ids)
+}
+
 impl Endpoints {
     /// The profile in use: the selected one, else the first.
     pub fn active(&self) -> Option<&Profile> {
