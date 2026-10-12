@@ -1,6 +1,10 @@
 //! Forge: a desktop chat shell for Claude Code, built on GPUI.
 //! UI only: the conversation, models and replies are mock data (`state.rs`).
 
+// A release build on Windows is a windowed app: no console opens beside it.
+// Debug builds keep the console, for logs.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 // Which shell commands run without asking, per mode (Forge for VS Code's
 // rules). Called when a chat's CLI asks for permission; this UI shell has no
 // CLI yet, so outside its tests nothing calls it.

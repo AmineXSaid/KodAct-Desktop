@@ -1,0 +1,77 @@
+# The Windows build: Forge's .exe, made on Windows with MSVC and the Windows
+# SDK (GPUI compiles its shaders with the SDK's fxc.exe in release builds).
+# Each push to main builds it, keeps it as an artifact for 30 days, and puts
+# it on the `windows-build` branch (one commit, replaced each time), so it can
+# also be fetched with plain git. Then the tests run, on Windows.
+
+name: Windows build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustc --version
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Describe the .exe
+        shell: pwsh
+        run: |
+          $exe = "target/release/forge-gpui.exe"
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+          $size = (Get-Item $exe).Length
+          @(
+            "commit: $env:GITHUB_SHA",
+            "sha256: $hash",
+            "bytes: $size",
+            "built: windows-latest, cargo build --release --locked, $(rustc --version)"
+          ) | Tee-Object -FilePath BUILD.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Forge-windows-x64
+          retention-days: 30
+          path: |
+            target/release/forge-gpui.exe
+            BUILD.txt
+
+      - name: Publish to the windows-build branch
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir publish
+          cp target/release/forge-gpui.exe BUILD.txt publish/
+          cd publish
+          git init -q -b windows-build
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add forge-gpui.exe BUILD.txt
+          git commit -q -m "Windows build of ${GITHUB_SHA::7}"
+          git push --force -q "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" windows-build
+
+      - name: Test
+        run: cargo test --release --locked
