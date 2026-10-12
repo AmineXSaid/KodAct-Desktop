@@ -3,6 +3,7 @@
 pub mod chat_view;
 pub mod command_palette;
 pub mod composer;
+pub mod diagram_view;
 pub mod doc_pane;
 pub mod file_card;
 pub mod forge_cube;

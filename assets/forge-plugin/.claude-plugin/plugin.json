@@ -1,0 +1,6 @@
+{
+  "name": "forge",
+  "version": "0.1.0",
+  "description": "What Forge desktop adds to every Claude Code session it starts: the Expert output style, and Diagram Design (44 diagram types, drawn in Forge's own skin and shown natively in the app).",
+  "author": { "name": "Forge" }
+}

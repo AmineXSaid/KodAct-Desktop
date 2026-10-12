@@ -199,7 +199,7 @@ impl Render for ChatView {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         let state = self.state.clone();
         let step = self.step.clone();
-        list(self.list.clone(), move |ix, _window, cx| {
+        list(self.list.clone(), move |ix, window, cx| {
             let t = cx.theme().clone();
             let s = state.read(cx);
             let Some(chat) = s.chat() else { return div().into_any_element() };
@@ -218,6 +218,7 @@ impl Render for ChatView {
                         live_turn: s.busy() && last_user.is_none_or(|u| ix > u),
                         cube: super::mode_menu::cube_color(&t, s.mode),
                         open_doc: s.doc.clone(),
+                        scale: window.scale_factor(),
                     };
                     message::render(m, &ctx, &t)
                 }

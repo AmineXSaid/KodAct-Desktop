@@ -35,6 +35,8 @@ pub struct ItemContext {
     pub cube: gpui::Hsla,
     /// The file open beside the chat, so its card shows it is open.
     pub open_doc: Option<crate::state::FileRef>,
+    /// Device pixels per logical pixel, for diagrams drawn to exact size.
+    pub scale: f32,
 }
 
 pub fn render(m: &Message, cx: &ItemContext, t: &Theme) -> AnyElement {
@@ -180,7 +182,7 @@ fn block(block: &Block, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
         Block::Thinking { text, open } => thinking(text, *open, b, cx, t),
         Block::Tool(call) => tool(call, b, cx, t),
         Block::Permission { title, detail, verdict } => permission(title, detail, *verdict, b, cx, t),
-        Block::File(file) => super::file_card::render(file, &format!("{}-{}-{b}", cx.chat, cx.index), cx.state.clone(), cx.open_doc.as_ref() == Some(file), t),
+        Block::File(file) => super::file_card::render(file, &format!("{}-{}-{b}", cx.chat, cx.index), cx.state.clone(), cx.open_doc.as_ref() == Some(file), cx.scale, t),
     }
 }
 

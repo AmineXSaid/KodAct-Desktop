@@ -9,6 +9,7 @@ mod approve;
 mod assets;
 mod avatars;
 mod context;
+mod diagram;
 mod downloads;
 mod endpoints;
 mod fonts;

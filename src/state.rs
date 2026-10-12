@@ -129,6 +129,11 @@ impl FileRef {
     /// What the card calls it: the document's first heading, else its name
     /// without the extension.
     pub fn title(&self) -> SharedString {
+        if self.is_diagram() {
+            if let Some(t) = crate::diagram::title(&self.content) {
+                return t.into();
+            }
+        }
         if self.is_markdown() {
             if let Some(h) = self.content.lines().find_map(|l| l.strip_prefix("# ")) {
                 return h.trim().to_string().into();
@@ -144,6 +149,12 @@ impl FileRef {
 
     pub fn is_markdown(&self) -> bool {
         matches!(self.kind().as_ref(), "MD" | "MARKDOWN")
+    }
+
+    /// A diagram Forge draws itself (`diagram.rs`): an SVG, or a Diagram
+    /// Design page holding one.
+    pub fn is_diagram(&self) -> bool {
+        crate::diagram::is_diagram(&self.name, &self.content)
     }
 }
 
@@ -293,6 +304,8 @@ pub struct AppState {
     pub copied: Option<SharedString>,
     /// The file open in the side panel, beside the chat.
     pub doc: Option<FileRef>,
+    /// A diagram in the panel fits its width (else it shows at actual size).
+    pub doc_fit: bool,
     copied_reset: Option<Task<()>>,
     /// A short message at the bottom of the window (stubs say what they would do).
     pub toast: Option<SharedString>,
@@ -358,6 +371,7 @@ impl AppState {
             picker_open: false,
             copied: None,
             doc: None,
+            doc_fit: true,
             copied_reset: None,
             toast: None,
             toast_reset: None,
@@ -762,6 +776,32 @@ impl AppState {
     pub fn open_doc(&mut self, file: FileRef, cx: &mut Context<Self>) {
         self.doc = if self.doc.as_ref() == Some(&file) { None } else { Some(file) };
         cx.notify();
+    }
+
+    pub fn toggle_doc_fit(&mut self, cx: &mut Context<Self>) {
+        self.doc_fit = !self.doc_fit;
+        cx.notify();
+    }
+
+    /// Open a diagram's page in the browser, where it is interactive: write
+    /// it to Forge's temp folder off the UI thread, then hand it to the system.
+    pub fn open_in_browser(&mut self, file: &FileRef, cx: &mut Context<Self>) {
+        let dir = std::env::temp_dir().join("forge-diagrams");
+        let (name, bytes) = (crate::downloads::clean_name(&file.name), file.content.as_bytes().to_vec());
+        cx.spawn(async move |this, cx| {
+            let written = cx
+                .background_spawn(async move {
+                    std::fs::create_dir_all(&dir)?;
+                    let path = dir.join(name);
+                    std::fs::write(&path, bytes).map(|_| path)
+                })
+                .await;
+            let _ = this.update(cx, |s, cx| match written {
+                Ok(path) => cx.open_with_system(&path),
+                Err(e) => s.show_toast(format!("Could not open it: {e}"), cx),
+            });
+        })
+        .detach();
     }
 
     pub fn close_doc(&mut self, cx: &mut Context<Self>) {
@@ -1204,6 +1244,28 @@ fn mock_chats() -> Vec<Chat> {
         },
         Message::TurnEnd { seconds: 24.7, usage: None },
     ];
+    // A reply that drew a diagram with the bundled Diagram Design skill.
+    const CHAT_PATH: &str = include_str!("../assets/docs/forge-chat-path.html");
+    let drawn = vec![
+        Message::User { text: "Draw how a chat in Forge reaches the model, and where the API key gets added.".into(), sent: minutes_ago(13) },
+        Message::Assistant {
+            blocks: vec![
+                Block::Tool(ToolCall {
+                    kind: ToolKind::Write,
+                    target: "docs/chat-path.html".into(),
+                    note: None,
+                    status: ToolStatus::Done,
+                    output: "".into(),
+                    diff: diff(&[(DiffKind::Add, "<!DOCTYPE html>"), (DiffKind::Add, "<title>How a chat reaches a model</title>"), (DiffKind::Add, "<svg viewBox=\"0 0 960 480\" …>")]),
+                    open: false,
+                    full: false,
+                }),
+                Block::Text("Here it is. The gateway is the one accent: it is the only piece that ever holds a key, and it reads it from Credential Manager on the way out.".into()),
+                Block::File(FileRef { name: "chat-path.html".into(), path: Some("docs/chat-path.html".into()), content: CHAT_PATH.into() }),
+            ],
+        },
+        Message::TurnEnd { seconds: 31.2, usage: None },
+    ];
     let with_error = |mut m: Vec<Message>| {
         m.push(Message::Notice { text: "The agent stopped unexpectedly (exit code 1). Send a message to try again.".into(), error: true });
         m
@@ -1215,6 +1277,7 @@ fn mock_chats() -> Vec<Chat> {
         Chat { id: 4, project: 3, title: "Write a README for the CLI".into(), minutes_ago: 1500, pinned: false, messages: simple("Write a README for the CLI", 1500), version: 0, unread: false },
         Chat { id: 5, project: 1, title: "Why does cargo test hang on Windows?".into(), minutes_ago: 1800, pinned: false, messages: with_error(simple("Why does cargo test hang on Windows?", 1800)), version: 0, unread: false },
         Chat { id: 6, project: 1, title: "Migrate settings to the new schema".into(), minutes_ago: 40, pinned: false, messages: plan, version: 0, unread: false },
+        Chat { id: 8, project: 1, title: "Draw how a chat reaches the model".into(), minutes_ago: 12, pinned: false, messages: drawn, version: 0, unread: false },
         Chat { id: 7, project: 2, title: "Genesis redesign: landing page".into(), minutes_ago: 20000, pinned: false, messages: simple("Genesis redesign: landing page", 20000), version: 0, unread: false },
     ];
     // The mock replies' usage, counted from their text as each turn ended.

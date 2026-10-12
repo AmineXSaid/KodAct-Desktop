@@ -332,7 +332,10 @@ impl Render for Workspace {
                 );
             // A file opened from a reply sits beside the conversation.
             let s = self.state.read(cx);
-            let pane = s.doc.as_ref().map(|f| super::doc_pane::render(f, self.state.clone(), s.copied.clone(), &t));
+            let main_width = f32::from(window.viewport_size().width) - if sidebar_open { f32::from(t.size.sidebar) } else { 0. };
+            let diagram = s.doc.as_ref().is_some_and(|f| f.is_diagram());
+            let fit = super::doc_pane::Fit { width: super::doc_pane::width(main_width, diagram, &t), scale: window.scale_factor(), fit: s.doc_fit };
+            let pane = s.doc.as_ref().map(|f| super::doc_pane::render(f, self.state.clone(), s.copied.clone(), fit, &t));
             main.child(div().flex_1().min_h_0().flex().child(conversation).children(pane))
         };
 

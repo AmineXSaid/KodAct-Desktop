@@ -1,6 +1,7 @@
 //! A file Forge made, as a card in its reply: a small page that previews the
-//! document, its title and type, and Download. Clicking the card opens the
-//! file beside the chat (`doc_pane.rs`); clicking it again closes it.
+//! document, its title and type, and Download. A diagram's card shows the
+//! diagram itself, drawn natively. Clicking the card opens the file beside
+//! the chat (`doc_pane.rs`); clicking it again closes it.
 
 use gpui::{div, prelude::*, px, relative, AnyElement, Entity, FontWeight, SharedString};
 
@@ -37,29 +38,17 @@ fn page(file: &FileRef, t: &Theme) -> AnyElement {
         .into_any_element()
 }
 
-pub fn render(file: &FileRef, key: &str, state: Entity<AppState>, open: bool, t: &Theme) -> AnyElement {
+/// The widest a card gets.
+const CARD: f32 = 440.;
+
+/// Title, type and Download: the card's text row.
+fn label_row(file: &FileRef, key: &str, state: Entity<AppState>, kind: &str, t: &Theme) -> gpui::Div {
     let hover = t.colors.hover;
-    // Hovered, the edge darkens; open, it stays the accent.
-    let edge = if open { t.colors.primary.opacity(0.6) } else { t.colors.text_subtle.opacity(0.5) };
-    let (opener, saver) = (state.clone(), state);
-    let (to_open, to_save) = (file.clone(), file.clone());
-    let kind = if file.is_markdown() { "Document".to_string() } else { "File".to_string() };
+    let to_save = file.clone();
     div()
-        .id(SharedString::from(format!("file-{key}")))
-        .w_full()
-        .max_w(px(440.))
         .flex()
         .items_center()
         .gap(t.space.md)
-        .p(t.space.sm)
-        .pr(t.space.md)
-        .bg(t.colors.surface)
-        .border_1()
-        .border_color(if open { t.colors.primary.opacity(0.6) } else { t.colors.border })
-        .rounded(t.radius.card)
-        .cursor_pointer()
-        .hover(move |st| st.border_color(edge))
-        .child(page(file, t))
         .child(
             div()
                 .flex_1()
@@ -90,9 +79,65 @@ pub fn render(file: &FileRef, key: &str, state: Entity<AppState>, open: bool, t:
                 .child("Download")
                 .on_click(move |_, _, cx| {
                     cx.stop_propagation();
-                    saver.update(cx, |s, cx| s.download(&to_save, cx));
+                    state.update(cx, |s, cx| s.download(&to_save, cx));
                 }),
         )
+}
+
+pub fn render(file: &FileRef, key: &str, state: Entity<AppState>, open: bool, scale: f32, t: &Theme) -> AnyElement {
+    if file.is_diagram() {
+        return diagram_card(file, key, state, open, scale, t);
+    }
+    // Hovered, the edge darkens; open, it stays the accent.
+    let edge = if open { t.colors.primary.opacity(0.6) } else { t.colors.text_subtle.opacity(0.5) };
+    let opener = state.clone();
+    let to_open = file.clone();
+    div()
+        .id(SharedString::from(format!("file-{key}")))
+        .w_full()
+        .max_w(px(CARD))
+        .flex()
+        .items_center()
+        .gap(t.space.md)
+        .p(t.space.sm)
+        .pr(t.space.md)
+        .bg(t.colors.surface)
+        .border_1()
+        .border_color(if open { t.colors.primary.opacity(0.6) } else { t.colors.border })
+        .rounded(t.radius.card)
+        .cursor_pointer()
+        .hover(move |st| st.border_color(edge))
+        .child(page(file, t))
+        .child(label_row(file, key, state, "Document", t).flex_1().min_w_0())
+        .on_click(move |_, _, cx| opener.update(cx, |s, cx| s.open_doc(to_open.clone(), cx)))
+        .into_any_element()
+}
+
+/// A diagram's card: the drawing itself on top, then its title and Download.
+fn diagram_card(file: &FileRef, key: &str, state: Entity<AppState>, open: bool, scale: f32, t: &Theme) -> AnyElement {
+    let edge = if open { t.colors.primary.opacity(0.6) } else { t.colors.text_subtle.opacity(0.5) };
+    let opener = state.clone();
+    let to_open = file.clone();
+    // The drawing sits 8px inside the card, its corners concentric with it.
+    let inner = CARD - 2. - 2. * f32::from(t.space.sm);
+    let drawing = crate::diagram::extract_svg(&file.content).and_then(|svg| super::diagram_view::fluid(&super::diagram_view::themed(svg, t.is_dark), inner, scale));
+    div()
+        .id(SharedString::from(format!("file-{key}")))
+        .w_full()
+        .max_w(px(CARD))
+        .flex()
+        .flex_col()
+        .gap(t.space.sm)
+        .p(t.space.sm)
+        .pb(t.space.sm + px(2.))
+        .bg(t.colors.surface)
+        .border_1()
+        .border_color(if open { t.colors.primary.opacity(0.6) } else { t.colors.border })
+        .rounded(t.radius.card)
+        .cursor_pointer()
+        .hover(move |st| st.border_color(edge))
+        .child(div().rounded(t.radius.small).overflow_hidden().border_1().border_color(t.colors.border).children(drawing))
+        .child(label_row(file, key, state, "Diagram", t).px(t.space.xs))
         .on_click(move |_, _, cx| opener.update(cx, |s, cx| s.open_doc(to_open.clone(), cx)))
         .into_any_element()
 }
