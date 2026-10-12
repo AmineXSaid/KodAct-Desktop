@@ -401,6 +401,7 @@ pub struct Sizes {
     pub icon: Pixels,          // 16
     pub composer_max: Pixels,  // the composer's tallest input
     pub composer_radius: Pixels, // 18: the composer box's corners
+    pub composer_width: Pixels,  // 620: the composer's widest, wherever it sits
     pub palette: Pixels,       // command palette width
     pub hairline: Pixels,      // 1
     pub line_height_chat: f32, // 1.45 for prose
@@ -422,6 +423,7 @@ impl Default for Sizes {
             icon: px(16.),
             composer_max: px(240.),
             composer_radius: px(18.),
+            composer_width: px(620.),
             palette: px(560.),
             hairline: px(1.),
             line_height_chat: 1.45,

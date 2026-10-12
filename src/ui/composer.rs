@@ -315,11 +315,12 @@ impl Render for Composer {
                 .tooltip(move |window, cx| gpui::component::tooltip::Tooltip::new(tip.clone()).build(window, cx))
         });
 
-        div()
+        let composer = div()
             .key_context("Composer")
             .track_focus(&self.menu_focus)
             .relative()
             .w_full()
+            .max_w(t.size.composer_width)
             .flex()
             .flex_col()
             .gap(px(6.))
@@ -346,7 +347,7 @@ impl Render for Composer {
                     )
                     // A soft rule between what you write and the tools under it,
                     // fading out at both ends, with a faint shade beneath.
-                    .child(divider(t.colors.border))
+                    .child(divider(t.colors.text_subtle.opacity(0.55)))
                     .child(
                         div()
                             .flex()
@@ -382,7 +383,9 @@ impl Render for Composer {
                     .child(model_button)
                     // Modes: the button and its menu above it.
                     .child(div().relative().child(mode_trigger).children(modes_menu)),
-            )
+            );
+        // Never wider than its own measure, centred wherever it sits.
+        div().w_full().flex().justify_center().child(composer)
     }
 }
 
@@ -395,5 +398,5 @@ fn divider(color: gpui::Hsla) -> impl IntoElement {
         div().h_full().w(relative(0.5)).bg(linear_gradient(90., linear_color_stop(a, 0.), linear_color_stop(b, 1.)))
     };
     let line = |c: gpui::Hsla| div().h(px(1.)).w_full().flex().child(half(c, false)).child(half(c, true));
-    div().mx(px(14.)).flex().flex_col().child(line(color)).child(line(color.opacity(0.35)))
+    div().mx(px(14.)).flex().flex_col().child(line(color)).child(line(color.opacity(0.4)))
 }
