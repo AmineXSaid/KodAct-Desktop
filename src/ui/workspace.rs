@@ -296,9 +296,11 @@ impl Render for Workspace {
         let pane = {
             let s = self.state.read(cx);
             let main_width = f32::from(window.viewport_size().width) - if sidebar_open { f32::from(t.size.sidebar) } else { 0. };
-            let diagram = s.doc.as_ref().is_some_and(|f| f.is_diagram());
-            let fit = super::doc_pane::Fit { width: super::doc_pane::width(main_width, diagram, &t), scale: window.scale_factor(), fit: s.doc_fit };
-            s.doc.as_ref().map(|f| super::doc_pane::render(f, self.state.clone(), s.copied.clone(), fit, &t))
+            // Diagrams and workbooks get the wider panel.
+            let wide = s.doc.as_ref().is_some_and(|f| f.is_diagram() || f.office() == Some(crate::office::Kind::Xlsx));
+            let fit = super::doc_pane::Fit { width: super::doc_pane::width(main_width, wide, &t), scale: window.scale_factor(), fit: s.doc_fit };
+            let read = s.doc_preview.as_ref().filter(|(n, _)| s.doc.as_ref().is_some_and(|f| f.name == *n)).map(|(_, r)| r);
+            s.doc.as_ref().map(|f| super::doc_pane::render(f, self.state.clone(), s.copied.clone(), fit, read, s.doc_sheet, &t))
         };
         let main = if screen == Screen::Rules {
             main.child(self.rules.clone())

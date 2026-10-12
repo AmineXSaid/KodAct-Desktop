@@ -122,7 +122,10 @@ pub struct FileRef {
     pub name: SharedString,
     /// Where it was written in the project, if it was.
     pub path: Option<SharedString>,
+    /// Its text: Markdown, a diagram's page. Empty for a binary file.
     pub content: SharedString,
+    /// A binary file's bytes: a workbook, a Word file, a deck, a PDF.
+    pub bytes: Option<std::sync::Arc<[u8]>>,
 }
 
 impl FileRef {
@@ -145,6 +148,29 @@ impl FileRef {
     /// Its type, as the card labels it: `MD`, `PDF`, `DOCX`.
     pub fn kind(&self) -> SharedString {
         self.name.rsplit_once('.').map_or("FILE".to_string(), |(_, ext)| ext.to_ascii_uppercase()).into()
+    }
+
+    /// An Office file or a PDF, read natively (`office.rs`).
+    pub fn office(&self) -> Option<crate::office::Kind> {
+        crate::office::Kind::of(&self.name)
+    }
+
+    /// What a card calls it: Document, Diagram, Spreadsheet, Presentation.
+    pub fn label(&self) -> &'static str {
+        if let Some(k) = self.office() {
+            k.label()
+        } else if self.is_diagram() {
+            "Diagram"
+        } else if self.is_markdown() {
+            "Document"
+        } else {
+            "File"
+        }
+    }
+
+    /// The file as saved: its bytes, else its text.
+    pub fn data(&self) -> Vec<u8> {
+        self.bytes.as_deref().map(<[u8]>::to_vec).unwrap_or_else(|| self.content.as_bytes().to_vec())
     }
 
     pub fn is_markdown(&self) -> bool {
@@ -306,6 +332,11 @@ pub struct AppState {
     pub doc: Option<FileRef>,
     /// A diagram in the panel fits its width (else it shows at actual size).
     pub doc_fit: bool,
+    /// An Office file or PDF in the panel, read: by file name, the preview
+    /// or why it couldn't be read. None while it is being read.
+    pub doc_preview: Option<(SharedString, Result<std::sync::Arc<crate::office::Preview>, String>)>,
+    /// The sheet shown, for a workbook.
+    pub doc_sheet: usize,
     copied_reset: Option<Task<()>>,
     /// A short message at the bottom of the window (stubs say what they would do).
     pub toast: Option<SharedString>,
@@ -372,6 +403,8 @@ impl AppState {
             copied: None,
             doc: None,
             doc_fit: true,
+            doc_preview: None,
+            doc_sheet: 0,
             copied_reset: None,
             toast: None,
             toast_reset: None,
@@ -785,7 +818,7 @@ impl AppState {
         if !matches!(self.screen, Screen::Chat) {
             self.screen = Screen::Chat;
         }
-        self.doc = Some(FileRef { name: "endpoint-setup.md".into(), path: None, content: crate::endpoints::GUIDE.into() });
+        self.doc = Some(FileRef { name: "endpoint-setup.md".into(), path: None, content: crate::endpoints::GUIDE.into(), bytes: None });
         cx.notify();
     }
 
@@ -808,9 +841,37 @@ impl AppState {
         .detach();
     }
 
-    /// Open a file in the side panel (the same file again closes it).
+    /// Open a file in the side panel (the same file again closes it). An
+    /// Office file or PDF is read off the UI thread; the panel says so meanwhile.
     pub fn open_doc(&mut self, file: FileRef, cx: &mut Context<Self>) {
-        self.doc = if self.doc.as_ref() == Some(&file) { None } else { Some(file) };
+        if self.doc.as_ref() == Some(&file) {
+            self.doc = None;
+            cx.notify();
+            return;
+        }
+        self.doc_sheet = 0;
+        if let (Some(_), Some(bytes)) = (file.office(), file.bytes.clone()) {
+            let ready = self.doc_preview.as_ref().is_some_and(|(n, _)| *n == file.name);
+            if !ready {
+                self.doc_preview = None;
+                let name = file.name.clone();
+                cx.spawn(async move |this, cx| {
+                    let n = name.to_string();
+                    let read = cx.background_spawn(async move { crate::office::preview(&n, &bytes).map(std::sync::Arc::new) }).await;
+                    let _ = this.update(cx, |s, cx| {
+                        s.doc_preview = Some((name, read));
+                        cx.notify();
+                    });
+                })
+                .detach();
+            }
+        }
+        self.doc = Some(file);
+        cx.notify();
+    }
+
+    pub fn select_sheet(&mut self, i: usize, cx: &mut Context<Self>) {
+        self.doc_sheet = i;
         cx.notify();
     }
 
@@ -819,11 +880,12 @@ impl AppState {
         cx.notify();
     }
 
-    /// Open a diagram's page in the browser, where it is interactive: write
-    /// it to Forge's temp folder off the UI thread, then hand it to the system.
-    pub fn open_in_browser(&mut self, file: &FileRef, cx: &mut Context<Self>) {
-        let dir = std::env::temp_dir().join("forge-diagrams");
-        let (name, bytes) = (crate::downloads::clean_name(&file.name), file.content.as_bytes().to_vec());
+    /// Open a file in the app the system has for it: a diagram's page in the
+    /// browser (where it is interactive), a workbook in Excel. Written to
+    /// Forge's temp folder off the UI thread, then handed to the system.
+    pub fn open_externally(&mut self, file: &FileRef, cx: &mut Context<Self>) {
+        let dir = std::env::temp_dir().join("forge-files");
+        let (name, bytes) = (crate::downloads::clean_name(&file.name), file.data());
         cx.spawn(async move |this, cx| {
             let written = cx
                 .background_spawn(async move {
@@ -852,7 +914,7 @@ impl AppState {
             self.show_toast("Could not find your Downloads folder.", cx);
             return;
         };
-        let (name, bytes) = (file.name.to_string(), file.content.as_bytes().to_vec());
+        let (name, bytes) = (file.name.to_string(), file.data());
         cx.spawn(async move |this, cx| {
             let saved = cx.background_spawn(async move { crate::downloads::save(&dir, &name, &bytes) }).await;
             let _ = this.update(cx, |s, cx| match saved {
@@ -1275,7 +1337,7 @@ fn mock_chats() -> Vec<Chat> {
                     full: false,
                 }),
                 Block::Text("Here is the plan. It moves every setting to the v2 schema without losing anything, and keeps a backup for one release. Two checklist items are still open: the round-trip test and a Windows run with a read-only file.".into()),
-                Block::File(FileRef { name: "settings-migration-plan.md".into(), path: Some("docs/settings-migration-plan.md".into()), content: PLAN.into() }),
+                Block::File(FileRef { name: "settings-migration-plan.md".into(), path: Some("docs/settings-migration-plan.md".into()), content: PLAN.into(), bytes: None }),
             ],
         },
         Message::TurnEnd { seconds: 24.7, usage: None },
@@ -1297,10 +1359,30 @@ fn mock_chats() -> Vec<Chat> {
                     full: false,
                 }),
                 Block::Text("Here it is. The gateway is the one accent: it is the only piece that ever holds a key, and it reads it from Credential Manager on the way out.".into()),
-                Block::File(FileRef { name: "chat-path.html".into(), path: Some("docs/chat-path.html".into()), content: CHAT_PATH.into() }),
+                Block::File(FileRef { name: "chat-path.html".into(), path: Some("docs/chat-path.html".into()), content: CHAT_PATH.into(), bytes: None }),
             ],
         },
         Message::TurnEnd { seconds: 31.2, usage: None },
+    ];
+    // A reply that edited a workbook and wrote it up with the bundled
+    // office-documents skill: the real files its tools made.
+    let office = |name: &str, bytes: &'static [u8]| Block::File(FileRef { name: name.into(), path: Some(format!("finance/{name}").into()), content: "".into(), bytes: Some(std::sync::Arc::from(bytes)) });
+    let bash = |command: &str, note: &str, output: &str| Block::Tool(ToolCall { kind: ToolKind::Bash, target: command.into(), note: Some(note.into()), status: ToolStatus::Done, output: output.into(), diff: vec![], open: false, full: false });
+    let budget = vec![
+        Message::User { text: "Licences came in at 700 and travel is forecast at 520. Update the Q3 budget, then write it up as a memo, a short deck and a PDF.".into(), sent: minutes_ago(7) },
+        Message::Assistant {
+            blocks: vec![
+                bash("python xlsx_tool.py read finance/q3-budget.xlsx --sheet Budget --formulas", "Read the budget", "## Budget (7 rows × 4 columns)\n| 3 | Licences | 800 | 640 | =C3-B3 |\n| 6 | Travel | 450 |  | =C6-B6 |\n| 7 | Total | =SUM(B2:B6) | =SUM(C2:C6) | =C7-B7 |"),
+                bash("python xlsx_tool.py set finance/q3-budget.xlsx finance/q3-budget.xlsx --cell \"Budget!C3=700\" --cell \"Budget!C6=520\" && python xlsx_tool.py recalc finance/q3-budget.xlsx finance/q3-budget.xlsx", "Update licences and travel, then recalculate", "set 2 cell(s); wrote finance/q3-budget.xlsx\nrecalculated; wrote finance/q3-budget.xlsx"),
+                bash("python docx_tool.py create finance/q3-budget-memo.docx --markdown memo.md && python pptx_tool.py create finance/q3-budget.pptx --outline deck.md && python pdf_tool.py convert finance/q3-budget-memo.docx finance/q3-budget.pdf", "Write the memo, the deck and the PDF", "wrote finance/q3-budget-memo.docx\nwrote 4 slide(s) to finance/q3-budget.pptx\nwrote finance/q3-budget.pdf"),
+                Block::Text("Done. The Q3 forecast is now **5,500 EUR**, up 350 on Q2:\n\n- `Budget!C3` Licences: 640 → **700**\n- `Budget!C6` Travel: empty → **520**\n\nThe change column and the totals are formulas, so I recalculated the workbook and read it back: Travel is +70 and the total change is +350. The memo, the 4-slide deck and the PDF all say the same.".into()),
+                office("q3-budget.xlsx", include_bytes!("../assets/docs/samples/q3-budget.xlsx")),
+                office("q3-budget-memo.docx", include_bytes!("../assets/docs/samples/q3-budget-memo.docx")),
+                office("q3-budget.pptx", include_bytes!("../assets/docs/samples/q3-budget.pptx")),
+                office("q3-budget.pdf", include_bytes!("../assets/docs/samples/q3-budget.pdf")),
+            ],
+        },
+        Message::TurnEnd { seconds: 42.6, usage: None },
     ];
     let with_error = |mut m: Vec<Message>| {
         m.push(Message::Notice { text: "The agent stopped unexpectedly (exit code 1). Send a message to try again.".into(), error: true });
@@ -1313,6 +1395,7 @@ fn mock_chats() -> Vec<Chat> {
         Chat { id: 4, project: 3, title: "Write a README for the CLI".into(), minutes_ago: 1500, pinned: false, messages: simple("Write a README for the CLI", 1500), version: 0, unread: false },
         Chat { id: 5, project: 1, title: "Why does cargo test hang on Windows?".into(), minutes_ago: 1800, pinned: false, messages: with_error(simple("Why does cargo test hang on Windows?", 1800)), version: 0, unread: false },
         Chat { id: 6, project: 1, title: "Migrate settings to the new schema".into(), minutes_ago: 40, pinned: false, messages: plan, version: 0, unread: false },
+        Chat { id: 9, project: 1, title: "Update the Q3 budget and write it up".into(), minutes_ago: 6, pinned: false, messages: budget, version: 0, unread: false },
         Chat { id: 8, project: 1, title: "Draw how a chat reaches the model".into(), minutes_ago: 12, pinned: false, messages: drawn, version: 0, unread: false },
         Chat { id: 7, project: 2, title: "Genesis redesign: landing page".into(), minutes_ago: 20000, pinned: false, messages: simple("Genesis redesign: landing page", 20000), version: 0, unread: false },
     ];

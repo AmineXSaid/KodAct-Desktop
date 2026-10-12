@@ -47,11 +47,18 @@ pub fn width(main: f32, diagram: bool, t: &Theme) -> f32 {
     (main * if diagram { 0.6 } else { 0.5 }).max(f32::from(t.size.doc_pane))
 }
 
-pub fn render(file: &FileRef, state: Entity<AppState>, copied: Option<SharedString>, fit: Fit, t: &Theme) -> AnyElement {
+/// An Office file or PDF, as `office.rs` read it: None while it is read.
+pub type Read<'a> = Option<&'a Result<std::sync::Arc<crate::office::Preview>, String>>;
+
+pub fn render(file: &FileRef, state: Entity<AppState>, copied: Option<SharedString>, fit: Fit, read: Read, sheet: usize, t: &Theme) -> AnyElement {
     let did_copy = copied.as_deref() == Some(COPY_KEY);
     let (copier, saver, closer, fitter, opener) = (state.clone(), state.clone(), state.clone(), state.clone(), state.clone());
     let (text, to_save, to_open) = (file.content.clone(), file.clone(), file.clone());
     let diagram = file.is_diagram();
+    let office = file.office();
+    let binary = file.bytes.is_some();
+    let external = to_open.clone();
+    let launcher = state.clone();
 
     let header = div()
         .flex_none()
@@ -63,7 +70,10 @@ pub fn render(file: &FileRef, state: Entity<AppState>, copied: Option<SharedStri
         .pr(t.space.sm)
         .border_b_1()
         .border_color(t.colors.border)
-        .child(icon("icons/file-text.svg", t.size.icon_sm, t.colors.text_muted))
+        .child(match office {
+            Some(kind) => super::file_mark::render(kind, f32::from(t.size.icon_lg), fit.scale),
+            None => icon("icons/file-text.svg", t.size.icon_sm, t.colors.text_muted).into_any_element(),
+        })
         .child(
             div()
                 .flex_1()
@@ -76,14 +86,19 @@ pub fn render(file: &FileRef, state: Entity<AppState>, copied: Option<SharedStri
         )
         .when(diagram, |d| {
             d.child(tool_button(t, "doc-fit", "icons/maximize-2.svg", if fit.fit { "Actual size" } else { "Fit to panel" }).on_click(move |_, _, cx| fitter.update(cx, |s, cx| s.toggle_doc_fit(cx))))
-                .child(tool_button(t, "doc-browser", "icons/globe.svg", "Open in browser").on_click(move |_, _, cx| opener.update(cx, |s, cx| s.open_in_browser(&to_open, cx))))
+                .child(tool_button(t, "doc-browser", "icons/globe.svg", "Open in browser").on_click(move |_, _, cx| opener.update(cx, |s, cx| s.open_externally(&to_open, cx))))
         })
-        .child(
-            tool_button(t, "doc-copy", if did_copy { "icons/check.svg" } else { "icons/copy.svg" }, if diagram { "Copy source" } else { "Copy" }).on_click(move |_, _, cx| {
-                cx.write_to_clipboard(ClipboardItem::new_string(text.to_string()));
-                copier.update(cx, |s, cx| s.mark_copied(COPY_KEY.into(), cx));
-            }),
-        )
+        .when(office.is_some(), |d| {
+            d.child(tool_button(t, "doc-external", "icons/external-link.svg", "Open with default app").on_click(move |_, _, cx| launcher.update(cx, |s, cx| s.open_externally(&external, cx))))
+        })
+        .when(!binary, |d| {
+            d.child(
+                tool_button(t, "doc-copy", if did_copy { "icons/check.svg" } else { "icons/copy.svg" }, if diagram { "Copy source" } else { "Copy" }).on_click(move |_, _, cx| {
+                    cx.write_to_clipboard(ClipboardItem::new_string(text.to_string()));
+                    copier.update(cx, |s, cx| s.mark_copied(COPY_KEY.into(), cx));
+                }),
+            )
+        })
         .child(tool_button(t, "doc-download", "icons/download.svg", "Download").on_click(move |_, _, cx| saver.update(cx, |s, cx| s.download(&to_save, cx))))
         .child(tool_button(t, "doc-close", "icons/x.svg", "Close").on_click(move |_, _, cx| closer.update(cx, |s, cx| s.close_doc(cx))));
 
@@ -117,6 +132,17 @@ pub fn render(file: &FileRef, state: Entity<AppState>, copied: Option<SharedStri
                         .children(super::diagram_view::image(svg, shown, fit.scale)),
                 ),
         )
+    } else if office.is_some() {
+        let quiet = |text: String| div().text_size(t.text.body_sm).text_color(t.colors.text_muted).child(text).into_any_element();
+        let content: AnyElement = match read {
+            None => quiet(format!("Reading {}…", file.name)),
+            Some(Err(e)) => quiet(format!("Forge could not read {}: {e}. Open it with its app instead.", file.name)),
+            Some(Ok(p)) => match p.as_ref() {
+                crate::office::Preview::Sheets(sheets) => return finish(file, header, body.child(div().p(t.space.xl).child(super::sheet_view::render(sheets, sheet, state, t))), fit.width, t),
+                crate::office::Preview::Markdown(md) => markdown::render_as(md, t, &CopyContext { state, key: "doc".into(), copied }, Look::Document),
+            },
+        };
+        body.child(div().flex().justify_center().px(t.space.xxl).pt(t.space.xl + t.space.xs).pb(t.space.xxl * 2.).child(div().w_full().max_w(t.size.doc_measure).child(content)))
     } else {
         let page: AnyElement = if file.is_markdown() {
             markdown::render_as(&file.content, t, &CopyContext { state, key: "doc".into(), copied }, Look::Document)
@@ -126,9 +152,15 @@ pub fn render(file: &FileRef, state: Entity<AppState>, copied: Option<SharedStri
         body.child(div().flex().justify_center().px(t.space.xxl).pt(t.space.xl + t.space.xs).pb(t.space.xxl * 2.).child(div().w_full().max_w(t.size.doc_measure).child(page)))
     };
 
+    finish(file, header, body, fit.width, t)
+}
+
+/// The panel around its header and body: a fixed width, the card surface,
+/// a hairline on its left, and a short entrance.
+fn finish(file: &FileRef, header: gpui::Div, body: gpui::Stateful<gpui::Div>, width: f32, t: &Theme) -> AnyElement {
     div()
         .flex_none()
-        .w(px(fit.width))
+        .w(px(width))
         .h_full()
         .flex()
         .flex_col()

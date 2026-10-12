@@ -17,6 +17,7 @@ mod greeting;
 mod health;
 mod highlight;
 mod modes;
+mod office;
 #[cfg(test)]
 mod palette_check;
 #[cfg(test)]

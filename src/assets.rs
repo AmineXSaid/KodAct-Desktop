@@ -15,7 +15,7 @@ macro_rules! icons {
 
 icons!(
     "archive", "arrow-right", "arrow-up", "at-sign", "bot", "brain", "check", "chevron-down", "chevron-right", "chevron-up",
-    "circle-check", "circle-pause", "code-xml", "graduation-cap", "route", "scroll-text", "circle-slash", "circle-x", "clock", "command", "copy", "cpu", "download", "ellipsis", "eye", "file-pen",
+    "circle-check", "circle-pause", "code-xml", "graduation-cap", "route", "scroll-text", "circle-slash", "circle-x", "clock", "command", "copy", "cpu", "download", "ellipsis", "external-link", "eye", "file-pen",
     "file-text", "folder-open", "git-branch", "globe", "hand", "image", "info", "keyboard", "list-todo",
     "loader-circle", "map", "maximize-2", "message-square", "minus", "moon", "panel-left", "paperclip", "pencil",
     "pin", "plus", "refresh-cw", "rotate-ccw", "search", "settings", "shield-check", "sliders-horizontal", "sparkles", "split", "square", "square-check",

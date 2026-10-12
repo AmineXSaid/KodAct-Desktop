@@ -40,6 +40,8 @@ fn page(file: &FileRef, t: &Theme) -> AnyElement {
 
 /// The widest a card gets.
 const CARD: f32 = 440.;
+/// An app's mark on a card: about the page tile's height.
+const MARK: f32 = 40.;
 
 /// Title, type and Download: the card's text row.
 fn label_row(file: &FileRef, key: &str, state: Entity<AppState>, kind: &str, t: &Theme) -> gpui::Div {
@@ -107,8 +109,12 @@ pub fn render(file: &FileRef, key: &str, state: Entity<AppState>, open: bool, sc
         .rounded(t.radius.card)
         .cursor_pointer()
         .hover(move |st| st.border_color(edge))
-        .child(page(file, t))
-        .child(label_row(file, key, state, "Document", t).flex_1().min_w_0())
+        // An Office file or PDF shows its app's mark; anything else a page.
+        .child(match file.office() {
+            Some(kind) => super::file_mark::render(kind, MARK, scale),
+            None => page(file, t),
+        })
+        .child(label_row(file, key, state, file.label(), t).flex_1().min_w_0())
         .on_click(move |_, _, cx| opener.update(cx, |s, cx| s.open_doc(to_open.clone(), cx)))
         .into_any_element()
 }

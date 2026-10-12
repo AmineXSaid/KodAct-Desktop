@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <path d="M28.5 5A19 19 0 0 0 9.5 24H28.5Z" fill="#ED6C47"/>
+  <path d="M28.5 5A19 19 0 0 1 47.5 24H28.5Z" fill="#FF8F6B"/>
+  <path d="M9.5 24A19 19 0 0 0 47.5 24Z" fill="#D35230"/>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0.35" y2="1"><stop offset="0" stop-color="#CA4C28"/><stop offset="1" stop-color="#B62F14"/></linearGradient>
+    <filter id="lift" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="1.4"/></filter>
+  </defs>
+  <rect x="3" y="14.2" width="23" height="22" rx="3" fill="#000000" fill-opacity="0.28" filter="url(#lift)"/>
+  <rect x="3" y="13" width="23" height="22" rx="3" fill="url(#tile)"/>
+  <path d="M11 30.2V18.6H15.6A3.9 3.9 0 0 1 15.6 26.4H11" fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linejoin="miter"/>
+</svg>
