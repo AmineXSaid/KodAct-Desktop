@@ -13,5 +13,12 @@ ui-ux-pro-max's installer also adds banner-design, brand, design, design-system,
 slides and ui-styling. They are for web pages and marketing (Tailwind, shadcn,
 logos, slide decks) and are left out here.
 
-The designer-skills plugins (ui-design, design-systems, visual-critique,
-interaction-design) install from their marketplace, Owl-Listener/designer-skills.
+From github.com/Owl-Listener/designer-skills (commit 9a6930c, MIT, licence in
+`LICENSE-designer-skills`), the four plugins ui-design, design-systems,
+visual-critique and interaction-design are copied in as plain files: their
+skills into this folder (57, e.g. `color-system`, `design-token`,
+`critique-color`, `micro-interaction-spec`), and their commands into
+`.claude/commands/<plugin>/` (`/color-palette`, `/type-system`, `/tokenize`,
+`/audit-system`, `/critique-screen`, …). Installed as a plugin they would be
+`/ui-design:color-palette`; copied, they keep the plugin's folder as a
+namespace where Claude Code shows one.

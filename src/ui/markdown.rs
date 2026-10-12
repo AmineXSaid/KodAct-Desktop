@@ -307,10 +307,11 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                         .pt((size * leading - t.size.icon_sm) / 2.)
                         .child(icon(if done { "icons/square-check.svg" } else { "icons/square.svg" }, t.size.icon_sm, if done { t.colors.primary } else { t.colors.text_subtle }))
                         .into_any_element(),
+                    // Step numbers carry meaning, so they read at 4.5:1.
                     None => div()
                         .flex_none()
                         .min_w(t.space.lg)
-                        .text_color(t.colors.text_subtle)
+                        .text_color(t.colors.text_muted)
                         .child(match number {
                             Some(n) => format!("{n}."),
                             None => "•".to_string(),
