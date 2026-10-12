@@ -1,23 +1,83 @@
 """Word documents: read, create from Markdown, replace text, append.
 
     python docx_tool.py read FILE
-    python docx_tool.py create OUT.docx --markdown FILE.md
+    python docx_tool.py create OUT.docx --markdown FILE.md [--page a4|letter] [--title TEXT]
     python docx_tool.py replace FILE OUT.docx --find TEXT --replace TEXT [--find ... --replace ...]
     python docx_tool.py append FILE OUT.docx --markdown FILE.md
 
 Edits keep the document's styles and the formatting of the runs they touch,
 and always write OUT (never the input in place unless OUT is the input).
+Every file written is schema-valid and carries real properties (title,
+author Forge, dates), not python-docx's template defaults.
 """
 
 import argparse
 import os
+import re
 import sys
+from datetime import datetime, timezone
 
 import docx
-from docx.shared import Pt
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
+from docx.shared import Mm, Pt
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # mdlite, beside this file
-from mdlite import blocks, inline
+from mdlite import blocks, inline, plain
+
+AUTHOR = "Forge"
+# Page sizes and margins, in millimetres.
+PAGES = {"a4": (210, 297, 25), "letter": (215.9, 279.4, 25.4)}
+
+
+def _now():
+    return datetime.now(timezone.utc).replace(microsecond=0, tzinfo=None)
+
+
+def _finish(d, title=None, new=False):
+    """What every saved file gets. python-docx's template leaves <w:zoom>
+    without the w:percent the schema requires, and properties from 2013 by
+    "python-docx": a new file gets real ones, an edited file a new date."""
+    zoom = d.settings.element.find(qn("w:zoom"))
+    if zoom is not None and zoom.get(qn("w:percent")) is None:
+        zoom.set(qn("w:percent"), "100")
+    cp = d.core_properties
+    if new:
+        cp.author = AUTHOR
+        cp.created = _now()
+        cp.revision = 1
+        cp.comments = ""
+        cp.title = title or ""
+    elif title:
+        cp.title = title
+    cp.last_modified_by = AUTHOR
+    cp.modified = _now()
+
+
+def _page(d, size):
+    w, h, margin = PAGES[size]
+    for section in d.sections:
+        section.page_width, section.page_height = Mm(w), Mm(h)
+        section.left_margin = section.right_margin = section.top_margin = section.bottom_margin = Mm(margin)
+
+
+def _restart_numbering(d):
+    """A numbered list that starts here counts from 1 again: a new w:num over
+    the List Number style's own list definition. Without it, every numbered
+    list in a document carries on from the one before."""
+    style = d.styles["List Number"].element
+    num_id = style.pPr.numPr.numId.val
+    numbering = d.part.numbering_part.element
+    abstract = numbering.num_having_numId(num_id).abstractNumId.val
+    num = numbering.add_num(abstract)
+    num.add_lvlOverride(ilvl=0).add_startOverride(1)
+    return num.numId
+
+
+def _number(paragraph, num_id):
+    numPr = paragraph._p.get_or_add_pPr().get_or_add_numPr()
+    numPr.get_or_add_ilvl().val = 0
+    numPr.get_or_add_numId().val = num_id
 
 
 def read(path):
@@ -56,6 +116,19 @@ def read(path):
     return "\n".join(out).strip() + "\n"
 
 
+NUMERIC = re.compile(r"^[+\-−]?[\d.,\s]*\d[\d.,]*\s*%?$")
+
+
+def _numeric_columns(rows, width):
+    """Columns whose every filled cell is a number ("1,200", "+350", "6.8%")."""
+    cols = []
+    for j in range(width):
+        cells = [plain(r[j]) for r in rows if j < len(r) and plain(r[j]).strip()]
+        if cells and all(NUMERIC.match(c.strip()) for c in cells):
+            cols.append(j)
+    return cols
+
+
 def _runs(paragraph, text):
     for t, bold, italic, code in inline(text):
         run = paragraph.add_run(t)
@@ -67,8 +140,12 @@ def _runs(paragraph, text):
 
 
 def add_markdown(d, markdown):
+    num_id, prev = None, None
     for b in blocks(markdown):
         kind = b[0]
+        if kind == "number" and prev != "number":
+            num_id = _restart_numbering(d)
+        prev = kind
         if kind == "heading":
             p = d.add_heading(level=b[1])
             _runs(p, b[2])
@@ -77,7 +154,9 @@ def add_markdown(d, markdown):
         elif kind == "bullet":
             _runs(d.add_paragraph(style="List Bullet"), b[1])
         elif kind == "number":
-            _runs(d.add_paragraph(style="List Number"), b[1])
+            p = d.add_paragraph(style="List Number")
+            _number(p, num_id)
+            _runs(p, b[1])
         elif kind == "code":
             p = d.add_paragraph()
             run = p.add_run(b[1])
@@ -96,11 +175,21 @@ def add_markdown(d, markdown):
             for i, r in enumerate(rows, start=1):
                 for j in range(len(header)):
                     _runs(t.rows[i].cells[j].paragraphs[0], r[j] if j < len(r) else "")
+            # Numbers line up on the right, header included, as in a ledger.
+            for j in _numeric_columns(rows, len(header)):
+                for row in t.rows:
+                    row.cells[j].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
 
-def create(out, markdown):
+def _first_heading(markdown):
+    return next((plain(b[2]) for b in blocks(markdown) if b[0] == "heading"), None)
+
+
+def create(out, markdown, page="letter", title=None):
     d = docx.Document()
+    _page(d, page)
     add_markdown(d, markdown)
+    _finish(d, title or _first_heading(markdown), new=True)
     d.save(out)
 
 
@@ -140,6 +229,7 @@ def replace(path, out, pairs):
     for find, repl in pairs:
         for p in paragraphs:
             total += _replace_in_paragraph(p, find, repl)
+    _finish(d)
     d.save(out)
     return total
 
@@ -147,6 +237,7 @@ def replace(path, out, pairs):
 def append(path, out, markdown):
     d = docx.Document(path)
     add_markdown(d, markdown)
+    _finish(d)
     d.save(out)
 
 
@@ -160,6 +251,7 @@ def main(argv=None):
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("read"); r.add_argument("file")
     c = sub.add_parser("create"); c.add_argument("out"); c.add_argument("--markdown", required=True)
+    c.add_argument("--page", choices=sorted(PAGES), default="letter"); c.add_argument("--title")
     p = sub.add_parser("replace"); p.add_argument("file"); p.add_argument("out")
     p.add_argument("--find", action="append", required=True); p.add_argument("--replace", action="append", required=True)
     a = sub.add_parser("append"); a.add_argument("file"); a.add_argument("out"); a.add_argument("--markdown", required=True)
@@ -167,7 +259,7 @@ def main(argv=None):
     if args.cmd == "read":
         sys.stdout.write(read(args.file))
     elif args.cmd == "create":
-        create(args.out, _text(args.markdown))
+        create(args.out, _text(args.markdown), args.page, args.title)
         print(f"wrote {args.out}")
     elif args.cmd == "replace":
         if len(args.find) != len(args.replace):

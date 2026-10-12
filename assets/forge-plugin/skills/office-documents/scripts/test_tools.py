@@ -10,6 +10,8 @@ import shutil
 import tempfile
 import unittest
 
+import zipfile
+
 import docx
 import openpyxl
 from openpyxl.styles import Font
@@ -103,12 +105,37 @@ class Excel(Tmp):
     def test_create_from_csv(self):
         data = self.path("data.csv")
         with open(data, "w", encoding="utf-8") as f:
-            f.write("Name,Score\nAda,9.5\nGrace,10\n")
+            f.write("Name,Score,Count\nAda,9.5,1200\nGrace,10,30\n")
         out = self.path("scores.xlsx")
         xlsx_tool.create(out, xlsx_tool._csv(data), "Scores")
-        ws = openpyxl.load_workbook(out)["Scores"]
-        self.assertEqual([c.value for c in ws[2]], ["Ada", 9.5])
+        wb = openpyxl.load_workbook(out)
+        ws = wb["Scores"]
+        self.assertEqual([c.value for c in ws[2]], ["Ada", 9.5, 1200])
         self.assertTrue(ws["A1"].font.bold)
+        self.assertEqual({ws[r].font.name for r in ("A1", "A2", "B3")}, {"Calibri"}, "every font is named, so no app substitutes one")
+        self.assertEqual((ws["B2"].number_format, ws["C2"].number_format), ("#,##0.00", "#,##0"))
+        self.assertEqual(ws.freeze_panes, "A2", "the header row stays in view")
+        self.assertEqual((wb.properties.creator, wb.properties.lastModifiedBy, wb.properties.title), ("Forge", "Forge", "Scores"))
+
+    def test_edits_stamp_the_properties(self):
+        src = self.make_input()
+        out = self.path("stamped.xlsx")
+        xlsx_tool.set_cells(src, out, ["Budget!C3=700"])
+        props = openpyxl.load_workbook(out).properties
+        self.assertEqual(props.lastModifiedBy, "Forge")
+        self.assertEqual(props.creator, "openpyxl", "an edit doesn't claim to have made the file")
+
+    @unittest.skipUnless(HAS_OFFICE, "LibreOffice is not installed")
+    def test_recalc_keeps_who_made_the_file(self):
+        data = self.path("d.csv")
+        with open(data, "w", encoding="utf-8") as f:
+            f.write("Item,Value\nA,1\n")
+        made = self.path("made.xlsx")
+        xlsx_tool.create(made, xlsx_tool._csv(data), "Data")
+        done = self.path("done.xlsx")
+        xlsx_tool.recalc(made, done)
+        self.assertEqual(openpyxl.load_workbook(done).properties.creator, "Forge")
+        self.assertEqual(openpyxl.load_workbook(done)["Data"]["A1"].font.name, "Calibri", "LibreOffice keeps the named font")
 
 
 class Word(Tmp):
@@ -124,6 +151,7 @@ class Word(Tmp):
         self.assertIn("| Area | Status |", text)
         bold = [r for p in docx.Document(src).paragraphs for r in p.runs if r.bold]
         self.assertEqual(bold[0].text, "diagrams")
+        self.assertEqual(docx.Document(src).tables[0].rows[0].cells[1].paragraphs[0].alignment, None, "a column of words stays left")
         total = docx.Document(src).tables[0].rows[2].cells[0].paragraphs[0].runs
         self.assertEqual([(r.text, r.bold) for r in total], [("Total", True)], "inline Markdown in a table cell is formatting, not asterisks")
         out = self.path("notes-2.docx")
@@ -137,6 +165,30 @@ class Word(Tmp):
         out2 = self.path("notes-3.docx")
         docx_tool.append(out, out2, "## Next\n\n1. Browser use\n")
         self.assertIn("## Next", docx_tool.read(out2))
+
+    def test_new_documents_are_schema_clean_and_titled(self):
+        out = self.path("memo.docx")
+        docx_tool.create(out, "# Q3 memo\n\nText.\n\n1. One\n2. Two\n\nBetween.\n\n1. Again\n", page="a4")
+        with zipfile.ZipFile(out) as z:
+            settings = z.read("word/settings.xml").decode()
+        self.assertRegex(settings, r'<w:zoom [^>]*w:percent="100"', "the schema requires w:percent on w:zoom")
+        d = docx.Document(out)
+        cp = d.core_properties
+        self.assertEqual((cp.title, cp.author, cp.last_modified_by), ("Q3 memo", "Forge", "Forge"))
+        self.assertGreaterEqual(cp.created.year, 2026, "not python-docx's 2013 template date")
+        self.assertEqual((round(d.sections[0].page_width.mm), round(d.sections[0].page_height.mm)), (210, 297))
+        ids = [p._p.pPr.numPr.numId.val for p in d.paragraphs if p.style.name == "List Number"]
+        self.assertEqual(len(ids), 3)
+        self.assertEqual(ids[0], ids[1], "one list keeps counting")
+        self.assertNotEqual(ids[1], ids[2], "the second list starts again at 1")
+
+    def test_numbers_in_tables_align_right(self):
+        out = self.path("t.docx")
+        docx_tool.create(out, "| Item | Q3 | Change |\n|---|---|---|\n| Servers | 1,350 | +150 |\n| **Total** | **5,500** | **+6.8%** |\n")
+        t = docx.Document(out).tables[0]
+        right = docx_tool.WD_ALIGN_PARAGRAPH.RIGHT
+        self.assertEqual([t.rows[r].cells[c].paragraphs[0].alignment for r in range(3) for c in (1, 2)], [right] * 6)
+        self.assertIsNone(t.rows[1].cells[0].paragraphs[0].alignment)
 
     def test_replace_across_runs(self):
         d = docx.Document()
@@ -163,6 +215,13 @@ class Slides(Tmp):
         self.assertIn("## Slide 1: Forge 1.0", text)
         self.assertIn("- A desktop app for Claude Code", text)
         self.assertIn("  - drawn natively", text)
+        self.assertEqual((prs.slide_width, prs.slide_height), (12192000, 6858000), "16:9, as PowerPoint makes decks")
+        for slide in prs.slides:
+            for shape in slide.placeholders:
+                self.assertLessEqual(shape.left + shape.width, prs.slide_width, "nothing runs off the wide slide")
+                self.assertGreater(shape.width, prs.slide_width * 0.6, "placeholders span the wide slide")
+        cp = prs.core_properties
+        self.assertEqual((cp.title, cp.author, cp.last_modified_by), ("Forge 1.0", "Forge", "Forge"))
         out2 = self.path("deck-2.pptx")
         self.assertEqual(pptx_tool.replace(out, out2, [("Browser use", "Browser use, built in")]), 1)
         self.assertIn("Browser use, built in", pptx_tool.read(out2))
@@ -180,6 +239,9 @@ class Pdf(Tmp):
         pdf_tool.create(a, "# Report\n\nThe **gateway** adds the key.\n\n- One\n- Two\n\n| K | V |\n|---|---|\n| x | 1 |\n", "Report")
         pdf_tool.create(b, "# Appendix\n\nMore.\n")
         self.assertIn("Report", pdf_tool.read(a))
+        meta = PdfReader(a).metadata
+        self.assertEqual((meta.title, meta.author), ("Report", "Forge"))
+        self.assertEqual(PdfReader(b).metadata.title, "Appendix", "the title defaults to the first heading")
         self.assertIn("gateway adds the key", pdf_tool.read(a))
         merged = self.path("merged.pdf")
         self.assertEqual(pdf_tool.merge(merged, [a, b]), 2)
@@ -207,6 +269,8 @@ class Pdf(Tmp):
         pdf_tool.convert(src, out)
         self.assertIn("The budget changed.", pdf_tool.read(out))
         self.assertEqual(len(PdfReader(out).pages), 1)
+        meta = PdfReader(out).metadata
+        self.assertEqual((meta.title, meta.author), ("Memo", "Forge"), "the Word file's properties carry into the PDF")
 
 
 if __name__ == "__main__":

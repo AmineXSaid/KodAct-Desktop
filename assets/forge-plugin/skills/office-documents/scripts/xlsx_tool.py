@@ -10,6 +10,8 @@ A value starting with "=" is a formula ("C3==B3*2" sets C3 to =B3*2).
 Edits keep every sheet, style, number format, width and formula they don't
 touch. openpyxl stores formulas without computing them: run `recalc`
 (LibreOffice, headless) so the saved file carries computed values too.
+Fonts are always named (a nameless one becomes whatever font the opening
+app picks), and every file carries real properties: author Forge, dates.
 """
 
 import argparse
@@ -22,8 +24,37 @@ import subprocess
 import sys
 import tempfile
 
+import zipfile
+from datetime import datetime, timezone
+
 import openpyxl
+from openpyxl.styles import Border, Font, Side
 from openpyxl.utils import get_column_letter
+
+AUTHOR = "Forge"
+FONT = "Calibri"
+
+
+def _now():
+    return datetime.now(timezone.utc).replace(microsecond=0, tzinfo=None)
+
+
+def _finish(wb, title=None, new=False):
+    p = wb.properties
+    if new:
+        p.creator = AUTHOR
+        p.created = _now()
+        p.title = title
+    p.lastModifiedBy = AUTHOR
+    p.modified = _now()
+
+
+def _number_format(values):
+    """A column of numbers gets thousands separators; decimals if it has any."""
+    nums = [v for v in values if isinstance(v, (int, float)) and not isinstance(v, bool)]
+    if not nums or len(nums) < len([v for v in values if v not in (None, "")]):
+        return None
+    return "#,##0" if all(float(v).is_integer() for v in nums) else "#,##0.00"
 
 
 def _value(text):
@@ -70,6 +101,7 @@ def set_cells(path, out, assignments):
             raise SystemExit(f"not a cell assignment: {a!r} (use Sheet!B3=value)")
         ws = wb[m.group("sheet")] if m.group("sheet") else wb.active
         ws[m.group("ref").upper()] = _value(m.group("value"))
+    _finish(wb)
     wb.save(out)
     return len(assignments)
 
@@ -79,6 +111,7 @@ def append_rows(path, out, rows, sheet=None):
     ws = wb[sheet] if sheet else wb.active
     for row in rows:
         ws.append([_value(c) for c in row])
+    _finish(wb)
     wb.save(out)
     return len(rows)
 
@@ -88,14 +121,23 @@ def create(out, rows, sheet=None):
     ws = wb.active
     if sheet:
         ws.title = sheet
+    body, head = Font(name=FONT, size=11), Font(name=FONT, size=11, bold=True)
     for i, row in enumerate(rows):
         ws.append([_value(c) for c in row])
-        if i == 0:
-            for cell in ws[1]:
-                cell.font = openpyxl.styles.Font(bold=True)
+        for cell in ws[ws.max_row]:
+            cell.font = head if i == 0 else body
+    if rows:
+        for cell in ws[1]:
+            cell.border = Border(bottom=Side(style="thin", color="FF808080"))
+        ws.freeze_panes = "A2"
     for c in range(1, ws.max_column + 1):
+        fmt = _number_format([ws.cell(r, c).value for r in range(2, ws.max_row + 1)])
+        if fmt:
+            for r in range(2, ws.max_row + 1):
+                ws.cell(r, c).number_format = fmt
         width = max(len(str(ws.cell(r, c).value or "")) for r in range(1, ws.max_row + 1))
         ws.column_dimensions[get_column_letter(c)].width = min(max(10, width + 2), 60)
+    _finish(wb, sheet, new=True)
     wb.save(out)
 
 
@@ -110,7 +152,18 @@ def recalc(path, out):
         profile = "file://" + os.path.join(tmp, "profile").replace(os.sep, "/")
         subprocess.run([soffice, f"-env:UserInstallation={profile}", "--headless", "--calc", "--convert-to", "xlsx:Calc MS Excel 2007 XML", "--outdir", os.path.join(tmp, "out"), src],
                        check=True, capture_output=True, timeout=120)
-        shutil.copyfile(os.path.join(tmp, "out", "in.xlsx"), out)
+        _keep_properties(src, os.path.join(tmp, "out", "in.xlsx"), out)
+
+
+def _keep_properties(original, recalculated, out):
+    """LibreOffice rewrites docProps (it names itself as the application and
+    drops the author); put the original's back, so a recalculation doesn't
+    change who made the file."""
+    with zipfile.ZipFile(original) as z:
+        keep = {n: z.read(n) for n in ("docProps/core.xml", "docProps/app.xml") if n in z.namelist()}
+    with zipfile.ZipFile(recalculated) as src, zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as dst:
+        for item in src.infolist():
+            dst.writestr(item, keep.get(item.filename, src.read(item.filename)))
 
 
 def _csv(path):

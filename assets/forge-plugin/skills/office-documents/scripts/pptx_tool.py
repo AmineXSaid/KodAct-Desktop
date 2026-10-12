@@ -7,13 +7,53 @@
 An outline is Markdown: each "# Title" starts a slide (the first is the
 title slide, with the paragraph under it as its subtitle); "- " lines are
 its bullets, indented two spaces per level.
+
+New decks are 16:9 (13.33 x 7.5 in), with the template's placeholders laid
+out for that width, body text that shrinks to fit its box, and real
+properties (title, author Forge, dates) instead of python-pptx's defaults.
 """
 
 import argparse
 import re
 import sys
+from datetime import datetime, timezone
 
 from pptx import Presentation
+from pptx.enum.text import MSO_AUTO_SIZE
+from pptx.util import Emu
+
+AUTHOR = "Forge"
+# 16:9, as PowerPoint makes new decks.
+WIDE = (Emu(12192000), Emu(6858000))
+
+
+def _now():
+    return datetime.now(timezone.utc).replace(microsecond=0, tzinfo=None)
+
+
+def _widen(prs):
+    """Make the deck 16:9. python-pptx's template is 4:3 and its master and
+    layouts place their placeholders for that width, so stretch them across."""
+    k = WIDE[0] / prs.slide_width
+    prs.slide_width, prs.slide_height = WIDE
+    for owner in [prs.slide_master, *prs.slide_layouts]:
+        for shape in owner.shapes:
+            # Only shapes placed by their own xfrm: the rest inherit from the
+            # master, already stretched.
+            if shape._element.xpath("./p:spPr/a:xfrm") and shape.width:
+                shape.left, shape.width = Emu(round(shape.left * k)), Emu(round(shape.width * k))
+
+
+def _finish(prs, title=None, new=False):
+    cp = prs.core_properties
+    if new:
+        cp.author = AUTHOR
+        cp.created = _now()
+        cp.revision = 1
+        cp.title = title or ""
+        cp.subject = cp.keywords = cp.comments = cp.category = ""
+    cp.last_modified_by = AUTHOR
+    cp.modified = _now()
 
 
 def read(path):
@@ -38,6 +78,7 @@ def read(path):
 
 def create(out, outline):
     prs = Presentation()
+    _widen(prs)
     slides, current = [], None
     for line in outline.splitlines():
         if m := re.match(r"^#\s+(.*)$", line.strip()):
@@ -58,10 +99,12 @@ def create(out, outline):
         slide.shapes.title.text = s["title"]
         body = slide.placeholders[1].text_frame
         body.clear()
+        body.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
         for j, (level, text) in enumerate(s["bullets"]):
             p = body.paragraphs[0] if j == 0 else body.add_paragraph()
             p.text = text
             p.level = min(level, 4)
+    _finish(prs, slides[0]["title"] if slides else None, new=True)
     prs.save(out)
     return len(slides)
 
@@ -79,6 +122,7 @@ def replace(path, out, pairs):
                         if find in run.text:
                             total += run.text.count(find)
                             run.text = run.text.replace(find, repl)
+    _finish(prs)
     prs.save(out)
     return total
 

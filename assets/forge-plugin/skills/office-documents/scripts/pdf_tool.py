@@ -9,6 +9,7 @@
     python pdf_tool.py convert FILE.docx|.xlsx|.pptx OUT.pdf
 
 `convert` exports an Office file through LibreOffice (headless).
+Every PDF written has a Title and an Author (Forge, unless the source says).
 """
 
 import argparse
@@ -26,7 +27,9 @@ from reportlab.lib.units import mm
 from reportlab.platypus import ListFlowable, ListItem, Paragraph, Preformatted, SimpleDocTemplate, Spacer, Table, TableStyle
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # mdlite, beside this file
-from mdlite import blocks, inline
+from mdlite import blocks, inline, plain
+
+AUTHOR = "Forge"
 
 
 def read(path):
@@ -88,7 +91,10 @@ def create(out, markdown, title=None):
             story.append(t)
             story.append(Spacer(1, 6))
     flush_lists()
-    doc = SimpleDocTemplate(out, pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm, topMargin=18 * mm, bottomMargin=18 * mm, title=title or "")
+    if not title:
+        title = next((plain(b[2]) for b in blocks(markdown) if b[0] == "heading"), "")
+    doc = SimpleDocTemplate(out, pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm, topMargin=18 * mm, bottomMargin=18 * mm,
+                            title=title, author=AUTHOR, creator=AUTHOR)
     doc.build(story)
 
 
@@ -145,7 +151,26 @@ def convert(path, out):
         profile = "file://" + os.path.join(tmp, "profile").replace(os.sep, "/")
         subprocess.run([soffice, f"-env:UserInstallation={profile}", "--headless", "--convert-to", "pdf", "--outdir", tmp, path], check=True, capture_output=True, timeout=180)
         made = os.path.join(tmp, os.path.splitext(os.path.basename(path))[0] + ".pdf")
-        shutil.copyfile(made, out)
+        _ensure_metadata(made, out, os.path.splitext(os.path.basename(path))[0])
+
+
+def _ensure_metadata(path, out, fallback_title):
+    """LibreOffice copies Title and Author from the source's properties; fill
+    in what it left empty, so the PDF never shows "Untitled"."""
+    r = PdfReader(path)
+    meta = r.metadata or {}
+    missing = {}
+    if not (meta.get("/Title") or "").strip():
+        missing["/Title"] = fallback_title
+    if not (meta.get("/Author") or "").strip():
+        missing["/Author"] = AUTHOR
+    if not missing:
+        shutil.copyfile(path, out)
+        return
+    w = PdfWriter(clone_from=r)
+    w.add_metadata({**{k: v for k, v in meta.items()}, **missing})
+    with open(out, "wb") as f:
+        w.write(f)
 
 
 def _text(path):
