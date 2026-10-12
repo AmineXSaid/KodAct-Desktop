@@ -103,6 +103,8 @@ impl CommandPalette {
             act("Projects", "icons/folder-open.svg", Some(shortcut("Shift P")), Box::new(OpenProjects)),
             act("Rules and memory", "icons/list-todo.svg", Some(shortcut("Shift R")), Box::new(OpenRules)),
             act("Open settings", "icons/settings.svg", Some(shortcut(",")), Box::new(OpenSettings)),
+            act("Set up an endpoint", "icons/route.svg", None, Box::new(EndpointGuide)),
+            act("Open endpoints.json", "icons/file-pen.svg", None, Box::new(OpenEndpointsFile)),
             act("Change your name", "icons/pencil.svg", None, Box::new(ChangeName)),
             act("Change your avatar", "icons/sparkles.svg", None, Box::new(ChangeAvatar)),
             act("Quit", "icons/x.svg", Some(shortcut("Q")), Box::new(Quit)),

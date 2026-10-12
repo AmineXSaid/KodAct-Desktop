@@ -110,6 +110,41 @@ impl Effort {
     }
 }
 
+/// The setup guide (`docs/endpoints.md`), shown in the side panel.
+pub const GUIDE: &str = include_str!("../docs/endpoints.md");
+
+/// What "Open endpoints.json" writes when there is no file yet: one local
+/// profile that needs no key, to edit from.
+pub const STARTER: &str = r#"{
+  "selected": "ollama",
+  "syncIntervalMinutes": 5,
+  "profiles": [
+    {
+      "name": "ollama",
+      "baseUrl": "http://127.0.0.1:11434",
+      "wire": "openai",
+      "model": "qwen3-coder:30b",
+      "displayName": "Qwen3 Coder"
+    }
+  ]
+}
+"#;
+
+/// The file, created from `STARTER` if it doesn't exist (never replaced).
+/// Blocking: call it off the UI thread.
+pub fn ensure_file() -> std::io::Result<PathBuf> {
+    let path = path().ok_or_else(|| std::io::Error::other("no config folder"))?;
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+        Ok(mut f) => std::io::Write::write_all(&mut f, STARTER.as_bytes())?,
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(e) => return Err(e),
+    }
+    Ok(path)
+}
+
 pub fn path() -> Option<PathBuf> {
     crate::profile::dir().map(|d| d.join("endpoints.json"))
 }
@@ -318,5 +353,25 @@ mod tests {
         p.capabilities = Capabilities { context_window: None, effort: true, effort_levels: Some(vec![Effort::Max, Effort::Low, Effort::Xhigh]), fast: true };
         assert_eq!(p.effort_levels(), [Effort::Low, Effort::Xhigh, Effort::Max]);
         assert_eq!(p.chips(), ["Max", "Ultracode", "Fast"]);
+    }
+
+    #[test]
+    fn the_starter_and_the_guide_examples_parse() {
+        let starter = parse(STARTER).unwrap();
+        assert_eq!(starter.profiles.len(), 1);
+        assert_eq!(starter.active().unwrap().chat_url(), "http://127.0.0.1:11434/v1/chat/completions");
+        // Every JSON block in the guide that is a whole file or one profile reads.
+        let blocks: Vec<&str> = GUIDE.split("```json").skip(1).filter_map(|b| b.split("```").next()).collect();
+        assert!(blocks.len() >= 4, "{}", blocks.len());
+        for b in blocks {
+            let whole = parse(b).ok().filter(|e| !e.profiles.is_empty());
+            let one = serde_json::from_str::<Profile>(b).ok();
+            assert!(whole.is_some() || one.is_some(), "a guide example does not parse:\n{b}");
+            if let Some(p) = one {
+                if let Auth::Bearer { token } = &p.auth {
+                    assert!(token.starts_with("${env:"), "the guide must never show a key in the file");
+                }
+            }
+        }
     }
 }

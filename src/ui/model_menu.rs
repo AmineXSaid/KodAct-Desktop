@@ -136,13 +136,14 @@ pub fn render(t: &Theme, state: &Entity<AppState>, s: &AppState, query: &str, ac
             .rounded(px(4.))
             .cursor_pointer()
             .hover(move |d| d.bg(active_bg))
-            .tooltip(move |window, cx| gpui::component::tooltip::Tooltip::new(if checking { "Checking which models answer…" } else { "Check which models answer" }).build(window, cx))
+            .tooltip(move |window, cx| gpui::component::tooltip::Tooltip::new(if checking { "Checking which models answer…" } else { "Read endpoints.json again and check every model" }).build(window, cx))
             .child(if checking {
                 spin.with_animation("models-refresh-spin", Animation::new(Duration::from_millis(900)).repeat(), |svg, d| svg.with_transformation(Transformation::rotate(gpui::percentage(d)))).into_any_element()
             } else {
                 spin.into_any_element()
             })
-            .on_click(move |_, _, cx| st.update(cx, |s, cx| s.sync_all(cx)))
+            // Refresh reads endpoints.json again, so an edit shows at once.
+            .on_click(move |_, _, cx| st.update(cx, |s, cx| s.load_endpoints(true, cx)))
     };
 
     let heading = div()
@@ -154,7 +155,7 @@ pub fn render(t: &Theme, state: &Entity<AppState>, s: &AppState, query: &str, ac
         .text_size(t.text.caption)
         .text_color(t.colors.text_subtle)
         .child(if none {
-            "No models: add an endpoint in endpoints.json".to_string()
+            "No models yet: set up an endpoint below".to_string()
         } else if rows.is_empty() && checking {
             "Checking which models answer…".into()
         } else if rows.is_empty() {
@@ -293,7 +294,39 @@ pub fn render(t: &Theme, state: &Entity<AppState>, s: &AppState, query: &str, ac
         .child(if total >= FILTER_THRESHOLD { search } else { div().h(px(4.)).into_any_element() })
         .child(div().id("models-list").max_h(px(300.)).overflow_y_scroll().child(list))
         .children(effort)
+        .child(setup_links(t))
         .with_animation("models-in", Animation::new(Duration::from_millis(170)).with_easing(gpui::ease_out_quint()), |d, k| d.opacity(k).mb(px(8. - 6. * (1. - k))))
+}
+
+/// Under the list: the setup guide and the file, one click each.
+fn setup_links(t: &Theme) -> impl IntoElement {
+    let hover = t.colors.hover;
+    let link = |id: &'static str, path: &'static str, label: &'static str| {
+        div()
+            .id(id)
+            .flex()
+            .items_center()
+            .gap(px(6.))
+            .h(t.size.control)
+            .px(px(8.))
+            .rounded(t.radius.button)
+            .cursor_pointer()
+            .text_size(t.text.caption)
+            .text_color(t.colors.text_muted)
+            .hover(move |st| st.bg(hover))
+            .child(icon(path, t.size.icon_sm, t.colors.text_muted))
+            .child(label)
+    };
+    div()
+        .flex()
+        .items_center()
+        .gap(px(2.))
+        .px(px(4.))
+        .py(px(4.))
+        .border_t_1()
+        .border_color(t.colors.border)
+        .child(link("models-guide", "icons/route.svg", "Set up an endpoint").on_click(|_, window, cx| window.dispatch_action(Box::new(super::EndpointGuide), cx)))
+        .child(link("models-file", "icons/file-pen.svg", "Open endpoints.json").on_click(|_, window, cx| window.dispatch_action(Box::new(super::OpenEndpointsFile), cx)))
 }
 
 /// A 76×18 track with a notch per level and a thumb on the current one

@@ -42,6 +42,8 @@ gpui::actions!(
         ChangeAvatar,
         OpenRules,
         OpenProjects,
+        EndpointGuide,
+        OpenEndpointsFile,
         Quit,
     ]
 );

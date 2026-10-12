@@ -395,7 +395,7 @@ impl AppState {
                 cx.notify();
             });
         }));
-        self.load_endpoints(cx);
+        self.load_endpoints(false, cx);
         // Someone who never chose keeps the avatar they were given.
         if !self.avatar_saved && !self.onboarding {
             self.save_avatar(cx);
@@ -420,7 +420,9 @@ impl AppState {
 
     /// Read the profiles and their saved checks off the UI thread, then
     /// check whatever is due and keep checking on the interval.
-    pub fn load_endpoints(&mut self, cx: &mut Context<Self>) {
+    /// Read endpoints.json (off the UI thread); `check_all` then checks every
+    /// model, as refresh does after you edit the file.
+    pub fn load_endpoints(&mut self, check_all: bool, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
             let (endpoints, health) = cx
                 .background_spawn(async move {
@@ -433,7 +435,11 @@ impl AppState {
                 let minutes = endpoints.sync_interval_minutes;
                 s.endpoints = Some(endpoints);
                 s.health = health;
-                s.sync_due(cx);
+                if check_all {
+                    s.sync_all(cx);
+                } else {
+                    s.sync_due(cx);
+                }
                 if minutes > 0. {
                     let every = Duration::from_secs_f64(minutes * 60.);
                     s.sync_timer = Some(cx.spawn(async move |this, cx| loop {
@@ -770,6 +776,36 @@ impl AppState {
             });
         }));
         cx.notify();
+    }
+
+    /// The endpoint setup guide, in the side panel.
+    pub fn show_endpoint_guide(&mut self, cx: &mut Context<Self>) {
+        self.picker_open = false;
+        self.palette_open = false;
+        if !matches!(self.screen, Screen::Chat) {
+            self.screen = Screen::Chat;
+        }
+        self.doc = Some(FileRef { name: "endpoint-setup.md".into(), path: None, content: crate::endpoints::GUIDE.into() });
+        cx.notify();
+    }
+
+    /// Open endpoints.json in your editor, writing a starter file first if
+    /// there is none.
+    pub fn open_endpoints_file(&mut self, cx: &mut Context<Self>) {
+        self.picker_open = false;
+        self.palette_open = false;
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let file = cx.background_spawn(async { crate::endpoints::ensure_file() }).await;
+            let _ = this.update(cx, |s, cx| match file {
+                Ok(path) => {
+                    cx.open_with_system(&path);
+                    s.show_toast("Opened endpoints.json. Save it, then press refresh in the model menu.", cx);
+                }
+                Err(e) => s.show_toast(format!("Could not open endpoints.json: {e}"), cx),
+            });
+        })
+        .detach();
     }
 
     /// Open a file in the side panel (the same file again closes it).

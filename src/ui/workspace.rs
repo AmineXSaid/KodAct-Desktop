@@ -196,8 +196,9 @@ impl Workspace {
                             .text_size(t.size.greeting)
                             .text_color(t.colors.text_strong)
                             // Large enough that the cube's block edges read clearly.
-                            .child(super::cube_image(48., window))
-                            .child(line),
+                            .child(div().flex_none().child(super::cube_image(48., window)))
+                            // In a narrow session (a panel open beside it) the line wraps.
+                            .child(div().min_w_0().line_height(gpui::relative(1.15)).child(line)),
                     )
                     .child(self.composer.clone()),
             )
@@ -291,12 +292,20 @@ impl Render for Workspace {
         let empty = s.chat().is_none_or(|c| c.messages.is_empty());
 
         let main = div().flex_1().min_w_0().flex().flex_col().bg(t.extra.stage);
+        // A file opened from a reply, or the setup guide, sits beside the session.
+        let pane = {
+            let s = self.state.read(cx);
+            let main_width = f32::from(window.viewport_size().width) - if sidebar_open { f32::from(t.size.sidebar) } else { 0. };
+            let diagram = s.doc.as_ref().is_some_and(|f| f.is_diagram());
+            let fit = super::doc_pane::Fit { width: super::doc_pane::width(main_width, diagram, &t), scale: window.scale_factor(), fit: s.doc_fit };
+            s.doc.as_ref().map(|f| super::doc_pane::render(f, self.state.clone(), s.copied.clone(), fit, &t))
+        };
         let main = if screen == Screen::Rules {
             main.child(self.rules.clone())
         } else if matches!(screen, Screen::Projects | Screen::Project(_)) {
             main.child(self.projects.clone())
         } else if empty {
-            main.child(self.welcome(window, cx))
+            main.child(div().flex_1().min_h_0().flex().child(div().flex_1().min_w_0().overflow_hidden().flex().flex_col().child(self.welcome(window, cx))).children(pane))
         } else if loading {
             main.child(div().flex_1().min_h_0().child(super::skeleton::transcript(&t))).child(
                 div()
@@ -330,12 +339,6 @@ impl Render for Workspace {
                         .pb(t.space.lg)
                         .child(div().w_full().max_w(t.size.column).child(self.composer.clone())),
                 );
-            // A file opened from a reply sits beside the conversation.
-            let s = self.state.read(cx);
-            let main_width = f32::from(window.viewport_size().width) - if sidebar_open { f32::from(t.size.sidebar) } else { 0. };
-            let diagram = s.doc.as_ref().is_some_and(|f| f.is_diagram());
-            let fit = super::doc_pane::Fit { width: super::doc_pane::width(main_width, diagram, &t), scale: window.scale_factor(), fit: s.doc_fit };
-            let pane = s.doc.as_ref().map(|f| super::doc_pane::render(f, self.state.clone(), s.copied.clone(), fit, &t));
             main.child(div().flex_1().min_h_0().flex().child(conversation).children(pane))
         };
 
@@ -454,6 +457,8 @@ impl Render for Workspace {
                 });
                 this.rules.update(cx, |r, cx| r.reload(cx));
             }))
+            .on_action(cx.listener(|this, _: &EndpointGuide, _, cx| this.state.update(cx, |s, cx| s.show_endpoint_guide(cx))))
+            .on_action(cx.listener(|this, _: &OpenEndpointsFile, _, cx| this.state.update(cx, |s, cx| s.open_endpoints_file(cx))))
             .on_action(cx.listener(|_, _: &Quit, _, cx| cx.quit()))
             .child(self.title_bar(cx))
             .when(onboarding, |d| d.child(self.onboarding.clone()))
