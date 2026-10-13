@@ -345,6 +345,85 @@ pub fn parse_btw(text: &str) -> Option<String> {
     Some(rest.trim().to_string())
 }
 
+// ---------------------------------------------------------------- find, ratings
+
+/// What the Stop notice says; its row offers Continue.
+pub const INTERRUPTED: &str = "Interrupted. Tell Forge what to do instead.";
+
+/// A reply's rating (the thumbs under a turn). Kept in memory for now:
+/// sending it is a stub (`stubs::FEEDBACK_UPLOAD`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Rating {
+    Good,
+    Bad,
+}
+
+/// Find in the conversation (Ctrl/⌘F): the query, the messages that hold
+/// it, and the one shown. `seq` changes on every move, so the list scrolls.
+#[derive(Clone, Debug, Default)]
+pub struct Find {
+    pub query: String,
+    pub hits: Vec<usize>,
+    pub at: usize,
+    pub seq: u64,
+}
+
+impl Find {
+    /// The message the find is on.
+    pub fn current(&self) -> Option<usize> {
+        self.hits.get(self.at).copied()
+    }
+}
+
+/// Whether a message holds `needle` (already lower-case): your text, the
+/// reply's prose and thinking, tool targets and output, notices.
+pub fn message_matches(m: &Message, needle: &str) -> bool {
+    let has = |t: &str| t.to_lowercase().contains(needle);
+    match m {
+        Message::User { text, .. } => has(text),
+        Message::Assistant { blocks } => blocks.iter().any(|b| match b {
+            Block::Text(t) => has(t),
+            Block::Thinking { text, .. } => has(text),
+            Block::Tool(c) => has(&c.target) || has(&c.output) || c.note.as_ref().is_some_and(|n| has(n)) || c.diff.iter().any(|l| has(&l.text)),
+            Block::Permission { title, detail, .. } => has(title) || has(detail),
+            Block::File(f) => has(&f.name),
+        }),
+        Message::TurnEnd { .. } => false,
+        Message::Notice { text, .. } => has(text),
+    }
+}
+
+/// The messages of `messages` that match `query` (case-insensitive).
+pub fn find_hits(messages: &[Message], query: &str) -> Vec<usize> {
+    let needle = query.trim().to_lowercase();
+    if needle.is_empty() {
+        return vec![];
+    }
+    messages.iter().enumerate().filter(|(_, m)| message_matches(m, &needle)).map(|(i, _)| i).collect()
+}
+
+/// The prose of the reply that ends at `end` (a turn end or the last
+/// message): every text block after your message before it.
+pub fn turn_text(messages: &[Message], end: usize) -> String {
+    let end = end.min(messages.len().saturating_sub(1));
+    let start = messages[..=end].iter().rposition(|m| matches!(m, Message::User { .. })).map_or(0, |u| u + 1);
+    let mut parts = vec![];
+    for m in &messages[start..=end] {
+        if let Message::Assistant { blocks } = m {
+            parts.extend(blocks.iter().filter_map(|b| if let Block::Text(t) = b { Some(t.trim().to_string()) } else { None }));
+        }
+    }
+    parts.join("\n\n")
+}
+
+/// Your message that a reply ending at `end` answers.
+pub fn turn_question(messages: &[Message], end: usize) -> Option<usize> {
+    messages.get(..=end.min(messages.len().saturating_sub(1)))?.iter().rposition(|m| matches!(m, Message::User { .. }))
+}
+
+/// What Continue sends: Forge picks up where Stop cut it off.
+const CONTINUE_PROMPT: &str = "Continue from where you stopped.";
+
 /// `FORGE_DEMO=1`: replies are the scripted demo instead of ForgeCLI.
 fn demo_mode() -> bool {
     std::env::var("FORGE_DEMO").is_ok_and(|v| v == "1")
@@ -455,6 +534,18 @@ pub struct AppState {
     pub side_focus: bool,
     /// Text for the composer to take (an edited message).
     pub draft: Option<String>,
+    /// Ratings given to replies, by chat and the turn's end message.
+    pub ratings: std::collections::HashMap<(usize, usize), Rating>,
+    /// Find in the conversation, while its bar is open.
+    pub find: Option<Find>,
+    /// The chat whose title is being edited in the sidebar.
+    pub renaming: Option<usize>,
+    /// The chat whose menu (⋯ or right-click) is open.
+    pub chat_menu: Option<usize>,
+    /// The chat waiting on "Delete?" to be confirmed.
+    pub confirm_delete: Option<usize>,
+    /// The keyboard shortcuts sheet is open.
+    pub shortcuts_open: bool,
     /// Chats are still loading: screens show placeholders.
     pub loading: bool,
     load: Option<Task<()>>,
@@ -531,6 +622,12 @@ impl AppState {
             side: Default::default(),
             side_focus: false,
             draft: None,
+            ratings: Default::default(),
+            find: None,
+            renaming: None,
+            chat_menu: None,
+            confirm_delete: None,
+            shortcuts_open: false,
             loading: true,
             load: None,
             next_id,
@@ -787,6 +884,7 @@ impl AppState {
         self.screen = Screen::Chat;
         if self.current != Some(id) {
             self.doc = None;
+            self.find = None;
         }
         self.current = Some(id);
         self.sync_mode();
@@ -800,6 +898,7 @@ impl AppState {
         self.screen = Screen::Chat;
         self.current = None;
         self.doc = None;
+        self.find = None;
         self.greeting_seed = self.greeting_seed.wrapping_add(1);
         self.sync_mode();
         cx.notify();
@@ -925,6 +1024,8 @@ impl AppState {
         self.stale_turns.remove(&chat);
         self.turn_started.remove(&chat);
         self.tool_rows.retain(|(c, _), _| *c != chat);
+        // Ratings of the replies being cut go with them.
+        self.ratings.retain(|(c, m), _| *c != chat || *m < msg);
         let c = self.chat_mut(chat)?;
         let Some(Message::User { text, .. }) = c.messages.get(msg) else { return None };
         let text = text.to_string();
@@ -1075,6 +1176,255 @@ impl AppState {
         .detach();
     }
 
+    /// A control with nothing behind it yet says so, in the registry's words.
+    pub fn stub(&mut self, id: &str, cx: &mut Context<Self>) {
+        self.show_toast(crate::stubs::toast(id), cx);
+    }
+
+    // ------------------------------------------------------------ replies: copy, regenerate, continue, rate
+
+    /// Copy the prose of the reply that ends at `end`.
+    pub fn copy_turn(&mut self, chat: usize, end: usize, cx: &mut Context<Self>) {
+        let Some(c) = self.chats.iter().find(|c| c.id == chat) else { return };
+        let text = turn_text(&c.messages, end);
+        if text.is_empty() {
+            return self.show_toast("This reply has no text to copy.", cx);
+        }
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+        self.mark_copied(format!("turn-{chat}-{end}").into(), cx);
+    }
+
+    /// Answer the question behind the reply ending at `end` again.
+    pub fn regenerate(&mut self, chat: usize, end: usize, cx: &mut Context<Self>) {
+        let Some(q) = self.chats.iter().find(|c| c.id == chat).and_then(|c| turn_question(&c.messages, end)) else { return };
+        self.retry(chat, q, cx);
+    }
+
+    /// The newest reply of the chat showing, answered again.
+    pub fn regenerate_last(&mut self, cx: &mut Context<Self>) {
+        let Some(c) = self.chat() else { return };
+        let (id, end) = (c.id, c.messages.len().saturating_sub(1));
+        if c.messages.is_empty() || self.busy() {
+            return;
+        }
+        self.regenerate(id, end, cx);
+    }
+
+    /// Pick a stopped reply back up. The chat's ForgeCLI process still holds
+    /// the conversation after Stop, so Forge is asked to go on; when the
+    /// process is gone the conversation can't be resumed (a stub until P2).
+    pub fn continue_reply(&mut self, cx: &mut Context<Self>) {
+        let Some(id) = self.current else { return };
+        if self.busy() {
+            return;
+        }
+        if demo_mode() || self.sessions.contains_key(&id) {
+            self.send(CONTINUE_PROMPT.to_string(), cx);
+        } else {
+            self.stub(crate::stubs::CONTINUE_NO_SESSION, cx);
+        }
+    }
+
+    /// Whether the chat showing ended on Stop (its last row offers Continue).
+    pub fn can_continue(&self) -> bool {
+        !self.busy() && self.chat().is_some_and(|c| matches!(c.messages.last(), Some(Message::Notice { text, error: false }) if text.as_ref() == INTERRUPTED))
+    }
+
+    /// Rate a reply; the same rating again takes it back.
+    pub fn rate(&mut self, chat: usize, end: usize, rating: Rating, cx: &mut Context<Self>) {
+        let key = (chat, end);
+        if self.ratings.get(&key) == Some(&rating) {
+            self.ratings.remove(&key);
+        } else {
+            self.ratings.insert(key, rating);
+            self.stub(crate::stubs::FEEDBACK_UPLOAD, cx);
+        }
+        if let Some(c) = self.chat_mut(chat) {
+            c.version += 1;
+        }
+        cx.notify();
+    }
+
+    // ------------------------------------------------------------ chats: rename, duplicate, export, delete
+
+    pub fn open_chat_menu(&mut self, id: Option<usize>, cx: &mut Context<Self>) {
+        self.chat_menu = id;
+        cx.notify();
+    }
+
+    /// Start editing a chat's title in the sidebar (shown first, if hidden).
+    pub fn start_rename(&mut self, id: usize, cx: &mut Context<Self>) {
+        self.chat_menu = None;
+        self.renaming = Some(id);
+        self.sidebar_open = true;
+        self.palette_open = false;
+        if let Some(c) = self.chats.iter().find(|c| c.id == id) {
+            // A chat hidden by the search or the project filter is shown again.
+            if !self.search.is_empty() && !c.title.to_lowercase().contains(&self.search.to_lowercase()) {
+                self.search = "".into();
+            }
+            if c.project != self.current_project {
+                self.all_chats = true;
+            }
+        }
+        cx.notify();
+    }
+
+    /// Give a chat a new title; an empty one keeps the old.
+    pub fn rename_chat(&mut self, id: usize, title: &str, cx: &mut Context<Self>) {
+        self.renaming = None;
+        let title: String = title.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(120).collect();
+        if let Some(c) = self.chat_mut(id).filter(|_| !title.is_empty()) {
+            c.title = title.into();
+        }
+        cx.notify();
+    }
+
+    pub fn cancel_rename(&mut self, cx: &mut Context<Self>) {
+        if self.renaming.take().is_some() {
+            cx.notify();
+        }
+    }
+
+    /// A copy of a chat, its messages included, opened next to it. The copy
+    /// starts its own ForgeCLI conversation on its first message.
+    pub fn duplicate_chat(&mut self, id: usize, cx: &mut Context<Self>) {
+        self.chat_menu = None;
+        let Some(c) = self.chats.iter().find(|c| c.id == id) else { return };
+        let busy = self.replies.contains_key(&id);
+        let mut messages = c.messages.clone();
+        // A reply still running is copied as it stands.
+        if busy {
+            messages.push(Message::Notice { text: "Copied while a reply was running; it ends here.".into(), error: false });
+        }
+        let copy = Chat { id: self.next_id, project: c.project, title: format!("{} (copy)", c.title).into(), minutes_ago: 0, pinned: false, messages, version: 0, unread: false };
+        self.next_id += 1;
+        let at = self.chats.iter().position(|c| c.id == id).unwrap_or(0);
+        let new_id = copy.id;
+        self.chats.insert(at, copy);
+        self.open_chat(new_id, cx);
+        self.show_toast("Duplicated the chat.", cx);
+    }
+
+    /// Write a chat to Downloads as Markdown, off the UI thread, and say where.
+    pub fn export_chat(&mut self, id: usize, cx: &mut Context<Self>) {
+        self.chat_menu = None;
+        let Some(c) = self.chats.iter().find(|c| c.id == id) else { return };
+        let Some(dir) = crate::downloads::dir() else {
+            return self.show_toast("Could not find your Downloads folder.", cx);
+        };
+        let project = self.project(c.project).map(|p| p.name.to_string()).unwrap_or_default();
+        let (name, text) = (crate::export::file_name(&c.title), crate::export::markdown(c, &project));
+        cx.spawn(async move |this, cx| {
+            let saved = cx.background_spawn(async move { crate::downloads::save(&dir, &name, text.as_bytes()) }).await;
+            let _ = this.update(cx, |s, cx| match saved {
+                Ok(path) => s.show_toast(format!("Exported to {}", path.display()), cx),
+                Err(e) => s.show_toast(format!("Could not export it: {e}"), cx),
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
+    /// Ask before deleting (the confirm window answers).
+    pub fn ask_delete(&mut self, id: usize, cx: &mut Context<Self>) {
+        self.chat_menu = None;
+        self.palette_open = false;
+        self.confirm_delete = Some(id);
+        cx.notify();
+    }
+
+    /// Delete a chat: its reply stops, its process ends, and it leaves the list.
+    pub fn delete_chat(&mut self, id: usize, cx: &mut Context<Self>) {
+        self.confirm_delete = None;
+        self.replies.remove(&id);
+        self.sessions.remove(&id);
+        self.asks.remove(&id);
+        self.stale_turns.remove(&id);
+        self.turn_started.remove(&id);
+        self.fresh_block.remove(&id);
+        self.tool_rows.retain(|(c, _), _| *c != id);
+        self.side.remove(&id);
+        self.kept_modes.remove(&id);
+        self.ratings.retain(|(c, _), _| *c != id);
+        let title = self.chats.iter().find(|c| c.id == id).map(|c| c.title.clone());
+        self.chats.retain(|c| c.id != id);
+        if self.current == Some(id) {
+            self.new_chat(cx);
+        }
+        if self.renaming == Some(id) {
+            self.renaming = None;
+        }
+        if let Some(t) = title {
+            self.show_toast(format!("Deleted \u{201c}{t}\u{201d}."), cx);
+        }
+        cx.notify();
+    }
+
+    // ------------------------------------------------------------ find
+
+    /// Open the find bar (it keeps its query if it was open).
+    pub fn open_find(&mut self, cx: &mut Context<Self>) {
+        if self.chat().is_some_and(|c| !c.messages.is_empty()) && self.find.is_none() {
+            self.find = Some(Find::default());
+            cx.notify();
+        }
+    }
+
+    pub fn close_find(&mut self, cx: &mut Context<Self>) {
+        if self.find.take().is_some() {
+            if let Some(id) = self.current {
+                if let Some(c) = self.chat_mut(id) {
+                    c.version += 1;
+                }
+            }
+            cx.notify();
+        }
+    }
+
+    /// A new query: the hits are found again, and the newest one is shown
+    /// (you are most likely looking for something recent).
+    pub fn set_find_query(&mut self, query: &str, cx: &mut Context<Self>) {
+        let hits = self.chat().map(|c| find_hits(&c.messages, query)).unwrap_or_default();
+        let Some(f) = self.find.as_mut() else { return };
+        f.query = query.to_string();
+        f.at = hits.len().saturating_sub(1);
+        f.hits = hits;
+        f.seq += 1;
+        if let Some(id) = self.current {
+            if let Some(c) = self.chat_mut(id) {
+                c.version += 1;
+            }
+        }
+        cx.notify();
+    }
+
+    /// The next (`forward`) or previous hit, wrapping.
+    pub fn find_step(&mut self, forward: bool, cx: &mut Context<Self>) {
+        // The conversation may have grown since the query was typed.
+        let query = match &self.find {
+            Some(f) => f.query.clone(),
+            None => return,
+        };
+        let hits = self.chat().map(|c| find_hits(&c.messages, &query)).unwrap_or_default();
+        let Some(f) = self.find.as_mut() else { return };
+        let current = f.current();
+        f.hits = hits;
+        let n = f.hits.len();
+        if n == 0 {
+            return cx.notify();
+        }
+        let here = current.and_then(|m| f.hits.iter().position(|h| *h == m)).unwrap_or(f.at.min(n - 1));
+        f.at = if forward { (here + 1) % n } else { (here + n - 1) % n };
+        f.seq += 1;
+        if let Some(id) = self.current {
+            if let Some(c) = self.chat_mut(id) {
+                c.version += 1;
+            }
+        }
+        cx.notify();
+    }
+
     pub fn show_toast(&mut self, text: impl Into<SharedString>, cx: &mut Context<Self>) {
         self.toast = Some(text.into());
         self.toast_reset = Some(cx.spawn(async move |this, cx| {
@@ -1189,7 +1539,7 @@ impl AppState {
                         }
                     }
                 }
-                c.messages.push(Message::Notice { text: "Interrupted. Tell Forge what to do instead.".into(), error: false });
+                c.messages.push(Message::Notice { text: INTERRUPTED.into(), error: false });
                 c.version += 1;
             }
         }
@@ -1944,4 +2294,33 @@ fn mock_chats() -> Vec<Chat> {
     }
     chats.sort_by_key(|c| (!c.pinned, c.minutes_ago));
     chats
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn find_looks_through_every_kind_of_message() {
+        let chats = mock_chats();
+        let rich = &chats.iter().find(|c| c.id == 1).unwrap().messages;
+        // Your message, a tool's target and a reply's prose.
+        assert_eq!(find_hits(rich, "HELLO, FORGE"), vec![0, 1, 2]);
+        assert_eq!(find_hits(rich, "diffLines"), vec![5]);
+        assert!(find_hits(rich, "   ").is_empty());
+        assert!(find_hits(rich, "no such words anywhere").is_empty());
+    }
+
+    #[test]
+    fn a_turns_text_spans_its_replies_and_stops_at_your_message() {
+        let chats = mock_chats();
+        let rich = &chats.iter().find(|c| c.id == 1).unwrap().messages;
+        let first = turn_text(rich, 3);
+        assert!(first.starts_with("I'll move the greeting") && first.contains("Done. The greeting now lives"), "{first}");
+        assert!(!first.contains("diffLines"));
+        let second = turn_text(rich, 6);
+        assert!(second.starts_with("One unused import"), "{second}");
+        assert_eq!(turn_question(rich, 3), Some(0));
+        assert_eq!(turn_question(rich, 6), Some(4));
+    }
 }

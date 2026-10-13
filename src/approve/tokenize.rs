@@ -64,6 +64,7 @@ pub fn is_recursive_flag(token: &Token) -> bool {
 }
 
 /// Whether this flag forces, including bundles like `-rf`.
+#[allow(dead_code)] // kept beside is_recursive_flag for the rules that will need it
 pub fn is_force_flag(token: &Token) -> bool {
     if !is_flag(token) {
         return false;

@@ -26,18 +26,34 @@ pub struct ChatView {
     /// The working line's step, and when it started (its timer restarts
     /// when the step changes).
     step: Option<(String, Instant)>,
+    /// You scrolled up from the newest message: "Jump to latest" shows.
+    away: bool,
+    /// The find move last scrolled to.
+    shown_find: u64,
 }
 
 impl ChatView {
     pub fn new(state: Entity<AppState>, cx: &mut Context<Self>) -> Self {
         let list = ListState::new(0, ListAlignment::Top, px(800.));
         list.set_follow_mode(FollowMode::Tail);
+        // Following the tail stops when you scroll up and starts again at
+        // the bottom; the button shows in between.
+        let me = cx.weak_entity();
+        list.set_scroll_handler(move |ev, _, cx| {
+            let away = !ev.is_following_tail;
+            let _ = me.update(cx, |v: &mut ChatView, cx| {
+                if v.away != away {
+                    v.away = away;
+                    cx.notify();
+                }
+            });
+        });
         cx.observe(&state, |this, _, cx| {
             this.sync(cx);
             cx.notify();
         })
         .detach();
-        let mut view = Self { state, list, shown_chat: None, shown_count: 0, shown_version: 0, ticker: None, step: None };
+        let mut view = Self { state, list, shown_chat: None, shown_count: 0, shown_version: 0, ticker: None, step: None, away: false, shown_find: 0 };
         view.sync(cx);
         view
     }
@@ -55,6 +71,7 @@ impl ChatView {
         if id != self.shown_chat {
             self.list.reset(count);
             self.list.set_follow_mode(FollowMode::Tail);
+            self.away = false;
         } else if count > self.shown_count {
             self.list.splice(self.shown_count..self.shown_count, count - self.shown_count);
             self.list.remeasure();
@@ -64,6 +81,16 @@ impl ChatView {
             self.list.remeasure();
         }
         (self.shown_chat, self.shown_count, self.shown_version) = (id, count, version);
+
+        // A find move: its match comes to the top of the view.
+        let find = self.state.read(cx).find.as_ref().map(|f| (f.seq, f.current()));
+        if let Some((seq, Some(ix))) = find {
+            if seq != self.shown_find && ix < count {
+                self.list.scroll_to(gpui::ListOffset { item_ix: ix, offset_in_item: px(0.) });
+                self.away = true;
+            }
+        }
+        self.shown_find = find.map_or(0, |(seq, _)| seq);
 
         if busy && self.ticker.is_none() {
             self.ticker = Some(cx.spawn(async move |this, cx| loop {
@@ -199,11 +226,56 @@ fn step_label(c: &Chat) -> Option<String> {
     Some(label)
 }
 
+impl ChatView {
+    /// Back to the newest message, following it again.
+    pub fn jump_to_latest(&mut self, cx: &mut Context<Self>) {
+        self.list.set_follow_mode(FollowMode::Tail);
+        self.away = false;
+        cx.notify();
+    }
+
+    fn jump_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = cx.theme().clone();
+        let hover = t.colors.hover;
+        let busy = self.state.read(cx).busy();
+        div().absolute().bottom(t.space.md).left_0().right_0().flex().justify_center().child(
+            div()
+                .id("jump-latest")
+                .flex()
+                .items_center()
+                .gap(t.space.xs)
+                .h(t.size.control + px(4.))
+                .px(t.space.md)
+                .rounded(t.radius.pill)
+                .bg(t.colors.surface)
+                .border_1()
+                .border_color(t.colors.border)
+                .shadow(t.elevation_popover())
+                .cursor_pointer()
+                .text_size(t.text.caption)
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(t.colors.text)
+                .hover(move |d| d.bg(hover))
+                .child(icon_arrow(&t))
+                // While a reply plays, the button says there's more coming.
+                .child(if busy { "New messages below" } else { "Jump to latest" })
+                .child(super::kbd(&t, super::shortcut("J")))
+                .on_click(cx.listener(|this, _, _, cx| this.jump_to_latest(cx)))
+                .with_animation("jump-in", Animation::new(Duration::from_millis(t.motion_ms)).with_easing(gpui::ease_in_out), |d, delta| d.opacity(delta).mb(px(6.) * (1. - delta))),
+        )
+    }
+}
+
+fn icon_arrow(t: &crate::theme::Theme) -> gpui::Svg {
+    super::icon("icons/arrow-down.svg", t.size.icon_sm, t.colors.text_muted)
+}
+
 impl Render for ChatView {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let state = self.state.clone();
         let step = self.step.clone();
-        list(self.list.clone(), move |ix, window, cx| {
+        let jump = self.away.then(|| self.jump_button(cx));
+        let list = list(self.list.clone(), move |ix, window, cx| {
             let t = cx.theme().clone();
             let s = state.read(cx);
             let Some(chat) = s.chat() else { return div().into_any_element() };
@@ -223,6 +295,9 @@ impl Render for ChatView {
                         cube: super::mode_menu::cube_color(&t, s.mode),
                         open_doc: s.doc.clone(),
                         scale: window.scale_factor(),
+                        rating: s.ratings.get(&(chat.id, ix)).copied(),
+                        newest_turn: !s.busy() && chat.messages[ix + 1..].iter().all(|m| !matches!(m, Message::TurnEnd { .. } | Message::User { .. })),
+                        can_continue: s.can_continue(),
                     };
                     message::render(m, &ctx, &t)
                 }
@@ -231,17 +306,34 @@ impl Render for ChatView {
                     None => div().into_any_element(),
                 },
             };
+            // Find: every match gets a faint bar at its left, the one shown a strong one.
+            let mark = s.find.as_ref().filter(|f| !f.query.trim().is_empty()).and_then(|f| {
+                if f.current() == Some(ix) {
+                    Some(t.colors.primary)
+                } else {
+                    f.hits.contains(&ix).then(|| t.colors.primary.opacity(0.3))
+                }
+            });
             div()
                 .w_full()
                 .flex()
                 .justify_center()
                 .px(t.space.xl)
                 .when(ix == 0, |d| d.pt(t.space.xl))
-                .child(div().w_full().max_w(t.size.column).pb(t.space.md).child(body))
+                .child(
+                    div()
+                        .relative()
+                        .w_full()
+                        .max_w(t.size.column)
+                        .pb(t.space.md)
+                        .child(body)
+                        .children(mark.map(|c| div().absolute().top_0().bottom(t.space.md).left(-t.space.md).w(px(3.)).rounded(t.radius.pill).bg(c))),
+                )
                 .into_any_element()
         })
         .size_full()
-        .flex_1()
+        .flex_1();
+        div().relative().size_full().flex().flex_col().child(list).children(jump)
     }
 }
 

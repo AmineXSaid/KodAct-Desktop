@@ -357,17 +357,21 @@ impl Render for Composer {
                             // button sits square in the box's corner.
                             .p(px(7.))
                             .child(
-                                div()
-                                    .id("attach")
-                                    .size(px(26.))
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .rounded(t.radius.pill)
-                                    .cursor_pointer()
-                                    .hover(move |st| st.bg(hover))
-                                    .child(icon("icons/plus.svg", t.size.icon, t.colors.text_muted))
-                                    .on_click(cx.listener(|this, _, _, cx| this.state.update(cx, |s, cx| s.show_toast("Attaching files and images isn't wired to ForgeCLI yet.", cx)))),
+                                // Attaching comes in P2: drawn as "Soon", and its click says so.
+                                soon(
+                                    div()
+                                        .id("attach")
+                                        .size(px(26.))
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .rounded(t.radius.pill)
+                                        .cursor_pointer()
+                                        .hover(move |st| st.bg(hover))
+                                        .child(icon("icons/plus.svg", t.size.icon, t.colors.text_muted)),
+                                    crate::stubs::ATTACH,
+                                )
+                                .on_click(cx.listener(|this, _, _, cx| this.state.update(cx, |s, cx| s.stub(crate::stubs::ATTACH, cx)))),
                             )
                             .child(div().flex_1())
                             .child(send),

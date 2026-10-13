@@ -1,12 +1,15 @@
 //! The window's views. `workspace` composes them; each file is one component.
 
+pub mod chat_menu;
 pub mod chat_view;
 pub mod command_palette;
 pub mod composer;
+pub mod confirm;
 pub mod context_ring;
 pub mod diagram_view;
 pub mod doc_pane;
 pub mod file_card;
+pub mod find_bar;
 pub mod file_mark;
 pub mod forge_cube;
 pub mod mode_menu;
@@ -19,9 +22,11 @@ pub mod onboarding;
 pub mod projects;
 pub mod rules_view;
 pub mod settings;
+pub mod shortcuts;
 pub mod side_chat;
 pub mod sidebar;
 pub mod skeleton;
+pub mod starters;
 pub mod terminal;
 pub mod voxels;
 pub mod workspace;
@@ -49,6 +54,15 @@ gpui::actions!(
         OpenProjects,
         EndpointGuide,
         OpenEndpointsFile,
+        ToggleFind,
+        JumpToLatest,
+        ShowShortcuts,
+        RenameChat,
+        DuplicateChat,
+        ExportChat,
+        DeleteChat,
+        RegenerateReply,
+        ContinueReply,
         Quit,
     ]
 );
@@ -82,6 +96,15 @@ pub fn mod_key() -> &'static str {
 /// A shortcut hint: `Ctrl K` / `⌘K`.
 pub fn shortcut(key: &str) -> SharedString {
     format!("{}{key}", mod_key()).into()
+}
+
+/// The one treatment for a control whose feature isn't wired yet
+/// (`stubs.rs`): drawn muted, with a "Soon" tooltip naming what it will do.
+/// It stays clickable, and its click says so (`AppState::stub`), never
+/// pretending to work.
+pub fn soon<E: gpui::StatefulInteractiveElement + gpui::Styled>(el: E, stub: &'static str) -> E {
+    let line = crate::stubs::get(stub).map(|s| s.soon_line()).unwrap_or_else(|| "Soon".into());
+    el.opacity(0.5).tooltip(move |window, cx| gpui::component::tooltip::Tooltip::new(line.clone()).build(window, cx))
 }
 
 /// A small key hint, as shown beside menu items.

@@ -18,6 +18,7 @@ mod context;
 mod diagram;
 mod downloads;
 mod endpoints;
+mod export;
 mod fonts;
 mod greeting;
 mod health;
@@ -32,6 +33,7 @@ mod profile;
 mod rules;
 mod secrets;
 mod state;
+mod stubs;
 mod theme;
 mod ui;
 
@@ -40,6 +42,8 @@ use gpui::{px, size, App, AppContext, Bounds, KeyBinding, WindowBounds, WindowDe
 
 use ui::*;
 
+/// Every binding here is listed on the shortcuts sheet (`ui/shortcuts.rs`);
+/// its test fails when the two disagree.
 fn bind_keys(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("secondary-k", ToggleCommandPalette, None),
@@ -53,6 +57,10 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("secondary-shift-r", OpenRules, None),
         KeyBinding::new("secondary-shift-p", OpenProjects, None),
         KeyBinding::new("secondary-q", Quit, None),
+        KeyBinding::new("f1", ShowShortcuts, None),
+        KeyBinding::new("f2", RenameChat, Some("Workspace")),
+        KeyBinding::new("secondary-f", ToggleFind, Some("Workspace")),
+        KeyBinding::new("secondary-j", JumpToLatest, Some("Workspace")),
         KeyBinding::new("shift-tab", CycleMode, Some("Composer")),
         KeyBinding::new("escape", StopReply, Some("Workspace")),
     ]);

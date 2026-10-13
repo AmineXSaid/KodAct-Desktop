@@ -109,8 +109,29 @@ impl CommandPalette {
             act("Change your avatar", "icons/sparkles.svg", None, Box::new(ChangeAvatar)),
             act("Quit", "icons/x.svg", Some(shortcut("Q")), Box::new(Quit)),
         ];
-        if s.busy() {
-            out.insert(0, act("Stop the reply", "icons/square.svg", Some("Esc".into()), Box::new(StopReply)));
+        out.insert(1, act("Keyboard shortcuts", "icons/keyboard.svg", Some("F1".into()), Box::new(ShowShortcuts)));
+        // The chat showing: what you can do with it.
+        if let Some(c) = s.chat().filter(|c| !c.messages.is_empty()) {
+            let mut chat = vec![
+                act("Find in this chat", "icons/search.svg", Some(shortcut("F")), Box::new(ToggleFind)),
+                act("Jump to the latest message", "icons/arrow-down.svg", Some(shortcut("J")), Box::new(JumpToLatest)),
+                act("Rename this chat", "icons/pencil.svg", Some("F2".into()), Box::new(RenameChat)),
+                act("Duplicate this chat", "icons/copy-plus.svg", None, Box::new(DuplicateChat)),
+                act("Export this chat as Markdown", "icons/archive.svg", None, Box::new(ExportChat)),
+                act("Delete this chat", "icons/trash.svg", None, Box::new(DeleteChat)),
+            ];
+            if !s.busy() && c.messages.iter().any(|m| matches!(m, crate::state::Message::User { .. })) {
+                chat.insert(2, act("Regenerate the last reply", "icons/rotate-ccw.svg", None, Box::new(RegenerateReply)));
+            }
+            if s.can_continue() {
+                chat.insert(0, act("Continue the stopped reply", "icons/play.svg", None, Box::new(ContinueReply)));
+            }
+            if s.busy() {
+                chat.insert(0, act("Stop the reply", "icons/square.svg", Some("Esc".into()), Box::new(StopReply)));
+            }
+            // First when nothing is typed: they are about what you're looking at.
+            let chat: Vec<Command> = chat.into_iter().map(|cmd| Command { group: "This chat", ..cmd }).collect();
+            out.splice(0..0, chat);
         }
         for m in ModeId::ALL.into_iter().filter(|m| *m != ModeId::Bypass || s.bypass_allowed) {
             out.push(Command { label: format!("Mode: {}", m.label()).into(), group: "Modes", icon: m.icon(), hint: (m == s.mode).then(|| "current".into()), target: Target::Mode(m) });

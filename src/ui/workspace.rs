@@ -11,6 +11,8 @@ use gpui::{
 use super::chat_view::ChatView;
 use super::command_palette::CommandPalette;
 use super::composer::Composer;
+use super::confirm::ConfirmDelete;
+use super::find_bar::FindBar;
 use super::onboarding::Onboarding;
 use super::projects::ProjectsView;
 use super::rules_view::RulesView;
@@ -32,6 +34,8 @@ pub struct Workspace {
     projects: Entity<ProjectsView>,
     side: Entity<SideChat>,
     settings: Entity<Settings>,
+    find: Entity<FindBar>,
+    confirm: Entity<ConfirmDelete>,
     focus: FocusHandle,
 }
 
@@ -52,8 +56,10 @@ impl Workspace {
         let projects = cx.new(|cx| ProjectsView::new(state.clone(), composer.clone(), cx));
         let side = cx.new(|cx| SideChat::new(state.clone(), window, cx));
         let settings = cx.new(|cx| Settings::new(state.clone(), window, cx));
+        let find = cx.new(|cx| FindBar::new(state.clone(), window, cx));
+        let confirm = cx.new(|cx| ConfirmDelete::new(state.clone(), window, cx));
         let first_run = state.read(cx).onboarding;
-        let ws = Self { state, sidebar, chat, composer, palette, onboarding, rules, projects, side, settings, focus: cx.focus_handle() };
+        let ws = Self { state, sidebar, chat, composer, palette, onboarding, rules, projects, side, settings, find, confirm, focus: cx.focus_handle() };
         if first_run {
             ws.onboarding.update(cx, |o, cx| o.open(window, cx));
         } else {
@@ -208,8 +214,15 @@ impl Workspace {
                             .child(line),
                     )
                     .child(div().h(t.space.sm))
-                    .child(self.composer.clone()),
+                    .child(self.composer.clone())
+                    .child(super::starters::render(&t, &self.state, &self.composer, cx)),
             )
+    }
+
+    /// The chat an action from the palette or a key acts on: the one showing.
+    fn current_chat(&self, cx: &Context<Self>) -> Option<usize> {
+        let s = self.state.read(cx);
+        s.chat().map(|c| c.id).filter(|_| s.screen == Screen::Chat)
     }
 
     /// The title bar's project switcher: every project, then All projects
@@ -278,7 +291,7 @@ impl Workspace {
         let t = cx.theme().clone();
         let text: SharedString = self.state.read(cx).toast.clone()?;
         Some(
-            div().absolute().bottom(t.space.xl).left_0().right_0().flex().justify_center().child(
+            div().absolute().bottom(t.size.composer_clearance).left_0().right_0().flex().justify_center().child(
                 theme::popover(&t)
                     .px(t.space.lg)
                     .py(t.space.sm)
@@ -297,6 +310,7 @@ impl Render for Workspace {
         let t = cx.theme().clone();
         let s = self.state.read(cx);
         let (sidebar_open, palette_open, onboarding, screen, loading) = (s.sidebar_open, s.palette_open, s.onboarding, s.screen, s.loading);
+        let (find_open, shortcuts_open) = (s.find.is_some(), s.shortcuts_open);
         let empty = s.chat().is_none_or(|c| c.messages.is_empty());
 
         let main = div().flex_1().min_w_0().flex().flex_col().bg(t.extra.stage);
@@ -332,6 +346,7 @@ impl Render for Workspace {
                 .min_h_0()
                 .flex()
                 .flex_col()
+                .when(find_open, |d| d.child(self.find.clone()))
                 .child(
                     div()
                         .flex_1()
@@ -407,7 +422,13 @@ impl Render for Workspace {
                     (s.palette_open, s.picker_open)
                 };
                 this.state.update(cx, |s, cx| {
-                    if palette || picker {
+                    if s.shortcuts_open || s.chat_menu.is_some() {
+                        s.shortcuts_open = false;
+                        s.chat_menu = None;
+                        cx.notify();
+                    } else if s.find.is_some() && !s.busy() {
+                        s.close_find(cx);
+                    } else if palette || picker {
                         s.palette_open = false;
                         s.picker_open = false;
                         cx.notify();
@@ -469,6 +490,41 @@ impl Render for Workspace {
             }))
             .on_action(cx.listener(|this, _: &EndpointGuide, _, cx| this.state.update(cx, |s, cx| s.add_endpoint(cx))))
             .on_action(cx.listener(|this, _: &OpenEndpointsFile, _, cx| this.state.update(cx, |s, cx| s.open_endpoints_file(cx))))
+            .on_action(cx.listener(|this, _: &ToggleFind, window, cx| {
+                if this.current_chat(cx).is_some() {
+                    this.find.update(cx, |f, cx| f.open(window, cx));
+                }
+            }))
+            .on_action(cx.listener(|this, _: &JumpToLatest, _, cx| this.chat.update(cx, |c, cx| c.jump_to_latest(cx))))
+            .on_action(cx.listener(|this, _: &ShowShortcuts, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.shortcuts_open = !s.shortcuts_open;
+                    s.palette_open = false;
+                    cx.notify();
+                })
+            }))
+            .on_action(cx.listener(|this, _: &RenameChat, _, cx| {
+                if let Some(id) = this.current_chat(cx) {
+                    this.state.update(cx, |s, cx| s.start_rename(id, cx));
+                }
+            }))
+            .on_action(cx.listener(|this, _: &DuplicateChat, _, cx| {
+                if let Some(id) = this.current_chat(cx) {
+                    this.state.update(cx, |s, cx| s.duplicate_chat(id, cx));
+                }
+            }))
+            .on_action(cx.listener(|this, _: &ExportChat, _, cx| {
+                if let Some(id) = this.current_chat(cx) {
+                    this.state.update(cx, |s, cx| s.export_chat(id, cx));
+                }
+            }))
+            .on_action(cx.listener(|this, _: &DeleteChat, _, cx| {
+                if let Some(id) = this.current_chat(cx) {
+                    this.state.update(cx, |s, cx| s.ask_delete(id, cx));
+                }
+            }))
+            .on_action(cx.listener(|this, _: &RegenerateReply, _, cx| this.state.update(cx, |s, cx| s.regenerate_last(cx))))
+            .on_action(cx.listener(|this, _: &ContinueReply, _, cx| this.state.update(cx, |s, cx| s.continue_reply(cx))))
             .on_action(cx.listener(|_, _: &Quit, _, cx| cx.quit()))
             .child(self.title_bar(cx))
             .when(onboarding, |d| d.child(self.onboarding.clone()))
@@ -485,6 +541,8 @@ impl Render for Workspace {
             .when(palette_open, |d| d.child(self.palette.clone()))
             .child(self.side.clone())
             .child(self.settings.clone())
+            .when(shortcuts_open, |d| d.child(super::shortcuts::render(&t, &self.state)))
+            .child(self.confirm.clone())
             .children(self.toast(cx))
     }
 }

@@ -366,9 +366,12 @@ pub fn classify_target(raw: &str, ctx: &RiskContext) -> TargetClass {
     TargetClass::Outside
 }
 
-/// The protected lists, exposed for tests and for explaining a refusal.
+/// The protected lists, exposed for tests and for explaining a refusal
+/// (nothing explains one yet).
+#[allow(dead_code)]
 pub struct ProtectedPaths;
 
+#[allow(dead_code)]
 impl ProtectedPaths {
     pub fn home_subpaths() -> &'static [&'static str] {
         PROTECTED_HOME_SUBPATHS

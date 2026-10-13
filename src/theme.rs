@@ -433,6 +433,7 @@ pub struct Sizes {
     pub doc_measure: Pixels,   // 680: a document's widest line
     pub rules_list: Pixels,    // 340: the Rules screen's file list
     pub editor: Pixels,        // 420: a file editor's height
+    pub composer_clearance: Pixels, // 150: toasts sit above the composer, its chips included
 }
 
 impl Default for Sizes {
@@ -462,6 +463,7 @@ impl Default for Sizes {
             doc_measure: px(680.),
             rules_list: px(340.),
             editor: px(420.),
+            composer_clearance: px(150.),
         }
     }
 }
@@ -515,6 +517,21 @@ pub fn primary_button(t: &Theme, label: impl Into<SharedString>) -> Div {
         .font_weight(FontWeight::MEDIUM)
         .cursor_pointer()
         .hover(move |s| s.bg(hover))
+        .child(label.into())
+}
+
+/// A destructive confirm (Delete): the danger fill, a shade deeper on hover.
+pub fn danger_button(t: &Theme, label: impl Into<SharedString>) -> Div {
+    div()
+        .px(px(15.))
+        .py(px(6.))
+        .rounded(t.radius.button)
+        .bg(t.extra.fill_danger)
+        .text_color(t.colors.primary_fg)
+        .text_size(t.text.body_sm)
+        .font_weight(FontWeight::MEDIUM)
+        .cursor_pointer()
+        .hover(|s| s.opacity(0.9))
         .child(label.into())
 }
 

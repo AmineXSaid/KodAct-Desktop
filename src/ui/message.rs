@@ -17,7 +17,7 @@ use gpui::{
 use super::icon;
 use super::markdown::{self, CopyContext};
 use super::terminal;
-use crate::state::{AppState, Block, DiffKind, Message, ToolCall, ToolKind, ToolStatus, Verdict};
+use crate::state::{AppState, Block, DiffKind, Message, Rating, ToolCall, ToolKind, ToolStatus, Verdict};
 use crate::theme::{self, Theme};
 
 pub struct ItemContext {
@@ -37,30 +37,147 @@ pub struct ItemContext {
     pub open_doc: Option<crate::state::FileRef>,
     /// Device pixels per logical pixel, for diagrams drawn to exact size.
     pub scale: f32,
+    /// The rating given to the reply this turn end closes.
+    pub rating: Option<Rating>,
+    /// No later turn: this one's actions stay shown, not only on hover.
+    pub newest_turn: bool,
+    /// The chat ended on Stop and its last row offers Continue.
+    pub can_continue: bool,
 }
 
 pub fn render(m: &Message, cx: &ItemContext, t: &Theme) -> AnyElement {
     match m {
         Message::User { text, sent } => user(text, *sent, cx, t),
         Message::Assistant { blocks } => assistant(blocks, cx, t),
-        Message::TurnEnd { seconds, .. } => div()
-            .text_size(t.text.caption)
-            .text_color(t.colors.text_subtle)
-            .child(format!("{seconds:.1}s"))
-            .into_any_element(),
-        Message::Notice { text, error } => div()
-            .flex()
-            .items_center()
-            .gap(t.space.sm)
-            .px(t.space.md)
-            .py(t.space.sm)
-            .rounded(t.radius.card)
-            .bg(if *error { t.extra.danger_tint } else { t.colors.hover })
-            .text_color(if *error { t.extra.danger } else { t.colors.text_muted })
-            .child(icon(if *error { "icons/triangle-alert.svg" } else { "icons/circle-pause.svg" }, t.size.icon_sm, if *error { t.extra.danger } else { t.colors.text_muted }))
-            .child(text.clone())
-            .into_any_element(),
+        Message::TurnEnd { seconds, .. } => turn_footer(*seconds, cx, t),
+        Message::Notice { text, error } => notice(text, *error, cx, t),
     }
+}
+
+/// A small icon button under a message.
+fn action_button(id: SharedString, path: &'static str, color: gpui::Hsla, tip: &'static str, t: &Theme) -> gpui::Stateful<gpui::Div> {
+    let hover = t.colors.hover;
+    div()
+        .id(id)
+        .size(t.size.control - px(4.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(t.radius.button)
+        .cursor_pointer()
+        .hover(move |s| s.bg(hover))
+        .child(icon(path, t.size.icon_sm, color))
+        .tooltip(move |window, cx| gpui::component::tooltip::Tooltip::new(tip).build(window, cx))
+}
+
+/// Under a finished reply: Copy, Good, Bad, Regenerate, then how long it
+/// took. The newest reply's row is always shown; older ones on hover.
+fn turn_footer(seconds: f32, cx: &ItemContext, t: &Theme) -> AnyElement {
+    let key = format!("{}-{}", cx.chat, cx.index);
+    let group: SharedString = format!("turn-{key}").into();
+    let copied = cx.copied.as_deref() == Some(format!("turn-{key}").as_str());
+    let (chat, end) = (cx.chat, cx.index);
+    let (s_copy, s_good, s_bad, s_again) = (cx.state.clone(), cx.state.clone(), cx.state.clone(), cx.state.clone());
+    let rated = |r: Rating| cx.rating == Some(r);
+    let pinned = cx.newest_turn || copied || cx.rating.is_some();
+    let actions = div()
+        .flex()
+        .items_center()
+        .gap(px(2.))
+        .when(!pinned, |d| d.invisible().group_hover(group.clone(), |s| s.visible()))
+        .child(
+            action_button(format!("copy-turn-{key}").into(), if copied { "icons/check.svg" } else { "icons/copy.svg" }, if copied { t.extra.success } else { t.colors.text_muted }, "Copy the reply", t)
+                .on_click(move |_, _, app| s_copy.update(app, |s, cx| s.copy_turn(chat, end, cx))),
+        )
+        .child(
+            action_button(format!("good-{key}").into(), "icons/thumbs-up.svg", if rated(Rating::Good) { t.extra.success } else { t.colors.text_muted }, "Good reply", t)
+                .when(rated(Rating::Good), |d| d.bg(t.extra.success_tint))
+                .on_click(move |_, _, app| s_good.update(app, |s, cx| s.rate(chat, end, Rating::Good, cx))),
+        )
+        .child(
+            action_button(format!("bad-{key}").into(), "icons/thumbs-down.svg", if rated(Rating::Bad) { t.extra.danger } else { t.colors.text_muted }, "Bad reply", t)
+                .when(rated(Rating::Bad), |d| d.bg(t.extra.danger_tint))
+                // Sending a rating is wired later (`stubs::FEEDBACK_UPLOAD`); the rating itself is kept.
+                .on_click(move |_, _, app| s_bad.update(app, |s, cx| s.rate(chat, end, Rating::Bad, cx))),
+        )
+        .when(!cx.busy, |d| {
+            d.child(
+                action_button(format!("again-{key}").into(), "icons/rotate-ccw.svg", t.colors.text_muted, "Regenerate this reply", t)
+                    .on_click(move |_, _, app| s_again.update(app, |s, cx| s.regenerate(chat, end, cx))),
+            )
+        });
+    div()
+        .group(group)
+        .flex()
+        .items_center()
+        .gap(t.space.sm)
+        .child(actions)
+        .child(div().text_size(t.text.caption).text_color(t.colors.text_subtle).child(format!("{seconds:.1}s")))
+        .into_any_element()
+}
+
+/// Something the app says: Stop (with Continue on the last one), or an error
+/// (wrapped in full, with Retry and Copy).
+fn notice(text: &SharedString, error: bool, cx: &ItemContext, t: &Theme) -> AnyElement {
+    let key = format!("{}-{}", cx.chat, cx.index);
+    let (fg, bg) = if error { (t.extra.danger, t.extra.danger_tint) } else { (t.colors.text_muted, t.colors.hover) };
+    let interrupted = !error && text.as_ref() == crate::state::INTERRUPTED;
+    let copy_key: SharedString = format!("notice-{key}").into();
+    let copied = cx.copied.as_ref() == Some(&copy_key);
+    let (state_copy, state_retry, to_copy) = (cx.state.clone(), cx.state.clone(), text.to_string());
+    let (chat, at) = (cx.chat, cx.index);
+    let hover = t.colors.hover;
+    let link = |id: String, label: &'static str, path: &'static str| {
+        div()
+            .id(SharedString::from(id))
+            .flex()
+            .flex_none()
+            .items_center()
+            .gap(t.space.xs)
+            .px(t.space.sm)
+            .h(t.size.control - px(2.))
+            .rounded(t.radius.button)
+            .cursor_pointer()
+            .text_size(t.text.caption)
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(fg)
+            .hover(move |s| s.bg(hover))
+            .child(icon(path, t.size.icon_xs, fg))
+            .child(label)
+    };
+    div()
+        .flex()
+        .items_start()
+        .gap(t.space.sm)
+        .px(t.space.md)
+        .py(t.space.sm)
+        .rounded(t.radius.card)
+        .bg(bg)
+        .text_color(fg)
+        .child(div().pt(px(2.)).child(icon(if error { "icons/triangle-alert.svg" } else { "icons/circle-pause.svg" }, t.size.icon_sm, fg)))
+        // Long errors (a proxy's whole response) wrap rather than run off the card.
+        .child(div().flex_1().min_w_0().line_height(relative(1.45)).child(text.clone()))
+        .when(interrupted && cx.last && cx.can_continue, |d| {
+            d.child(link(format!("continue-{key}"), "Continue", "icons/play.svg").on_click(|_, window, app| window.dispatch_action(Box::new(super::ContinueReply), app)))
+        })
+        .when(error && cx.last && !cx.busy, |d| {
+            d.child(link(format!("retry-{key}"), "Retry", "icons/rotate-ccw.svg").on_click(move |_, _, app| {
+                state_retry.update(app, |s, cx| {
+                    let q = s.chats.iter().find(|c| c.id == chat).and_then(|c| crate::state::turn_question(&c.messages, at));
+                    if let Some(q) = q {
+                        s.retry(chat, q, cx);
+                    }
+                })
+            }))
+        })
+        .when(error, |d| {
+            d.child(link(format!("copy-notice-{key}"), if copied { "Copied" } else { "Copy" }, if copied { "icons/check.svg" } else { "icons/copy.svg" }).on_click(move |_, _, app| {
+                app.write_to_clipboard(ClipboardItem::new_string(to_copy.clone()));
+                let key = copy_key.clone();
+                state_copy.update(app, |s, cx| s.mark_copied(key, cx));
+            }))
+        })
+        .into_any_element()
 }
 
 /// `just now`, `4 min ago`, `5 hours ago`, `3 days ago`.

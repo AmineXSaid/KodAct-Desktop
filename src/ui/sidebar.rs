@@ -17,6 +17,11 @@ use crate::theme::ActiveTheme;
 pub struct Sidebar {
     state: Entity<AppState>,
     search: Entity<InputState>,
+    /// The title being edited (F2, or Rename in a chat's menu).
+    rename: Entity<InputState>,
+    renaming: Option<usize>,
+    /// Where the open chat menu sits: under the ⋯ button, or at the click.
+    menu_at: gpui::Point<gpui::Pixels>,
     _subs: Vec<Subscription>,
 }
 
@@ -25,8 +30,39 @@ const GROUPS: [&str; 5] = ["Pinned", "Today", "Yesterday", "Previous 7 days", "O
 impl Sidebar {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search chats"));
+        let rename = cx.new(|cx| InputState::new(window, cx).placeholder("Chat title"));
         let subs = vec![
-            cx.observe(&state, |_, _, cx| cx.notify()),
+            cx.observe_in(&state, window, |this, state, window, cx| {
+                // Renaming starts: the title goes in the box, and the box takes the keyboard.
+                let (now, search) = (state.read(cx).renaming, state.read(cx).search.clone());
+                if now != this.renaming {
+                    this.renaming = now;
+                    if let Some(title) = now.and_then(|id| state.read(cx).chats.iter().find(|c| c.id == id)).map(|c| c.title.to_string()) {
+                        this.rename.update(cx, |i, cx| {
+                            i.set_value(title, window, cx);
+                            i.focus(window, cx);
+                        });
+                    }
+                }
+                // The search box follows the state (a rename can clear it).
+                if this.search.read(cx).value() != search {
+                    this.search.update(cx, |i, cx| i.set_value(search.to_string(), window, cx));
+                }
+                cx.notify();
+            }),
+            cx.subscribe_in(&rename, window, |this, input, ev: &InputEvent, window, cx| {
+                let Some(id) = this.renaming else { return };
+                match ev {
+                    InputEvent::PressEnter { .. } | InputEvent::Blur => {
+                        let title = input.read(cx).value().to_string();
+                        this.state.update(cx, |s, cx| s.rename_chat(id, &title, cx));
+                        if matches!(ev, InputEvent::PressEnter { .. }) {
+                            window.dispatch_action(Box::new(FocusComposer), cx);
+                        }
+                    }
+                    _ => {}
+                }
+            }),
             cx.subscribe(&search, |this, input, ev: &InputEvent, cx| {
                 if matches!(ev, InputEvent::Change) {
                     let q = input.read(cx).value();
@@ -37,7 +73,7 @@ impl Sidebar {
                 }
             }),
         ];
-        Self { state, search, _subs: subs }
+        Self { state, search, rename, renaming: None, menu_at: Default::default(), _subs: subs }
     }
 }
 
@@ -182,6 +218,11 @@ impl Render for Sidebar {
                 };
                 let status = s.status(c);
                 let unread = status == ChatStatus::Unread;
+                let editing = s.renaming == Some(id);
+                let menu_open = s.chat_menu == Some(id);
+                let (state_menu, state_right) = (self.state.clone(), self.state.clone());
+                let me = cx.entity().downgrade();
+                let me_right = me.clone();
                 list = list.child(
                     div()
                         .id(("chat", id))
@@ -197,42 +238,91 @@ impl Render for Sidebar {
                         .when(selected, |d| d.bg(t.extra.selected).border_1().border_color(t.colors.border).font_weight(FontWeight::MEDIUM))
                         .when(!selected, |d| d.hover(move |st| st.bg(hover)))
                         .child(status_mark(status, id, &t))
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .overflow_hidden()
-                                .whitespace_nowrap()
-                                .text_ellipsis()
-                                .when(unread, |d| d.font_weight(FontWeight::SEMIBOLD).text_color(t.colors.text_strong))
-                                .child(c.title.clone()),
-                        )
-                        .child(
-                            div()
-                                .flex_none()
-                                .text_size(t.text.caption)
-                                .text_color(t.colors.text_subtle)
-                                .group_hover("row", |st| st.invisible())
-                                .child(ago),
-                        )
-                        .child(
-                            div()
-                                .id(("pin", id))
-                                .flex_none()
-                                .absolute()
-                                .right(t.space.sm)
-                                .invisible()
-                                .group_hover("row", |st| st.visible())
-                                .p(px(3.))
-                                .rounded(t.radius.small)
-                                .hover(move |st| st.bg(hover))
-                                .child(icon("icons/pin.svg", t.size.icon_sm, if pinned { t.colors.primary } else { t.colors.text_subtle }))
-                                .on_click(move |_, _, cx| {
-                                    cx.stop_propagation();
-                                    state_pin.update(cx, |s, cx| s.toggle_pin(id, cx));
-                                }),
-                        )
+                        .map(|d| {
+                            if editing {
+                                // The title, editable: Enter or a click away keeps it, Esc puts it back.
+                                let cancel = self.state.clone();
+                                d.child(
+                                    div()
+                                        .flex_1()
+                                        .min_w_0()
+                                        .capture_key_down(move |ev: &gpui::KeyDownEvent, window, cx| {
+                                            if ev.keystroke.key == "escape" {
+                                                cx.stop_propagation();
+                                                cancel.update(cx, |s, cx| s.cancel_rename(cx));
+                                                window.dispatch_action(Box::new(FocusComposer), cx);
+                                            }
+                                        })
+                                        .child(Input::new(&self.rename).appearance(false).text_size(t.text.body_sm)),
+                                )
+                            } else {
+                                d.child(
+                                    div()
+                                        .flex_1()
+                                        .min_w_0()
+                                        .overflow_hidden()
+                                        .whitespace_nowrap()
+                                        .text_ellipsis()
+                                        .when(unread, |d| d.font_weight(FontWeight::SEMIBOLD).text_color(t.colors.text_strong))
+                                        .child(c.title.clone()),
+                                )
+                                .child(
+                                    div()
+                                        .flex_none()
+                                        .text_size(t.text.caption)
+                                        .text_color(t.colors.text_subtle)
+                                        .group_hover("row", |st| st.invisible())
+                                        .when(menu_open, |d| d.invisible())
+                                        .child(ago),
+                                )
+                                .child(
+                                    // On hover: pin, and the chat's menu.
+                                    div()
+                                        .flex()
+                                        .flex_none()
+                                        .gap(px(2.))
+                                        .absolute()
+                                        .right(t.space.xs)
+                                        .invisible()
+                                        .group_hover("row", |st| st.visible())
+                                        .when(menu_open, |d| d.visible())
+                                        .child(
+                                            div()
+                                                .id(("pin", id))
+                                                .p(px(3.))
+                                                .rounded(t.radius.small)
+                                                .hover(move |st| st.bg(hover))
+                                                .child(icon("icons/pin.svg", t.size.icon_sm, if pinned { t.colors.primary } else { t.colors.text_subtle }))
+                                                .on_click(move |_, _, cx| {
+                                                    cx.stop_propagation();
+                                                    state_pin.update(cx, |s, cx| s.toggle_pin(id, cx));
+                                                }),
+                                        )
+                                        .child(
+                                            div()
+                                                .id(("chat-more", id))
+                                                .p(px(3.))
+                                                .rounded(t.radius.small)
+                                                .hover(move |st| st.bg(hover))
+                                                .when(menu_open, |d| d.bg(hover))
+                                                .child(icon("icons/ellipsis.svg", t.size.icon_sm, t.colors.text_muted))
+                                                .on_click(move |ev, _, cx| {
+                                                    cx.stop_propagation();
+                                                    let at = ev.position();
+                                                    let _ = me.update(cx, |this, _| this.menu_at = at);
+                                                    state_menu.update(cx, |s, cx| s.open_chat_menu(if s.chat_menu == Some(id) { None } else { Some(id) }, cx));
+                                                }),
+                                        ),
+                                )
+                            }
+                        })
                         .relative()
+                        .on_mouse_down(gpui::MouseButton::Right, move |ev, _, cx| {
+                            cx.stop_propagation();
+                            let at = ev.position;
+                            let _ = me_right.update(cx, |this, _| this.menu_at = at);
+                            state_right.update(cx, |s, cx| s.open_chat_menu(Some(id), cx));
+                        })
                         .on_click(move |_, _, cx| state.update(cx, |s, cx| s.open_chat(id, cx))),
                 );
             }
@@ -240,6 +330,18 @@ impl Render for Sidebar {
         if !any {
             list = list.child(div().px(t.space.md).py(t.space.lg).text_color(t.colors.text_subtle).child(if q.is_empty() { "Chats you start appear here." } else { "No chat matches." }));
         }
+
+        // The open chat menu, anchored where it was asked for, over everything.
+        let menu = s.chat_menu.and_then(|id| s.chats.iter().find(|c| c.id == id)).map(|c| {
+            let close = self.state.clone();
+            gpui::deferred(
+                gpui::anchored()
+                    .position(self.menu_at)
+                    .snap_to_window_with_margin(t.space.sm)
+                    .child(div().on_mouse_down_out(move |_, _, cx| close.update(cx, |s, cx| s.open_chat_menu(None, cx))).child(super::chat_menu::render(&t, &self.state, c.id, c.pinned))),
+            )
+            .with_priority(2)
+        });
 
         div()
             .w(t.size.sidebar)
@@ -365,6 +467,7 @@ impl Render for Sidebar {
                             .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenSettings), cx)),
                     ),
             )
+            .children(menu)
     }
 }
 
