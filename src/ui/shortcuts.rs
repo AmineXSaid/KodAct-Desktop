@@ -37,7 +37,7 @@ pub const SHORTCUTS: &[(&str, &str, &str)] = &[
     ),
 ];
 
-const GROUPS: [&str; 3] = ["General", "Chats", "Conversation"];
+pub const GROUPS: [&str; 3] = ["General", "Chats", "Conversation"];
 
 /// The keys of a binding as this platform writes them: `Ctrl Shift L`, `⌘⇧L`.
 pub fn keys(binding: &str) -> Vec<String> {
@@ -58,7 +58,7 @@ pub fn keys(binding: &str) -> Vec<String> {
         .collect()
 }
 
-fn keycap(t: &Theme, text: String) -> impl IntoElement {
+pub fn keycap(t: &Theme, text: String) -> impl IntoElement {
     div()
         .min_w(px(20.))
         .px(t.space.xs + px(2.))

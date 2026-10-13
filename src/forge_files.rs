@@ -1475,6 +1475,144 @@ pub fn set_rule(
     })
 }
 
+// ---------------------------------------------------------------- one key of a settings file
+
+/// A top-level key of one settings file, as JSON (`None` when unset).
+pub fn setting(project: &Path, layer: Layer, key: &str) -> Result<Option<Value>, String> {
+    let path = layer
+        .path(project)
+        .ok_or("ForgeCLI's config folder is unknown")?;
+    Ok(read_json(&path)?.get(key).cloned())
+}
+
+/// Set a top-level key of a settings file (`None` removes it).
+pub fn set_setting(
+    project: &Path,
+    layer: Layer,
+    key: &str,
+    value: Option<Value>,
+) -> Result<(), String> {
+    let path = layer
+        .path(project)
+        .ok_or("ForgeCLI's config folder is unknown")?;
+    edit_json(&path, |root| match value {
+        Some(v) => {
+            root.insert(key.to_string(), v);
+        }
+        None => {
+            root.remove(key);
+        }
+    })
+}
+
+/// The sandbox modes ForgeCLI takes (`sandbox.mode`).
+pub const SANDBOX_MODES: [(&str, &str); 3] = [
+    ("off", "Off: commands run as you"),
+    ("read-only", "Read-only: commands can read, not write"),
+    (
+        "workspace-write",
+        "Workspace: write only in the project, no network",
+    ),
+];
+
+/// `env`: variables for the commands Forge runs, as `KEY=value` lines.
+pub fn env_text(v: Option<&Value>) -> String {
+    v.and_then(Value::as_object)
+        .map(|m| {
+            m.iter()
+                .map(|(k, v)| {
+                    format!(
+                        "{k}={}",
+                        v.as_str()
+                            .map(str::to_string)
+                            .unwrap_or_else(|| v.to_string())
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
+        .unwrap_or_default()
+}
+
+/// `KEY=value` lines as the `env` object (None when empty).
+pub fn env_value(text: &str) -> Result<Option<Value>, String> {
+    let pairs = parse_pairs(text, '=')?;
+    for k in pairs.keys() {
+        if !k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+            || k.starts_with(|c: char| c.is_ascii_digit())
+        {
+            return Err(format!(
+                "{k}: a variable name is letters, digits and _, not starting with a digit."
+            ));
+        }
+    }
+    Ok((!pairs.is_empty()).then(|| json!(pairs)))
+}
+
+// ---------------------------------------------------------------- memory files
+
+/// A memory file ForgeCLI loads into every session (`forge-config/src/memory.rs`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Memory {
+    pub path: PathBuf,
+    /// You (every project), Project (shared), Local (this computer).
+    pub kind: &'static str,
+    pub exists: bool,
+    pub bytes: u64,
+}
+
+/// The files ForgeCLI reads, in its order: yours, then each folder from the
+/// top down to the project (`FORGE.md`, `.forge/FORGE.md`, else
+/// `AGENTS.md`, then `FORGE.local.md`), stopping below the home folder. The
+/// project's own `FORGE.md` and `FORGE.local.md` and yours are listed even
+/// when missing, so they can be made.
+pub fn memory_files(project: &Path) -> Vec<Memory> {
+    let file = |path: PathBuf, kind: &'static str| {
+        let meta = std::fs::metadata(&path).ok().filter(|m| m.is_file());
+        Memory {
+            exists: meta.is_some(),
+            bytes: meta.map(|m| m.len()).unwrap_or(0),
+            path,
+            kind,
+        }
+    };
+    let mut out = vec![];
+    if let Some(h) = cli_home() {
+        out.push(file(h.join("FORGE.md"), "You"));
+    }
+    let home =
+        std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from);
+    let mut chain: Vec<&Path> = project
+        .ancestors()
+        .take_while(|a| Some(*a) != home.as_deref() && a.parent().is_some())
+        .collect();
+    chain.reverse();
+    for dir in chain {
+        let is_project = dir == project;
+        let mut found = false;
+        for name in ["FORGE.md", ".forge/FORGE.md"] {
+            let m = file(dir.join(name), "Project");
+            if m.exists {
+                found = true;
+                out.push(m);
+            }
+        }
+        if !found {
+            let agents = file(dir.join("AGENTS.md"), "Project");
+            if agents.exists {
+                out.push(agents);
+            } else if is_project {
+                out.push(file(dir.join("FORGE.md"), "Project"));
+            }
+        }
+        let local = file(dir.join("FORGE.local.md"), "Local");
+        if local.exists || is_project {
+            out.push(local);
+        }
+    }
+    out
+}
+
 // ---------------------------------------------------------------- all of it
 
 /// Everything the editors show, read in one pass.
@@ -1809,6 +1947,28 @@ mod tests {
         assert!(check_rule("Bash()").is_err());
         assert!(check_rule("(x)").is_err());
         assert!(check_rule("WebFetch(domain:example.com)").is_ok());
+    }
+
+    #[test]
+    fn env_lines_round_trip_and_names_are_checked() {
+        let v = env_value("A=1\nPATH_EXTRA=/x y").unwrap().unwrap();
+        assert_eq!(v["PATH_EXTRA"], "/x y");
+        assert_eq!(env_text(Some(&v)), "A=1\nPATH_EXTRA=/x y");
+        assert!(env_value("1A=x").is_err());
+        assert_eq!(env_value("  ").unwrap(), None);
+    }
+
+    #[test]
+    fn memory_lists_the_projects_files_even_before_they_exist() {
+        let p = tmp("mem");
+        std::fs::write(p.join("AGENTS.md"), "x").unwrap();
+        let m = memory_files(&p);
+        // AGENTS.md stands in for a missing FORGE.md; FORGE.local.md can be made.
+        assert!(m.iter().any(|f| f.path == p.join("AGENTS.md") && f.exists));
+        assert!(m
+            .iter()
+            .any(|f| f.path == p.join("FORGE.local.md") && !f.exists));
+        assert!(!m.iter().any(|f| f.path == p.join("FORGE.md")));
     }
 
     #[test]

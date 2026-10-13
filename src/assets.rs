@@ -108,6 +108,7 @@ icons!(
     "box",
     "puzzle",
     "server",
+    "circle-dashed",
     // The title bar's minimize / maximize / restore / close (gpui-kit-assets, Apache-2.0).
     "window-close",
     "window-maximize",

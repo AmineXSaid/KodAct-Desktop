@@ -422,6 +422,10 @@ impl SettingsTab {
                 | SettingsTab::Hooks
                 | SettingsTab::Mcp
                 | SettingsTab::Permissions
+                | SettingsTab::Sandbox
+                | SettingsTab::Environments
+                | SettingsTab::Memory
+                | SettingsTab::Plugins
         )
     }
 }

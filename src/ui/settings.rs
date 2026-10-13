@@ -53,6 +53,10 @@ pub struct Settings {
     hooks: Entity<super::hooks_editor::HooksEditor>,
     mcp: Entity<super::mcp_editor::McpEditor>,
     permissions: Entity<super::permissions_editor::PermissionsEditor>,
+    sandbox: Entity<super::sandbox_editor::SandboxEditor>,
+    env: Entity<super::env_editor::EnvEditor>,
+    plugins: Entity<super::plugins_editor::PluginsEditor>,
+    memory: Entity<super::memory_view::MemoryView>,
     _subs: Vec<Subscription>,
 }
 
@@ -93,7 +97,7 @@ const SECTIONS: &[(&str, &[(SettingsTab, &str, &str)])] = &[
         ],
     ),
     (
-        "Planned",
+        "Workspace",
         &[
             (SettingsTab::Sandbox, "icons/box.svg", "Sandbox"),
             (SettingsTab::Network, "icons/network.svg", "Network"),
@@ -165,6 +169,12 @@ impl Settings {
         let mcp = cx.new(|cx| super::mcp_editor::McpEditor::new(state.clone(), window, cx));
         let permissions = cx
             .new(|cx| super::permissions_editor::PermissionsEditor::new(state.clone(), window, cx));
+        let sandbox =
+            cx.new(|cx| super::sandbox_editor::SandboxEditor::new(state.clone(), window, cx));
+        let env = cx.new(|cx| super::env_editor::EnvEditor::new(state.clone(), window, cx));
+        let plugins =
+            cx.new(|cx| super::plugins_editor::PluginsEditor::new(state.clone(), window, cx));
+        let memory = cx.new(|cx| super::memory_view::MemoryView::new(state.clone(), window, cx));
         Self {
             state,
             name,
@@ -186,6 +196,10 @@ impl Settings {
             hooks,
             mcp,
             permissions,
+            sandbox,
+            env,
+            plugins,
+            memory,
             _subs: subs,
         }
     }
@@ -1262,6 +1276,14 @@ impl Render for Settings {
             SettingsTab::Hooks => self.hooks.clone().into_any_element(),
             SettingsTab::Mcp => self.mcp.clone().into_any_element(),
             SettingsTab::Permissions => self.permissions.clone().into_any_element(),
+            SettingsTab::Sandbox => self.sandbox.clone().into_any_element(),
+            SettingsTab::Network => {
+                super::planned::render(&t, &super::planned::NETWORK).into_any_element()
+            }
+            SettingsTab::Environments => self.env.clone().into_any_element(),
+            SettingsTab::Memory => self.memory.clone().into_any_element(),
+            SettingsTab::Plugins => self.plugins.clone().into_any_element(),
+            SettingsTab::Guide => super::guide::render(&t).into_any_element(),
             SettingsTab::About => self.about(&t),
             _ => div().into_any_element(),
         };

@@ -400,3 +400,46 @@ pub fn reveal(dir: &std::path::Path, cx: &mut gpui::App) {
     let _ = std::fs::create_dir_all(dir);
     cx.open_with_system(dir);
 }
+
+/// One settings key as each file holds it (yours, the project's, this
+/// PC's), for the editors of a single key.
+pub type KeyByLayer = Vec<(
+    crate::forge_files::Layer,
+    Result<Option<serde_json::Value>, String>,
+)>;
+
+/// Read `key` from the three settings files (blocking: call off the UI thread).
+pub fn read_key(project: &std::path::Path, key: &str) -> KeyByLayer {
+    crate::forge_files::Layer::ALL
+        .iter()
+        .map(|l| (*l, crate::forge_files::setting(project, *l, key)))
+        .collect()
+}
+
+/// The three settings files as chips, with what each one reaches.
+pub fn layer_chips<V: 'static>(
+    t: &Theme,
+    id: &'static str,
+    current: crate::forge_files::Layer,
+    cx: &mut gpui::Context<V>,
+    pick: impl Fn(&mut V, crate::forge_files::Layer, &mut gpui::Context<V>) + Copy + 'static,
+) -> gpui::Div {
+    use crate::forge_files::Layer;
+    let mut row = div().flex().flex_wrap().gap(px(6.));
+    for (layer, label) in [
+        (Layer::Local, "This project, this PC"),
+        (Layer::Project, "This project, shared"),
+        (Layer::User, "Every project"),
+    ] {
+        row = row.child(
+            chip(
+                t,
+                SharedString::from(format!("{id}-{layer:?}")),
+                label,
+                current == layer,
+            )
+            .on_click(cx.listener(move |this, _, _, cx| pick(this, layer, cx))),
+        );
+    }
+    row
+}
