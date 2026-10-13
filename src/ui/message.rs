@@ -43,6 +43,8 @@ pub struct ItemContext {
     pub newest_turn: bool,
     /// The chat ended on Stop and its last row offers Continue.
     pub can_continue: bool,
+    /// Nothing you sent comes after this item: it belongs to the newest turn.
+    pub in_last_turn: bool,
     /// Diagrams showing their source (`AppState::diagram_code`).
     pub sources: std::sync::Arc<std::collections::HashSet<SharedString>>,
 }
@@ -162,7 +164,7 @@ fn notice(text: &SharedString, error: bool, cx: &ItemContext, t: &Theme) -> AnyE
         .when(interrupted && cx.last && cx.can_continue, |d| {
             d.child(link(format!("continue-{key}"), "Continue", "icons/play.svg").on_click(|_, window, app| window.dispatch_action(Box::new(super::ContinueReply), app)))
         })
-        .when(error && cx.last && !cx.busy, |d| {
+        .when(error && cx.in_last_turn && !cx.busy, |d| {
             d.child(link(format!("retry-{key}"), "Retry", "icons/rotate-ccw.svg").on_click(move |_, _, app| {
                 state_retry.update(app, |s, cx| {
                     let q = s.chats.iter().find(|c| c.id == chat).and_then(|c| crate::state::turn_question(&c.messages, at));

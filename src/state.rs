@@ -214,6 +214,13 @@ pub struct Chat {
     pub version: u64,
     /// A reply finished here while you were looking at another chat.
     pub unread: bool,
+    /// Its ForgeCLI conversation's id (`--session-id`, then `--resume`) and
+    /// its file name in the history (`history.rs`).
+    pub session: String,
+    /// ForgeCLI has written this conversation: the next process resumes it.
+    pub resumable: bool,
+    /// When it last changed, for the sidebar's dates and the history's order.
+    pub updated: SystemTime,
 }
 
 /// Where a chat stands, as its sidebar row shows it.
@@ -231,6 +238,18 @@ pub enum ChatStatus {
 }
 
 impl Chat {
+    /// A new, empty chat with a fresh conversation id.
+    pub fn new(id: usize, project: usize, title: SharedString) -> Self {
+        Self { id, project, title, minutes_ago: 0, pinned: false, messages: vec![], version: 0, unread: false, session: crate::history::new_id(), resumable: false, updated: SystemTime::now() }
+    }
+
+    /// Start a new ForgeCLI conversation for this chat (its old one can't
+    /// follow: the transcript was cut back, or the endpoint changed).
+    pub fn new_conversation(&mut self) {
+        self.session = crate::history::new_id();
+        self.resumable = false;
+    }
+
     pub fn group(&self) -> &'static str {
         if self.pinned {
             return "Pinned";
@@ -286,6 +305,8 @@ struct Live {
     session: crate::backend::Session,
     _pump: Task<()>,
     profile: crate::endpoints::Profile,
+    /// Which process this is: events from one that was replaced are dropped.
+    generation: u64,
 }
 
 /// A permission question Forge is waiting on, and where its card is.
@@ -421,6 +442,14 @@ pub fn turn_question(messages: &[Message], end: usize) -> Option<usize> {
     messages.get(..=end.min(messages.len().saturating_sub(1)))?.iter().rposition(|m| matches!(m, Message::User { .. }))
 }
 
+/// Whole minutes since `t` (0 for the future).
+fn minutes_since(t: SystemTime) -> u32 {
+    t.elapsed().map(|d| (d.as_secs() / 60).min(u32::MAX as u64) as u32).unwrap_or(0)
+}
+
+/// Said under a reply that was still running when Forge closed.
+pub const CLOSED_MID_REPLY: &str = "Forge was closed before this reply finished. Send a message to pick it up.";
+
 /// What Continue sends: Forge picks up where Stop cut it off.
 const CONTINUE_PROMPT: &str = "Continue from where you stopped.";
 
@@ -551,6 +580,18 @@ pub struct AppState {
     /// Chats are still loading: screens show placeholders.
     pub loading: bool,
     load: Option<Task<()>>,
+    /// Where chats are kept between launches (`history.rs`); None keeps them in memory only.
+    history: Option<std::path::PathBuf>,
+    /// Chats changed since they were last written, and the pending write.
+    dirty: std::collections::HashSet<usize>,
+    save_task: Option<Task<()>>,
+    /// Chats whose process is resuming a conversation and hasn't spoken yet:
+    /// if it ends first, the conversation couldn't be reopened.
+    resuming: std::collections::HashSet<usize>,
+    /// Keeps the sidebar's "5m" / "2h" true as time passes.
+    clock: Option<Task<()>>,
+    /// Counts ForgeCLI processes started, to tell their events apart.
+    generations: u64,
     next_id: usize,
 }
 
@@ -633,6 +674,12 @@ impl AppState {
             diagram_code: Default::default(),
             loading: true,
             load: None,
+            history: crate::history::dir(),
+            dirty: Default::default(),
+            save_task: None,
+            resuming: Default::default(),
+            clock: None,
+            generations: 0,
             next_id,
         }
     }
@@ -641,13 +688,32 @@ impl AppState {
     /// UI thread; this shell's chats are built in, so it only stands in for
     /// that read's time, so the loading placeholders can be seen.
     pub fn load(&mut self, cx: &mut Context<Self>) {
-        const MOCK_INDEX_READ: Duration = Duration::from_millis(700);
+        // Your chats from before, read off the UI thread.
+        let dir = self.history.clone();
         self.load = Some(cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(MOCK_INDEX_READ).await;
+            let saved = cx
+                .background_spawn(async move {
+                    let all = dir.as_deref().map(crate::history::load_all).unwrap_or_default();
+                    all.into_iter().map(|c| { let m = crate::history::messages_of(&c); (c, m) }).collect::<Vec<_>>()
+                })
+                .await;
             let _ = this.update(cx, |s, cx| {
+                s.restore(saved, cx);
                 s.loading = false;
                 cx.notify();
             });
+        }));
+        // Anything not yet written is written as the app closes.
+        cx.on_app_quit(|s, _| {
+            s.flush_history();
+            async {}
+        })
+        .detach();
+        self.clock = Some(cx.spawn(async move |this, cx| loop {
+            cx.background_executor().timer(Duration::from_secs(60)).await;
+            if this.update(cx, |s, cx| s.tick_ages(cx)).is_err() {
+                break;
+            }
         }));
         self.load_endpoints(false, cx);
         // Someone who never chose keeps the avatar they were given.
@@ -803,6 +869,129 @@ impl AppState {
         }
     }
 
+    // ------------------------------------------------------------ history
+
+    /// Chats read back at start become the sidebar's, each in its project
+    /// (a project folder not open yet is added).
+    fn restore(&mut self, saved: Vec<(crate::history::SavedChat, Vec<Message>)>, cx: &mut Context<Self>) {
+        let mut added_project = false;
+        for (c, messages) in saved {
+            if self.chats.iter().any(|x| x.session == c.session) {
+                continue;
+            }
+            let project = match self.projects.iter().find(|p| p.path == c.project) {
+                Some(p) => p.id,
+                None => {
+                    let id = self.projects.iter().map(|p| p.id).max().unwrap_or(0) + 1;
+                    let name = c.project.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| c.project.display().to_string());
+                    self.projects.push(Project { id, name: name.into(), branch: git_branch(&c.project).into(), path: c.project.clone(), pinned: false, opened_minutes_ago: 60 });
+                    added_project = true;
+                    id
+                }
+            };
+            let id = self.next_id;
+            self.next_id += 1;
+            let updated = crate::history::updated_of(&c);
+            let mut messages = messages;
+            // A reply cut off by closing the app says so, rather than just stopping.
+            if matches!(messages.last(), Some(Message::Assistant { .. }) | Some(Message::User { .. })) {
+                messages.push(Message::Notice { text: CLOSED_MID_REPLY.into(), error: false });
+            }
+            self.chats.push(Chat {
+                minutes_ago: minutes_since(updated),
+                pinned: c.pinned,
+                messages,
+                session: c.session,
+                resumable: c.resumable,
+                updated,
+                ..Chat::new(id, project, c.title.into())
+            });
+        }
+        // Pinned first is the sidebar's job; here, the most recent first.
+        self.chats.sort_by(|a, b| b.updated.cmp(&a.updated));
+        if added_project {
+            let paths: Vec<std::path::PathBuf> = self.projects.iter().skip(1).map(|p| p.path.clone()).collect();
+            cx.background_spawn(async move { save_projects(paths) }).detach();
+        }
+    }
+
+    /// A chat changed: it moves to now, and is written shortly (changes
+    /// close together are written once).
+    fn touch(&mut self, chat: usize, cx: &mut Context<Self>) {
+        if let Some(c) = self.chat_mut(chat) {
+            c.updated = SystemTime::now();
+            c.minutes_ago = 0;
+        }
+        self.mark_dirty(chat, cx);
+    }
+
+    /// Write a chat soon, without changing its date (a rename, a pin).
+    fn mark_dirty(&mut self, chat: usize, cx: &mut Context<Self>) {
+        if self.history.is_none() {
+            return;
+        }
+        self.dirty.insert(chat);
+        if self.save_task.is_some() {
+            return;
+        }
+        self.save_task = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(Duration::from_millis(600)).await;
+            let _ = this.update(cx, |s, cx| {
+                s.save_task = None;
+                let batch = s.take_dirty();
+                if let Some(dir) = s.history.clone() {
+                    cx.background_spawn(async move {
+                        for c in batch {
+                            if let Err(e) = crate::history::save(&dir, &c) {
+                                eprintln!("could not save chat {}: {e}", c.session);
+                            }
+                        }
+                    })
+                    .detach();
+                }
+            });
+        }));
+    }
+
+    /// The chats waiting to be written, in their on-disk form.
+    fn take_dirty(&mut self) -> Vec<crate::history::SavedChat> {
+        let ids: Vec<usize> = self.dirty.drain().collect();
+        ids.iter()
+            .filter_map(|id| self.chats.iter().find(|c| c.id == *id))
+            // An empty chat (a new one never sent) isn't kept.
+            .filter(|c| !c.messages.is_empty())
+            .map(|c| {
+                let dir = self.project(c.project).map(|p| p.path.clone()).unwrap_or_else(|| self.project_dir.clone());
+                crate::history::save_form(c, &dir)
+            })
+            .collect()
+    }
+
+    /// Write what's pending now (the app is closing).
+    fn flush_history(&mut self) {
+        self.save_task = None;
+        let batch = self.take_dirty();
+        if let Some(dir) = &self.history {
+            for c in batch {
+                let _ = crate::history::save(dir, &c);
+            }
+        }
+    }
+
+    fn tick_ages(&mut self, cx: &mut Context<Self>) {
+        let mut changed = false;
+        for c in self.chats.iter_mut() {
+            let m = minutes_since(c.updated);
+            if m != c.minutes_ago {
+                c.minutes_ago = m;
+                changed = true;
+            }
+        }
+        if changed {
+            cx.notify();
+        }
+    }
+
     pub fn chat(&self) -> Option<&Chat> {
         self.current.and_then(|id| self.chats.iter().find(|c| c.id == id))
     }
@@ -954,6 +1143,7 @@ impl AppState {
         if let Some(c) = self.chat_mut(id) {
             c.pinned = !c.pinned;
         }
+        self.mark_dirty(id, cx);
         cx.notify();
     }
 
@@ -1034,6 +1224,8 @@ impl AppState {
         let text = text.to_string();
         c.messages.truncate(msg);
         c.version += 1;
+        c.new_conversation();
+        self.touch(chat, cx);
         cx.notify();
         Some(text)
     }
@@ -1294,6 +1486,7 @@ impl AppState {
         if let Some(c) = self.chat_mut(id).filter(|_| !title.is_empty()) {
             c.title = title.into();
         }
+        self.mark_dirty(id, cx);
         cx.notify();
     }
 
@@ -1314,11 +1507,13 @@ impl AppState {
         if busy {
             messages.push(Message::Notice { text: "Copied while a reply was running; it ends here.".into(), error: false });
         }
-        let copy = Chat { id: self.next_id, project: c.project, title: format!("{} (copy)", c.title).into(), minutes_ago: 0, pinned: false, messages, version: 0, unread: false };
+        let mut copy = Chat::new(self.next_id, c.project, format!("{} (copy)", c.title).into());
+        copy.messages = messages;
         self.next_id += 1;
         let at = self.chats.iter().position(|c| c.id == id).unwrap_or(0);
         let new_id = copy.id;
         self.chats.insert(at, copy);
+        self.touch(new_id, cx);
         self.open_chat(new_id, cx);
         self.show_toast("Duplicated the chat.", cx);
     }
@@ -1365,6 +1560,11 @@ impl AppState {
         self.kept_modes.remove(&id);
         self.ratings.retain(|(c, _), _| *c != id);
         let title = self.chats.iter().find(|c| c.id == id).map(|c| c.title.clone());
+        // Its file goes too (ForgeCLI's own log of the conversation stays, as it does for the CLI).
+        self.dirty.remove(&id);
+        if let (Some(dir), Some(session)) = (self.history.clone(), self.chats.iter().find(|c| c.id == id).map(|c| c.session.clone())) {
+            cx.background_spawn(async move { crate::history::remove(&dir, &session) }).detach();
+        }
         self.chats.retain(|c| c.id != id);
         if self.current == Some(id) {
             self.new_chat(cx);
@@ -1560,6 +1760,7 @@ impl AppState {
                 c.version += 1;
             }
         }
+        self.touch(id, cx);
         cx.notify();
     }
 
@@ -1579,7 +1780,7 @@ impl AppState {
                 let id = self.next_id;
                 self.next_id += 1;
                 let title: String = text.lines().next().unwrap_or_default().chars().take(48).collect();
-                self.chats.insert(0, Chat { id, project: self.current_project, title: title.into(), minutes_ago: 0, pinned: false, messages: vec![], version: 0, unread: false });
+                self.chats.insert(0, Chat::new(id, self.current_project, title.into()));
                 self.current = Some(id);
                 self.keep_mode();
                 id
@@ -1588,9 +1789,9 @@ impl AppState {
         self.screen = Screen::Chat;
         if let Some(c) = self.chat_mut(id) {
             c.messages.push(Message::User { text: text.clone().into(), sent: SystemTime::now() });
-            c.minutes_ago = 0;
             c.version += 1;
         }
+        self.touch(id, cx);
         if demo_mode() {
             self.play_script(id, text, cx);
         } else {
@@ -1654,6 +1855,9 @@ impl AppState {
                     self.sessions.get_mut(&id).expect("checked above").profile = profile.clone();
                 } else {
                     self.sessions.remove(&id);
+                    if let Some(c) = self.chat_mut(id) {
+                        c.new_conversation();
+                    }
                     self.notice(id, format!("Now on {}: a new endpoint starts a new conversation, so Forge doesn't see the messages above.", profile.display()), false);
                 }
             }
@@ -1674,25 +1878,61 @@ impl AppState {
 
     fn start_session(&mut self, id: usize, profile: crate::endpoints::Profile, cx: &mut Context<Self>) -> Result<(), String> {
         let exe = crate::backend::find_cli().ok_or("ForgeCLI wasn't found. Put forge.exe beside ForgeDesktop.exe, or set FORGE_CLI to its path.")?;
-        let launch = crate::backend::launch(&profile, self.mode, self.bypass_allowed)?;
+        let (session_id, resumable) = self.chats.iter().find(|c| c.id == id).map(|c| (c.session.clone(), c.resumable)).unwrap_or_else(|| (crate::history::new_id(), false));
+        let conversation = if resumable { crate::backend::Conversation::Resume(&session_id) } else { crate::backend::Conversation::New(&session_id) };
+        let launch = crate::backend::launch(&profile, self.mode, self.bypass_allowed, conversation)?;
+        if resumable {
+            self.resuming.insert(id);
+        } else {
+            self.resuming.remove(&id);
+        }
         let project = self.chats.iter().find(|c| c.id == id).map(|c| c.project);
         let dir = project.and_then(|p| self.project(p)).map(|p| p.path.clone()).filter(|p| p.is_dir()).unwrap_or_else(|| self.project_dir.clone());
         let session = crate::backend::Session::spawn(&exe, &launch, &dir)?;
         let events = session.events.clone();
+        self.generations += 1;
+        let generation = self.generations;
         let pump = cx.spawn(async move |this, cx| {
             while let Ok(ev) = events.recv().await {
-                if this.update(cx, |s, cx| s.on_event(id, ev, cx)).is_err() {
+                if this.update(cx, |s, cx| s.on_event(id, generation, ev, cx)).is_err() {
                     break;
                 }
             }
         });
         self.stale_turns.remove(&id);
-        self.sessions.insert(id, Live { session, _pump: pump, profile });
+        self.sessions.insert(id, Live { session, _pump: pump, profile, generation });
         Ok(())
     }
 
-    fn on_event(&mut self, chat: usize, ev: crate::backend::Event, cx: &mut Context<Self>) {
+    fn on_event(&mut self, chat: usize, generation: u64, ev: crate::backend::Event, cx: &mut Context<Self>) {
         use crate::backend::Event;
+        // A process that was replaced or dropped (edit, retry, a new endpoint,
+        // a failed resume) may still have events queued: they aren't this chat's.
+        if self.sessions.get(&chat).map(|l| l.generation) != Some(generation) {
+            return;
+        }
+        if !matches!(ev, Event::Exited { .. } | Event::Error(_)) {
+            self.resuming.remove(&chat);
+        } else if self.resuming.remove(&chat) {
+            // It failed before saying anything ("no session …", then exit):
+            // the conversation couldn't be reopened (removed, or written on
+            // another machine). Go on in a new one, sending the message
+            // again. Dropping the process drops its events too.
+            self.sessions.remove(&chat);
+            self.asks.remove(&chat);
+            self.stale_turns.remove(&chat);
+            let pending = self.replies.contains_key(&chat).then(|| self.chats.iter().find(|c| c.id == chat).and_then(|c| c.messages.iter().rev().find_map(|m| if let Message::User { text, .. } = m { Some(text.to_string()) } else { None }))).flatten();
+            if let Some(c) = self.chat_mut(chat) {
+                c.new_conversation();
+            }
+            self.notice(chat, "Forge couldn't reopen this conversation's earlier context, so it goes on as a new conversation.", false);
+            if let Some(text) = pending {
+                self.replies.remove(&chat);
+                self.send_to_forge(chat, text, cx);
+            }
+            self.touch(chat, cx);
+            return cx.notify();
+        }
         // After Stop, the stopped turn's last words are dropped up to its result.
         if let Some(n) = self.stale_turns.get_mut(&chat).filter(|n| **n > 0) {
             match ev {
@@ -1767,6 +2007,8 @@ impl AppState {
                 if let Some(c) = self.chat_mut(chat) {
                     c.messages.push(Message::TurnEnd { seconds, usage });
                     c.version += 1;
+                    // ForgeCLI has written the conversation: it can be resumed.
+                    c.resumable = true;
                 }
                 self.finish_turn(chat, cx);
             }
@@ -1848,6 +2090,7 @@ impl AppState {
 
     /// The turn is over: the composer is free again.
     fn finish_turn(&mut self, chat: usize, cx: &mut Context<Self>) {
+        self.touch(chat, cx);
         self.replies.remove(&chat);
         self.turn_started.remove(&chat);
         if let Some(c) = self.chat_mut(chat) {
@@ -1887,7 +2130,7 @@ impl AppState {
             None => {
                 let id = self.next_id;
                 self.next_id += 1;
-                self.chats.insert(0, Chat { id, project: self.current_project, title: SIDE_TITLE.into(), minutes_ago: 0, pinned: false, messages: vec![], version: 0, unread: false });
+                self.chats.insert(0, Chat::new(id, self.current_project, SIDE_TITLE.into()));
                 self.current = Some(id);
                 self.keep_mode();
                 id
@@ -2014,6 +2257,7 @@ impl AppState {
                 // A mock reply has no model to report usage: count it from the text.
                 let usage = crate::context::estimate(&c.messages);
                 c.messages.push(Message::TurnEnd { seconds, usage: Some(usage) });
+                self.touch(chat, cx);
             }
             _ => {}
         }
@@ -2301,15 +2545,15 @@ fn mock_chats() -> Vec<Chat> {
         m
     };
     let mut chats = vec![
-        Chat { id: 1, project: 1, title: "Fix the greeting and add a test".into(), minutes_ago: 4, pinned: true, messages: rich, version: 0, unread: false },
-        Chat { id: 2, project: 4, title: "Explain the hermes review pipeline".into(), minutes_ago: 120, pinned: false, messages: simple("Explain the hermes review pipeline", 120), version: 0, unread: true },
-        Chat { id: 3, project: 1, title: "Speed up the session store".into(), minutes_ago: 300, pinned: false, messages: simple("Speed up the session store", 300), version: 0, unread: false },
-        Chat { id: 4, project: 3, title: "Write a README for the CLI".into(), minutes_ago: 1500, pinned: false, messages: simple("Write a README for the CLI", 1500), version: 0, unread: false },
-        Chat { id: 5, project: 1, title: "Why does cargo test hang on Windows?".into(), minutes_ago: 1800, pinned: false, messages: with_error(simple("Why does cargo test hang on Windows?", 1800)), version: 0, unread: false },
-        Chat { id: 6, project: 1, title: "Migrate settings to the new schema".into(), minutes_ago: 40, pinned: false, messages: plan, version: 0, unread: false },
-        Chat { id: 9, project: 1, title: "Update the Q3 budget and write it up".into(), minutes_ago: 6, pinned: false, messages: budget, version: 0, unread: false },
-        Chat { id: 8, project: 1, title: "Draw how a chat reaches the model".into(), minutes_ago: 12, pinned: false, messages: drawn, version: 0, unread: false },
-        Chat { id: 7, project: 2, title: "Genesis redesign: landing page".into(), minutes_ago: 20000, pinned: false, messages: simple("Genesis redesign: landing page", 20000), version: 0, unread: false },
+        Chat { minutes_ago: 4, pinned: true, messages: rich, unread: false, ..Chat::new(1, 1, "Fix the greeting and add a test".into()) },
+        Chat { minutes_ago: 120, pinned: false, messages: simple("Explain the hermes review pipeline", 120), unread: true, ..Chat::new(2, 4, "Explain the hermes review pipeline".into()) },
+        Chat { minutes_ago: 300, pinned: false, messages: simple("Speed up the session store", 300), unread: false, ..Chat::new(3, 1, "Speed up the session store".into()) },
+        Chat { minutes_ago: 1500, pinned: false, messages: simple("Write a README for the CLI", 1500), unread: false, ..Chat::new(4, 3, "Write a README for the CLI".into()) },
+        Chat { minutes_ago: 1800, pinned: false, messages: with_error(simple("Why does cargo test hang on Windows?", 1800)), unread: false, ..Chat::new(5, 1, "Why does cargo test hang on Windows?".into()) },
+        Chat { minutes_ago: 40, pinned: false, messages: plan, unread: false, ..Chat::new(6, 1, "Migrate settings to the new schema".into()) },
+        Chat { minutes_ago: 6, pinned: false, messages: budget, unread: false, ..Chat::new(9, 1, "Update the Q3 budget and write it up".into()) },
+        Chat { minutes_ago: 12, pinned: false, messages: drawn, unread: false, ..Chat::new(8, 1, "Draw how a chat reaches the model".into()) },
+        Chat { minutes_ago: 20000, pinned: false, messages: simple("Genesis redesign: landing page", 20000), unread: false, ..Chat::new(7, 2, "Genesis redesign: landing page".into()) },
     ];
     // The mock replies' usage, counted from their text as each turn ended.
     for c in &mut chats {

@@ -99,7 +99,15 @@ When a diagram would explain structure or flow better than prose (architecture, 
 draw it in a ```mermaid fenced block: flowchart (any direction, subgraphs allowed), sequenceDiagram or stateDiagram-v2. \
 Forge draws these inline. An ```svg block with one <svg> also renders. Never draw diagrams with ASCII art.";
 
-pub fn launch(profile: &Profile, mode: ModeId, bypass_allowed: bool) -> Result<Launch, String> {
+/// Which ForgeCLI conversation a process runs: a new one under the id the
+/// desktop chose, or one already on disk, resumed.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Conversation<'a> {
+    New(&'a str),
+    Resume(&'a str),
+}
+
+pub fn launch(profile: &Profile, mode: ModeId, bypass_allowed: bool, conversation: Conversation) -> Result<Launch, String> {
     let token = crate::health::token(&profile.auth)?;
     let mut args: Vec<String> = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--include-partial-messages", "--permission-prompt-tool", "stdio", "--model"]
         .iter()
@@ -108,6 +116,10 @@ pub fn launch(profile: &Profile, mode: ModeId, bypass_allowed: bool) -> Result<L
     args.push(profile.model.clone());
     args.extend(crate::modes::cli_args(mode, bypass_allowed));
     args.extend(["--append-system-prompt".to_string(), SURFACE_PROMPT.to_string()]);
+    match conversation {
+        Conversation::New(id) => args.extend(["--session-id".to_string(), id.to_string()]),
+        Conversation::Resume(id) => args.extend(["--resume".to_string(), id.to_string()]),
+    }
     let mut env = vec![];
     let base = cli_base_url(profile);
     match profile.wire {
@@ -535,7 +547,11 @@ mod tests {
     fn the_endpoint_goes_in_variables_never_arguments() {
         let p: Profile = serde_json::from_value(json!({"name":"x","baseUrl":"https://gw.example/v1","wire":"anthropic","model":"m1","auth":{"type":"bearer","token":"${env:FORGE_GPUI_TEST_KEY}"}})).unwrap();
         std::env::set_var("FORGE_GPUI_TEST_KEY", "sk-test");
-        let l = launch(&p, ModeId::Manual, false).unwrap();
+        let id = "0b9a1f2e-3c4d-4e5f-8a6b-7c8d9e0f1a2b";
+        let l = launch(&p, ModeId::Manual, false, Conversation::New(id)).unwrap();
+        assert!(l.args.windows(2).any(|w| w == ["--session-id", id]));
+        let r = launch(&p, ModeId::Manual, false, Conversation::Resume(id)).unwrap();
+        assert!(r.args.windows(2).any(|w| w == ["--resume", id]) && !r.args.iter().any(|a| a == "--session-id"));
         assert!(!l.args.iter().any(|a| a.contains("sk-test")));
         assert!(l.env.contains(&("FORGE_BASE_URL".into(), "https://gw.example".into())));
         assert!(l.env.contains(&("FORGE_API_KEY".into(), "sk-test".into())));
@@ -544,7 +560,7 @@ mod tests {
         // The model is told its diagrams are drawn here.
         assert!(l.args.windows(2).any(|w| w[0] == "--append-system-prompt" && w[1].contains("```mermaid")));
         let o: Profile = serde_json::from_value(json!({"name":"o","baseUrl":"http://127.0.0.1:11434","wire":"openai","model":"q"})).unwrap();
-        let l = launch(&o, ModeId::Manual, false).unwrap();
+        let l = launch(&o, ModeId::Manual, false, Conversation::New(id)).unwrap();
         assert!(l.env.contains(&("FORGE_OPENAI_BASE_URL".into(), "http://127.0.0.1:11434/v1".into())));
     }
 

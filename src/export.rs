@@ -144,7 +144,7 @@ mod tests {
     use crate::state::{DiffLine, ToolCall};
 
     fn chat(messages: Vec<Message>) -> Chat {
-        Chat { id: 1, project: 1, title: "Fix the greeting: a test!".into(), minutes_ago: 0, pinned: false, messages, version: 0, unread: false }
+        Chat { messages, ..Chat::new(1, 1, "Fix the greeting: a test!".into()) }
     }
 
     #[test]

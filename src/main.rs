@@ -23,6 +23,7 @@ mod fonts;
 mod greeting;
 mod health;
 mod highlight;
+mod history;
 mod mermaid;
 mod modes;
 mod office;
