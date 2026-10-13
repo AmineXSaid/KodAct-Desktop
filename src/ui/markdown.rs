@@ -210,6 +210,10 @@ pub struct CopyContext {
     /// Unique per message: `<chat>-<message>-<block>`.
     pub key: String,
     pub copied: Option<SharedString>,
+    /// Device pixels per logical pixel, for diagrams drawn to exact size.
+    pub scale: f32,
+    /// Diagrams showing their source instead of the drawing (`AppState::diagram_code`).
+    pub sources: std::sync::Arc<std::collections::HashSet<SharedString>>,
 }
 
 fn runs(spans: &[Span], t: &Theme, base_weight: FontWeight, color: gpui::Hsla) -> StyledText {
@@ -327,7 +331,15 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                 .child(runs(&spans, t, FontWeight::NORMAL, t.colors.text_body))
                 .into_any_element(),
             Block::Rule => div().h(t.size.hairline).bg(t.colors.border).into_any_element(),
-            Block::Code { lang, code } => code_block(&lang, code, &format!("{}-{n}", copy.key), t, copy),
+            Block::Code { lang, code } => {
+                let key = format!("{}-{n}", copy.key);
+                // A diagram (Mermaid, an SVG) is drawn, unless you asked for its source.
+                let source_shown = copy.sources.contains(key.as_str());
+                match super::diagram_view::fence(&lang, &code, t) {
+                    Some(svg) => diagram_block(&lang, code, svg, &key, source_shown, t, copy),
+                    None => code_block(&lang, code, &key, t, copy),
+                }
+            }
             Block::Table { align, head, rows } => table(&align, &head, &rows, t),
         };
         col = col.child(div().mt(gap).child(el));
@@ -438,6 +450,93 @@ fn code_block(lang: &str, code: String, key: &str, t: &Theme, copy: &CopyContext
                 .child(code_text(&shown, lang, t)),
         )
         .into_any_element()
+}
+
+/// A diagram a reply wrote: drawn in a card, with its kind, Code (show the
+/// source instead), Open (the side panel, to zoom and download) and Copy.
+fn diagram_block(lang: &str, code: String, svg: std::sync::Arc<str>, key: &str, source_shown: bool, t: &Theme, copy: &CopyContext) -> AnyElement {
+    if source_shown {
+        // The source, with a way back to the drawing.
+        return div()
+            .relative()
+            .child(code_block(lang, code, key, t, copy))
+            .child(div().absolute().top(px(3.)).right(px(84.)).child(header_button(&format!("draw-{key}"), "icons/eye.svg", "Diagram", false, t).on_click({
+                let (state, key) = (copy.state.clone(), SharedString::from(key.to_string()));
+                move |_, _, cx: &mut App| state.update(cx, |s, cx| s.toggle_diagram_code(key.clone(), cx))
+            })))
+            .into_any_element();
+    }
+    let copied = copy.copied.as_deref() == Some(key);
+    let (copier, toggler, opener) = (copy.state.clone(), copy.state.clone(), copy.state.clone());
+    let key_owned: SharedString = key.to_string().into();
+    let toggle_key = key_owned.clone();
+    let kind = match lang.to_ascii_lowercase().as_str() {
+        "mermaid" | "mmd" => "Mermaid",
+        _ => "SVG",
+    };
+    let natural = super::diagram_view::natural_width(&svg).unwrap_or(f32::from(t.size.column));
+    let inner = (f32::from(t.size.column) - 2. * f32::from(t.space.md) - 2.).max(80.);
+    let drawing = super::diagram_view::fluid(&svg, natural.min(inner), copy.scale);
+    // Named for what it is, so the panel's title and a download read well.
+    let first = code.split_whitespace().next().unwrap_or_default().to_ascii_lowercase();
+    let stem = match first.as_str() {
+        "sequencediagram" => "sequence-diagram",
+        s if s.starts_with("statediagram") => "state-diagram",
+        "graph" | "flowchart" => "flowchart",
+        _ => "diagram",
+    };
+    let to_open = crate::state::FileRef { name: format!("{stem}.svg").into(), path: None, content: svg.to_string().into(), bytes: None };
+    div()
+        .w_full()
+        .bg(t.colors.surface)
+        .border_1()
+        .border_color(t.colors.border)
+        .rounded(t.radius.card)
+        .overflow_hidden()
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(t.space.xs)
+                .px(t.space.md)
+                .py(t.space.xs)
+                .border_b_1()
+                .border_color(t.colors.border)
+                .text_size(t.text.caption)
+                .text_color(t.colors.text_subtle)
+                .child(icon("icons/route.svg", t.size.icon_xs, t.colors.text_subtle))
+                .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(format!("Diagram · {kind}")))
+                .child(header_button(&format!("source-{key}"), "icons/code-xml.svg", "Code", false, t).on_click(move |_, _, cx: &mut App| toggler.update(cx, |s, cx| s.toggle_diagram_code(toggle_key.clone(), cx))))
+                .child(header_button(&format!("open-{key}"), "icons/maximize-2.svg", "Open", false, t).on_click(move |_, _, cx: &mut App| opener.update(cx, |s, cx| s.open_doc(to_open.clone(), cx))))
+                .child(header_button(&format!("copy-{key}"), if copied { "icons/check.svg" } else { "icons/copy.svg" }, if copied { "Copied" } else { "Copy" }, copied, t).on_click(move |_, _, cx: &mut App| {
+                    cx.write_to_clipboard(ClipboardItem::new_string(code.clone()));
+                    let key = key_owned.clone();
+                    copier.update(cx, |s, cx| s.mark_copied(key, cx));
+                })),
+        )
+        // The drawing, centred, at its own size or the column's, whichever is smaller.
+        .child(div().flex().justify_center().p(t.space.md).children(drawing))
+        .into_any_element()
+}
+
+/// A small text button in a block's header.
+fn header_button(id: &str, path: &'static str, label: &'static str, done: bool, t: &Theme) -> gpui::Stateful<gpui::Div> {
+    let hover = t.colors.hover;
+    let color = if done { t.extra.success } else { t.colors.text_muted };
+    div()
+        .id(SharedString::from(id.to_string()))
+        .flex()
+        .items_center()
+        .gap(t.space.xs)
+        .px(t.space.sm)
+        .py(px(2.))
+        .rounded(t.radius.small)
+        .cursor_pointer()
+        .hover(move |s| s.bg(hover))
+        .text_size(t.text.caption)
+        .text_color(color)
+        .child(icon(path, t.size.icon_xs, color))
+        .child(label)
 }
 
 /// Code in `lang`, coloured with Forge's code palette (comments italic).

@@ -298,6 +298,7 @@ impl Render for ChatView {
                         rating: s.ratings.get(&(chat.id, ix)).copied(),
                         newest_turn: !s.busy() && chat.messages[ix + 1..].iter().all(|m| !matches!(m, Message::TurnEnd { .. } | Message::User { .. })),
                         can_continue: s.can_continue(),
+                        sources: s.diagram_code.clone(),
                     };
                     message::render(m, &ctx, &t)
                 }

@@ -91,6 +91,14 @@ fn cli_base_url(profile: &Profile) -> String {
     url.strip_suffix(suffix).unwrap_or(&url).to_string()
 }
 
+/// What the desktop adds to ForgeCLI's system prompt: how replies are shown
+/// here, so the model draws diagrams Forge can render in the chat
+/// (`mermaid.rs`) rather than ASCII art.
+pub const SURFACE_PROMPT: &str = "You are running inside Forge Desktop, which renders your replies as Markdown. \
+When a diagram would explain structure or flow better than prose (architecture, a request's path, states, a sequence of calls), \
+draw it in a ```mermaid fenced block: flowchart (any direction, subgraphs allowed), sequenceDiagram or stateDiagram-v2. \
+Forge draws these inline. An ```svg block with one <svg> also renders. Never draw diagrams with ASCII art.";
+
 pub fn launch(profile: &Profile, mode: ModeId, bypass_allowed: bool) -> Result<Launch, String> {
     let token = crate::health::token(&profile.auth)?;
     let mut args: Vec<String> = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--include-partial-messages", "--permission-prompt-tool", "stdio", "--model"]
@@ -99,6 +107,7 @@ pub fn launch(profile: &Profile, mode: ModeId, bypass_allowed: bool) -> Result<L
         .collect();
     args.push(profile.model.clone());
     args.extend(crate::modes::cli_args(mode, bypass_allowed));
+    args.extend(["--append-system-prompt".to_string(), SURFACE_PROMPT.to_string()]);
     let mut env = vec![];
     let base = cli_base_url(profile);
     match profile.wire {
@@ -532,6 +541,8 @@ mod tests {
         assert!(l.env.contains(&("FORGE_API_KEY".into(), "sk-test".into())));
         assert!(l.args.windows(2).any(|w| w == ["--model", "m1"]));
         assert!(l.args.windows(2).any(|w| w == ["--permission-mode", "default"]));
+        // The model is told its diagrams are drawn here.
+        assert!(l.args.windows(2).any(|w| w[0] == "--append-system-prompt" && w[1].contains("```mermaid")));
         let o: Profile = serde_json::from_value(json!({"name":"o","baseUrl":"http://127.0.0.1:11434","wire":"openai","model":"q"})).unwrap();
         let l = launch(&o, ModeId::Manual, false).unwrap();
         assert!(l.env.contains(&("FORGE_OPENAI_BASE_URL".into(), "http://127.0.0.1:11434/v1".into())));

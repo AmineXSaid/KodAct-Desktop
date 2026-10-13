@@ -546,6 +546,8 @@ pub struct AppState {
     pub confirm_delete: Option<usize>,
     /// The keyboard shortcuts sheet is open.
     pub shortcuts_open: bool,
+    /// Diagrams in replies showing their source instead (by block key).
+    pub diagram_code: std::sync::Arc<std::collections::HashSet<SharedString>>,
     /// Chats are still loading: screens show placeholders.
     pub loading: bool,
     load: Option<Task<()>>,
@@ -628,6 +630,7 @@ impl AppState {
             chat_menu: None,
             confirm_delete: None,
             shortcuts_open: false,
+            diagram_code: Default::default(),
             loading: true,
             load: None,
             next_id,
@@ -1174,6 +1177,20 @@ impl AppState {
             });
         })
         .detach();
+    }
+
+    /// Show a diagram's source, or its drawing again.
+    pub fn toggle_diagram_code(&mut self, key: SharedString, cx: &mut Context<Self>) {
+        let set = std::sync::Arc::make_mut(&mut self.diagram_code);
+        if !set.remove(&key) {
+            set.insert(key);
+        }
+        if let Some(id) = self.current {
+            if let Some(c) = self.chat_mut(id) {
+                c.version += 1;
+            }
+        }
+        cx.notify();
     }
 
     /// A control with nothing behind it yet says so, in the registry's words.
@@ -2050,12 +2067,22 @@ fn diff(lines: &[(DiffKind, &str)]) -> Vec<DiffLine> {
     lines.iter().map(|(k, t)| DiffLine { kind: *k, text: (*t).into() }).collect()
 }
 
+/// The demo's drawn answer: a flowchart and a sequence, in Mermaid.
+const DEMO_DIAGRAM: &str = "Here is how a message travels through Forge.\n\n```mermaid\nflowchart TD\n  A[You type a message] --> B{Endpoint set up?}\n  B -->|no| C[Settings › Models]\n  C --> D\n  B -->|yes| D[ForgeCLI process]\n  D -.->|stream-json| E([Reply in the chat])\n  D --> F[(Session log)]\n```\n\nAnd the turn itself, step by step:\n\n```mermaid\nsequenceDiagram\n  autonumber\n  participant U as You\n  participant D as Forge\n  participant C as ForgeCLI\n  U->>D: Send\n  D->>C: user turn\n  loop each tool call\n    C-->>D: tool_use / tool_result\n  end\n  C-->>D: result\n  D-->>U: Reply\n```";
+
 fn script(prompt: &str) -> Vec<Step> {
     let mut s = vec![];
     s.extend(words(
         &format!("The user asked: \"{}\". I should read the entry point first, change only what is needed, then run the tests to prove it.", prompt.lines().next().unwrap_or_default()),
         Step::Think,
     ));
+    // Asked to draw something: the reply draws it, as a Mermaid diagram.
+    let lower = prompt.to_lowercase();
+    if ["diagram", "draw", "flow", "sequence", "architecture"].iter().any(|w| lower.contains(w)) {
+        s.extend(words(DEMO_DIAGRAM, Step::Say));
+        s.push(Step::End { seconds: 6.4 });
+        return s;
+    }
     s.extend(words("Let me look at how the greeting is wired before changing anything.", Step::Say));
     s.push(Step::ToolStart(ToolKind::Read, "src/main.rs".into(), None));
     s.push(Step::ToolDone("fn main() {\n    println!(\"Hello, world\");\n}\n".into(), vec![]));

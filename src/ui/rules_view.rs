@@ -407,7 +407,7 @@ impl RulesView {
         } else if s.body.trim().is_empty() {
             div().text_color(t.colors.text_subtle).child("This file is empty.").into_any_element()
         } else {
-            markdown::render(&s.body, t, &CopyContext { state: self.state.clone(), key: format!("rules-{}", s.path.display()), copied })
+            markdown::render(&s.body, t, &CopyContext { state: self.state.clone(), key: format!("rules-{}", s.path.display()), copied, scale: 2., sources: self.state.read(cx).diagram_code.clone() })
         };
 
         theme::card(t)

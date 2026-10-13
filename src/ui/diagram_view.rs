@@ -71,3 +71,57 @@ pub fn themed(svg: &str, dark: bool) -> std::borrow::Cow<'_, str> {
 pub fn natural_width(svg: &str) -> Option<f32> {
     crate::diagram::view_size(svg).map(|(w, _)| w)
 }
+
+/// An SVG colour for a theme colour.
+fn css(c: gpui::Hsla) -> String {
+    let r = c.to_rgb();
+    format!("rgba({},{},{},{:.3})", (r.r * 255.).round(), (r.g * 255.).round(), (r.b * 255.).round(), r.a)
+}
+
+/// The colours Forge draws a Mermaid diagram in, from the theme's tokens.
+pub fn palette(t: &crate::theme::Theme) -> crate::mermaid::Palette {
+    crate::mermaid::Palette {
+        node_fill: css(t.colors.surface),
+        node_stroke: css(t.colors.text_subtle.opacity(0.55)),
+        text: css(t.colors.text_strong),
+        muted: css(t.colors.text_muted),
+        edge: css(t.colors.text_muted),
+        label_bg: css(t.colors.surface),
+        accent: css(t.colors.primary),
+        accent_tint: css(t.colors.primary_tint),
+        group_fill: css(t.extra.inset),
+        note_fill: css(t.extra.warning_tint),
+        note_stroke: css(t.colors.marigold.opacity(0.6)),
+    }
+}
+
+thread_local! {
+    /// Fences already turned into drawings, by source and theme: a reply
+    /// re-renders on every streamed word, but its diagram is laid out once.
+    static FENCES: RefCell<HashMap<(u64, bool), Option<Arc<str>>>> = RefCell::new(HashMap::new());
+}
+
+/// The drawing for a fenced block, if it is a diagram (`mermaid::fence_svg`),
+/// in this theme's colours.
+pub fn fence(lang: &str, code: &str, t: &crate::theme::Theme) -> Option<Arc<str>> {
+    if !matches!(lang.to_ascii_lowercase().as_str(), "mermaid" | "mmd" | "svg" | "xml" | "html" | "htm") {
+        return None;
+    }
+    let k = (key(&format!("{lang}\u{0}{code}")), t.is_dark);
+    FENCES.with(|f| {
+        let mut f = f.borrow_mut();
+        if let Some(hit) = f.get(&k) {
+            return hit.clone();
+        }
+        if f.len() >= 256 {
+            f.clear();
+        }
+        let drawn = crate::mermaid::fence_svg(lang, code, &palette(t)).map(|svg| {
+            // A drawn SVG follows the app into dark, as diagram files do.
+            let svg = if lang.eq_ignore_ascii_case("mermaid") || lang.eq_ignore_ascii_case("mmd") { svg } else { themed(&svg, t.is_dark).into_owned() };
+            Arc::<str>::from(svg)
+        });
+        f.insert(k, drawn.clone());
+        drawn
+    })
+}

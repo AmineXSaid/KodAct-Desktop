@@ -45,6 +45,14 @@ pub struct Assets;
 
 impl AssetSource for Assets {
     fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
+        // GPUI's SVG renderer loads these two paths into the font list
+        // diagrams draw text with: give it Forge's faces, so a diagram's
+        // labels look the same on every machine.
+        match path {
+            "fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf" => return Ok(Some(Cow::Borrowed(include_bytes!("../assets/fonts/HankenGrotesk-Regular.ttf")))),
+            "fonts/lilex/Lilex-Regular.ttf" => return Ok(Some(Cow::Borrowed(include_bytes!("../assets/fonts/JetBrainsMono-Regular.ttf")))),
+            _ => {}
+        }
         if path.starts_with("avatars/") {
             // Sized to the pixels they're drawn at (`avatars.rs`).
             return Ok(crate::avatars::load(path).map(Cow::Owned));

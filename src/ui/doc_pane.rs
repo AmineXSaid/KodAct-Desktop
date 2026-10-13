@@ -139,13 +139,13 @@ pub fn render(file: &FileRef, state: Entity<AppState>, copied: Option<SharedStri
             Some(Err(e)) => quiet(format!("Forge could not read {}: {e}. Open it with its app instead.", file.name)),
             Some(Ok(p)) => match p.as_ref() {
                 crate::office::Preview::Sheets(sheets) => return finish(file, header, body.child(div().p(t.space.xl).child(super::sheet_view::render(sheets, sheet, state, t))), fit.width, t),
-                crate::office::Preview::Markdown(md) => markdown::render_as(md, t, &CopyContext { state, key: "doc".into(), copied }, Look::Document),
+                crate::office::Preview::Markdown(md) => markdown::render_as(md, t, &CopyContext { state, key: "doc".into(), copied, scale: fit.scale, sources: Default::default() }, Look::Document),
             },
         };
         body.child(div().flex().justify_center().px(t.space.xxl).pt(t.space.xl + t.space.xs).pb(t.space.xxl * 2.).child(div().w_full().max_w(t.size.doc_measure).child(content)))
     } else {
         let page: AnyElement = if file.is_markdown() {
-            markdown::render_as(&file.content, t, &CopyContext { state, key: "doc".into(), copied }, Look::Document)
+            markdown::render_as(&file.content, t, &CopyContext { state, key: "doc".into(), copied, scale: fit.scale, sources: Default::default() }, Look::Document)
         } else {
             div().font_family(t.font_mono.clone()).text_size(t.text.caption).line_height(relative(1.5)).text_color(t.colors.text).child(file.content.clone()).into_any_element()
         };

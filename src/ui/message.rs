@@ -43,6 +43,8 @@ pub struct ItemContext {
     pub newest_turn: bool,
     /// The chat ended on Stop and its last row offers Continue.
     pub can_continue: bool,
+    /// Diagrams showing their source (`AppState::diagram_code`).
+    pub sources: std::sync::Arc<std::collections::HashSet<SharedString>>,
 }
 
 pub fn render(m: &Message, cx: &ItemContext, t: &Theme) -> AnyElement {
@@ -295,7 +297,7 @@ fn assistant(blocks: &[Block], cx: &ItemContext, t: &Theme) -> AnyElement {
 
 fn block(block: &Block, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
     match block {
-        Block::Text(text) => markdown::render(text, t, &CopyContext { state: cx.state.clone(), key: format!("{}-{}-{b}", cx.chat, cx.index), copied: cx.copied.clone() }),
+        Block::Text(text) => markdown::render(text, t, &CopyContext { state: cx.state.clone(), key: format!("{}-{}-{b}", cx.chat, cx.index), copied: cx.copied.clone(), scale: cx.scale, sources: cx.sources.clone() }),
         Block::Thinking { text, open } => thinking(text, *open, b, cx, t),
         Block::Tool(call) => tool(call, b, cx, t),
         Block::Permission { title, detail, verdict } => permission(title, detail, *verdict, b, cx, t),

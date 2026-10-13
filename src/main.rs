@@ -23,6 +23,7 @@ mod fonts;
 mod greeting;
 mod health;
 mod highlight;
+mod mermaid;
 mod modes;
 mod office;
 #[cfg(test)]
