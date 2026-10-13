@@ -468,6 +468,8 @@ pub struct Sizes {
     pub attach_chip: Pixels,        // 220: an attachment chip's widest
     pub popover_list: Pixels,       // 300: the tallest an autocomplete or context list grows
     pub completion_width: Pixels,   // 460: the / and @ lists, opened at the caret
+    pub settings_nav: Pixels,       // 200: the Settings window's section list
+    pub prompt_box: Pixels,         // 180: a prompt or instructions box in a Settings editor
 }
 
 impl Default for Sizes {
@@ -502,6 +504,8 @@ impl Default for Sizes {
             attach_chip: px(220.),
             popover_list: px(300.),
             completion_width: px(460.),
+            settings_nav: px(200.),
+            prompt_box: px(180.),
         }
     }
 }

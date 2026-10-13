@@ -40,9 +40,37 @@ pub fn dir() -> Option<PathBuf> {
     .clone()
 }
 
+/// The skills the plugin brings, as ForgeCLI names them (`forge:<name>`),
+/// with their descriptions.
+pub fn skills() -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = embedded::FILES
+        .iter()
+        .filter_map(|(path, bytes)| {
+            let name = path.strip_prefix("skills/")?.strip_suffix("/SKILL.md")?;
+            let doc = crate::forge_files::Doc::parse(&String::from_utf8_lossy(bytes));
+            Some((
+                format!("forge:{name}"),
+                doc.get("description").unwrap_or_default(),
+            ))
+        })
+        .collect();
+    out.sort();
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::embedded;
+
+    #[test]
+    fn the_plugin_lists_its_skills() {
+        let names: Vec<String> = super::skills().into_iter().map(|(n, _)| n).collect();
+        assert!(
+            names.contains(&"forge:diagram-design".to_string()),
+            "{names:?}"
+        );
+        assert!(super::skills().iter().all(|(_, d)| !d.is_empty()));
+    }
 
     #[test]
     fn the_plugin_carries_its_manifest_and_diagram_design() {

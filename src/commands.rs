@@ -221,38 +221,23 @@ pub fn builtin() -> Vec<Command> {
         .collect()
 }
 
-/// The project's own commands: `.forge/commands/<name>.md`, described by
-/// their `description:` front matter or their first line (blocking: call
-/// off the UI thread).
+/// Your commands and the project's, as ForgeCLI finds them
+/// (`forge_files::commands`: yours, then `.agents/commands` and
+/// `.forge/commands`, subfolders as `dir:name`), described by their
+/// `description:` front matter or their first line (blocking: call off the
+/// UI thread).
 pub fn custom(project: &std::path::Path) -> Vec<Command> {
-    let Ok(entries) = std::fs::read_dir(project.join(".forge").join("commands")) else {
-        return vec![];
-    };
-    let mut out: Vec<Command> = entries
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|x| x == "md"))
-        .filter_map(|p| {
-            let name = p.file_stem()?.to_string_lossy().into_owned();
-            let text = std::fs::read_to_string(&p).unwrap_or_default();
-            let description = text
-                .lines()
-                .find_map(|l| {
-                    l.strip_prefix("description:")
-                        .map(|d| d.trim().trim_matches('"').to_string())
-                })
-                .or_else(|| {
-                    text.lines()
-                        .map(str::trim)
-                        .find(|l| !l.is_empty() && *l != "---")
-                        .map(|l| l.trim_start_matches('#').trim().to_string())
-                })
-                .unwrap_or_else(|| "Project command".into());
-            Some(Command {
-                name,
-                args: String::new(),
-                description,
-            })
+    let mut out: Vec<Command> = crate::forge_files::commands(project, &mut vec![])
+        .into_iter()
+        .filter(|c| !c.shadowed)
+        .map(|c| Command {
+            name: c.name,
+            args: c.hint,
+            description: if c.description.is_empty() {
+                "Custom command".into()
+            } else {
+                c.description
+            },
         })
         .collect();
     out.sort_by(|a, b| a.name.cmp(&b.name));
@@ -304,7 +289,11 @@ mod tests {
         )
         .unwrap();
         std::fs::write(cmds.join("lint.md"), "# Lint everything\n").unwrap();
-        let c = custom(&dir);
+        // Yours (ForgeCLI's config folder) may add more; these are the project's.
+        let c: Vec<Command> = custom(&dir)
+            .into_iter()
+            .filter(|c| c.name == "lint" || c.name == "ship")
+            .collect();
         assert_eq!(
             c.iter()
                 .map(|c| (c.name.as_str(), c.description.as_str()))

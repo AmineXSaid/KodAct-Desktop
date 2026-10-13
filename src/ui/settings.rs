@@ -47,8 +47,73 @@ pub struct Settings {
     /// The check failed: offer to save anyway.
     save_anyway: bool,
     detected: Vec<&'static str>,
+    commands: Entity<super::slash_commands::SlashCommands>,
+    agents: Entity<super::agents_editor::AgentsEditor>,
+    skills: Entity<super::skills_editor::SkillsEditor>,
+    hooks: Entity<super::hooks_editor::HooksEditor>,
+    mcp: Entity<super::mcp_editor::McpEditor>,
+    permissions: Entity<super::permissions_editor::PermissionsEditor>,
     _subs: Vec<Subscription>,
 }
+
+/// The Settings window's corner radius.
+const PANEL_RADIUS: gpui::Pixels = px(14.);
+
+/// The sections, in groups, with each one's icon and name.
+const SECTIONS: &[(&str, &[(SettingsTab, &str, &str)])] = &[
+    (
+        "Forge",
+        &[
+            (
+                SettingsTab::General,
+                "icons/sliders-horizontal.svg",
+                "General",
+            ),
+            (SettingsTab::Models, "icons/cpu.svg", "Models"),
+            (SettingsTab::Profiles, "icons/layers.svg", "Profiles"),
+        ],
+    ),
+    (
+        "Engine",
+        &[
+            (
+                SettingsTab::Commands,
+                "icons/square-slash.svg",
+                "Slash commands",
+            ),
+            (SettingsTab::Agents, "icons/bot.svg", "Agents"),
+            (SettingsTab::Skills, "icons/wand-sparkles.svg", "Skills"),
+            (SettingsTab::Hooks, "icons/webhook.svg", "Hooks"),
+            (SettingsTab::Mcp, "icons/plug.svg", "MCP servers"),
+            (
+                SettingsTab::Permissions,
+                "icons/shield-check.svg",
+                "Permissions",
+            ),
+        ],
+    ),
+    (
+        "Planned",
+        &[
+            (SettingsTab::Sandbox, "icons/box.svg", "Sandbox"),
+            (SettingsTab::Network, "icons/network.svg", "Network"),
+            (
+                SettingsTab::Environments,
+                "icons/server.svg",
+                "Environments",
+            ),
+            (SettingsTab::Memory, "icons/brain.svg", "Memory and rules"),
+            (SettingsTab::Plugins, "icons/puzzle.svg", "Plugins"),
+        ],
+    ),
+    (
+        "Help",
+        &[
+            (SettingsTab::Guide, "icons/book-open.svg", "Guide"),
+            (SettingsTab::About, "icons/info.svg", "About"),
+        ],
+    ),
+];
 
 impl Settings {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -90,6 +155,16 @@ impl Settings {
                 }
             }),
         ];
+        let commands =
+            cx.new(|cx| super::slash_commands::SlashCommands::new(state.clone(), window, cx));
+        let agents =
+            cx.new(|cx| super::agents_editor::AgentsEditor::new(state.clone(), window, cx));
+        let skills =
+            cx.new(|cx| super::skills_editor::SkillsEditor::new(state.clone(), window, cx));
+        let hooks = cx.new(|cx| super::hooks_editor::HooksEditor::new(state.clone(), window, cx));
+        let mcp = cx.new(|cx| super::mcp_editor::McpEditor::new(state.clone(), window, cx));
+        let permissions = cx
+            .new(|cx| super::permissions_editor::PermissionsEditor::new(state.clone(), window, cx));
         Self {
             state,
             name,
@@ -105,6 +180,12 @@ impl Settings {
             status: Status::Idle,
             save_anyway: false,
             detected: vec![],
+            commands,
+            agents,
+            skills,
+            hooks,
+            mcp,
+            permissions,
             _subs: subs,
         }
     }
@@ -1095,55 +1176,19 @@ impl Render for Settings {
             return div().into_any_element();
         }
         let hover = t.colors.hover;
-        let nav = |id: &'static str,
-                   path: &'static str,
-                   label: &'static str,
-                   this_tab: SettingsTab,
-                   state: Entity<AppState>| {
-            let on = tab == this_tab;
-            div()
-                .id(id)
-                .flex()
-                .items_center()
-                .gap(px(8.))
-                .h(px(30.))
-                .px(px(10.))
-                .rounded(t.radius.button)
-                .cursor_pointer()
-                .text_size(t.text.body_sm)
-                .text_color(if on {
-                    t.colors.text_strong
-                } else {
-                    t.colors.text_muted
-                })
-                .when(on, |d| {
-                    d.bg(t.extra.selected).font_weight(FontWeight::MEDIUM)
-                })
-                .when(!on, |d| d.hover(move |s| s.bg(hover)))
-                .child(icon(
-                    path,
-                    t.size.icon_sm,
-                    if on {
-                        t.colors.primary
-                    } else {
-                        t.colors.text_muted
-                    },
-                ))
-                .child(label)
-                .on_click(move |_, _, cx| {
-                    state.update(cx, |s, cx| {
-                        s.settings_tab = this_tab;
-                        cx.notify();
-                    })
-                })
-        };
-        let side = div()
-            .w(px(190.))
+        let mut side = div()
+            .id("settings-nav")
+            .w(t.size.settings_nav)
             .flex_none()
             .flex()
             .flex_col()
             .gap(px(2.))
             .p(px(12.))
+            .overflow_y_scroll()
+            // GPUI clips children to a rectangle, not the panel's rounded
+            // corners: the pane rounds its own, inside the panel's border.
+            .rounded_tl(PANEL_RADIUS - t.size.hairline)
+            .rounded_bl(PANEL_RADIUS - t.size.hairline)
             .bg(t.extra.pane)
             .border_r_1()
             .border_color(t.colors.border)
@@ -1151,38 +1196,74 @@ impl Render for Settings {
                 div()
                     .px(px(10.))
                     .pt(px(4.))
-                    .pb(px(12.))
+                    .pb(px(8.))
                     .text_size(t.text.subheading)
                     .font_family(t.font_display.clone())
                     .text_color(t.colors.text_strong)
                     .child("Settings"),
-            )
-            .child(nav(
-                "tab-general",
-                "icons/sliders-horizontal.svg",
-                "General",
-                SettingsTab::General,
-                self.state.clone(),
-            ))
-            .child(nav(
-                "tab-models",
-                "icons/cpu.svg",
-                "Models",
-                SettingsTab::Models,
-                self.state.clone(),
-            ))
-            .child(nav(
-                "tab-about",
-                "icons/info.svg",
-                "About",
-                SettingsTab::About,
-                self.state.clone(),
-            ));
+            );
+        for (group, items) in SECTIONS {
+            side = side.child(
+                div()
+                    .px(px(10.))
+                    .pt(px(10.))
+                    .pb(px(2.))
+                    .text_size(t.text.caption)
+                    .text_color(t.colors.text_subtle)
+                    .child(*group),
+            );
+            for (this_tab, path, label) in items.iter().copied() {
+                let on = tab == this_tab;
+                let state = self.state.clone();
+                side = side.child(
+                    div()
+                        .id(SharedString::from(format!("tab-{label}")))
+                        .flex()
+                        .flex_none()
+                        .items_center()
+                        .gap(px(8.))
+                        .h(t.size.row)
+                        .px(px(10.))
+                        .rounded(t.radius.button)
+                        .cursor_pointer()
+                        .text_size(t.text.body_sm)
+                        .text_color(if on {
+                            t.colors.text_strong
+                        } else {
+                            t.colors.text_muted
+                        })
+                        .when(on, |d| {
+                            d.bg(t.extra.selected).font_weight(FontWeight::MEDIUM)
+                        })
+                        .when(!on, |d| d.hover(move |s| s.bg(hover)))
+                        .child(icon(
+                            path,
+                            t.size.icon_sm,
+                            if on {
+                                t.colors.primary
+                            } else {
+                                t.colors.text_muted
+                            },
+                        ))
+                        .child(label)
+                        .on_click(move |_, _, cx| {
+                            state.update(cx, |s, cx| s.settings_tab(this_tab, cx))
+                        }),
+                );
+            }
+        }
         let body = match tab {
             SettingsTab::General => self.general(&t, cx),
             SettingsTab::Models if self.form => self.models_form(&t, cx),
             SettingsTab::Models => self.models_list(&t, cx),
+            SettingsTab::Commands => self.commands.clone().into_any_element(),
+            SettingsTab::Agents => self.agents.clone().into_any_element(),
+            SettingsTab::Skills => self.skills.clone().into_any_element(),
+            SettingsTab::Hooks => self.hooks.clone().into_any_element(),
+            SettingsTab::Mcp => self.mcp.clone().into_any_element(),
+            SettingsTab::Permissions => self.permissions.clone().into_any_element(),
             SettingsTab::About => self.about(&t),
+            _ => div().into_any_element(),
         };
         let close = div()
             .id("settings-close")
@@ -1210,7 +1291,7 @@ impl Render for Settings {
             .bg(t.colors.surface)
             .border_1()
             .border_color(t.colors.border)
-            .rounded(px(14.))
+            .rounded(PANEL_RADIUS)
             .shadow(t.elevation_popover())
             .overflow_hidden()
             .on_click(|_, _, cx| cx.stop_propagation())
@@ -1237,7 +1318,16 @@ impl Render for Settings {
             .bg(t.extra.scrim)
             .on_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, _, cx| {
                 if ev.keystroke.key == "escape" {
-                    if this.form {
+                    let closed_inner = match this.state.read(cx).settings_tab {
+                        SettingsTab::Commands => this.commands.update(cx, |e, cx| e.back(cx)),
+                        SettingsTab::Agents => this.agents.update(cx, |e, cx| e.back(cx)),
+                        SettingsTab::Skills => this.skills.update(cx, |e, cx| e.back(cx)),
+                        SettingsTab::Hooks => this.hooks.update(cx, |e, cx| e.back(cx)),
+                        SettingsTab::Mcp => this.mcp.update(cx, |e, cx| e.back(cx)),
+                        _ => false,
+                    };
+                    if closed_inner {
+                    } else if this.form {
                         this.form = false;
                         cx.notify();
                     } else {

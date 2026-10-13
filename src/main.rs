@@ -23,6 +23,7 @@ mod downloads;
 mod endpoints;
 mod export;
 mod fonts;
+mod forge_files;
 mod greeting;
 mod health;
 mod highlight;

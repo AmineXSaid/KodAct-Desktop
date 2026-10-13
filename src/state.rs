@@ -394,7 +394,56 @@ pub enum Screen {
 pub enum SettingsTab {
     General,
     Models,
+    Profiles,
+    Commands,
+    Agents,
+    Skills,
+    Hooks,
+    Mcp,
+    Permissions,
+    Sandbox,
+    Network,
+    Environments,
+    Memory,
+    Plugins,
+    Guide,
     About,
+}
+
+impl SettingsTab {
+    /// The editors backed by ForgeCLI's files (`forge_files.rs`): open, they
+    /// read those files and keep them current.
+    pub fn reads_engine_files(self) -> bool {
+        matches!(
+            self,
+            SettingsTab::Commands
+                | SettingsTab::Agents
+                | SettingsTab::Skills
+                | SettingsTab::Hooks
+                | SettingsTab::Mcp
+                | SettingsTab::Permissions
+        )
+    }
+}
+
+/// What the Settings editors show: ForgeCLI's files for this project.
+#[derive(Default)]
+pub struct Engine {
+    /// The last read; None until the first one ends.
+    pub catalog: Option<crate::forge_files::Catalog>,
+    /// A read is under way.
+    pub loading: bool,
+    /// The files' fingerprint at the last read.
+    signature: u64,
+    /// Whose files were read.
+    project: Option<std::path::PathBuf>,
+    /// Polls the files while an editor is open.
+    watch: Option<Task<()>>,
+    /// Each MCP server's state as `forge mcp list` last said it.
+    pub mcp_status: std::collections::BTreeMap<String, String>,
+    pub mcp_checking: bool,
+    /// What went wrong with the last check (no ForgeCLI, it failed…).
+    pub mcp_error: Option<String>,
 }
 
 /// A folder Forge works in. Its chats, rules and memory belong to it.
@@ -818,6 +867,8 @@ pub struct AppState {
     pub approvals_open: bool,
     /// Chats whose running turn is a compaction.
     compacting: std::collections::HashSet<usize>,
+    /// ForgeCLI's own files, for the Settings editors.
+    pub engine: Engine,
     next_id: usize,
 }
 
@@ -935,6 +986,7 @@ impl AppState {
             tasks_open: false,
             approvals_open: false,
             compacting: Default::default(),
+            engine: Default::default(),
             next_id,
         }
     }
@@ -1641,11 +1693,161 @@ impl AppState {
     /// The endpoint setup guide, in the side panel.
     pub fn open_settings(&mut self, tab: SettingsTab, cx: &mut Context<Self>) {
         self.settings_open = true;
-        self.settings_tab = tab;
         self.picker_open = false;
         self.modes_open = false;
         self.palette_open = false;
+        self.settings_tab(tab, cx);
+    }
+
+    /// Show a Settings section; an editor of ForgeCLI's files reads them
+    /// and starts watching them.
+    pub fn settings_tab(&mut self, tab: SettingsTab, cx: &mut Context<Self>) {
+        self.settings_tab = tab;
+        if tab.reads_engine_files() {
+            self.reload_engine(cx);
+            self.watch_engine(cx);
+        }
         cx.notify();
+    }
+
+    /// Read ForgeCLI's files again (off the UI thread).
+    pub fn reload_engine(&mut self, cx: &mut Context<Self>) {
+        let project = self.project_dir.clone();
+        if self.engine.project.as_ref() != Some(&project) {
+            self.engine.catalog = None;
+            self.engine.mcp_status.clear();
+            self.engine.mcp_error = None;
+        }
+        self.engine.loading = true;
+        cx.spawn(async move |this, cx| {
+            let (catalog, sig) = cx
+                .background_spawn({
+                    let project = project.clone();
+                    async move {
+                        let sig = crate::forge_files::signature(&project);
+                        (crate::forge_files::load(&project), sig)
+                    }
+                })
+                .await;
+            let _ = this.update(cx, |s, cx| {
+                // The / list reads the project's commands again.
+                s.custom_commands = None;
+                // A project switched mid-read: that read is stale.
+                if s.project_dir == project {
+                    s.engine.catalog = Some(catalog);
+                    s.engine.signature = sig;
+                    s.engine.project = Some(project);
+                    s.engine.loading = false;
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
+    /// While Settings shows an editor of ForgeCLI's files, look at them every
+    /// two seconds and read them again when one changed (an edit in another
+    /// program, a `git pull`).
+    fn watch_engine(&mut self, cx: &mut Context<Self>) {
+        if self.engine.watch.is_some() {
+            return;
+        }
+        self.engine.watch = Some(cx.spawn(async move |this, cx| loop {
+            cx.background_executor()
+                .timer(std::time::Duration::from_secs(2))
+                .await;
+            let Ok(Some(project)) = this.update(cx, |s, _| {
+                (s.settings_open && s.settings_tab.reads_engine_files())
+                    .then(|| s.project_dir.clone())
+            }) else {
+                let _ = this.update(cx, |s, _| s.engine.watch = None);
+                return;
+            };
+            let sig = cx
+                .background_spawn(async move { crate::forge_files::signature(&project) })
+                .await;
+            let _ = this.update(cx, |s, cx| {
+                if sig != s.engine.signature && !s.engine.loading {
+                    s.reload_engine(cx);
+                }
+            });
+        }));
+    }
+
+    /// Ask ForgeCLI which MCP servers start (`forge mcp list`, in the project).
+    pub fn check_mcp(&mut self, cx: &mut Context<Self>) {
+        let Some(cli) = crate::backend::find_cli() else {
+            self.engine.mcp_error = Some(
+                "ForgeCLI isn't installed beside Forge, so the servers can't be checked.".into(),
+            );
+            return cx.notify();
+        };
+        let project = self.project_dir.clone();
+        self.engine.mcp_checking = true;
+        self.engine.mcp_error = None;
+        cx.spawn(async move |this, cx| {
+            let out = cx
+                .background_spawn(async move {
+                    let mut cmd = std::process::Command::new(&cli);
+                    cmd.args(["mcp", "list"])
+                        .current_dir(&project)
+                        .env("NO_COLOR", "1")
+                        .stdin(std::process::Stdio::null());
+                    #[cfg(windows)]
+                    {
+                        use std::os::windows::process::CommandExt;
+                        cmd.creation_flags(0x0800_0000);
+                    }
+                    cmd.output()
+                })
+                .await;
+            let _ = this.update(cx, |s, cx| {
+                s.engine.mcp_checking = false;
+                match out {
+                    Ok(o) => {
+                        let text = String::from_utf8_lossy(&o.stdout);
+                        s.engine.mcp_status = crate::forge_files::parse_mcp_list(&text);
+                        if s.engine.mcp_status.is_empty() && !o.status.success() {
+                            let err = String::from_utf8_lossy(&o.stderr);
+                            s.engine.mcp_error = Some(
+                                err.lines()
+                                    .last()
+                                    .unwrap_or("forge mcp list failed")
+                                    .to_string(),
+                            );
+                        }
+                    }
+                    Err(e) => s.engine.mcp_error = Some(format!("Couldn't run ForgeCLI: {e}")),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
+    /// Run a change to ForgeCLI's files off the UI thread, then read them
+    /// again and say how it went.
+    pub fn engine_write(
+        &mut self,
+        done: impl Into<String>,
+        f: impl FnOnce(&std::path::Path) -> Result<(), String> + Send + 'static,
+        cx: &mut Context<Self>,
+    ) -> Task<Result<(), String>> {
+        let project = self.project_dir.clone();
+        let done = done.into();
+        cx.spawn(async move |this, cx| {
+            let r = cx.background_spawn(async move { f(&project) }).await;
+            let _ = this.update(cx, |s, cx| {
+                match &r {
+                    Ok(()) => s.show_toast(done, cx),
+                    Err(e) => s.show_toast(e.clone(), cx),
+                }
+                s.reload_engine(cx);
+            });
+            r
+        })
     }
 
     /// Settings > Models, on the Add endpoint form.

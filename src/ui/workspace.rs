@@ -671,6 +671,46 @@ impl Render for Workspace {
                     s.open_settings(crate::state::SettingsTab::General, cx)
                 })
             }))
+            .on_action(cx.listener(|this, _: &OpenSlashCommands, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.open_settings(crate::state::SettingsTab::Commands, cx)
+                })
+            }))
+            .on_action(cx.listener(|this, _: &OpenAgents, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.open_settings(crate::state::SettingsTab::Agents, cx)
+                })
+            }))
+            .on_action(cx.listener(|this, _: &OpenSkills, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.open_settings(crate::state::SettingsTab::Skills, cx)
+                })
+            }))
+            .on_action(cx.listener(|this, _: &OpenHooks, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.open_settings(crate::state::SettingsTab::Hooks, cx)
+                })
+            }))
+            .on_action(cx.listener(|this, _: &OpenMcpServers, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.open_settings(crate::state::SettingsTab::Mcp, cx)
+                })
+            }))
+            .on_action(cx.listener(|this, _: &OpenPermissions, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.open_settings(crate::state::SettingsTab::Permissions, cx)
+                })
+            }))
+            .on_action(cx.listener(|this, _: &OpenProfiles, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.open_settings(crate::state::SettingsTab::Profiles, cx)
+                })
+            }))
+            .on_action(cx.listener(|this, _: &OpenGuide, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.open_settings(crate::state::SettingsTab::Guide, cx)
+                })
+            }))
             .on_action(cx.listener(|this, _: &CopyLastReply, _, cx| {
                 let reply = this.state.read(cx).last_reply();
                 this.state.update(cx, |s, cx| match reply {

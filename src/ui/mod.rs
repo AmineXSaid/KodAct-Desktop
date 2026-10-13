@@ -1,5 +1,6 @@
 //! The window's views. `workspace` composes them; each file is one component.
 
+pub mod agents_editor;
 pub mod approvals;
 pub mod attachments;
 pub mod autocomplete;
@@ -12,17 +13,21 @@ pub mod context_menu;
 pub mod context_ring;
 pub mod diagram_view;
 pub mod doc_pane;
+pub mod editor_kit;
 pub mod file_card;
 pub mod file_icon;
 pub mod file_mark;
 pub mod find_bar;
 pub mod forge_cube;
+pub mod hooks_editor;
 pub mod markdown;
+pub mod mcp_editor;
 pub mod message;
 pub mod mode_menu;
 pub mod model_menu;
 pub mod motion;
 pub mod onboarding;
+pub mod permissions_editor;
 pub mod projects;
 pub mod rules_view;
 pub mod settings;
@@ -31,6 +36,8 @@ pub mod shortcuts;
 pub mod side_chat;
 pub mod sidebar;
 pub mod skeleton;
+pub mod skills_editor;
+pub mod slash_commands;
 pub mod starters;
 pub mod tasks;
 pub mod terminal;
@@ -55,6 +62,14 @@ gpui::actions!(
         CycleMode,
         StopReply,
         OpenSettings,
+        OpenSlashCommands,
+        OpenAgents,
+        OpenSkills,
+        OpenHooks,
+        OpenMcpServers,
+        OpenPermissions,
+        OpenProfiles,
+        OpenGuide,
         CopyLastReply,
         ChangeName,
         ChangeAvatar,
