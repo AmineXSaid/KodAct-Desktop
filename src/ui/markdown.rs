@@ -11,8 +11,8 @@
 //! title in the display serif. Both draw tables and task lists.
 
 use gpui::{
-    div, font, prelude::*, px, relative, AnyElement, App, ClipboardItem, Entity, FontStyle, FontWeight, SharedString,
-    StrikethroughStyle, StyledText, TextRun, UnderlineStyle,
+    div, font, prelude::*, px, relative, AnyElement, App, ClipboardItem, Entity, FontStyle,
+    FontWeight, SharedString, StrikethroughStyle, StyledText, TextRun, UnderlineStyle,
 };
 use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
@@ -35,11 +35,23 @@ enum Block {
     Para(Vec<Span>),
     Heading(u8, Vec<Span>),
     /// A list item; `task` is its checkbox, when it has one.
-    Item { number: Option<u64>, depth: usize, spans: Vec<Span>, task: Option<bool> },
-    Code { lang: String, code: String },
+    Item {
+        number: Option<u64>,
+        depth: usize,
+        spans: Vec<Span>,
+        task: Option<bool>,
+    },
+    Code {
+        lang: String,
+        code: String,
+    },
     Quote(Vec<Span>),
     Rule,
-    Table { align: Vec<Alignment>, head: Vec<Vec<Span>>, rows: Vec<Vec<Vec<Span>>> },
+    Table {
+        align: Vec<Alignment>,
+        head: Vec<Vec<Span>>,
+        rows: Vec<Vec<Vec<Span>>>,
+    },
 }
 
 /// How a piece of markdown is drawn.
@@ -76,17 +88,42 @@ fn parse(src: &str) -> Vec<Block> {
             return;
         }
         match spans.last_mut() {
-            Some(last) if Span { text: String::new(), ..last.clone() } == Span { text: String::new(), ..s.clone() } => last.text.push_str(text),
-            _ => spans.push(Span { text: text.to_string(), ..s }),
+            Some(last)
+                if Span {
+                    text: String::new(),
+                    ..last.clone()
+                } == Span {
+                    text: String::new(),
+                    ..s.clone()
+                } =>
+            {
+                last.text.push_str(text)
+            }
+            _ => spans.push(Span {
+                text: text.to_string(),
+                ..s
+            }),
         }
     };
 
-    for ev in Parser::new_ext(src, Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS) {
-        let style = Span { text: String::new(), bold, italic, code: false, strike, link };
+    for ev in Parser::new_ext(
+        src,
+        Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS,
+    ) {
+        let style = Span {
+            text: String::new(),
+            bold,
+            italic,
+            code: false,
+            strike,
+            link,
+        };
         match ev {
             Event::Start(Tag::CodeBlock(kind)) => {
                 let lang = match kind {
-                    CodeBlockKind::Fenced(l) => l.split_whitespace().next().unwrap_or("").to_string(),
+                    CodeBlockKind::Fenced(l) => {
+                        l.split_whitespace().next().unwrap_or("").to_string()
+                    }
                     CodeBlockKind::Indented => String::new(),
                 };
                 code = Some((lang, String::new()));
@@ -107,7 +144,10 @@ fn parse(src: &str) -> Vec<Block> {
                     _ => 3,
                 })
             }
-            Event::End(TagEnd::Heading(_)) => out.push(Block::Heading(heading.take().unwrap_or(3), std::mem::take(&mut spans))),
+            Event::End(TagEnd::Heading(_)) => out.push(Block::Heading(
+                heading.take().unwrap_or(3),
+                std::mem::take(&mut spans),
+            )),
             Event::Start(Tag::List(start)) => lists.push(start),
             Event::End(TagEnd::List(_)) => {
                 lists.pop();
@@ -123,20 +163,35 @@ fn parse(src: &str) -> Vec<Block> {
                 if !spans.is_empty() {
                     // A nested list starts: flush the parent item's text first.
                     if let Some(num) = item_number.take() {
-                        out.push(Block::Item { number: num, depth: lists.len().saturating_sub(2), spans: std::mem::take(&mut spans), task: task.take() });
+                        out.push(Block::Item {
+                            number: num,
+                            depth: lists.len().saturating_sub(2),
+                            spans: std::mem::take(&mut spans),
+                            task: task.take(),
+                        });
                     }
                 }
                 item_number = Some(n);
             }
             Event::End(TagEnd::Item) => {
                 if let Some(num) = item_number.take() {
-                    out.push(Block::Item { number: num, depth: lists.len().saturating_sub(1), spans: std::mem::take(&mut spans), task: task.take() });
+                    out.push(Block::Item {
+                        number: num,
+                        depth: lists.len().saturating_sub(1),
+                        spans: std::mem::take(&mut spans),
+                        task: task.take(),
+                    });
                 } else {
                     spans.clear();
                 }
             }
             Event::TaskListMarker(done) => task = Some(done),
-            Event::Start(Tag::Table(align)) => table = Some(TableBuild { align, ..Default::default() }),
+            Event::Start(Tag::Table(align)) => {
+                table = Some(TableBuild {
+                    align,
+                    ..Default::default()
+                })
+            }
             Event::Start(Tag::TableHead) => {
                 if let Some(t) = table.as_mut() {
                     t.in_head = true;
@@ -164,7 +219,11 @@ fn parse(src: &str) -> Vec<Block> {
             }
             Event::End(TagEnd::Table) => {
                 if let Some(t) = table.take() {
-                    out.push(Block::Table { align: t.align, head: t.head, rows: t.rows });
+                    out.push(Block::Table {
+                        align: t.align,
+                        head: t.head,
+                        rows: t.rows,
+                    });
                 }
             }
             Event::Start(Tag::BlockQuote(_)) => quote += 1,
@@ -188,7 +247,14 @@ fn parse(src: &str) -> Vec<Block> {
             Event::Start(Tag::Link { .. }) => link = true,
             Event::End(TagEnd::Link) => link = false,
             Event::Text(t) => push(&mut spans, &t, style),
-            Event::Code(t) => push(&mut spans, &t, Span { code: true, ..style }),
+            Event::Code(t) => push(
+                &mut spans,
+                &t,
+                Span {
+                    code: true,
+                    ..style
+                },
+            ),
             Event::SoftBreak => push(&mut spans, " ", style),
             Event::HardBreak => push(&mut spans, "\n", style),
             Event::Rule => out.push(Block::Rule),
@@ -221,7 +287,13 @@ fn runs(spans: &[Span], t: &Theme, base_weight: FontWeight, color: gpui::Hsla) -
 }
 
 /// Text runs in `family` (code spans stay in the mono face).
-fn runs_in(spans: &[Span], t: &Theme, family: &SharedString, base_weight: FontWeight, color: gpui::Hsla) -> StyledText {
+fn runs_in(
+    spans: &[Span],
+    t: &Theme,
+    family: &SharedString,
+    base_weight: FontWeight,
+    color: gpui::Hsla,
+) -> StyledText {
     let mut text = String::new();
     let mut runs = vec![];
     for s in spans {
@@ -229,8 +301,16 @@ fn runs_in(spans: &[Span], t: &Theme, family: &SharedString, base_weight: FontWe
             continue;
         }
         text.push_str(&s.text);
-        let mut f = font(if s.code { t.font_mono.clone() } else { family.clone() });
-        f.weight = if s.bold { FontWeight::SEMIBOLD } else { base_weight };
+        let mut f = font(if s.code {
+            t.font_mono.clone()
+        } else {
+            family.clone()
+        });
+        f.weight = if s.bold {
+            FontWeight::SEMIBOLD
+        } else {
+            base_weight
+        };
         if s.italic {
             f.style = FontStyle::Italic;
         }
@@ -239,8 +319,15 @@ fn runs_in(spans: &[Span], t: &Theme, family: &SharedString, base_weight: FontWe
             font: f,
             color: if s.link { t.colors.primary } else { color },
             background_color: s.code.then_some(t.extra.inset),
-            underline: s.link.then(|| UnderlineStyle { thickness: px(1.), color: Some(t.colors.primary), wavy: false }),
-            strikethrough: s.strike.then(|| StrikethroughStyle { thickness: px(1.), color: Some(color) }),
+            underline: s.link.then(|| UnderlineStyle {
+                thickness: px(1.),
+                color: Some(t.colors.primary),
+                wavy: false,
+            }),
+            strikethrough: s.strike.then(|| StrikethroughStyle {
+                thickness: px(1.),
+                color: Some(color),
+            }),
         });
     }
     StyledText::new(text).with_runs(runs)
@@ -253,8 +340,17 @@ pub fn render(src: &str, t: &Theme, copy: &CopyContext) -> AnyElement {
 pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyElement {
     let doc = look == Look::Document;
     let blocks = parse(src);
-    let (size, leading) = if doc { (t.size.doc_text, t.size.line_height_doc) } else { (t.size.chat_text, t.size.line_height_chat) };
-    let mut col = div().flex().flex_col().w_full().text_size(size).line_height(relative(leading));
+    let (size, leading) = if doc {
+        (t.size.doc_text, t.size.line_height_doc)
+    } else {
+        (t.size.chat_text, t.size.line_height_chat)
+    };
+    let mut col = div()
+        .flex()
+        .flex_col()
+        .w_full()
+        .text_size(size)
+        .line_height(relative(leading));
     let mut prev: Option<&'static str> = None;
     for (n, b) in blocks.into_iter().enumerate() {
         // Space above a block depends on what it follows: list items sit
@@ -280,12 +376,20 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
         };
         prev = Some(kind);
         let el: AnyElement = match b {
-            Block::Para(spans) => div().child(runs(&spans, t, FontWeight::NORMAL, t.colors.text)).into_any_element(),
+            Block::Para(spans) => div()
+                .child(runs(&spans, t, FontWeight::NORMAL, t.colors.text))
+                .into_any_element(),
             // A document's title is set in the display serif, as the greeting is.
             Block::Heading(1, spans) if doc => div()
                 .text_size(t.size.doc_title)
                 .line_height(relative(1.2))
-                .child(runs_in(&spans, t, &t.font_display, FontWeight::NORMAL, t.colors.text_strong))
+                .child(runs_in(
+                    &spans,
+                    t,
+                    &t.font_display,
+                    FontWeight::NORMAL,
+                    t.colors.text_strong,
+                ))
                 .into_any_element(),
             Block::Heading(level, spans) => div()
                 .text_size(match (level, doc) {
@@ -298,7 +402,12 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                 .line_height(relative(1.35))
                 .child(runs(&spans, t, FontWeight::SEMIBOLD, t.colors.text_strong))
                 .into_any_element(),
-            Block::Item { number, depth, spans, task } => div()
+            Block::Item {
+                number,
+                depth,
+                spans,
+                task,
+            } => div()
                 .flex()
                 .gap(t.space.sm)
                 .pl(t.space.xs + t.space.lg * depth as f32)
@@ -309,7 +418,19 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                         .h(relative(1.))
                         .min_w(t.space.lg)
                         .pt((size * leading - t.size.icon_sm) / 2.)
-                        .child(icon(if done { "icons/square-check.svg" } else { "icons/square.svg" }, t.size.icon_sm, if done { t.colors.primary } else { t.colors.text_subtle }))
+                        .child(icon(
+                            if done {
+                                "icons/square-check.svg"
+                            } else {
+                                "icons/square.svg"
+                            },
+                            t.size.icon_sm,
+                            if done {
+                                t.colors.primary
+                            } else {
+                                t.colors.text_subtle
+                            },
+                        ))
                         .into_any_element(),
                     // Step numbers carry meaning, so they read at 4.5:1.
                     None => div()
@@ -322,7 +443,16 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                         })
                         .into_any_element(),
                 })
-                .child(div().flex_1().min_w_0().child(runs(&spans, t, FontWeight::NORMAL, if task == Some(true) { t.colors.text_muted } else { t.colors.text })))
+                .child(div().flex_1().min_w_0().child(runs(
+                    &spans,
+                    t,
+                    FontWeight::NORMAL,
+                    if task == Some(true) {
+                        t.colors.text_muted
+                    } else {
+                        t.colors.text
+                    },
+                )))
                 .into_any_element(),
             Block::Quote(spans) => div()
                 .border_l_2()
@@ -330,7 +460,10 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                 .pl(t.space.md)
                 .child(runs(&spans, t, FontWeight::NORMAL, t.colors.text_body))
                 .into_any_element(),
-            Block::Rule => div().h(t.size.hairline).bg(t.colors.border).into_any_element(),
+            Block::Rule => div()
+                .h(t.size.hairline)
+                .bg(t.colors.border)
+                .into_any_element(),
             Block::Code { lang, code } => {
                 let key = format!("{}-{n}", copy.key);
                 // A diagram (Mermaid, an SVG) is drawn, unless you asked for its source.
@@ -348,8 +481,16 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
 }
 
 /// A table: equal columns, a tinted header, hairlines between rows.
-fn table(align: &[Alignment], head: &[Vec<Span>], rows: &[Vec<Vec<Span>>], t: &Theme) -> AnyElement {
-    let columns = head.len().max(rows.iter().map(|r| r.len()).max().unwrap_or(0)).max(1);
+fn table(
+    align: &[Alignment],
+    head: &[Vec<Span>],
+    rows: &[Vec<Vec<Span>>],
+    t: &Theme,
+) -> AnyElement {
+    let columns = head
+        .len()
+        .max(rows.iter().map(|r| r.len()).max().unwrap_or(0))
+        .max(1);
     let row = |cells: &[Vec<Span>], header: bool| {
         let mut r = div().flex().w_full();
         for i in 0..columns {
@@ -365,7 +506,20 @@ fn table(align: &[Alignment], head: &[Vec<Span>], rows: &[Vec<Vec<Span>>], t: &T
                     Some(Alignment::Center) => d.text_center(),
                     _ => d,
                 })
-                .child(runs(spans, t, if header { FontWeight::SEMIBOLD } else { FontWeight::NORMAL }, if header { t.colors.text_strong } else { t.colors.text }));
+                .child(runs(
+                    spans,
+                    t,
+                    if header {
+                        FontWeight::SEMIBOLD
+                    } else {
+                        FontWeight::NORMAL
+                    },
+                    if header {
+                        t.colors.text_strong
+                    } else {
+                        t.colors.text
+                    },
+                ));
             r = r.child(cell);
         }
         r
@@ -413,7 +567,15 @@ fn code_block(lang: &str, code: String, key: &str, t: &Theme, copy: &CopyContext
                 .border_color(t.colors.border)
                 .text_size(t.text.caption)
                 .text_color(t.colors.text_subtle)
-                .child(div().font_family(t.font_mono.clone()).child(if lang.is_empty() { "text".to_string() } else { lang.to_string() }))
+                .child(
+                    div()
+                        .font_family(t.font_mono.clone())
+                        .child(if lang.is_empty() {
+                            "text".to_string()
+                        } else {
+                            lang.to_string()
+                        }),
+                )
                 .child(
                     div()
                         .id(SharedString::from(format!("copy-{key}")))
@@ -425,8 +587,24 @@ fn code_block(lang: &str, code: String, key: &str, t: &Theme, copy: &CopyContext
                         .rounded(t.radius.small)
                         .cursor_pointer()
                         .hover(move |s| s.bg(hover))
-                        .text_color(if copied { t.extra.success } else { t.colors.text_muted })
-                        .child(icon(if copied { "icons/check.svg" } else { "icons/copy.svg" }, t.size.icon_sm, if copied { t.extra.success } else { t.colors.text_muted }))
+                        .text_color(if copied {
+                            t.extra.success
+                        } else {
+                            t.colors.text_muted
+                        })
+                        .child(icon(
+                            if copied {
+                                "icons/check.svg"
+                            } else {
+                                "icons/copy.svg"
+                            },
+                            t.size.icon_sm,
+                            if copied {
+                                t.extra.success
+                            } else {
+                                t.colors.text_muted
+                            },
+                        ))
                         .child(if copied { "Copied" } else { "Copy" })
                         .on_click(move |_, _, cx: &mut App| {
                             cx.write_to_clipboard(ClipboardItem::new_string(code.clone()));
@@ -454,16 +632,32 @@ fn code_block(lang: &str, code: String, key: &str, t: &Theme, copy: &CopyContext
 
 /// A diagram a reply wrote: drawn in a card, with its kind, Code (show the
 /// source instead), Open (the side panel, to zoom and download) and Copy.
-fn diagram_block(lang: &str, code: String, svg: std::sync::Arc<str>, key: &str, source_shown: bool, t: &Theme, copy: &CopyContext) -> AnyElement {
+fn diagram_block(
+    lang: &str,
+    code: String,
+    svg: std::sync::Arc<str>,
+    key: &str,
+    source_shown: bool,
+    t: &Theme,
+    copy: &CopyContext,
+) -> AnyElement {
     if source_shown {
         // The source, with a way back to the drawing.
         return div()
             .relative()
             .child(code_block(lang, code, key, t, copy))
-            .child(div().absolute().top(px(3.)).right(px(84.)).child(header_button(&format!("draw-{key}"), "icons/eye.svg", "Diagram", false, t).on_click({
-                let (state, key) = (copy.state.clone(), SharedString::from(key.to_string()));
-                move |_, _, cx: &mut App| state.update(cx, |s, cx| s.toggle_diagram_code(key.clone(), cx))
-            })))
+            .child(
+                div().absolute().top(px(3.)).right(px(84.)).child(
+                    header_button(&format!("draw-{key}"), "icons/eye.svg", "Diagram", false, t)
+                        .on_click({
+                            let (state, key) =
+                                (copy.state.clone(), SharedString::from(key.to_string()));
+                            move |_, _, cx: &mut App| {
+                                state.update(cx, |s, cx| s.toggle_diagram_code(key.clone(), cx))
+                            }
+                        }),
+                ),
+            )
             .into_any_element();
     }
     let copied = copy.copied.as_deref() == Some(key);
@@ -478,14 +672,23 @@ fn diagram_block(lang: &str, code: String, svg: std::sync::Arc<str>, key: &str, 
     let inner = (f32::from(t.size.column) - 2. * f32::from(t.space.md) - 2.).max(80.);
     let drawing = super::diagram_view::fluid(&svg, natural.min(inner), copy.scale);
     // Named for what it is, so the panel's title and a download read well.
-    let first = code.split_whitespace().next().unwrap_or_default().to_ascii_lowercase();
+    let first = code
+        .split_whitespace()
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
     let stem = match first.as_str() {
         "sequencediagram" => "sequence-diagram",
         s if s.starts_with("statediagram") => "state-diagram",
         "graph" | "flowchart" => "flowchart",
         _ => "diagram",
     };
-    let to_open = crate::state::FileRef { name: format!("{stem}.svg").into(), path: None, content: svg.to_string().into(), bytes: None };
+    let to_open = crate::state::FileRef {
+        name: format!("{stem}.svg").into(),
+        path: None,
+        content: svg.to_string().into(),
+        bytes: None,
+    };
     div()
         .w_full()
         .bg(t.colors.surface)
@@ -504,25 +707,88 @@ fn diagram_block(lang: &str, code: String, svg: std::sync::Arc<str>, key: &str, 
                 .border_color(t.colors.border)
                 .text_size(t.text.caption)
                 .text_color(t.colors.text_subtle)
-                .child(icon("icons/route.svg", t.size.icon_xs, t.colors.text_subtle))
-                .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(format!("Diagram · {kind}")))
-                .child(header_button(&format!("source-{key}"), "icons/code-xml.svg", "Code", false, t).on_click(move |_, _, cx: &mut App| toggler.update(cx, |s, cx| s.toggle_diagram_code(toggle_key.clone(), cx))))
-                .child(header_button(&format!("open-{key}"), "icons/maximize-2.svg", "Open", false, t).on_click(move |_, _, cx: &mut App| opener.update(cx, |s, cx| s.open_doc(to_open.clone(), cx))))
-                .child(header_button(&format!("copy-{key}"), if copied { "icons/check.svg" } else { "icons/copy.svg" }, if copied { "Copied" } else { "Copy" }, copied, t).on_click(move |_, _, cx: &mut App| {
-                    cx.write_to_clipboard(ClipboardItem::new_string(code.clone()));
-                    let key = key_owned.clone();
-                    copier.update(cx, |s, cx| s.mark_copied(key, cx));
-                })),
+                .child(icon(
+                    "icons/route.svg",
+                    t.size.icon_xs,
+                    t.colors.text_subtle,
+                ))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .child(format!("Diagram · {kind}")),
+                )
+                .child(
+                    header_button(
+                        &format!("source-{key}"),
+                        "icons/code-xml.svg",
+                        "Code",
+                        false,
+                        t,
+                    )
+                    .on_click(move |_, _, cx: &mut App| {
+                        toggler.update(cx, |s, cx| s.toggle_diagram_code(toggle_key.clone(), cx))
+                    }),
+                )
+                .child(
+                    header_button(
+                        &format!("open-{key}"),
+                        "icons/maximize-2.svg",
+                        "Open",
+                        false,
+                        t,
+                    )
+                    .on_click(move |_, _, cx: &mut App| {
+                        opener.update(cx, |s, cx| s.open_doc(to_open.clone(), cx))
+                    }),
+                )
+                .child(
+                    header_button(
+                        &format!("copy-{key}"),
+                        if copied {
+                            "icons/check.svg"
+                        } else {
+                            "icons/copy.svg"
+                        },
+                        if copied { "Copied" } else { "Copy" },
+                        copied,
+                        t,
+                    )
+                    .on_click(move |_, _, cx: &mut App| {
+                        cx.write_to_clipboard(ClipboardItem::new_string(code.clone()));
+                        let key = key_owned.clone();
+                        copier.update(cx, |s, cx| s.mark_copied(key, cx));
+                    }),
+                ),
         )
         // The drawing, centred, at its own size or the column's, whichever is smaller.
-        .child(div().flex().justify_center().p(t.space.md).children(drawing))
+        .child(
+            div()
+                .flex()
+                .justify_center()
+                .p(t.space.md)
+                .children(drawing),
+        )
         .into_any_element()
 }
 
 /// A small text button in a block's header.
-fn header_button(id: &str, path: &'static str, label: &'static str, done: bool, t: &Theme) -> gpui::Stateful<gpui::Div> {
+fn header_button(
+    id: &str,
+    path: &'static str,
+    label: &'static str,
+    done: bool,
+    t: &Theme,
+) -> gpui::Stateful<gpui::Div> {
     let hover = t.colors.hover;
-    let color = if done { t.extra.success } else { t.colors.text_muted };
+    let color = if done {
+        t.extra.success
+    } else {
+        t.colors.text_muted
+    };
     div()
         .id(SharedString::from(id.to_string()))
         .flex()
@@ -564,7 +830,14 @@ pub fn code_text(code: &str, lang: &str, t: &Theme) -> StyledText {
                 Kind::Added => k.added,
                 Kind::Removed => k.removed,
             };
-            TextRun { len: range.len(), font: f, color, background_color: None, underline: None, strikethrough: None }
+            TextRun {
+                len: range.len(),
+                font: f,
+                color,
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            }
         })
         .collect::<Vec<_>>();
     StyledText::new(code.to_string()).with_runs(runs)
@@ -572,7 +845,10 @@ pub fn code_text(code: &str, lang: &str, t: &Theme) -> StyledText {
 
 /// The language of a file, by its extension (for colouring its contents).
 pub fn lang_of(path: &str) -> &str {
-    path.rsplit_once('.').map(|(_, ext)| ext).filter(|e| !e.contains('/')).unwrap_or("")
+    path.rsplit_once('.')
+        .map(|(_, ext)| ext)
+        .filter(|e| !e.contains('/'))
+        .unwrap_or("")
 }
 
 #[cfg(test)]
@@ -582,14 +858,43 @@ mod tests {
     #[test]
     fn blocks_and_inline_styles() {
         let b = parse("# Title\n\nSome **bold** and `code`.\n\n- one\n- two\n\n1. first\n2. second\n\n```rust\nfn x() {}\n```\n\n> quoted\n\n---");
-        assert_eq!(b[0], Block::Heading(1, vec![Span { text: "Title".into(), ..Default::default() }]));
-        let Block::Para(p) = &b[1] else { panic!("{:?}", b[1]) };
+        assert_eq!(
+            b[0],
+            Block::Heading(
+                1,
+                vec![Span {
+                    text: "Title".into(),
+                    ..Default::default()
+                }]
+            )
+        );
+        let Block::Para(p) = &b[1] else {
+            panic!("{:?}", b[1])
+        };
         assert!(p.iter().any(|s| s.bold && s.text == "bold"));
         assert!(p.iter().any(|s| s.code && s.text == "code"));
         assert!(matches!(&b[2], Block::Item { number: None, .. }));
-        assert!(matches!(&b[4], Block::Item { number: Some(1), .. }));
-        assert!(matches!(&b[5], Block::Item { number: Some(2), .. }));
-        assert_eq!(b[6], Block::Code { lang: "rust".into(), code: "fn x() {}".into() });
+        assert!(matches!(
+            &b[4],
+            Block::Item {
+                number: Some(1),
+                ..
+            }
+        ));
+        assert!(matches!(
+            &b[5],
+            Block::Item {
+                number: Some(2),
+                ..
+            }
+        ));
+        assert_eq!(
+            b[6],
+            Block::Code {
+                lang: "rust".into(),
+                code: "fn x() {}".into()
+            }
+        );
         assert!(matches!(&b[7], Block::Quote(_)));
         assert_eq!(b[8], Block::Rule);
     }
@@ -597,20 +902,43 @@ mod tests {
     #[test]
     fn tables_and_task_lists() {
         let b = parse("| Field | Old | New |\n|:--|:-:|--:|\n| `theme` | string | enum |\n| fonts | – | list |\n\n- [x] Read the old file\n- [ ] Write the new one");
-        let Block::Table { align, head, rows } = &b[0] else { panic!("{:?}", b[0]) };
-        assert_eq!(align, &vec![Alignment::Left, Alignment::Center, Alignment::Right]);
+        let Block::Table { align, head, rows } = &b[0] else {
+            panic!("{:?}", b[0])
+        };
+        assert_eq!(
+            align,
+            &vec![Alignment::Left, Alignment::Center, Alignment::Right]
+        );
         assert_eq!(head.len(), 3);
         assert_eq!(head[0][0].text, "Field");
         assert_eq!(rows.len(), 2);
         assert!(rows[0][0][0].code && rows[0][0][0].text == "theme");
         assert_eq!(rows[1][2][0].text, "list");
-        assert!(matches!(&b[1], Block::Item { task: Some(true), .. }));
-        assert!(matches!(&b[2], Block::Item { task: Some(false), .. }));
+        assert!(matches!(
+            &b[1],
+            Block::Item {
+                task: Some(true),
+                ..
+            }
+        ));
+        assert!(matches!(
+            &b[2],
+            Block::Item {
+                task: Some(false),
+                ..
+            }
+        ));
     }
 
     #[test]
     fn an_unclosed_fence_while_streaming_is_still_code() {
         let b = parse("Here:\n\n```sh\ncargo te");
-        assert_eq!(b.last(), Some(&Block::Code { lang: "sh".into(), code: "cargo te".into() }));
+        assert_eq!(
+            b.last(),
+            Some(&Block::Code {
+                lang: "sh".into(),
+                code: "cargo te".into()
+            })
+        );
     }
 }

@@ -6,7 +6,10 @@
 
 use std::time::Duration;
 
-use gpui::{div, prelude::*, px, Animation, AnimationExt, App, Entity, FontWeight, Hsla, IntoElement, SharedString};
+use gpui::{
+    div, prelude::*, px, Animation, AnimationExt, App, Entity, FontWeight, Hsla, IntoElement,
+    SharedString,
+};
 
 use super::icon;
 use crate::modes::ModeId;
@@ -38,12 +41,23 @@ pub fn cube_color(t: &Theme, mode: ModeId) -> Hsla {
 
 /// `⇧`, `tab`: a key in the header hint.
 fn key(t: &Theme, text: &'static str) -> impl IntoElement {
-    div().px(px(4.)).py(px(1.)).border_1().border_color(t.colors.border).rounded(px(3.)).child(text)
+    div()
+        .px(px(4.))
+        .py(px(1.))
+        .border_1()
+        .border_color(t.colors.border)
+        .rounded(px(3.))
+        .child(text)
 }
 
 /// A compact button for the warning's two answers: both the same height
 /// and text, the filled one in `fill`, the other a quiet text button.
-fn small_button(t: &Theme, id: &'static str, label: &'static str, fill: Option<Hsla>) -> gpui::Stateful<gpui::Div> {
+fn small_button(
+    t: &Theme,
+    id: &'static str,
+    label: &'static str,
+    fill: Option<Hsla>,
+) -> gpui::Stateful<gpui::Div> {
     let hover = t.colors.hover;
     div()
         .id(id)
@@ -56,7 +70,10 @@ fn small_button(t: &Theme, id: &'static str, label: &'static str, fill: Option<H
         .font_weight(FontWeight::MEDIUM)
         .cursor_pointer()
         .map(|d| match fill {
-            Some(c) => d.bg(c).text_color(t.colors.primary_fg).hover(|st| st.opacity(0.9)),
+            Some(c) => d
+                .bg(c)
+                .text_color(t.colors.primary_fg)
+                .hover(|st| st.opacity(0.9)),
             None => d.text_color(t.colors.text).hover(move |st| st.bg(hover)),
         })
         .child(label)
@@ -64,7 +81,12 @@ fn small_button(t: &Theme, id: &'static str, label: &'static str, fill: Option<H
 
 /// The footer button. `skip` says a click is the one that just closed the
 /// menu (pressing the button while it's open), so it doesn't reopen it.
-pub fn trigger(t: &Theme, state: &Entity<AppState>, cx: &App, skip: impl Fn(&gpui::ClickEvent, &mut App) -> bool + 'static) -> impl IntoElement {
+pub fn trigger(
+    t: &Theme,
+    state: &Entity<AppState>,
+    cx: &App,
+    skip: impl Fn(&gpui::ClickEvent, &mut App) -> bool + 'static,
+) -> impl IntoElement {
     let s = state.read(cx);
     let (mode, open) = (s.mode, s.modes_open);
     let fg = tint(t, mode).unwrap_or(t.colors.text);
@@ -87,9 +109,20 @@ pub fn trigger(t: &Theme, state: &Entity<AppState>, cx: &App, skip: impl Fn(&gpu
         .when(open, |d| d.bg(hover))
         .hover(move |st| st.bg(hover))
         .child(icon(mode.icon(), t.size.icon_xs, fg))
-        .child(div().max_w(px(200.)).overflow_hidden().whitespace_nowrap().text_ellipsis().child(mode.label()))
+        .child(
+            div()
+                .max_w(px(200.))
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .child(mode.label()),
+        )
         .tooltip({
-            let tip: SharedString = format!("{}. Click to change, or press Shift+Tab to cycle.", mode.description()).into();
+            let tip: SharedString = format!(
+                "{}. Click to change, or press Shift+Tab to cycle.",
+                mode.description()
+            )
+            .into();
             move |window, cx| gpui::component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
         })
         .on_click(move |ev, _, cx| {
@@ -106,7 +139,12 @@ pub fn trigger(t: &Theme, state: &Entity<AppState>, cx: &App, skip: impl Fn(&gpu
 }
 
 /// The menu, above the trigger. A press anywhere outside it calls `on_out`.
-pub fn menu(t: &Theme, state: &Entity<AppState>, cx: &App, on_out: impl Fn(gpui::Point<gpui::Pixels>, &mut App) + 'static) -> impl IntoElement {
+pub fn menu(
+    t: &Theme,
+    state: &Entity<AppState>,
+    cx: &App,
+    on_out: impl Fn(gpui::Point<gpui::Pixels>, &mut App) + 'static,
+) -> impl IntoElement {
     let s = state.read(cx);
     let (current, allowed, warning) = (s.mode, s.bypass_allowed, s.bypass_warning);
     let active_bg = t.colors.hover;
@@ -207,7 +245,12 @@ pub fn menu(t: &Theme, state: &Entity<AppState>, cx: &App, on_out: impl Fn(gpui:
                 .flex()
                 .items_center()
                 .justify_between()
-                .child(div().text_size(t.text.caption).text_color(t.colors.text_subtle).child("Modes"))
+                .child(
+                    div()
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_subtle)
+                        .child("Modes"),
+                )
                 .child(
                     div()
                         .flex()
@@ -224,5 +267,9 @@ pub fn menu(t: &Theme, state: &Entity<AppState>, cx: &App, on_out: impl Fn(gpui:
         )
         .child(rows)
         .children(warning_card)
-        .with_animation("modes-in", Animation::new(Duration::from_millis(170)).with_easing(gpui::ease_out_quint()), |d, k| d.opacity(k).mb(px(8. - 6. * (1. - k))))
+        .with_animation(
+            "modes-in",
+            Animation::new(Duration::from_millis(170)).with_easing(gpui::ease_out_quint()),
+            |d, k| d.opacity(k).mb(px(8. - 6. * (1. - k))),
+        )
 }

@@ -84,8 +84,16 @@ const WRAPPER_COMMANDS: &[&str] = &[
 ];
 
 /// Wrapper options that consume the following word as their value.
-const WRAPPER_FLAGS_WITH_VALUES: &[&str] =
-    &["-n", "-u", "-s", "-c", "-k", "--signal", "--adjustment", "--user"];
+const WRAPPER_FLAGS_WITH_VALUES: &[&str] = &[
+    "-n",
+    "-u",
+    "-s",
+    "-c",
+    "-k",
+    "--signal",
+    "--adjustment",
+    "--user",
+];
 
 const SHELL_COMMANDS: &[&str] = &["sh", "bash", "zsh", "dash", "ksh", "fish"];
 
@@ -98,7 +106,11 @@ const CONDITIONALLY_DESTRUCTIVE: &[(&str, &[&str])] = &[
 ];
 
 fn level_of(findings: &[RiskFinding]) -> RiskLevel {
-    findings.iter().map(|f| f.level).max().unwrap_or(RiskLevel::Safe)
+    findings
+        .iter()
+        .map(|f| f.level)
+        .max()
+        .unwrap_or(RiskLevel::Safe)
 }
 
 /// A bare number (`timeout 5`): digits and dots only.
@@ -177,7 +189,12 @@ fn describe(
             format!("{verb} \"{t}\" inside the working directory"),
         ),
     };
-    findings.push(RiskFinding { level, reason, target: Some(t.clone()), kind: Some(kind) });
+    findings.push(RiskFinding {
+        level,
+        reason,
+        target: Some(t.clone()),
+        kind: Some(kind),
+    });
 }
 
 fn assess_segment(tokens: &[Token], ctx: &RiskContext, findings: &mut Vec<RiskFinding>) {
@@ -221,11 +238,14 @@ fn assess_segment(tokens: &[Token], ctx: &RiskContext, findings: &mut Vec<RiskFi
         .find(|(name, _)| *name == program_name)
         .map(|(_, flags)| *flags);
     let triggered = is_destructive
-        || conditional.is_some_and(|flags| unwrapped.iter().any(|t| flags.contains(&t.text.as_str())));
+        || conditional
+            .is_some_and(|flags| unwrapped.iter().any(|t| flags.contains(&t.text.as_str())));
 
     // Output redirection truncates a file even with a harmless program.
-    let redirect_targets: Vec<&Token> =
-        unwrapped.iter().filter(|t| t.is_truncating_redirect_target).collect();
+    let redirect_targets: Vec<&Token> = unwrapped
+        .iter()
+        .filter(|t| t.is_truncating_redirect_target)
+        .collect();
 
     if !triggered && redirect_targets.is_empty() {
         return;
@@ -257,7 +277,13 @@ fn assess_segment(tokens: &[Token], ctx: &RiskContext, findings: &mut Vec<RiskFi
             format!("`{program_name}` would remove")
         };
         for target in operands {
-            describe(findings, &verb, target, classify_target(&target.text, ctx), FindingKind::Remove);
+            describe(
+                findings,
+                &verb,
+                target,
+                classify_target(&target.text, ctx),
+                FindingKind::Remove,
+            );
         }
     }
 
@@ -296,7 +322,10 @@ pub fn assess(command: &str, ctx: &RiskContext) -> RiskAssessment {
         });
     }
 
-    RiskAssessment { level: level_of(&findings), findings }
+    RiskAssessment {
+        level: level_of(&findings),
+        findings,
+    }
 }
 
 /// The text shown with a risky command, phrased to force a comparison against
@@ -305,10 +334,16 @@ pub fn explain(assessment: &RiskAssessment) -> String {
     if assessment.findings.is_empty() {
         return String::new();
     }
-    let lines: Vec<String> = assessment.findings.iter().map(|f| format!("• {}", f.reason)).collect();
+    let lines: Vec<String> = assessment
+        .findings
+        .iter()
+        .map(|f| format!("• {}", f.reason))
+        .collect();
     let header = match assessment.level {
         RiskLevel::Catastrophic => "This command would destroy something that cannot be recovered:",
-        RiskLevel::Confirm => "This command makes irreversible changes outside the working directory:",
+        RiskLevel::Confirm => {
+            "This command makes irreversible changes outside the working directory:"
+        }
         _ => "This command deletes files inside the working directory:",
     };
     format!("{header}\n{}", lines.join("\n"))
@@ -375,7 +410,11 @@ pub fn gate(input: &GateInput) -> GateOutcome {
         };
     }
 
-    let allow = GateOutcome { decision: GateDecision::Allow, reason: None, suggested_default: None };
+    let allow = GateOutcome {
+        decision: GateDecision::Allow,
+        reason: None,
+        suggested_default: None,
+    };
 
     if input.explicitly_allowed {
         return allow;
@@ -422,7 +461,11 @@ mod tests {
     }
 
     fn gate_of(command: &str, explicitly_allowed: bool, bypass_permissions: bool) -> GateOutcome {
-        gate(&GateInput { assessment: assess(command, &ctx()), explicitly_allowed, bypass_permissions })
+        gate(&GateInput {
+            assessment: assess(command, &ctx()),
+            explicitly_allowed,
+            bypass_permissions,
+        })
     }
 
     // The catastrophic cases, and every way around them.
@@ -452,14 +495,23 @@ mod tests {
 
     #[test]
     fn assesses_the_inline_script() {
-        for command in [r#"sh -c "rm -rf ~""#, "bash -c 'rm -rf /etc'", r#"sudo sh -c "rm -rf ~""#] {
+        for command in [
+            r#"sh -c "rm -rf ~""#,
+            "bash -c 'rm -rf /etc'",
+            r#"sudo sh -c "rm -rf ~""#,
+        ] {
             assert_eq!(level(command), RiskLevel::Catastrophic, "{command}");
         }
     }
 
     #[test]
     fn assesses_every_segment() {
-        for command in ["ls && rm -rf ~", "ls ; rm -rf ~", "false || rm -rf ~", "echo hi && echo there && rm -rf ~"] {
+        for command in [
+            "ls && rm -rf ~",
+            "ls ; rm -rf ~",
+            "false || rm -rf ~",
+            "echo hi && echo there && rm -rf ~",
+        ] {
             assert_eq!(level(command), RiskLevel::Catastrophic, "{command}");
         }
     }
@@ -487,7 +539,14 @@ mod tests {
 
     #[test]
     fn leaves_ordinary_commands_alone() {
-        for command in ["ls -la", "git status", "npm install", "cat package.json", "echo hello", "grep -r TODO src"] {
+        for command in [
+            "ls -la",
+            "git status",
+            "npm install",
+            "cat package.json",
+            "echo hello",
+            "grep -r TODO src",
+        ] {
             assert_eq!(level(command), RiskLevel::Safe, "{command}");
         }
     }
@@ -537,7 +596,11 @@ mod tests {
 
     #[test]
     fn flags_the_conditionally_destructive() {
-        for command in ["find . -delete", "git clean -fdx", "chmod -R 777 /home/dev/other"] {
+        for command in [
+            "find . -delete",
+            "git clean -fdx",
+            "chmod -R 777 /home/dev/other",
+        ] {
             assert!(level(command) > RiskLevel::Safe, "{command}");
         }
     }
@@ -563,7 +626,11 @@ mod tests {
     fn allows_a_safe_command_outright() {
         assert_eq!(
             gate_of("ls", false, false),
-            GateOutcome { decision: GateDecision::Allow, reason: None, suggested_default: None }
+            GateOutcome {
+                decision: GateDecision::Allow,
+                reason: None,
+                suggested_default: None
+            }
         );
     }
 
@@ -572,7 +639,10 @@ mod tests {
         let o = gate_of("rm -rf /home/dev/other", false, false);
         assert_eq!(o.decision, GateDecision::Ask);
         assert_eq!(o.suggested_default, Some(SuggestedDefault::Deny));
-        assert!(o.reason.unwrap_or_default().contains("outside the working directory"));
+        assert!(o
+            .reason
+            .unwrap_or_default()
+            .contains("outside the working directory"));
     }
 
     #[test]
@@ -585,30 +655,45 @@ mod tests {
     #[test]
     fn honours_a_user_rule_over_a_confirm_assessment() {
         // The user knows something the classifier does not.
-        assert_eq!(gate_of("rm -rf /home/dev/other", true, false).decision, GateDecision::Allow);
+        assert_eq!(
+            gate_of("rm -rf /home/dev/other", true, false).decision,
+            GateDecision::Allow
+        );
     }
 
     #[test]
     fn does_not_let_a_rule_unlock_a_catastrophic_command() {
         // The cost of being overruled and right here is unbounded; the cost of
         // a false positive is rephrasing one command.
-        assert_eq!(gate_of("rm -rf ~", true, false).decision, GateDecision::Deny);
+        assert_eq!(
+            gate_of("rm -rf ~", true, false).decision,
+            GateDecision::Deny
+        );
     }
 
     #[test]
     fn bypass_does_not_block_because_the_user_turned_prompts_off() {
-        assert_eq!(gate_of("rm -rf /home/dev/other", false, true).decision, GateDecision::Allow);
+        assert_eq!(
+            gate_of("rm -rf /home/dev/other", false, true).decision,
+            GateDecision::Allow
+        );
     }
 
     #[test]
     fn bypass_still_computes_the_assessment_so_it_can_be_logged() {
         let o = gate_of("rm -rf /home/dev/other", false, true);
-        assert!(o.reason.unwrap_or_default().contains("outside the working directory"));
+        assert!(o
+            .reason
+            .unwrap_or_default()
+            .contains("outside the working directory"));
     }
 
     #[test]
     fn bypass_still_refuses_a_catastrophic_command() {
-        assert_eq!(gate_of("rm -rf ~", false, true).decision, GateDecision::Deny);
+        assert_eq!(
+            gate_of("rm -rf ~", false, true).decision,
+            GateDecision::Deny
+        );
     }
 
     #[test]
@@ -620,7 +705,9 @@ mod tests {
 
     #[test]
     fn quotes_the_path_that_triggered_it() {
-        let reason = gate_of("rm -rf ~/.ssh", false, false).reason.unwrap_or_default();
+        let reason = gate_of("rm -rf ~/.ssh", false, false)
+            .reason
+            .unwrap_or_default();
         assert!(reason.contains("~/.ssh"));
         assert!(reason.contains("protected location"));
     }
@@ -634,7 +721,10 @@ mod tests {
 
     #[test]
     fn still_protects_absolute_system_paths() {
-        assert_eq!(assess("rm -rf /etc", &RiskContext::default()).level, RiskLevel::Catastrophic);
+        assert_eq!(
+            assess("rm -rf /etc", &RiskContext::default()).level,
+            RiskLevel::Catastrophic
+        );
     }
 
     #[test]
@@ -644,7 +734,10 @@ mod tests {
 
     #[test]
     fn does_not_claim_home_knowledge_it_does_not_have() {
-        assert_ne!(assess("rm -rf ~", &RiskContext::default()).level, RiskLevel::Catastrophic);
+        assert_ne!(
+            assess("rm -rf ~", &RiskContext::default()).level,
+            RiskLevel::Catastrophic
+        );
     }
 
     // Degenerate input.

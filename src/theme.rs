@@ -11,21 +11,21 @@ use gpui::{
 
 #[derive(Clone, Copy)]
 pub struct Colors {
-    pub canvas: Hsla,        // page / window background (warm paper)
-    pub surface: Hsla,       // cards, panels, popovers
+    pub canvas: Hsla,  // page / window background (warm paper)
+    pub surface: Hsla, // cards, panels, popovers
     #[allow(dead_code)] // in the palette; the sidebar now uses `ExtraColors::pane`
-    pub sidebar: Hsla,       // app-specific: sidebar sits between canvas and surface
-    pub text: Hsla,          // ink 95%
-    pub text_strong: Hsla,   // ink 100% (headings)
-    pub text_body: Hsla,     // graphite – warm body text
-    pub text_muted: Hsla,    // ink 60%
-    pub text_subtle: Hsla,   // ink 40% (placeholders, disabled)
-    pub border: Hsla,        // hairline, ink 8%
-    pub hover: Hsla,         // row / ghost hover wash
-    pub primary: Hsla,       // the single filled-action color
+    pub sidebar: Hsla, // app-specific: sidebar sits between canvas and surface
+    pub text: Hsla,    // ink 95%
+    pub text_strong: Hsla, // ink 100% (headings)
+    pub text_body: Hsla, // graphite – warm body text
+    pub text_muted: Hsla, // ink 60%
+    pub text_subtle: Hsla, // ink 40% (placeholders, disabled)
+    pub border: Hsla,  // hairline, ink 8%
+    pub hover: Hsla,   // row / ghost hover wash
+    pub primary: Hsla, // the single filled-action color
     pub primary_hover: Hsla,
     pub primary_fg: Hsla,
-    pub primary_tint: Hsla,  // ghost CTA bg, selection wash
+    pub primary_tint: Hsla, // ghost CTA bg, selection wash
     pub marigold: Hsla,
     #[allow(dead_code)] // in the palette; nothing is coral right now
     pub coral: Hsla,
@@ -68,11 +68,11 @@ pub struct Theme {
     pub text: TypeScale,
     pub space: Space,
     pub radius: Radius,
-    pub font_sans: SharedString,  // Anthropic Sans when on this PC, else Hanken Grotesk (`fonts.rs`)
+    pub font_sans: SharedString, // Anthropic Sans when on this PC, else Hanken Grotesk (`fonts.rs`)
     pub font_serif: SharedString, // Source Serif (substitute for Lyon Text)
-    pub motion_ms: u64,           // 200ms ease for hovers/transitions
+    pub motion_ms: u64,          // 200ms ease for hovers/transitions
     // Forge additions (see the section at the end of the tokens).
-    pub font_mono: SharedString,  // JetBrains Mono: code, paths, commands
+    pub font_mono: SharedString, // JetBrains Mono: code, paths, commands
     pub font_display: SharedString, // large serif lines (the greeting): Anthropic Serif when on this PC, else Source Serif 4 Display
     pub extra: ExtraColors,
     pub terminal: TerminalColors,
@@ -208,34 +208,34 @@ impl Theme {
 
 #[derive(Clone, Copy)]
 pub struct ExtraColors {
-    pub inset: Hsla,         // a quiet well inside a card: code blocks, terminal output
-    pub success: Hsla,       // text/icon on success
+    pub inset: Hsla,   // a quiet well inside a card: code blocks, terminal output
+    pub success: Hsla, // text/icon on success
     pub success_tint: Hsla,
     pub danger: Hsla,
     pub danger_tint: Hsla,
-    pub warning: Hsla,       // "needs you"
+    pub warning: Hsla, // "needs you"
     pub warning_tint: Hsla,
-    pub diff_add: Hsla,      // added line background
-    pub diff_del: Hsla,      // removed line background
-    pub scrim: Hsla,         // behind the command palette
-    pub selected: Hsla,      // selected row: a white sticky note on the sidebar
+    pub diff_add: Hsla, // added line background
+    pub diff_del: Hsla, // removed line background
+    pub scrim: Hsla,    // behind the command palette
+    pub selected: Hsla, // selected row: a white sticky note on the sidebar
     // The window's three surfaces, a clear step apart so each area reads as
     // its own: the title bar darkest, then the sidebar, then the session.
     // Cards and the composer sit on top in `surface`.
-    pub chrome: Hsla,        // the title bar
-    pub pane: Hsla,          // the sidebar
-    pub stage: Hsla,         // the session: the chat, the welcome, Rules, Projects
+    pub chrome: Hsla, // the title bar
+    pub pane: Hsla,   // the sidebar
+    pub stage: Hsla,  // the session: the chat, the welcome, Rules, Projects
     // Filled buttons. Light uses `primary` as is; in dark, white text on
     // `primary` reads at only 3.3:1, so the fill is the same blue, deeper,
     // and links keep `primary` (`palette_check.rs` holds both to 4.5:1).
     pub fill: Hsla,
     pub fill_hover: Hsla,
-    pub fill_danger: Hsla,   // a destructive confirm ("Allow bypass")
+    pub fill_danger: Hsla, // a destructive confirm ("Allow bypass")
     // Permission modes, as Forge for VS Code tints them (forge-tokens.css).
-    pub mode_edit: Hsla,     // Edit automatically
-    pub mode_plan: Hsla,     // Plan
-    pub mode_bypass: Hsla,   // Bypass permissions
-    pub mode_expert: Hsla,   // Expert
+    pub mode_edit: Hsla,   // Edit automatically
+    pub mode_plan: Hsla,   // Plan
+    pub mode_bypass: Hsla, // Bypass permissions
+    pub mode_expert: Hsla, // Expert
     // A model's ping chip: answered fast, fair, slow (never red).
     pub ping_fast_bg: Hsla,
     pub ping_fast_fg: Hsla,
@@ -265,8 +265,8 @@ impl ExtraColors {
                 chrome: rgb(0x100f0e).into(),
                 pane: rgb(0x161514).into(),
                 stage: rgb(0x1c1b19).into(),
-                fill: rgb(0x0069c2).into(),       // 5.5:1 under white
-                fill_hover: rgb(0x0b74cd).into(), // 4.8:1, a step lighter
+                fill: rgb(0x0069c2).into(),        // 5.5:1 under white
+                fill_hover: rgb(0x0b74cd).into(),  // 4.8:1, a step lighter
                 fill_danger: rgb(0xb7331f).into(), // 6.0:1
                 mode_edit: rgb(0x2da160).into(),
                 mode_plan: rgb(0x428fdc).into(),
@@ -297,7 +297,7 @@ impl ExtraColors {
                 chrome: rgb(0xe9e6e1).into(),
                 pane: rgb(0xf1efeb).into(),
                 stage: rgb(0xf9f7f5).into(),
-                fill: rgb(0x0075de).into(),       // `primary`: 4.6:1 under white
+                fill: rgb(0x0075de).into(), // `primary`: 4.6:1 under white
                 fill_hover: rgb(0x005bab).into(), // `primary_hover`: 6.8:1
                 fill_danger: rgb(0xa32c12).into(), // 7.2:1
                 mode_edit: rgb(0x108548).into(),
@@ -354,7 +354,10 @@ impl TerminalColors {
                 operator: rgb(0xf6806d).into(),
                 number: rgb(0xd99530).into(),
                 comment: rgb(0x747273).into(),
-                ansi: [0x646163, 0xec5941, 0x2da160, 0xd99530, 0x428fdc, 0x9475db, 0x63a6e9, 0xc1bfbe].map(|c| rgb(c).into()),
+                ansi: [
+                    0x646163, 0xec5941, 0x2da160, 0xd99530, 0x428fdc, 0x9475db, 0x63a6e9, 0xc1bfbe,
+                ]
+                .map(|c| rgb(c).into()),
             }
         } else {
             Self {
@@ -371,7 +374,10 @@ impl TerminalColors {
                 operator: rgb(0xc02f12).into(),
                 number: rgb(0xab6100).into(),
                 comment: rgb(0x747273).into(),
-                ansi: [0x28272d, 0xc02f12, 0x2f7549, 0xab6100, 0x2f68b4, 0x6a4fb4, 0x1f75cb, 0x747273].map(|c| rgb(c).into()),
+                ansi: [
+                    0x28272d, 0xc02f12, 0x2f7549, 0xab6100, 0x2f68b4, 0x6a4fb4, 0x1f75cb, 0x747273,
+                ]
+                .map(|c| rgb(c).into()),
             }
         }
     }
@@ -398,9 +404,33 @@ impl CodeColors {
     fn for_mode(is_dark: bool) -> Self {
         let c = |x: u32| -> Hsla { rgb(x).into() };
         if is_dark {
-            Self { keyword: c(0xac93e6), string: c(0xe9be74), number: c(0xd99530), comment: c(0x8a8888), function: c(0x63a6e9), type_: c(0x52b87a), variable: c(0xcbbbf2), operator: c(0xf6806d), meta: c(0x8a8888), added: c(0x52b87a), removed: c(0xf6806d) }
+            Self {
+                keyword: c(0xac93e6),
+                string: c(0xe9be74),
+                number: c(0xd99530),
+                comment: c(0x8a8888),
+                function: c(0x63a6e9),
+                type_: c(0x52b87a),
+                variable: c(0xcbbbf2),
+                operator: c(0xf6806d),
+                meta: c(0x8a8888),
+                added: c(0x52b87a),
+                removed: c(0xf6806d),
+            }
         } else {
-            Self { keyword: c(0x6a4fb4), string: c(0x995715), number: c(0xab6100), comment: c(0x747273), function: c(0x2f68b4), type_: c(0x2f7549), variable: c(0x7b58cf), operator: c(0xc02f12), meta: c(0x747273), added: c(0x2f7549), removed: c(0xc02f12) }
+            Self {
+                keyword: c(0x6a4fb4),
+                string: c(0x995715),
+                number: c(0xab6100),
+                comment: c(0x747273),
+                function: c(0x2f68b4),
+                type_: c(0x2f7549),
+                variable: c(0x7b58cf),
+                operator: c(0xc02f12),
+                meta: c(0x747273),
+                added: c(0x2f7549),
+                removed: c(0xc02f12),
+            }
         }
     }
 }
@@ -408,32 +438,35 @@ impl CodeColors {
 /// The app's fixed dimensions.
 #[derive(Clone, Copy)]
 pub struct Sizes {
-    pub titlebar: Pixels,      // 36
-    pub sidebar: Pixels,       // 240
-    pub column: Pixels,        // 680: the reading column
-    pub row: Pixels,           // 30: sidebar rows, menu items
-    pub control: Pixels,       // 26: pills, small buttons
+    pub titlebar: Pixels, // 36
+    pub sidebar: Pixels,  // 240
+    pub column: Pixels,   // 680: the reading column
+    pub row: Pixels,      // 30: sidebar rows, menu items
+    pub control: Pixels,  // 26: pills, small buttons
     // Icons: one scale, 12 / 14 / 16 / 20, and Lucide's own 2px stroke.
-    pub icon_xs: Pixels,       // 12: inside captions and chips
-    pub icon_sm: Pixels,       // 14
-    pub icon: Pixels,          // 16
-    pub icon_lg: Pixels,       // 20: the composer's +
-    pub composer_max: Pixels,  // the composer's tallest input
-    pub composer_radius: Pixels, // 16: the composer box's corners
-    pub composer_width: Pixels,  // 560: the composer's widest, wherever it sits
-    pub palette: Pixels,       // command palette width
-    pub hairline: Pixels,      // 1
-    pub line_height_chat: f32, // 1.45 for prose
-    pub chat_text: Pixels,     // 13.5: replies and your messages
-    pub greeting: Pixels,      // 28: the new-chat greeting, in the display serif
-    pub doc_text: Pixels,      // 15: a document in the side panel
-    pub doc_title: Pixels,     // 28: its title, in the display serif
-    pub line_height_doc: f32,  // 1.65: a document's leading
-    pub doc_pane: Pixels,      // 460: the side panel's narrowest
-    pub doc_measure: Pixels,   // 680: a document's widest line
-    pub rules_list: Pixels,    // 340: the Rules screen's file list
-    pub editor: Pixels,        // 420: a file editor's height
+    pub icon_xs: Pixels,            // 12: inside captions and chips
+    pub icon_sm: Pixels,            // 14
+    pub icon: Pixels,               // 16
+    pub icon_lg: Pixels,            // 20: the composer's +
+    pub composer_max: Pixels,       // the composer's tallest input
+    pub composer_radius: Pixels,    // 16: the composer box's corners
+    pub composer_width: Pixels,     // 560: the composer's widest, wherever it sits
+    pub palette: Pixels,            // command palette width
+    pub hairline: Pixels,           // 1
+    pub line_height_chat: f32,      // 1.45 for prose
+    pub chat_text: Pixels,          // 13.5: replies and your messages
+    pub greeting: Pixels,           // 28: the new-chat greeting, in the display serif
+    pub doc_text: Pixels,           // 15: a document in the side panel
+    pub doc_title: Pixels,          // 28: its title, in the display serif
+    pub line_height_doc: f32,       // 1.65: a document's leading
+    pub doc_pane: Pixels,           // 460: the side panel's narrowest
+    pub doc_measure: Pixels,        // 680: a document's widest line
+    pub rules_list: Pixels,         // 340: the Rules screen's file list
+    pub editor: Pixels,             // 420: a file editor's height
     pub composer_clearance: Pixels, // 150: toasts sit above the composer, its chips included
+    pub attach_thumb: Pixels,       // 28: an attachment chip's picture or icon
+    pub attach_chip: Pixels,        // 220: an attachment chip's widest
+    pub popover_list: Pixels,       // 300: the tallest an autocomplete or context list grows
 }
 
 impl Default for Sizes {
@@ -464,6 +497,9 @@ impl Default for Sizes {
             rules_list: px(340.),
             editor: px(420.),
             composer_clearance: px(150.),
+            attach_thumb: px(28.),
+            attach_chip: px(220.),
+            popover_list: px(300.),
         }
     }
 }

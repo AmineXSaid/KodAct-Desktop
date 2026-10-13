@@ -4,7 +4,9 @@
 //! marks it (`chat_view.rs`).
 
 use gpui::component::input::{Input, InputEvent, InputState};
-use gpui::{div, prelude::*, px, Context, Entity, IntoElement, KeyDownEvent, Render, Subscription, Window};
+use gpui::{
+    div, prelude::*, px, Context, Entity, IntoElement, KeyDownEvent, Render, Subscription, Window,
+};
 
 use super::icon;
 use crate::state::AppState;
@@ -21,19 +23,27 @@ impl FindBar {
         let query = cx.new(|cx| InputState::new(window, cx).placeholder("Find in this chat"));
         let subs = vec![
             cx.observe(&state, |_, _, cx| cx.notify()),
-            cx.subscribe_in(&query, window, |this, input, ev: &InputEvent, _, cx| match ev {
-                InputEvent::Change => {
-                    let q = input.read(cx).value().to_string();
-                    this.state.update(cx, |s, cx| s.set_find_query(&q, cx));
-                }
-                InputEvent::PressEnter { shift, .. } => {
-                    let forward = !*shift;
-                    this.state.update(cx, |s, cx| s.find_step(forward, cx));
-                }
-                _ => {}
-            }),
+            cx.subscribe_in(
+                &query,
+                window,
+                |this, input, ev: &InputEvent, _, cx| match ev {
+                    InputEvent::Change => {
+                        let q = input.read(cx).value().to_string();
+                        this.state.update(cx, |s, cx| s.set_find_query(&q, cx));
+                    }
+                    InputEvent::PressEnter { shift, .. } => {
+                        let forward = !*shift;
+                        this.state.update(cx, |s, cx| s.find_step(forward, cx));
+                    }
+                    _ => {}
+                },
+            ),
         ];
-        Self { state, query, _subs: subs }
+        Self {
+            state,
+            query,
+            _subs: subs,
+        }
     }
 
     /// Show the bar and put the cursor in it, the last query selected for typing over.
@@ -57,7 +67,9 @@ impl FindBar {
 impl Render for FindBar {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
-        let Some(find) = self.state.read(cx).find.clone() else { return div().into_any_element() };
+        let Some(find) = self.state.read(cx).find.clone() else {
+            return div().into_any_element();
+        };
         let hover = t.colors.hover;
         let n = find.hits.len();
         let typed = !find.query.trim().is_empty();
@@ -75,7 +87,15 @@ impl Render for FindBar {
                 .justify_center()
                 .rounded(t.radius.button)
                 .when(enabled, |d| d.cursor_pointer().hover(move |s| s.bg(hover)))
-                .child(icon(path, t.size.icon_sm, if enabled { t.colors.text_muted } else { t.colors.text_subtle.opacity(0.5) }))
+                .child(icon(
+                    path,
+                    t.size.icon_sm,
+                    if enabled {
+                        t.colors.text_muted
+                    } else {
+                        t.colors.text_subtle.opacity(0.5)
+                    },
+                ))
         };
         let (up, down) = (self.state.clone(), self.state.clone());
         div()
@@ -100,13 +120,50 @@ impl Render for FindBar {
                     .gap(t.space.xs)
                     .px(t.space.sm)
                     .py(px(2.))
-                    .child(icon("icons/search.svg", t.size.icon_sm, t.colors.text_subtle))
-                    .child(div().flex_1().min_w_0().child(Input::new(&self.query).appearance(false).text_size(t.text.body_sm)))
-                    .child(div().flex_none().text_size(t.text.caption).text_color(if typed && n == 0 { t.extra.danger } else { t.colors.text_subtle }).child(count))
-                    .child(div().w(t.size.hairline).h(t.space.lg).mx(t.space.xs).bg(t.colors.border))
-                    .child(button("find-prev", "icons/chevron-up.svg", n > 0).on_click(move |_, _, cx| up.update(cx, |s, cx| s.find_step(false, cx))))
-                    .child(button("find-next", "icons/chevron-down.svg", n > 0).on_click(move |_, _, cx| down.update(cx, |s, cx| s.find_step(true, cx))))
-                    .child(button("find-close", "icons/x.svg", true).on_click(cx.listener(|this, _, window, cx| this.close(window, cx)))),
+                    .child(icon(
+                        "icons/search.svg",
+                        t.size.icon_sm,
+                        t.colors.text_subtle,
+                    ))
+                    .child(
+                        div().flex_1().min_w_0().child(
+                            Input::new(&self.query)
+                                .appearance(false)
+                                .text_size(t.text.body_sm),
+                        ),
+                    )
+                    .child(
+                        div()
+                            .flex_none()
+                            .text_size(t.text.caption)
+                            .text_color(if typed && n == 0 {
+                                t.extra.danger
+                            } else {
+                                t.colors.text_subtle
+                            })
+                            .child(count),
+                    )
+                    .child(
+                        div()
+                            .w(t.size.hairline)
+                            .h(t.space.lg)
+                            .mx(t.space.xs)
+                            .bg(t.colors.border),
+                    )
+                    .child(
+                        button("find-prev", "icons/chevron-up.svg", n > 0).on_click(
+                            move |_, _, cx| up.update(cx, |s, cx| s.find_step(false, cx)),
+                        ),
+                    )
+                    .child(
+                        button("find-next", "icons/chevron-down.svg", n > 0).on_click(
+                            move |_, _, cx| down.update(cx, |s, cx| s.find_step(true, cx)),
+                        ),
+                    )
+                    .child(
+                        button("find-close", "icons/x.svg", true)
+                            .on_click(cx.listener(|this, _, window, cx| this.close(window, cx))),
+                    ),
             )
             .into_any_element()
     }

@@ -100,6 +100,17 @@ pub struct ToolCall {
     pub open: bool,
     /// Long output shows its last lines; this shows all of it.
     pub full: bool,
+    /// What you did about the change it made (Keep / Revert).
+    pub review: Review,
+}
+
+/// A file change's review: not looked at yet, kept, or reverted on disk.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Review {
+    #[default]
+    Open,
+    Kept,
+    Reverted,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -113,9 +124,16 @@ pub enum Verdict {
 #[derive(Clone, Debug)]
 pub enum Block {
     Text(SharedString),
-    Thinking { text: SharedString, open: bool },
+    Thinking {
+        text: SharedString,
+        open: bool,
+    },
     Tool(ToolCall),
-    Permission { title: SharedString, detail: SharedString, verdict: Verdict },
+    Permission {
+        title: SharedString,
+        detail: SharedString,
+        verdict: Verdict,
+    },
     /// A file Forge made for you: a card in the reply, opened beside the chat.
     File(FileRef),
 }
@@ -148,12 +166,18 @@ impl FileRef {
                 return h.trim().to_string().into();
             }
         }
-        self.name.rsplit_once('.').map_or(self.name.to_string(), |(stem, _)| stem.to_string()).into()
+        self.name
+            .rsplit_once('.')
+            .map_or(self.name.to_string(), |(stem, _)| stem.to_string())
+            .into()
     }
 
     /// Its type, as the card labels it: `MD`, `PDF`, `DOCX`.
     pub fn kind(&self) -> SharedString {
-        self.name.rsplit_once('.').map_or("FILE".to_string(), |(_, ext)| ext.to_ascii_uppercase()).into()
+        self.name
+            .rsplit_once('.')
+            .map_or("FILE".to_string(), |(_, ext)| ext.to_ascii_uppercase())
+            .into()
     }
 
     /// An Office file or a PDF, read natively (`office.rs`).
@@ -176,7 +200,10 @@ impl FileRef {
 
     /// The file as saved: its bytes, else its text.
     pub fn data(&self) -> Vec<u8> {
-        self.bytes.as_deref().map(<[u8]>::to_vec).unwrap_or_else(|| self.content.as_bytes().to_vec())
+        self.bytes
+            .as_deref()
+            .map(<[u8]>::to_vec)
+            .unwrap_or_else(|| self.content.as_bytes().to_vec())
     }
 
     pub fn is_markdown(&self) -> bool {
@@ -190,17 +217,44 @@ impl FileRef {
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum Message {
-    User { text: SharedString, sent: SystemTime },
-    Assistant { blocks: Vec<Block> },
-    /// The end of a turn: how long it took, and the usage the model
-    /// reported for it (`context.rs`).
-    TurnEnd { seconds: f32, usage: Option<crate::context::Usage> },
-    /// Something the app says (interrupted, an error).
-    Notice { text: SharedString, error: bool },
+impl Message {
+    /// Your message, without attachments.
+    #[cfg(test)]
+    pub fn user(text: SharedString, sent: SystemTime) -> Self {
+        Message::User {
+            text,
+            sent,
+            attachments: vec![],
+            turn: None,
+        }
+    }
 }
 
+#[derive(Clone, Debug)]
+pub enum Message {
+    /// Your message: its text, the files you attached, and the id ForgeCLI
+    /// gave its turn (for Revert), once known.
+    User {
+        text: SharedString,
+        sent: SystemTime,
+        attachments: Vec<crate::attach::Attachment>,
+        turn: Option<SharedString>,
+    },
+    Assistant {
+        blocks: Vec<Block>,
+    },
+    /// The end of a turn: how long it took, and the usage the model
+    /// reported for it (`context.rs`).
+    TurnEnd {
+        seconds: f32,
+        usage: Option<crate::context::Usage>,
+    },
+    /// Something the app says (interrupted, an error).
+    Notice {
+        text: SharedString,
+        error: bool,
+    },
+}
 
 pub struct Chat {
     pub id: usize,
@@ -221,7 +275,52 @@ pub struct Chat {
     pub resumable: bool,
     /// When it last changed, for the sidebar's dates and the history's order.
     pub updated: SystemTime,
+    /// Earlier versions of the conversation, replaced by an edit or a retry.
+    pub versions: Vec<Version>,
 }
+
+/// A replaced version of a conversation: from your message at `at` on, as
+/// it was, and the ForgeCLI conversation it had (restoring it resumes that).
+#[derive(Clone, Debug)]
+pub struct Version {
+    pub at: usize,
+    pub tail: Vec<Message>,
+    pub session: String,
+    pub resumable: bool,
+    pub when: SystemTime,
+}
+
+impl Version {
+    /// The first words of its reply, for the versions list.
+    pub fn preview(&self) -> String {
+        let text = turn_text(&self.tail, self.tail.len().saturating_sub(1));
+        let flat: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        if flat.chars().count() > 280 {
+            format!("{}…", flat.chars().take(279).collect::<String>())
+        } else if flat.is_empty() {
+            "(no reply text)".into()
+        } else {
+            flat
+        }
+    }
+
+    /// What you asked in it.
+    pub fn asked(&self) -> String {
+        match self.tail.first() {
+            Some(Message::User { text, .. }) => text
+                .lines()
+                .next()
+                .unwrap_or_default()
+                .chars()
+                .take(80)
+                .collect(),
+            _ => String::new(),
+        }
+    }
+}
+
+/// The most versions kept per chat (the oldest go first).
+const MAX_VERSIONS: usize = 20;
 
 /// Where a chat stands, as its sidebar row shows it.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -240,7 +339,20 @@ pub enum ChatStatus {
 impl Chat {
     /// A new, empty chat with a fresh conversation id.
     pub fn new(id: usize, project: usize, title: SharedString) -> Self {
-        Self { id, project, title, minutes_ago: 0, pinned: false, messages: vec![], version: 0, unread: false, session: crate::history::new_id(), resumable: false, updated: SystemTime::now() }
+        Self {
+            id,
+            project,
+            title,
+            minutes_ago: 0,
+            pinned: false,
+            messages: vec![],
+            version: 0,
+            unread: false,
+            session: crate::history::new_id(),
+            resumable: false,
+            updated: SystemTime::now(),
+            versions: vec![],
+        }
     }
 
     /// Start a new ForgeCLI conversation for this chat (its old one can't
@@ -323,7 +435,8 @@ struct Ask {
 
 /// The side-question card's copy, as Forge for VS Code has it.
 pub const SIDE_TITLE: &str = "Side question";
-pub const SIDE_EMPTY: &str = "Ask a quick side question below without interrupting the conversation.";
+pub const SIDE_EMPTY: &str =
+    "Ask a quick side question below without interrupting the conversation.";
 pub const SIDE_PLACEHOLDER: &str = "Ask a side question";
 pub const SIDE_PENDING: &str = "Answering…";
 /// The thread keeps the last 20 exchanges.
@@ -332,8 +445,14 @@ const SIDE_MAX: usize = 20;
 /// One `/btw` exchange.
 #[derive(Clone, Debug, PartialEq)]
 pub enum SideItem {
-    Answer { question: SharedString, answer: SharedString },
-    Failed { question: SharedString, message: SharedString },
+    Answer {
+        question: SharedString,
+        answer: SharedString,
+    },
+    Failed {
+        question: SharedString,
+        message: SharedString,
+    },
 }
 
 /// A chat's side questions: answered by ForgeCLI from the conversation,
@@ -405,7 +524,12 @@ pub fn message_matches(m: &Message, needle: &str) -> bool {
         Message::Assistant { blocks } => blocks.iter().any(|b| match b {
             Block::Text(t) => has(t),
             Block::Thinking { text, .. } => has(text),
-            Block::Tool(c) => has(&c.target) || has(&c.output) || c.note.as_ref().is_some_and(|n| has(n)) || c.diff.iter().any(|l| has(&l.text)),
+            Block::Tool(c) => {
+                has(&c.target)
+                    || has(&c.output)
+                    || c.note.as_ref().is_some_and(|n| has(n))
+                    || c.diff.iter().any(|l| has(&l.text))
+            }
             Block::Permission { title, detail, .. } => has(title) || has(detail),
             Block::File(f) => has(&f.name),
         }),
@@ -420,18 +544,32 @@ pub fn find_hits(messages: &[Message], query: &str) -> Vec<usize> {
     if needle.is_empty() {
         return vec![];
     }
-    messages.iter().enumerate().filter(|(_, m)| message_matches(m, &needle)).map(|(i, _)| i).collect()
+    messages
+        .iter()
+        .enumerate()
+        .filter(|(_, m)| message_matches(m, &needle))
+        .map(|(i, _)| i)
+        .collect()
 }
 
 /// The prose of the reply that ends at `end` (a turn end or the last
 /// message): every text block after your message before it.
 pub fn turn_text(messages: &[Message], end: usize) -> String {
     let end = end.min(messages.len().saturating_sub(1));
-    let start = messages[..=end].iter().rposition(|m| matches!(m, Message::User { .. })).map_or(0, |u| u + 1);
+    let start = messages[..=end]
+        .iter()
+        .rposition(|m| matches!(m, Message::User { .. }))
+        .map_or(0, |u| u + 1);
     let mut parts = vec![];
     for m in &messages[start..=end] {
         if let Message::Assistant { blocks } = m {
-            parts.extend(blocks.iter().filter_map(|b| if let Block::Text(t) = b { Some(t.trim().to_string()) } else { None }));
+            parts.extend(blocks.iter().filter_map(|b| {
+                if let Block::Text(t) = b {
+                    Some(t.trim().to_string())
+                } else {
+                    None
+                }
+            }));
         }
     }
     parts.join("\n\n")
@@ -439,16 +577,39 @@ pub fn turn_text(messages: &[Message], end: usize) -> String {
 
 /// Your message that a reply ending at `end` answers.
 pub fn turn_question(messages: &[Message], end: usize) -> Option<usize> {
-    messages.get(..=end.min(messages.len().saturating_sub(1)))?.iter().rposition(|m| matches!(m, Message::User { .. }))
+    messages
+        .get(..=end.min(messages.len().saturating_sub(1)))?
+        .iter()
+        .rposition(|m| matches!(m, Message::User { .. }))
 }
 
 /// Whole minutes since `t` (0 for the future).
 fn minutes_since(t: SystemTime) -> u32 {
-    t.elapsed().map(|d| (d.as_secs() / 60).min(u32::MAX as u64) as u32).unwrap_or(0)
+    t.elapsed()
+        .map(|d| (d.as_secs() / 60).min(u32::MAX as u64) as u32)
+        .unwrap_or(0)
 }
 
+/// Said while ForgeCLI summarizes the conversation, and when it has.
+pub const COMPACTING: &str = "Compacting the conversation…";
+pub const COMPACTED: &str = "Compacted: earlier messages were summarized to free context. Forge still knows what was decided.";
+
 /// Said under a reply that was still running when Forge closed.
-pub const CLOSED_MID_REPLY: &str = "Forge was closed before this reply finished. Send a message to pick it up.";
+pub const CLOSED_MID_REPLY: &str =
+    "Forge was closed before this reply finished. Send a message to pick it up.";
+
+/// A `rewind_files` request for ForgeCLI's turn `turn`.
+fn json_rewind(turn: &str, dry_run: bool) -> serde_json::Value {
+    serde_json::json!({ "subtype": "rewind_files", "user_message_id": turn, "dry_run": dry_run })
+}
+
+/// Whether ForgeCLI's absolute path `full` is the tool row's `target`
+/// (absolute, or relative to the project).
+fn same_file(full: &str, target: &str) -> bool {
+    let norm = |s: &str| s.replace('\\', "/");
+    let (f, t) = (norm(full), norm(target));
+    f == t || f.ends_with(&format!("/{}", t.trim_start_matches("./")))
+}
 
 /// What Continue sends: Forge picks up where Stop cut it off.
 const CONTINUE_PROMPT: &str = "Continue from where you stopped.";
@@ -456,6 +617,37 @@ const CONTINUE_PROMPT: &str = "Continue from where you stopped.";
 /// `FORGE_DEMO=1`: replies are the scripted demo instead of ForgeCLI.
 fn demo_mode() -> bool {
     std::env::var("FORGE_DEMO").is_ok_and(|v| v == "1")
+}
+
+/// What the confirm window asks.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Confirm {
+    /// Delete this chat?
+    Delete(usize),
+    /// Put these files back as they were before your message `msg`?
+    Revert {
+        chat: usize,
+        msg: usize,
+        files: Vec<String>,
+    },
+}
+
+/// A command `/` offers, and the group it is listed under.
+#[derive(Clone, Debug)]
+pub struct CompletionCommand {
+    pub name: String,
+    pub args: String,
+    pub description: String,
+    pub group: &'static str,
+}
+
+/// A control request sent to a chat's ForgeCLI, and what its answer is for.
+#[derive(Clone, Debug)]
+pub enum Request {
+    /// "Which files would reverting to before this message change?"
+    RevertPlan { chat: usize, msg: usize },
+    /// Revert them.
+    Revert { chat: usize, msg: usize },
 }
 
 // ---------------------------------------------------------------- the state
@@ -528,7 +720,10 @@ pub struct AppState {
     pub doc_fit: bool,
     /// An Office file or PDF in the panel, read: by file name, the preview
     /// or why it couldn't be read. None while it is being read.
-    pub doc_preview: Option<(SharedString, Result<std::sync::Arc<crate::office::Preview>, String>)>,
+    pub doc_preview: Option<(
+        SharedString,
+        Result<std::sync::Arc<crate::office::Preview>, String>,
+    )>,
     /// The sheet shown, for a workbook.
     pub doc_sheet: usize,
     copied_reset: Option<Task<()>>,
@@ -572,7 +767,7 @@ pub struct AppState {
     /// The chat whose menu (⋯ or right-click) is open.
     pub chat_menu: Option<usize>,
     /// The chat waiting on "Delete?" to be confirmed.
-    pub confirm_delete: Option<usize>,
+    pub confirm: Option<Confirm>,
     /// The keyboard shortcuts sheet is open.
     pub shortcuts_open: bool,
     /// Diagrams in replies showing their source instead (by block key).
@@ -592,6 +787,33 @@ pub struct AppState {
     clock: Option<Task<()>>,
     /// Counts ForgeCLI processes started, to tell their events apart.
     generations: u64,
+    /// Files waiting in the composer to go with the next message.
+    pub attachments: Vec<crate::attach::Attachment>,
+    /// Pasted images so far, to number their names.
+    pasted: usize,
+    /// Answers ForgeCLI gives at once, in the order asked, by chat: `true`
+    /// for a command typed in the composer (`/status`), `false` for `/btw`.
+    immediate_queue: std::collections::HashMap<usize, std::collections::VecDeque<bool>>,
+    /// Control requests waiting on ForgeCLI's answer, by request id.
+    requests: std::collections::HashMap<String, Request>,
+    /// For `@` completion: the project's files, read once per project.
+    file_index: Option<(std::path::PathBuf, std::sync::Arc<Vec<String>>)>,
+    /// For `/` completion: the project's own commands (`.forge/commands`).
+    custom_commands: Option<(std::path::PathBuf, Vec<crate::commands::Command>)>,
+    /// A read of either is under way.
+    pub completions_loading: bool,
+    /// The context window's breakdown is open (the composer's meter).
+    pub context_open: bool,
+    /// The versions list open under your message: (chat, message).
+    pub versions_open: Option<(usize, usize)>,
+    /// A message to scroll to (its move's number, its index), and the count.
+    pub jump: Option<(u64, usize)>,
+    jump_seq: u64,
+    /// The task panel and the approvals list are open.
+    pub tasks_open: bool,
+    pub approvals_open: bool,
+    /// Chats whose running turn is a compaction.
+    compacting: std::collections::HashSet<usize>,
     next_id: usize,
 }
 
@@ -612,7 +834,17 @@ impl AppState {
             first_run: user_name.is_none(),
             user_name,
             avatar_saved: saved_avatar.is_some(),
-            avatar: saved_avatar.unwrap_or_else(|| crate::avatars::random(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(7)).to_string()).into(),
+            avatar: saved_avatar
+                .unwrap_or_else(|| {
+                    crate::avatars::random(
+                        SystemTime::now()
+                            .duration_since(SystemTime::UNIX_EPOCH)
+                            .map(|d| d.as_nanos() as u64)
+                            .unwrap_or(7),
+                    )
+                    .to_string()
+                })
+                .into(),
             project: projects[0].name.clone(),
             project_dir,
             branch: projects[0].branch.clone(),
@@ -633,7 +865,10 @@ impl AppState {
             checks_running: 0,
             check_gen: Default::default(),
             sync_timer: None,
-            greeting_seed: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0),
+            greeting_seed: SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0),
             greeting_timer: None,
             mode: ModeId::Manual,
             kept_modes: Default::default(),
@@ -669,7 +904,7 @@ impl AppState {
             find: None,
             renaming: None,
             chat_menu: None,
-            confirm_delete: None,
+            confirm: None,
             shortcuts_open: false,
             diagram_code: Default::default(),
             loading: true,
@@ -680,6 +915,20 @@ impl AppState {
             resuming: Default::default(),
             clock: None,
             generations: 0,
+            attachments: vec![],
+            pasted: 0,
+            immediate_queue: Default::default(),
+            requests: Default::default(),
+            file_index: None,
+            custom_commands: None,
+            completions_loading: false,
+            context_open: false,
+            versions_open: None,
+            jump: None,
+            jump_seq: 0,
+            tasks_open: false,
+            approvals_open: false,
+            compacting: Default::default(),
             next_id,
         }
     }
@@ -693,8 +942,17 @@ impl AppState {
         self.load = Some(cx.spawn(async move |this, cx| {
             let saved = cx
                 .background_spawn(async move {
-                    let all = dir.as_deref().map(crate::history::load_all).unwrap_or_default();
-                    all.into_iter().map(|c| { let m = crate::history::messages_of(&c); (c, m) }).collect::<Vec<_>>()
+                    let all = dir
+                        .as_deref()
+                        .map(crate::history::load_all)
+                        .unwrap_or_default();
+                    all.into_iter()
+                        .map(|c| {
+                            let m = crate::history::messages_of(&c);
+                            let v = crate::history::versions_of(&c);
+                            (c, m, v)
+                        })
+                        .collect::<Vec<_>>()
                 })
                 .await;
             let _ = this.update(cx, |s, cx| {
@@ -710,7 +968,9 @@ impl AppState {
         })
         .detach();
         self.clock = Some(cx.spawn(async move |this, cx| loop {
-            cx.background_executor().timer(Duration::from_secs(60)).await;
+            cx.background_executor()
+                .timer(Duration::from_secs(60))
+                .await;
             if this.update(cx, |s, cx| s.tick_ages(cx)).is_err() {
                 break;
             }
@@ -782,14 +1042,19 @@ impl AppState {
 
     /// Pick a profile (the model window's row); kept for next time.
     pub fn select_profile(&mut self, name: &str, cx: &mut Context<Self>) {
-        let Some(e) = self.endpoints.as_mut() else { return };
+        let Some(e) = self.endpoints.as_mut() else {
+            return;
+        };
         if !e.profiles.iter().any(|p| p.name == name) {
             return;
         }
         e.selected = Some(name.to_string());
         self.picker_open = false;
         // An effort the new model doesn't take is dropped.
-        let levels = self.active_profile().map(|p| p.effort_levels()).unwrap_or_default();
+        let levels = self
+            .active_profile()
+            .map(|p| p.effort_levels())
+            .unwrap_or_default();
         if self.effort.is_some_and(|l| !levels.contains(&l)) {
             self.effort = None;
         }
@@ -805,13 +1070,28 @@ impl AppState {
     pub fn sync_due(&mut self, cx: &mut Context<Self>) {
         let Some(e) = &self.endpoints else { return };
         let now = crate::health::now_ms();
-        let due: Vec<String> = e.profiles.iter().filter(|p| crate::health::is_due(self.health.get(&p.name).and_then(|h| h.last_synced_at), now, e.sync_interval_minutes)).map(|p| p.name.clone()).collect();
+        let due: Vec<String> = e
+            .profiles
+            .iter()
+            .filter(|p| {
+                crate::health::is_due(
+                    self.health.get(&p.name).and_then(|h| h.last_synced_at),
+                    now,
+                    e.sync_interval_minutes,
+                )
+            })
+            .map(|p| p.name.clone())
+            .collect();
         self.check(due, true, cx);
     }
 
     /// The model window's refresh: check them all now.
     pub fn sync_all(&mut self, cx: &mut Context<Self>) {
-        let names = self.endpoints.as_ref().map(|e| e.profiles.iter().map(|p| p.name.clone()).collect()).unwrap_or_default();
+        let names = self
+            .endpoints
+            .as_ref()
+            .map(|e| e.profiles.iter().map(|p| p.name.clone()).collect())
+            .unwrap_or_default();
         self.check(names, false, cx);
     }
 
@@ -825,10 +1105,18 @@ impl AppState {
             // A new check of a profile replaces one still waiting.
             self.check_queue.retain(|(n, _)| *n != name);
             *self.check_gen.entry(name.clone()).or_default() += 1;
-            let fingerprint = self.endpoints.as_ref().and_then(|e| e.profiles.iter().find(|p| p.name == name)).map(|p| p.fingerprint()).unwrap_or_default();
+            let fingerprint = self
+                .endpoints
+                .as_ref()
+                .and_then(|e| e.profiles.iter().find(|p| p.name == name))
+                .map(|p| p.fingerprint())
+                .unwrap_or_default();
             let entry = self.health.entry(name.clone()).or_default();
             if entry.fingerprint != fingerprint {
-                *entry = crate::health::EndpointHealth { fingerprint, ..Default::default() };
+                *entry = crate::health::EndpointHealth {
+                    fingerprint,
+                    ..Default::default()
+                };
             }
             entry.syncing = true;
             self.check_queue.push_back((name, background));
@@ -840,8 +1128,15 @@ impl AppState {
     /// Start waiting checks while there are free slots.
     fn pump_checks(&mut self, cx: &mut Context<Self>) {
         while self.checks_running < crate::health::SWEEP_PARALLELISM {
-            let Some((name, background)) = self.check_queue.pop_front() else { break };
-            let Some(profile) = self.endpoints.as_ref().and_then(|e| e.profiles.iter().find(|p| p.name == name)).cloned() else {
+            let Some((name, background)) = self.check_queue.pop_front() else {
+                break;
+            };
+            let Some(profile) = self
+                .endpoints
+                .as_ref()
+                .and_then(|e| e.profiles.iter().find(|p| p.name == name))
+                .cloned()
+            else {
                 // Gone from the list: nothing to check, so stop showing it as checking.
                 if let Some(h) = self.health.get_mut(&name) {
                     h.syncing = false;
@@ -853,13 +1148,21 @@ impl AppState {
             cx.spawn(async move |this, cx| {
                 let timeout = crate::health::timeout_for(&profile, background);
                 let probed = profile.clone();
-                let (outcome, listed) = cx.background_spawn(async move { (crate::health::probe(&probed, timeout), crate::health::listed_context(&probed, timeout)) }).await;
+                let (outcome, listed) = cx
+                    .background_spawn(async move {
+                        (
+                            crate::health::probe(&probed, timeout),
+                            crate::health::listed_context(&probed, timeout),
+                        )
+                    })
+                    .await;
                 let _ = this.update(cx, |s, cx| {
                     s.checks_running -= 1;
                     if s.check_gen.get(&profile.name) == Some(&generation) {
                         crate::health::apply(&mut s.health, &profile, outcome, listed);
                         let store = s.health.clone();
-                        cx.background_spawn(async move { crate::health::save(&store) }).detach();
+                        cx.background_spawn(async move { crate::health::save(&store) })
+                            .detach();
                     }
                     s.pump_checks(cx);
                     cx.notify();
@@ -873,9 +1176,13 @@ impl AppState {
 
     /// Chats read back at start become the sidebar's, each in its project
     /// (a project folder not open yet is added).
-    fn restore(&mut self, saved: Vec<(crate::history::SavedChat, Vec<Message>)>, cx: &mut Context<Self>) {
+    fn restore(
+        &mut self,
+        saved: Vec<(crate::history::SavedChat, Vec<Message>, Vec<Version>)>,
+        cx: &mut Context<Self>,
+    ) {
         let mut added_project = false;
-        for (c, messages) in saved {
+        for (c, messages, versions) in saved {
             if self.chats.iter().any(|x| x.session == c.session) {
                 continue;
             }
@@ -883,8 +1190,19 @@ impl AppState {
                 Some(p) => p.id,
                 None => {
                     let id = self.projects.iter().map(|p| p.id).max().unwrap_or(0) + 1;
-                    let name = c.project.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| c.project.display().to_string());
-                    self.projects.push(Project { id, name: name.into(), branch: git_branch(&c.project).into(), path: c.project.clone(), pinned: false, opened_minutes_ago: 60 });
+                    let name = c
+                        .project
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| c.project.display().to_string());
+                    self.projects.push(Project {
+                        id,
+                        name: name.into(),
+                        branch: git_branch(&c.project).into(),
+                        path: c.project.clone(),
+                        pinned: false,
+                        opened_minutes_ago: 60,
+                    });
                     added_project = true;
                     id
                 }
@@ -894,8 +1212,14 @@ impl AppState {
             let updated = crate::history::updated_of(&c);
             let mut messages = messages;
             // A reply cut off by closing the app says so, rather than just stopping.
-            if matches!(messages.last(), Some(Message::Assistant { .. }) | Some(Message::User { .. })) {
-                messages.push(Message::Notice { text: CLOSED_MID_REPLY.into(), error: false });
+            if matches!(
+                messages.last(),
+                Some(Message::Assistant { .. }) | Some(Message::User { .. })
+            ) {
+                messages.push(Message::Notice {
+                    text: CLOSED_MID_REPLY.into(),
+                    error: false,
+                });
             }
             self.chats.push(Chat {
                 minutes_ago: minutes_since(updated),
@@ -904,14 +1228,21 @@ impl AppState {
                 session: c.session,
                 resumable: c.resumable,
                 updated,
+                versions,
                 ..Chat::new(id, project, c.title.into())
             });
         }
         // Pinned first is the sidebar's job; here, the most recent first.
         self.chats.sort_by(|a, b| b.updated.cmp(&a.updated));
         if added_project {
-            let paths: Vec<std::path::PathBuf> = self.projects.iter().skip(1).map(|p| p.path.clone()).collect();
-            cx.background_spawn(async move { save_projects(paths) }).detach();
+            let paths: Vec<std::path::PathBuf> = self
+                .projects
+                .iter()
+                .skip(1)
+                .map(|p| p.path.clone())
+                .collect();
+            cx.background_spawn(async move { save_projects(paths) })
+                .detach();
         }
     }
 
@@ -935,7 +1266,9 @@ impl AppState {
             return;
         }
         self.save_task = Some(cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(Duration::from_millis(600)).await;
+            cx.background_executor()
+                .timer(Duration::from_millis(600))
+                .await;
             let _ = this.update(cx, |s, cx| {
                 s.save_task = None;
                 let batch = s.take_dirty();
@@ -961,7 +1294,10 @@ impl AppState {
             // An empty chat (a new one never sent) isn't kept.
             .filter(|c| !c.messages.is_empty())
             .map(|c| {
-                let dir = self.project(c.project).map(|p| p.path.clone()).unwrap_or_else(|| self.project_dir.clone());
+                let dir = self
+                    .project(c.project)
+                    .map(|p| p.path.clone())
+                    .unwrap_or_else(|| self.project_dir.clone());
                 crate::history::save_form(c, &dir)
             })
             .collect()
@@ -993,7 +1329,8 @@ impl AppState {
     }
 
     pub fn chat(&self) -> Option<&Chat> {
-        self.current.and_then(|id| self.chats.iter().find(|c| c.id == id))
+        self.current
+            .and_then(|id| self.chats.iter().find(|c| c.id == id))
     }
 
     fn chat_mut(&mut self, id: usize) -> Option<&mut Chat> {
@@ -1002,13 +1339,18 @@ impl AppState {
 
     /// A reply is playing in the chat you're looking at.
     pub fn busy(&self) -> bool {
-        self.current.is_some_and(|id| self.replies.contains_key(&id))
+        self.current
+            .is_some_and(|id| self.replies.contains_key(&id))
     }
 
     /// Where a chat stands, for its row in the sidebar.
     pub fn status(&self, chat: &Chat) -> ChatStatus {
         if self.replies.contains_key(&chat.id) {
-            return if self.waiting_on_permission(chat.id) { ChatStatus::NeedsYou } else { ChatStatus::Working };
+            return if self.waiting_on_permission(chat.id) {
+                ChatStatus::NeedsYou
+            } else {
+                ChatStatus::Working
+            };
         }
         match chat.messages.last() {
             Some(Message::Notice { error: true, .. }) => ChatStatus::Error,
@@ -1024,7 +1366,9 @@ impl AppState {
     /// Work in another project: the title bar, the Rules screen and new
     /// chats follow it. The open chat stays only if it belongs there.
     pub fn select_project(&mut self, id: usize, cx: &mut Context<Self>) {
-        let Some(p) = self.projects.iter_mut().find(|p| p.id == id) else { return };
+        let Some(p) = self.projects.iter_mut().find(|p| p.id == id) else {
+            return;
+        };
         p.opened_minutes_ago = 0;
         let (name, path, branch) = (p.name.clone(), p.path.clone(), p.branch.clone());
         self.current_project = id;
@@ -1053,10 +1397,26 @@ impl AppState {
             return self.show_project(id, cx);
         }
         let id = self.projects.iter().map(|p| p.id).max().unwrap_or(0) + 1;
-        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.display().to_string());
-        self.projects.push(Project { id, name: name.into(), branch: git_branch(&path).into(), path, pinned: false, opened_minutes_ago: 0 });
-        let paths: Vec<std::path::PathBuf> = self.projects.iter().skip(1).map(|p| p.path.clone()).collect();
-        cx.background_spawn(async move { save_projects(paths) }).detach();
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| path.display().to_string());
+        self.projects.push(Project {
+            id,
+            name: name.into(),
+            branch: git_branch(&path).into(),
+            path,
+            pinned: false,
+            opened_minutes_ago: 0,
+        });
+        let paths: Vec<std::path::PathBuf> = self
+            .projects
+            .iter()
+            .skip(1)
+            .map(|p| p.path.clone())
+            .collect();
+        cx.background_spawn(async move { save_projects(paths) })
+            .detach();
         self.show_project(id, cx);
     }
 
@@ -1098,7 +1458,10 @@ impl AppState {
 
     /// The mode for the chat now showing: what it kept, else the setting's.
     fn sync_mode(&mut self) {
-        self.mode = self.current.and_then(|id| self.kept_modes.get(&id).copied()).unwrap_or_else(|| crate::modes::initial(self.default_mode, self.bypass_allowed));
+        self.mode = self
+            .current
+            .and_then(|id| self.kept_modes.get(&id).copied())
+            .unwrap_or_else(|| crate::modes::initial(self.default_mode, self.bypass_allowed));
     }
 
     fn keep_mode(&mut self) {
@@ -1148,11 +1511,18 @@ impl AppState {
     }
 
     /// Save the name from the first-run screen. Returns an error to show.
-    pub fn set_user_name(&mut self, name: &str, cx: &mut Context<Self>) -> Result<(), &'static str> {
+    pub fn set_user_name(
+        &mut self,
+        name: &str,
+        cx: &mut Context<Self>,
+    ) -> Result<(), &'static str> {
         let name = crate::profile::clean(name).ok_or("Type a name first.")?;
         if crate::profile::save_name(&name).is_err() {
             // Still usable for this run; the next launch asks again.
-            self.show_toast("Your name could not be saved; Forge will ask again next time.", cx);
+            self.show_toast(
+                "Your name could not be saved; Forge will ask again next time.",
+                cx,
+            );
         }
         self.user_name = Some(name.into());
         cx.notify();
@@ -1191,7 +1561,9 @@ impl AppState {
     /// Run the reply to one of your messages again: the conversation goes
     /// back to that message, and Forge answers it afresh.
     pub fn retry(&mut self, chat: usize, msg: usize, cx: &mut Context<Self>) {
-        let Some(text) = self.take_from(chat, msg, cx) else { return };
+        let Some(text) = self.take_from(chat, msg, cx) else {
+            return;
+        };
         self.send(text, cx);
     }
 
@@ -1211,7 +1583,11 @@ impl AppState {
         // Forge's conversation can't be cut back: the next message starts a new one.
         self.sessions.remove(&chat);
         while self.side.get(&chat).is_some_and(|s| !s.pending.is_empty()) {
-            self.answer_side(chat, "The conversation was restarted before it answered.".into(), true);
+            self.answer_side(
+                chat,
+                "The conversation was restarted before it answered.".into(),
+                true,
+            );
         }
         self.asks.remove(&chat);
         self.stale_turns.remove(&chat);
@@ -1220,8 +1596,20 @@ impl AppState {
         // Ratings of the replies being cut go with them.
         self.ratings.retain(|(c, m), _| *c != chat || *m < msg);
         let c = self.chat_mut(chat)?;
-        let Some(Message::User { text, .. }) = c.messages.get(msg) else { return None };
+        let Some(Message::User { text, .. }) = c.messages.get(msg) else {
+            return None;
+        };
         let text = text.to_string();
+        // What is cut is kept as a version, to view or restore.
+        c.versions.push(Version {
+            at: msg,
+            tail: c.messages[msg..].to_vec(),
+            session: c.session.clone(),
+            resumable: c.resumable,
+            when: SystemTime::now(),
+        });
+        let over = c.versions.len().saturating_sub(MAX_VERSIONS);
+        c.versions.drain(..over);
         c.messages.truncate(msg);
         c.version += 1;
         c.new_conversation();
@@ -1233,7 +1621,9 @@ impl AppState {
     pub fn mark_copied(&mut self, key: SharedString, cx: &mut Context<Self>) {
         self.copied = Some(key);
         self.copied_reset = Some(cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(Duration::from_millis(1500)).await;
+            cx.background_executor()
+                .timer(Duration::from_millis(1500))
+                .await;
             let _ = this.update(cx, |s, cx| {
                 s.copied = None;
                 cx.notify();
@@ -1264,7 +1654,12 @@ impl AppState {
         if !matches!(self.screen, Screen::Chat) {
             self.screen = Screen::Chat;
         }
-        self.doc = Some(FileRef { name: "endpoint-setup.md".into(), path: None, content: crate::endpoints::GUIDE.into(), bytes: None });
+        self.doc = Some(FileRef {
+            name: "endpoint-setup.md".into(),
+            path: None,
+            content: crate::endpoints::GUIDE.into(),
+            bytes: None,
+        });
         cx.notify();
     }
 
@@ -1275,11 +1670,16 @@ impl AppState {
         self.palette_open = false;
         cx.notify();
         cx.spawn(async move |this, cx| {
-            let file = cx.background_spawn(async { crate::endpoints::ensure_file() }).await;
+            let file = cx
+                .background_spawn(async { crate::endpoints::ensure_file() })
+                .await;
             let _ = this.update(cx, |s, cx| match file {
                 Ok(path) => {
                     cx.open_with_system(&path);
-                    s.show_toast("Opened endpoints.json. Save it, then press refresh in the model menu.", cx);
+                    s.show_toast(
+                        "Opened endpoints.json. Save it, then press refresh in the model menu.",
+                        cx,
+                    );
                 }
                 Err(e) => s.show_toast(format!("Could not open endpoints.json: {e}"), cx),
             });
@@ -1297,13 +1697,20 @@ impl AppState {
         }
         self.doc_sheet = 0;
         if let (Some(_), Some(bytes)) = (file.office(), file.bytes.clone()) {
-            let ready = self.doc_preview.as_ref().is_some_and(|(n, _)| *n == file.name);
+            let ready = self
+                .doc_preview
+                .as_ref()
+                .is_some_and(|(n, _)| *n == file.name);
             if !ready {
                 self.doc_preview = None;
                 let name = file.name.clone();
                 cx.spawn(async move |this, cx| {
                     let n = name.to_string();
-                    let read = cx.background_spawn(async move { crate::office::preview(&n, &bytes).map(std::sync::Arc::new) }).await;
+                    let read = cx
+                        .background_spawn(async move {
+                            crate::office::preview(&n, &bytes).map(std::sync::Arc::new)
+                        })
+                        .await;
                     let _ = this.update(cx, |s, cx| {
                         s.doc_preview = Some((name, read));
                         cx.notify();
@@ -1362,13 +1769,424 @@ impl AppState {
         };
         let (name, bytes) = (file.name.to_string(), file.data());
         cx.spawn(async move |this, cx| {
-            let saved = cx.background_spawn(async move { crate::downloads::save(&dir, &name, &bytes) }).await;
+            let saved = cx
+                .background_spawn(async move { crate::downloads::save(&dir, &name, &bytes) })
+                .await;
             let _ = this.update(cx, |s, cx| match saved {
-                Ok(path) => s.show_toast(format!("Saved to Downloads as {}", path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()), cx),
+                Ok(path) => s.show_toast(
+                    format!(
+                        "Saved to Downloads as {}",
+                        path.file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_default()
+                    ),
+                    cx,
+                ),
                 Err(e) => s.show_toast(format!("Could not save it: {e}"), cx),
             });
         })
         .detach();
+    }
+
+    // ------------------------------------------------------------ autocomplete
+
+    /// Read what `/` and `@` complete from, for the project you're in, if
+    /// it hasn't been read yet (off the UI thread).
+    pub fn ensure_completions(&mut self, cx: &mut Context<Self>) {
+        let dir = self.project_dir.clone();
+        let fresh = self.file_index.as_ref().is_some_and(|(d, _)| *d == dir)
+            && self
+                .custom_commands
+                .as_ref()
+                .is_some_and(|(d, _)| *d == dir);
+        if fresh || self.completions_loading {
+            return;
+        }
+        self.completions_loading = true;
+        cx.spawn(async move |this, cx| {
+            let d = dir.clone();
+            let (files, commands) = cx
+                .background_spawn(async move {
+                    (
+                        crate::rules::project_files(&d, 20_000),
+                        crate::commands::custom(&d),
+                    )
+                })
+                .await;
+            let _ = this.update(cx, |s, cx| {
+                s.completions_loading = false;
+                s.file_index = Some((dir.clone(), std::sync::Arc::new(files)));
+                s.custom_commands = Some((dir, commands));
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// The commands `/` offers: the project's own, then ForgeCLI's.
+    pub fn completion_commands(&self) -> Vec<CompletionCommand> {
+        let custom = self
+            .custom_commands
+            .as_ref()
+            .filter(|(d, _)| *d == self.project_dir)
+            .map(|(_, c)| c.clone())
+            .unwrap_or_default();
+        custom
+            .into_iter()
+            .map(|c| CompletionCommand {
+                name: c.name,
+                args: c.args,
+                description: c.description,
+                group: "This project",
+            })
+            .chain(
+                crate::commands::builtin()
+                    .into_iter()
+                    .map(|c| CompletionCommand {
+                        name: c.name,
+                        args: c.args,
+                        description: c.description,
+                        group: "ForgeCLI",
+                    }),
+            )
+            .collect()
+    }
+
+    /// The files `@` offers.
+    pub fn completion_files(&self) -> std::sync::Arc<Vec<String>> {
+        self.file_index
+            .as_ref()
+            .filter(|(d, _)| *d == self.project_dir)
+            .map(|(_, f)| f.clone())
+            .unwrap_or_default()
+    }
+
+    /// "Run again" on a command: Forge is asked to run it again, as a
+    /// message of yours, so the mode's permissions apply as for any command.
+    pub fn rerun(&mut self, command: &str, cx: &mut Context<Self>) {
+        if self.busy() {
+            return self.show_toast("Wait for the reply to finish before running it again.", cx);
+        }
+        let fence = if command.contains("```") {
+            "````"
+        } else {
+            "```"
+        };
+        self.send(
+            format!(
+                "Run this command again and tell me what changed:\n\n{fence}sh\n{command}\n{fence}"
+            ),
+            cx,
+        );
+    }
+
+    // ------------------------------------------------------------ versions
+
+    pub fn toggle_versions(&mut self, chat: usize, msg: usize, cx: &mut Context<Self>) {
+        self.versions_open = if self.versions_open == Some((chat, msg)) {
+            None
+        } else {
+            Some((chat, msg))
+        };
+        if let Some(c) = self.chat_mut(chat) {
+            c.version += 1;
+        }
+        cx.notify();
+    }
+
+    // ------------------------------------------------------------ jump, tasks, approvals
+
+    /// Show message `msg` of the chat showing (the list scrolls to it).
+    pub fn jump_to(&mut self, msg: usize, cx: &mut Context<Self>) {
+        self.jump_seq += 1;
+        self.jump = Some((self.jump_seq, msg));
+        cx.notify();
+    }
+
+    pub fn toggle_tasks(&mut self, cx: &mut Context<Self>) {
+        self.tasks_open = !self.tasks_open;
+        cx.notify();
+    }
+
+    pub fn toggle_approvals(&mut self, cx: &mut Context<Self>) {
+        self.approvals_open = !self.approvals_open && !self.pending_approvals().is_empty();
+        cx.notify();
+    }
+
+    /// The chats waiting on a permission answer: (chat, its title, what it
+    /// asks, where the question is), the one you're looking at first.
+    pub fn pending_approvals(&self) -> Vec<(usize, SharedString, SharedString, usize)> {
+        let mut out: Vec<_> = self
+            .chats
+            .iter()
+            .filter_map(|c| {
+                let (msg, title) =
+                    c.messages
+                        .iter()
+                        .enumerate()
+                        .rev()
+                        .find_map(|(i, m)| match m {
+                            Message::Assistant { blocks } => blocks.iter().find_map(|b| match b {
+                                Block::Permission {
+                                    title,
+                                    verdict: Verdict::Pending,
+                                    ..
+                                } => Some((i, title.clone())),
+                                _ => None,
+                            }),
+                            _ => None,
+                        })?;
+                // Only a question a running reply still waits on.
+                self.replies
+                    .contains_key(&c.id)
+                    .then(|| (c.id, c.title.clone(), title, msg))
+            })
+            .collect();
+        out.sort_by_key(|(id, ..)| Some(*id) != self.current);
+        out
+    }
+
+    /// Open a chat at the question it waits on.
+    pub fn reveal_approval(&mut self, chat: usize, msg: usize, cx: &mut Context<Self>) {
+        self.approvals_open = false;
+        self.open_chat(chat, cx);
+        self.jump_to(msg, cx);
+    }
+
+    // ------------------------------------------------------------ JSON export and share
+
+    /// The chat as JSON: its whole transcript, tool calls included (the
+    /// history's format, so Forge can read it back).
+    fn chat_json(&self, id: usize) -> Option<(String, String)> {
+        let c = self.chats.iter().find(|c| c.id == id)?;
+        let dir = self
+            .project(c.project)
+            .map(|p| p.path.clone())
+            .unwrap_or_else(|| self.project_dir.clone());
+        let json = serde_json::to_string_pretty(&crate::history::save_form(c, &dir)).ok()?;
+        Some((
+            crate::export::file_name(&c.title).replace(".md", ".json"),
+            json,
+        ))
+    }
+
+    /// Write a chat to Downloads as JSON, off the UI thread.
+    pub fn export_chat_json(&mut self, id: usize, cx: &mut Context<Self>) {
+        self.chat_menu = None;
+        let Some((name, json)) = self.chat_json(id) else {
+            return;
+        };
+        let Some(dir) = crate::downloads::dir() else {
+            return self.show_toast("Could not find your Downloads folder.", cx);
+        };
+        cx.spawn(async move |this, cx| {
+            let saved = cx
+                .background_spawn(
+                    async move { crate::downloads::save(&dir, &name, json.as_bytes()) },
+                )
+                .await;
+            let _ = this.update(cx, |s, cx| match saved {
+                Ok(path) => s.show_toast(format!("Exported to {}", path.display()), cx),
+                Err(e) => s.show_toast(format!("Could not export it: {e}"), cx),
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
+    /// Share: the JSON goes to the clipboard now; a link waits on upload (a stub).
+    pub fn share_chat(&mut self, id: usize, cx: &mut Context<Self>) {
+        self.chat_menu = None;
+        let Some((_, json)) = self.chat_json(id) else {
+            return;
+        };
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(json));
+        self.stub(crate::stubs::SHARE_LINK, cx);
+    }
+
+    /// Bring back version `v`: the conversation from its message on becomes
+    /// what it was then (the one showing now is kept as a version in turn),
+    /// and the next message resumes that version's ForgeCLI conversation.
+    pub fn restore_version(&mut self, chat: usize, v: usize, cx: &mut Context<Self>) {
+        self.versions_open = None;
+        if self.replies.contains_key(&chat) {
+            return self.show_toast(
+                "Wait for the reply to finish, or stop it, before restoring.",
+                cx,
+            );
+        }
+        // The running process holds the other version's conversation.
+        self.sessions.remove(&chat);
+        self.asks.remove(&chat);
+        self.tool_rows.retain(|(c, _), _| *c != chat);
+        self.ratings.retain(|(c, _), _| *c != chat);
+        let Some(c) = self.chat_mut(chat) else { return };
+        if v >= c.versions.len() {
+            return;
+        }
+        let old = c.versions.remove(v);
+        let at = old.at.min(c.messages.len());
+        let now = Version {
+            at,
+            tail: c.messages[at..].to_vec(),
+            session: c.session.clone(),
+            resumable: c.resumable,
+            when: SystemTime::now(),
+        };
+        if !now.tail.is_empty() {
+            c.versions.push(now);
+        }
+        c.messages.truncate(at);
+        c.messages.extend(old.tail);
+        c.session = old.session;
+        c.resumable = old.resumable;
+        c.version += 1;
+        self.touch(chat, cx);
+        self.show_toast("Restored that version.", cx);
+        cx.notify();
+    }
+
+    // ------------------------------------------------------------ context
+
+    /// Summarize the conversation to free context: ForgeCLI's `/compact`,
+    /// shown as a notice rather than a message of yours.
+    pub fn compact(&mut self, cx: &mut Context<Self>) {
+        self.context_open = false;
+        let Some(id) = self.current else { return };
+        if demo_mode() {
+            return self.stub(crate::stubs::COMPACT_DEMO, cx);
+        }
+        if self.busy() {
+            return self.show_toast("Wait for the reply to finish before compacting.", cx);
+        }
+        let Some(profile) = self.active_profile().cloned() else {
+            return self.show_toast(
+                "Set up an endpoint first: compacting runs on the model.",
+                cx,
+            );
+        };
+        if !self.sessions.contains_key(&id) {
+            if let Err(e) = self.start_session(id, profile, cx) {
+                return self.show_toast(format!("Couldn't start Forge to compact: {e}"), cx);
+            }
+        }
+        match self.sessions.get(&id).map(|l| l.session.send("/compact")) {
+            Some(Ok(())) => {
+                self.notice(id, COMPACTING, false);
+                self.compacting.insert(id);
+                self.replies.insert(id, Task::ready(()));
+                self.turn_started.insert(id, std::time::Instant::now());
+            }
+            Some(Err(e)) => self.show_toast(format!("Couldn't compact: {e}"), cx),
+            None => {}
+        }
+        cx.notify();
+    }
+
+    pub fn toggle_context(&mut self, cx: &mut Context<Self>) {
+        self.context_open = !self.context_open && self.chat().is_some();
+        self.picker_open = false;
+        self.modes_open = false;
+        cx.notify();
+    }
+
+    // ------------------------------------------------------------ attachments
+
+    /// Attach files (the picker, a drop, a paste of copied files): each is
+    /// read off the UI thread, then waits in the composer.
+    pub fn add_attachment_paths(&mut self, paths: Vec<std::path::PathBuf>, cx: &mut Context<Self>) {
+        let room = crate::attach::MAX_FILES.saturating_sub(self.attachments.len());
+        if room == 0 {
+            return self.show_toast(
+                format!("A message takes up to {} files.", crate::attach::MAX_FILES),
+                cx,
+            );
+        }
+        let skipped = paths.len().saturating_sub(room);
+        let paths: Vec<_> = paths
+            .into_iter()
+            .filter(|p| !self.attachments.iter().any(|a| a.path.as_ref() == Some(p)))
+            .take(room)
+            .collect();
+        cx.spawn(async move |this, cx| {
+            let read: Vec<Result<crate::attach::Attachment, String>> = cx
+                .background_spawn(
+                    async move { paths.iter().map(|p| crate::attach::read(p)).collect() },
+                )
+                .await;
+            let _ = this.update(cx, |s, cx| {
+                let mut errors = vec![];
+                for r in read {
+                    match r {
+                        Ok(a) => s.attachments.push(a),
+                        Err(e) => errors.push(e),
+                    }
+                }
+                if let Some(e) = errors.first() {
+                    s.show_toast(format!("Couldn't attach {e}"), cx);
+                } else if skipped > 0 {
+                    s.show_toast(
+                        format!(
+                            "Attached the first files; a message takes up to {}.",
+                            crate::attach::MAX_FILES
+                        ),
+                        cx,
+                    );
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// An image pasted from the clipboard (`ext` names its format). One too
+    /// big to send inline is written to Forge's temp folder, to go by path.
+    pub fn add_pasted_image(&mut self, bytes: Vec<u8>, ext: &str, cx: &mut Context<Self>) {
+        if self.attachments.len() >= crate::attach::MAX_FILES {
+            return self.show_toast(
+                format!("A message takes up to {} files.", crate::attach::MAX_FILES),
+                cx,
+            );
+        }
+        self.pasted += 1;
+        let n = self.pasted;
+        let ext = ext.to_string();
+        cx.spawn(async move |this, cx| {
+            let made = cx
+                .background_spawn(async move {
+                    let mut a =
+                        crate::attach::pasted_image(bytes.clone(), n).unwrap_or_else(|| {
+                            crate::attach::Attachment {
+                                name: format!("Pasted image {n}.{ext}").into(),
+                                path: None,
+                                kind: crate::attach::Kind::File,
+                                size: bytes.len() as u64,
+                                bytes: Some(std::sync::Arc::from(bytes.into_boxed_slice())),
+                            }
+                        });
+                    if a.kind == crate::attach::Kind::File {
+                        crate::attach::ensure_path(&mut a)?;
+                        a.bytes = None;
+                    }
+                    Ok::<_, String>(a)
+                })
+                .await;
+            let _ = this.update(cx, |s, cx| match made {
+                Ok(a) => {
+                    s.attachments.push(a);
+                    cx.notify();
+                }
+                Err(e) => s.show_toast(format!("Couldn't attach the pasted image: {e}"), cx),
+            });
+        })
+        .detach();
+    }
+
+    pub fn remove_attachment(&mut self, i: usize, cx: &mut Context<Self>) {
+        if i < self.attachments.len() {
+            self.attachments.remove(i);
+            cx.notify();
+        }
     }
 
     /// Show a diagram's source, or its drawing again.
@@ -1385,6 +2203,167 @@ impl AppState {
         cx.notify();
     }
 
+    // ------------------------------------------------------------ keep / revert a turn's changes
+
+    /// Keep a file change: its Keep / Revert buttons go.
+    pub fn keep_change(&mut self, chat: usize, msg: usize, block: usize, cx: &mut Context<Self>) {
+        self.update_tool(chat, msg, block, |t| t.review = Review::Kept);
+        self.mark_dirty(chat, cx);
+        cx.notify();
+    }
+
+    /// Revert the changes made since your message before `msg`: ForgeCLI's
+    /// checkpoints say which files that touches (a dry run), and the confirm
+    /// window lists them before anything is put back.
+    pub fn ask_revert(&mut self, chat: usize, msg: usize, cx: &mut Context<Self>) {
+        if demo_mode() {
+            return self.stub(crate::stubs::REVERT_DEMO, cx);
+        }
+        let Some(c) = self.chats.iter().find(|c| c.id == chat) else {
+            return;
+        };
+        let Some(q) = turn_question(&c.messages, msg) else {
+            return;
+        };
+        let Some(Message::User {
+            turn: Some(turn), ..
+        }) = c.messages.get(q)
+        else {
+            // A message from before Forge learnt turn ids (or one never accepted).
+            return self.stub(crate::stubs::REVERT_NO_CHECKPOINT, cx);
+        };
+        let turn = turn.to_string();
+        if self.replies.contains_key(&chat) {
+            return self.show_toast(
+                "Wait for the reply to finish, or stop it, before reverting.",
+                cx,
+            );
+        }
+        if let Err(e) = self.control(
+            chat,
+            json_rewind(&turn, true),
+            Request::RevertPlan { chat, msg: q },
+            cx,
+        ) {
+            self.show_toast(format!("Couldn't ask Forge what to revert: {e}"), cx);
+        }
+    }
+
+    /// The confirm window's Revert.
+    pub fn revert(&mut self, chat: usize, msg: usize, cx: &mut Context<Self>) {
+        self.confirm = None;
+        let Some(Message::User {
+            turn: Some(turn), ..
+        }) = self
+            .chats
+            .iter()
+            .find(|c| c.id == chat)
+            .and_then(|c| c.messages.get(msg))
+        else {
+            return;
+        };
+        let turn = turn.to_string();
+        if let Err(e) = self.control(
+            chat,
+            json_rewind(&turn, false),
+            Request::Revert { chat, msg },
+            cx,
+        ) {
+            self.show_toast(format!("Couldn't revert: {e}"), cx);
+        }
+        cx.notify();
+    }
+
+    /// Send a control request to a chat's ForgeCLI (starting it, resumed,
+    /// if it isn't running), remembering what the answer is for.
+    fn control(
+        &mut self,
+        chat: usize,
+        request: serde_json::Value,
+        what: Request,
+        cx: &mut Context<Self>,
+    ) -> Result<(), String> {
+        if !self.sessions.contains_key(&chat) {
+            let profile = self
+                .active_profile()
+                .cloned()
+                .ok_or("set up an endpoint first")?;
+            self.start_session(chat, profile, cx)?;
+        }
+        let id = self
+            .sessions
+            .get(&chat)
+            .ok_or("Forge isn't running")?
+            .session
+            .request(request)?;
+        self.requests.insert(id, what);
+        Ok(())
+    }
+
+    fn on_reply(
+        &mut self,
+        req: Request,
+        result: Result<serde_json::Value, String>,
+        cx: &mut Context<Self>,
+    ) {
+        let files = |v: &serde_json::Value| -> Result<Vec<String>, String> {
+            if v["canRewind"] == false {
+                return Err(v["error"]
+                    .as_str()
+                    .unwrap_or("Forge has no checkpoint for this message")
+                    .to_string());
+            }
+            Ok(v["filesChanged"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|f| f.as_str().map(str::to_string))
+                .collect())
+        };
+        match (req, result.and_then(|v| files(&v))) {
+            (Request::RevertPlan { .. }, Ok(f)) if f.is_empty() => self.show_toast(
+                "Nothing to revert: no files changed since this message.",
+                cx,
+            ),
+            (Request::RevertPlan { chat, msg }, Ok(files)) => {
+                self.confirm = Some(Confirm::Revert { chat, msg, files });
+                cx.notify();
+            }
+            (Request::Revert { chat, msg }, Ok(files)) => {
+                // Every file change from that message on, to a file put back, reads "Reverted".
+                if let Some(c) = self.chat_mut(chat) {
+                    for m in c.messages.iter_mut().skip(msg) {
+                        if let Message::Assistant { blocks } = m {
+                            for b in blocks.iter_mut() {
+                                if let Block::Tool(t) = b {
+                                    if matches!(t.kind, ToolKind::Edit | ToolKind::Write)
+                                        && files.iter().any(|f| same_file(f, &t.target))
+                                    {
+                                        t.review = Review::Reverted;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    c.version += 1;
+                }
+                let n = files.len();
+                self.notice(
+                    chat,
+                    format!(
+                        "Reverted {n} {} to how {} before this message.",
+                        if n == 1 { "file" } else { "files" },
+                        if n == 1 { "it was" } else { "they were" }
+                    ),
+                    false,
+                );
+                self.touch(chat, cx);
+            }
+            (_, Err(e)) => self.show_toast(format!("Couldn't revert: {e}"), cx),
+        }
+        cx.notify();
+    }
+
     /// A control with nothing behind it yet says so, in the registry's words.
     pub fn stub(&mut self, id: &str, cx: &mut Context<Self>) {
         self.show_toast(crate::stubs::toast(id), cx);
@@ -1394,7 +2373,9 @@ impl AppState {
 
     /// Copy the prose of the reply that ends at `end`.
     pub fn copy_turn(&mut self, chat: usize, end: usize, cx: &mut Context<Self>) {
-        let Some(c) = self.chats.iter().find(|c| c.id == chat) else { return };
+        let Some(c) = self.chats.iter().find(|c| c.id == chat) else {
+            return;
+        };
         let text = turn_text(&c.messages, end);
         if text.is_empty() {
             return self.show_toast("This reply has no text to copy.", cx);
@@ -1405,7 +2386,14 @@ impl AppState {
 
     /// Answer the question behind the reply ending at `end` again.
     pub fn regenerate(&mut self, chat: usize, end: usize, cx: &mut Context<Self>) {
-        let Some(q) = self.chats.iter().find(|c| c.id == chat).and_then(|c| turn_question(&c.messages, end)) else { return };
+        let Some(q) = self
+            .chats
+            .iter()
+            .find(|c| c.id == chat)
+            .and_then(|c| turn_question(&c.messages, end))
+        else {
+            return;
+        };
         self.retry(chat, q, cx);
     }
 
@@ -1427,7 +2415,10 @@ impl AppState {
         if self.busy() {
             return;
         }
-        if demo_mode() || self.sessions.contains_key(&id) {
+        // The live process still holds the conversation, and one ForgeCLI
+        // wrote can be resumed (`--resume`).
+        let resumable = self.chats.iter().any(|c| c.id == id && c.resumable);
+        if demo_mode() || self.sessions.contains_key(&id) || resumable {
             self.send(CONTINUE_PROMPT.to_string(), cx);
         } else {
             self.stub(crate::stubs::CONTINUE_NO_SESSION, cx);
@@ -1469,7 +2460,9 @@ impl AppState {
         self.palette_open = false;
         if let Some(c) = self.chats.iter().find(|c| c.id == id) {
             // A chat hidden by the search or the project filter is shown again.
-            if !self.search.is_empty() && !c.title.to_lowercase().contains(&self.search.to_lowercase()) {
+            if !self.search.is_empty()
+                && !c.title.to_lowercase().contains(&self.search.to_lowercase())
+            {
                 self.search = "".into();
             }
             if c.project != self.current_project {
@@ -1482,7 +2475,13 @@ impl AppState {
     /// Give a chat a new title; an empty one keeps the old.
     pub fn rename_chat(&mut self, id: usize, title: &str, cx: &mut Context<Self>) {
         self.renaming = None;
-        let title: String = title.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(120).collect();
+        let title: String = title
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .chars()
+            .take(120)
+            .collect();
         if let Some(c) = self.chat_mut(id).filter(|_| !title.is_empty()) {
             c.title = title.into();
         }
@@ -1500,14 +2499,23 @@ impl AppState {
     /// starts its own ForgeCLI conversation on its first message.
     pub fn duplicate_chat(&mut self, id: usize, cx: &mut Context<Self>) {
         self.chat_menu = None;
-        let Some(c) = self.chats.iter().find(|c| c.id == id) else { return };
+        let Some(c) = self.chats.iter().find(|c| c.id == id) else {
+            return;
+        };
         let busy = self.replies.contains_key(&id);
         let mut messages = c.messages.clone();
         // A reply still running is copied as it stands.
         if busy {
-            messages.push(Message::Notice { text: "Copied while a reply was running; it ends here.".into(), error: false });
+            messages.push(Message::Notice {
+                text: "Copied while a reply was running; it ends here.".into(),
+                error: false,
+            });
         }
-        let mut copy = Chat::new(self.next_id, c.project, format!("{} (copy)", c.title).into());
+        let mut copy = Chat::new(
+            self.next_id,
+            c.project,
+            format!("{} (copy)", c.title).into(),
+        );
         copy.messages = messages;
         self.next_id += 1;
         let at = self.chats.iter().position(|c| c.id == id).unwrap_or(0);
@@ -1521,14 +2529,26 @@ impl AppState {
     /// Write a chat to Downloads as Markdown, off the UI thread, and say where.
     pub fn export_chat(&mut self, id: usize, cx: &mut Context<Self>) {
         self.chat_menu = None;
-        let Some(c) = self.chats.iter().find(|c| c.id == id) else { return };
+        let Some(c) = self.chats.iter().find(|c| c.id == id) else {
+            return;
+        };
         let Some(dir) = crate::downloads::dir() else {
             return self.show_toast("Could not find your Downloads folder.", cx);
         };
-        let project = self.project(c.project).map(|p| p.name.to_string()).unwrap_or_default();
-        let (name, text) = (crate::export::file_name(&c.title), crate::export::markdown(c, &project));
+        let project = self
+            .project(c.project)
+            .map(|p| p.name.to_string())
+            .unwrap_or_default();
+        let (name, text) = (
+            crate::export::file_name(&c.title),
+            crate::export::markdown(c, &project),
+        );
         cx.spawn(async move |this, cx| {
-            let saved = cx.background_spawn(async move { crate::downloads::save(&dir, &name, text.as_bytes()) }).await;
+            let saved = cx
+                .background_spawn(
+                    async move { crate::downloads::save(&dir, &name, text.as_bytes()) },
+                )
+                .await;
             let _ = this.update(cx, |s, cx| match saved {
                 Ok(path) => s.show_toast(format!("Exported to {}", path.display()), cx),
                 Err(e) => s.show_toast(format!("Could not export it: {e}"), cx),
@@ -1542,13 +2562,13 @@ impl AppState {
     pub fn ask_delete(&mut self, id: usize, cx: &mut Context<Self>) {
         self.chat_menu = None;
         self.palette_open = false;
-        self.confirm_delete = Some(id);
+        self.confirm = Some(Confirm::Delete(id));
         cx.notify();
     }
 
     /// Delete a chat: its reply stops, its process ends, and it leaves the list.
     pub fn delete_chat(&mut self, id: usize, cx: &mut Context<Self>) {
-        self.confirm_delete = None;
+        self.confirm = None;
         self.replies.remove(&id);
         self.sessions.remove(&id);
         self.asks.remove(&id);
@@ -1559,11 +2579,22 @@ impl AppState {
         self.side.remove(&id);
         self.kept_modes.remove(&id);
         self.ratings.retain(|(c, _), _| *c != id);
-        let title = self.chats.iter().find(|c| c.id == id).map(|c| c.title.clone());
+        let title = self
+            .chats
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| c.title.clone());
         // Its file goes too (ForgeCLI's own log of the conversation stays, as it does for the CLI).
         self.dirty.remove(&id);
-        if let (Some(dir), Some(session)) = (self.history.clone(), self.chats.iter().find(|c| c.id == id).map(|c| c.session.clone())) {
-            cx.background_spawn(async move { crate::history::remove(&dir, &session) }).detach();
+        if let (Some(dir), Some(session)) = (
+            self.history.clone(),
+            self.chats
+                .iter()
+                .find(|c| c.id == id)
+                .map(|c| c.session.clone()),
+        ) {
+            cx.background_spawn(async move { crate::history::remove(&dir, &session) })
+                .detach();
         }
         self.chats.retain(|c| c.id != id);
         if self.current == Some(id) {
@@ -1602,7 +2633,10 @@ impl AppState {
     /// A new query: the hits are found again, and the newest one is shown
     /// (you are most likely looking for something recent).
     pub fn set_find_query(&mut self, query: &str, cx: &mut Context<Self>) {
-        let hits = self.chat().map(|c| find_hits(&c.messages, query)).unwrap_or_default();
+        let hits = self
+            .chat()
+            .map(|c| find_hits(&c.messages, query))
+            .unwrap_or_default();
         let Some(f) = self.find.as_mut() else { return };
         f.query = query.to_string();
         f.at = hits.len().saturating_sub(1);
@@ -1623,7 +2657,10 @@ impl AppState {
             Some(f) => f.query.clone(),
             None => return,
         };
-        let hits = self.chat().map(|c| find_hits(&c.messages, &query)).unwrap_or_default();
+        let hits = self
+            .chat()
+            .map(|c| find_hits(&c.messages, &query))
+            .unwrap_or_default();
         let Some(f) = self.find.as_mut() else { return };
         let current = f.current();
         f.hits = hits;
@@ -1631,8 +2668,14 @@ impl AppState {
         if n == 0 {
             return cx.notify();
         }
-        let here = current.and_then(|m| f.hits.iter().position(|h| *h == m)).unwrap_or(f.at.min(n - 1));
-        f.at = if forward { (here + 1) % n } else { (here + n - 1) % n };
+        let here = current
+            .and_then(|m| f.hits.iter().position(|h| *h == m))
+            .unwrap_or(f.at.min(n - 1));
+        f.at = if forward {
+            (here + 1) % n
+        } else {
+            (here + n - 1) % n
+        };
         f.seq += 1;
         if let Some(id) = self.current {
             if let Some(c) = self.chat_mut(id) {
@@ -1645,7 +2688,9 @@ impl AppState {
     pub fn show_toast(&mut self, text: impl Into<SharedString>, cx: &mut Context<Self>) {
         self.toast = Some(text.into());
         self.toast_reset = Some(cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(Duration::from_millis(2600)).await;
+            cx.background_executor()
+                .timer(Duration::from_millis(2600))
+                .await;
             let _ = this.update(cx, |s, cx| {
                 s.toast = None;
                 cx.notify();
@@ -1658,7 +2703,16 @@ impl AppState {
     pub fn last_reply(&self) -> Option<String> {
         self.chat()?.messages.iter().rev().find_map(|m| match m {
             Message::Assistant { blocks } => {
-                let text: Vec<&str> = blocks.iter().filter_map(|b| if let Block::Text(t) = b { Some(t.as_ref()) } else { None }).collect();
+                let text: Vec<&str> = blocks
+                    .iter()
+                    .filter_map(|b| {
+                        if let Block::Text(t) = b {
+                            Some(t.as_ref())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
                 (!text.is_empty()).then(|| text.join("\n\n"))
             }
             _ => None,
@@ -1694,7 +2748,14 @@ impl AppState {
     }
 
     /// Answer the permission prompt the reply is waiting on.
-    pub fn answer(&mut self, chat: usize, msg: usize, block: usize, verdict: Verdict, cx: &mut Context<Self>) {
+    pub fn answer(
+        &mut self,
+        chat: usize,
+        msg: usize,
+        block: usize,
+        verdict: Verdict,
+        cx: &mut Context<Self>,
+    ) {
         if let Some(c) = self.chat_mut(chat) {
             if let Some(Message::Assistant { blocks }) = c.messages.get_mut(msg) {
                 if let Some(Block::Permission { verdict: v, .. }) = blocks.get_mut(block) {
@@ -1704,7 +2765,12 @@ impl AppState {
             c.version += 1;
         }
         // A real question: Forge waits on this answer.
-        if self.asks.get(&chat).is_some_and(|a| a.msg == msg && a.block == block) && verdict != Verdict::Pending {
+        if self
+            .asks
+            .get(&chat)
+            .is_some_and(|a| a.msg == msg && a.block == block)
+            && verdict != Verdict::Pending
+        {
             let ask = self.asks.remove(&chat).expect("checked above");
             let allow = matches!(verdict, Verdict::Allowed | Verdict::AllowedAlways);
             if !allow {
@@ -1715,7 +2781,15 @@ impl AppState {
                     });
                 }
             }
-            let sent = self.sessions.get(&chat).map(|l| l.session.answer(&ask.request_id, allow, verdict == Verdict::AllowedAlways, &ask.input, &ask.suggestions));
+            let sent = self.sessions.get(&chat).map(|l| {
+                l.session.answer(
+                    &ask.request_id,
+                    allow,
+                    verdict == Verdict::AllowedAlways,
+                    &ask.input,
+                    &ask.suggestions,
+                )
+            });
             if let Some(Err(e)) = sent {
                 self.notice(chat, e, true);
                 self.finish_turn(chat, cx);
@@ -1756,7 +2830,10 @@ impl AppState {
                         }
                     }
                 }
-                c.messages.push(Message::Notice { text: INTERRUPTED.into(), error: false });
+                c.messages.push(Message::Notice {
+                    text: INTERRUPTED.into(),
+                    error: false,
+                });
                 c.version += 1;
             }
         }
@@ -1771,16 +2848,27 @@ impl AppState {
         if let Some(question) = parse_btw(&text) {
             return self.ask_side(question, cx);
         }
-        if text.is_empty() || self.busy() {
+        if (text.is_empty() && self.attachments.is_empty()) || self.busy() {
             return;
         }
+        let attachments = std::mem::take(&mut self.attachments);
         let id = match self.current {
             Some(id) => id,
             None => {
                 let id = self.next_id;
                 self.next_id += 1;
-                let title: String = text.lines().next().unwrap_or_default().chars().take(48).collect();
-                self.chats.insert(0, Chat::new(id, self.current_project, title.into()));
+                let first = text.lines().next().unwrap_or_default();
+                let first = if first.is_empty() {
+                    attachments
+                        .first()
+                        .map(|a| a.name.to_string())
+                        .unwrap_or_default()
+                } else {
+                    first.to_string()
+                };
+                let title: String = first.chars().take(48).collect();
+                self.chats
+                    .insert(0, Chat::new(id, self.current_project, title.into()));
                 self.current = Some(id);
                 self.keep_mode();
                 id
@@ -1788,55 +2876,69 @@ impl AppState {
         };
         self.screen = Screen::Chat;
         if let Some(c) = self.chat_mut(id) {
-            c.messages.push(Message::User { text: text.clone().into(), sent: SystemTime::now() });
+            c.messages.push(Message::User {
+                text: text.clone().into(),
+                sent: SystemTime::now(),
+                attachments: attachments.clone(),
+                turn: None,
+            });
             c.version += 1;
         }
         self.touch(id, cx);
         if demo_mode() {
             self.play_script(id, text, cx);
         } else {
-            self.send_to_forge(id, text, cx);
+            self.send_to_forge(id, text, attachments, cx);
         }
         cx.notify();
     }
 
     /// `FORGE_DEMO=1`: replies are the scripted demo, no ForgeCLI needed.
     fn play_script(&mut self, id: usize, text: String, cx: &mut Context<Self>) {
-        self.replies.insert(id, cx.spawn(async move |this, cx| {
-            for step in script(&text) {
-                let wait = step.delay();
-                cx.background_executor().timer(Duration::from_millis(wait)).await;
-                // A permission prompt holds the reply until it is answered.
-                loop {
-                    let waiting = this
-                        .update(cx, |s, _| s.waiting_on_permission(id))
+        self.replies.insert(
+            id,
+            cx.spawn(async move |this, cx| {
+                for step in script(&text) {
+                    let wait = step.delay();
+                    cx.background_executor()
+                        .timer(Duration::from_millis(wait))
+                        .await;
+                    // A permission prompt holds the reply until it is answered.
+                    loop {
+                        let waiting = this
+                            .update(cx, |s, _| s.waiting_on_permission(id))
+                            .unwrap_or(false);
+                        if !waiting {
+                            break;
+                        }
+                        cx.background_executor()
+                            .timer(Duration::from_millis(120))
+                            .await;
+                    }
+                    let denied = this
+                        .update(cx, |s, _| s.last_permission_denied(id))
                         .unwrap_or(false);
-                    if !waiting {
+                    let step = if denied { Step::Denied } else { step };
+                    let done = matches!(step, Step::End { .. } | Step::Denied);
+                    if this.update(cx, |s, cx| s.apply(id, step, cx)).is_err() {
+                        return;
+                    }
+                    if done {
                         break;
                     }
-                    cx.background_executor().timer(Duration::from_millis(120)).await;
                 }
-                let denied = this.update(cx, |s, _| s.last_permission_denied(id)).unwrap_or(false);
-                let step = if denied { Step::Denied } else { step };
-                let done = matches!(step, Step::End { .. } | Step::Denied);
-                if this.update(cx, |s, cx| s.apply(id, step, cx)).is_err() {
-                    return;
-                }
-                if done {
-                    break;
-                }
-            }
-            let _ = this.update(cx, |s, cx| {
-                s.replies.remove(&id);
-                // Finished while you were elsewhere: it waits as unread.
-                if s.current != Some(id) {
-                    if let Some(c) = s.chat_mut(id) {
-                        c.unread = true;
+                let _ = this.update(cx, |s, cx| {
+                    s.replies.remove(&id);
+                    // Finished while you were elsewhere: it waits as unread.
+                    if s.current != Some(id) {
+                        if let Some(c) = s.chat_mut(id) {
+                            c.unread = true;
+                        }
                     }
-                }
-                cx.notify();
-            });
-        }));
+                    cx.notify();
+                });
+            }),
+        );
         cx.notify();
     }
 
@@ -1844,13 +2946,22 @@ impl AppState {
 
     /// Send your message to the chat's ForgeCLI process, starting it first
     /// when the chat has none (or the endpoint changed under it).
-    fn send_to_forge(&mut self, id: usize, text: String, cx: &mut Context<Self>) {
+    fn send_to_forge(
+        &mut self,
+        id: usize,
+        text: String,
+        attachments: Vec<crate::attach::Attachment>,
+        cx: &mut Context<Self>,
+    ) {
         let Some(profile) = self.active_profile().cloned() else {
             return self.notice(id, "Set up an endpoint first: Forge needs a model to answer. Open the model menu to add one.", true);
         };
         if let Some(live) = self.sessions.get(&id) {
             if live.profile != profile {
-                let same_endpoint = live.profile.base_url == profile.base_url && live.profile.wire == profile.wire && live.profile.auth == profile.auth && live.profile.headers == profile.headers;
+                let same_endpoint = live.profile.base_url == profile.base_url
+                    && live.profile.wire == profile.wire
+                    && live.profile.auth == profile.auth
+                    && live.profile.headers == profile.headers;
                 if same_endpoint && live.session.set_model(&profile.model).is_ok() {
                     self.sessions.get_mut(&id).expect("checked above").profile = profile.clone();
                 } else {
@@ -1867,44 +2978,97 @@ impl AppState {
                 return self.notice(id, e, true);
             }
         }
-        let sent = self.sessions.get(&id).map(|l| l.session.send(&text)).unwrap_or(Err("Forge isn't running.".into()));
+        let sent = self
+            .sessions
+            .get(&id)
+            .map(|l| {
+                if attachments.is_empty() {
+                    l.session.send(&text)
+                } else {
+                    l.session
+                        .send_content(crate::attach::content_blocks(&text, &attachments))
+                }
+            })
+            .unwrap_or(Err("Forge isn't running.".into()));
         if let Err(e) = sent {
             self.sessions.remove(&id);
             return self.notice(id, e, true);
+        }
+        // A command ForgeCLI answers at once (`/status`) starts no turn: its
+        // answer comes back as an immediate result.
+        if attachments.is_empty() && crate::commands::is_immediate(&text) {
+            self.immediate_queue.entry(id).or_default().push_back(true);
+            return;
         }
         self.replies.insert(id, Task::ready(()));
         self.turn_started.insert(id, std::time::Instant::now());
     }
 
-    fn start_session(&mut self, id: usize, profile: crate::endpoints::Profile, cx: &mut Context<Self>) -> Result<(), String> {
+    fn start_session(
+        &mut self,
+        id: usize,
+        profile: crate::endpoints::Profile,
+        cx: &mut Context<Self>,
+    ) -> Result<(), String> {
         let exe = crate::backend::find_cli().ok_or("ForgeCLI wasn't found. Put forge.exe beside ForgeDesktop.exe, or set FORGE_CLI to its path.")?;
-        let (session_id, resumable) = self.chats.iter().find(|c| c.id == id).map(|c| (c.session.clone(), c.resumable)).unwrap_or_else(|| (crate::history::new_id(), false));
-        let conversation = if resumable { crate::backend::Conversation::Resume(&session_id) } else { crate::backend::Conversation::New(&session_id) };
-        let launch = crate::backend::launch(&profile, self.mode, self.bypass_allowed, conversation)?;
+        let (session_id, resumable) = self
+            .chats
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| (c.session.clone(), c.resumable))
+            .unwrap_or_else(|| (crate::history::new_id(), false));
+        let conversation = if resumable {
+            crate::backend::Conversation::Resume(&session_id)
+        } else {
+            crate::backend::Conversation::New(&session_id)
+        };
+        let launch =
+            crate::backend::launch(&profile, self.mode, self.bypass_allowed, conversation)?;
         if resumable {
             self.resuming.insert(id);
         } else {
             self.resuming.remove(&id);
         }
         let project = self.chats.iter().find(|c| c.id == id).map(|c| c.project);
-        let dir = project.and_then(|p| self.project(p)).map(|p| p.path.clone()).filter(|p| p.is_dir()).unwrap_or_else(|| self.project_dir.clone());
+        let dir = project
+            .and_then(|p| self.project(p))
+            .map(|p| p.path.clone())
+            .filter(|p| p.is_dir())
+            .unwrap_or_else(|| self.project_dir.clone());
         let session = crate::backend::Session::spawn(&exe, &launch, &dir)?;
         let events = session.events.clone();
         self.generations += 1;
         let generation = self.generations;
         let pump = cx.spawn(async move |this, cx| {
             while let Ok(ev) = events.recv().await {
-                if this.update(cx, |s, cx| s.on_event(id, generation, ev, cx)).is_err() {
+                if this
+                    .update(cx, |s, cx| s.on_event(id, generation, ev, cx))
+                    .is_err()
+                {
                     break;
                 }
             }
         });
         self.stale_turns.remove(&id);
-        self.sessions.insert(id, Live { session, _pump: pump, profile, generation });
+        self.sessions.insert(
+            id,
+            Live {
+                session,
+                _pump: pump,
+                profile,
+                generation,
+            },
+        );
         Ok(())
     }
 
-    fn on_event(&mut self, chat: usize, generation: u64, ev: crate::backend::Event, cx: &mut Context<Self>) {
+    fn on_event(
+        &mut self,
+        chat: usize,
+        generation: u64,
+        ev: crate::backend::Event,
+        cx: &mut Context<Self>,
+    ) {
         use crate::backend::Event;
         // A process that was replaced or dropped (edit, retry, a new endpoint,
         // a failed resume) may still have events queued: they aren't this chat's.
@@ -1921,14 +3085,31 @@ impl AppState {
             self.sessions.remove(&chat);
             self.asks.remove(&chat);
             self.stale_turns.remove(&chat);
-            let pending = self.replies.contains_key(&chat).then(|| self.chats.iter().find(|c| c.id == chat).and_then(|c| c.messages.iter().rev().find_map(|m| if let Message::User { text, .. } = m { Some(text.to_string()) } else { None }))).flatten();
+            let pending = self
+                .replies
+                .contains_key(&chat)
+                .then(|| {
+                    self.chats.iter().find(|c| c.id == chat).and_then(|c| {
+                        c.messages.iter().rev().find_map(|m| {
+                            if let Message::User {
+                                text, attachments, ..
+                            } = m
+                            {
+                                Some((text.to_string(), attachments.clone()))
+                            } else {
+                                None
+                            }
+                        })
+                    })
+                })
+                .flatten();
             if let Some(c) = self.chat_mut(chat) {
                 c.new_conversation();
             }
             self.notice(chat, "Forge couldn't reopen this conversation's earlier context, so it goes on as a new conversation.", false);
-            if let Some(text) = pending {
+            if let Some((text, attachments)) = pending {
                 self.replies.remove(&chat);
-                self.send_to_forge(chat, text, cx);
+                self.send_to_forge(chat, text, attachments, cx);
             }
             self.touch(chat, cx);
             return cx.notify();
@@ -1940,9 +3121,16 @@ impl AppState {
                     *n -= 1;
                     return;
                 }
-                Event::Ask { request_id, input, suggestions, .. } => {
+                Event::Ask {
+                    request_id,
+                    input,
+                    suggestions,
+                    ..
+                } => {
                     if let Some(l) = self.sessions.get(&chat) {
-                        let _ = l.session.answer(&request_id, false, false, &input, &suggestions);
+                        let _ = l
+                            .session
+                            .answer(&request_id, false, false, &input, &suggestions);
                     }
                     return;
                 }
@@ -1958,21 +3146,37 @@ impl AppState {
                 self.push_block(chat, Block::Text(t.into()));
             }
             Event::Thinking(t) if self.fresh_block.remove(&chat) => {
-                self.push_block(chat, Block::Thinking { text: t.into(), open: false });
+                self.push_block(
+                    chat,
+                    Block::Thinking {
+                        text: t.into(),
+                        open: false,
+                    },
+                );
             }
             Event::Text(t) => self.apply(chat, Step::Say(t), cx),
             Event::Thinking(t) => self.apply(chat, Step::Think(t), cx),
             Event::ToolUse { id, name, input } => {
-                if let Some(at) = self.push_block(chat, Block::Tool(crate::backend::tool_call(&name, &input))) {
+                if let Some(at) =
+                    self.push_block(chat, Block::Tool(crate::backend::tool_call(&name, &input)))
+                {
                     self.tool_rows.insert((chat, id), at);
                 }
             }
-            Event::ToolResult { id, output, is_error } => {
+            Event::ToolResult {
+                id,
+                output,
+                is_error,
+            } => {
                 if let Some(&(m, b)) = self.tool_rows.get(&(chat, id)) {
                     let mut written = None;
                     self.update_tool(chat, m, b, |t| {
                         if t.status != ToolStatus::Declined {
-                            t.status = if is_error { ToolStatus::Failed } else { ToolStatus::Done };
+                            t.status = if is_error {
+                                ToolStatus::Failed
+                            } else {
+                                ToolStatus::Done
+                            };
                             t.output = output.into();
                             if !is_error && t.kind == ToolKind::Write {
                                 written = Some(t.target.to_string());
@@ -1985,10 +3189,33 @@ impl AppState {
                     }
                 }
             }
-            Event::Ask { request_id, tool_use_id, tool_name, input, suggestions } => {
+            Event::Ask {
+                request_id,
+                tool_use_id,
+                tool_name,
+                input,
+                suggestions,
+            } => {
                 let (title, detail) = crate::backend::ask_text(&tool_name, &input);
-                if let Some((msg, block)) = self.push_block(chat, Block::Permission { title: title.into(), detail: detail.into(), verdict: Verdict::Pending }) {
-                    self.asks.insert(chat, Ask { request_id, tool_use_id, input, suggestions, msg, block });
+                if let Some((msg, block)) = self.push_block(
+                    chat,
+                    Block::Permission {
+                        title: title.into(),
+                        detail: detail.into(),
+                        verdict: Verdict::Pending,
+                    },
+                ) {
+                    self.asks.insert(
+                        chat,
+                        Ask {
+                            request_id,
+                            tool_use_id,
+                            input,
+                            suggestions,
+                            msg,
+                            block,
+                        },
+                    );
                 }
             }
             Event::CancelAsk { request_id } => {
@@ -1998,12 +3225,75 @@ impl AppState {
                     self.answer(chat, m, b, Verdict::Denied, cx);
                 }
             }
-            Event::Immediate { text, is_error } => self.answer_side(chat, text, is_error),
+            Event::Immediate { text, is_error } => {
+                // The oldest question asked of this kind gets it: a typed command's
+                // answer goes in the chat, a `/btw` answer in the side card.
+                let command = self
+                    .immediate_queue
+                    .get_mut(&chat)
+                    .and_then(|q| q.pop_front())
+                    .unwrap_or(false);
+                if command {
+                    self.push_block(
+                        chat,
+                        Block::Text(if text.is_empty() {
+                            "(no output)".into()
+                        } else {
+                            format!("```text\n{text}\n```").into()
+                        }),
+                    );
+                    if is_error {
+                        self.notice(chat, "ForgeCLI reported an error for this command.", true);
+                    }
+                    self.touch(chat, cx);
+                } else {
+                    self.answer_side(chat, text, is_error);
+                }
+            }
+            Event::UserAccepted { uuid } => {
+                // The newest of your messages without an id is the one just accepted.
+                if let Some(c) = self.chat_mut(chat) {
+                    if let Some(Message::User { turn, .. }) = c
+                        .messages
+                        .iter_mut()
+                        .rev()
+                        .find(|m| matches!(m, Message::User { turn: None, .. }))
+                    {
+                        *turn = Some(uuid.into());
+                    }
+                }
+                self.mark_dirty(chat, cx);
+            }
+            Event::ControlReply { request_id, result } => {
+                if let Some(req) = self.requests.remove(&request_id) {
+                    self.on_reply(req, result, cx);
+                }
+            }
             Event::TurnEnd { ms, usage, error } => {
+                // A compaction's turn ends in its notice, not a reply's end:
+                // "Compacted" when it worked, its error when it didn't.
+                if self.compacting.remove(&chat) {
+                    if let Some(c) = self.chat_mut(chat) {
+                        c.messages.retain(|m| !matches!(m, Message::Notice { text, .. } if text.as_ref() == COMPACTING));
+                        c.resumable = true;
+                    }
+                    match error {
+                        Some(e) => self.notice(chat, e, true),
+                        None => self.notice(chat, COMPACTED, false),
+                    }
+                    return self.finish_turn(chat, cx);
+                }
                 if let Some(e) = error {
                     self.notice(chat, e, true);
                 }
-                let seconds = if ms > 0 { ms as f32 / 1000. } else { self.turn_started.get(&chat).map(|t| t.elapsed().as_secs_f32()).unwrap_or(0.) };
+                let seconds = if ms > 0 {
+                    ms as f32 / 1000.
+                } else {
+                    self.turn_started
+                        .get(&chat)
+                        .map(|t| t.elapsed().as_secs_f32())
+                        .unwrap_or(0.)
+                };
                 if let Some(c) = self.chat_mut(chat) {
                     c.messages.push(Message::TurnEnd { seconds, usage });
                     c.version += 1;
@@ -2028,7 +3318,11 @@ impl AppState {
                         Some(c) => format!("Forge stopped (exit code {c})."),
                         None => "Forge stopped.".to_string(),
                     };
-                    let text = if detail.is_empty() { why } else { format!("{why}\n{detail}") };
+                    let text = if detail.is_empty() {
+                        why
+                    } else {
+                        format!("{why}\n{detail}")
+                    };
                     self.notice(chat, text, true);
                     self.finish_turn(chat, cx);
                 }
@@ -2042,17 +3336,37 @@ impl AppState {
     fn written_file(&self, chat: usize, path: &str) -> Option<FileRef> {
         let name = path.rsplit(['/', '\\']).next()?.to_string();
         let ext = name.rsplit_once('.')?.1.to_ascii_lowercase();
-        if !matches!(ext.as_str(), "md" | "markdown" | "svg" | "docx" | "xlsx" | "pptx" | "pdf") {
+        if !matches!(
+            ext.as_str(),
+            "md" | "markdown" | "svg" | "docx" | "xlsx" | "pptx" | "pdf"
+        ) {
             return None;
         }
-        let project = self.chats.iter().find(|c| c.id == chat).and_then(|c| self.project(c.project)).map(|p| p.path.clone()).unwrap_or_else(|| self.project_dir.clone());
-        let full = { let p = std::path::Path::new(path); if p.is_absolute() { p.to_path_buf() } else { project.join(p) } };
+        let project = self
+            .chats
+            .iter()
+            .find(|c| c.id == chat)
+            .and_then(|c| self.project(c.project))
+            .map(|p| p.path.clone())
+            .unwrap_or_else(|| self.project_dir.clone());
+        let full = {
+            let p = std::path::Path::new(path);
+            if p.is_absolute() {
+                p.to_path_buf()
+            } else {
+                project.join(p)
+            }
+        };
         let bytes = std::fs::read(&full).ok()?;
         let binary = matches!(ext.as_str(), "docx" | "xlsx" | "pptx" | "pdf");
         Some(FileRef {
             name: name.into(),
             path: Some(full.display().to_string().into()),
-            content: if binary { "".into() } else { String::from_utf8_lossy(&bytes).into_owned().into() },
+            content: if binary {
+                "".into()
+            } else {
+                String::from_utf8_lossy(&bytes).into_owned().into()
+            },
             bytes: binary.then(|| std::sync::Arc::from(bytes.into_boxed_slice())),
         })
     }
@@ -2064,14 +3378,22 @@ impl AppState {
             c.messages.push(Message::Assistant { blocks: vec![] });
         }
         let m = c.messages.len() - 1;
-        let Some(Message::Assistant { blocks }) = c.messages.get_mut(m) else { return None };
+        let Some(Message::Assistant { blocks }) = c.messages.get_mut(m) else {
+            return None;
+        };
         blocks.push(block);
         let b = blocks.len() - 1;
         c.version += 1;
         Some((m, b))
     }
 
-    fn update_tool(&mut self, chat: usize, msg: usize, block: usize, f: impl FnOnce(&mut ToolCall)) {
+    fn update_tool(
+        &mut self,
+        chat: usize,
+        msg: usize,
+        block: usize,
+        f: impl FnOnce(&mut ToolCall),
+    ) {
         let Some(c) = self.chat_mut(chat) else { return };
         if let Some(Message::Assistant { blocks }) = c.messages.get_mut(msg) {
             if let Some(Block::Tool(t)) = blocks.get_mut(block) {
@@ -2083,7 +3405,10 @@ impl AppState {
 
     fn notice(&mut self, chat: usize, text: impl Into<SharedString>, error: bool) {
         if let Some(c) = self.chat_mut(chat) {
-            c.messages.push(Message::Notice { text: text.into(), error });
+            c.messages.push(Message::Notice {
+                text: text.into(),
+                error,
+            });
             c.version += 1;
         }
     }
@@ -2119,7 +3444,9 @@ impl AppState {
 
     /// The side card of the chat showing, if it is open.
     pub fn side_shown(&self) -> Option<&Side> {
-        self.current.and_then(|id| self.side.get(&id)).filter(|s| s.visible)
+        self.current
+            .and_then(|id| self.side.get(&id))
+            .filter(|s| s.visible)
     }
 
     /// Open the side card and, when there is a question, ask it. A new chat
@@ -2130,7 +3457,8 @@ impl AppState {
             None => {
                 let id = self.next_id;
                 self.next_id += 1;
-                self.chats.insert(0, Chat::new(id, self.current_project, SIDE_TITLE.into()));
+                self.chats
+                    .insert(0, Chat::new(id, self.current_project, SIDE_TITLE.into()));
                 self.current = Some(id);
                 self.keep_mode();
                 id
@@ -2143,7 +3471,11 @@ impl AppState {
         self.side_focus = true;
         let question = question.trim().to_string();
         if !question.is_empty() {
-            self.side.entry(id).or_default().pending.push_back(question.clone().into());
+            self.side
+                .entry(id)
+                .or_default()
+                .pending
+                .push_back(question.clone().into());
             if demo_mode() {
                 self.answer_side(id, format!("(Demo) A side answer to \"{question}\": ForgeCLI answers these from the conversation, without tools."), false);
             } else if let Err(e) = self.send_side(id, &question, cx) {
@@ -2153,24 +3485,48 @@ impl AppState {
         cx.notify();
     }
 
-    fn send_side(&mut self, id: usize, question: &str, cx: &mut Context<Self>) -> Result<(), String> {
+    fn send_side(
+        &mut self,
+        id: usize,
+        question: &str,
+        cx: &mut Context<Self>,
+    ) -> Result<(), String> {
         if !self.sessions.contains_key(&id) {
-            let profile = self.active_profile().cloned().ok_or("Set up an endpoint first: side questions need a model.")?;
+            let profile = self
+                .active_profile()
+                .cloned()
+                .ok_or("Set up an endpoint first: side questions need a model.")?;
             self.start_session(id, profile, cx)?;
         }
         let live = self.sessions.get(&id).ok_or("Forge isn't running.")?;
-        live.session.send(&format!("/btw {question}"))
+        live.session.send(&format!("/btw {question}"))?;
+        self.immediate_queue.entry(id).or_default().push_back(false);
+        Ok(())
     }
 
     /// The oldest waiting question gets its answer (or its error).
     fn answer_side(&mut self, chat: usize, text: String, is_error: bool) {
-        let Some(side) = self.side.get_mut(&chat) else { return };
-        let Some(question) = side.pending.pop_front() else { return };
+        let Some(side) = self.side.get_mut(&chat) else {
+            return;
+        };
+        let Some(question) = side.pending.pop_front() else {
+            return;
+        };
         side.push(if is_error || text.is_empty() {
-            let message = if text.is_empty() { "Forge didn't return an answer for this side question.".to_string() } else { text };
-            SideItem::Failed { question, message: message.into() }
+            let message = if text.is_empty() {
+                "Forge didn't return an answer for this side question.".to_string()
+            } else {
+                text
+            };
+            SideItem::Failed {
+                question,
+                message: message.into(),
+            }
         } else {
-            SideItem::Answer { question, answer: text.into() }
+            SideItem::Answer {
+                question,
+                answer: text.into(),
+            }
         });
     }
 
@@ -2221,42 +3577,66 @@ impl AppState {
         match (step, blocks) {
             (Step::Think(t), Some(blocks)) => match blocks.last_mut() {
                 Some(Block::Thinking { text, .. }) => *text = format!("{text}{t}").into(),
-                _ => blocks.push(Block::Thinking { text: t.into(), open: false }),
+                _ => blocks.push(Block::Thinking {
+                    text: t.into(),
+                    open: false,
+                }),
             },
             (Step::Say(t), Some(blocks)) => match blocks.last_mut() {
                 Some(Block::Text(text)) => *text = format!("{text}{t}").into(),
                 _ => blocks.push(Block::Text(t.into())),
             },
-            (Step::ToolStart(kind, target, note), Some(blocks)) => blocks.push(Block::Tool(ToolCall {
-                kind,
-                target: target.into(),
-                note: note.map(Into::into),
-                status: ToolStatus::Running,
-                output: "".into(),
-                diff: vec![],
-                // A command's terminal block is open from the start, as in Forge.
-                open: kind == ToolKind::Bash,
-                full: false,
-            })),
+            (Step::ToolStart(kind, target, note), Some(blocks)) => {
+                blocks.push(Block::Tool(ToolCall {
+                    kind,
+                    target: target.into(),
+                    note: note.map(Into::into),
+                    status: ToolStatus::Running,
+                    output: "".into(),
+                    diff: vec![],
+                    // A command's terminal block is open from the start, as in Forge.
+                    open: kind == ToolKind::Bash,
+                    full: false,
+                    review: Review::Open,
+                }))
+            }
             (Step::ToolDone(output, diff), Some(blocks)) => {
-                if let Some(Block::Tool(t)) = blocks.iter_mut().rev().find(|b| matches!(b, Block::Tool(_))) {
+                if let Some(Block::Tool(t)) = blocks
+                    .iter_mut()
+                    .rev()
+                    .find(|b| matches!(b, Block::Tool(_)))
+                {
                     t.status = ToolStatus::Done;
                     t.output = output.into();
                     t.diff = diff;
                 }
             }
-            (Step::Ask(title, detail), Some(blocks)) => blocks.push(Block::Permission { title: title.into(), detail: detail.into(), verdict: Verdict::Pending }),
+            (Step::Ask(title, detail), Some(blocks)) => blocks.push(Block::Permission {
+                title: title.into(),
+                detail: detail.into(),
+                verdict: Verdict::Pending,
+            }),
             (Step::Denied, Some(blocks)) => {
-                if let Some(Block::Tool(t)) = blocks.iter_mut().rev().find(|b| matches!(b, Block::Tool(_))) {
+                if let Some(Block::Tool(t)) = blocks
+                    .iter_mut()
+                    .rev()
+                    .find(|b| matches!(b, Block::Tool(_)))
+                {
                     t.status = ToolStatus::Declined;
                     t.output = "You declined this edit.".into();
                 }
-                blocks.push(Block::Text("Understood, I won't change the file. Tell me how you'd like to proceed.".into()));
+                blocks.push(Block::Text(
+                    "Understood, I won't change the file. Tell me how you'd like to proceed."
+                        .into(),
+                ));
             }
             (Step::End { seconds }, _) => {
                 // A mock reply has no model to report usage: count it from the text.
                 let usage = crate::context::estimate(&c.messages);
-                c.messages.push(Message::TurnEnd { seconds, usage: Some(usage) });
+                c.messages.push(Message::TurnEnd {
+                    seconds,
+                    usage: Some(usage),
+                });
                 self.touch(chat, cx);
             }
             _ => {}
@@ -2308,7 +3688,13 @@ fn words(s: &str, f: fn(String) -> Step) -> Vec<Step> {
 }
 
 fn diff(lines: &[(DiffKind, &str)]) -> Vec<DiffLine> {
-    lines.iter().map(|(k, t)| DiffLine { kind: *k, text: (*t).into() }).collect()
+    lines
+        .iter()
+        .map(|(k, t)| DiffLine {
+            kind: *k,
+            text: (*t).into(),
+        })
+        .collect()
 }
 
 /// The demo's drawn answer: a flowchart and a sequence, in Mermaid.
@@ -2322,16 +3708,28 @@ fn script(prompt: &str) -> Vec<Step> {
     ));
     // Asked to draw something: the reply draws it, as a Mermaid diagram.
     let lower = prompt.to_lowercase();
-    if ["diagram", "draw", "flow", "sequence", "architecture"].iter().any(|w| lower.contains(w)) {
+    if ["diagram", "draw", "flow", "sequence", "architecture"]
+        .iter()
+        .any(|w| lower.contains(w))
+    {
         s.extend(words(DEMO_DIAGRAM, Step::Say));
         s.push(Step::End { seconds: 6.4 });
         return s;
     }
-    s.extend(words("Let me look at how the greeting is wired before changing anything.", Step::Say));
+    s.extend(words(
+        "Let me look at how the greeting is wired before changing anything.",
+        Step::Say,
+    ));
     s.push(Step::ToolStart(ToolKind::Read, "src/main.rs".into(), None));
-    s.push(Step::ToolDone("fn main() {\n    println!(\"Hello, world\");\n}\n".into(), vec![]));
+    s.push(Step::ToolDone(
+        "fn main() {\n    println!(\"Hello, world\");\n}\n".into(),
+        vec![],
+    ));
     s.push(Step::ToolStart(ToolKind::Edit, "src/main.rs".into(), None));
-    s.push(Step::Ask("Edit src/main.rs?".into(), "Replace the greeting with a function main calls, and add a test for it.".into()));
+    s.push(Step::Ask(
+        "Edit src/main.rs?".into(),
+        "Replace the greeting with a function main calls, and add a test for it.".into(),
+    ));
     s.push(Step::ToolDone(
         "The file was updated.".into(),
         diff(&[
@@ -2345,7 +3743,11 @@ fn script(prompt: &str) -> Vec<Step> {
             (DiffKind::Same, "}"),
         ]),
     ));
-    s.push(Step::ToolStart(ToolKind::Bash, "cargo test".into(), Some("Run the tests".into())));
+    s.push(Step::ToolStart(
+        ToolKind::Bash,
+        "cargo test".into(),
+        Some("Run the tests".into()),
+    ));
     s.push(Step::ToolDone("   \x1b[1;32mCompiling\x1b[0m hello v0.1.0 (/home/amine/dev/kryptonite)\n    \x1b[1;32mFinished\x1b[0m `test` profile [unoptimized + debuginfo] target(s) in 1.84s\n     \x1b[1;32mRunning\x1b[0m unittests src/main.rs (target/debug/deps/hello-3f2a9c1e)\n\nrunning 3 tests\ntest tests::greets_by_name ... \x1b[32mok\x1b[0m\ntest tests::greeting_is_static ... \x1b[32mok\x1b[0m\ntest tests::main_prints_the_greeting ... \x1b[32mok\x1b[0m\n\ntest result: \x1b[32mok\x1b[0m. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n   \x1b[1;32mDoc-tests\x1b[0m hello\n\nrunning 0 tests\n\ntest result: \x1b[32mok\x1b[0m. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s".into(), vec![]));
     s.extend(words(
         "Done. The greeting now lives in `greeting()` and `main` prints it.\n\n**What changed**\n- `src/main.rs`: a new `greeting()` function, used by `main`.\n- A unit test, `greets_by_name`, checks the text.\n\n```rust\npub fn greeting() -> &'static str {\n    \"Hello, Forge\"\n}\n```\n\nAll tests pass.",
@@ -2363,7 +3765,11 @@ fn script(prompt: &str) -> Vec<Step> {
 fn initial_projects(here: &std::path::Path) -> Vec<Project> {
     let project = |id, path: std::path::PathBuf, opened| Project {
         id,
-        name: path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.display().to_string()).into(),
+        name: path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| path.display().to_string())
+            .into(),
         branch: git_branch(&path).into(),
         path,
         pinned: false,
@@ -2383,7 +3789,15 @@ fn projects_file() -> Option<std::path::PathBuf> {
 }
 
 fn saved_projects() -> Vec<std::path::PathBuf> {
-    projects_file().and_then(|f| std::fs::read_to_string(f).ok()).map(|t| t.lines().filter(|l| !l.trim().is_empty()).map(std::path::PathBuf::from).collect()).unwrap_or_default()
+    projects_file()
+        .and_then(|f| std::fs::read_to_string(f).ok())
+        .map(|t| {
+            t.lines()
+                .filter(|l| !l.trim().is_empty())
+                .map(std::path::PathBuf::from)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Keep the folders you opened for next time (blocking: off the UI thread).
@@ -2399,7 +3813,15 @@ fn save_projects(paths: Vec<std::path::PathBuf>) {
 /// The checked-out branch, read from `.git/HEAD`; empty when it isn't a repository.
 pub fn git_branch(dir: &std::path::Path) -> String {
     let head = dir.join(".git").join("HEAD");
-    std::fs::read_to_string(head).ok().map(|h| h.trim().strip_prefix("ref: refs/heads/").map(str::to_string).unwrap_or_else(|| h.trim().chars().take(7).collect())).unwrap_or_default()
+    std::fs::read_to_string(head)
+        .ok()
+        .map(|h| {
+            h.trim()
+                .strip_prefix("ref: refs/heads/")
+                .map(str::to_string)
+                .unwrap_or_else(|| h.trim().chars().take(7).collect())
+        })
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -2410,7 +3832,7 @@ fn minutes_ago(minutes: u32) -> SystemTime {
 #[cfg(test)]
 fn mock_chats() -> Vec<Chat> {
     let rich = vec![
-        Message::User { text: "Fix the greeting in src/main.rs so it says Hello, Forge, and add a test for it.".into(), sent: minutes_ago(9) },
+        Message::user("Fix the greeting in src/main.rs so it says Hello, Forge, and add a test for it.".into(), minutes_ago(9)),
         Message::Assistant {
             blocks: vec![
                 Block::Thinking {
@@ -2418,7 +3840,7 @@ fn mock_chats() -> Vec<Chat> {
                     open: false,
                 },
                 Block::Text("I'll move the greeting into a small function so it can be tested, then update `main`.".into()),
-                Block::Tool(ToolCall { kind: ToolKind::Read, target: "src/main.rs".into(), note: None, status: ToolStatus::Done, output: "fn main() {\n    println!(\"Hello, world\");\n}\n".into(), diff: vec![], open: false, full: false }),
+                Block::Tool(ToolCall { kind: ToolKind::Read, target: "src/main.rs".into(), note: None, status: ToolStatus::Done, output: "fn main() {\n    println!(\"Hello, world\");\n}\n".into(), diff: vec![], open: false, full: false, review: Review::Open }),
                 Block::Tool(ToolCall {
                     kind: ToolKind::Edit,
                     target: "src/main.rs".into(),
@@ -2436,7 +3858,7 @@ fn mock_chats() -> Vec<Chat> {
                         (DiffKind::Same, "}"),
                     ]),
                     open: true,
-                    full: false,
+                    full: false, review: Review::Open,
                 }),
                 Block::Tool(ToolCall {
                     kind: ToolKind::Bash,
@@ -2446,7 +3868,7 @@ fn mock_chats() -> Vec<Chat> {
                     output: "   \x1b[1;32mCompiling\x1b[0m hello v0.1.0 (/home/amine/dev/kryptonite)\n    \x1b[1;32mFinished\x1b[0m `test` profile [unoptimized + debuginfo] target(s) in 1.84s\n     \x1b[1;32mRunning\x1b[0m unittests src/main.rs (target/debug/deps/hello-3f2a9c1e)\n\nrunning 3 tests\ntest tests::greets_by_name ... \x1b[32mok\x1b[0m\ntest tests::greeting_is_static ... \x1b[32mok\x1b[0m\ntest tests::main_prints_the_greeting ... \x1b[32mok\x1b[0m\n\ntest result: \x1b[32mok\x1b[0m. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n   \x1b[1;32mDoc-tests\x1b[0m hello\n\nrunning 0 tests\n\ntest result: \x1b[32mok\x1b[0m. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s".into(),
                     diff: vec![],
                     open: true,
-                    full: false,
+                    full: false, review: Review::Open,
                 }),
             ],
         },
@@ -2456,13 +3878,13 @@ fn mock_chats() -> Vec<Chat> {
             )],
         },
         Message::TurnEnd { seconds: 18.4, usage: None },
-        Message::User { text: "Can you also check the hermes review pipeline for unused imports?".into(), sent: minutes_ago(4) },
+        Message::user("Can you also check the hermes review pipeline for unused imports?".into(), minutes_ago(4)),
         Message::Assistant {
             blocks: vec![
-                Block::Tool(ToolCall { kind: ToolKind::Web, target: "https://eslint.org/docs/latest/rules/no-unused-vars".into(), note: None, status: ToolStatus::Done, output: "no-unused-vars: disallow unused variables, including imports.".into(), diff: vec![], open: false, full: false }),
-                Block::Tool(ToolCall { kind: ToolKind::Write, target: "docs/lint-notes.md".into(), note: None, status: ToolStatus::Done, output: "".into(), diff: diff(&[(DiffKind::Add, "# Lint notes"), (DiffKind::Add, ""), (DiffKind::Add, "Run `pnpm lint --filter hermes` before pushing.")]), open: false, full: false }),
-                Block::Tool(ToolCall { kind: ToolKind::Search, target: "^use .*;$ in src/hermes".into(), note: None, status: ToolStatus::Done, output: "src/hermes/review.ts:3\nsrc/hermes/store.ts:1".into(), diff: vec![], open: false, full: false }),
-                Block::Tool(ToolCall { kind: ToolKind::Bash, target: "pnpm lint --filter hermes".into(), note: Some("Lint the package".into()), status: ToolStatus::Failed, output: "\x1b[4msrc/hermes/review.ts\x1b[24m\n  \x1b[2m3:10\x1b[22m  \x1b[31merror\x1b[39m  'diffLines' is defined but never used  \x1b[2m@typescript-eslint/no-unused-vars\x1b[22m\n\n\x1b[31m\x1b[1m✖ 1 problem (1 error, 0 warnings)\x1b[22m\x1b[39m\n\x1b[2m ELIFECYCLE \x1b[22m Command failed with exit code 1.".into(), diff: vec![], open: true, full: false }),
+                Block::Tool(ToolCall { kind: ToolKind::Web, target: "https://eslint.org/docs/latest/rules/no-unused-vars".into(), note: None, status: ToolStatus::Done, output: "no-unused-vars: disallow unused variables, including imports.".into(), diff: vec![], open: false, full: false, review: Review::Open }),
+                Block::Tool(ToolCall { kind: ToolKind::Write, target: "docs/lint-notes.md".into(), note: None, status: ToolStatus::Done, output: "".into(), diff: diff(&[(DiffKind::Add, "# Lint notes"), (DiffKind::Add, ""), (DiffKind::Add, "Run `pnpm lint --filter hermes` before pushing.")]), open: false, full: false, review: Review::Open }),
+                Block::Tool(ToolCall { kind: ToolKind::Search, target: "^use .*;$ in src/hermes".into(), note: None, status: ToolStatus::Done, output: "src/hermes/review.ts:3\nsrc/hermes/store.ts:1".into(), diff: vec![], open: false, full: false, review: Review::Open }),
+                Block::Tool(ToolCall { kind: ToolKind::Bash, target: "pnpm lint --filter hermes".into(), note: Some("Lint the package".into()), status: ToolStatus::Failed, output: "\x1b[4msrc/hermes/review.ts\x1b[24m\n  \x1b[2m3:10\x1b[22m  \x1b[31merror\x1b[39m  'diffLines' is defined but never used  \x1b[2m@typescript-eslint/no-unused-vars\x1b[22m\n\n\x1b[31m\x1b[1m✖ 1 problem (1 error, 0 warnings)\x1b[22m\x1b[39m\n\x1b[2m ELIFECYCLE \x1b[22m Command failed with exit code 1.".into(), diff: vec![], open: true, full: false, review: Review::Open }),
                 Block::Text("One unused import: `diffLines` in `src/hermes/review.ts`. Want me to remove it?".into()),
             ],
         },
@@ -2470,18 +3892,29 @@ fn mock_chats() -> Vec<Chat> {
     ];
     let simple = |title: &str, minutes: u32| {
         vec![
-            Message::User { text: title.to_string().into(), sent: minutes_ago(minutes) },
-            Message::Assistant { blocks: vec![Block::Text(format!("This is an older conversation about *{}*.", title.to_lowercase()).into())] },
-            Message::TurnEnd { seconds: 3.2, usage: None },
+            Message::user(title.to_string().into(), minutes_ago(minutes)),
+            Message::Assistant {
+                blocks: vec![Block::Text(
+                    format!(
+                        "This is an older conversation about *{}*.",
+                        title.to_lowercase()
+                    )
+                    .into(),
+                )],
+            },
+            Message::TurnEnd {
+                seconds: 3.2,
+                usage: None,
+            },
         ]
     };
     // A reply that wrote a plan: the write, a short note, and the file's card.
     const PLAN: &str = include_str!("../assets/docs/settings-migration-plan.md");
     let plan = vec![
-        Message::User { text: "Plan the migration of our settings to the new schema. Write it up so I can review it.".into(), sent: minutes_ago(41) },
+        Message::user("Plan the migration of our settings to the new schema. Write it up so I can review it.".into(), minutes_ago(41)),
         Message::Assistant {
             blocks: vec![
-                Block::Tool(ToolCall { kind: ToolKind::Read, target: "src/settings.rs".into(), note: None, status: ToolStatus::Done, output: "pub struct Settings { pub theme: String, pub model: String, pub permissions: Vec<String> }".into(), diff: vec![], open: false, full: false }),
+                Block::Tool(ToolCall { kind: ToolKind::Read, target: "src/settings.rs".into(), note: None, status: ToolStatus::Done, output: "pub struct Settings { pub theme: String, pub model: String, pub permissions: Vec<String> }".into(), diff: vec![], open: false, full: false, review: Review::Open }),
                 Block::Tool(ToolCall {
                     kind: ToolKind::Write,
                     target: "docs/settings-migration-plan.md".into(),
@@ -2490,7 +3923,7 @@ fn mock_chats() -> Vec<Chat> {
                     output: "".into(),
                     diff: diff(&PLAN.lines().take(6).map(|l| (DiffKind::Add, l)).collect::<Vec<_>>()),
                     open: false,
-                    full: false,
+                    full: false, review: Review::Open,
                 }),
                 Block::Text("Here is the plan. It moves every setting to the v2 schema without losing anything, and keeps a backup for one release. Two checklist items are still open: the round-trip test and a Windows run with a read-only file.".into()),
                 Block::File(FileRef { name: "settings-migration-plan.md".into(), path: Some("docs/settings-migration-plan.md".into()), content: PLAN.into(), bytes: None }),
@@ -2501,7 +3934,7 @@ fn mock_chats() -> Vec<Chat> {
     // A reply that drew a diagram with the bundled Diagram Design skill.
     const CHAT_PATH: &str = include_str!("../assets/docs/forge-chat-path.html");
     let drawn = vec![
-        Message::User { text: "Draw how a chat in Forge reaches the model, and where the API key gets added.".into(), sent: minutes_ago(13) },
+        Message::user("Draw how a chat in Forge reaches the model, and where the API key gets added.".into(), minutes_ago(13)),
         Message::Assistant {
             blocks: vec![
                 Block::Tool(ToolCall {
@@ -2512,7 +3945,7 @@ fn mock_chats() -> Vec<Chat> {
                     output: "".into(),
                     diff: diff(&[(DiffKind::Add, "<!DOCTYPE html>"), (DiffKind::Add, "<title>How a chat reaches a model</title>"), (DiffKind::Add, "<svg viewBox=\"0 0 960 480\" …>")]),
                     open: false,
-                    full: false,
+                    full: false, review: Review::Open,
                 }),
                 Block::Text("Here it is. The gateway is the one accent: it is the only piece that ever holds a key, and it reads it from Credential Manager on the way out.".into()),
                 Block::File(FileRef { name: "chat-path.html".into(), path: Some("docs/chat-path.html".into()), content: CHAT_PATH.into(), bytes: None }),
@@ -2522,10 +3955,29 @@ fn mock_chats() -> Vec<Chat> {
     ];
     // A reply that edited a workbook and wrote it up with the bundled
     // office-documents skill: the real files its tools made.
-    let office = |name: &str, bytes: &'static [u8]| Block::File(FileRef { name: name.into(), path: Some(format!("finance/{name}").into()), content: "".into(), bytes: Some(std::sync::Arc::from(bytes)) });
-    let bash = |command: &str, note: &str, output: &str| Block::Tool(ToolCall { kind: ToolKind::Bash, target: command.into(), note: Some(note.into()), status: ToolStatus::Done, output: output.into(), diff: vec![], open: false, full: false });
+    let office = |name: &str, bytes: &'static [u8]| {
+        Block::File(FileRef {
+            name: name.into(),
+            path: Some(format!("finance/{name}").into()),
+            content: "".into(),
+            bytes: Some(std::sync::Arc::from(bytes)),
+        })
+    };
+    let bash = |command: &str, note: &str, output: &str| {
+        Block::Tool(ToolCall {
+            kind: ToolKind::Bash,
+            target: command.into(),
+            note: Some(note.into()),
+            status: ToolStatus::Done,
+            output: output.into(),
+            diff: vec![],
+            open: false,
+            full: false,
+            review: Review::Open,
+        })
+    };
     let budget = vec![
-        Message::User { text: "Licences came in at 700 and travel is forecast at 520. Update the Q3 budget, then write it up as a memo, a short deck and a PDF.".into(), sent: minutes_ago(7) },
+        Message::user("Licences came in at 700 and travel is forecast at 520. Update the Q3 budget, then write it up as a memo, a short deck and a PDF.".into(), minutes_ago(7)),
         Message::Assistant {
             blocks: vec![
                 bash("python xlsx_tool.py read finance/q3-budget.xlsx --sheet Budget --formulas", "Read the budget", "## Budget (7 rows × 4 columns)\n| 3 | Licences | 800 | 640 | =C3-B3 |\n| 6 | Travel | 450 |  | =C6-B6 |\n| 7 | Total | =SUM(B2:B6) | =SUM(C2:C6) | =C7-B7 |"),
@@ -2541,25 +3993,90 @@ fn mock_chats() -> Vec<Chat> {
         Message::TurnEnd { seconds: 42.6, usage: None },
     ];
     let with_error = |mut m: Vec<Message>| {
-        m.push(Message::Notice { text: "The agent stopped unexpectedly (exit code 1). Send a message to try again.".into(), error: true });
+        m.push(Message::Notice {
+            text: "The agent stopped unexpectedly (exit code 1). Send a message to try again."
+                .into(),
+            error: true,
+        });
         m
     };
     let mut chats = vec![
-        Chat { minutes_ago: 4, pinned: true, messages: rich, unread: false, ..Chat::new(1, 1, "Fix the greeting and add a test".into()) },
-        Chat { minutes_ago: 120, pinned: false, messages: simple("Explain the hermes review pipeline", 120), unread: true, ..Chat::new(2, 4, "Explain the hermes review pipeline".into()) },
-        Chat { minutes_ago: 300, pinned: false, messages: simple("Speed up the session store", 300), unread: false, ..Chat::new(3, 1, "Speed up the session store".into()) },
-        Chat { minutes_ago: 1500, pinned: false, messages: simple("Write a README for the CLI", 1500), unread: false, ..Chat::new(4, 3, "Write a README for the CLI".into()) },
-        Chat { minutes_ago: 1800, pinned: false, messages: with_error(simple("Why does cargo test hang on Windows?", 1800)), unread: false, ..Chat::new(5, 1, "Why does cargo test hang on Windows?".into()) },
-        Chat { minutes_ago: 40, pinned: false, messages: plan, unread: false, ..Chat::new(6, 1, "Migrate settings to the new schema".into()) },
-        Chat { minutes_ago: 6, pinned: false, messages: budget, unread: false, ..Chat::new(9, 1, "Update the Q3 budget and write it up".into()) },
-        Chat { minutes_ago: 12, pinned: false, messages: drawn, unread: false, ..Chat::new(8, 1, "Draw how a chat reaches the model".into()) },
-        Chat { minutes_ago: 20000, pinned: false, messages: simple("Genesis redesign: landing page", 20000), unread: false, ..Chat::new(7, 2, "Genesis redesign: landing page".into()) },
+        Chat {
+            minutes_ago: 4,
+            pinned: true,
+            messages: rich,
+            unread: false,
+            ..Chat::new(1, 1, "Fix the greeting and add a test".into())
+        },
+        Chat {
+            minutes_ago: 120,
+            pinned: false,
+            messages: simple("Explain the hermes review pipeline", 120),
+            unread: true,
+            ..Chat::new(2, 4, "Explain the hermes review pipeline".into())
+        },
+        Chat {
+            minutes_ago: 300,
+            pinned: false,
+            messages: simple("Speed up the session store", 300),
+            unread: false,
+            ..Chat::new(3, 1, "Speed up the session store".into())
+        },
+        Chat {
+            minutes_ago: 1500,
+            pinned: false,
+            messages: simple("Write a README for the CLI", 1500),
+            unread: false,
+            ..Chat::new(4, 3, "Write a README for the CLI".into())
+        },
+        Chat {
+            minutes_ago: 1800,
+            pinned: false,
+            messages: with_error(simple("Why does cargo test hang on Windows?", 1800)),
+            unread: false,
+            ..Chat::new(5, 1, "Why does cargo test hang on Windows?".into())
+        },
+        Chat {
+            minutes_ago: 40,
+            pinned: false,
+            messages: plan,
+            unread: false,
+            ..Chat::new(6, 1, "Migrate settings to the new schema".into())
+        },
+        Chat {
+            minutes_ago: 6,
+            pinned: false,
+            messages: budget,
+            unread: false,
+            ..Chat::new(9, 1, "Update the Q3 budget and write it up".into())
+        },
+        Chat {
+            minutes_ago: 12,
+            pinned: false,
+            messages: drawn,
+            unread: false,
+            ..Chat::new(8, 1, "Draw how a chat reaches the model".into())
+        },
+        Chat {
+            minutes_ago: 20000,
+            pinned: false,
+            messages: simple("Genesis redesign: landing page", 20000),
+            unread: false,
+            ..Chat::new(7, 2, "Genesis redesign: landing page".into())
+        },
     ];
     // The mock replies' usage, counted from their text as each turn ended.
     for c in &mut chats {
         for i in 0..c.messages.len() {
-            if let Message::TurnEnd { usage: None, seconds } = c.messages[i] {
-                c.messages[i] = Message::TurnEnd { seconds, usage: Some(crate::context::estimate(&c.messages[..i])) };
+            if let Message::TurnEnd {
+                usage: None,
+                seconds,
+            } = c.messages[i]
+            {
+                c.messages[i] = Message::TurnEnd {
+                    seconds,
+                    usage: Some(crate::context::estimate(&c.messages[..i])),
+                };
             }
         }
     }
@@ -2587,7 +4104,11 @@ mod tests {
         let chats = mock_chats();
         let rich = &chats.iter().find(|c| c.id == 1).unwrap().messages;
         let first = turn_text(rich, 3);
-        assert!(first.starts_with("I'll move the greeting") && first.contains("Done. The greeting now lives"), "{first}");
+        assert!(
+            first.starts_with("I'll move the greeting")
+                && first.contains("Done. The greeting now lives"),
+            "{first}"
+        );
         assert!(!first.contains("diffLines"));
         let second = turn_text(rich, 6);
         assert!(second.starts_with("One unused import"), "{second}");

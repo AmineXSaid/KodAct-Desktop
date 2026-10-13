@@ -7,8 +7,9 @@ use std::time::Duration;
 use std::time::Instant;
 
 use gpui::{
-    div, font, list, prelude::*, px, Animation, AnimationExt, Context, Entity, FollowMode, FontWeight, IntoElement,
-    ListAlignment, ListState, Render, SharedString, StyledText, Task, TextRun, Window,
+    div, font, list, prelude::*, px, Animation, AnimationExt, Context, Entity, FollowMode,
+    FontWeight, IntoElement, ListAlignment, ListState, Render, SharedString, StyledText, Task,
+    TextRun, Window,
 };
 
 use super::message::{self, ItemContext};
@@ -30,6 +31,8 @@ pub struct ChatView {
     away: bool,
     /// The find move last scrolled to.
     shown_find: u64,
+    /// The jump (tasks, approvals) last scrolled to.
+    shown_jump: u64,
 }
 
 impl ChatView {
@@ -53,7 +56,18 @@ impl ChatView {
             cx.notify();
         })
         .detach();
-        let mut view = Self { state, list, shown_chat: None, shown_count: 0, shown_version: 0, ticker: None, step: None, away: false, shown_find: 0 };
+        let mut view = Self {
+            state,
+            list,
+            shown_chat: None,
+            shown_count: 0,
+            shown_version: 0,
+            ticker: None,
+            step: None,
+            away: false,
+            shown_find: 0,
+            shown_jump: 0,
+        };
         view.sync(cx);
         view
     }
@@ -73,7 +87,8 @@ impl ChatView {
             self.list.set_follow_mode(FollowMode::Tail);
             self.away = false;
         } else if count > self.shown_count {
-            self.list.splice(self.shown_count..self.shown_count, count - self.shown_count);
+            self.list
+                .splice(self.shown_count..self.shown_count, count - self.shown_count);
             self.list.remeasure();
         } else if count < self.shown_count {
             self.list.reset(count);
@@ -83,14 +98,34 @@ impl ChatView {
         (self.shown_chat, self.shown_count, self.shown_version) = (id, count, version);
 
         // A find move: its match comes to the top of the view.
-        let find = self.state.read(cx).find.as_ref().map(|f| (f.seq, f.current()));
+        let find = self
+            .state
+            .read(cx)
+            .find
+            .as_ref()
+            .map(|f| (f.seq, f.current()));
         if let Some((seq, Some(ix))) = find {
             if seq != self.shown_find && ix < count {
-                self.list.scroll_to(gpui::ListOffset { item_ix: ix, offset_in_item: px(0.) });
+                self.list.scroll_to(gpui::ListOffset {
+                    item_ix: ix,
+                    offset_in_item: px(0.),
+                });
                 self.away = true;
             }
         }
         self.shown_find = find.map_or(0, |(seq, _)| seq);
+
+        // A jump from the task panel or the approvals list.
+        if let Some((seq, ix)) = self.state.read(cx).jump {
+            if seq != self.shown_jump && ix < count {
+                self.list.scroll_to(gpui::ListOffset {
+                    item_ix: ix,
+                    offset_in_item: px(0.),
+                });
+                self.away = true;
+            }
+            self.shown_jump = seq;
+        }
 
         if busy && self.ticker.is_none() {
             self.ticker = Some(cx.spawn(async move |this, cx| loop {
@@ -104,7 +139,11 @@ impl ChatView {
         }
 
         // Follow the step, restarting its timer when it changes.
-        let step = if busy { self.state.read(cx).chat().and_then(step_label) } else { None };
+        let step = if busy {
+            self.state.read(cx).chat().and_then(step_label)
+        } else {
+            None
+        };
         match (&step, &self.step) {
             (Some(label), Some((shown, _))) if label == shown => {}
             (Some(label), _) => self.step = Some((label.clone(), Instant::now())),
@@ -116,20 +155,99 @@ impl ChatView {
 /// A seed that stays the same for one turn, so its idle verb changes only
 /// with time.
 fn s_turn_seed(c: &Chat) -> usize {
-    c.messages.iter().filter(|m| matches!(m, Message::User { .. })).count()
+    c.messages
+        .iter()
+        .filter(|m| matches!(m, Message::User { .. }))
+        .count()
 }
 
 /// The verbs the working line types while no step is named (the
 /// extension's list).
 const VERBS: &[&str] = &[
-    "Accomplishing", "Actioning", "Actualizing", "Baking", "Booping", "Brewing", "Calculating", "Cerebrating", "Channelling", "Churning", "Coalescing",
-    "Cogitating", "Computing", "Combobulating", "Concocting", "Considering", "Contemplating", "Cooking", "Crafting", "Creating", "Crunching", "Deciphering",
-    "Deliberating", "Determining", "Discombobulating", "Doing", "Effecting", "Elucidating", "Enchanting", "Envisioning", "Finagling", "Flibbertigibbeting",
-    "Forging", "Forming", "Frolicking", "Generating", "Germinating", "Hammering", "Hatching", "Herding", "Honking", "Ideating", "Imagining", "Incubating",
-    "Inferring", "Manifesting", "Marinating", "Meandering", "Moseying", "Mulling", "Mustering", "Musing", "Noodling", "Percolating", "Perusing",
-    "Philosophising", "Pontificating", "Pondering", "Processing", "Puttering", "Puzzling", "Reticulating", "Ruminating", "Scheming", "Schlepping",
-    "Shimmying", "Simmering", "Smooshing", "Spelunking", "Spinning", "Stewing", "Sussing", "Synthesizing", "Thinking", "Tinkering", "Transmuting",
-    "Unfurling", "Unravelling", "Vibing", "Wandering", "Whirring", "Wibbling", "Working", "Wrangling",
+    "Accomplishing",
+    "Actioning",
+    "Actualizing",
+    "Baking",
+    "Booping",
+    "Brewing",
+    "Calculating",
+    "Cerebrating",
+    "Channelling",
+    "Churning",
+    "Coalescing",
+    "Cogitating",
+    "Computing",
+    "Combobulating",
+    "Concocting",
+    "Considering",
+    "Contemplating",
+    "Cooking",
+    "Crafting",
+    "Creating",
+    "Crunching",
+    "Deciphering",
+    "Deliberating",
+    "Determining",
+    "Discombobulating",
+    "Doing",
+    "Effecting",
+    "Elucidating",
+    "Enchanting",
+    "Envisioning",
+    "Finagling",
+    "Flibbertigibbeting",
+    "Forging",
+    "Forming",
+    "Frolicking",
+    "Generating",
+    "Germinating",
+    "Hammering",
+    "Hatching",
+    "Herding",
+    "Honking",
+    "Ideating",
+    "Imagining",
+    "Incubating",
+    "Inferring",
+    "Manifesting",
+    "Marinating",
+    "Meandering",
+    "Moseying",
+    "Mulling",
+    "Mustering",
+    "Musing",
+    "Noodling",
+    "Percolating",
+    "Perusing",
+    "Philosophising",
+    "Pontificating",
+    "Pondering",
+    "Processing",
+    "Puttering",
+    "Puzzling",
+    "Reticulating",
+    "Ruminating",
+    "Scheming",
+    "Schlepping",
+    "Shimmying",
+    "Simmering",
+    "Smooshing",
+    "Spelunking",
+    "Spinning",
+    "Stewing",
+    "Sussing",
+    "Synthesizing",
+    "Thinking",
+    "Tinkering",
+    "Transmuting",
+    "Unfurling",
+    "Unravelling",
+    "Vibing",
+    "Wandering",
+    "Whirring",
+    "Wibbling",
+    "Working",
+    "Wrangling",
 ];
 
 /// A small deterministic hash, for the verb picks and the typing's noise.
@@ -145,7 +263,10 @@ fn mix_hash(a: u64) -> u64 {
 fn verb_at(seed: usize, ms: u64) -> (usize, u64) {
     let mut start = 0;
     let mut k = 0u64;
-    for step in [2000u64, 3000, 5000].into_iter().chain(std::iter::repeat(5000)) {
+    for step in [2000u64, 3000, 5000]
+        .into_iter()
+        .chain(std::iter::repeat(5000))
+    {
         if ms < start + step {
             break;
         }
@@ -181,7 +302,10 @@ fn typed_verb(seed: usize, ms: u64) -> String {
             match phase {
                 i64::MIN..=-1 => previous[p],
                 0 => '▌',
-                1 | 2 => match mix_hash((seed as u64) << 20 ^ (since << 8) ^ (p as u64 * 4 + phase as u64)) % 3 {
+                1 | 2 => match mix_hash(
+                    (seed as u64) << 20 ^ (since << 8) ^ (p as u64 * 4 + phase as u64),
+                ) % 3
+                {
                     0 => '.',
                     1 => '_',
                     _ => want,
@@ -201,9 +325,18 @@ fn step_label(c: &Chat) -> Option<String> {
         Some(Message::Assistant { blocks }) => blocks.as_slice(),
         _ => &[],
     };
-    let clip = |s: &str| if s.chars().count() > 48 { format!("{}…", s.chars().take(47).collect::<String>()) } else { s.to_string() };
+    let clip = |s: &str| {
+        if s.chars().count() > 48 {
+            format!("{}…", s.chars().take(47).collect::<String>())
+        } else {
+            s.to_string()
+        }
+    };
     let label = match blocks.last() {
-        Some(Block::Permission { verdict: Verdict::Pending, .. }) => return None,
+        Some(Block::Permission {
+            verdict: Verdict::Pending,
+            ..
+        }) => return None,
         Some(Block::Tool(t)) if t.status == ToolStatus::Running => match t.kind {
             ToolKind::Read => format!("Reading {}", clip(&t.target)),
             ToolKind::Edit => format!("Editing {}", clip(&t.target)),
@@ -213,7 +346,16 @@ fn step_label(c: &Chat) -> Option<String> {
                 None => format!("Running {}", clip(&t.target)),
             },
             ToolKind::Search => format!("Searching for {}", clip(&t.target)),
-            ToolKind::Web => format!("Fetching {}", t.target.split("://").nth(1).unwrap_or(&t.target).split('/').next().unwrap_or_default()),
+            ToolKind::Web => format!(
+                "Fetching {}",
+                t.target
+                    .split("://")
+                    .nth(1)
+                    .unwrap_or(&t.target)
+                    .split('/')
+                    .next()
+                    .unwrap_or_default()
+            ),
             ToolKind::Other => match &t.note {
                 Some(note) => clip(note),
                 None => format!("Using {}", clip(&t.target)),
@@ -238,31 +380,47 @@ impl ChatView {
         let t = cx.theme().clone();
         let hover = t.colors.hover;
         let busy = self.state.read(cx).busy();
-        div().absolute().bottom(t.space.md).left_0().right_0().flex().justify_center().child(
-            div()
-                .id("jump-latest")
-                .flex()
-                .items_center()
-                .gap(t.space.xs)
-                .h(t.size.control + px(4.))
-                .px(t.space.md)
-                .rounded(t.radius.pill)
-                .bg(t.colors.surface)
-                .border_1()
-                .border_color(t.colors.border)
-                .shadow(t.elevation_popover())
-                .cursor_pointer()
-                .text_size(t.text.caption)
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(t.colors.text)
-                .hover(move |d| d.bg(hover))
-                .child(icon_arrow(&t))
-                // While a reply plays, the button says there's more coming.
-                .child(if busy { "New messages below" } else { "Jump to latest" })
-                .child(super::kbd(&t, super::shortcut("J")))
-                .on_click(cx.listener(|this, _, _, cx| this.jump_to_latest(cx)))
-                .with_animation("jump-in", Animation::new(Duration::from_millis(t.motion_ms)).with_easing(gpui::ease_in_out), |d, delta| d.opacity(delta).mb(px(6.) * (1. - delta))),
-        )
+        div()
+            .absolute()
+            .bottom(t.space.md)
+            .left_0()
+            .right_0()
+            .flex()
+            .justify_center()
+            .child(
+                div()
+                    .id("jump-latest")
+                    .flex()
+                    .items_center()
+                    .gap(t.space.xs)
+                    .h(t.size.control + px(4.))
+                    .px(t.space.md)
+                    .rounded(t.radius.pill)
+                    .bg(t.colors.surface)
+                    .border_1()
+                    .border_color(t.colors.border)
+                    .shadow(t.elevation_popover())
+                    .cursor_pointer()
+                    .text_size(t.text.caption)
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(t.colors.text)
+                    .hover(move |d| d.bg(hover))
+                    .child(icon_arrow(&t))
+                    // While a reply plays, the button says there's more coming.
+                    .child(if busy {
+                        "New messages below"
+                    } else {
+                        "Jump to latest"
+                    })
+                    .child(super::kbd(&t, super::shortcut("J")))
+                    .on_click(cx.listener(|this, _, _, cx| this.jump_to_latest(cx)))
+                    .with_animation(
+                        "jump-in",
+                        Animation::new(Duration::from_millis(t.motion_ms))
+                            .with_easing(gpui::ease_in_out),
+                        |d, delta| d.opacity(delta).mb(px(6.) * (1. - delta)),
+                    ),
+            )
     }
 }
 
@@ -278,11 +436,17 @@ impl Render for ChatView {
         let list = list(self.list.clone(), move |ix, window, cx| {
             let t = cx.theme().clone();
             let s = state.read(cx);
-            let Some(chat) = s.chat() else { return div().into_any_element() };
+            let Some(chat) = s.chat() else {
+                return div().into_any_element();
+            };
             let body = match chat.messages.get(ix) {
                 Some(m) => {
-                    let after_user = ix == 0 || matches!(chat.messages.get(ix - 1), Some(Message::User { .. }));
-                    let last_user = chat.messages.iter().rposition(|m| matches!(m, Message::User { .. }));
+                    let after_user =
+                        ix == 0 || matches!(chat.messages.get(ix - 1), Some(Message::User { .. }));
+                    let last_user = chat
+                        .messages
+                        .iter()
+                        .rposition(|m| matches!(m, Message::User { .. }));
                     let ctx = ItemContext {
                         state: state.clone(),
                         chat: chat.id,
@@ -296,32 +460,68 @@ impl Render for ChatView {
                         open_doc: s.doc.clone(),
                         scale: window.scale_factor(),
                         rating: s.ratings.get(&(chat.id, ix)).copied(),
-                        newest_turn: !s.busy() && chat.messages[ix + 1..].iter().all(|m| !matches!(m, Message::TurnEnd { .. } | Message::User { .. })),
+                        newest_turn: !s.busy()
+                            && chat.messages[ix + 1..].iter().all(|m| {
+                                !matches!(m, Message::TurnEnd { .. } | Message::User { .. })
+                            }),
                         can_continue: s.can_continue(),
-                        in_last_turn: !chat.messages[ix + 1..].iter().any(|m| matches!(m, Message::User { .. })),
+                        in_last_turn: !chat.messages[ix + 1..]
+                            .iter()
+                            .any(|m| matches!(m, Message::User { .. })),
+                        versions: if matches!(m, Message::User { .. }) {
+                            chat.versions
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, v)| v.at == ix)
+                                .map(|(index, v)| super::versions::Row {
+                                    index,
+                                    when: v.when,
+                                    asked: v.asked(),
+                                    preview: v.preview(),
+                                })
+                                .collect()
+                        } else {
+                            vec![]
+                        },
+                        versions_open: s.versions_open == Some((chat.id, ix)),
                         sources: s.diagram_code.clone(),
                     };
                     message::render(m, &ctx, &t)
                 }
                 None => match &step {
-                    Some((label, since)) => working_line(&t, label, *since, s_turn_seed(chat), super::mode_menu::cube_color(&t, s.mode)),
+                    Some((label, since)) => working_line(
+                        &t,
+                        label,
+                        *since,
+                        s_turn_seed(chat),
+                        super::mode_menu::cube_color(&t, s.mode),
+                    ),
                     None => div().into_any_element(),
                 },
             };
             // Find: every match gets a faint bar at its left, the one shown a strong one.
-            let mark = s.find.as_ref().filter(|f| !f.query.trim().is_empty()).and_then(|f| {
-                if f.current() == Some(ix) {
-                    Some(t.colors.primary)
-                } else {
-                    f.hits.contains(&ix).then(|| t.colors.primary.opacity(0.3))
-                }
-            });
+            let mark = s
+                .find
+                .as_ref()
+                .filter(|f| !f.query.trim().is_empty())
+                .and_then(|f| {
+                    if f.current() == Some(ix) {
+                        Some(t.colors.primary)
+                    } else {
+                        f.hits.contains(&ix).then(|| t.colors.primary.opacity(0.3))
+                    }
+                });
             div()
                 .w_full()
                 .flex()
                 .justify_center()
                 .px(t.space.xl)
-                .when(ix == 0, |d| d.pt(t.space.xl))
+                // The task pill sits over the top of the transcript: the first
+                // message starts below it.
+                .when(ix == 0, |d| {
+                    let pill = !super::tasks::tasks(&chat.messages).is_empty();
+                    d.pt(if pill { t.space.xl + t.size.control } else { t.space.xl })
+                })
                 .child(
                     div()
                         .relative()
@@ -329,13 +529,28 @@ impl Render for ChatView {
                         .max_w(t.size.column)
                         .pb(t.space.md)
                         .child(body)
-                        .children(mark.map(|c| div().absolute().top_0().bottom(t.space.md).left(-t.space.md).w(px(3.)).rounded(t.radius.pill).bg(c))),
+                        .children(mark.map(|c| {
+                            div()
+                                .absolute()
+                                .top_0()
+                                .bottom(t.space.md)
+                                .left(-t.space.md)
+                                .w(px(3.))
+                                .rounded(t.radius.pill)
+                                .bg(c)
+                        })),
                 )
                 .into_any_element()
         })
         .size_full()
         .flex_1();
-        div().relative().size_full().flex().flex_col().child(list).children(jump)
+        div()
+            .relative()
+            .size_full()
+            .flex()
+            .flex_col()
+            .child(list)
+            .children(jump)
     }
 }
 
@@ -358,7 +573,14 @@ fn shimmer(label: &str, sweep: f32, t: &crate::theme::Theme) -> StyledText {
         let lift = (-((x - sweep) / 0.16).powi(2)).exp();
         let mut f = font(t.font_sans.clone());
         f.weight = FontWeight::MEDIUM;
-        runs.push(TextRun { len: ch.len_utf8(), font: f, color: t.colors.text_strong.opacity(0.5 + 0.5 * lift), background_color: None, underline: None, strikethrough: None });
+        runs.push(TextRun {
+            len: ch.len_utf8(),
+            font: f,
+            color: t.colors.text_strong.opacity(0.5 + 0.5 * lift),
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+        });
     }
     StyledText::new(label.to_string()).with_runs(runs)
 }
@@ -367,7 +589,13 @@ fn shimmer(label: &str, sweep: f32, t: &crate::theme::Theme) -> StyledText {
 /// struck into shape (tinted by the mode), then what the reply is doing and
 /// for how long, or, between steps, a verb typing itself in. A light
 /// sweeps across the words.
-fn working_line(t: &crate::theme::Theme, label: &str, since: Instant, seed: usize, cube: gpui::Hsla) -> gpui::AnyElement {
+fn working_line(
+    t: &crate::theme::Theme,
+    label: &str,
+    since: Instant,
+    seed: usize,
+    cube: gpui::Hsla,
+) -> gpui::AnyElement {
     let theme = t.clone();
     let text = label.to_string();
     div()
@@ -377,11 +605,26 @@ fn working_line(t: &crate::theme::Theme, label: &str, since: Instant, seed: usiz
         .h(px(24.))
         .mt(px(4.))
         .child(super::forge_cube::cube(t, px(24.), cube, "working-cube"))
-        .child(div().font_weight(FontWeight::MEDIUM).with_animation(SharedString::from(format!("working-{label}")), Animation::new(Duration::from_millis(2200)).repeat(), move |d, delta| {
-            let words = if text.is_empty() { typed_verb(seed, since.elapsed().as_millis() as u64) } else { text.clone() };
-            d.child(shimmer(&words, -0.3 + delta * 1.6, &theme))
-        }))
-        .when(!label.is_empty(), |d| d.child(div().ml(px(4.)).text_color(t.colors.text_subtle).child(elapsed(since.elapsed().as_secs()))))
+        .child(div().font_weight(FontWeight::MEDIUM).with_animation(
+            SharedString::from(format!("working-{label}")),
+            Animation::new(Duration::from_millis(2200)).repeat(),
+            move |d, delta| {
+                let words = if text.is_empty() {
+                    typed_verb(seed, since.elapsed().as_millis() as u64)
+                } else {
+                    text.clone()
+                };
+                d.child(shimmer(&words, -0.3 + delta * 1.6, &theme))
+            },
+        ))
+        .when(!label.is_empty(), |d| {
+            d.child(
+                div()
+                    .ml(px(4.))
+                    .text_color(t.colors.text_subtle)
+                    .child(elapsed(since.elapsed().as_secs())),
+            )
+        })
         .into_any_element()
 }
 

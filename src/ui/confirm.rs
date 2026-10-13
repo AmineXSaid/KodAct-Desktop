@@ -1,58 +1,147 @@
-//! "Delete this chat?": a small window over a scrim. Enter deletes, Esc or
-//! a click outside cancels. It takes the keyboard when it opens.
+//! The confirm window: "Delete this chat?", or "Revert these files?" with
+//! the files ForgeCLI's dry run named. A small window over a scrim; Enter
+//! confirms, Esc or a click outside cancels. It takes the keyboard when it
+//! opens.
 
-use gpui::{div, prelude::*, px, AnimationExt, Context, Entity, FocusHandle, FontWeight, IntoElement, KeyDownEvent, Render, Subscription, Window};
+use gpui::{
+    div, prelude::*, px, AnimationExt, Context, Entity, FocusHandle, FontWeight, IntoElement,
+    KeyDownEvent, Render, Subscription, Window,
+};
 
-use crate::state::AppState;
+use crate::state::{AppState, Confirm};
 use crate::theme::{self, ActiveTheme};
 
-pub struct ConfirmDelete {
+pub struct ConfirmWindow {
     state: Entity<AppState>,
     focus: FocusHandle,
-    shown: Option<usize>,
+    shown: Option<Confirm>,
     _subs: Vec<Subscription>,
 }
 
-impl ConfirmDelete {
+impl ConfirmWindow {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let subs = vec![cx.observe_in(&state, window, |this, state, window, cx| {
-            let asking = state.read(cx).confirm_delete;
+            let asking = state.read(cx).confirm.clone();
             if asking.is_some() && asking != this.shown {
                 window.focus(&this.focus, cx);
             }
             this.shown = asking;
             cx.notify();
         })];
-        Self { state, focus: cx.focus_handle(), shown: None, _subs: subs }
+        Self {
+            state,
+            focus: cx.focus_handle(),
+            shown: None,
+            _subs: subs,
+        }
     }
 
     fn cancel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.state.update(cx, |s, cx| {
-            s.confirm_delete = None;
+            s.confirm = None;
             cx.notify();
         });
         window.dispatch_action(Box::new(super::FocusComposer), cx);
     }
 
     fn confirm(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(id) = self.state.read(cx).confirm_delete {
-            self.state.update(cx, |s, cx| s.delete_chat(id, cx));
+        match self.state.read(cx).confirm.clone() {
+            Some(Confirm::Delete(id)) => self.state.update(cx, |s, cx| s.delete_chat(id, cx)),
+            Some(Confirm::Revert { chat, msg, .. }) => {
+                self.state.update(cx, |s, cx| s.revert(chat, msg, cx))
+            }
+            None => {}
         }
         window.dispatch_action(Box::new(super::FocusComposer), cx);
     }
 }
 
-impl Render for ConfirmDelete {
+impl Render for ConfirmWindow {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let s = self.state.read(cx);
-        let Some(chat) = s.confirm_delete.and_then(|id| s.chats.iter().find(|c| c.id == id)) else { return div().into_any_element() };
-        let title = chat.title.clone();
-        let running = s.status(chat) == crate::state::ChatStatus::Working;
+        let home = crate::rules::home_dir();
+        let (title, subject, body, files, action): (
+            &str,
+            gpui::SharedString,
+            &str,
+            Vec<String>,
+            &str,
+        ) = match &s.confirm {
+            Some(Confirm::Delete(id)) => {
+                let Some(chat) = s.chats.iter().find(|c| c.id == *id) else {
+                    return div().into_any_element();
+                };
+                let running = s.status(chat) == crate::state::ChatStatus::Working;
+                let body = if running {
+                    "Its reply is still running and will be stopped. The chat and its side questions leave Forge; this can't be undone."
+                } else {
+                    "The chat and its side questions leave Forge. Files Forge changed in your project stay as they are. This can't be undone."
+                };
+                (
+                    "Delete this chat?",
+                    chat.title.clone(),
+                    body,
+                    vec![],
+                    "Delete",
+                )
+            }
+            Some(Confirm::Revert { chat, files, .. }) => {
+                // Paths read from the chat's project, as the tool rows show them.
+                let root = s
+                    .chats
+                    .iter()
+                    .find(|c| c.id == *chat)
+                    .and_then(|c| s.project(c.project))
+                    .map(|p| p.path.clone())
+                    .unwrap_or_else(|| s.project_dir.clone());
+                let shown = files
+                    .iter()
+                    .map(|f| {
+                        let p = std::path::Path::new(f);
+                        match p.strip_prefix(&root) {
+                            Ok(rest) => rest.to_string_lossy().replace('\\', "/"),
+                            Err(_) => crate::rules::display_path(p, home.as_deref()),
+                        }
+                    })
+                    .collect();
+                let one = files.len() == 1;
+                (
+                "Revert these files?",
+                format!("{} {} back to how {} before this message", files.len(), if one { "file goes" } else { "files go" }, if one { "it was" } else { "they were" }).into(),
+                "Later changes to them, from this turn on, are undone too. Files Forge created are removed. The conversation stays as it is.",
+                shown,
+                "Revert",
+                )
+            }
+            None => return div().into_any_element(),
+        };
+        let mut list = div()
+            .id("confirm-files")
+            .flex()
+            .flex_col()
+            .max_h(t.size.popover_list)
+            .overflow_y_scroll()
+            .rounded(t.radius.button)
+            .bg(t.extra.inset)
+            .px(t.space.md)
+            .py(t.space.sm);
+        for f in &files {
+            list = list.child(
+                div()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
+                    .font_family(t.font_mono.clone())
+                    .text_size(t.text.caption)
+                    .text_color(t.colors.text)
+                    .child(f.clone()),
+            );
+        }
         div()
             .id("confirm-scrim")
             .track_focus(&self.focus)
-            .key_context("ConfirmDelete")
+            .key_context("Confirm")
             .absolute()
             .inset_0()
             .flex()
@@ -67,38 +156,70 @@ impl Render for ConfirmDelete {
                 }
                 cx.stop_propagation();
             }))
-            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| this.cancel(window, cx)))
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(|this, _, window, cx| this.cancel(window, cx)),
+            )
             .child(
                 theme::popover(&t)
                     .id("confirm")
                     .occlude()
-                    .w(px(400.))
+                    .w(px(440.))
                     .p(t.space.xl)
                     .flex()
                     .flex_col()
                     .gap(t.space.md)
                     .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                    .child(div().text_size(t.text.subheading).font_family(t.font_display.clone()).text_color(t.colors.text_strong).child("Delete this chat?"))
-                    .child(div().font_weight(FontWeight::MEDIUM).text_color(t.colors.text).overflow_hidden().whitespace_nowrap().text_ellipsis().child(title))
-                    .child(div().text_color(t.colors.text_muted).line_height(gpui::relative(1.45)).child(if running {
-                        "Its reply is still running and will be stopped. The chat and its side questions leave Forge; this can't be undone."
-                    } else {
-                        "The chat and its side questions leave Forge. Files Forge changed in your project stay as they are. This can't be undone."
-                    }))
+                    .child(
+                        div()
+                            .text_size(t.text.subheading)
+                            .font_family(t.font_display.clone())
+                            .text_color(t.colors.text_strong)
+                            .child(title),
+                    )
+                    .child(
+                        div()
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(t.colors.text)
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .child(subject),
+                    )
+                    .when(!files.is_empty(), |d| d.child(list))
+                    .child(
+                        div()
+                            .text_color(t.colors.text_muted)
+                            .line_height(gpui::relative(1.45))
+                            .child(body),
+                    )
                     .child(
                         div()
                             .flex()
                             .justify_end()
                             .gap(t.space.sm)
                             .pt(t.space.sm)
-                            .child(theme::text_button(&t, "Cancel").id("confirm-cancel").on_click(cx.listener(|this, _, window, cx| this.cancel(window, cx))))
                             .child(
-                                theme::danger_button(&t, "Delete")
+                                theme::text_button(&t, "Cancel")
+                                    .id("confirm-cancel")
+                                    .on_click(
+                                        cx.listener(|this, _, window, cx| this.cancel(window, cx)),
+                                    ),
+                            )
+                            .child(
+                                theme::danger_button(&t, action)
                                     .id("confirm-delete")
-                                    .on_click(cx.listener(|this, _, window, cx| this.confirm(window, cx))),
+                                    .on_click(
+                                        cx.listener(|this, _, window, cx| this.confirm(window, cx)),
+                                    ),
                             ),
                     )
-                    .with_animation("confirm-in", gpui::Animation::new(std::time::Duration::from_millis(t.motion_ms)).with_easing(gpui::ease_in_out), |d, delta| d.opacity(delta)),
+                    .with_animation(
+                        "confirm-in",
+                        gpui::Animation::new(std::time::Duration::from_millis(t.motion_ms))
+                            .with_easing(gpui::ease_in_out),
+                        |d, delta| d.opacity(delta),
+                    ),
             )
             .into_any_element()
     }

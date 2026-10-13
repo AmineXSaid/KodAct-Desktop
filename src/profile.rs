@@ -24,7 +24,12 @@ pub(crate) fn dir() -> Option<PathBuf> {
 
 /// A name as typed: trimmed, one line, at most 40 characters; None if empty.
 pub fn clean(name: &str) -> Option<String> {
-    let n: String = name.trim().chars().filter(|c| !c.is_control()).take(MAX_NAME).collect();
+    let n: String = name
+        .trim()
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(MAX_NAME)
+        .collect();
     (!n.trim().is_empty()).then(|| n.trim().to_string())
 }
 

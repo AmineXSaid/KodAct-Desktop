@@ -24,7 +24,11 @@ fn svg(kind: Kind) -> &'static str {
 /// The mark, `size` logical pixels square.
 pub fn render(kind: Kind, size: f32, scale: f32) -> AnyElement {
     let drawn = super::diagram_view::image(svg(kind), size, scale);
-    div().flex_none().size(px(size)).children(drawn).into_any_element()
+    div()
+        .flex_none()
+        .size(px(size))
+        .children(drawn)
+        .into_any_element()
 }
 
 #[cfg(test)]
@@ -34,7 +38,11 @@ mod tests {
     #[test]
     fn every_mark_is_a_square_drawing() {
         for kind in [Kind::Xlsx, Kind::Docx, Kind::Pptx, Kind::Pdf] {
-            assert_eq!(crate::diagram::view_size(svg(kind)), Some((48., 48.)), "{kind:?}");
+            assert_eq!(
+                crate::diagram::view_size(svg(kind)),
+                Some((48., 48.)),
+                "{kind:?}"
+            );
         }
     }
 }

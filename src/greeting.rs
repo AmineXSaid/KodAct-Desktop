@@ -34,10 +34,18 @@ const ANYTIME: &[&str] = &[
 
 fn of_day(part: DayPart) -> &'static [&'static str] {
     match part {
-        DayPart::Morning => &["Good morning, {}", "Morning, {}. Fresh start?", "Early fire, {}"],
+        DayPart::Morning => &[
+            "Good morning, {}",
+            "Morning, {}. Fresh start?",
+            "Early fire, {}",
+        ],
         DayPart::Afternoon => &["Good afternoon, {}", "Afternoon, {}. What's next?"],
         DayPart::Evening => &["Good evening, {}", "Evening shift, {}"],
-        DayPart::Night => &["Burning the midnight oil, {}?", "Late at the forge, {}", "Quiet hours, {}"],
+        DayPart::Night => &[
+            "Burning the midnight oil, {}?",
+            "Late at the forge, {}",
+            "Quiet hours, {}",
+        ],
     }
 }
 
@@ -59,7 +67,11 @@ pub fn pick(name: &str, hour: u32, seed: u64) -> String {
     let day = of_day(day_part(hour));
     let all = day.len() + ANYTIME.len();
     let i = (mix(seed) % all as u64) as usize;
-    let line = if i < day.len() { day[i] } else { ANYTIME[i - day.len()] };
+    let line = if i < day.len() {
+        day[i]
+    } else {
+        ANYTIME[i - day.len()]
+    };
     line.replace("{}", name)
 }
 
@@ -75,12 +87,30 @@ mod tests {
 
     #[test]
     fn the_day_is_split_in_four() {
-        assert_eq!((day_part(5), day_part(11), day_part(12), day_part(17), day_part(22), day_part(3)), (DayPart::Morning, DayPart::Morning, DayPart::Afternoon, DayPart::Evening, DayPart::Night, DayPart::Night));
+        assert_eq!(
+            (
+                day_part(5),
+                day_part(11),
+                day_part(12),
+                day_part(17),
+                day_part(22),
+                day_part(3)
+            ),
+            (
+                DayPart::Morning,
+                DayPart::Morning,
+                DayPart::Afternoon,
+                DayPart::Evening,
+                DayPart::Night,
+                DayPart::Night
+            )
+        );
     }
 
     #[test]
     fn it_varies_and_always_names_you() {
-        let lines: std::collections::HashSet<String> = (0..64).map(|s| pick("Amine", 9, s)).collect();
+        let lines: std::collections::HashSet<String> =
+            (0..64).map(|s| pick("Amine", 9, s)).collect();
         assert!(lines.len() >= 6, "{lines:?}");
         assert!(lines.iter().all(|l| l.contains("Amine")));
         // Night lines never show in the morning.

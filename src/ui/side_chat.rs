@@ -4,7 +4,10 @@
 //! and closes with Esc; the thread keeps the last 20 exchanges.
 
 use gpui::component::input::{Input, InputEvent, InputState};
-use gpui::{div, prelude::*, px, Context, Entity, FontWeight, IntoElement, Render, SharedString, Subscription, Window};
+use gpui::{
+    div, prelude::*, px, Context, Entity, FontWeight, IntoElement, Render, SharedString,
+    Subscription, Window,
+};
 
 use super::*;
 use crate::state::{AppState, SideItem, SIDE_EMPTY, SIDE_PENDING, SIDE_PLACEHOLDER, SIDE_TITLE};
@@ -33,7 +36,11 @@ impl SideChat {
                 }
             }),
         ];
-        Self { state, input, _subs: subs }
+        Self {
+            state,
+            input,
+            _subs: subs,
+        }
     }
 
     fn send(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -65,15 +72,27 @@ impl Render for SideChat {
                 .cursor_pointer()
                 .hover(move |st| st.bg(hover))
                 .child(icon(path, t.size.icon_sm, t.colors.text_muted))
-                .tooltip(move |window, cx| gpui::component::tooltip::Tooltip::new(tip).build(window, cx))
+                .tooltip(move |window, cx| {
+                    gpui::component::tooltip::Tooltip::new(tip).build(window, cx)
+                })
         };
-        let answered = side.thread.iter().filter(|i| matches!(i, SideItem::Answer { .. })).count();
+        let answered = side
+            .thread
+            .iter()
+            .filter(|i| matches!(i, SideItem::Answer { .. }))
+            .count();
         let status: Option<SharedString> = if !side.minimized {
             None
         } else if !side.pending.is_empty() {
             Some(SIDE_PENDING.into())
         } else if answered > 0 {
-            Some(format!("{answered} {}", if answered == 1 { "answer" } else { "answers" }).into())
+            Some(
+                format!(
+                    "{answered} {}",
+                    if answered == 1 { "answer" } else { "answers" }
+                )
+                .into(),
+            )
         } else {
             None
         };
@@ -85,22 +104,49 @@ impl Render for SideChat {
             .h(px(36.))
             .pl(px(12.))
             .pr(px(6.))
-            .child(icon("icons/message-square.svg", t.size.icon_sm, t.colors.primary))
-            .child(div().text_size(t.text.body_sm).font_weight(FontWeight::MEDIUM).text_color(t.colors.text_strong).child(SIDE_TITLE))
-            .children(status.map(|s| div().text_size(t.text.caption).text_color(t.colors.text_subtle).child(s)))
+            .child(icon(
+                "icons/message-square.svg",
+                t.size.icon_sm,
+                t.colors.primary,
+            ))
+            .child(
+                div()
+                    .text_size(t.text.body_sm)
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(t.colors.text_strong)
+                    .child(SIDE_TITLE),
+            )
+            .children(status.map(|s| {
+                div()
+                    .text_size(t.text.caption)
+                    .text_color(t.colors.text_subtle)
+                    .child(s)
+            }))
             .child(div().flex_1())
             .when(!side.thread.is_empty() && !side.minimized, |d| {
                 let state = state.clone();
-                d.child(head_button("side-clear", "icons/trash.svg", "Clear side questions").on_click(move |_, _, cx| state.update(cx, |s, cx| s.clear_side(cx))))
+                d.child(
+                    head_button("side-clear", "icons/trash.svg", "Clear side questions")
+                        .on_click(move |_, _, cx| state.update(cx, |s, cx| s.clear_side(cx))),
+                )
             })
             .child({
                 let state = state.clone();
-                head_button("side-min", if side.minimized { "icons/chevron-up.svg" } else { "icons/minus.svg" }, if side.minimized { "Expand" } else { "Minimise" })
-                    .on_click(move |_, _, cx| state.update(cx, |s, cx| s.toggle_side_min(cx)))
+                head_button(
+                    "side-min",
+                    if side.minimized {
+                        "icons/chevron-up.svg"
+                    } else {
+                        "icons/minus.svg"
+                    },
+                    if side.minimized { "Expand" } else { "Minimise" },
+                )
+                .on_click(move |_, _, cx| state.update(cx, |s, cx| s.toggle_side_min(cx)))
             })
             .child({
                 let state = state.clone();
-                head_button("side-close", "icons/x.svg", "Close (Esc)").on_click(move |_, _, cx| state.update(cx, |s, cx| s.close_side(cx)))
+                head_button("side-close", "icons/x.svg", "Close (Esc)")
+                    .on_click(move |_, _, cx| state.update(cx, |s, cx| s.close_side(cx)))
             });
 
         let exchange = |question: SharedString, body: gpui::AnyElement| {
@@ -108,22 +154,51 @@ impl Render for SideChat {
                 .flex()
                 .flex_col()
                 .gap(px(4.))
-                .child(div().text_size(t.text.caption).font_weight(FontWeight::MEDIUM).text_color(t.colors.text_muted).child(question))
+                .child(
+                    div()
+                        .text_size(t.text.caption)
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(t.colors.text_muted)
+                        .child(question),
+                )
                 .child(body)
         };
-        let mut thread = div().id("side-thread").flex().flex_col().gap(px(14.)).max_h(px(300.)).overflow_y_scroll().px(px(14.)).py(px(10.));
+        let mut thread = div()
+            .id("side-thread")
+            .flex()
+            .flex_col()
+            .gap(px(14.))
+            .max_h(px(300.))
+            .overflow_y_scroll()
+            .px(px(14.))
+            .py(px(10.));
         if side.thread.is_empty() && side.pending.is_empty() {
-            thread = thread.child(div().text_size(t.text.body_sm).text_color(t.colors.text_subtle).line_height(gpui::relative(1.45)).child(SIDE_EMPTY));
+            thread = thread.child(
+                div()
+                    .text_size(t.text.body_sm)
+                    .text_color(t.colors.text_subtle)
+                    .line_height(gpui::relative(1.45))
+                    .child(SIDE_EMPTY),
+            );
         }
         for item in &side.thread {
             thread = thread.child(match item {
                 SideItem::Answer { question, answer } => exchange(
                     question.clone(),
-                    div().text_size(t.text.body_sm).text_color(t.colors.text).line_height(gpui::relative(1.5)).child(answer.clone()).into_any_element(),
+                    div()
+                        .text_size(t.text.body_sm)
+                        .text_color(t.colors.text)
+                        .line_height(gpui::relative(1.5))
+                        .child(answer.clone())
+                        .into_any_element(),
                 ),
                 SideItem::Failed { question, message } => exchange(
                     question.clone(),
-                    div().text_size(t.text.body_sm).text_color(t.extra.danger).child(message.clone()).into_any_element(),
+                    div()
+                        .text_size(t.text.body_sm)
+                        .text_color(t.extra.danger)
+                        .child(message.clone())
+                        .into_any_element(),
                 ),
             });
         }
@@ -136,7 +211,11 @@ impl Render for SideChat {
                     .gap(px(6.))
                     .text_size(t.text.body_sm)
                     .text_color(t.colors.text_subtle)
-                    .child(icon("icons/loader-circle.svg", t.size.icon_xs, t.colors.text_subtle))
+                    .child(icon(
+                        "icons/loader-circle.svg",
+                        t.size.icon_xs,
+                        t.colors.text_subtle,
+                    ))
                     .child(SIDE_PENDING)
                     .into_any_element(),
             ));
@@ -156,7 +235,13 @@ impl Render for SideChat {
             .bg(t.colors.canvas)
             .border_1()
             .border_color(t.colors.border)
-            .child(div().flex_1().min_w_0().child(Input::new(&self.input).appearance(false).text_size(t.text.body_sm)))
+            .child(
+                div().flex_1().min_w_0().child(
+                    Input::new(&self.input)
+                        .appearance(false)
+                        .text_size(t.text.body_sm),
+                ),
+            )
             .child(
                 div()
                     .id("side-send")
@@ -168,8 +253,15 @@ impl Render for SideChat {
                     .bg(send_bg)
                     .cursor_pointer()
                     .hover(|st| st.opacity(0.9))
-                    .child(icon("icons/arrow-up.svg", t.size.icon_sm, t.colors.primary_fg))
-                    .tooltip(|window, cx| gpui::component::tooltip::Tooltip::new("Send side question").build(window, cx))
+                    .child(icon(
+                        "icons/arrow-up.svg",
+                        t.size.icon_sm,
+                        t.colors.primary_fg,
+                    ))
+                    .tooltip(|window, cx| {
+                        gpui::component::tooltip::Tooltip::new("Send side question")
+                            .build(window, cx)
+                    })
                     .on_click(cx.listener(|this, _, window, cx| this.send(window, cx))),
             );
 
@@ -192,9 +284,18 @@ impl Render for SideChat {
                 }
             }))
             .child(head)
-            .when(!side.minimized, |d| d.child(div().h(px(1.)).bg(t.colors.border)).child(thread).child(input_row));
+            .when(!side.minimized, |d| {
+                d.child(div().h(px(1.)).bg(t.colors.border))
+                    .child(thread)
+                    .child(input_row)
+            });
 
         // Bottom right, above the composer's row.
-        div().absolute().right(px(20.)).bottom(px(150.)).child(card).into_any_element()
+        div()
+            .absolute()
+            .right(px(20.))
+            .bottom(px(150.))
+            .child(card)
+            .into_any_element()
     }
 }

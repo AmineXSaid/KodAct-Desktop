@@ -32,19 +32,27 @@ static FACES: OnceLock<Faces> = OnceLock::new();
 
 /// The interface face.
 pub fn sans() -> SharedString {
-    FACES.get().map_or_else(|| SANS_BUNDLED.into(), |f| f.sans.clone())
+    FACES
+        .get()
+        .map_or_else(|| SANS_BUNDLED.into(), |f| f.sans.clone())
 }
 
 /// The display serif.
 pub fn display() -> SharedString {
-    FACES.get().map_or_else(|| DISPLAY_BUNDLED.into(), |f| f.display.clone())
+    FACES
+        .get()
+        .map_or_else(|| DISPLAY_BUNDLED.into(), |f| f.display.clone())
 }
 
 /// The first preferred family that is available (any case), else `fallback`.
 pub fn pick(available: &[String], preferred: &[&str], fallback: &str) -> SharedString {
     preferred
         .iter()
-        .find_map(|want| available.iter().find(|name| name.eq_ignore_ascii_case(want)))
+        .find_map(|want| {
+            available
+                .iter()
+                .find(|name| name.eq_ignore_ascii_case(want))
+        })
         .map(|name| SharedString::from(name.clone()))
         .unwrap_or_else(|| fallback.into())
 }
@@ -56,15 +64,28 @@ pub fn user_dir() -> Option<PathBuf> {
 
 /// The .ttf / .otf files in `dir`, in name order, within the limits.
 pub fn read_dir_fonts(dir: &Path) -> Vec<Vec<u8>> {
-    let Ok(entries) = std::fs::read_dir(dir) else { return vec![] };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return vec![];
+    };
     let mut paths: Vec<PathBuf> = entries
         .filter_map(|e| e.ok())
         .map(|e| e.path())
-        .filter(|p| p.extension().and_then(|x| x.to_str()).is_some_and(|x| x.eq_ignore_ascii_case("ttf") || x.eq_ignore_ascii_case("otf")))
-        .filter(|p| p.metadata().is_ok_and(|m| m.is_file() && m.len() <= MAX_FILE))
+        .filter(|p| {
+            p.extension()
+                .and_then(|x| x.to_str())
+                .is_some_and(|x| x.eq_ignore_ascii_case("ttf") || x.eq_ignore_ascii_case("otf"))
+        })
+        .filter(|p| {
+            p.metadata()
+                .is_ok_and(|m| m.is_file() && m.len() <= MAX_FILE)
+        })
         .collect();
     paths.sort();
-    paths.into_iter().take(MAX_FILES).filter_map(|p| std::fs::read(p).ok()).collect()
+    paths
+        .into_iter()
+        .take(MAX_FILES)
+        .filter_map(|p| std::fs::read(p).ok())
+        .collect()
 }
 
 /// At start, before the theme: load the fonts folder, then settle the faces
@@ -73,13 +94,19 @@ pub fn choose(cx: &App) {
     if let Some(dir) = user_dir() {
         let files = read_dir_fonts(&dir);
         if !files.is_empty() {
-            if let Err(e) = cx.text_system().add_fonts(files.into_iter().map(Into::into).collect()) {
+            if let Err(e) = cx
+                .text_system()
+                .add_fonts(files.into_iter().map(Into::into).collect())
+            {
                 eprintln!("could not load the fonts in {}: {e}", dir.display());
             }
         }
     }
     let available = cx.text_system().all_font_names();
-    let _ = FACES.set(Faces { sans: pick(&available, SANS_PREFERRED, SANS_BUNDLED), display: pick(&available, DISPLAY_PREFERRED, DISPLAY_BUNDLED) });
+    let _ = FACES.set(Faces {
+        sans: pick(&available, SANS_PREFERRED, SANS_BUNDLED),
+        display: pick(&available, DISPLAY_PREFERRED, DISPLAY_BUNDLED),
+    });
 }
 
 #[cfg(test)]
@@ -93,8 +120,14 @@ mod tests {
         let with = vec!["anthropic sans".to_string(), "Hanken Grotesk".into()];
         assert_eq!(pick(&with, SANS_PREFERRED, SANS_BUNDLED), "anthropic sans");
         let text_cut = vec!["Anthropic Sans Text".to_string()];
-        assert_eq!(pick(&text_cut, SANS_PREFERRED, SANS_BUNDLED), "Anthropic Sans Text");
-        assert_eq!(pick(&none, DISPLAY_PREFERRED, DISPLAY_BUNDLED), "Source Serif 4 Display");
+        assert_eq!(
+            pick(&text_cut, SANS_PREFERRED, SANS_BUNDLED),
+            "Anthropic Sans Text"
+        );
+        assert_eq!(
+            pick(&none, DISPLAY_PREFERRED, DISPLAY_BUNDLED),
+            "Source Serif 4 Display"
+        );
     }
 
     #[test]

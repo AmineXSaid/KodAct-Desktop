@@ -22,12 +22,19 @@ pub const SHORTCUTS: &[(&str, &str, &str)] = &[
     ("secondary-shift-p", "Projects", "Chats"),
     ("secondary-shift-r", "Rules and memory", "Chats"),
     ("secondary-l", "Focus the composer", "Conversation"),
+    ("secondary-u", "Attach files and images", "Conversation"),
+    ("secondary-shift-t", "This turn's tasks", "Conversation"),
+    ("secondary-shift-a", "Chats that need you", "Chats"),
     ("secondary-f", "Find in the conversation", "Conversation"),
     ("secondary-j", "Jump to the latest message", "Conversation"),
     ("secondary-shift-c", "Copy the last reply", "Conversation"),
     ("secondary-/", "Choose a model", "Conversation"),
     ("shift-tab", "Next permission mode", "Conversation"),
-    ("escape", "Stop the reply, or close what's open", "Conversation"),
+    (
+        "escape",
+        "Stop the reply, or close what's open",
+        "Conversation",
+    ),
 ];
 
 const GROUPS: [&str; 3] = ["General", "Chats", "Conversation"];
@@ -83,7 +90,12 @@ pub fn render(t: &Theme, state: &Entity<AppState>) -> impl IntoElement {
                     .border_b_1()
                     .border_color(t.colors.border)
                     .child(div().flex_1().text_color(t.colors.text).child(*label))
-                    .child(div().flex().gap(t.space.xs).children(keys(binding).into_iter().map(|k| keycap(t, k)))),
+                    .child(
+                        div()
+                            .flex()
+                            .gap(t.space.xs)
+                            .children(keys(binding).into_iter().map(|k| keycap(t, k))),
+                    ),
             );
         }
         groups = groups.child(
@@ -91,7 +103,13 @@ pub fn render(t: &Theme, state: &Entity<AppState>) -> impl IntoElement {
                 .flex()
                 .flex_col()
                 .gap(t.space.xs)
-                .child(div().text_size(t.text.caption).font_weight(FontWeight::MEDIUM).text_color(t.colors.text_subtle).child(g))
+                .child(
+                    div()
+                        .text_size(t.text.caption)
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(t.colors.text_subtle)
+                        .child(g),
+                )
                 .child(rows),
         );
     }
@@ -129,7 +147,14 @@ pub fn render(t: &Theme, state: &Entity<AppState>) -> impl IntoElement {
                         .items_center()
                         .gap(t.space.sm)
                         .child(icon("icons/keyboard.svg", t.size.icon, t.colors.primary))
-                        .child(div().flex_1().text_size(t.text.subheading).font_family(t.font_display.clone()).text_color(t.colors.text_strong).child(title))
+                        .child(
+                            div()
+                                .flex_1()
+                                .text_size(t.text.subheading)
+                                .font_family(t.font_display.clone())
+                                .text_color(t.colors.text_strong)
+                                .child(title),
+                        )
                         .child(
                             div()
                                 .id("shortcuts-close")
@@ -149,9 +174,26 @@ pub fn render(t: &Theme, state: &Entity<AppState>) -> impl IntoElement {
                                 }),
                         ),
                 )
-                .child(div().id("shortcuts-list").flex_1().min_h_0().overflow_y_scroll().child(groups))
-                .child(div().text_size(t.text.caption).text_color(t.colors.text_subtle).child("Every command is also in the palette, with or without a shortcut."))
-                .with_animation("shortcuts-in", gpui::Animation::new(std::time::Duration::from_millis(t.motion_ms)).with_easing(gpui::ease_in_out), |d, delta| d.opacity(delta)),
+                .child(
+                    div()
+                        .id("shortcuts-list")
+                        .flex_1()
+                        .min_h_0()
+                        .overflow_y_scroll()
+                        .child(groups),
+                )
+                .child(
+                    div()
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_subtle)
+                        .child("Every command is also in the palette, with or without a shortcut."),
+                )
+                .with_animation(
+                    "shortcuts-in",
+                    gpui::Animation::new(std::time::Duration::from_millis(t.motion_ms))
+                        .with_easing(gpui::ease_in_out),
+                    |d, delta| d.opacity(delta),
+                ),
         )
 }
 
@@ -164,13 +206,23 @@ mod tests {
     #[test]
     fn the_sheet_matches_the_keymap() {
         let main = include_str!("../main.rs");
-        let bound: Vec<&str> = main.split("KeyBinding::new(\"").skip(1).filter_map(|rest| rest.split('"').next()).collect();
+        let bound: Vec<&str> = main
+            .split("KeyBinding::new(\"")
+            .skip(1)
+            .filter_map(|rest| rest.split('"').next())
+            .collect();
         assert!(bound.len() > 10, "{bound:?}");
         for b in &bound {
-            assert!(SHORTCUTS.iter().any(|(k, _, _)| k == b), "{b} is bound in main.rs but missing from the shortcuts sheet");
+            assert!(
+                SHORTCUTS.iter().any(|(k, _, _)| k == b),
+                "{b} is bound in main.rs but missing from the shortcuts sheet"
+            );
         }
         for (k, _, _) in SHORTCUTS {
-            assert!(bound.contains(k), "{k} is on the sheet but main.rs doesn't bind it");
+            assert!(
+                bound.contains(k),
+                "{k} is on the sheet but main.rs doesn't bind it"
+            );
         }
     }
 

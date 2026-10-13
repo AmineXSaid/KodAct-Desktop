@@ -33,12 +33,111 @@ impl Usage {
     }
 }
 
-/// The latest reply's usage: the conversation's size now.
+/// The latest reply's usage: the conversation's size now. Unknown after a
+/// compaction, until the next reply reports it.
 pub fn last_usage(messages: &[Message]) -> Option<Usage> {
-    messages.iter().rev().find_map(|m| match m {
-        Message::TurnEnd { usage, .. } => *usage,
-        _ => None,
-    })
+    for m in messages.iter().rev() {
+        match m {
+            Message::Notice { text, .. } if text.as_ref() == crate::state::COMPACTED => {
+                return None
+            }
+            Message::TurnEnd { usage: Some(u), .. } => return Some(*u),
+            _ => {}
+        }
+    }
+    None
+}
+
+/// What fills the conversation, by kind, counted from its text (about four
+/// characters to a token): a split of the reported total, not a measure.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Breakdown {
+    pub yours: u64,
+    pub replies: u64,
+    pub thinking: u64,
+    pub tools: u64,
+    pub files: u64,
+}
+
+impl Breakdown {
+    pub fn total(&self) -> u64 {
+        self.yours + self.replies + self.thinking + self.tools + self.files
+    }
+
+    /// (label, tokens) for each kind, scaled so they add up to `used`.
+    pub fn scaled(&self, used: u64) -> Vec<(&'static str, u64)> {
+        let t = self.total().max(1) as f64;
+        let k = used as f64 / t;
+        [
+            ("Your messages", self.yours),
+            ("Replies", self.replies),
+            ("Tool calls and output", self.tools),
+            ("Thinking", self.thinking),
+            ("Files Forge wrote", self.files),
+        ]
+        .into_iter()
+        .map(|(l, n)| (l, (n as f64 * k).round() as u64))
+        .collect()
+    }
+}
+
+/// The conversation's text, by kind, since the last compaction.
+pub fn breakdown(messages: &[Message]) -> Breakdown {
+    let from = messages.iter().rposition(|m| matches!(m, Message::Notice { text, .. } if text.as_ref() == crate::state::COMPACTED)).map_or(0, |i| i + 1);
+    let mut b = Breakdown::default();
+    for m in &messages[from..] {
+        match m {
+            Message::User {
+                text, attachments, ..
+            } => {
+                b.yours += tokens(text);
+                // An image costs the model about a thousand tokens; text files go in whole.
+                b.files += attachments
+                    .iter()
+                    .map(|a| match a.kind {
+                        crate::attach::Kind::Image(_) => 1_000,
+                        crate::attach::Kind::Text => a.size.div_ceil(4),
+                        crate::attach::Kind::File => 20,
+                    })
+                    .sum::<u64>();
+            }
+            Message::Assistant { blocks } => {
+                for blk in blocks {
+                    match blk {
+                        Block::Text(t) => b.replies += tokens(t),
+                        Block::Thinking { text, .. } => b.thinking += tokens(text),
+                        Block::Tool(_) | Block::Permission { .. } => b.tools += block_text(blk),
+                        Block::File(_) => b.files += block_text(blk),
+                    }
+                }
+            }
+            Message::TurnEnd { .. } | Message::Notice { .. } => {}
+        }
+    }
+    b
+}
+
+/// Each finished turn's context size, as reported: (the first words of
+/// your message, its usage), oldest first.
+pub fn turns(messages: &[Message]) -> Vec<(String, Usage)> {
+    let mut asked = String::new();
+    let mut out = vec![];
+    for m in messages {
+        match m {
+            Message::User { text, .. } => {
+                asked = text
+                    .lines()
+                    .next()
+                    .unwrap_or_default()
+                    .chars()
+                    .take(60)
+                    .collect()
+            }
+            Message::TurnEnd { usage: Some(u), .. } => out.push((asked.clone(), *u)),
+            _ => {}
+        }
+    }
+    out
 }
 
 /// About four characters to a token, rounded up.
@@ -50,7 +149,9 @@ fn block_text(b: &Block) -> u64 {
     match b {
         Block::Text(t) => tokens(t),
         Block::Thinking { text, .. } => tokens(text),
-        Block::Tool(t) => tokens(&t.target) + t.note.as_ref().map_or(0, |n| tokens(n)) + tokens(&t.output),
+        Block::Tool(t) => {
+            tokens(&t.target) + t.note.as_ref().map_or(0, |n| tokens(n)) + tokens(&t.output)
+        }
         Block::Permission { title, detail, .. } => tokens(title) + tokens(detail),
         // The model wrote the file's text, so it counts as what it said.
         Block::File(f) => tokens(&f.content),
@@ -61,7 +162,9 @@ fn block_text(b: &Block) -> u64 {
 /// everything before the latest reply is input, the latest reply is output.
 /// Only for replies no model reported on (the mock ones).
 pub fn estimate(messages: &[Message]) -> Usage {
-    let last_user = messages.iter().rposition(|m| matches!(m, Message::User { .. }));
+    let last_user = messages
+        .iter()
+        .rposition(|m| matches!(m, Message::User { .. }));
     let (mut input, mut output) = (0, 0);
     for (i, m) in messages.iter().enumerate() {
         let n = match m {
@@ -75,7 +178,12 @@ pub fn estimate(messages: &[Message]) -> Usage {
             input += n;
         }
     }
-    Usage { input, output, estimated: true, ..Default::default() }
+    Usage {
+        input,
+        output,
+        estimated: true,
+        ..Default::default()
+    }
 }
 
 /// The meter's reading: tokens used against the window.
@@ -96,7 +204,11 @@ impl Meter {
 /// The meter, or None when either number isn't known.
 pub fn meter(usage: Option<Usage>, window: Option<u64>) -> Option<Meter> {
     let (usage, window) = (usage?, window.filter(|w| *w > 0)?);
-    Some(Meter { used: usage.total(), window, estimated: usage.estimated })
+    Some(Meter {
+        used: usage.total(),
+        window,
+        estimated: usage.estimated,
+    })
 }
 
 /// 950, 12.3K, 1.2M.
@@ -115,11 +227,23 @@ mod tests {
 
     fn chat() -> Vec<Message> {
         vec![
-            Message::User { text: "a".repeat(400).into(), sent: SystemTime::UNIX_EPOCH },
-            Message::Assistant { blocks: vec![Block::Text("b".repeat(200).into())] },
-            Message::TurnEnd { seconds: 1., usage: Some(Usage { input: 9_000, cache_read: 1_000, output: 500, ..Default::default() }) },
-            Message::User { text: "c".repeat(40).into(), sent: SystemTime::UNIX_EPOCH },
-            Message::Assistant { blocks: vec![Block::Text("d".repeat(80).into())] },
+            Message::user("a".repeat(400).into(), SystemTime::UNIX_EPOCH),
+            Message::Assistant {
+                blocks: vec![Block::Text("b".repeat(200).into())],
+            },
+            Message::TurnEnd {
+                seconds: 1.,
+                usage: Some(Usage {
+                    input: 9_000,
+                    cache_read: 1_000,
+                    output: 500,
+                    ..Default::default()
+                }),
+            },
+            Message::user("c".repeat(40).into(), SystemTime::UNIX_EPOCH),
+            Message::Assistant {
+                blocks: vec![Block::Text("d".repeat(80).into())],
+            },
         ]
     }
 
@@ -127,13 +251,23 @@ mod tests {
     fn the_latest_reply_sets_the_size() {
         let mut m = chat();
         assert_eq!(last_usage(&m).map(|u| u.total()), Some(10_500));
-        m.push(Message::TurnEnd { seconds: 1., usage: Some(Usage { input: 11_000, output: 300, ..Default::default() }) });
+        m.push(Message::TurnEnd {
+            seconds: 1.,
+            usage: Some(Usage {
+                input: 11_000,
+                output: 300,
+                ..Default::default()
+            }),
+        });
         assert_eq!(last_usage(&m).map(|u| u.total()), Some(11_300));
     }
 
     #[test]
     fn no_meter_without_both_numbers() {
-        let u = Some(Usage { input: 50_000, ..Default::default() });
+        let u = Some(Usage {
+            input: 50_000,
+            ..Default::default()
+        });
         assert_eq!(meter(u, None), None);
         assert_eq!(meter(u, Some(0)), None);
         assert_eq!(meter(None, Some(128_000)), None);
@@ -142,7 +276,10 @@ mod tests {
 
     #[test]
     fn switching_models_rereads_the_same_conversation() {
-        let u = Some(Usage { input: 50_000, ..Default::default() });
+        let u = Some(Usage {
+            input: 50_000,
+            ..Default::default()
+        });
         let big = meter(u, Some(200_000)).unwrap();
         let small = meter(u, Some(32_000)).unwrap();
         assert_eq!((big.used, small.used), (50_000, 50_000));
@@ -157,5 +294,68 @@ mod tests {
         assert_eq!(short(950), "950");
         assert_eq!(short(12_340), "12.3K");
         assert_eq!(short(1_200_000), "1.2M");
+    }
+}
+
+#[cfg(test)]
+mod breakdown_tests {
+    use super::*;
+    use crate::state::Message;
+
+    #[test]
+    fn the_split_adds_up_to_what_was_reported() {
+        let m = vec![
+            Message::user("a".repeat(400).into(), std::time::SystemTime::UNIX_EPOCH),
+            Message::Assistant {
+                blocks: vec![
+                    Block::Text("b".repeat(200).into()),
+                    Block::Thinking {
+                        text: "c".repeat(40).into(),
+                        open: false,
+                    },
+                ],
+            },
+            Message::TurnEnd {
+                seconds: 1.,
+                usage: Some(Usage {
+                    input: 900,
+                    output: 100,
+                    ..Default::default()
+                }),
+            },
+        ];
+        let b = breakdown(&m);
+        assert_eq!((b.yours, b.replies, b.thinking), (100, 50, 10));
+        let scaled = b.scaled(1600);
+        assert_eq!(scaled.iter().map(|(_, n)| n).sum::<u64>(), 1600);
+        assert_eq!(
+            turns(&m),
+            vec![(
+                "a".repeat(60),
+                Usage {
+                    input: 900,
+                    output: 100,
+                    ..Default::default()
+                }
+            )]
+        );
+    }
+
+    #[test]
+    fn a_compaction_resets_the_reading() {
+        let mut m = vec![Message::TurnEnd {
+            seconds: 1.,
+            usage: Some(Usage {
+                input: 5,
+                ..Default::default()
+            }),
+        }];
+        assert!(last_usage(&m).is_some());
+        m.push(Message::Notice {
+            text: crate::state::COMPACTED.into(),
+            error: false,
+        });
+        assert!(last_usage(&m).is_none());
+        assert_eq!(breakdown(&m).total(), 0);
     }
 }

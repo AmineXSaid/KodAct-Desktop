@@ -1,33 +1,39 @@
 //! The window's views. `workspace` composes them; each file is one component.
 
+pub mod approvals;
+pub mod attachments;
+pub mod autocomplete;
 pub mod chat_menu;
 pub mod chat_view;
 pub mod command_palette;
 pub mod composer;
 pub mod confirm;
+pub mod context_menu;
 pub mod context_ring;
 pub mod diagram_view;
 pub mod doc_pane;
 pub mod file_card;
-pub mod find_bar;
 pub mod file_mark;
+pub mod find_bar;
 pub mod forge_cube;
-pub mod mode_menu;
-pub mod sheet_view;
-pub mod model_menu;
-pub mod motion;
 pub mod markdown;
 pub mod message;
+pub mod mode_menu;
+pub mod model_menu;
+pub mod motion;
 pub mod onboarding;
 pub mod projects;
 pub mod rules_view;
 pub mod settings;
+pub mod sheet_view;
 pub mod shortcuts;
 pub mod side_chat;
 pub mod sidebar;
 pub mod skeleton;
 pub mod starters;
+pub mod tasks;
 pub mod terminal;
+pub mod versions;
 pub mod voxels;
 pub mod workspace;
 
@@ -55,6 +61,12 @@ gpui::actions!(
         EndpointGuide,
         OpenEndpointsFile,
         ToggleFind,
+        AttachFiles,
+        ExportChatJson,
+        ShareChat,
+        ShowContext,
+        ToggleTasks,
+        ShowApprovals,
         JumpToLatest,
         ShowShortcuts,
         RenameChat,
@@ -76,21 +88,31 @@ pub fn icon(path: &'static str, size: Pixels, color: Hsla) -> Svg {
 /// 32 or 96px. It uses the rendering made for this screen's density, so the
 /// picture is shown pixel for pixel, never squeezed.
 pub fn cube_image(size: f32, window: &gpui::Window) -> gpui::Img {
-    const MADE: [u32; 16] = [32, 40, 48, 56, 60, 64, 72, 80, 84, 96, 120, 144, 168, 192, 240, 288];
+    const MADE: [u32; 16] = [
+        32, 40, 48, 56, 60, 64, 72, 80, 84, 96, 120, 144, 168, 192, 240, 288,
+    ];
     let want = (size * window.scale_factor()).round() as u32;
     let file = MADE.iter().copied().find(|n| *n >= want).unwrap_or(288);
-    gpui::img(SharedString::from(format!("images/cube-{file}.png"))).size(gpui::px(size)).flex_none()
+    gpui::img(SharedString::from(format!("images/cube-{file}.png")))
+        .size(gpui::px(size))
+        .flex_none()
 }
 
 /// Your avatar, drawn `size` px square at this screen's density.
 pub fn avatar_image(name: &str, size: f32, window: &gpui::Window) -> gpui::Img {
     let px = (size * window.scale_factor()).round() as u32;
-    gpui::img(SharedString::from(crate::avatars::path(name, px))).size(gpui::px(size)).flex_none()
+    gpui::img(SharedString::from(crate::avatars::path(name, px)))
+        .size(gpui::px(size))
+        .flex_none()
 }
 
 /// The platform's name for the main modifier.
 pub fn mod_key() -> &'static str {
-    if cfg!(target_os = "macos") { "⌘" } else { "Ctrl " }
+    if cfg!(target_os = "macos") {
+        "⌘"
+    } else {
+        "Ctrl "
+    }
 }
 
 /// A shortcut hint: `Ctrl K` / `⌘K`.
@@ -103,13 +125,21 @@ pub fn shortcut(key: &str) -> SharedString {
 /// It stays clickable, and its click says so (`AppState::stub`), never
 /// pretending to work.
 pub fn soon<E: gpui::StatefulInteractiveElement + gpui::Styled>(el: E, stub: &'static str) -> E {
-    let line = crate::stubs::get(stub).map(|s| s.soon_line()).unwrap_or_else(|| "Soon".into());
-    el.opacity(0.5).tooltip(move |window, cx| gpui::component::tooltip::Tooltip::new(line.clone()).build(window, cx))
+    let line = crate::stubs::get(stub)
+        .map(|s| s.soon_line())
+        .unwrap_or_else(|| "Soon".into());
+    el.opacity(0.5).tooltip(move |window, cx| {
+        gpui::component::tooltip::Tooltip::new(line.clone()).build(window, cx)
+    })
 }
 
 /// A small key hint, as shown beside menu items.
 pub fn kbd(t: &Theme, text: impl Into<SharedString>) -> Div {
-    div().flex_none().text_size(t.text.caption).text_color(t.colors.text_subtle).child(text.into())
+    div()
+        .flex_none()
+        .text_size(t.text.caption)
+        .text_color(t.colors.text_subtle)
+        .child(text.into())
 }
 
 /// Give gpui-component's widgets (text inputs, scrollbars) our tokens, so
@@ -117,7 +147,15 @@ pub fn kbd(t: &Theme, text: impl Into<SharedString>) -> Div {
 pub fn sync_component_theme(cx: &mut App) {
     use gpui::component::theme::{Theme as ComponentTheme, ThemeMode};
     let t = cx.theme().clone();
-    ComponentTheme::change(if t.is_dark { ThemeMode::Dark } else { ThemeMode::Light }, None, cx);
+    ComponentTheme::change(
+        if t.is_dark {
+            ThemeMode::Dark
+        } else {
+            ThemeMode::Light
+        },
+        None,
+        cx,
+    );
     ComponentTheme::update(cx, |c| {
         c.font_family = t.font_sans.clone();
         c.mono_font_family = t.font_mono.clone();

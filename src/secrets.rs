@@ -26,7 +26,9 @@ mod store {
     }
 
     pub fn set(key: &str, value: &str) -> Result<(), String> {
-        entry(key)?.set_password(value).map_err(|e| format!("Credential Manager: {e}"))
+        entry(key)?
+            .set_password(value)
+            .map_err(|e| format!("Credential Manager: {e}"))
     }
 
     pub fn delete(key: &str) {
@@ -45,7 +47,10 @@ mod store {
     }
 
     fn read() -> BTreeMap<String, String> {
-        path().and_then(|p| std::fs::read_to_string(p).ok()).and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+        path()
+            .and_then(|p| std::fs::read_to_string(p).ok())
+            .and_then(|t| serde_json::from_str(&t).ok())
+            .unwrap_or_default()
     }
 
     fn write(map: &BTreeMap<String, String>) -> Result<(), String> {
@@ -53,7 +58,8 @@ mod store {
         if let Some(d) = p.parent() {
             std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
         }
-        std::fs::write(&p, serde_json::to_string_pretty(map).unwrap_or_default()).map_err(|e| e.to_string())?;
+        std::fs::write(&p, serde_json::to_string_pretty(map).unwrap_or_default())
+            .map_err(|e| e.to_string())?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -89,6 +95,9 @@ mod tests {
     #[test]
     fn references_name_the_key_never_the_value() {
         assert_eq!(key_for("kgpt"), "forge.endpoint.kgpt.token");
-        assert_eq!(reference(&key_for("kgpt")), "${secret:forge.endpoint.kgpt.token}");
+        assert_eq!(
+            reference(&key_for("kgpt")),
+            "${secret:forge.endpoint.kgpt.token}"
+        );
     }
 }

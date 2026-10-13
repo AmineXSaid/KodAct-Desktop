@@ -13,9 +13,29 @@ macro_rules! avatars {
     };
 }
 
-avatars!("bow", "spacebuns", "flowerbun", "ponytail", "headband", "hijab", "quiff", "beanie", "cap", "beard", "curls", "phones");
+avatars!(
+    "bow",
+    "spacebuns",
+    "flowerbun",
+    "ponytail",
+    "headband",
+    "hijab",
+    "quiff",
+    "beanie",
+    "cap",
+    "beard",
+    "curls",
+    "phones"
+);
 
-pub const WOMEN: [&str; 6] = ["bow", "spacebuns", "flowerbun", "ponytail", "headband", "hijab"];
+pub const WOMEN: [&str; 6] = [
+    "bow",
+    "spacebuns",
+    "flowerbun",
+    "ponytail",
+    "headband",
+    "hijab",
+];
 pub const MEN: [&str; 6] = ["quiff", "beanie", "cap", "beard", "curls", "phones"];
 
 /// Every avatar, women first.
@@ -43,10 +63,20 @@ pub fn path(name: &str, px: u32) -> String {
 
 /// The SVG for an asset path, sized to its pixels.
 pub fn load(path: &str) -> Option<Vec<u8>> {
-    let (name, px) = path.strip_prefix("avatars/")?.strip_suffix(".svg")?.rsplit_once('-')?;
+    let (name, px) = path
+        .strip_prefix("avatars/")?
+        .strip_suffix(".svg")?
+        .rsplit_once('-')?;
     let px: u32 = px.parse().ok().filter(|p| (8..=1024).contains(p))?;
     let svg = FILES.iter().find(|(n, _)| *n == name)?.1;
-    Some(svg.replacen(r#"width="64" height="64""#, &format!(r#"width="{px}" height="{px}""#), 1).into_bytes())
+    Some(
+        svg.replacen(
+            r#"width="64" height="64""#,
+            &format!(r#"width="{px}" height="{px}""#),
+            1,
+        )
+        .into_bytes(),
+    )
 }
 
 #[cfg(test)]
@@ -59,7 +89,10 @@ mod tests {
         for name in all() {
             let svg = String::from_utf8(load(&path(name, 96)).unwrap()).unwrap();
             assert!(svg.contains(r#"width="96" height="96""#), "{name}");
-            assert!(svg.contains(&format!("bg-{name}")), "{name} has its own ids");
+            assert!(
+                svg.contains(&format!("bg-{name}")),
+                "{name} has its own ids"
+            );
         }
         assert!(load("avatars/bow-0.svg").is_none());
         assert!(load("avatars/nobody-32.svg").is_none());

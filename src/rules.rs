@@ -98,7 +98,9 @@ impl Source {
         match &self.when {
             When::Always => true,
             When::Paths(_) => self.matcher.as_ref().is_some_and(|m| m.is_match(rel)),
-            When::Folder(dir) => rel.strip_prefix(dir.as_str()).is_some_and(|rest| rest.starts_with('/')),
+            When::Folder(dir) => rel
+                .strip_prefix(dir.as_str())
+                .is_some_and(|rest| rest.starts_with('/')),
             When::OnDemand => false,
         }
     }
@@ -111,7 +113,11 @@ pub struct Scan {
 
 impl Scan {
     pub fn always_tokens(&self) -> usize {
-        self.sources.iter().filter(|s| s.when == When::Always).map(Source::tokens).sum()
+        self.sources
+            .iter()
+            .filter(|s| s.when == When::Always)
+            .map(Source::tokens)
+            .sum()
     }
 
     pub fn count(&self, kind: impl Fn(&When) -> bool) -> usize {
@@ -124,7 +130,9 @@ impl Scan {
         let typed = typed.trim().replace('\\', "/");
         let root = self.project.to_string_lossy().replace('\\', "/");
         let rel = typed.strip_prefix(&format!("{root}/")).unwrap_or(&typed);
-        rel.trim_start_matches("./").trim_start_matches('/').to_string()
+        rel.trim_start_matches("./")
+            .trim_start_matches('/')
+            .to_string()
     }
 }
 
@@ -153,7 +161,12 @@ pub fn scan(project: &Path, home: Option<&Path>) -> Scan {
         }
         found.memory(&dir.join("CLAUDE.md"), Scope::Project, home, project);
         if i == 0 {
-            found.memory(&dir.join(".claude").join("CLAUDE.md"), Scope::Project, home, project);
+            found.memory(
+                &dir.join(".claude").join("CLAUDE.md"),
+                Scope::Project,
+                home,
+                project,
+            );
         }
         found.memory(&dir.join("CLAUDE.local.md"), Scope::Local, home, project);
     }
@@ -163,7 +176,10 @@ pub fn scan(project: &Path, home: Option<&Path>) -> Scan {
     }
     found.folders(project);
 
-    Scan { project: project.to_path_buf(), sources: found.sources }
+    Scan {
+        project: project.to_path_buf(),
+        sources: found.sources,
+    }
 }
 
 #[derive(Default)]
@@ -182,13 +198,29 @@ impl Found {
         if path.is_file() && self.first_time(path) {
             let text = read(path);
             let name = short_name(path, project, home);
-            self.push(Kind::Memory, scope, path, name, When::Always, text, None, None);
+            self.push(
+                Kind::Memory,
+                scope,
+                path,
+                name,
+                When::Always,
+                text,
+                None,
+                None,
+            );
             self.imports(path, scope, home, project, 1);
         }
     }
 
     /// Follow `@path` imports from a file that loads every session.
-    fn imports(&mut self, from: &Path, scope: Scope, home: Option<&Path>, project: &Path, depth: usize) {
+    fn imports(
+        &mut self,
+        from: &Path,
+        scope: Scope,
+        home: Option<&Path>,
+        project: &Path,
+        depth: usize,
+    ) {
         if depth > MAX_IMPORT_DEPTH {
             return;
         }
@@ -198,14 +230,26 @@ impl Found {
             if path.is_file() && self.first_time(&path) {
                 let body = read(&path);
                 let name = short_name(&path, project, home);
-                self.push(Kind::Import, scope, &path, name, When::Always, body, None, Some(from.to_path_buf()));
+                self.push(
+                    Kind::Import,
+                    scope,
+                    &path,
+                    name,
+                    When::Always,
+                    body,
+                    None,
+                    Some(from.to_path_buf()),
+                );
                 self.imports(&path, scope, home, project, depth + 1);
             }
         }
     }
 
     fn rules(&mut self, dir: &Path, scope: Scope) {
-        let mut files: Vec<PathBuf> = walk(dir, usize::MAX).into_iter().filter(|p| p.extension().is_some_and(|e| e == "md")).collect();
+        let mut files: Vec<PathBuf> = walk(dir, usize::MAX)
+            .into_iter()
+            .filter(|p| p.extension().is_some_and(|e| e == "md"))
+            .collect();
         files.sort();
         for path in files {
             if !self.first_time(&path) {
@@ -214,15 +258,30 @@ impl Found {
             let text = read(&path);
             let (front, _) = frontmatter(&text);
             let globs = front.as_ref().map(|f| f.list("paths")).unwrap_or_default();
-            let when = if globs.is_empty() { When::Always } else { When::Paths(globs) };
-            let name = path.strip_prefix(dir).unwrap_or(&path).with_extension("").to_string_lossy().replace('\\', "/");
+            let when = if globs.is_empty() {
+                When::Always
+            } else {
+                When::Paths(globs)
+            };
+            let name = path
+                .strip_prefix(dir)
+                .unwrap_or(&path)
+                .with_extension("")
+                .to_string_lossy()
+                .replace('\\', "/");
             self.push(Kind::Rule, scope, &path, name, when, text, None, None);
         }
     }
 
     fn skills(&mut self, dir: &Path, scope: Scope) {
-        let Ok(entries) = std::fs::read_dir(dir) else { return };
-        let mut paths: Vec<PathBuf> = entries.flatten().map(|e| e.path().join("SKILL.md")).filter(|p| p.is_file()).collect();
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        let mut paths: Vec<PathBuf> = entries
+            .flatten()
+            .map(|e| e.path().join("SKILL.md"))
+            .filter(|p| p.is_file())
+            .collect();
         paths.sort();
         for path in paths {
             if !self.first_time(&path) {
@@ -230,10 +289,26 @@ impl Found {
             }
             let text = read(&path);
             let (front, _) = frontmatter(&text);
-            let folder = path.parent().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-            let name = front.as_ref().and_then(|f| f.value("name")).unwrap_or(folder);
+            let folder = path
+                .parent()
+                .and_then(|p| p.file_name())
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let name = front
+                .as_ref()
+                .and_then(|f| f.value("name"))
+                .unwrap_or(folder);
             let description = front.as_ref().and_then(|f| f.value("description"));
-            self.push(Kind::Skill, scope, &path, name, When::OnDemand, text, description, None);
+            self.push(
+                Kind::Skill,
+                scope,
+                &path,
+                name,
+                When::OnDemand,
+                text,
+                description,
+                None,
+            );
         }
     }
 
@@ -242,7 +317,10 @@ impl Found {
     fn folders(&mut self, project: &Path) {
         let mut paths: Vec<PathBuf> = walk(project, MAX_WALK_DEPTH)
             .into_iter()
-            .filter(|p| p.file_name().is_some_and(|n| n == "CLAUDE.md" || n == "CLAUDE.local.md"))
+            .filter(|p| {
+                p.file_name()
+                    .is_some_and(|n| n == "CLAUDE.md" || n == "CLAUDE.local.md")
+            })
             .filter(|p| p.parent() != Some(project))
             .collect();
         paths.sort();
@@ -250,19 +328,48 @@ impl Found {
             if !self.first_time(&path) {
                 continue;
             }
-            let Some(dir) = path.parent().and_then(|d| d.strip_prefix(project).ok()) else { continue };
+            let Some(dir) = path.parent().and_then(|d| d.strip_prefix(project).ok()) else {
+                continue;
+            };
             let dir = dir.to_string_lossy().replace('\\', "/");
             let local = path.file_name().is_some_and(|n| n == "CLAUDE.local.md");
-            let name = format!("{dir}/{}", if local { "CLAUDE.local.md" } else { "CLAUDE.md" });
+            let name = format!(
+                "{dir}/{}",
+                if local {
+                    "CLAUDE.local.md"
+                } else {
+                    "CLAUDE.md"
+                }
+            );
             let text = read(&path);
-            self.push(Kind::Folder, if local { Scope::Local } else { Scope::Project }, &path, name, When::Folder(dir), text, None, None);
+            self.push(
+                Kind::Folder,
+                if local { Scope::Local } else { Scope::Project },
+                &path,
+                name,
+                When::Folder(dir),
+                text,
+                None,
+                None,
+            );
         }
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn push(&mut self, kind: Kind, scope: Scope, path: &Path, name: String, when: When, text: String, description: Option<String>, imported_by: Option<PathBuf>) {
+    fn push(
+        &mut self,
+        kind: Kind,
+        scope: Scope,
+        path: &Path,
+        name: String,
+        when: When,
+        text: String,
+        description: Option<String>,
+        imported_by: Option<PathBuf>,
+    ) {
         let (front, body) = frontmatter(&text);
-        let mut problem = (text.starts_with("---") && front.is_none()).then(|| "The frontmatter has no closing `---`.".to_string());
+        let mut problem = (text.starts_with("---") && front.is_none())
+            .then(|| "The frontmatter has no closing `---`.".to_string());
         let matcher = match &when {
             When::Paths(globs) => match compile(globs) {
                 Ok(m) => Some(m),
@@ -274,15 +381,49 @@ impl Found {
             _ => None,
         };
         let body = body.trim_start().to_string();
-        self.sources.push(Source { kind, scope, path: path.to_path_buf(), name, when, text, body, description, imported_by, problem, matcher });
+        self.sources.push(Source {
+            kind,
+            scope,
+            path: path.to_path_buf(),
+            name,
+            when,
+            text,
+            body,
+            description,
+            imported_by,
+            problem,
+            matcher,
+        });
     }
 }
 
 fn read(path: &Path) -> String {
     match std::fs::metadata(path) {
-        Ok(m) if m.len() > MAX_FILE_BYTES => format!("(This file is {} KB; Forge shows files up to {} KB.)", m.len() / 1024, MAX_FILE_BYTES / 1024),
+        Ok(m) if m.len() > MAX_FILE_BYTES => format!(
+            "(This file is {} KB; Forge shows files up to {} KB.)",
+            m.len() / 1024,
+            MAX_FILE_BYTES / 1024
+        ),
         _ => std::fs::read_to_string(path).unwrap_or_default(),
     }
+}
+
+/// The project's files for `@` completion: paths relative to `dir`, with
+/// `/`, as git sees them (ignored and hidden ones left out), at most `cap`
+/// (blocking: call off the UI thread).
+pub fn project_files(dir: &Path, cap: usize) -> Vec<String> {
+    let mut out: Vec<String> = walk(dir, 16)
+        .into_iter()
+        .filter_map(|p| {
+            p.strip_prefix(dir)
+                .ok()
+                .map(|r| r.to_string_lossy().replace('\\', "/"))
+        })
+        .take(cap)
+        .collect();
+    // Shallow paths first: they're the ones people mean most often.
+    out.sort_by_key(|p| (p.matches('/').count(), p.clone()));
+    out
 }
 
 /// Files under `dir`, honouring `.gitignore` and skipping hidden folders.
@@ -306,7 +447,10 @@ fn walk(dir: &Path, depth: usize) -> Vec<PathBuf> {
 pub fn compile(globs: &[String]) -> Result<GlobSet, String> {
     let mut set = GlobSetBuilder::new();
     for g in globs {
-        let glob = globset::GlobBuilder::new(g.trim_start_matches("./")).literal_separator(true).build().map_err(|e| format!("`{g}` is not a valid glob: {e}"))?;
+        let glob = globset::GlobBuilder::new(g.trim_start_matches("./"))
+            .literal_separator(true)
+            .build()
+            .map_err(|e| format!("`{g}` is not a valid glob: {e}"))?;
         set.add(glob);
     }
     set.build().map_err(|e| e.to_string())
@@ -338,11 +482,19 @@ pub struct Frontmatter {
 
 impl Frontmatter {
     pub fn value(&self, key: &str) -> Option<String> {
-        self.entries.iter().find(|(k, _)| k == key).and_then(|(_, v)| v.first().cloned()).filter(|v| !v.is_empty())
+        self.entries
+            .iter()
+            .find(|(k, _)| k == key)
+            .and_then(|(_, v)| v.first().cloned())
+            .filter(|v| !v.is_empty())
     }
 
     pub fn list(&self, key: &str) -> Vec<String> {
-        self.entries.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone()).unwrap_or_default()
+        self.entries
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.clone())
+            .unwrap_or_default()
     }
 }
 
@@ -350,7 +502,12 @@ impl Frontmatter {
 /// rules and skills use: `key: value`, `key: [a, b]`, and `- item` lists.
 /// Returns `None` for the frontmatter if there is none (or it never closes).
 pub fn frontmatter(text: &str) -> (Option<Frontmatter>, &str) {
-    let Some(rest) = text.strip_prefix("---\n").or_else(|| text.strip_prefix("---\r\n")) else { return (None, text) };
+    let Some(rest) = text
+        .strip_prefix("---\n")
+        .or_else(|| text.strip_prefix("---\r\n"))
+    else {
+        return (None, text);
+    };
     let mut offset = 0;
     let mut end = None;
     for line in rest.split_inclusive('\n') {
@@ -360,7 +517,9 @@ pub fn frontmatter(text: &str) -> (Option<Frontmatter>, &str) {
         }
         offset += line.len();
     }
-    let Some((yaml_end, body_start)) = end else { return (None, text) };
+    let Some((yaml_end, body_start)) = end else {
+        return (None, text);
+    };
     let yaml = &rest[..yaml_end];
     let mut front = Frontmatter::default();
     for line in yaml.lines() {
@@ -374,15 +533,24 @@ pub fn frontmatter(text: &str) -> (Option<Frontmatter>, &str) {
             }
         } else if let Some((key, value)) = trimmed.split_once(':') {
             let value = value.trim();
-            let values = if let Some(inner) = value.strip_prefix('[').and_then(|v| v.strip_suffix(']')) {
-                inner.split(',').map(unquote).filter(|v| !v.is_empty()).collect()
-            } else if value.is_empty() {
-                vec![]
-            } else if key.trim() == "paths" {
-                value.split(',').map(unquote).filter(|v| !v.is_empty()).collect()
-            } else {
-                vec![unquote(value)]
-            };
+            let values =
+                if let Some(inner) = value.strip_prefix('[').and_then(|v| v.strip_suffix(']')) {
+                    inner
+                        .split(',')
+                        .map(unquote)
+                        .filter(|v| !v.is_empty())
+                        .collect()
+                } else if value.is_empty() {
+                    vec![]
+                } else if key.trim() == "paths" {
+                    value
+                        .split(',')
+                        .map(unquote)
+                        .filter(|v| !v.is_empty())
+                        .collect()
+                } else {
+                    vec![unquote(value)]
+                };
             front.entries.push((key.trim().to_string(), values));
         }
     }
@@ -391,7 +559,11 @@ pub fn frontmatter(text: &str) -> (Option<Frontmatter>, &str) {
 
 fn unquote(s: &str) -> String {
     let s = s.trim();
-    let s = s.strip_prefix('"').and_then(|v| v.strip_suffix('"')).or_else(|| s.strip_prefix('\'').and_then(|v| v.strip_suffix('\''))).unwrap_or(s);
+    let s = s
+        .strip_prefix('"')
+        .and_then(|v| v.strip_suffix('"'))
+        .or_else(|| s.strip_prefix('\'').and_then(|v| v.strip_suffix('\'')))
+        .unwrap_or(s);
     s.trim().to_string()
 }
 
@@ -433,7 +605,9 @@ pub fn import_paths(text: &str) -> Vec<String> {
                     path.push(chars[j]);
                     j += 1;
                 }
-                let path = path.trim_end_matches(['.', ',', ';', ':', ')', '!', '?']).to_string();
+                let path = path
+                    .trim_end_matches(['.', ',', ';', ':', ')', '!', '?'])
+                    .to_string();
                 if path.contains('/') || path.contains('.') {
                     out.push(path);
                 }
@@ -506,7 +680,10 @@ pub fn create_rule(project: &Path, name: &str, globs: &[String]) -> Result<PathB
 
 /// Split what someone typed into globs: commas or new lines between them.
 pub fn parse_globs(text: &str) -> Vec<String> {
-    text.split([',', '\n']).map(unquote).filter(|g| !g.is_empty()).collect()
+    text.split([',', '\n'])
+        .map(unquote)
+        .filter(|g| !g.is_empty())
+        .collect()
 }
 
 #[cfg(test)]
@@ -541,7 +718,10 @@ mod tests {
     #[test]
     fn imports_skip_code_and_emails() {
         let text = "See @docs/a.md and @~/notes.md.\nMail me@example.com\n`@not/this.md`\n```\n@nor/this.md\n```\n@Design\\ Docs/x.md";
-        assert_eq!(import_paths(text), vec!["docs/a.md", "~/notes.md", "Design Docs/x.md"]);
+        assert_eq!(
+            import_paths(text),
+            vec!["docs/a.md", "~/notes.md", "Design Docs/x.md"]
+        );
     }
 
     #[test]
@@ -557,7 +737,10 @@ mod tests {
     fn slugs() {
         assert_eq!(slug("UI rules!").as_deref(), Some("ui-rules"));
         assert_eq!(slug("  ").as_deref(), None);
-        assert_eq!(parse_globs("ui/**, \"src/*.rs\"\n\n"), vec!["ui/**", "src/*.rs"]);
+        assert_eq!(
+            parse_globs("ui/**, \"src/*.rs\"\n\n"),
+            vec!["ui/**", "src/*.rs"]
+        );
     }
 
     #[test]
@@ -565,17 +748,30 @@ mod tests {
         let home = tmp("home");
         let project = tmp("proj");
         write(home.join(".claude/CLAUDE.md"), "Be brief.");
-        write(home.join(".claude/skills/review/SKILL.md"), "---\nname: review\ndescription: Review a diff\n---\nSteps");
+        write(
+            home.join(".claude/skills/review/SKILL.md"),
+            "---\nname: review\ndescription: Review a diff\n---\nSteps",
+        );
         write(project.join("CLAUDE.md"), "Rules. @docs/arch.md");
         write(project.join("docs/arch.md"), "Architecture");
-        write(project.join(".claude/rules/ui.md"), "---\npaths:\n  - \"ui/**\"\n---\n# UI\nTokens only.");
-        write(project.join(".claude/rules/always.md"), "# Always\nShip it.");
+        write(
+            project.join(".claude/rules/ui.md"),
+            "---\npaths:\n  - \"ui/**\"\n---\n# UI\nTokens only.",
+        );
+        write(
+            project.join(".claude/rules/always.md"),
+            "# Always\nShip it.",
+        );
         write(project.join("ui/CLAUDE.md"), "UI folder notes");
         write(project.join(".gitignore"), "target/\n");
         write(project.join("target/CLAUDE.md"), "ignored");
 
         let scan = scan(&project, Some(&home));
-        let names: Vec<_> = scan.sources.iter().map(|s| (s.kind, s.name.as_str())).collect();
+        let names: Vec<_> = scan
+            .sources
+            .iter()
+            .map(|s| (s.kind, s.name.as_str()))
+            .collect();
         assert!(names.contains(&(Kind::Memory, "~/.claude/CLAUDE.md")));
         assert!(names.contains(&(Kind::Memory, "CLAUDE.md")));
         assert!(names.contains(&(Kind::Import, "docs/arch.md")));
@@ -588,16 +784,27 @@ mod tests {
         let ui = scan.sources.iter().find(|s| s.name == "ui").unwrap();
         assert_eq!(ui.body, "# UI\nTokens only.");
         assert!(ui.loads_for("ui/src/App.tsx") && !ui.loads_for("src/main.rs"));
-        let folder = scan.sources.iter().find(|s| s.kind == Kind::Folder).unwrap();
+        let folder = scan
+            .sources
+            .iter()
+            .find(|s| s.kind == Kind::Folder)
+            .unwrap();
         assert!(folder.loads_for("ui/x.ts") && !folder.loads_for("uix/x.ts"));
-        assert_eq!(scan.relative(&format!("{}/ui/a.ts", project.display())), "ui/a.ts");
+        assert_eq!(
+            scan.relative(&format!("{}/ui/a.ts", project.display())),
+            "ui/a.ts"
+        );
         assert_eq!(scan.relative("./ui\\a.ts"), "ui/a.ts");
 
         let made = create_rule(&project, "Git hygiene", &["src/**".into()]).unwrap();
         assert!(made.ends_with(".claude/rules/git-hygiene.md"));
         assert!(create_rule(&project, "Git hygiene", &[]).is_err());
         let rescan = super::scan(&project, Some(&home));
-        let rule = rescan.sources.iter().find(|s| s.name == "git-hygiene").unwrap();
+        let rule = rescan
+            .sources
+            .iter()
+            .find(|s| s.name == "git-hygiene")
+            .unwrap();
         assert_eq!(rule.when, When::Paths(vec!["src/**".into()]));
     }
 }

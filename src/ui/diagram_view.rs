@@ -48,14 +48,27 @@ fn raster(svg: &str, width: f32, scale: f32) -> Option<(Arc<Image>, f32, f32)> {
 pub fn image(svg: &str, width: f32, scale: f32) -> Option<AnyElement> {
     let (image, w, h) = raster(svg, width, scale)?;
     let width = width.floor().max(1.);
-    Some(img(image).w(px(width)).h(px(width * h / w)).object_fit(ObjectFit::Contain).into_any_element())
+    Some(
+        img(image)
+            .w(px(width))
+            .h(px(width * h / w))
+            .object_fit(ObjectFit::Contain)
+            .into_any_element(),
+    )
 }
 
 /// Drawn at most `width` wide, but shrinking with its container (keeping its
 /// aspect) when that is narrower: for places whose width layout decides.
 pub fn fluid(svg: &str, width: f32, scale: f32) -> Option<AnyElement> {
     let (image, w, h) = raster(svg, width, scale)?;
-    Some(gpui::div().w_full().max_w(px(width.floor())).aspect_ratio(w / h).child(img(image).size_full().object_fit(ObjectFit::Contain)).into_any_element())
+    Some(
+        gpui::div()
+            .w_full()
+            .max_w(px(width.floor()))
+            .aspect_ratio(w / h)
+            .child(img(image).size_full().object_fit(ObjectFit::Contain))
+            .into_any_element(),
+    )
 }
 
 /// The drawing to show in this theme: a Forge-skinned diagram turns dark
@@ -75,7 +88,13 @@ pub fn natural_width(svg: &str) -> Option<f32> {
 /// An SVG colour for a theme colour.
 fn css(c: gpui::Hsla) -> String {
     let r = c.to_rgb();
-    format!("rgba({},{},{},{:.3})", (r.r * 255.).round(), (r.g * 255.).round(), (r.b * 255.).round(), r.a)
+    format!(
+        "rgba({},{},{},{:.3})",
+        (r.r * 255.).round(),
+        (r.g * 255.).round(),
+        (r.b * 255.).round(),
+        r.a
+    )
 }
 
 /// The colours Forge draws a Mermaid diagram in, from the theme's tokens.
@@ -104,7 +123,10 @@ thread_local! {
 /// The drawing for a fenced block, if it is a diagram (`mermaid::fence_svg`),
 /// in this theme's colours.
 pub fn fence(lang: &str, code: &str, t: &crate::theme::Theme) -> Option<Arc<str>> {
-    if !matches!(lang.to_ascii_lowercase().as_str(), "mermaid" | "mmd" | "svg" | "xml" | "html" | "htm") {
+    if !matches!(
+        lang.to_ascii_lowercase().as_str(),
+        "mermaid" | "mmd" | "svg" | "xml" | "html" | "htm"
+    ) {
         return None;
     }
     let k = (key(&format!("{lang}\u{0}{code}")), t.is_dark);
@@ -118,7 +140,11 @@ pub fn fence(lang: &str, code: &str, t: &crate::theme::Theme) -> Option<Arc<str>
         }
         let drawn = crate::mermaid::fence_svg(lang, code, &palette(t)).map(|svg| {
             // A drawn SVG follows the app into dark, as diagram files do.
-            let svg = if lang.eq_ignore_ascii_case("mermaid") || lang.eq_ignore_ascii_case("mmd") { svg } else { themed(&svg, t.is_dark).into_owned() };
+            let svg = if lang.eq_ignore_ascii_case("mermaid") || lang.eq_ignore_ascii_case("mmd") {
+                svg
+            } else {
+                themed(&svg, t.is_dark).into_owned()
+            };
             Arc::<str>::from(svg)
         });
         f.insert(k, drawn.clone());

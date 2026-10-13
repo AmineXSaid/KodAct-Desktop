@@ -14,16 +14,82 @@ macro_rules! icons {
 }
 
 icons!(
-    "archive", "arrow-right", "arrow-up", "at-sign", "brain", "check", "chevron-down", "chevron-right", "chevron-up",
-    "circle-check", "circle-pause", "code-xml", "graduation-cap", "route", "scroll-text", "circle-slash", "circle-x", "clock", "copy", "cpu", "download", "ellipsis", "external-link", "eye", "file-pen",
-    "file-text", "folder-open", "git-branch", "globe", "hand", "image", "info", "keyboard", "list-todo",
-    "loader-circle", "map", "maximize-2", "message-square", "minus", "moon", "panel-left", "paperclip", "pencil",
-    "pin", "plus", "refresh-cw", "rotate-ccw", "search", "settings", "shield-check", "sliders-horizontal", "sparkles", "split", "square", "square-check",
-    "sun", "terminal", "trash", "triangle-alert", "x",
+    "archive",
+    "arrow-right",
+    "arrow-up",
+    "at-sign",
+    "brain",
+    "check",
+    "chevron-down",
+    "chevron-right",
+    "chevron-up",
+    "circle-check",
+    "circle-pause",
+    "code-xml",
+    "graduation-cap",
+    "route",
+    "scroll-text",
+    "circle-slash",
+    "circle-x",
+    "clock",
+    "copy",
+    "cpu",
+    "download",
+    "ellipsis",
+    "external-link",
+    "eye",
+    "file-pen",
+    "file-text",
+    "folder-open",
+    "git-branch",
+    "globe",
+    "hand",
+    "image",
+    "info",
+    "keyboard",
+    "list-todo",
+    "loader-circle",
+    "map",
+    "maximize-2",
+    "message-square",
+    "minus",
+    "moon",
+    "panel-left",
+    "paperclip",
+    "pencil",
+    "pin",
+    "plus",
+    "refresh-cw",
+    "rotate-ccw",
+    "search",
+    "settings",
+    "shield-check",
+    "sliders-horizontal",
+    "sparkles",
+    "split",
+    "square",
+    "square-check",
+    "sun",
+    "terminal",
+    "trash",
+    "triangle-alert",
+    "x",
     // Reply actions, starters, jump to latest, the chat menu (P1).
-    "arrow-down", "book-open", "bug", "copy-plus", "flask-conical", "history", "play", "thumbs-down", "thumbs-up", "wand-sparkles",
+    "arrow-down",
+    "book-open",
+    "bug",
+    "copy-plus",
+    "flask-conical",
+    "history",
+    "play",
+    "thumbs-down",
+    "thumbs-up",
+    "wand-sparkles",
     // The title bar's minimize / maximize / restore / close (gpui-kit-assets, Apache-2.0).
-    "window-close", "window-maximize", "window-minimize", "window-restore",
+    "window-close",
+    "window-maximize",
+    "window-minimize",
+    "window-restore",
 );
 
 macro_rules! images {
@@ -38,7 +104,8 @@ macro_rules! images {
 }
 
 images!(
-    "cube-32", "cube-40", "cube-48", "cube-56", "cube-60", "cube-64", "cube-72", "cube-80", "cube-84", "cube-96", "cube-120", "cube-144", "cube-168", "cube-192", "cube-240", "cube-288",
+    "cube-32", "cube-40", "cube-48", "cube-56", "cube-60", "cube-64", "cube-72", "cube-80",
+    "cube-84", "cube-96", "cube-120", "cube-144", "cube-168", "cube-192", "cube-240", "cube-288",
 );
 
 pub struct Assets;
@@ -49,19 +116,36 @@ impl AssetSource for Assets {
         // diagrams draw text with: give it Forge's faces, so a diagram's
         // labels look the same on every machine.
         match path {
-            "fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf" => return Ok(Some(Cow::Borrowed(include_bytes!("../assets/fonts/HankenGrotesk-Regular.ttf")))),
-            "fonts/lilex/Lilex-Regular.ttf" => return Ok(Some(Cow::Borrowed(include_bytes!("../assets/fonts/JetBrainsMono-Regular.ttf")))),
+            "fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf" => {
+                return Ok(Some(Cow::Borrowed(include_bytes!(
+                    "../assets/fonts/HankenGrotesk-Regular.ttf"
+                ))))
+            }
+            "fonts/lilex/Lilex-Regular.ttf" => {
+                return Ok(Some(Cow::Borrowed(include_bytes!(
+                    "../assets/fonts/JetBrainsMono-Regular.ttf"
+                ))))
+            }
             _ => {}
         }
         if path.starts_with("avatars/") {
             // Sized to the pixels they're drawn at (`avatars.rs`).
             return Ok(crate::avatars::load(path).map(Cow::Owned));
         }
-        Ok(ICONS.iter().chain(IMAGES).find(|(p, _)| *p == path).map(|(_, bytes)| Cow::Borrowed(*bytes)))
+        Ok(ICONS
+            .iter()
+            .chain(IMAGES)
+            .find(|(p, _)| *p == path)
+            .map(|(_, bytes)| Cow::Borrowed(*bytes)))
     }
 
     fn list(&self, path: &str) -> Result<Vec<SharedString>> {
-        Ok(ICONS.iter().chain(IMAGES).filter(|(p, _)| p.starts_with(path)).map(|(p, _)| SharedString::from(*p)).collect())
+        Ok(ICONS
+            .iter()
+            .chain(IMAGES)
+            .filter(|(p, _)| p.starts_with(path))
+            .map(|(p, _)| SharedString::from(*p))
+            .collect())
     }
 }
 
@@ -76,7 +160,9 @@ pub fn load_fonts(cx: &App) {
         Cow::Borrowed(include_bytes!("../assets/fonts/JetBrainsMono-Regular.ttf")),
         Cow::Borrowed(include_bytes!("../assets/fonts/JetBrainsMono-Bold.ttf")),
         Cow::Borrowed(include_bytes!("../assets/fonts/SourceSerif4-Regular.ttf")),
-        Cow::Borrowed(include_bytes!("../assets/fonts/SourceSerif4Display-Regular.ttf")),
+        Cow::Borrowed(include_bytes!(
+            "../assets/fonts/SourceSerif4Display-Regular.ttf"
+        )),
     ];
     if let Err(e) = cx.text_system().add_fonts(fonts) {
         eprintln!("could not load the bundled fonts: {e}");
@@ -103,14 +189,29 @@ mod tests {
             }
         }
         let bundled: Vec<&str> = super::ICONS.iter().map(|(p, _)| *p).collect();
-        for used in source.split("\"icons/").skip(1).filter_map(|r| r.split('"').next()) {
-            assert!(bundled.contains(&format!("icons/{used}").as_str()), "icons/{used} is drawn but not bundled in assets.rs");
+        for used in source
+            .split("\"icons/")
+            .skip(1)
+            .filter_map(|r| r.split('"').next())
+        {
+            assert!(
+                bundled.contains(&format!("icons/{used}").as_str()),
+                "icons/{used} is drawn but not bundled in assets.rs"
+            );
         }
-        let reserved: Vec<String> = crate::stubs::RESERVED_ICONS.iter().map(|(n, _, _)| format!("icons/{n}.svg")).collect();
+        let reserved: Vec<String> = crate::stubs::RESERVED_ICONS
+            .iter()
+            .map(|(n, _, _)| format!("icons/{n}.svg"))
+            .collect();
         for b in &bundled {
             // The title bar's window buttons are drawn by gpui-component, by name.
             let by_component = b.starts_with("icons/window-");
-            assert!(by_component || source.contains(&format!("\"{b}\"")) || reserved.iter().any(|r| r == b), "{b} is bundled but nothing draws it");
+            assert!(
+                by_component
+                    || source.contains(&format!("\"{b}\""))
+                    || reserved.iter().any(|r| r == b),
+                "{b} is bundled but nothing draws it"
+            );
         }
     }
 }

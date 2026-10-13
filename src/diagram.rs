@@ -7,7 +7,10 @@
 /// Whether a file is a diagram Forge can draw: an `.svg`, or an `.html`
 /// page that holds one.
 pub fn is_diagram(name: &str, content: &str) -> bool {
-    let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
+    let ext = name
+        .rsplit_once('.')
+        .map(|(_, e)| e.to_ascii_lowercase())
+        .unwrap_or_default();
     match ext.as_str() {
         "svg" => content.contains("<svg"),
         "html" | "htm" => extract_svg(content).is_some(),
@@ -22,7 +25,9 @@ pub fn extract_svg(content: &str) -> Option<&str> {
     let mut i = start;
     while i < content.len() {
         let rest = &content[i..];
-        if rest.starts_with("<svg") && rest[4..].starts_with(|c: char| c.is_whitespace() || c == '>') {
+        if rest.starts_with("<svg")
+            && rest[4..].starts_with(|c: char| c.is_whitespace() || c == '>')
+        {
             depth += 1;
             i += 4;
         } else if rest.starts_with("</svg>") {
@@ -53,12 +58,21 @@ fn attr<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
 pub fn view_size(svg: &str) -> Option<(f32, f32)> {
     let tag = root_tag(svg)?;
     if let Some(vb) = attr(tag, "viewBox") {
-        let n: Vec<f32> = vb.split(|c: char| c.is_whitespace() || c == ',').filter(|s| !s.is_empty()).filter_map(|s| s.parse().ok()).collect();
+        let n: Vec<f32> = vb
+            .split(|c: char| c.is_whitespace() || c == ',')
+            .filter(|s| !s.is_empty())
+            .filter_map(|s| s.parse().ok())
+            .collect();
         if n.len() == 4 && n[2] > 0. && n[3] > 0. {
             return Some((n[2], n[3]));
         }
     }
-    let num = |s: &str| s.trim_end_matches("px").parse::<f32>().ok().filter(|v| *v > 0.);
+    let num = |s: &str| {
+        s.trim_end_matches("px")
+            .parse::<f32>()
+            .ok()
+            .filter(|v| *v > 0.)
+    };
     Some((num(attr(tag, "width")?)?, num(attr(tag, "height")?)?))
 }
 
@@ -74,7 +88,11 @@ pub fn sized(svg: &str, width: u32) -> Option<String> {
         }
     }
     let height = (width as f32 * h / w).round().max(1.) as u32;
-    new_tag = new_tag.replacen("<svg", &format!("<svg width=\"{width}\" height=\"{height}\""), 1);
+    new_tag = new_tag.replacen(
+        "<svg",
+        &format!("<svg width=\"{width}\" height=\"{height}\""),
+        1,
+    );
     Some(format!("{new_tag}{}", &svg[tag.len()..]))
 }
 
@@ -82,16 +100,16 @@ pub fn sized(svg: &str, width: u32) -> Option<String> {
 /// skill's `references/style-guide.md`), for drawing a light diagram in the
 /// dark theme.
 const TO_DARK: &[(&str, &str)] = &[
-    ("#f9f7f5", "#1c1b19"), // paper
-    ("#f1efeb", "#22211f"), // paper-2
-    ("#1c1b19", "#f6f5f4"), // ink
-    ("#615d59", "#b5b0aa"), // muted
-    ("#6f6a64", "#9d978f"), // soft
-    ("#c9c4bd", "#4a4744"), // rule-solid
-    ("#005fb3", "#4ba1f3"), // accent
-    ("#6a4fb4", "#ac93e6"), // link
-    ("#ffffff", "#111111"), // ink-strong, on accent fills
-    ("rgba(0,95,179,", "rgba(75,161,243,"), // accent-tint
+    ("#f9f7f5", "#1c1b19"),                  // paper
+    ("#f1efeb", "#22211f"),                  // paper-2
+    ("#1c1b19", "#f6f5f4"),                  // ink
+    ("#615d59", "#b5b0aa"),                  // muted
+    ("#6f6a64", "#9d978f"),                  // soft
+    ("#c9c4bd", "#4a4744"),                  // rule-solid
+    ("#005fb3", "#4ba1f3"),                  // accent
+    ("#6a4fb4", "#ac93e6"),                  // link
+    ("#ffffff", "#111111"),                  // ink-strong, on accent fills
+    ("rgba(0,95,179,", "rgba(75,161,243,"),  // accent-tint
     ("rgba(28,27,25,", "rgba(246,245,244,"), // rule
 ];
 
@@ -126,12 +144,16 @@ fn inner_text<'a>(content: &'a str, open: &str, close: &str) -> Option<&'a str> 
     let body = &content[at..];
     let start = body.find('>')? + 1;
     let end = body.find(close)?;
-    (start <= end).then(|| body[start..end].trim()).filter(|s| !s.is_empty())
+    (start <= end)
+        .then(|| body[start..end].trim())
+        .filter(|s| !s.is_empty())
 }
 
 /// What the diagram is called: the page's `<h1>`, else the SVG's `<title>`.
 pub fn title(content: &str) -> Option<String> {
-    inner_text(content, "<h1", "</h1>").or_else(|| inner_text(extract_svg(content)?, "<title", "</title>")).map(unescape)
+    inner_text(content, "<h1", "</h1>")
+        .or_else(|| inner_text(extract_svg(content)?, "<title", "</title>"))
+        .map(unescape)
 }
 
 /// Its one-sentence description, from the SVG's `<desc>`.
@@ -140,7 +162,11 @@ pub fn description(content: &str) -> Option<String> {
 }
 
 fn unescape(s: &str) -> String {
-    s.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&#39;", "'")
+    s.replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
 }
 
 #[cfg(test)]
@@ -158,7 +184,10 @@ mod tests {
         assert!(svg.ends_with(r##"fill="#f9f7f5"/></svg>"##), "{svg}");
         assert!(is_diagram("arch.html", PAGE));
         assert!(!is_diagram("notes.md", PAGE));
-        assert!(!is_diagram("page.html", "<html><body>no drawing</body></html>"));
+        assert!(!is_diagram(
+            "page.html",
+            "<html><body>no drawing</body></html>"
+        ));
         assert!(extract_svg("<svg viewBox='0 0 1 1'>unclosed").is_none());
     }
 
@@ -167,12 +196,23 @@ mod tests {
         let svg = extract_svg(PAGE).unwrap();
         assert_eq!(view_size(svg), Some((960., 600.)));
         let out = sized(svg, 1360).unwrap();
-        assert!(out.starts_with("<svg width=\"1360\" height=\"850\" viewBox=\"0 0 960 600\""), "{}", &out[..80]);
+        assert!(
+            out.starts_with("<svg width=\"1360\" height=\"850\" viewBox=\"0 0 960 600\""),
+            "{}",
+            &out[..80]
+        );
         // Only the root is resized; the nested icon keeps its 16px.
         assert!(out.contains(r#"<svg x="4" y="4" width="16" height="16""#));
         let sized_twice = sized(&out, 480).unwrap();
-        assert!(sized_twice.starts_with("<svg width=\"480\" height=\"300\" viewBox"), "{}", &sized_twice[..60]);
-        assert_eq!(view_size(r#"<svg width="200px" height="100px">"#), Some((200., 100.)));
+        assert!(
+            sized_twice.starts_with("<svg width=\"480\" height=\"300\" viewBox"),
+            "{}",
+            &sized_twice[..60]
+        );
+        assert_eq!(
+            view_size(r#"<svg width="200px" height="100px">"#),
+            Some((200., 100.))
+        );
     }
 
     #[test]
@@ -183,17 +223,31 @@ mod tests {
         assert!(dark.contains(r##"<rect fill="#1c1b19"/>"##), "{dark}");
         assert!(dark.contains(r##"<text fill="#f6f5f4">"##), "{dark}");
         assert!(dark.contains("rgba(75,161,243,0.08)") && dark.contains("#4ba1f3"));
-        assert!(for_dark(r##"<svg><rect fill="#f5f5f5"/></svg>"##).is_none(), "another skin is left alone");
+        assert!(
+            for_dark(r##"<svg><rect fill="#f5f5f5"/></svg>"##).is_none(),
+            "another skin is left alone"
+        );
     }
 
     #[test]
     fn the_bundled_skill_wears_the_forge_skin() {
-        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/forge-plugin/skills/diagram-design");
+        let root = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/forge-plugin/skills/diagram-design"
+        );
         let guide = std::fs::read_to_string(format!("{root}/references/style-guide.md")).unwrap();
         assert!(guide.starts_with("<!-- diagram-design-profile\nname: Forge\nslug: forge"));
-        for template in ["template.html", "template-full.html", "template-motion.html", "template-dark.html"] {
+        for template in [
+            "template.html",
+            "template-full.html",
+            "template-motion.html",
+            "template-dark.html",
+        ] {
             let t = std::fs::read_to_string(format!("{root}/assets/{template}")).unwrap();
-            assert!(t.contains("'Hanken Grotesk'") && t.contains("'JetBrains Mono'"), "{template}");
+            assert!(
+                t.contains("'Hanken Grotesk'") && t.contains("'JetBrains Mono'"),
+                "{template}"
+            );
             for old in ["Geist", "Instrument", "#bf4520", "#2d3142", "#f5f5f5"] {
                 assert!(!t.contains(old), "{template} still has {old}");
             }
@@ -202,20 +256,33 @@ mod tests {
         use crate::palette_check::contrast;
         let c = |x: u32| -> gpui::Hsla { gpui::rgb(x).into() };
         for (fg, bg, floor) in [
-            (0x1c1b19, 0xf9f7f5, 4.5), (0x615d59, 0xf9f7f5, 4.5), (0x6f6a64, 0xf9f7f5, 4.5), (0x005fb3, 0xf9f7f5, 4.5), (0x6a4fb4, 0xf9f7f5, 4.5),
-            (0xf6f5f4, 0x1c1b19, 4.5), (0xb5b0aa, 0x1c1b19, 4.5), (0x9d978f, 0x1c1b19, 4.5), (0x4ba1f3, 0x1c1b19, 4.5), (0xac93e6, 0x1c1b19, 4.5),
+            (0x1c1b19, 0xf9f7f5, 4.5),
+            (0x615d59, 0xf9f7f5, 4.5),
+            (0x6f6a64, 0xf9f7f5, 4.5),
+            (0x005fb3, 0xf9f7f5, 4.5),
+            (0x6a4fb4, 0xf9f7f5, 4.5),
+            (0xf6f5f4, 0x1c1b19, 4.5),
+            (0xb5b0aa, 0x1c1b19, 4.5),
+            (0x9d978f, 0x1c1b19, 4.5),
+            (0x4ba1f3, 0x1c1b19, 4.5),
+            (0xac93e6, 0x1c1b19, 4.5),
         ] {
             let r = contrast(c(fg), c(bg));
             assert!(r >= floor, "#{fg:06x} on #{bg:06x} is {r:.2}:1");
         }
         let page = include_str!("../assets/docs/forge-chat-path.html");
-        assert!(is_diagram("chat-path.html", page) && for_dark(extract_svg(page).unwrap()).is_some());
+        assert!(
+            is_diagram("chat-path.html", page) && for_dark(extract_svg(page).unwrap()).is_some()
+        );
     }
 
     #[test]
     fn names_and_describes_it() {
         assert_eq!(title(PAGE).as_deref(), Some("How a chat reaches a model"));
-        assert_eq!(description(PAGE).as_deref(), Some("From Forge to an endpoint & back."));
+        assert_eq!(
+            description(PAGE).as_deref(),
+            Some("From Forge to an endpoint & back.")
+        );
         let bare = r#"<svg viewBox="0 0 10 10"><title>Only a title</title></svg>"#;
         assert_eq!(title(bare).as_deref(), Some("Only a title"));
     }

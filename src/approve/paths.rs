@@ -56,16 +56,33 @@ const PROTECTED_HOME_SUBPATHS: &[&str] = &[
 
 /// Absolute system paths that must never be recursively destroyed.
 const PROTECTED_SYSTEM_PATHS: &[&str] = &[
-    "/", "/bin", "/boot", "/dev", "/etc", "/lib", "/lib64", "/opt", "/proc",
-    "/root", "/sbin", "/srv", "/sys", "/usr", "/var",
-    "/Applications", "/System", "/Library", "/Users", "/home",
+    "/",
+    "/bin",
+    "/boot",
+    "/dev",
+    "/etc",
+    "/lib",
+    "/lib64",
+    "/opt",
+    "/proc",
+    "/root",
+    "/sbin",
+    "/srv",
+    "/sys",
+    "/usr",
+    "/var",
+    "/Applications",
+    "/System",
+    "/Library",
+    "/Users",
+    "/home",
 ];
 
 /// System paths where the contents are as critical as the directory itself, so
 /// deleting a single file inside them is also unacceptable.
 const SYSTEM_PATHS_PROTECTED_RECURSIVELY: &[&str] = &[
-    "/bin", "/boot", "/dev", "/etc", "/lib", "/lib64", "/proc", "/sbin", "/sys",
-    "/usr", "/var/lib", "/System", "/Library",
+    "/bin", "/boot", "/dev", "/etc", "/lib", "/lib64", "/proc", "/sbin", "/sys", "/usr",
+    "/var/lib", "/System", "/Library",
 ];
 
 /// The three standard device sinks.
@@ -108,7 +125,11 @@ fn normalize(p: &str) -> String {
 fn is_under(child: &str, parent: &str) -> bool {
     let c = normalize(child);
     let p = normalize(parent);
-    let prefix = if p == "/" { "/".to_string() } else { format!("{p}/") };
+    let prefix = if p == "/" {
+        "/".to_string()
+    } else {
+        format!("{p}/")
+    };
     c == p || c.starts_with(&prefix)
 }
 
@@ -139,7 +160,11 @@ fn posix_normalize(path: &str) -> String {
         if absolute {
             return "/".to_string();
         }
-        return if trailing { "./".to_string() } else { ".".to_string() };
+        return if trailing {
+            "./".to_string()
+        } else {
+            ".".to_string()
+        };
     }
     if trailing {
         out.push('/');
@@ -261,7 +286,10 @@ pub fn expand(raw: &str, ctx: &RiskContext) -> Expanded {
         value = posix_join(&[&normalize(cwd), &normalize(&value)]);
     }
 
-    Expanded { path: normalize(&value), unknown }
+    Expanded {
+        path: normalize(&value),
+        unknown,
+    }
 }
 
 /// Would destroying this path be unacceptable no matter the justification?
@@ -276,7 +304,10 @@ pub fn is_catastrophic_target(target: &str, ctx: &RiskContext) -> bool {
     if PROTECTED_SYSTEM_PATHS.iter().any(|sys| normalize(sys) == p) {
         return true;
     }
-    if SYSTEM_PATHS_PROTECTED_RECURSIVELY.iter().any(|sys| is_under(&p, sys)) {
+    if SYSTEM_PATHS_PROTECTED_RECURSIVELY
+        .iter()
+        .any(|sys| is_under(&p, sys))
+    {
         return true;
     }
 
@@ -322,12 +353,18 @@ pub enum TargetClass {
 
 /// How much scrutiny destroying this path earns. See [`TargetClass`].
 pub fn classify_target(raw: &str, ctx: &RiskContext) -> TargetClass {
-    let Expanded { path: resolved, unknown } = expand(raw, ctx);
+    let Expanded {
+        path: resolved,
+        unknown,
+    } = expand(raw, ctx);
 
     // Writing to a device sink destroys nothing, so it earns no finding at all.
     // Without this it would fall through to "outside the working directory" and
     // turn every ordinary `cmd > /dev/null` into a permission prompt.
-    if SAFE_DEVICE_SINKS.iter().any(|sink| normalize(sink) == resolved) {
+    if SAFE_DEVICE_SINKS
+        .iter()
+        .any(|sink| normalize(sink) == resolved)
+    {
         return TargetClass::Harmless;
     }
 
@@ -428,8 +465,14 @@ pub(super) mod tests {
     #[test]
     fn protects_the_credential_stores_recursively() {
         for dir in [".ssh", ".gnupg", ".aws", ".kube", ".docker"] {
-            assert!(is_catastrophic_target(&format!("{HOME}/{dir}"), &ctx()), "{dir}");
-            assert!(is_catastrophic_target(&format!("{HOME}/{dir}/id_rsa"), &ctx()), "{dir}");
+            assert!(
+                is_catastrophic_target(&format!("{HOME}/{dir}"), &ctx()),
+                "{dir}"
+            );
+            assert!(
+                is_catastrophic_target(&format!("{HOME}/{dir}/id_rsa"), &ctx()),
+                "{dir}"
+            );
         }
     }
 
@@ -438,13 +481,19 @@ pub(super) mod tests {
         // Deleting individual config files is something people do all day, and
         // protecting every one would make the classifier noisy enough to ignore.
         assert!(is_catastrophic_target(&format!("{HOME}/.config"), &ctx()));
-        assert!(!is_catastrophic_target(&format!("{HOME}/.config/app/stale.toml"), &ctx()));
+        assert!(!is_catastrophic_target(
+            &format!("{HOME}/.config/app/stale.toml"),
+            &ctx()
+        ));
     }
 
     #[test]
     fn does_not_protect_home_recursively_because_projects_live_under_it() {
         assert!(is_catastrophic_target("/home", &ctx()));
-        assert!(!is_catastrophic_target("/home/dev/projects/forge/build", &ctx()));
+        assert!(!is_catastrophic_target(
+            "/home/dev/projects/forge/build",
+            &ctx()
+        ));
     }
 
     #[test]
@@ -464,7 +513,10 @@ pub(super) mod tests {
     #[test]
     fn treats_a_file_inside_the_working_directory_as_bounded() {
         assert_eq!(classify_target("build/tmp.o", &ctx()), TargetClass::Bounded);
-        assert_eq!(classify_target(&format!("{CWD}/dist"), &ctx()), TargetClass::Bounded);
+        assert_eq!(
+            classify_target(&format!("{CWD}/dist"), &ctx()),
+            TargetClass::Bounded
+        );
     }
 
     #[test]
@@ -475,7 +527,10 @@ pub(super) mod tests {
 
     #[test]
     fn treats_temp_directories_as_bounded() {
-        assert_eq!(classify_target("/tmp/scratch", &ctx()), TargetClass::Bounded);
+        assert_eq!(
+            classify_target("/tmp/scratch", &ctx()),
+            TargetClass::Bounded
+        );
     }
 
     #[test]
@@ -486,7 +541,10 @@ pub(super) mod tests {
     #[test]
     fn resolves_home_because_that_one_actually_matters() {
         assert_eq!(classify_target("$HOME", &ctx()), TargetClass::Catastrophic);
-        assert_eq!(classify_target("${HOME}", &ctx()), TargetClass::Catastrophic);
+        assert_eq!(
+            classify_target("${HOME}", &ctx()),
+            TargetClass::Catastrophic
+        );
     }
 
     #[test]
@@ -499,6 +557,9 @@ pub(super) mod tests {
     fn catches_a_wildcard_directly_under_a_protected_root() {
         // The `rm -rf /*` shape.
         assert_eq!(classify_target("/*", &ctx()), TargetClass::Catastrophic);
-        assert_eq!(classify_target(&format!("{HOME}/*"), &ctx()), TargetClass::Catastrophic);
+        assert_eq!(
+            classify_target(&format!("{HOME}/*"), &ctx()),
+            TargetClass::Catastrophic
+        );
     }
 }

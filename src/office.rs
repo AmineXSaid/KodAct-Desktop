@@ -109,17 +109,22 @@ pub fn column_letters(mut n: usize) -> String {
 
 fn sheets(bytes: &[u8]) -> Result<Vec<Sheet>, String> {
     use calamine::{Data, Reader as _};
-    let mut book = calamine::open_workbook_auto_from_rs(Cursor::new(bytes.to_vec())).map_err(|e| format!("not a workbook Forge can read: {e}"))?;
+    let mut book = calamine::open_workbook_auto_from_rs(Cursor::new(bytes.to_vec()))
+        .map_err(|e| format!("not a workbook Forge can read: {e}"))?;
     let mut out = vec![];
     for name in book.sheet_names().to_vec() {
         let range = book.worksheet_range(&name).map_err(|e| e.to_string())?;
         let (h, w) = range.get_size();
         // Cells start at the range's origin; show them from A1 so the
         // letters and numbers match the workbook's.
-        let (r0, c0) = range.start().map(|(r, c)| (r as usize, c as usize)).unwrap_or((0, 0));
+        let (r0, c0) = range
+            .start()
+            .map(|(r, c)| (r as usize, c as usize))
+            .unwrap_or((0, 0));
         let total_rows = if h == 0 { 0 } else { r0 + h };
         let total_cols = if w == 0 { 0 } else { c0 + w };
-        let mut rows = vec![vec![CellText::default(); total_cols.min(MAX_COLS)]; total_rows.min(MAX_ROWS)];
+        let mut rows =
+            vec![vec![CellText::default(); total_cols.min(MAX_COLS)]; total_rows.min(MAX_ROWS)];
         for (r, row) in range.rows().enumerate().take(MAX_ROWS.saturating_sub(r0)) {
             for (c, cell) in row.iter().enumerate().take(MAX_COLS.saturating_sub(c0)) {
                 let (text, numeric) = match cell {
@@ -136,7 +141,12 @@ fn sheets(bytes: &[u8]) -> Result<Vec<Sheet>, String> {
                 rows[r0 + r][c0 + c] = CellText { text, numeric };
             }
         }
-        out.push(Sheet { name, rows, total_rows, total_cols });
+        out.push(Sheet {
+            name,
+            rows,
+            total_rows,
+            total_cols,
+        });
     }
     Ok(out)
 }
@@ -150,13 +160,18 @@ fn part(zip: &mut zip::ZipArchive<Cursor<&[u8]>>, path: &str) -> Option<String> 
 }
 
 fn open_zip(bytes: &[u8]) -> Result<zip::ZipArchive<Cursor<&[u8]>>, String> {
-    zip::ZipArchive::new(Cursor::new(bytes)).map_err(|e| format!("not an Office file Forge can read: {e}"))
+    zip::ZipArchive::new(Cursor::new(bytes))
+        .map_err(|e| format!("not an Office file Forge can read: {e}"))
 }
 
 fn attr(e: &BytesStart, key: &[u8]) -> Option<String> {
     let a = e.attributes().flatten().find(|a| a.key.as_ref() == key)?;
     let raw = std::str::from_utf8(&a.value).ok()?;
-    Some(quick_xml::escape::unescape(raw).map(|v| v.into_owned()).unwrap_or_else(|_| raw.to_string()))
+    Some(
+        quick_xml::escape::unescape(raw)
+            .map(|v| v.into_owned())
+            .unwrap_or_else(|_| raw.to_string()),
+    )
 }
 
 /// Text from a `&…;` reference.
@@ -179,7 +194,9 @@ fn entity(name: &str) -> String {
 
 /// Markdown's special characters in plain text, made literal.
 fn escape_md(s: &str) -> String {
-    s.replace('*', "\\*").replace('`', "\\`").replace('|', "\\|")
+    s.replace('*', "\\*")
+        .replace('`', "\\`")
+        .replace('|', "\\|")
 }
 
 /// Runs of one paragraph, with bold kept as `**`.
@@ -202,7 +219,8 @@ impl Para {
             // Keep the spaces outside the markers, as Markdown wants.
             let (lead, rest) = t.split_at(t.len() - t.trim_start().len());
             let trail = &rest[rest.trim_end().len()..];
-            self.text.push_str(&format!("{lead}**{}**{trail}", rest.trim()));
+            self.text
+                .push_str(&format!("{lead}**{}**{trail}", rest.trim()));
         } else {
             self.text.push_str(&t);
         }
@@ -215,7 +233,9 @@ impl Para {
             return None;
         }
         let style = self.style.to_ascii_lowercase();
-        let level = style.strip_prefix("heading").and_then(|n| n.trim().parse::<usize>().ok());
+        let level = style
+            .strip_prefix("heading")
+            .and_then(|n| n.trim().parse::<usize>().ok());
         Some(if style == "title" {
             format!("# {text}")
         } else if let Some(n) = level {
@@ -232,44 +252,50 @@ impl Para {
 
 fn docx(bytes: &[u8]) -> Result<String, String> {
     let mut zip = open_zip(bytes)?;
-    let xml = part(&mut zip, "word/document.xml").ok_or("no word/document.xml: not a Word document")?;
+    let xml =
+        part(&mut zip, "word/document.xml").ok_or("no word/document.xml: not a Word document")?;
     // Which numbering ids are bulleted, so lists keep their kind.
-    let bullets: std::collections::HashSet<String> = part(&mut zip, "word/numbering.xml").map(|n| bullet_num_ids(&n)).unwrap_or_default();
+    let bullets: std::collections::HashSet<String> = part(&mut zip, "word/numbering.xml")
+        .map(|n| bullet_num_ids(&n))
+        .unwrap_or_default();
     let mut reader = Reader::from_str(&xml);
     let (mut out, mut para, mut in_para) = (Vec::<String>::new(), Para::default(), false);
-    let (mut table, mut row, mut cell): (Vec<Vec<String>>, Vec<String>, Option<String>) = (vec![], vec![], None);
+    let (mut table, mut row, mut cell): (Vec<Vec<String>>, Vec<String>, Option<String>) =
+        (vec![], vec![], None);
     let mut depth_tbl = 0usize;
     let mut in_text = false;
     loop {
         match reader.read_event() {
-            Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
-                match e.name().as_ref() {
-                    b"w:tbl" => depth_tbl += 1,
-                    b"w:tr" => row.clear(),
-                    b"w:tc" => cell = Some(String::new()),
-                    b"w:p" => {
-                        para = Para::default();
-                        in_para = true;
-                    }
-                    b"w:pStyle" => para.style = attr(&e, b"w:val").unwrap_or_default(),
-                    b"w:numId" => {
-                        let id = attr(&e, b"w:val").unwrap_or_default();
-                        if bullets.contains(&id) {
-                            para.list = true;
-                        } else if id != "0" {
-                            para.numbered = true;
-                        }
-                    }
-                    b"w:r" => para.run_bold = false,
-                    b"w:b" => para.run_bold = attr(&e, b"w:val").is_none_or(|v| v != "0" && v != "false"),
-                    b"w:t" => in_text = true,
-                    b"w:tab" => para.run.push(' '),
-                    b"w:br" => para.run.push(' '),
-                    _ => {}
+            Ok(Event::Start(e)) | Ok(Event::Empty(e)) => match e.name().as_ref() {
+                b"w:tbl" => depth_tbl += 1,
+                b"w:tr" => row.clear(),
+                b"w:tc" => cell = Some(String::new()),
+                b"w:p" => {
+                    para = Para::default();
+                    in_para = true;
                 }
-            }
+                b"w:pStyle" => para.style = attr(&e, b"w:val").unwrap_or_default(),
+                b"w:numId" => {
+                    let id = attr(&e, b"w:val").unwrap_or_default();
+                    if bullets.contains(&id) {
+                        para.list = true;
+                    } else if id != "0" {
+                        para.numbered = true;
+                    }
+                }
+                b"w:r" => para.run_bold = false,
+                b"w:b" => {
+                    para.run_bold = attr(&e, b"w:val").is_none_or(|v| v != "0" && v != "false")
+                }
+                b"w:t" => in_text = true,
+                b"w:tab" => para.run.push(' '),
+                b"w:br" => para.run.push(' '),
+                _ => {}
+            },
             Ok(Event::Text(t)) if in_text => para.run.push_str(&t.decode().unwrap_or_default()),
-            Ok(Event::GeneralRef(r)) if in_text => para.run.push_str(&entity(&r.decode().unwrap_or_default())),
+            Ok(Event::GeneralRef(r)) if in_text => {
+                para.run.push_str(&entity(&r.decode().unwrap_or_default()))
+            }
             Ok(Event::End(e)) => match e.name().as_ref() {
                 b"w:t" => in_text = false,
                 b"w:r" => {
@@ -313,7 +339,11 @@ fn join_blocks(blocks: &[String]) -> String {
     let mut out = String::new();
     for (i, b) in blocks.iter().enumerate() {
         if i > 0 {
-            out.push_str(if item(b) && item(&blocks[i - 1]) { "\n" } else { "\n\n" });
+            out.push_str(if item(b) && item(&blocks[i - 1]) {
+                "\n"
+            } else {
+                "\n\n"
+            });
         }
         out.push_str(b);
     }
@@ -352,7 +382,8 @@ fn reflow(text: &str) -> String {
 /// The numbering ids whose first level is a bullet.
 fn bullet_num_ids(numbering: &str) -> std::collections::HashSet<String> {
     let mut reader = Reader::from_str(numbering);
-    let (mut abstract_bullets, mut current_abstract, mut level_zero) = (std::collections::HashSet::new(), None::<String>, false);
+    let (mut abstract_bullets, mut current_abstract, mut level_zero) =
+        (std::collections::HashSet::new(), None::<String>, false);
     let mut num_to_abstract = vec![];
     let mut current_num = None::<String>;
     loop {
@@ -377,14 +408,34 @@ fn bullet_num_ids(numbering: &str) -> std::collections::HashSet<String> {
             _ => {}
         }
     }
-    num_to_abstract.into_iter().filter(|(_, a)| abstract_bullets.contains(a)).map(|(n, _)| n).collect()
+    num_to_abstract
+        .into_iter()
+        .filter(|(_, a)| abstract_bullets.contains(a))
+        .map(|(n, _)| n)
+        .collect()
 }
 
 fn md_table(rows: &[Vec<String>]) -> String {
     let w = rows.iter().map(|r| r.len()).max().unwrap_or(0).max(1);
-    let line = |r: &Vec<String>| format!("| {} |", (0..w).map(|i| r.get(i).map(|s| s.replace('\n', " ")).unwrap_or_default()).collect::<Vec<_>>().join(" | "));
+    let line = |r: &Vec<String>| {
+        format!(
+            "| {} |",
+            (0..w)
+                .map(|i| r.get(i).map(|s| s.replace('\n', " ")).unwrap_or_default())
+                .collect::<Vec<_>>()
+                .join(" | ")
+        )
+    };
     // A header row is drawn bold already: its own bold markers go.
-    let header: Vec<String> = rows[0].iter().map(|c| c.strip_prefix("**").and_then(|c| c.strip_suffix("**")).unwrap_or(c).to_string()).collect();
+    let header: Vec<String> = rows[0]
+        .iter()
+        .map(|c| {
+            c.strip_prefix("**")
+                .and_then(|c| c.strip_suffix("**"))
+                .unwrap_or(c)
+                .to_string()
+        })
+        .collect();
     let mut out = vec![line(&header), format!("|{}", "---|".repeat(w))];
     out.extend(rows[1..].iter().map(line));
     out.join("\n")
@@ -394,7 +445,12 @@ fn pptx(bytes: &[u8]) -> Result<String, String> {
     let mut zip = open_zip(bytes)?;
     let mut slides: Vec<(usize, String)> = zip
         .file_names()
-        .filter_map(|n| n.strip_prefix("ppt/slides/slide").and_then(|r| r.strip_suffix(".xml")).and_then(|d| d.parse().ok()).map(|i: usize| (i, n.to_string())))
+        .filter_map(|n| {
+            n.strip_prefix("ppt/slides/slide")
+                .and_then(|r| r.strip_suffix(".xml"))
+                .and_then(|d| d.parse().ok())
+                .map(|i: usize| (i, n.to_string()))
+        })
         .collect();
     if slides.is_empty() {
         return Err("no slides: not a PowerPoint deck".into());
@@ -426,7 +482,12 @@ fn slide_text(xml: &str) -> (Option<String>, Vec<String>) {
                     is_title = false;
                     shape_paras.clear();
                 }
-                b"p:ph" => is_title = matches!(attr(&e, b"type").as_deref(), Some("title") | Some("ctrTitle")),
+                b"p:ph" => {
+                    is_title = matches!(
+                        attr(&e, b"type").as_deref(),
+                        Some("title") | Some("ctrTitle")
+                    )
+                }
                 b"a:p" => {
                     para.clear();
                     level = 0;
@@ -436,7 +497,9 @@ fn slide_text(xml: &str) -> (Option<String>, Vec<String>) {
                 _ => {}
             },
             Ok(Event::Text(t)) if in_text => para.push_str(&t.decode().unwrap_or_default()),
-            Ok(Event::GeneralRef(r)) if in_text => para.push_str(&entity(&r.decode().unwrap_or_default())),
+            Ok(Event::GeneralRef(r)) if in_text => {
+                para.push_str(&entity(&r.decode().unwrap_or_default()))
+            }
             Ok(Event::End(e)) => match e.name().as_ref() {
                 b"a:t" => in_text = false,
                 b"a:p" => {
@@ -446,9 +509,19 @@ fn slide_text(xml: &str) -> (Option<String>, Vec<String>) {
                 }
                 b"p:sp" => {
                     if is_title && title.is_none() {
-                        title = Some(shape_paras.iter().map(|(_, t)| t.as_str()).collect::<Vec<_>>().join(" "));
+                        title = Some(
+                            shape_paras
+                                .iter()
+                                .map(|(_, t)| t.as_str())
+                                .collect::<Vec<_>>()
+                                .join(" "),
+                        );
                     } else {
-                        body.extend(shape_paras.drain(..).map(|(l, t)| format!("{}- {t}", "  ".repeat(l.min(4)))));
+                        body.extend(
+                            shape_paras
+                                .drain(..)
+                                .map(|(l, t)| format!("{}- {t}", "  ".repeat(l.min(4)))),
+                        );
                     }
                 }
                 _ => {}
@@ -458,11 +531,19 @@ fn slide_text(xml: &str) -> (Option<String>, Vec<String>) {
         }
     }
     // Consecutive bullets form one list.
-    (title, if body.is_empty() { vec![] } else { vec![body.join("\n")] })
+    (
+        title,
+        if body.is_empty() {
+            vec![]
+        } else {
+            vec![body.join("\n")]
+        },
+    )
 }
 
 fn pdf(bytes: &[u8]) -> Result<String, String> {
-    let doc = lopdf::Document::load_mem(bytes).map_err(|e| format!("not a PDF Forge can read: {e}"))?;
+    let doc =
+        lopdf::Document::load_mem(bytes).map_err(|e| format!("not a PDF Forge can read: {e}"))?;
     let pages: Vec<u32> = doc.get_pages().keys().copied().take(MAX_PARTS).collect();
     if pages.is_empty() {
         return Err("the PDF has no pages".into());
@@ -471,7 +552,11 @@ fn pdf(bytes: &[u8]) -> Result<String, String> {
     for n in pages {
         out.push(format!("## Page {n}"));
         let text = reflow(&doc.extract_text(&[n]).unwrap_or_default());
-        out.push(if text.trim().is_empty() { "*No text on this page: it may be a scan.*".to_string() } else { escape_md(text.trim()) });
+        out.push(if text.trim().is_empty() {
+            "*No text on this page: it may be a scan.*".to_string()
+        } else {
+            escape_md(text.trim())
+        });
     }
     Ok(out.join("\n\n") + "\n")
 }
@@ -489,15 +574,28 @@ mod tests {
     const PDF: &[u8] = include_bytes!("../assets/docs/samples/q3-budget.pdf");
 
     fn cell<'a>(s: &'a Sheet, a1: &str) -> &'a str {
-        let col = a1.bytes().take_while(u8::is_ascii_alphabetic).fold(0usize, |n, b| n * 26 + (b - b'A' + 1) as usize) - 1;
-        let row: usize = a1.trim_start_matches(|c: char| c.is_ascii_alphabetic()).parse::<usize>().unwrap() - 1;
+        let col = a1
+            .bytes()
+            .take_while(u8::is_ascii_alphabetic)
+            .fold(0usize, |n, b| n * 26 + (b - b'A' + 1) as usize)
+            - 1;
+        let row: usize = a1
+            .trim_start_matches(|c: char| c.is_ascii_alphabetic())
+            .parse::<usize>()
+            .unwrap()
+            - 1;
         &s.rows[row][col].text
     }
 
     #[test]
     fn reads_the_edited_workbook_with_its_computed_values() {
-        let Preview::Sheets(sheets) = preview("q3-budget.xlsx", XLSX).unwrap() else { panic!() };
-        assert_eq!(sheets.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), ["Budget", "Notes"]);
+        let Preview::Sheets(sheets) = preview("q3-budget.xlsx", XLSX).unwrap() else {
+            panic!()
+        };
+        assert_eq!(
+            sheets.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(),
+            ["Budget", "Notes"]
+        );
         let b = &sheets[0];
         assert_eq!((b.total_rows, b.total_cols), (7, 4));
         assert_eq!(cell(b, "A1"), "Item");
@@ -508,52 +606,98 @@ mod tests {
         assert_eq!(cell(b, "C7"), "5500");
         assert_eq!(cell(b, "D7"), "350");
         assert!(b.rows[2][2].numeric && !b.rows[2][0].numeric);
-        assert_eq!(cell(&sheets[1], "A1"), "Figures in EUR. Q3 is the forecast.");
+        assert_eq!(
+            cell(&sheets[1], "A1"),
+            "Figures in EUR. Q3 is the forecast."
+        );
     }
 
     #[test]
     fn reads_the_memo_as_markdown() {
-        let Preview::Markdown(md) = preview("q3-budget-memo.docx", DOCX).unwrap() else { panic!() };
+        let Preview::Markdown(md) = preview("q3-budget-memo.docx", DOCX).unwrap() else {
+            panic!()
+        };
         assert!(md.starts_with("# Q3 budget update\n"), "{md}");
-        assert!(md.contains("The Q3 forecast is **5,500 EUR**, up 350 EUR"), "bold is kept: {md}");
+        assert!(
+            md.contains("The Q3 forecast is **5,500 EUR**, up 350 EUR"),
+            "bold is kept: {md}"
+        );
         assert!(md.contains("## What changed"));
         assert!(md.contains("- **Licences** fall to 700 EUR (from 800): the renewal was renegotiated.\n- **Travel**"), "a list, kept together: {md}");
-        assert!(md.contains("1. Finance signs off the forecast by Friday."), "a numbered item: {md}");
+        assert!(
+            md.contains("1. Finance signs off the forecast by Friday."),
+            "a numbered item: {md}"
+        );
         assert!(md.contains("| Item | Q2 | Q3 | Change |"), "{md}");
-        assert!(md.contains("| **Total** | **5,150** | **5,500** | **+350** |"), "{md}");
+        assert!(
+            md.contains("| **Total** | **5,150** | **5,500** | **+350** |"),
+            "{md}"
+        );
     }
 
     #[test]
     fn reads_the_deck_slide_by_slide() {
-        let Preview::Markdown(md) = preview("q3-budget.pptx", PPTX).unwrap() else { panic!() };
+        let Preview::Markdown(md) = preview("q3-budget.pptx", PPTX).unwrap() else {
+            panic!()
+        };
         assert!(md.contains("## Slide 1: Q3 budget"), "{md}");
         assert!(md.contains("## Slide 3: What changed"), "{md}");
-        assert!(md.contains("- Licences: 700, down 100\n  - renewal renegotiated"), "{md}");
+        assert!(
+            md.contains("- Licences: 700, down 100\n  - renewal renegotiated"),
+            "{md}"
+        );
         assert!(md.contains("## Slide 4: Next"));
     }
 
     #[test]
     fn reads_the_pdf_page_by_page() {
-        let Preview::Markdown(md) = preview("q3-budget.pdf", PDF).unwrap() else { panic!() };
+        let Preview::Markdown(md) = preview("q3-budget.pdf", PDF).unwrap() else {
+            panic!()
+        };
         assert!(md.starts_with("## Page 1"), "{md}");
         assert!(md.contains("Q3 budget update"), "{md}");
         assert!(md.contains("Licences fall to 700 EUR"), "{md}");
-        assert!(md.contains("The Q3 forecast is 5,500 EUR, up 350 EUR (6.8%) on Q2."), "a sentence split by bold is one again: {md}");
+        assert!(
+            md.contains("The Q3 forecast is 5,500 EUR, up 350 EUR (6.8%) on Q2."),
+            "a sentence split by bold is one again: {md}"
+        );
     }
 
     #[test]
     fn reflows_pdf_lines_into_sentences() {
-        assert_eq!(reflow("Title\nThe total is\n5,500\n, up 6%.\nNext line"), "Title\nThe total is 5,500, up 6%.\nNext line");
+        assert_eq!(
+            reflow("Title\nThe total is\n5,500\n, up 6%.\nNext line"),
+            "Title\nThe total is 5,500, up 6%.\nNext line"
+        );
         assert_eq!(reflow("A\n\nB"), "A\n\nB");
     }
 
     #[test]
     fn says_what_it_cannot_read() {
         assert!(preview("notes.txt", b"hello").is_err());
-        assert!(preview("broken.xlsx", b"not a zip").unwrap_err().contains("not a workbook"));
-        assert!(preview("broken.docx", b"not a zip").unwrap_err().contains("not an Office file"));
+        assert!(preview("broken.xlsx", b"not a zip")
+            .unwrap_err()
+            .contains("not a workbook"));
+        assert!(preview("broken.docx", b"not a zip")
+            .unwrap_err()
+            .contains("not an Office file"));
         assert!(preview("broken.pdf", b"%PDF-1.4 nothing").is_err());
         assert_eq!(Kind::of("Report.PDF"), Some(Kind::Pdf));
-        assert_eq!((column_letters(0), column_letters(25), column_letters(26), column_letters(51), column_letters(52)), ("A".into(), "Z".into(), "AA".into(), "AZ".into(), "BA".into()));
+        assert_eq!(
+            (
+                column_letters(0),
+                column_letters(25),
+                column_letters(26),
+                column_letters(51),
+                column_letters(52)
+            ),
+            (
+                "A".into(),
+                "Z".into(),
+                "AA".into(),
+                "AZ".into(),
+                "BA".into()
+            )
+        );
     }
 }

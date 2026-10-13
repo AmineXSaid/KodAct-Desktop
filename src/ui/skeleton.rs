@@ -4,13 +4,21 @@
 
 use std::time::Duration;
 
-use gpui::{div, linear_color_stop, linear_gradient, prelude::*, px, relative, Animation, AnimationExt, AnyElement, DefiniteLength, Pixels, SharedString};
+use gpui::{
+    div, linear_color_stop, linear_gradient, prelude::*, px, relative, Animation, AnimationExt,
+    AnyElement, DefiniteLength, Pixels, SharedString,
+};
 
 use crate::theme::Theme;
 
 /// One placeholder shape, `w` wide (a length or a fraction of its row) and
 /// `h` high, with the sweep running across it.
-pub fn bar(t: &Theme, id: impl Into<SharedString>, w: impl Into<DefiniteLength>, h: Pixels) -> AnyElement {
+pub fn bar(
+    t: &Theme,
+    id: impl Into<SharedString>,
+    w: impl Into<DefiniteLength>,
+    h: Pixels,
+) -> AnyElement {
     let w: DefiniteLength = w.into();
     let base = t.colors.hover;
     let glow = t.colors.surface.opacity(if t.is_dark { 0.08 } else { 0.9 });
@@ -29,9 +37,23 @@ pub fn bar(t: &Theme, id: impl Into<SharedString>, w: impl Into<DefiniteLength>,
                 .bottom_0()
                 .w(relative(0.6))
                 .flex()
-                .child(div().h_full().w(relative(0.5)).bg(linear_gradient(90., linear_color_stop(glow.opacity(0.), 0.), linear_color_stop(glow, 1.))))
-                .child(div().h_full().w(relative(0.5)).bg(linear_gradient(90., linear_color_stop(glow, 0.), linear_color_stop(glow.opacity(0.), 1.))))
-                .with_animation(id.into(), Animation::new(Duration::from_millis(1500)).repeat().with_easing(gpui::ease_in_out), |d, delta| d.left(relative(-0.6 + delta * 1.6))),
+                .child(div().h_full().w(relative(0.5)).bg(linear_gradient(
+                    90.,
+                    linear_color_stop(glow.opacity(0.), 0.),
+                    linear_color_stop(glow, 1.),
+                )))
+                .child(div().h_full().w(relative(0.5)).bg(linear_gradient(
+                    90.,
+                    linear_color_stop(glow, 0.),
+                    linear_color_stop(glow.opacity(0.), 1.),
+                )))
+                .with_animation(
+                    id.into(),
+                    Animation::new(Duration::from_millis(1500))
+                        .repeat()
+                        .with_easing(gpui::ease_in_out),
+                    |d, delta| d.left(relative(-0.6 + delta * 1.6)),
+                ),
         )
         .into_any_element()
 }
@@ -39,10 +61,19 @@ pub fn bar(t: &Theme, id: impl Into<SharedString>, w: impl Into<DefiniteLength>,
 /// The sidebar's chat list, loading: a few date groups of rows.
 pub fn chat_list(t: &Theme) -> AnyElement {
     let widths = [0.72, 0.55, 0.8, 0.62, 0.7, 0.5, 0.66];
-    let mut col = div().flex().flex_col().px(t.space.md).pt(t.space.lg).gap(t.space.md);
+    let mut col = div()
+        .flex()
+        .flex_col()
+        .px(t.space.md)
+        .pt(t.space.lg)
+        .gap(t.space.md);
     for (i, w) in widths.iter().enumerate() {
         if i == 0 || i == 3 || i == 5 {
-            col = col.child(div().pt(if i == 0 { px(0.) } else { t.space.sm }).child(bar(t, format!("sk-group-{i}"), px(56.), px(8.))));
+            col = col.child(
+                div()
+                    .pt(if i == 0 { px(0.) } else { t.space.sm })
+                    .child(bar(t, format!("sk-group-{i}"), px(56.), px(8.))),
+            );
         }
         col = col.child(
             div()
@@ -50,7 +81,11 @@ pub fn chat_list(t: &Theme) -> AnyElement {
                 .items_center()
                 .gap(t.space.sm)
                 .child(bar(t, format!("sk-dot-{i}"), px(8.), px(8.)))
-                .child(div().flex_1().child(bar(t, format!("sk-row-{i}"), relative(*w), px(11.))))
+                .child(
+                    div()
+                        .flex_1()
+                        .child(bar(t, format!("sk-row-{i}"), relative(*w), px(11.))),
+                )
                 .child(bar(t, format!("sk-ago-{i}"), px(18.), px(8.))),
         );
     }
@@ -72,8 +107,17 @@ pub fn transcript(t: &Theme) -> AnyElement {
                 .flex()
                 .flex_col()
                 .gap(t.space.md)
-                .child(div().flex().justify_end().child(bar(t, "sk-you", px(280.), px(36.))))
-                .child(div().pt(t.space.md).child(bar(t, "sk-head", px(64.), px(12.))))
+                .child(
+                    div()
+                        .flex()
+                        .justify_end()
+                        .child(bar(t, "sk-you", px(280.), px(36.))),
+                )
+                .child(
+                    div()
+                        .pt(t.space.md)
+                        .child(bar(t, "sk-head", px(64.), px(12.))),
+                )
                 .child(bar(t, "sk-l1", relative(0.92), px(11.)))
                 .child(bar(t, "sk-l2", relative(0.78), px(11.)))
                 .child(bar(t, "sk-tool1", relative(1.), px(36.)))
@@ -100,7 +144,12 @@ pub fn file_list(t: &Theme) -> AnyElement {
                         .flex()
                         .flex_col()
                         .gap(px(5.))
-                        .child(bar(t, format!("sk-file-{i}"), relative(0.5 + (i % 3) as f32 * 0.12), px(11.)))
+                        .child(bar(
+                            t,
+                            format!("sk-file-{i}"),
+                            relative(0.5 + (i % 3) as f32 * 0.12),
+                            px(11.),
+                        ))
                         .child(bar(t, format!("sk-file-sub-{i}"), relative(0.7), px(8.))),
                 ),
         );

@@ -256,7 +256,9 @@ mod tests {
         let t = tokenize("echo x > f");
         let hit = t.iter().find(|t| t.is_truncating_redirect_target);
         assert_eq!(hit.map(|t| t.text.as_str()), Some("f"));
-        assert!(!tokenize("echo x >> f").iter().any(|t| t.is_truncating_redirect_target));
+        assert!(!tokenize("echo x >> f")
+            .iter()
+            .any(|t| t.is_truncating_redirect_target));
     }
 
     #[test]
@@ -288,7 +290,11 @@ mod tests {
     #[test]
     fn splits_on_each_separator() {
         for sep in ["&&", "||", ";", "|"] {
-            assert_eq!(split_segments(&format!("ls {sep} rm -rf /")).len(), 2, "{sep}");
+            assert_eq!(
+                split_segments(&format!("ls {sep} rm -rf /")).len(),
+                2,
+                "{sep}"
+            );
         }
     }
 
@@ -303,5 +309,4 @@ mod tests {
         let segs = split_segments("ls && rm x");
         assert!(!segs[1][0].receives_pipe);
     }
-
 }

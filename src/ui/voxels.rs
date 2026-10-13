@@ -17,8 +17,24 @@ const FADE: [f32; 4] = [1., 0.55, 0.25, 0.12];
 fn grid(color: Hsla, lead: usize) -> Div {
     let mut d = div().relative().size(px(8.)).flex_none();
     for (i, (x, y)) in CELLS.iter().enumerate() {
-        let alpha = if lead == usize::MAX { if i == 0 { 1. } else { FADE[1] } } else { FADE[(lead + 4 - i) % 4] };
-        d = d.child(div().absolute().left(px(*x)).top(px(*y)).size(px(3.)).rounded(px(0.5)).bg(color.opacity(alpha)));
+        let alpha = if lead == usize::MAX {
+            if i == 0 {
+                1.
+            } else {
+                FADE[1]
+            }
+        } else {
+            FADE[(lead + 4 - i) % 4]
+        };
+        d = d.child(
+            div()
+                .absolute()
+                .left(px(*x))
+                .top(px(*y))
+                .size(px(3.))
+                .rounded(px(0.5))
+                .bg(color.opacity(alpha)),
+        );
     }
     d
 }
@@ -31,7 +47,9 @@ pub fn running(color: Hsla, id: impl Into<ElementId>) -> AnyElement {
     div()
         .size(px(8.))
         .flex_none()
-        .with_animation(id, Animation::new(LAP).repeat(), move |d, delta| d.child(grid(color, ((delta * 4.) as usize).min(3))))
+        .with_animation(id, Animation::new(LAP).repeat(), move |d, delta| {
+            d.child(grid(color, ((delta * 4.) as usize).min(3)))
+        })
         .into_any_element()
 }
 

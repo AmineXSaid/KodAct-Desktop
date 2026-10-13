@@ -45,7 +45,13 @@ pub const EXPERT_STYLE_MD: &str = include_str!("../assets/forge-plugin/output-st
 
 impl ModeId {
     /// Every row, in menu order.
-    pub const ALL: [ModeId; 5] = [ModeId::Expert, ModeId::Manual, ModeId::AcceptEdits, ModeId::Plan, ModeId::Bypass];
+    pub const ALL: [ModeId; 5] = [
+        ModeId::Expert,
+        ModeId::Manual,
+        ModeId::AcceptEdits,
+        ModeId::Plan,
+        ModeId::Bypass,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -59,11 +65,15 @@ impl ModeId {
 
     pub fn description(self) -> &'static str {
         match self {
-            ModeId::Expert => "Forge teaches step by step, from the basics up, and asks before each edit",
+            ModeId::Expert => {
+                "Forge teaches step by step, from the basics up, and asks before each edit"
+            }
             ModeId::Manual => "Forge will ask for approval before making each edit",
             ModeId::AcceptEdits => "Forge will edit your selected text or the whole file",
             ModeId::Plan => "Forge will explore the code and present a plan before editing",
-            ModeId::Bypass => "Forge will not ask for approval before running potentially dangerous commands",
+            ModeId::Bypass => {
+                "Forge will not ask for approval before running potentially dangerous commands"
+            }
         }
     }
 
@@ -107,7 +117,11 @@ impl ModeId {
 
 /// Shift+Tab: the next mode, with Bypass in the round only when allowed.
 pub fn next(current: ModeId, bypass_allowed: bool) -> ModeId {
-    let order: &[ModeId] = if bypass_allowed { &ModeId::ALL } else { &ModeId::ALL[..4] };
+    let order: &[ModeId] = if bypass_allowed {
+        &ModeId::ALL
+    } else {
+        &ModeId::ALL[..4]
+    };
     let at = order.iter().position(|m| *m == current).unwrap_or(0);
     order[(at + 1) % order.len()]
 }
@@ -124,7 +138,10 @@ pub fn initial(setting: ModeId, bypass_allowed: bool) -> ModeId {
 /// The flags a chat's `forge` process starts with for `mode`. While Bypass
 /// is allowed the switch is always passed, so the mode can change mid-session.
 pub fn cli_args(mode: ModeId, bypass_allowed: bool) -> Vec<String> {
-    let mut args = vec!["--permission-mode".to_string(), mode.permission().cli_name().to_string()];
+    let mut args = vec![
+        "--permission-mode".to_string(),
+        mode.permission().cli_name().to_string(),
+    ];
     if bypass_allowed {
         args.push("--allow-dangerously-skip-permissions".into());
     }
@@ -156,7 +173,14 @@ mod tests {
     #[test]
     fn what_the_cli_is_given() {
         assert_eq!(cli_args(ModeId::Plan, false), ["--permission-mode", "plan"]);
-        assert_eq!(cli_args(ModeId::AcceptEdits, true), ["--permission-mode", "acceptEdits", "--allow-dangerously-skip-permissions"]);
+        assert_eq!(
+            cli_args(ModeId::AcceptEdits, true),
+            [
+                "--permission-mode",
+                "acceptEdits",
+                "--allow-dangerously-skip-permissions"
+            ]
+        );
         assert_eq!(initial(ModeId::Bypass, false), ModeId::Manual);
     }
 

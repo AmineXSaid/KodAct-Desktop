@@ -18,12 +18,20 @@ fn hex(c: Hsla) -> String {
     let c = rgba(c);
     let b = |v: f32| (v.clamp(0., 1.) * 255.).round() as u8;
     let base = format!("#{:02x}{:02x}{:02x}", b(c.r), b(c.g), b(c.b));
-    if c.a >= 0.999 { base } else { format!("{base} @ {:.1}%", c.a * 100.) }
+    if c.a >= 0.999 {
+        base
+    } else {
+        format!("{base} @ {:.1}%", c.a * 100.)
+    }
 }
 
 fn px(p: Pixels) -> String {
     let v = f32::from(p);
-    if v.fract() == 0. { format!("{v:.0}") } else { format!("{v}") }
+    if v.fract() == 0. {
+        format!("{v:.0}")
+    } else {
+        format!("{v}")
+    }
 }
 
 fn render() -> String {
@@ -32,8 +40,14 @@ fn render() -> String {
     let w = &mut s;
     let _ = writeln!(w, "# Design System: Forge desktop (forge-gpui)\n");
     let _ = writeln!(w, "> Generated from `src/theme.rs` by `src/system_md.rs`. Change a token in theme.rs, then run");
-    let _ = writeln!(w, "> `UPDATE_SYSTEM_MD=1 cargo test system_md`; `cargo test` fails while this file is stale.");
-    let _ = writeln!(w, "> Every colour pair below is held to its floor by `src/palette_check.rs`.\n");
+    let _ = writeln!(
+        w,
+        "> `UPDATE_SYSTEM_MD=1 cargo test system_md`; `cargo test` fails while this file is stale."
+    );
+    let _ = writeln!(
+        w,
+        "> Every colour pair below is held to its floor by `src/palette_check.rs`.\n"
+    );
 
     let _ = writeln!(w, "## Direction\n");
     let _ = writeln!(w, "**Personality:** Warmth & Approachability, with the Precision & Density of a desktop tool. A calm room to build in with an agent.\n");
@@ -42,19 +56,52 @@ fn render() -> String {
 
     let _ = writeln!(w, "## Tokens\n");
     let sp = &l.space;
-    let _ = writeln!(w, "### Spacing\nBase: 4px\nScale: {}, {}, {}, {}, {}, {}\n", px(sp.xs), px(sp.sm), px(sp.md), px(sp.lg), px(sp.xl), px(sp.xxl));
+    let _ = writeln!(
+        w,
+        "### Spacing\nBase: 4px\nScale: {}, {}, {}, {}, {}, {}\n",
+        px(sp.xs),
+        px(sp.sm),
+        px(sp.md),
+        px(sp.lg),
+        px(sp.xl),
+        px(sp.xxl)
+    );
     let r = &l.radius;
     let z = &l.size;
     let _ = writeln!(w, "### Radius\nScale: {}px (small), {}px (buttons, rows), {}px (cards, popovers), {}px (the composer), pill\n", px(r.small), px(r.button), px(r.card), px(z.composer_radius));
 
     let _ = writeln!(w, "### Typography");
-    let _ = writeln!(w, "Interface: {} (Anthropic Sans when installed or in Forge's `fonts` folder; never bundled)", l.font_sans);
-    let _ = writeln!(w, "Display: {} (the greeting)\nCode: {}", l.font_display, l.font_mono);
+    let _ = writeln!(
+        w,
+        "Interface: {} (Anthropic Sans when installed or in Forge's `fonts` folder; never bundled)",
+        l.font_sans
+    );
+    let _ = writeln!(
+        w,
+        "Display: {} (the greeting)\nCode: {}",
+        l.font_display, l.font_mono
+    );
     let tx = &l.text;
-    let _ = writeln!(w, "Scale: {} caption, {} UI and chat, {} input, {} subheading, {} heading, {} greeting", px(tx.caption), px(tx.body_sm), px(tx.body), px(tx.subheading), px(tx.heading_sm), px(z.greeting));
+    let _ = writeln!(
+        w,
+        "Scale: {} caption, {} UI and chat, {} input, {} subheading, {} heading, {} greeting",
+        px(tx.caption),
+        px(tx.body_sm),
+        px(tx.body),
+        px(tx.subheading),
+        px(tx.heading_sm),
+        px(z.greeting)
+    );
     let _ = writeln!(w, "Weights: 400, 500 (labels, buttons), 600 (headings, the project name)\nProse line height: {}\n", z.line_height_chat);
 
-    let _ = writeln!(w, "### Icons\nLucide, 2px stroke as drawn. Sizes: {} / {} / {} / {} only.\n", px(z.icon_xs), px(z.icon_sm), px(z.icon), px(z.icon_lg));
+    let _ = writeln!(
+        w,
+        "### Icons\nLucide, 2px stroke as drawn. Sizes: {} / {} / {} / {} only.\n",
+        px(z.icon_xs),
+        px(z.icon_sm),
+        px(z.icon),
+        px(z.icon_lg)
+    );
 
     let _ = writeln!(w, "### Sizes");
     for (name, v, role) in [
@@ -63,10 +110,18 @@ fn render() -> String {
         ("column", z.column, "the reading column"),
         ("composer_width", z.composer_width, "the composer's widest"),
         ("row", z.row, "sidebar rows, menu items"),
-        ("control", z.control, "small buttons, pills, title-bar controls"),
+        (
+            "control",
+            z.control,
+            "small buttons, pills, title-bar controls",
+        ),
         ("palette", z.palette, "the command palette's width"),
         ("hairline", z.hairline, "every border"),
-        ("doc_pane", z.doc_pane, "the document panel's narrowest (it takes half the session)"),
+        (
+            "doc_pane",
+            z.doc_pane,
+            "the document panel's narrowest (it takes half the session)",
+        ),
         ("doc_measure", z.doc_measure, "a document's widest line"),
     ] {
         let _ = writeln!(w, "- `{name}`: {}px, {role}", px(v));
@@ -74,41 +129,160 @@ fn render() -> String {
     let _ = writeln!(w);
 
     let _ = writeln!(w, "### Surfaces\nOne ladder, darkest at the top of the window, even steps in OKLab lightness.\n");
-    let _ = writeln!(w, "| Token | Light | L | Dark | L | Role |\n|---|---|---|---|---|---|");
+    let _ = writeln!(
+        w,
+        "| Token | Light | L | Dark | L | Role |\n|---|---|---|---|---|---|"
+    );
     for (name, a, b, role) in [
         ("chrome", l.extra.chrome, d.extra.chrome, "the title bar"),
         ("pane", l.extra.pane, d.extra.pane, "the sidebar"),
-        ("stage", l.extra.stage, d.extra.stage, "the session: chat, welcome, Rules, Projects"),
-        ("surface", l.colors.surface, d.colors.surface, "cards, the composer, popovers"),
-        ("selected", l.extra.selected, d.extra.selected, "the selected sidebar row"),
+        (
+            "stage",
+            l.extra.stage,
+            d.extra.stage,
+            "the session: chat, welcome, Rules, Projects",
+        ),
+        (
+            "surface",
+            l.colors.surface,
+            d.colors.surface,
+            "cards, the composer, popovers",
+        ),
+        (
+            "selected",
+            l.extra.selected,
+            d.extra.selected,
+            "the selected sidebar row",
+        ),
     ] {
-        let _ = writeln!(w, "| `{name}` | `{}` | {:.3} | `{}` | {:.3} | {role} |", hex(a), oklab(rgba(a)).0, hex(b), oklab(rgba(b)).0);
+        let _ = writeln!(
+            w,
+            "| `{name}` | `{}` | {:.3} | `{}` | {:.3} | {role} |",
+            hex(a),
+            oklab(rgba(a)).0,
+            hex(b),
+            oklab(rgba(b)).0
+        );
     }
     let _ = writeln!(w);
 
     let _ = writeln!(w, "### Colors\nContrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of white text on a fill.\n");
-    let _ = writeln!(w, "| Token | Light | Contrast | Dark | Contrast | Role |\n|---|---|---|---|---|---|");
+    let _ = writeln!(
+        w,
+        "| Token | Light | Contrast | Dark | Contrast | Role |\n|---|---|---|---|---|---|"
+    );
     // Each row: the token, then the pair whose contrast is shown.
     type Pick = fn(&Theme) -> Hsla;
     let rows: [(&str, Pick, Pick, Pick, &str); 14] = [
-        ("text_strong", |t| t.colors.text_strong, |t| t.colors.text_strong, |t| t.extra.stage, "headings, names"),
-        ("text", |t| t.colors.text, |t| t.colors.text, |t| t.extra.stage, "body text"),
-        ("text_body", |t| t.colors.text_body, |t| t.colors.text_body, |t| t.extra.stage, "secondary prose"),
-        ("text_muted", |t| t.colors.text_muted, |t| t.colors.text_muted, |t| t.extra.stage, "labels, captions, icons"),
-        ("text_subtle", |t| t.colors.text_subtle, |t| t.colors.text_subtle, |t| t.extra.stage, "placeholders and disabled only"),
-        ("border", |t| t.colors.border, |t| t.colors.border, |t| t.extra.stage, "hairlines"),
-        ("primary", |t| t.colors.primary, |t| t.colors.primary, |t| t.colors.surface, "links, the one accent"),
-        ("fill", |t| t.extra.fill, |t| t.colors.primary_fg, |t| t.extra.fill, "filled buttons (white text on it)"),
-        ("fill_danger", |t| t.extra.fill_danger, |t| t.colors.primary_fg, |t| t.extra.fill_danger, "destructive confirms"),
-        ("success", |t| t.extra.success, |t| t.extra.success, |t| t.colors.surface, "done, passed"),
-        ("danger", |t| t.extra.danger, |t| t.extra.danger, |t| t.colors.surface, "failed, errors"),
-        ("warning", |t| t.extra.warning, |t| t.extra.warning, |t| t.colors.surface, "needs you"),
-        ("mode_plan", |t| t.extra.mode_plan, |t| t.extra.mode_plan, |t| t.colors.surface, "Plan mode"),
-        ("mode_bypass", |t| t.extra.mode_bypass, |t| t.extra.mode_bypass, |t| t.colors.surface, "Bypass permissions"),
+        (
+            "text_strong",
+            |t| t.colors.text_strong,
+            |t| t.colors.text_strong,
+            |t| t.extra.stage,
+            "headings, names",
+        ),
+        (
+            "text",
+            |t| t.colors.text,
+            |t| t.colors.text,
+            |t| t.extra.stage,
+            "body text",
+        ),
+        (
+            "text_body",
+            |t| t.colors.text_body,
+            |t| t.colors.text_body,
+            |t| t.extra.stage,
+            "secondary prose",
+        ),
+        (
+            "text_muted",
+            |t| t.colors.text_muted,
+            |t| t.colors.text_muted,
+            |t| t.extra.stage,
+            "labels, captions, icons",
+        ),
+        (
+            "text_subtle",
+            |t| t.colors.text_subtle,
+            |t| t.colors.text_subtle,
+            |t| t.extra.stage,
+            "placeholders and disabled only",
+        ),
+        (
+            "border",
+            |t| t.colors.border,
+            |t| t.colors.border,
+            |t| t.extra.stage,
+            "hairlines",
+        ),
+        (
+            "primary",
+            |t| t.colors.primary,
+            |t| t.colors.primary,
+            |t| t.colors.surface,
+            "links, the one accent",
+        ),
+        (
+            "fill",
+            |t| t.extra.fill,
+            |t| t.colors.primary_fg,
+            |t| t.extra.fill,
+            "filled buttons (white text on it)",
+        ),
+        (
+            "fill_danger",
+            |t| t.extra.fill_danger,
+            |t| t.colors.primary_fg,
+            |t| t.extra.fill_danger,
+            "destructive confirms",
+        ),
+        (
+            "success",
+            |t| t.extra.success,
+            |t| t.extra.success,
+            |t| t.colors.surface,
+            "done, passed",
+        ),
+        (
+            "danger",
+            |t| t.extra.danger,
+            |t| t.extra.danger,
+            |t| t.colors.surface,
+            "failed, errors",
+        ),
+        (
+            "warning",
+            |t| t.extra.warning,
+            |t| t.extra.warning,
+            |t| t.colors.surface,
+            "needs you",
+        ),
+        (
+            "mode_plan",
+            |t| t.extra.mode_plan,
+            |t| t.extra.mode_plan,
+            |t| t.colors.surface,
+            "Plan mode",
+        ),
+        (
+            "mode_bypass",
+            |t| t.extra.mode_bypass,
+            |t| t.extra.mode_bypass,
+            |t| t.colors.surface,
+            "Bypass permissions",
+        ),
     ];
     let ratio = |t: &Theme, fg: Pick, bg: Pick| format!("{:.1}:1", contrast(fg(t), bg(t)));
     for (name, token, fg, bg, role) in rows {
-        let _ = writeln!(w, "| `{name}` | `{}` | {} | `{}` | {} | {role} |", hex(token(&l)), ratio(&l, fg, bg), hex(token(&d)), ratio(&d, fg, bg));
+        let _ = writeln!(
+            w,
+            "| `{name}` | `{}` | {} | `{}` | {} | {role} |",
+            hex(token(&l)),
+            ratio(&l, fg, bg),
+            hex(token(&d)),
+            ratio(&d, fg, bg)
+        );
     }
     let _ = writeln!(w);
 
@@ -125,7 +299,10 @@ fn render() -> String {
     let _ = writeln!(w, "### Sidebar Row\n- Height: {}px, radius {}px\n- Selected: `selected` with a hairline, 500 weight\n- Group labels: {}px caption\n", px(z.row), px(r.button), px(tx.caption));
 
     let _ = writeln!(w, "## Decisions\n");
-    let _ = writeln!(w, "| Decision | Rationale | Date |\n|----------|-----------|------|");
+    let _ = writeln!(
+        w,
+        "| Decision | Rationale | Date |\n|----------|-----------|------|"
+    );
     for (what, why, when) in [
         ("Borders-only depth", "A desktop tool read for hours: hairlines separate without adding weight; shadows are kept to show what floats.", "2026-09-28"),
         ("Three surfaces, one step apart", "Title bar, sidebar and session must read as separate areas at a glance; even OKLab steps make the split clear without contrast jumps.", "2026-10-12"),
@@ -148,5 +325,8 @@ fn system_md_matches_the_theme() {
         return;
     }
     let have = std::fs::read_to_string(PATH).unwrap_or_default();
-    assert!(have == want, ".interface-design/system.md is stale; run `UPDATE_SYSTEM_MD=1 cargo test system_md`");
+    assert!(
+        have == want,
+        ".interface-design/system.md is stale; run `UPDATE_SYSTEM_MD=1 cargo test system_md`"
+    );
 }

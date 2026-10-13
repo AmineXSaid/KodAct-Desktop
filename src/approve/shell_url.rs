@@ -32,7 +32,9 @@ fn url_in(tokens: &[Token]) -> Option<String> {
         .iter()
         .find(|t| {
             let lower = t.text.to_ascii_lowercase();
-            ["http://", "https://", "ftp://"].iter().any(|s| lower.starts_with(s))
+            ["http://", "https://", "ftp://"]
+                .iter()
+                .any(|s| lower.starts_with(s))
         })
         .map(|t| t.text.clone())
 }
@@ -46,14 +48,20 @@ pub fn scan_for_shell_url_issues(command: &str) -> Vec<ShellUrlFinding> {
     let mut findings = Vec::new();
 
     for (i, segment) in segments.iter().enumerate() {
-        let Some(program) = segment.first() else { continue };
+        let Some(program) = segment.first() else {
+            continue;
+        };
         if !DOWNLOADERS.contains(&basename(program)) {
             continue;
         }
 
         // The next segment only receives this one's output if it is actually piped.
-        let Some(next) = segments.get(i + 1) else { continue };
-        let Some(interpreter) = next.first() else { continue };
+        let Some(next) = segments.get(i + 1) else {
+            continue;
+        };
+        let Some(interpreter) = next.first() else {
+            continue;
+        };
         if !interpreter.receives_pipe {
             continue;
         }
@@ -70,8 +78,16 @@ pub fn scan_for_shell_url_issues(command: &str) -> Vec<ShellUrlFinding> {
             .collect::<Vec<_>>()
             .join(" ");
         findings.push(ShellUrlFinding {
-            downloader: segment.iter().map(|t| t.text.as_str()).collect::<Vec<_>>().join(" "),
-            interpreter: if described.is_empty() { interpreter_name.to_string() } else { described },
+            downloader: segment
+                .iter()
+                .map(|t| t.text.as_str())
+                .collect::<Vec<_>>()
+                .join(" "),
+            interpreter: if described.is_empty() {
+                interpreter_name.to_string()
+            } else {
+                described
+            },
             url: url_in(segment),
         });
     }
@@ -91,14 +107,22 @@ mod tests {
     #[test]
     fn flags_a_pipe_into_each_interpreter() {
         for shell in ["sh", "bash", "python3", "node", "perl"] {
-            assert_eq!(scan_for_shell_url_issues(&format!("curl https://x/i.sh | {shell}")).len(), 1, "{shell}");
+            assert_eq!(
+                scan_for_shell_url_issues(&format!("curl https://x/i.sh | {shell}")).len(),
+                1,
+                "{shell}"
+            );
         }
     }
 
     #[test]
     fn flags_each_downloader() {
         for tool in ["curl", "wget", "aria2c"] {
-            assert_eq!(scan_for_shell_url_issues(&format!("{tool} https://x/i.sh | sh")).len(), 1, "{tool}");
+            assert_eq!(
+                scan_for_shell_url_issues(&format!("{tool} https://x/i.sh | sh")).len(),
+                1,
+                "{tool}"
+            );
         }
     }
 
@@ -112,7 +136,10 @@ mod tests {
 
     #[test]
     fn does_not_flag_a_pipe_into_something_that_is_not_an_interpreter() {
-        assert_eq!(scan_for_shell_url_issues("curl https://x/data | jq ."), vec![]);
+        assert_eq!(
+            scan_for_shell_url_issues("curl https://x/data | jq ."),
+            vec![]
+        );
     }
 
     #[test]
@@ -122,6 +149,8 @@ mod tests {
             hits.first().and_then(|h| h.url.as_deref()),
             Some("https://get.example.com/x.sh")
         );
-        assert!(has_pipe_to_shell("curl -fsSL https://get.example.com/x.sh | bash"));
+        assert!(has_pipe_to_shell(
+            "curl -fsSL https://get.example.com/x.sh | bash"
+        ));
     }
 }

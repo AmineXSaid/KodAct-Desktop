@@ -10,7 +10,10 @@
 //! profile in endpoints.json only names it (`${secret:…}`).
 
 use gpui::component::input::{Input, InputEvent, InputState};
-use gpui::{div, prelude::*, px, relative, AnyElement, Context, Entity, FontWeight, Hsla, IntoElement, Render, SharedString, Subscription, Window};
+use gpui::{
+    div, prelude::*, px, relative, AnyElement, Context, Entity, FontWeight, Hsla, IntoElement,
+    Render, SharedString, Subscription, Window,
+};
 
 use super::*;
 use crate::endpoints::{Profile, Wire, PRESETS};
@@ -49,11 +52,17 @@ pub struct Settings {
 
 impl Settings {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let input = |placeholder: &'static str, window: &mut Window, cx: &mut Context<Self>| cx.new(|cx| InputState::new(window, cx).placeholder(placeholder));
+        let input = |placeholder: &'static str, window: &mut Window, cx: &mut Context<Self>| {
+            cx.new(|cx| InputState::new(window, cx).placeholder(placeholder))
+        };
         let name = input("Your name", window, cx);
         let ep_name = input("kgpt", window, cx);
         let ep_url = input("https://api.example.com/v1", window, cx);
-        let ep_key = cx.new(|cx| InputState::new(window, cx).placeholder("Paste the key").masked(true));
+        let ep_key = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Paste the key")
+                .masked(true)
+        });
         let ep_model = input("Type a model id, or load the list", window, cx);
         let subs = vec![
             cx.observe_in(&state, window, |this, state, window, cx| {
@@ -64,7 +73,8 @@ impl Settings {
                 }
                 if open && this.name.read(cx).value().is_empty() {
                     let n = state.read(cx).user_name.clone().unwrap_or_default();
-                    this.name.update(cx, |i, cx| i.set_value(n.to_string(), window, cx));
+                    this.name
+                        .update(cx, |i, cx| i.set_value(n.to_string(), window, cx));
                 }
                 cx.notify();
             }),
@@ -122,18 +132,38 @@ impl Settings {
         self.save_anyway = false;
         self.preset = None;
         self.editing = profile.as_ref().map(|p| p.name.clone());
-        let p = profile.unwrap_or_else(|| Profile { name: String::new(), base_url: String::new(), wire: Wire::Openai, model: String::new(), display_name: None, chat_path: None, headers: Default::default(), auth: Default::default(), capabilities: Default::default() });
+        let p = profile.unwrap_or_else(|| Profile {
+            name: String::new(),
+            base_url: String::new(),
+            wire: Wire::Openai,
+            model: String::new(),
+            display_name: None,
+            chat_path: None,
+            headers: Default::default(),
+            auth: Default::default(),
+            capabilities: Default::default(),
+        });
         self.wire = p.wire;
         Self::set(&self.ep_name, &p.name, window, cx);
         Self::set(&self.ep_url, &p.base_url, window, cx);
         Self::set(&self.ep_model, &p.model, window, cx);
         Self::set(&self.ep_key, "", window, cx);
         self.ep_key.update(cx, |i, cx| {
-            i.set_placeholder(if self.editing.is_some() { "Leave empty to keep the saved key" } else { "Paste the key" }, window, cx);
+            i.set_placeholder(
+                if self.editing.is_some() {
+                    "Leave empty to keep the saved key"
+                } else {
+                    "Paste the key"
+                },
+                window,
+                cx,
+            );
         });
         // Which local runtimes answer right now.
         cx.spawn(async move |this, cx| {
-            let found = cx.background_spawn(async { crate::endpoints::detect_local() }).await;
+            let found = cx
+                .background_spawn(async { crate::endpoints::detect_local() })
+                .await;
             let _ = this.update(cx, |s, cx| {
                 s.detected = found;
                 cx.notify();
@@ -144,7 +174,9 @@ impl Settings {
     }
 
     fn pick_preset(&mut self, id: &'static str, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(p) = PRESETS.iter().find(|p| p.id == id) else { return };
+        let Some(p) = PRESETS.iter().find(|p| p.id == id) else {
+            return;
+        };
         self.preset = Some(id);
         self.wire = p.wire;
         self.models.clear();
@@ -169,7 +201,12 @@ impl Settings {
         let old = self.editing.as_ref()?;
         crate::secrets::get(&crate::secrets::key_for(old)).or_else(|| {
             let s = self.state.read(cx);
-            let p = s.endpoints.as_ref()?.profiles.iter().find(|p| &p.name == old)?;
+            let p = s
+                .endpoints
+                .as_ref()?
+                .profiles
+                .iter()
+                .find(|p| &p.name == old)?;
             crate::health::token(&p.auth).ok().flatten()
         })
     }
@@ -183,15 +220,35 @@ impl Settings {
         let (wire, key) = (self.wire, self.key(cx));
         self.status = Status::Working("Loading the models…".into());
         cx.spawn(async move |this, cx| {
-            let listed = cx.background_spawn(async move { crate::endpoints::list_models(&url, wire, key.as_deref(), &Default::default()) }).await;
+            let listed = cx
+                .background_spawn(async move {
+                    crate::endpoints::list_models(&url, wire, key.as_deref(), &Default::default())
+                })
+                .await;
             let _ = this.update(cx, |s, cx| {
                 match listed {
-                    Ok(m) if m.is_empty() => s.status = Status::Failed("The endpoint listed no chat models: type the model id.".into()),
+                    Ok(m) if m.is_empty() => {
+                        s.status = Status::Failed(
+                            "The endpoint listed no chat models: type the model id.".into(),
+                        )
+                    }
                     Ok(m) => {
-                        s.status = Status::Ok(format!("{} {}. Pick one.", m.len(), if m.len() == 1 { "model" } else { "models" }).into());
+                        s.status = Status::Ok(
+                            format!(
+                                "{} {}. Pick one.",
+                                m.len(),
+                                if m.len() == 1 { "model" } else { "models" }
+                            )
+                            .into(),
+                        );
                         s.models = m;
                     }
-                    Err(e) => s.status = Status::Failed(format!("Couldn't list models: {e}. You can still type the model id.").into()),
+                    Err(e) => {
+                        s.status = Status::Failed(
+                            format!("Couldn't list models: {e}. You can still type the model id.")
+                                .into(),
+                        )
+                    }
                 }
                 cx.notify();
             });
@@ -202,34 +259,83 @@ impl Settings {
 
     /// Check the pair with one real request, then save and select it.
     fn check_and_save(&mut self, skip_check: bool, window: &mut Window, cx: &mut Context<Self>) {
-        let (name, url, model) = (Self::val(&self.ep_name, cx), Self::val(&self.ep_url, cx), Self::val(&self.ep_model, cx));
-        let taken: Vec<String> = self.state.read(cx).endpoints.as_ref().map(|e| e.profiles.iter().map(|p| p.name.clone()).filter(|n| Some(n) != self.editing.as_ref()).collect()).unwrap_or_default();
-        let invalid = crate::endpoints::validate_name(&name, &taken).err().or_else(|| crate::endpoints::validate_url(&url).err()).or_else(|| model.is_empty().then(|| "Pick or type a model.".to_string()));
+        let (name, url, model) = (
+            Self::val(&self.ep_name, cx),
+            Self::val(&self.ep_url, cx),
+            Self::val(&self.ep_model, cx),
+        );
+        let taken: Vec<String> = self
+            .state
+            .read(cx)
+            .endpoints
+            .as_ref()
+            .map(|e| {
+                e.profiles
+                    .iter()
+                    .map(|p| p.name.clone())
+                    .filter(|n| Some(n) != self.editing.as_ref())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let invalid = crate::endpoints::validate_name(&name, &taken)
+            .err()
+            .or_else(|| crate::endpoints::validate_url(&url).err())
+            .or_else(|| {
+                model
+                    .is_empty()
+                    .then(|| "Pick or type a model.".to_string())
+            });
         if let Some(e) = invalid {
             self.status = Status::Failed(e.into());
             return cx.notify();
         }
         let key = self.key(cx);
-        let needs_key = self.wire == Wire::Anthropic || PRESETS.iter().any(|p| Some(p.id) == self.preset && p.key);
+        let needs_key = self.wire == Wire::Anthropic
+            || PRESETS.iter().any(|p| Some(p.id) == self.preset && p.key);
         if key.is_none() && needs_key {
             self.status = Status::Failed("This endpoint needs a key.".into());
             return cx.notify();
         }
-        let old = self.editing.clone().and_then(|n| self.state.read(cx).endpoints.as_ref().and_then(|e| e.profiles.iter().find(|p| p.name == n).cloned()));
+        let old = self.editing.clone().and_then(|n| {
+            self.state
+                .read(cx)
+                .endpoints
+                .as_ref()
+                .and_then(|e| e.profiles.iter().find(|p| p.name == n).cloned())
+        });
         let secret = crate::secrets::key_for(&name);
         let profile = Profile {
             name: name.clone(),
             base_url: url,
             wire: self.wire,
             model,
-            display_name: old.as_ref().and_then(|p| p.display_name.clone()).filter(|_| old.as_ref().is_some_and(|o| o.model == Self::val(&self.ep_model, cx))),
+            display_name: old
+                .as_ref()
+                .and_then(|p| p.display_name.clone())
+                .filter(|_| {
+                    old.as_ref()
+                        .is_some_and(|o| o.model == Self::val(&self.ep_model, cx))
+                }),
             chat_path: old.as_ref().and_then(|p| p.chat_path.clone()),
             headers: old.as_ref().map(|p| p.headers.clone()).unwrap_or_default(),
-            auth: if key.is_some() { crate::endpoints::Auth::Bearer { token: crate::secrets::reference(&secret) } } else { crate::endpoints::Auth::None },
-            capabilities: old.as_ref().map(|p| p.capabilities.clone()).unwrap_or_default(),
+            auth: if key.is_some() {
+                crate::endpoints::Auth::Bearer {
+                    token: crate::secrets::reference(&secret),
+                }
+            } else {
+                crate::endpoints::Auth::None
+            },
+            capabilities: old
+                .as_ref()
+                .map(|p| p.capabilities.clone())
+                .unwrap_or_default(),
         };
         let replaces = self.editing.clone();
-        self.status = Status::Working(if skip_check { "Saving…".into() } else { "Checking the model with one short request…".into() });
+        self.status = Status::Working(if skip_check {
+            "Saving…".into()
+        } else {
+            "Checking the model with one short request…".into()
+        });
         self.save_anyway = false;
         let _ = window;
         cx.spawn(async move |this, cx| {
@@ -241,10 +347,14 @@ impl Settings {
                     if !skip_check {
                         let h = crate::health::probe(&profile, std::time::Duration::from_secs(30))?;
                         if !h.servable {
-                            return Err(format!("the model didn't answer: {}", h.detail.unwrap_or_default()));
+                            return Err(format!(
+                                "the model didn't answer: {}",
+                                h.detail.unwrap_or_default()
+                            ));
                         }
                     }
-                    crate::endpoints::save_profile(&profile, replaces.as_deref()).map_err(|e| format!("endpoints.json could not be written: {e}"))?;
+                    crate::endpoints::save_profile(&profile, replaces.as_deref())
+                        .map_err(|e| format!("endpoints.json could not be written: {e}"))?;
                     // A rename leaves the old name's key behind: drop it.
                     if let Some(old) = replaces.filter(|o| *o != profile.name) {
                         crate::secrets::delete(&crate::secrets::key_for(&old));
@@ -286,7 +396,14 @@ impl Settings {
             let _ = this.update(cx, |s, cx| {
                 s.state.update(cx, |st, cx| {
                     st.load_endpoints(false, cx);
-                    st.show_toast(if r.is_ok() { format!("Removed {name}.") } else { format!("{name} could not be removed.") }, cx);
+                    st.show_toast(
+                        if r.is_ok() {
+                            format!("Removed {name}.")
+                        } else {
+                            format!("{name} could not be removed.")
+                        },
+                        cx,
+                    );
                 });
             });
         })
@@ -300,8 +417,20 @@ impl Settings {
             .flex()
             .flex_col()
             .gap(px(2.))
-            .child(div().text_size(t.text.body_sm).font_weight(FontWeight::MEDIUM).text_color(t.colors.text_strong).child(title.to_string()))
-            .children(hint.map(|h| div().text_size(t.text.caption).text_color(t.colors.text_subtle).line_height(relative(1.4)).child(h.to_string())))
+            .child(
+                div()
+                    .text_size(t.text.body_sm)
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(t.colors.text_strong)
+                    .child(title.to_string()),
+            )
+            .children(hint.map(|h| {
+                div()
+                    .text_size(t.text.caption)
+                    .text_color(t.colors.text_subtle)
+                    .line_height(relative(1.4))
+                    .child(h.to_string())
+            }))
     }
 
     fn field(t: &Theme, label: &str, input: &Entity<InputState>) -> gpui::Div {
@@ -309,15 +438,41 @@ impl Settings {
             .flex()
             .flex_col()
             .gap(px(5.))
-            .child(div().text_size(t.text.caption).font_weight(FontWeight::MEDIUM).text_color(t.colors.text_muted).child(label.to_string()))
-            .child(Self::boxed(t, Input::new(input).appearance(false).text_size(t.text.body_sm).into_any_element()))
+            .child(
+                div()
+                    .text_size(t.text.caption)
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(t.colors.text_muted)
+                    .child(label.to_string()),
+            )
+            .child(Self::boxed(
+                t,
+                Input::new(input)
+                    .appearance(false)
+                    .text_size(t.text.body_sm)
+                    .into_any_element(),
+            ))
     }
 
     fn boxed(t: &Theme, child: AnyElement) -> gpui::Div {
-        div().h(px(32.)).px(px(2.)).flex().items_center().rounded(px(8.)).bg(t.colors.canvas).border_1().border_color(t.colors.border).child(div().flex_1().min_w_0().child(child))
+        div()
+            .h(px(32.))
+            .px(px(2.))
+            .flex()
+            .items_center()
+            .rounded(px(8.))
+            .bg(t.colors.canvas)
+            .border_1()
+            .border_color(t.colors.border)
+            .child(div().flex_1().min_w_0().child(child))
     }
 
-    fn chip(t: &Theme, id: impl Into<gpui::ElementId>, label: impl Into<SharedString>, on: bool) -> gpui::Stateful<gpui::Div> {
+    fn chip(
+        t: &Theme,
+        id: impl Into<gpui::ElementId>,
+        label: impl Into<SharedString>,
+        on: bool,
+    ) -> gpui::Stateful<gpui::Div> {
         let hover = t.colors.hover;
         let label: SharedString = label.into();
         div()
@@ -329,8 +484,16 @@ impl Settings {
             .px(px(10.))
             .rounded(t.radius.pill)
             .border_1()
-            .border_color(if on { t.colors.primary } else { t.colors.border })
-            .bg(if on { t.colors.primary_tint } else { t.colors.surface })
+            .border_color(if on {
+                t.colors.primary
+            } else {
+                t.colors.border
+            })
+            .bg(if on {
+                t.colors.primary_tint
+            } else {
+                t.colors.surface
+            })
             .text_size(t.text.caption)
             .text_color(if on { t.colors.primary } else { t.colors.text })
             .cursor_pointer()
@@ -345,27 +508,44 @@ impl Settings {
             .flex()
             .items_center()
             .gap(px(8.))
-            .child(div().w(px(260.)).child(Self::boxed(t, Input::new(&self.name).appearance(false).text_size(t.text.body_sm).into_any_element())))
-            .child(theme::ghost_button(t, "Save").id("save-name").on_click(cx.listener(|this, _, _, cx| {
-                let n = this.name.read(cx).value().to_string();
-                this.state.update(cx, |s, cx| match s.set_user_name(&n, cx) {
-                    Ok(()) => s.show_toast("Saved your name.", cx),
-                    Err(e) => s.show_toast(e, cx),
-                });
-            })));
+            .child(
+                div().w(px(260.)).child(Self::boxed(
+                    t,
+                    Input::new(&self.name)
+                        .appearance(false)
+                        .text_size(t.text.body_sm)
+                        .into_any_element(),
+                )),
+            )
+            .child(
+                theme::ghost_button(t, "Save")
+                    .id("save-name")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        let n = this.name.read(cx).value().to_string();
+                        this.state
+                            .update(cx, |s, cx| match s.set_user_name(&n, cx) {
+                                Ok(()) => s.show_toast("Saved your name.", cx),
+                                Err(e) => s.show_toast(e, cx),
+                            });
+                    })),
+            );
         let appearance = div()
             .flex()
             .gap(px(6.))
-            .child(Self::chip(t, "light", "Light", !dark).on_click(move |_, window, cx| {
-                if dark {
-                    window.dispatch_action(Box::new(ToggleTheme), cx)
-                }
-            }))
-            .child(Self::chip(t, "dark", "Dark", dark).on_click(move |_, window, cx| {
-                if !dark {
-                    window.dispatch_action(Box::new(ToggleTheme), cx)
-                }
-            }));
+            .child(
+                Self::chip(t, "light", "Light", !dark).on_click(move |_, window, cx| {
+                    if dark {
+                        window.dispatch_action(Box::new(ToggleTheme), cx)
+                    }
+                }),
+            )
+            .child(
+                Self::chip(t, "dark", "Dark", dark).on_click(move |_, window, cx| {
+                    if !dark {
+                        window.dispatch_action(Box::new(ToggleTheme), cx)
+                    }
+                }),
+            );
         let mut modes = div().flex().flex_wrap().gap(px(6.));
         for m in crate::modes::ModeId::ALL {
             if m == crate::modes::ModeId::Bypass && !bypass {
@@ -373,13 +553,28 @@ impl Settings {
             }
             let state = self.state.clone();
             modes = modes.child(
-                Self::chip(t, SharedString::from(format!("mode-{}", m.label())), "", m == default_mode)
-                    .child(icon(m.icon(), t.size.icon_xs, if m == default_mode { t.colors.primary } else { t.colors.text_muted }))
-                    .child(m.label())
-                    .on_click(move |_, _, cx| state.update(cx, |s, cx| {
+                Self::chip(
+                    t,
+                    SharedString::from(format!("mode-{}", m.label())),
+                    "",
+                    m == default_mode,
+                )
+                .child(icon(
+                    m.icon(),
+                    t.size.icon_xs,
+                    if m == default_mode {
+                        t.colors.primary
+                    } else {
+                        t.colors.text_muted
+                    },
+                ))
+                .child(m.label())
+                .on_click(move |_, _, cx| {
+                    state.update(cx, |s, cx| {
                         s.default_mode = m;
                         cx.notify();
-                    })),
+                    })
+                }),
             );
         }
         let state = self.state.clone();
@@ -406,16 +601,56 @@ impl Settings {
             .flex()
             .flex_col()
             .gap(px(22.))
-            .child(div().flex().flex_col().gap(px(8.)).child(Self::section(t, "Your name", Some("What Forge calls you on the new-chat screen."))).child(name_row))
-            .child(div().flex().flex_col().gap(px(8.)).child(Self::section(t, "Appearance", None)).child(appearance))
-            .child(div().flex().flex_col().gap(px(8.)).child(Self::section(t, "New chats start in", Some("Shift+Tab changes the mode inside a chat."))).child(modes))
-            .child(div().flex().flex_col().gap(px(8.)).child(Self::section(t, "Bypass permissions", None)).child(bypass_row))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(8.))
+                    .child(Self::section(
+                        t,
+                        "Your name",
+                        Some("What Forge calls you on the new-chat screen."),
+                    ))
+                    .child(name_row),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(8.))
+                    .child(Self::section(t, "Appearance", None))
+                    .child(appearance),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(8.))
+                    .child(Self::section(
+                        t,
+                        "New chats start in",
+                        Some("Shift+Tab changes the mode inside a chat."),
+                    ))
+                    .child(modes),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(8.))
+                    .child(Self::section(t, "Bypass permissions", None))
+                    .child(bypass_row),
+            )
             .into_any_element()
     }
 
     fn models_list(&self, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
         let s = self.state.read(cx);
-        let profiles = s.endpoints.as_ref().map(|e| e.profiles.clone()).unwrap_or_default();
+        let profiles = s
+            .endpoints
+            .as_ref()
+            .map(|e| e.profiles.clone())
+            .unwrap_or_default();
         let active = s.active_profile().map(|p| p.name.clone());
         let mut list = div().flex().flex_col().gap(px(8.));
         if profiles.is_empty() {
@@ -433,8 +668,12 @@ impl Settings {
         for p in profiles {
             let (check, syncing) = crate::health::pair_check(&p.model, s.health.get(&p.name));
             let (dot, text): (Hsla, String) = match &check {
-                crate::health::Check::Answered { ms, .. } => (t.extra.success, format!("answered in {}", crate::health::ping_text(*ms))),
-                crate::health::Check::Failed { detail } | crate::health::Check::Unreachable { detail } => (t.extra.danger, detail.clone()),
+                crate::health::Check::Answered { ms, .. } => (
+                    t.extra.success,
+                    format!("answered in {}", crate::health::ping_text(*ms)),
+                ),
+                crate::health::Check::Failed { detail }
+                | crate::health::Check::Unreachable { detail } => (t.extra.danger, detail.clone()),
                 _ if syncing => (t.colors.text_subtle, "checking…".into()),
                 _ => (t.colors.text_subtle, "not checked yet".into()),
             };
@@ -450,9 +689,21 @@ impl Settings {
                     .py(px(11.))
                     .rounded(t.radius.card)
                     .border_1()
-                    .border_color(if in_use { t.colors.primary.opacity(0.5) } else { t.colors.border })
+                    .border_color(if in_use {
+                        t.colors.primary.opacity(0.5)
+                    } else {
+                        t.colors.border
+                    })
                     .bg(t.colors.surface)
-                    .child(icon(if p.wire == Wire::Anthropic { "icons/sparkles.svg" } else { "icons/cpu.svg" }, t.size.icon, t.colors.text_muted))
+                    .child(icon(
+                        if p.wire == Wire::Anthropic {
+                            "icons/sparkles.svg"
+                        } else {
+                            "icons/cpu.svg"
+                        },
+                        t.size.icon,
+                        t.colors.text_muted,
+                    ))
                     .child(
                         div()
                             .flex_1()
@@ -460,12 +711,83 @@ impl Settings {
                             .flex()
                             .flex_col()
                             .gap(px(2.))
-                            .child(div().flex().items_center().gap(px(6.)).child(div().text_size(t.text.body_sm).font_weight(FontWeight::MEDIUM).text_color(t.colors.text_strong).child(p.display().to_string())).when(in_use, |d| d.child(theme::pill(t, t.colors.primary_tint, t.colors.primary, "In use"))))
-                            .child(div().overflow_hidden().whitespace_nowrap().text_ellipsis().text_size(t.text.caption).text_color(t.colors.text_subtle).child(format!("{} · {} · {}", p.name, crate::endpoints::host_of(&p.base_url), if p.wire == Wire::Anthropic { "Anthropic Messages" } else { "OpenAI-compatible" })))
-                            .child(div().flex().items_center().gap(px(6.)).child(div().size(px(6.)).rounded(t.radius.pill).bg(dot)).child(div().overflow_hidden().whitespace_nowrap().text_ellipsis().text_size(t.text.caption).text_color(t.colors.text_muted).child(text))),
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(6.))
+                                    .child(
+                                        div()
+                                            .text_size(t.text.body_sm)
+                                            .font_weight(FontWeight::MEDIUM)
+                                            .text_color(t.colors.text_strong)
+                                            .child(p.display().to_string()),
+                                    )
+                                    .when(in_use, |d| {
+                                        d.child(theme::pill(
+                                            t,
+                                            t.colors.primary_tint,
+                                            t.colors.primary,
+                                            "In use",
+                                        ))
+                                    }),
+                            )
+                            .child(
+                                div()
+                                    .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .text_ellipsis()
+                                    .text_size(t.text.caption)
+                                    .text_color(t.colors.text_subtle)
+                                    .child(format!(
+                                        "{} · {} · {}",
+                                        p.name,
+                                        crate::endpoints::host_of(&p.base_url),
+                                        if p.wire == Wire::Anthropic {
+                                            "Anthropic Messages"
+                                        } else {
+                                            "OpenAI-compatible"
+                                        }
+                                    )),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(6.))
+                                    .child(div().size(px(6.)).rounded(t.radius.pill).bg(dot))
+                                    .child(
+                                        div()
+                                            .overflow_hidden()
+                                            .whitespace_nowrap()
+                                            .text_ellipsis()
+                                            .text_size(t.text.caption)
+                                            .text_color(t.colors.text_muted)
+                                            .child(text),
+                                    ),
+                            ),
                     )
-                    .when(!in_use, |d| d.child(Self::chip(t, SharedString::from(format!("use-{name}")), "Use", false).on_click(move |_, _, cx| use_state.update(cx, |s, cx| s.select_profile(&name, cx)))))
-                    .child(Self::chip(t, SharedString::from(format!("edit-{}", p.name)), "Edit", false).on_click(cx.listener(move |this, _, window, cx| this.open_form(Some(edit_p.clone()), window, cx))))
+                    .when(!in_use, |d| {
+                        d.child(
+                            Self::chip(t, SharedString::from(format!("use-{name}")), "Use", false)
+                                .on_click(move |_, _, cx| {
+                                    use_state.update(cx, |s, cx| s.select_profile(&name, cx))
+                                }),
+                        )
+                    })
+                    .child(
+                        Self::chip(
+                            t,
+                            SharedString::from(format!("edit-{}", p.name)),
+                            "Edit",
+                            false,
+                        )
+                        .on_click(cx.listener(
+                            move |this, _, window, cx| {
+                                this.open_form(Some(edit_p.clone()), window, cx)
+                            },
+                        )),
+                    )
                     .child(
                         div()
                             .id(SharedString::from(format!("rm-{}", p.name)))
@@ -480,8 +802,15 @@ impl Settings {
                                 move |s| s.bg(h)
                             })
                             .child(icon("icons/trash.svg", t.size.icon_sm, t.colors.text_muted))
-                            .tooltip(|window, cx| gpui::component::tooltip::Tooltip::new("Remove this endpoint and its saved key").build(window, cx))
-                            .on_click(cx.listener(move |this, _, _, cx| this.remove(rm_name.clone(), cx))),
+                            .tooltip(|window, cx| {
+                                gpui::component::tooltip::Tooltip::new(
+                                    "Remove this endpoint and its saved key",
+                                )
+                                .build(window, cx)
+                            })
+                            .on_click(
+                                cx.listener(move |this, _, _, cx| this.remove(rm_name.clone(), cx)),
+                            ),
                     ),
             );
         }
@@ -525,43 +854,93 @@ impl Settings {
             let found = self.detected.contains(&p.id);
             let id = p.id;
             presets = presets.child(
-                Self::chip(t, SharedString::from(format!("preset-{id}")), p.label, self.preset == Some(id))
-                    .when(found, |d| d.child(div().size(px(6.)).rounded(t.radius.pill).bg(t.extra.success)))
-                    .on_click(cx.listener(move |this, _, window, cx| this.pick_preset(id, window, cx))),
+                Self::chip(
+                    t,
+                    SharedString::from(format!("preset-{id}")),
+                    p.label,
+                    self.preset == Some(id),
+                )
+                .when(found, |d| {
+                    d.child(
+                        div()
+                            .size(px(6.))
+                            .rounded(t.radius.pill)
+                            .bg(t.extra.success),
+                    )
+                })
+                .on_click(cx.listener(move |this, _, window, cx| this.pick_preset(id, window, cx))),
             );
         }
         let found_note = (!self.detected.is_empty()).then(|| {
-            let names: Vec<&str> = PRESETS.iter().filter(|p| self.detected.contains(&p.id)).map(|p| p.label).collect();
+            let names: Vec<&str> = PRESETS
+                .iter()
+                .filter(|p| self.detected.contains(&p.id))
+                .map(|p| p.label)
+                .collect();
             format!("Running on this PC: {}.", names.join(", "))
         });
         let wire = self.wire;
         let wire_row = div()
             .flex()
             .gap(px(6.))
-            .child(Self::chip(t, "wire-openai", "OpenAI-compatible", wire == Wire::Openai).on_click(cx.listener(|this, _, _, cx| {
-                this.wire = Wire::Openai;
-                this.models.clear();
-                cx.notify();
-            })))
-            .child(Self::chip(t, "wire-anthropic", "Anthropic Messages", wire == Wire::Anthropic).on_click(cx.listener(|this, _, _, cx| {
-                this.wire = Wire::Anthropic;
-                this.models.clear();
-                cx.notify();
-            })));
+            .child(
+                Self::chip(t, "wire-openai", "OpenAI-compatible", wire == Wire::Openai).on_click(
+                    cx.listener(|this, _, _, cx| {
+                        this.wire = Wire::Openai;
+                        this.models.clear();
+                        cx.notify();
+                    }),
+                ),
+            )
+            .child(
+                Self::chip(
+                    t,
+                    "wire-anthropic",
+                    "Anthropic Messages",
+                    wire == Wire::Anthropic,
+                )
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.wire = Wire::Anthropic;
+                    this.models.clear();
+                    cx.notify();
+                })),
+            );
         let picked = Self::val(&self.ep_model, cx);
         let model_row = div()
             .flex()
             .items_end()
             .gap(px(8.))
-            .child(div().flex_1().child(Self::field(t, "Model", &self.ep_model)))
-            .child(theme::ghost_button(t, "Load models").id("load-models").on_click(cx.listener(|this, _, _, cx| this.load_models(cx))));
-        let mut list = div().id("model-list").flex().flex_wrap().gap(px(6.)).max_h(px(132.)).overflow_y_scroll();
+            .child(
+                div()
+                    .flex_1()
+                    .child(Self::field(t, "Model", &self.ep_model)),
+            )
+            .child(
+                theme::ghost_button(t, "Load models")
+                    .id("load-models")
+                    .on_click(cx.listener(|this, _, _, cx| this.load_models(cx))),
+            );
+        let mut list = div()
+            .id("model-list")
+            .flex()
+            .flex_wrap()
+            .gap(px(6.))
+            .max_h(px(132.))
+            .overflow_y_scroll();
         for m in self.models.iter().take(300) {
             let id = m.clone();
-            list = list.child(Self::chip(t, SharedString::from(format!("m-{m}")), m.clone(), picked == *m).on_click(cx.listener(move |this, _, window, cx| {
-                Self::set(&this.ep_model, &id, window, cx);
-                cx.notify();
-            })));
+            list = list.child(
+                Self::chip(
+                    t,
+                    SharedString::from(format!("m-{m}")),
+                    m.clone(),
+                    picked == *m,
+                )
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    Self::set(&this.ep_model, &id, window, cx);
+                    cx.notify();
+                })),
+            );
         }
         let status = match &self.status {
             Status::Idle => None,
@@ -570,7 +949,11 @@ impl Settings {
             Status::Failed(s) => Some((t.extra.danger, "icons/circle-x.svg", s.clone())),
         };
         let working = matches!(self.status, Status::Working(_));
-        let title = if self.editing.is_some() { "Edit endpoint" } else { "Add an endpoint" };
+        let title = if self.editing.is_some() {
+            "Edit endpoint"
+        } else {
+            "Add an endpoint"
+        };
         div()
             .flex()
             .flex_col()
@@ -610,15 +993,74 @@ impl Settings {
 
     fn about(&self, t: &Theme) -> AnyElement {
         let cli = crate::backend::find_cli();
-        let row = |k: &str, v: String| div().flex().gap(px(12.)).child(div().w(px(130.)).text_size(t.text.caption).text_color(t.colors.text_subtle).child(k.to_string())).child(div().flex_1().min_w_0().text_size(t.text.caption).font_family(t.font_mono.clone()).text_color(t.colors.text).child(v));
+        let row = |k: &str, v: String| {
+            div()
+                .flex()
+                .gap(px(12.))
+                .child(
+                    div()
+                        .w(px(130.))
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_subtle)
+                        .child(k.to_string()),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .text_size(t.text.caption)
+                        .font_family(t.font_mono.clone())
+                        .text_color(t.colors.text)
+                        .child(v),
+                )
+        };
         div()
             .flex()
             .flex_col()
             .gap(px(14.))
-            .child(div().flex().items_center().gap(px(12.)).child(super::forge_cube::finished(t, px(40.), t.colors.primary)).child(div().flex().flex_col().child(div().text_size(t.text.subheading).font_family(t.font_display.clone()).text_color(t.colors.text_strong).child("Forge")).child(div().text_size(t.text.caption).text_color(t.colors.text_subtle).child(format!("Version {}", env!("CARGO_PKG_VERSION"))))))
-            .child(row("Engine", cli.map(|p| p.display().to_string()).unwrap_or_else(|| "ForgeCLI not found: put forge.exe beside ForgeDesktop.exe".into())))
-            .child(row("Config folder", crate::profile::dir().map(|p| p.display().to_string()).unwrap_or_default()))
-            .child(row("Endpoints", crate::endpoints::path().map(|p| p.display().to_string()).unwrap_or_default()))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(12.))
+                    .child(super::forge_cube::finished(t, px(40.), t.colors.primary))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .child(
+                                div()
+                                    .text_size(t.text.subheading)
+                                    .font_family(t.font_display.clone())
+                                    .text_color(t.colors.text_strong)
+                                    .child("Forge"),
+                            )
+                            .child(
+                                div()
+                                    .text_size(t.text.caption)
+                                    .text_color(t.colors.text_subtle)
+                                    .child(format!("Version {}", env!("CARGO_PKG_VERSION"))),
+                            ),
+                    ),
+            )
+            .child(row(
+                "Engine",
+                cli.map(|p| p.display().to_string()).unwrap_or_else(|| {
+                    "ForgeCLI not found: put forge.exe beside ForgeDesktop.exe".into()
+                }),
+            ))
+            .child(row(
+                "Config folder",
+                crate::profile::dir()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default(),
+            ))
+            .child(row(
+                "Endpoints",
+                crate::endpoints::path()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default(),
+            ))
             .into_any_element()
     }
 }
@@ -634,7 +1076,11 @@ impl Render for Settings {
             return div().into_any_element();
         }
         let hover = t.colors.hover;
-        let nav = |id: &'static str, path: &'static str, label: &'static str, this_tab: SettingsTab, state: Entity<AppState>| {
+        let nav = |id: &'static str,
+                   path: &'static str,
+                   label: &'static str,
+                   this_tab: SettingsTab,
+                   state: Entity<AppState>| {
             let on = tab == this_tab;
             div()
                 .id(id)
@@ -646,15 +1092,31 @@ impl Render for Settings {
                 .rounded(t.radius.button)
                 .cursor_pointer()
                 .text_size(t.text.body_sm)
-                .text_color(if on { t.colors.text_strong } else { t.colors.text_muted })
-                .when(on, |d| d.bg(t.extra.selected).font_weight(FontWeight::MEDIUM))
+                .text_color(if on {
+                    t.colors.text_strong
+                } else {
+                    t.colors.text_muted
+                })
+                .when(on, |d| {
+                    d.bg(t.extra.selected).font_weight(FontWeight::MEDIUM)
+                })
                 .when(!on, |d| d.hover(move |s| s.bg(hover)))
-                .child(icon(path, t.size.icon_sm, if on { t.colors.primary } else { t.colors.text_muted }))
+                .child(icon(
+                    path,
+                    t.size.icon_sm,
+                    if on {
+                        t.colors.primary
+                    } else {
+                        t.colors.text_muted
+                    },
+                ))
                 .child(label)
-                .on_click(move |_, _, cx| state.update(cx, |s, cx| {
-                    s.settings_tab = this_tab;
-                    cx.notify();
-                }))
+                .on_click(move |_, _, cx| {
+                    state.update(cx, |s, cx| {
+                        s.settings_tab = this_tab;
+                        cx.notify();
+                    })
+                })
         };
         let side = div()
             .w(px(190.))
@@ -666,10 +1128,37 @@ impl Render for Settings {
             .bg(t.extra.pane)
             .border_r_1()
             .border_color(t.colors.border)
-            .child(div().px(px(10.)).pt(px(4.)).pb(px(12.)).text_size(t.text.subheading).font_family(t.font_display.clone()).text_color(t.colors.text_strong).child("Settings"))
-            .child(nav("tab-general", "icons/sliders-horizontal.svg", "General", SettingsTab::General, self.state.clone()))
-            .child(nav("tab-models", "icons/cpu.svg", "Models", SettingsTab::Models, self.state.clone()))
-            .child(nav("tab-about", "icons/info.svg", "About", SettingsTab::About, self.state.clone()));
+            .child(
+                div()
+                    .px(px(10.))
+                    .pt(px(4.))
+                    .pb(px(12.))
+                    .text_size(t.text.subheading)
+                    .font_family(t.font_display.clone())
+                    .text_color(t.colors.text_strong)
+                    .child("Settings"),
+            )
+            .child(nav(
+                "tab-general",
+                "icons/sliders-horizontal.svg",
+                "General",
+                SettingsTab::General,
+                self.state.clone(),
+            ))
+            .child(nav(
+                "tab-models",
+                "icons/cpu.svg",
+                "Models",
+                SettingsTab::Models,
+                self.state.clone(),
+            ))
+            .child(nav(
+                "tab-about",
+                "icons/info.svg",
+                "About",
+                SettingsTab::About,
+                self.state.clone(),
+            ));
         let body = match tab {
             SettingsTab::General => self.general(&t, cx),
             SettingsTab::Models if self.form => self.models_form(&t, cx),
@@ -707,7 +1196,17 @@ impl Render for Settings {
             .overflow_hidden()
             .on_click(|_, _, cx| cx.stop_propagation())
             .child(side)
-            .child(div().id("settings-body").flex_1().min_w_0().overflow_y_scroll().pl(px(28.)).pr(px(52.)).py(px(24.)).child(body))
+            .child(
+                div()
+                    .id("settings-body")
+                    .flex_1()
+                    .min_w_0()
+                    .overflow_y_scroll()
+                    .pl(px(28.))
+                    .pr(px(52.))
+                    .py(px(24.))
+                    .child(body),
+            )
             .child(close);
         div()
             .id("settings-scrim")
@@ -728,7 +1227,10 @@ impl Render for Settings {
                     cx.stop_propagation();
                 }
             }))
-            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| this.close(cx)))
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(|this, _, _, cx| this.close(cx)),
+            )
             .child(panel.on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation()))
             .into_any_element()
     }

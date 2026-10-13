@@ -38,7 +38,19 @@ impl Palette {
     #[cfg(test)]
     pub fn test() -> Self {
         let s = |v: &str| v.to_string();
-        Self { node_fill: s("#fff"), node_stroke: s("#ccc"), text: s("#111"), muted: s("#666"), edge: s("#888"), label_bg: s("#fafafa"), accent: s("#0075de"), accent_tint: s("#e6f3fe"), group_fill: s("#f5f5f5"), note_fill: s("#fff8e1"), note_stroke: s("#e0c070") }
+        Self {
+            node_fill: s("#fff"),
+            node_stroke: s("#ccc"),
+            text: s("#111"),
+            muted: s("#666"),
+            edge: s("#888"),
+            label_bg: s("#fafafa"),
+            accent: s("#0075de"),
+            accent_tint: s("#e6f3fe"),
+            group_fill: s("#f5f5f5"),
+            note_fill: s("#fff8e1"),
+            note_stroke: s("#e0c070"),
+        }
     }
 }
 
@@ -49,7 +61,11 @@ const LIMIT: usize = 250;
 
 /// The SVG for a Mermaid source, or `None` when it isn't one Forge draws.
 pub fn render(source: &str, p: &Palette) -> Option<String> {
-    let lines: Vec<&str> = source.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with("%%")).collect();
+    let lines: Vec<&str> = source
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with("%%"))
+        .collect();
     // A front-matter block (`---` … `---`) is skipped.
     let lines: Vec<&str> = if lines.first() == Some(&"---") {
         let end = lines.iter().skip(1).position(|l| *l == "---")?;
@@ -98,12 +114,23 @@ pub fn text_width(text: &str, size: f32) -> f32 {
 }
 
 fn esc(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 /// A label's lines: `<br>` breaks, quotes and entities undone, long lines wrapped.
 fn label_lines(raw: &str) -> Vec<String> {
-    let text = raw.trim().trim_matches('"').replace("<br/>", "\n").replace("<br />", "\n").replace("<br>", "\n").replace("\\n", "\n").replace("#quot;", "\"").replace("&amp;", "&");
+    let text = raw
+        .trim()
+        .trim_matches('"')
+        .replace("<br/>", "\n")
+        .replace("<br />", "\n")
+        .replace("<br>", "\n")
+        .replace("\\n", "\n")
+        .replace("#quot;", "\"")
+        .replace("&amp;", "&");
     let mut out = vec![];
     for line in text.lines() {
         let mut cur = String::new();
@@ -128,7 +155,12 @@ fn text_block(out: &mut String, lines: &[String], cx: f32, cy: f32, color: &str,
     let lh = SIZE * 1.3;
     let top = cy - lh * (lines.len() as f32 - 1.) / 2.;
     for (i, l) in lines.iter().enumerate() {
-        let _ = write!(out, r#"<text x="{cx:.1}" y="{:.1}" text-anchor="middle" dominant-baseline="central" font-family="{FONT}" font-size="{SIZE}" font-weight="{weight}" fill="{color}">{}</text>"#, top + lh * i as f32, esc(l));
+        let _ = write!(
+            out,
+            r#"<text x="{cx:.1}" y="{:.1}" text-anchor="middle" dominant-baseline="central" font-family="{FONT}" font-size="{SIZE}" font-weight="{weight}" fill="{color}">{}</text>"#,
+            top + lh * i as f32,
+            esc(l)
+        );
     }
 }
 
@@ -216,7 +248,12 @@ impl Graph {
             return i;
         }
         let (l, shape) = label.unwrap_or_else(|| (id.to_string(), Shape::Rect));
-        self.nodes.push(Node { id: id.to_string(), label: label_lines(&l), shape, group });
+        self.nodes.push(Node {
+            id: id.to_string(),
+            label: label_lines(&l),
+            shape,
+            group,
+        });
         self.nodes.len() - 1
     }
 }
@@ -247,7 +284,10 @@ fn is_id_char(c: char) -> bool {
 /// A node at `s`: its id, its label and shape if given, and what follows.
 fn parse_node(s: &str) -> Option<(String, Option<(String, Shape)>, &str)> {
     let s = s.trim_start();
-    let end = s.char_indices().find(|(_, c)| !is_id_char(*c)).map_or(s.len(), |(i, _)| i);
+    let end = s
+        .char_indices()
+        .find(|(_, c)| !is_id_char(*c))
+        .map_or(s.len(), |(i, _)| i);
     if end == 0 {
         return None;
     }
@@ -271,7 +311,9 @@ fn parse_node(s: &str) -> Option<(String, Option<(String, Shape)>, &str)> {
     }
     // A class on the node (`A:::warn`) is dropped.
     if let Some(r) = rest.strip_prefix(":::") {
-        let cend = r.find(|c: char| !(c.is_alphanumeric() || c == '_' || c == '-')).unwrap_or(r.len());
+        let cend = r
+            .find(|c: char| !(c.is_alphanumeric() || c == '_' || c == '-'))
+            .unwrap_or(r.len());
         rest = &r[cend..];
     }
     Some((id.to_string(), label, rest))
@@ -282,7 +324,9 @@ fn parse_link(s: &str) -> Option<(Line, bool, bool, Option<String>, &str)> {
     let s = s.trim_start();
     let both = s.starts_with('<');
     let body = if both { &s[1..] } else { s };
-    let run = body.find(|c: char| !matches!(c, '-' | '=' | '.')).unwrap_or(body.len());
+    let run = body
+        .find(|c: char| !matches!(c, '-' | '=' | '.'))
+        .unwrap_or(body.len());
     if run < 2 {
         return None;
     }
@@ -290,7 +334,15 @@ fn parse_link(s: &str) -> Option<(Line, bool, bool, Option<String>, &str)> {
     let mut rest = &body[run..];
     let mut arrow = false;
     let mut label = None;
-    let line = |ops: &str| if ops.contains('=') { Line::Thick } else if ops.contains('.') { Line::Dotted } else { Line::Solid };
+    let line = |ops: &str| {
+        if ops.contains('=') {
+            Line::Thick
+        } else if ops.contains('.') {
+            Line::Dotted
+        } else {
+            Line::Solid
+        }
+    };
     let mut style = line(ops);
     if let Some(r) = rest.strip_prefix(['>', 'o', 'x']) {
         arrow = rest.starts_with('>');
@@ -298,7 +350,10 @@ fn parse_link(s: &str) -> Option<(Line, bool, bool, Option<String>, &str)> {
     } else if matches!(ops, "--" | "==" | "-.") && rest.starts_with(char::is_whitespace) {
         // `A -- text --> B`: the label runs to the link's end.
         let ends = ["-->", "---", "==>", "===", ".->", "-.-", "--o", "--x"];
-        let (at, end) = ends.iter().filter_map(|e| rest.find(e).map(|i| (i, *e))).min_by_key(|(i, _)| *i)?;
+        let (at, end) = ends
+            .iter()
+            .filter_map(|e| rest.find(e).map(|i| (i, *e)))
+            .min_by_key(|(i, _)| *i)?;
         label = Some(rest[..at].trim().to_string());
         let mut after = &rest[at + end.len()..];
         // A longer run (`---->`) goes on.
@@ -323,14 +378,21 @@ fn parse_link(s: &str) -> Option<(Line, bool, bool, Option<String>, &str)> {
 fn parse_flow(body: &[&str]) -> Option<Graph> {
     let mut g = Graph::default();
     let mut stack: Vec<usize> = vec![];
-    let statements = body.iter().flat_map(|l| l.split(';')).map(str::trim).filter(|l| !l.is_empty());
+    let statements = body
+        .iter()
+        .flat_map(|l| l.split(';'))
+        .map(str::trim)
+        .filter(|l| !l.is_empty());
     for st in statements {
         let word = st.split_whitespace().next().unwrap_or_default();
         match word {
             "subgraph" => {
                 let rest = st["subgraph".len()..].trim();
                 let title = match rest.find('[') {
-                    Some(i) => rest[i + 1..].trim_end_matches(']').trim_matches('"').to_string(),
+                    Some(i) => rest[i + 1..]
+                        .trim_end_matches(']')
+                        .trim_matches('"')
+                        .to_string(),
                     None => rest.trim_matches('"').to_string(),
                 };
                 g.groups.push(title);
@@ -341,7 +403,8 @@ fn parse_flow(body: &[&str]) -> Option<Graph> {
                 stack.pop();
                 continue;
             }
-            "classDef" | "class" | "style" | "linkStyle" | "click" | "direction" | "accTitle" | "accDescr" => continue,
+            "classDef" | "class" | "style" | "linkStyle" | "click" | "direction" | "accTitle"
+            | "accDescr" => continue,
             _ => {}
         }
         let group = stack.last().copied();
@@ -363,7 +426,14 @@ fn parse_flow(body: &[&str]) -> Option<Graph> {
             if let Some((line, arrow, both, label)) = pending.take() {
                 for &a in &prev {
                     for &b in &here {
-                        g.edges.push(Edge { from: a, to: b, label: label.as_deref().map(label_lines), line, arrow, both });
+                        g.edges.push(Edge {
+                            from: a,
+                            to: b,
+                            label: label.as_deref().map(label_lines),
+                            line,
+                            arrow,
+                            both,
+                        });
                     }
                 }
             }
@@ -388,19 +458,30 @@ fn parse_state(body: &[&str]) -> Option<(Graph, Dir)> {
     let mut g = Graph::default();
     let mut dir = Dir::Down;
     let mut names: HashMap<String, String> = HashMap::new();
-    let state_node = |g: &mut Graph, names: &HashMap<String, String>, raw: &str, as_source: bool| -> usize {
-        let raw = raw.trim();
-        if raw == "[*]" {
-            return if as_source { g.node("[*]start", Some((String::new(), Shape::Start)), None) } else { g.node("[*]end", Some((String::new(), Shape::End)), None) };
-        }
-        let id = raw.trim_end_matches(":::").to_string();
-        let label = names.get(&id).cloned().unwrap_or_else(|| id.clone());
-        let exists = g.nodes.iter().any(|n| n.id == id);
-        g.node(&id, (!exists).then(|| (label, Shape::Round)), None)
-    };
+    let state_node =
+        |g: &mut Graph, names: &HashMap<String, String>, raw: &str, as_source: bool| -> usize {
+            let raw = raw.trim();
+            if raw == "[*]" {
+                return if as_source {
+                    g.node("[*]start", Some((String::new(), Shape::Start)), None)
+                } else {
+                    g.node("[*]end", Some((String::new(), Shape::End)), None)
+                };
+            }
+            let id = raw.trim_end_matches(":::").to_string();
+            let label = names.get(&id).cloned().unwrap_or_else(|| id.clone());
+            let exists = g.nodes.iter().any(|n| n.id == id);
+            g.node(&id, (!exists).then(|| (label, Shape::Round)), None)
+        };
     for line in body {
         let l = line.trim();
-        if l == "}" || l.starts_with("note") || l.starts_with("end note") || l.starts_with("classDef") || l.starts_with("class ") || l == "--" {
+        if l == "}"
+            || l.starts_with("note")
+            || l.starts_with("end note")
+            || l.starts_with("classDef")
+            || l.starts_with("class ")
+            || l == "--"
+        {
             continue;
         }
         if let Some(d) = l.strip_prefix("direction") {
@@ -416,10 +497,19 @@ fn parse_state(body: &[&str]) -> Option<(Graph, Dir)> {
                 if let Some(n) = g.nodes.iter_mut().find(|n| n.id == id) {
                     n.label = label_lines(name);
                 } else {
-                    g.node(&id, Some((name.trim().trim_matches('"').to_string(), Shape::Round)), None);
+                    g.node(
+                        &id,
+                        Some((name.trim().trim_matches('"').to_string(), Shape::Round)),
+                        None,
+                    );
                 }
             } else if !rest.is_empty() {
-                state_node(&mut g, &names, rest.split_whitespace().next().unwrap_or(rest), true);
+                state_node(
+                    &mut g,
+                    &names,
+                    rest.split_whitespace().next().unwrap_or(rest),
+                    true,
+                );
             }
             continue;
         }
@@ -430,7 +520,14 @@ fn parse_state(body: &[&str]) -> Option<(Graph, Dir)> {
             };
             let from = state_node(&mut g, &names, a, true);
             let to = state_node(&mut g, &names, b, false);
-            g.edges.push(Edge { from, to, label, line: Line::Solid, arrow: true, both: false });
+            g.edges.push(Edge {
+                from,
+                to,
+                label,
+                line: Line::Solid,
+                arrow: true,
+                both: false,
+            });
         } else if let Some((id, desc)) = l.split_once(':') {
             // `Id : description` names the state.
             let i = state_node(&mut g, &names, id, true);
@@ -529,7 +626,11 @@ fn layer(g: &Graph) -> Layered {
     }
     let dag = |i: usize| {
         let e = &g.edges[i];
-        if reversed[i] { (e.to, e.from) } else { (e.from, e.to) }
+        if reversed[i] {
+            (e.to, e.from)
+        } else {
+            (e.from, e.to)
+        }
     };
     // Longest-path ranks.
     let mut rank = vec![0usize; n];
@@ -561,14 +662,26 @@ fn layer(g: &Graph) -> Layered {
     let mut paths = vec![];
     for i in 0..g.edges.len() {
         let (a, b) = dag(i);
-        let mut path = vec![(rank[a], ranks[rank[a]].iter().position(|s| matches!(s, Slot::Node(x) if *x == a)).unwrap_or(0))];
+        let mut path = vec![(
+            rank[a],
+            ranks[rank[a]]
+                .iter()
+                .position(|s| matches!(s, Slot::Node(x) if *x == a))
+                .unwrap_or(0),
+        )];
         if a != b {
             for r in rank[a] + 1..rank[b] {
                 ranks[r].push(Slot::Dummy(i));
                 path.push((r, ranks[r].len() - 1));
             }
         }
-        path.push((rank[b], ranks[rank[b]].iter().position(|s| matches!(s, Slot::Node(x) if *x == b)).unwrap_or(0)));
+        path.push((
+            rank[b],
+            ranks[rank[b]]
+                .iter()
+                .position(|s| matches!(s, Slot::Node(x) if *x == b))
+                .unwrap_or(0),
+        ));
         paths.push((path, reversed[i]));
     }
     Layered { ranks, paths }
@@ -594,10 +707,18 @@ fn order(g: &Graph, l: &mut Layered) {
     }
     for sweep in 0..8 {
         let down = sweep % 2 == 0;
-        let rs: Vec<usize> = if down { (1..nr).collect() } else { (0..nr.saturating_sub(1)).rev().collect() };
+        let rs: Vec<usize> = if down {
+            (1..nr).collect()
+        } else {
+            (0..nr.saturating_sub(1)).rev().collect()
+        };
         for r in rs {
             let other = if down { r - 1 } else { r + 1 };
-            let pos: HashMap<(usize, usize), usize> = l.ranks[other].iter().enumerate().map(|(i, s)| (key(s), i)).collect();
+            let pos: HashMap<(usize, usize), usize> = l.ranks[other]
+                .iter()
+                .enumerate()
+                .map(|(i, s)| (key(s), i))
+                .collect();
             let mut bary: Vec<(f32, usize, Slot)> = l.ranks[r]
                 .iter()
                 .enumerate()
@@ -615,7 +736,11 @@ fn order(g: &Graph, l: &mut Layered) {
                             }
                         })
                         .collect();
-                    let b = if ns.is_empty() { i as f32 } else { ns.iter().sum::<f32>() / ns.len() as f32 };
+                    let b = if ns.is_empty() {
+                        i as f32
+                    } else {
+                        ns.iter().sum::<f32>() / ns.len() as f32
+                    };
                     (b, i, *s)
                 })
                 .collect();
@@ -637,7 +762,11 @@ fn order(g: &Graph, l: &mut Layered) {
                     }
                 }
             }
-            bary.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then(a.1.cmp(&b.1)));
+            bary.sort_by(|a, b| {
+                a.0.partial_cmp(&b.0)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then(a.1.cmp(&b.1))
+            });
             l.ranks[r] = bary.into_iter().map(|(_, _, s)| s).collect();
         }
     }
@@ -646,7 +775,10 @@ fn order(g: &Graph, l: &mut Layered) {
     for (i, (path, _)) in l.paths.iter_mut().enumerate() {
         let last = path.len() - 1;
         for step in path.iter_mut().take(last).skip(1) {
-            step.1 = l.ranks[step.0].iter().position(|s| matches!(s, Slot::Dummy(e) if *e == i)).unwrap_or(0);
+            step.1 = l.ranks[step.0]
+                .iter()
+                .position(|s| matches!(s, Slot::Dummy(e) if *e == i))
+                .unwrap_or(0);
         }
     }
 }
@@ -664,12 +796,22 @@ fn place(g: &Graph, dir: Dir) -> Laid {
     order(g, &mut l);
     // Fix reversed edges' endpoints: a reversed edge's path runs to → from.
     for (i, (path, rev)) in l.paths.iter_mut().enumerate() {
-        let (a, b) = if *rev { (g.edges[i].to, g.edges[i].from) } else { (g.edges[i].from, g.edges[i].to) };
+        let (a, b) = if *rev {
+            (g.edges[i].to, g.edges[i].from)
+        } else {
+            (g.edges[i].from, g.edges[i].to)
+        };
         let first = path[0].0;
         let last_ix = path.len() - 1;
         let lr = path[last_ix].0;
-        path[0].1 = l.ranks[first].iter().position(|s| matches!(s, Slot::Node(x) if *x == a)).unwrap_or(0);
-        path[last_ix].1 = l.ranks[lr].iter().position(|s| matches!(s, Slot::Node(x) if *x == b)).unwrap_or(0);
+        path[0].1 = l.ranks[first]
+            .iter()
+            .position(|s| matches!(s, Slot::Node(x) if *x == a))
+            .unwrap_or(0);
+        path[last_ix].1 = l.ranks[lr]
+            .iter()
+            .position(|s| matches!(s, Slot::Node(x) if *x == b))
+            .unwrap_or(0);
     }
     let horizontal = dir.horizontal();
     let sizes: Vec<(f32, f32)> = g.nodes.iter().map(node_size).collect();
@@ -678,7 +820,11 @@ fn place(g: &Graph, dir: Dir) -> Laid {
         match s {
             Slot::Node(v) => {
                 let (w, h) = sizes[*v];
-                if horizontal { (h, w) } else { (w, h) }
+                if horizontal {
+                    (h, w)
+                } else {
+                    (w, h)
+                }
             }
             Slot::Dummy(_) => (10., 0.),
         }
@@ -694,22 +840,31 @@ fn place(g: &Graph, dir: Dir) -> Laid {
         y += depth + gap;
     }
     // Across: packed, then pulled towards neighbours a few times.
-    let mut across: Vec<Vec<f32>> = l.ranks.iter().map(|rank| {
-        let mut x = 0.;
-        rank.iter().map(|s| {
-            let w = ext(s).0;
-            let c = x + w / 2.;
-            x += w + NODE_GAP;
-            c
-        }).collect()
-    }).collect();
+    let mut across: Vec<Vec<f32>> = l
+        .ranks
+        .iter()
+        .map(|rank| {
+            let mut x = 0.;
+            rank.iter()
+                .map(|s| {
+                    let w = ext(s).0;
+                    let c = x + w / 2.;
+                    x += w + NODE_GAP;
+                    c
+                })
+                .collect()
+        })
+        .collect();
     // Centre every rank on the widest.
     let width_of = |r: usize, across: &Vec<Vec<f32>>| -> (f32, f32) {
         let rank = &l.ranks[r];
         if rank.is_empty() {
             return (0., 0.);
         }
-        (across[r][0] - ext(&rank[0]).0 / 2., across[r][rank.len() - 1] + ext(&rank[rank.len() - 1]).0 / 2.)
+        (
+            across[r][0] - ext(&rank[0]).0 / 2.,
+            across[r][rank.len() - 1] + ext(&rank[rank.len() - 1]).0 / 2.,
+        )
     };
     let neighbours = |r: usize, i: usize| -> Vec<(usize, usize)> {
         let mut out = vec![];
@@ -725,7 +880,9 @@ fn place(g: &Graph, dir: Dir) -> Laid {
         }
         out
     };
-    let nbrs: Vec<Vec<Vec<(usize, usize)>>> = (0..l.ranks.len()).map(|r| (0..l.ranks[r].len()).map(|i| neighbours(r, i)).collect()).collect();
+    let nbrs: Vec<Vec<Vec<(usize, usize)>>> = (0..l.ranks.len())
+        .map(|r| (0..l.ranks[r].len()).map(|i| neighbours(r, i)).collect())
+        .collect();
     for _ in 0..12 {
         for r in 0..l.ranks.len() {
             let n = l.ranks[r].len();
@@ -735,12 +892,18 @@ fn place(g: &Graph, dir: Dir) -> Laid {
             let want: Vec<f32> = (0..n)
                 .map(|i| {
                     let ns = &nbrs[r][i];
-                    if ns.is_empty() { across[r][i] } else { ns.iter().map(|(rr, ii)| across[*rr][*ii]).sum::<f32>() / ns.len() as f32 }
+                    if ns.is_empty() {
+                        across[r][i]
+                    } else {
+                        ns.iter().map(|(rr, ii)| across[*rr][*ii]).sum::<f32>() / ns.len() as f32
+                    }
                 })
                 .collect();
             let mut xs = want.clone();
             // Keep order and spacing: a pass each way, then split the difference.
-            let min_gap = |a: usize, b: usize| (ext(&l.ranks[r][a]).0 + ext(&l.ranks[r][b]).0) / 2. + NODE_GAP;
+            let min_gap = |a: usize, b: usize| {
+                (ext(&l.ranks[r][a]).0 + ext(&l.ranks[r][b]).0) / 2. + NODE_GAP
+            };
             let mut left = xs.clone();
             for i in 1..n {
                 left[i] = left[i].max(left[i - 1] + min_gap(i - 1, i));
@@ -759,7 +922,9 @@ fn place(g: &Graph, dir: Dir) -> Laid {
         }
     }
     // Shift everything to start at the margin.
-    let min_x = (0..l.ranks.len()).map(|r| width_of(r, &across).0).fold(f32::MAX, f32::min);
+    let min_x = (0..l.ranks.len())
+        .map(|r| width_of(r, &across).0)
+        .fold(f32::MAX, f32::min);
     for r in across.iter_mut() {
         for x in r.iter_mut() {
             *x += MARGIN - min_x;
@@ -776,12 +941,26 @@ fn place(g: &Graph, dir: Dir) -> Laid {
             Dir::Left => (span_along - b, a),
         }
     };
-    let mut nodes: Vec<Placed> = g.nodes.iter().map(|_| Placed { x: 0., y: 0., w: 0., h: 0. }).collect();
+    let mut nodes: Vec<Placed> = g
+        .nodes
+        .iter()
+        .map(|_| Placed {
+            x: 0.,
+            y: 0.,
+            w: 0.,
+            h: 0.,
+        })
+        .collect();
     for (r, rank) in l.ranks.iter().enumerate() {
         for (i, s) in rank.iter().enumerate() {
             if let Slot::Node(v) = s {
                 let (x, y) = to_frame(across[r][i], along[r]);
-                nodes[*v] = Placed { x, y, w: sizes[*v].0, h: sizes[*v].1 };
+                nodes[*v] = Placed {
+                    x,
+                    y,
+                    w: sizes[*v].0,
+                    h: sizes[*v].1,
+                };
             }
         }
     }
@@ -789,7 +968,10 @@ fn place(g: &Graph, dir: Dir) -> Laid {
         .paths
         .iter()
         .map(|(path, rev)| {
-            let mut pts: Vec<(f32, f32)> = path.iter().map(|(r, i)| to_frame(across[*r][*i], along[*r])).collect();
+            let mut pts: Vec<(f32, f32)> = path
+                .iter()
+                .map(|(r, i)| to_frame(across[*r][*i], along[*r]))
+                .collect();
             if *rev {
                 pts.reverse();
             }
@@ -825,21 +1007,85 @@ fn boundary(n: &Placed, shape: Shape, to: (f32, f32)) -> (f32, f32) {
 
 fn draw_shape(out: &mut String, n: &Placed, shape: Shape, p: &Palette) {
     let (x, y, w, h) = (n.x - n.w / 2., n.y - n.h / 2., n.w, n.h);
-    let style = format!(r#"fill="{}" stroke="{}" stroke-width="1.2""#, p.node_fill, p.node_stroke);
+    let style = format!(
+        r#"fill="{}" stroke="{}" stroke-width="1.2""#,
+        p.node_fill, p.node_stroke
+    );
     let _ = match shape {
-        Shape::Rect => write!(out, r#"<rect x="{x:.1}" y="{y:.1}" width="{w:.1}" height="{h:.1}" rx="4" {style}/>"#),
-        Shape::Round => write!(out, r#"<rect x="{x:.1}" y="{y:.1}" width="{w:.1}" height="{h:.1}" rx="10" {style}/>"#),
-        Shape::Stadium => write!(out, r#"<rect x="{x:.1}" y="{y:.1}" width="{w:.1}" height="{h:.1}" rx="{:.1}" {style}/>"#, h / 2.),
-        Shape::Diamond => write!(out, r#"<polygon points="{:.1},{:.1} {:.1},{:.1} {:.1},{:.1} {:.1},{:.1}" {style}/>"#, n.x, y, x + w, n.y, n.x, y + h, x, n.y),
-        Shape::Circle => write!(out, r#"<circle cx="{:.1}" cy="{:.1}" r="{:.1}" {style}/>"#, n.x, n.y, w / 2.),
-        Shape::Hexagon => write!(out, r#"<polygon points="{:.1},{:.1} {:.1},{:.1} {:.1},{:.1} {:.1},{:.1} {:.1},{:.1} {:.1},{:.1}" {style}/>"#, x + 12., y, x + w - 12., y, x + w, n.y, x + w - 12., y + h, x + 12., y + h, x, n.y),
+        Shape::Rect => write!(
+            out,
+            r#"<rect x="{x:.1}" y="{y:.1}" width="{w:.1}" height="{h:.1}" rx="4" {style}/>"#
+        ),
+        Shape::Round => write!(
+            out,
+            r#"<rect x="{x:.1}" y="{y:.1}" width="{w:.1}" height="{h:.1}" rx="10" {style}/>"#
+        ),
+        Shape::Stadium => write!(
+            out,
+            r#"<rect x="{x:.1}" y="{y:.1}" width="{w:.1}" height="{h:.1}" rx="{:.1}" {style}/>"#,
+            h / 2.
+        ),
+        Shape::Diamond => write!(
+            out,
+            r#"<polygon points="{:.1},{:.1} {:.1},{:.1} {:.1},{:.1} {:.1},{:.1}" {style}/>"#,
+            n.x,
+            y,
+            x + w,
+            n.y,
+            n.x,
+            y + h,
+            x,
+            n.y
+        ),
+        Shape::Circle => write!(
+            out,
+            r#"<circle cx="{:.1}" cy="{:.1}" r="{:.1}" {style}/>"#,
+            n.x,
+            n.y,
+            w / 2.
+        ),
+        Shape::Hexagon => write!(
+            out,
+            r#"<polygon points="{:.1},{:.1} {:.1},{:.1} {:.1},{:.1} {:.1},{:.1} {:.1},{:.1} {:.1},{:.1}" {style}/>"#,
+            x + 12.,
+            y,
+            x + w - 12.,
+            y,
+            x + w,
+            n.y,
+            x + w - 12.,
+            y + h,
+            x + 12.,
+            y + h,
+            x,
+            n.y
+        ),
         Shape::Cylinder => write!(
             out,
             r#"<path d="M{x:.1},{:.1} A{:.1},6 0 0 1 {:.1},{:.1} V{:.1} A{:.1},6 0 0 1 {x:.1},{:.1} Z" {style}/><path d="M{x:.1},{:.1} A{:.1},6 0 0 0 {:.1},{:.1}" fill="none" stroke="{}" stroke-width="1.2"/>"#,
-            y + 6., w / 2., x + w, y + 6., y + h - 6., w / 2., y + h - 6., y + 6., w / 2., x + w, y + 6., p.node_stroke
+            y + 6.,
+            w / 2.,
+            x + w,
+            y + 6.,
+            y + h - 6.,
+            w / 2.,
+            y + h - 6.,
+            y + 6.,
+            w / 2.,
+            x + w,
+            y + 6.,
+            p.node_stroke
         ),
-        Shape::Start => write!(out, r#"<circle cx="{:.1}" cy="{:.1}" r="7" fill="{}"/>"#, n.x, n.y, p.text),
-        Shape::End => write!(out, r#"<circle cx="{:.1}" cy="{:.1}" r="8" fill="none" stroke="{}" stroke-width="1.5"/><circle cx="{:.1}" cy="{:.1}" r="4.5" fill="{}"/>"#, n.x, n.y, p.text, n.x, n.y, p.text),
+        Shape::Start => write!(
+            out,
+            r#"<circle cx="{:.1}" cy="{:.1}" r="7" fill="{}"/>"#,
+            n.x, n.y, p.text
+        ),
+        Shape::End => write!(
+            out,
+            r#"<circle cx="{:.1}" cy="{:.1}" r="8" fill="none" stroke="{}" stroke-width="1.5"/><circle cx="{:.1}" cy="{:.1}" r="4.5" fill="{}"/>"#,
+            n.x, n.y, p.text, n.x, n.y, p.text
+        ),
     };
 }
 
@@ -849,7 +1095,16 @@ fn arrowhead(out: &mut String, tip: (f32, f32), from: (f32, f32), color: &str) {
     let (ux, uy) = (dx / d, dy / d);
     let (len, half) = (8., 4.);
     let base = (tip.0 - ux * len, tip.1 - uy * len);
-    let _ = write!(out, r#"<polygon points="{:.1},{:.1} {:.1},{:.1} {:.1},{:.1}" fill="{color}"/>"#, tip.0, tip.1, base.0 - uy * half, base.1 + ux * half, base.0 + uy * half, base.1 - ux * half);
+    let _ = write!(
+        out,
+        r#"<polygon points="{:.1},{:.1} {:.1},{:.1} {:.1},{:.1}" fill="{color}"/>"#,
+        tip.0,
+        tip.1,
+        base.0 - uy * half,
+        base.1 + ux * half,
+        base.0 + uy * half,
+        base.1 - ux * half
+    );
 }
 
 fn draw_graph(g: &Graph, dir: Dir, p: &Palette) -> String {
@@ -858,31 +1113,81 @@ fn draw_graph(g: &Graph, dir: Dir, p: &Palette) -> String {
     // Everything drawn is measured, so nothing is cut off at the edge.
     let mut bounds = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
     let mut grow = |x0: f32, y0: f32, x1: f32, y1: f32| {
-        bounds = (bounds.0.min(x0), bounds.1.min(y0), bounds.2.max(x1), bounds.3.max(y1));
+        bounds = (
+            bounds.0.min(x0),
+            bounds.1.min(y0),
+            bounds.2.max(x1),
+            bounds.3.max(y1),
+        );
     };
     for n in &laid.nodes {
-        grow(n.x - n.w / 2., n.y - n.h / 2., n.x + n.w / 2., n.y + n.h / 2.);
+        grow(
+            n.x - n.w / 2.,
+            n.y - n.h / 2.,
+            n.x + n.w / 2.,
+            n.y + n.h / 2.,
+        );
     }
     let mut body = String::new();
     // Subgraphs first, behind everything.
     for (gi, title) in g.groups.iter().enumerate() {
-        let members: Vec<&Placed> = g.nodes.iter().zip(&laid.nodes).filter(|(n, _)| n.group == Some(gi)).map(|(_, pl)| pl).collect();
+        let members: Vec<&Placed> = g
+            .nodes
+            .iter()
+            .zip(&laid.nodes)
+            .filter(|(n, _)| n.group == Some(gi))
+            .map(|(_, pl)| pl)
+            .collect();
         if members.is_empty() {
             continue;
         }
-        let x0 = members.iter().map(|m| m.x - m.w / 2.).fold(f32::MAX, f32::min) - 12.;
-        let x1 = members.iter().map(|m| m.x + m.w / 2.).fold(f32::MIN, f32::max).max(x0 + text_width(title, 12.) + 8.) + 12.;
-        let y0 = members.iter().map(|m| m.y - m.h / 2.).fold(f32::MAX, f32::min) - 30.;
-        let y1 = members.iter().map(|m| m.y + m.h / 2.).fold(f32::MIN, f32::max) + 12.;
+        let x0 = members
+            .iter()
+            .map(|m| m.x - m.w / 2.)
+            .fold(f32::MAX, f32::min)
+            - 12.;
+        let x1 = members
+            .iter()
+            .map(|m| m.x + m.w / 2.)
+            .fold(f32::MIN, f32::max)
+            .max(x0 + text_width(title, 12.) + 8.)
+            + 12.;
+        let y0 = members
+            .iter()
+            .map(|m| m.y - m.h / 2.)
+            .fold(f32::MAX, f32::min)
+            - 30.;
+        let y1 = members
+            .iter()
+            .map(|m| m.y + m.h / 2.)
+            .fold(f32::MIN, f32::max)
+            + 12.;
         grow(x0, y0, x1, y1);
-        let _ = write!(body, r#"<rect x="{x0:.1}" y="{y0:.1}" width="{:.1}" height="{:.1}" rx="8" fill="{}" stroke="{}" stroke-width="1" stroke-dasharray="4 3"/>"#, x1 - x0, y1 - y0, p.group_fill, p.node_stroke);
-        let _ = write!(body, r#"<text x="{:.1}" y="{:.1}" font-family="{FONT}" font-size="12" font-weight="600" fill="{}">{}</text>"#, x0 + 10., y0 + 18., p.muted, esc(title));
+        let _ = write!(
+            body,
+            r#"<rect x="{x0:.1}" y="{y0:.1}" width="{:.1}" height="{:.1}" rx="8" fill="{}" stroke="{}" stroke-width="1" stroke-dasharray="4 3"/>"#,
+            x1 - x0,
+            y1 - y0,
+            p.group_fill,
+            p.node_stroke
+        );
+        let _ = write!(
+            body,
+            r#"<text x="{:.1}" y="{:.1}" font-family="{FONT}" font-size="12" font-weight="600" fill="{}">{}</text>"#,
+            x0 + 10.,
+            y0 + 18.,
+            p.muted,
+            esc(title)
+        );
     }
     // Links between the same two nodes are fanned apart, so neither hides the other.
     let mut pairs: HashMap<(usize, usize), Vec<usize>> = HashMap::new();
     for (i, e) in g.edges.iter().enumerate() {
         if e.from != e.to {
-            pairs.entry((e.from.min(e.to), e.from.max(e.to))).or_default().push(i);
+            pairs
+                .entry((e.from.min(e.to), e.from.max(e.to)))
+                .or_default()
+                .push(i);
         }
     }
     let mut fan = vec![0f32; g.edges.len()];
@@ -892,17 +1197,43 @@ fn draw_graph(g: &Graph, dir: Dir, p: &Palette) -> String {
         }
     }
     let mut labels = String::new();
-    let mut taken: Vec<(f32, f32, f32, f32)> = laid.nodes.iter().map(|n| (n.x - n.w / 2., n.y - n.h / 2., n.x + n.w / 2., n.y + n.h / 2.)).collect();
+    let mut taken: Vec<(f32, f32, f32, f32)> = laid
+        .nodes
+        .iter()
+        .map(|n| {
+            (
+                n.x - n.w / 2.,
+                n.y - n.h / 2.,
+                n.x + n.w / 2.,
+                n.y + n.h / 2.,
+            )
+        })
+        .collect();
     for (i, (e, pts)) in g.edges.iter().zip(&laid.edges).enumerate() {
         let (a, b) = (&laid.nodes[e.from], &laid.nodes[e.to]);
         let color = &p.edge;
         let width = if e.line == Line::Thick { 2.6 } else { 1.4 };
-        let dash = if e.line == Line::Dotted { r#" stroke-dasharray="4 4""# } else { "" };
+        let dash = if e.line == Line::Dotted {
+            r#" stroke-dasharray="4 4""#
+        } else {
+            ""
+        };
         if e.from == e.to {
             // A loop on the node's side.
             let (x, y) = (a.x + a.w / 2., a.y);
             grow(x, y - 26., x + 40., y + 26.);
-            let _ = write!(body, r#"<path d="M{:.1},{:.1} C{:.1},{:.1} {:.1},{:.1} {:.1},{:.1}" fill="none" stroke="{color}" stroke-width="{width}"{dash}/>"#, x, y - 6., x + 36., y - 26., x + 36., y + 26., x + 1., y + 7.);
+            let _ = write!(
+                body,
+                r#"<path d="M{:.1},{:.1} C{:.1},{:.1} {:.1},{:.1} {:.1},{:.1}" fill="none" stroke="{color}" stroke-width="{width}"{dash}/>"#,
+                x,
+                y - 6.,
+                x + 36.,
+                y - 26.,
+                x + 36.,
+                y + 26.,
+                x + 1.,
+                y + 7.
+            );
             if e.arrow {
                 arrowhead(&mut body, (x + 1., y + 7.), (x + 20., y + 16.), color);
             }
@@ -919,7 +1250,13 @@ fn draw_graph(g: &Graph, dir: Dir, p: &Palette) -> String {
         if fan[i] != 0. {
             // Across the flow: x for top-down, y for left-right.
             let o = fan[i];
-            let shift = |q: (f32, f32)| if horizontal { (q.0, q.1 + o) } else { (q.0 + o, q.1) };
+            let shift = |q: (f32, f32)| {
+                if horizontal {
+                    (q.0, q.1 + o)
+                } else {
+                    (q.0 + o, q.1)
+                }
+            };
             if pts.len() == 2 {
                 let mid = ((pts[0].0 + pts[1].0) / 2., (pts[0].1 + pts[1].1) / 2.);
                 pts.insert(1, shift(mid));
@@ -944,35 +1281,72 @@ fn draw_graph(g: &Graph, dir: Dir, p: &Palette) -> String {
             let (p0, p1) = (w[0], w[1]);
             if horizontal {
                 let mx = (p0.0 + p1.0) / 2.;
-                let _ = write!(d, " C{mx:.1},{:.1} {mx:.1},{:.1} {:.1},{:.1}", p0.1, p1.1, p1.0, p1.1);
+                let _ = write!(
+                    d,
+                    " C{mx:.1},{:.1} {mx:.1},{:.1} {:.1},{:.1}",
+                    p0.1, p1.1, p1.0, p1.1
+                );
             } else {
                 let my = (p0.1 + p1.1) / 2.;
-                let _ = write!(d, " C{:.1},{my:.1} {:.1},{my:.1} {:.1},{:.1}", p0.0, p1.0, p1.0, p1.1);
+                let _ = write!(
+                    d,
+                    " C{:.1},{my:.1} {:.1},{my:.1} {:.1},{:.1}",
+                    p0.0, p1.0, p1.0, p1.1
+                );
             }
         }
-        let _ = write!(body, r#"<path d="{d}" fill="none" stroke="{color}" stroke-width="{width}"{dash}/>"#);
+        let _ = write!(
+            body,
+            r#"<path d="{d}" fill="none" stroke="{color}" stroke-width="{width}"{dash}/>"#
+        );
         // The arrow follows the curve's last tangent.
-        let tail = |p0: (f32, f32), p1: (f32, f32)| if horizontal { ((p0.0 + p1.0) / 2., p1.1) } else { (p1.0, (p0.1 + p1.1) / 2.) };
+        let tail = |p0: (f32, f32), p1: (f32, f32)| {
+            if horizontal {
+                ((p0.0 + p1.0) / 2., p1.1)
+            } else {
+                (p1.0, (p0.1 + p1.1) / 2.)
+            }
+        };
         if e.arrow {
             arrowhead(&mut body, pts[last], tail(pts[last - 1], pts[last]), color);
         }
         if e.both {
-            let head = if horizontal { ((pts[0].0 + pts[1].0) / 2., pts[0].1) } else { (pts[0].0, (pts[0].1 + pts[1].1) / 2.) };
+            let head = if horizontal {
+                ((pts[0].0 + pts[1].0) / 2., pts[0].1)
+            } else {
+                (pts[0].0, (pts[0].1 + pts[1].1) / 2.)
+            };
             arrowhead(&mut body, pts[0], head, color);
         }
         if let Some(lines) = &e.label {
             // At the middle of the path, moved along it off anything already there.
-            let mut mid = if pts.len() > 2 { pts[pts.len() / 2] } else { ((pts[0].0 + pts[1].0) / 2., (pts[0].1 + pts[1].1) / 2.) };
+            let mut mid = if pts.len() > 2 {
+                pts[pts.len() / 2]
+            } else {
+                ((pts[0].0 + pts[1].0) / 2., (pts[0].1 + pts[1].1) / 2.)
+            };
             let (tw, th) = lines_size(lines);
             let (hw, hh) = (tw / 2. + 5., th / 2. + 2.);
             // A fanned link's label sits outside its own curve.
             if fan[i] != 0. {
                 let side = fan[i].signum();
-                mid = if horizontal { (mid.0, mid.1 + side * (hh + 3.)) } else { (mid.0 + side * (hw + 3.), mid.1) };
+                mid = if horizontal {
+                    (mid.0, mid.1 + side * (hh + 3.))
+                } else {
+                    (mid.0 + side * (hw + 3.), mid.1)
+                };
             }
-            let hits = |m: (f32, f32), taken: &Vec<(f32, f32, f32, f32)>| taken.iter().any(|r| m.0 - hw < r.2 && m.0 + hw > r.0 && m.1 - hh < r.3 && m.1 + hh > r.1);
+            let hits = |m: (f32, f32), taken: &Vec<(f32, f32, f32, f32)>| {
+                taken
+                    .iter()
+                    .any(|r| m.0 - hw < r.2 && m.0 + hw > r.0 && m.1 - hh < r.3 && m.1 + hh > r.1)
+            };
             for step in [0., 1., -1., 2., -2., 3.] {
-                let m = if horizontal { (mid.0, mid.1 + step * (hh * 2. + 2.)) } else { (mid.0 + step * (hw + 8.), mid.1) };
+                let m = if horizontal {
+                    (mid.0, mid.1 + step * (hh * 2. + 2.))
+                } else {
+                    (mid.0 + step * (hw + 8.), mid.1)
+                };
                 if !hits(m, &taken) {
                     mid = m;
                     break;
@@ -980,7 +1354,15 @@ fn draw_graph(g: &Graph, dir: Dir, p: &Palette) -> String {
             }
             taken.push((mid.0 - hw, mid.1 - hh, mid.0 + hw, mid.1 + hh));
             grow(mid.0 - hw, mid.1 - hh, mid.0 + hw, mid.1 + hh);
-            let _ = write!(labels, r#"<rect x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}" rx="4" fill="{}"/>"#, mid.0 - hw, mid.1 - hh, hw * 2., hh * 2., p.label_bg);
+            let _ = write!(
+                labels,
+                r#"<rect x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}" rx="4" fill="{}"/>"#,
+                mid.0 - hw,
+                mid.1 - hh,
+                hw * 2.,
+                hh * 2.,
+                p.label_bg
+            );
             let mut t = String::new();
             text_block(&mut t, lines, mid.0, mid.1, &p.muted, 400);
             labels.push_str(&t);
@@ -996,11 +1378,17 @@ fn draw_graph(g: &Graph, dir: Dir, p: &Palette) -> String {
     let (x0, y0, x1, y1) = bounds;
     let (dx, dy) = (MARGIN - x0, MARGIN - y0);
     let body = format!(r#"<g transform="translate({dx:.1},{dy:.1})">{body}</g>"#);
-    svg((x1 - x0 + 2. * MARGIN).max(40.), (y1 - y0 + 2. * MARGIN).max(40.), &body)
+    svg(
+        (x1 - x0 + 2. * MARGIN).max(40.),
+        (y1 - y0 + 2. * MARGIN).max(40.),
+        &body,
+    )
 }
 
 fn svg(w: f32, h: f32, body: &str) -> String {
-    format!(r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w:.0}" height="{h:.0}" viewBox="0 0 {w:.1} {h:.1}">{body}</svg>"#)
+    format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w:.0}" height="{h:.0}" viewBox="0 0 {w:.1} {h:.1}">{body}</svg>"#
+    )
 }
 
 // ---------------------------------------------------------------- sequence diagrams
@@ -1014,10 +1402,26 @@ struct Seq {
 
 #[derive(Debug)]
 enum Step {
-    Message { from: usize, to: usize, text: String, dashed: bool, arrow: Arrow },
-    Note { from: usize, to: usize, text: String, side: NoteSide },
-    Open { kind: String, text: String },
-    Else { text: String },
+    Message {
+        from: usize,
+        to: usize,
+        text: String,
+        dashed: bool,
+        arrow: Arrow,
+    },
+    Note {
+        from: usize,
+        to: usize,
+        text: String,
+        side: NoteSide,
+    },
+    Open {
+        kind: String,
+        text: String,
+    },
+    Else {
+        text: String,
+    },
     Close,
 }
 
@@ -1037,7 +1441,11 @@ enum NoteSide {
 }
 
 fn parse_sequence(body: &[&str]) -> Option<Seq> {
-    let mut s = Seq { actors: vec![], steps: vec![], numbered: false };
+    let mut s = Seq {
+        actors: vec![],
+        steps: vec![],
+        numbered: false,
+    };
     fn actor(s: &mut Seq, name: &str) -> usize {
         let name = name.trim();
         if let Some(i) = s.actors.iter().position(|a| a.0 == name) {
@@ -1073,8 +1481,19 @@ fn parse_sequence(body: &[&str]) -> Option<Seq> {
                 s.actors[i].2 = word == "actor";
             }
             "activate" | "deactivate" | "title" | "create" | "destroy" | "box" => {}
-            "loop" | "alt" | "opt" | "par" | "critical" | "break" | "rect" => s.steps.push(Step::Open { kind: word.to_string(), text: if word == "rect" { String::new() } else { rest.to_string() } }),
-            "else" | "and" | "option" => s.steps.push(Step::Else { text: rest.to_string() }),
+            "loop" | "alt" | "opt" | "par" | "critical" | "break" | "rect" => {
+                s.steps.push(Step::Open {
+                    kind: word.to_string(),
+                    text: if word == "rect" {
+                        String::new()
+                    } else {
+                        rest.to_string()
+                    },
+                })
+            }
+            "else" | "and" | "option" => s.steps.push(Step::Else {
+                text: rest.to_string(),
+            }),
             "end" => s.steps.push(Step::Close),
             w if w.eq_ignore_ascii_case("note") => {
                 let (head, text) = rest.split_once(':')?;
@@ -1089,15 +1508,29 @@ fn parse_sequence(body: &[&str]) -> Option<Seq> {
                 let mut names = who.split(',');
                 let a = actor(&mut s, names.next()?);
                 let b = names.next().map(|n| actor(&mut s, n)).unwrap_or(a);
-                s.steps.push(Step::Note { from: a, to: b, text: text.trim().to_string(), side });
+                s.steps.push(Step::Note {
+                    from: a,
+                    to: b,
+                    text: text.trim().to_string(),
+                    side,
+                });
             }
             _ => {
                 let (head, text) = l.split_once(':').unwrap_or((l, ""));
-                let (at, op, dashed, arrow) = ARROWS.iter().filter_map(|(op, d, a)| head.find(op).map(|i| (i, *op, *d, *a))).min_by_key(|(i, op, ..)| (*i, std::cmp::Reverse(op.len())))?;
+                let (at, op, dashed, arrow) = ARROWS
+                    .iter()
+                    .filter_map(|(op, d, a)| head.find(op).map(|i| (i, *op, *d, *a)))
+                    .min_by_key(|(i, op, ..)| (*i, std::cmp::Reverse(op.len())))?;
                 let from = actor(&mut s, &head[..at]);
                 let to_name = head[at + op.len()..].trim().trim_start_matches(['+', '-']);
                 let to = actor(&mut s, to_name);
-                s.steps.push(Step::Message { from, to, text: text.trim().to_string(), dashed, arrow });
+                s.steps.push(Step::Message {
+                    from,
+                    to,
+                    text: text.trim().to_string(),
+                    dashed,
+                    arrow,
+                });
             }
         }
         if s.steps.len() > LIMIT || s.actors.len() > 40 {
@@ -1112,7 +1545,11 @@ fn draw_sequence(s: &Seq, p: &Palette) -> String {
     let col_gap = 36.;
     let row = 38.;
     // Each actor's box width, and the room messages between neighbours need.
-    let widths: Vec<f32> = s.actors.iter().map(|a| (text_width(&a.1, SIZE) + 28.).max(90.)).collect();
+    let widths: Vec<f32> = s
+        .actors
+        .iter()
+        .map(|a| (text_width(&a.1, SIZE) + 28.).max(90.))
+        .collect();
     let n = s.actors.len();
     let mut gaps = vec![col_gap; n.saturating_sub(1)];
     for st in &s.steps {
@@ -1120,7 +1557,10 @@ fn draw_sequence(s: &Seq, p: &Palette) -> String {
             let (a, b) = ((*from).min(*to), (*from).max(*to));
             if a != b {
                 let need = text_width(text, 12.) + 30.;
-                let have: f32 = (a..b).map(|i| widths[i] / 2. + widths[i + 1] / 2.).sum::<f32>() + gaps[a..b].iter().sum::<f32>();
+                let have: f32 = (a..b)
+                    .map(|i| widths[i] / 2. + widths[i + 1] / 2.)
+                    .sum::<f32>()
+                    + gaps[a..b].iter().sum::<f32>();
                 if need > have {
                     let extra = (need - have) / (b - a) as f32;
                     for g in &mut gaps[a..b] {
@@ -1128,7 +1568,8 @@ fn draw_sequence(s: &Seq, p: &Palette) -> String {
                     }
                 }
             } else if a + 1 < n {
-                gaps[a] = gaps[a].max(text_width(text, 12.) + 50. - widths[a] / 2. - widths[a + 1] / 2.);
+                gaps[a] =
+                    gaps[a].max(text_width(text, 12.) + 50. - widths[a] / 2. - widths[a + 1] / 2.);
             }
         }
     }
@@ -1138,7 +1579,16 @@ fn draw_sequence(s: &Seq, p: &Palette) -> String {
         xs.push(x + widths[i] / 2.);
         x += widths[i] + gaps.get(i).copied().unwrap_or(0.);
     }
-    let total_w = x + MARGIN + 20. + if s.steps.iter().any(|st| matches!(st, Step::Message { from, to, .. } if from == to && *from == n - 1)) { 80. } else { 0. };
+    let total_w =
+        x + MARGIN
+            + 20.
+            + if s.steps.iter().any(
+                |st| matches!(st, Step::Message { from, to, .. } if from == to && *from == n - 1),
+            ) {
+                80.
+            } else {
+                0.
+            };
     let mut y = MARGIN + head_h + 22.;
     let mut body = String::new();
     let mut frames: Vec<(f32, String, String, Vec<(f32, String)>)> = vec![];
@@ -1146,32 +1596,84 @@ fn draw_sequence(s: &Seq, p: &Palette) -> String {
     let mut number = 0;
     for st in &s.steps {
         match st {
-            Step::Message { from, to, text, dashed, arrow } => {
+            Step::Message {
+                from,
+                to,
+                text,
+                dashed,
+                arrow,
+            } => {
                 number += 1;
-                let label = if s.numbered { format!("{number}. {text}") } else { text.clone() };
+                let label = if s.numbered {
+                    format!("{number}. {text}")
+                } else {
+                    text.clone()
+                };
                 let (x1, x2) = (xs[*from], xs[*to]);
-                let dash = if *dashed { r#" stroke-dasharray="5 4""# } else { "" };
+                let dash = if *dashed {
+                    r#" stroke-dasharray="5 4""#
+                } else {
+                    ""
+                };
                 if from == to {
-                    let _ = write!(body, r#"<path d="M{x1:.1},{:.1} h34 v18 h-34" fill="none" stroke="{}" stroke-width="1.3"{dash}/>"#, y - 6., p.edge);
+                    let _ = write!(
+                        body,
+                        r#"<path d="M{x1:.1},{:.1} h34 v18 h-34" fill="none" stroke="{}" stroke-width="1.3"{dash}/>"#,
+                        y - 6.,
+                        p.edge
+                    );
                     arrowhead(&mut body, (x1 + 1., y + 12.), (x1 + 20., y + 12.), &p.edge);
-                    let _ = write!(body, r#"<text x="{:.1}" y="{:.1}" font-family="{FONT}" font-size="12" fill="{}">{}</text>"#, x1 + 40., y + 7., p.text, esc(&label));
+                    let _ = write!(
+                        body,
+                        r#"<text x="{:.1}" y="{:.1}" font-family="{FONT}" font-size="12" fill="{}">{}</text>"#,
+                        x1 + 40.,
+                        y + 7.,
+                        p.text,
+                        esc(&label)
+                    );
                     y += row + 10.;
                 } else {
                     let dirn = if x2 > x1 { 1. } else { -1. };
                     let end = x2 - dirn * 1.;
-                    let _ = write!(body, r#"<line x1="{x1:.1}" y1="{y:.1}" x2="{end:.1}" y2="{y:.1}" stroke="{}" stroke-width="1.3"{dash}/>"#, p.edge);
+                    let _ = write!(
+                        body,
+                        r#"<line x1="{x1:.1}" y1="{y:.1}" x2="{end:.1}" y2="{y:.1}" stroke="{}" stroke-width="1.3"{dash}/>"#,
+                        p.edge
+                    );
                     match arrow {
-                        Arrow::Filled | Arrow::Async => arrowhead(&mut body, (end, y), (end - dirn * 10., y), &p.edge),
+                        Arrow::Filled | Arrow::Async => {
+                            arrowhead(&mut body, (end, y), (end - dirn * 10., y), &p.edge)
+                        }
                         Arrow::Open => {}
                         Arrow::Cross => {
-                            let _ = write!(body, r#"<path d="M{:.1},{:.1} l8,8 M{:.1},{:.1} l-8,8" stroke="{}" stroke-width="1.5"/>"#, end - 4., y - 4., end + 4., y - 4., p.edge);
+                            let _ = write!(
+                                body,
+                                r#"<path d="M{:.1},{:.1} l8,8 M{:.1},{:.1} l-8,8" stroke="{}" stroke-width="1.5"/>"#,
+                                end - 4.,
+                                y - 4.,
+                                end + 4.,
+                                y - 4.,
+                                p.edge
+                            );
                         }
                     }
-                    let _ = write!(body, r#"<text x="{:.1}" y="{:.1}" text-anchor="middle" font-family="{FONT}" font-size="12" fill="{}">{}</text>"#, (x1 + x2) / 2., y - 7., p.text, esc(&label));
+                    let _ = write!(
+                        body,
+                        r#"<text x="{:.1}" y="{:.1}" text-anchor="middle" font-family="{FONT}" font-size="12" fill="{}">{}</text>"#,
+                        (x1 + x2) / 2.,
+                        y - 7.,
+                        p.text,
+                        esc(&label)
+                    );
                     y += row;
                 }
             }
-            Step::Note { from, to, text, side } => {
+            Step::Note {
+                from,
+                to,
+                text,
+                side,
+            } => {
                 let lines = label_lines(text);
                 let (tw, th) = lines_size(&lines);
                 let w = tw + 20.;
@@ -1181,9 +1683,27 @@ fn draw_sequence(s: &Seq, p: &Palette) -> String {
                     NoteSide::Left => l - 10. - w,
                     NoteSide::Over => (l + r) / 2. - (w.max(r - l + 40.)) / 2.,
                 };
-                let w = if *side == NoteSide::Over { w.max(r - l + 40.) } else { w };
-                let _ = write!(body, r#"<rect x="{x0:.1}" y="{:.1}" width="{w:.1}" height="{:.1}" rx="3" fill="{}" stroke="{}" stroke-width="1"/>"#, y - 12., th + 12., p.note_fill, p.note_stroke);
-                text_block(&mut body, &lines, x0 + w / 2., y - 6. + th / 2., &p.text, 400);
+                let w = if *side == NoteSide::Over {
+                    w.max(r - l + 40.)
+                } else {
+                    w
+                };
+                let _ = write!(
+                    body,
+                    r#"<rect x="{x0:.1}" y="{:.1}" width="{w:.1}" height="{:.1}" rx="3" fill="{}" stroke="{}" stroke-width="1"/>"#,
+                    y - 12.,
+                    th + 12.,
+                    p.note_fill,
+                    p.note_stroke
+                );
+                text_block(
+                    &mut body,
+                    &lines,
+                    x0 + w / 2.,
+                    y - 6. + th / 2.,
+                    &p.text,
+                    400,
+                );
                 y += th + 24.;
             }
             Step::Open { kind, text } => {
@@ -1201,19 +1721,60 @@ fn draw_sequence(s: &Seq, p: &Palette) -> String {
                     let depth = frames.len() as f32 * 8.;
                     let (x0, x1) = (MARGIN + 6. + depth, total_w - MARGIN - 6. - depth);
                     let bottom = y - 6.;
-                    let _ = write!(drawn_frames, r#"<rect x="{x0:.1}" y="{top:.1}" width="{:.1}" height="{:.1}" rx="4" fill="{}" stroke="{}" stroke-width="1"/>"#, x1 - x0, bottom - top, if kind == "rect" { p.group_fill.as_str() } else { "none" }, p.node_stroke);
+                    let _ = write!(
+                        drawn_frames,
+                        r#"<rect x="{x0:.1}" y="{top:.1}" width="{:.1}" height="{:.1}" rx="4" fill="{}" stroke="{}" stroke-width="1"/>"#,
+                        x1 - x0,
+                        bottom - top,
+                        if kind == "rect" {
+                            p.group_fill.as_str()
+                        } else {
+                            "none"
+                        },
+                        p.node_stroke
+                    );
                     if kind != "rect" {
                         let tag_w = text_width(&kind, 11.) + 14.;
-                        let _ = write!(drawn_frames, r#"<path d="M{x0:.1},{top:.1} h{tag_w:.1} v12 l-6,6 h{:.1} Z" fill="{}"/>"#, -(tag_w - 6.), p.accent_tint);
-                        let _ = write!(drawn_frames, r#"<text x="{:.1}" y="{:.1}" font-family="{FONT}" font-size="11" font-weight="600" fill="{}">{}</text>"#, x0 + 6., top + 13., p.accent, esc(&kind));
+                        let _ = write!(
+                            drawn_frames,
+                            r#"<path d="M{x0:.1},{top:.1} h{tag_w:.1} v12 l-6,6 h{:.1} Z" fill="{}"/>"#,
+                            -(tag_w - 6.),
+                            p.accent_tint
+                        );
+                        let _ = write!(
+                            drawn_frames,
+                            r#"<text x="{:.1}" y="{:.1}" font-family="{FONT}" font-size="11" font-weight="600" fill="{}">{}</text>"#,
+                            x0 + 6.,
+                            top + 13.,
+                            p.accent,
+                            esc(&kind)
+                        );
                         if !text.is_empty() {
-                            let _ = write!(drawn_frames, r#"<text x="{:.1}" y="{:.1}" font-family="{FONT}" font-size="11" fill="{}">[{}]</text>"#, x0 + tag_w + 8., top + 13., p.muted, esc(&text));
+                            let _ = write!(
+                                drawn_frames,
+                                r#"<text x="{:.1}" y="{:.1}" font-family="{FONT}" font-size="11" fill="{}">[{}]</text>"#,
+                                x0 + tag_w + 8.,
+                                top + 13.,
+                                p.muted,
+                                esc(&text)
+                            );
                         }
                     }
                     for (ey, et) in elses {
-                        let _ = write!(drawn_frames, r#"<line x1="{x0:.1}" y1="{ey:.1}" x2="{x1:.1}" y2="{ey:.1}" stroke="{}" stroke-dasharray="4 3"/>"#, p.node_stroke);
+                        let _ = write!(
+                            drawn_frames,
+                            r#"<line x1="{x0:.1}" y1="{ey:.1}" x2="{x1:.1}" y2="{ey:.1}" stroke="{}" stroke-dasharray="4 3"/>"#,
+                            p.node_stroke
+                        );
                         if !et.is_empty() {
-                            let _ = write!(drawn_frames, r#"<text x="{:.1}" y="{:.1}" font-family="{FONT}" font-size="11" fill="{}">[{}]</text>"#, x0 + 8., ey + 13., p.muted, esc(&et));
+                            let _ = write!(
+                                drawn_frames,
+                                r#"<text x="{:.1}" y="{:.1}" font-family="{FONT}" font-size="11" fill="{}">[{}]</text>"#,
+                                x0 + 8.,
+                                ey + 13.,
+                                p.muted,
+                                esc(&et)
+                            );
                         }
                     }
                     y += 10.;
@@ -1226,10 +1787,29 @@ fn draw_sequence(s: &Seq, p: &Palette) -> String {
     let mut heads = String::new();
     for (i, a) in s.actors.iter().enumerate() {
         let (x, w) = (xs[i], widths[i]);
-        let _ = write!(heads, r#"<line x1="{x:.1}" y1="{:.1}" x2="{x:.1}" y2="{bottom_top:.1}" stroke="{}" stroke-width="1" stroke-dasharray="3 4"/>"#, MARGIN + head_h, p.node_stroke);
+        let _ = write!(
+            heads,
+            r#"<line x1="{x:.1}" y1="{:.1}" x2="{x:.1}" y2="{bottom_top:.1}" stroke="{}" stroke-width="1" stroke-dasharray="3 4"/>"#,
+            MARGIN + head_h,
+            p.node_stroke
+        );
         for top in [MARGIN, bottom_top] {
-            let _ = write!(heads, r#"<rect x="{:.1}" y="{top:.1}" width="{w:.1}" height="{head_h:.1}" rx="{}" fill="{}" stroke="{}" stroke-width="1.2"/>"#, x - w / 2., if a.2 { 17. } else { 6. }, p.node_fill, p.node_stroke);
-            text_block(&mut heads, &[a.1.clone()], x, top + head_h / 2., &p.text, 600);
+            let _ = write!(
+                heads,
+                r#"<rect x="{:.1}" y="{top:.1}" width="{w:.1}" height="{head_h:.1}" rx="{}" fill="{}" stroke="{}" stroke-width="1.2"/>"#,
+                x - w / 2.,
+                if a.2 { 17. } else { 6. },
+                p.node_fill,
+                p.node_stroke
+            );
+            text_block(
+                &mut heads,
+                &[a.1.clone()],
+                x,
+                top + head_h / 2.,
+                &p.text,
+                600,
+            );
         }
     }
     svg(total_w, total_h, &format!("{drawn_frames}{heads}{body}"))
@@ -1242,7 +1822,9 @@ fn draw_sequence(s: &Seq, p: &Palette) -> String {
 pub fn fence_svg(lang: &str, code: &str, p: &Palette) -> Option<String> {
     match lang.to_ascii_lowercase().as_str() {
         "mermaid" | "mmd" => render(code, p),
-        "svg" | "xml" | "html" | "htm" => crate::diagram::extract_svg(code).filter(|s| crate::diagram::view_size(s).is_some()).map(str::to_string),
+        "svg" | "xml" | "html" | "htm" => crate::diagram::extract_svg(code)
+            .filter(|s| crate::diagram::view_size(s).is_some())
+            .map(str::to_string),
         _ => None,
     }
 }
@@ -1252,7 +1834,11 @@ mod tests {
     use super::*;
 
     fn flow(src: &str) -> Graph {
-        let lines: Vec<&str> = src.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+        let lines: Vec<&str> = src
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect();
         parse_flow(&lines).expect("parses")
     }
 
@@ -1330,7 +1916,8 @@ mod tests {
         for i in 0..laid.nodes.len() {
             for j in i + 1..laid.nodes.len() {
                 let (a, b) = (&laid.nodes[i], &laid.nodes[j]);
-                let apart = (a.x - b.x).abs() >= (a.w + b.w) / 2. - 0.5 || (a.y - b.y).abs() >= (a.h + b.h) / 2. - 0.5;
+                let apart = (a.x - b.x).abs() >= (a.w + b.w) / 2. - 0.5
+                    || (a.y - b.y).abs() >= (a.h + b.h) / 2. - 0.5;
                 assert!(apart, "{i} and {j} overlap");
             }
         }
@@ -1355,7 +1942,9 @@ mod tests {
 #[test]
 #[ignore]
 fn dump_samples() {
-    let Some(dir) = std::env::var_os("MERMAID_DUMP") else { return };
+    let Some(dir) = std::env::var_os("MERMAID_DUMP") else {
+        return;
+    };
     let samples = [
         ("flow-td", "flowchart TD\n  A[You type a message] --> B{Endpoint set up?}\n  B -->|no| C[Open Settings › Models]\n  B -->|yes| D[ForgeCLI process]\n  C --> D\n  D --> E[(Session log)]\n  D -.->|stream-json| F([Reply in the chat])\n  F --> G((Done))\n  D --> F"),
         ("flow-lr", "graph LR\n  subgraph Desktop\n    ui[Forge UI] --> st[AppState]\n  end\n  st --> cli[ForgeCLI]\n  cli ==> api{{Model API}}\n  cli --> tools[Tools]\n  tools --> cli"),
@@ -1364,6 +1953,10 @@ fn dump_samples() {
     ];
     let p = Palette::test();
     for (name, src) in samples {
-        std::fs::write(std::path::Path::new(&dir).join(format!("{name}.svg")), render(src, &p).unwrap()).unwrap();
+        std::fs::write(
+            std::path::Path::new(&dir).join(format!("{name}.svg")),
+            render(src, &p).unwrap(),
+        )
+        .unwrap();
     }
 }

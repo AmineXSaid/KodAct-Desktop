@@ -13,9 +13,22 @@ pub fn dir() -> Option<PathBuf> {
 /// A bare file name: no folders, no `..`, nothing Windows refuses.
 pub fn clean_name(name: &str) -> String {
     let base = name.rsplit(['/', '\\']).next().unwrap_or("");
-    let cleaned: String = base.chars().map(|c| if c.is_control() || r#"<>:"|?*"#.contains(c) { '_' } else { c }).collect();
+    let cleaned: String = base
+        .chars()
+        .map(|c| {
+            if c.is_control() || r#"<>:"|?*"#.contains(c) {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
     let cleaned = cleaned.trim().trim_matches('.').to_string();
-    if cleaned.is_empty() { "document.md".into() } else { cleaned }
+    if cleaned.is_empty() {
+        "document.md".into()
+    } else {
+        cleaned
+    }
 }
 
 /// The names to try, in order: `plan.md`, `plan (1).md`, `plan (2).md`…
@@ -34,7 +47,11 @@ pub fn save(dir: &Path, name: &str, bytes: &[u8]) -> std::io::Result<PathBuf> {
     let name = clean_name(name);
     for candidate in candidates(&name) {
         let path = dir.join(&candidate);
-        match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
             Ok(mut f) => {
                 f.write_all(bytes)?;
                 return Ok(path);

@@ -12,8 +12,9 @@
 use std::time::Duration;
 
 use gpui::{
-    div, font, linear_color_stop, linear_gradient, prelude::*, px, relative, Animation, AnimationExt, AnyElement,
-    ClipboardItem, Entity, FontStyle, FontWeight, Hsla, SharedString, StyledText, TextRun,
+    div, font, linear_color_stop, linear_gradient, prelude::*, px, relative, Animation,
+    AnimationExt, AnyElement, ClipboardItem, Entity, FontStyle, FontWeight, Hsla, SharedString,
+    StyledText, TextRun,
 };
 
 use super::icon;
@@ -38,7 +39,10 @@ pub enum Tok {
     Plain,
 }
 
-const KEYWORDS: &[&str] = &["if", "then", "else", "elif", "fi", "for", "while", "until", "do", "done", "case", "esac", "in", "function", "select", "time", "!"];
+const KEYWORDS: &[&str] = &[
+    "if", "then", "else", "elif", "fi", "for", "while", "until", "do", "done", "case", "esac",
+    "in", "function", "select", "time", "!",
+];
 
 /// Split a command line into coloured tokens. The first word of each
 /// command (at the start, and after `|`, `&&`, `||`, `;`, or a keyword like
@@ -90,7 +94,11 @@ pub fn highlight(line: &str) -> Vec<(Tok, String)> {
             expect_command = matches!(op.as_str(), "|" | "||" | "&&" | ";" | "&" | "(");
         } else {
             let mut j = i;
-            while j < chars.len() && !chars[j].is_whitespace() && operator(&chars[j..]).is_none() && !matches!(chars[j], '\'' | '"' | '$') {
+            while j < chars.len()
+                && !chars[j].is_whitespace()
+                && operator(&chars[j..]).is_none()
+                && !matches!(chars[j], '\'' | '"' | '$')
+            {
                 j += 1;
             }
             let word: String = chars[i..j].iter().collect();
@@ -119,9 +127,13 @@ pub fn highlight(line: &str) -> Vec<(Tok, String)> {
 }
 
 fn operator(rest: &[char]) -> Option<String> {
-    const OPS: &[&str] = &["2>&1", "&>", "2>", "&&", "||", ">>", "|", ";", ">", "<", "&", "(", ")"];
+    const OPS: &[&str] = &[
+        "2>&1", "&>", "2>", "&&", "||", ">>", "|", ";", ">", "<", "&", "(", ")",
+    ];
     let s: String = rest.iter().take(4).collect();
-    OPS.iter().find(|op| s.starts_with(**op)).map(|op| op.to_string())
+    OPS.iter()
+        .find(|op| s.starts_with(**op))
+        .map(|op| op.to_string())
 }
 
 // ----------------------------------------------------------------- ANSI
@@ -150,9 +162,14 @@ pub fn ansi(text: &str) -> Vec<(Style, String)> {
             rest = after;
             continue;
         };
-        let end = body.find(|c: char| c.is_ascii_alphabetic()).unwrap_or(body.len());
+        let end = body
+            .find(|c: char| c.is_ascii_alphabetic())
+            .unwrap_or(body.len());
         if body[end..].starts_with('m') {
-            let codes: Vec<u32> = body[..end].split(';').map(|c| c.parse().unwrap_or(0)).collect();
+            let codes: Vec<u32> = body[..end]
+                .split(';')
+                .map(|c| c.parse().unwrap_or(0))
+                .collect();
             for code in if codes.is_empty() { vec![0] } else { codes } {
                 match code {
                     0 => style = Style::default(),
@@ -204,7 +221,14 @@ fn command_text(cmd: &str, t: &Theme) -> StyledText {
         if tok == Tok::Comment {
             f.style = FontStyle::Italic;
         }
-        runs.push(TextRun { len: s.len(), font: f, color: tok_color(tok, t), background_color: None, underline: None, strikethrough: None });
+        runs.push(TextRun {
+            len: s.len(),
+            font: f,
+            color: tok_color(tok, t),
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+        });
         text.push_str(&s);
     }
     StyledText::new(text).with_runs(runs)
@@ -221,17 +245,34 @@ fn output_text(line: &str, t: &Theme) -> StyledText {
         if style.italic {
             f.style = FontStyle::Italic;
         }
-        let mut color = style.fg.map(|n| t.terminal.ansi[n as usize]).unwrap_or(t.terminal.foreground);
+        let mut color = style
+            .fg
+            .map(|n| t.terminal.ansi[n as usize])
+            .unwrap_or(t.terminal.foreground);
         if style.dim {
             color = color.opacity(0.6);
         }
-        runs.push(TextRun { len: s.len(), font: f, color, background_color: None, underline: None, strikethrough: None });
+        runs.push(TextRun {
+            len: s.len(),
+            font: f,
+            color,
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+        });
         text.push_str(&s);
     }
     if text.is_empty() {
         // Keep blank lines their height.
         text.push(' ');
-        runs.push(TextRun { len: 1, font: font(t.font_mono.clone()), color: t.terminal.foreground, background_color: None, underline: None, strikethrough: None });
+        runs.push(TextRun {
+            len: 1,
+            font: font(t.font_mono.clone()),
+            color: t.terminal.foreground,
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+        });
     }
     StyledText::new(text).with_runs(runs)
 }
@@ -243,6 +284,8 @@ pub struct Where {
     pub msg: usize,
     pub block: usize,
     pub copied: Option<SharedString>,
+    /// A reply is running in this chat (Run again waits for it).
+    pub busy: bool,
 }
 
 /// The terminal block for a shell tool call.
@@ -268,8 +311,18 @@ pub fn block(call: &ToolCall, at: &Where, t: &Theme) -> AnyElement {
         .border_1()
         .border_color(k.divider)
         .cursor_pointer()
-        .when(!copied, |d| d.invisible().group_hover(group.clone(), |s| s.visible()))
-        .child(icon(if copied { "icons/check.svg" } else { "icons/copy.svg" }, t.size.icon_sm, if copied { t.extra.success } else { k.muted }))
+        .when(!copied, |d| {
+            d.invisible().group_hover(group.clone(), |s| s.visible())
+        })
+        .child(icon(
+            if copied {
+                "icons/check.svg"
+            } else {
+                "icons/copy.svg"
+            },
+            t.size.icon_sm,
+            if copied { t.extra.success } else { k.muted },
+        ))
         .on_click(move |_, _, cx| {
             cx.write_to_clipboard(ClipboardItem::new_string(command.clone()));
             let key = copy_key.clone();
@@ -283,46 +336,97 @@ pub fn block(call: &ToolCall, at: &Where, t: &Theme) -> AnyElement {
         .pl(px(10.))
         .pr(px(36.))
         .py(px(7.))
-        .child(div().flex_none().font_weight(FontWeight::BOLD).text_color(k.prompt).child("$"))
-        .child(div().flex_1().min_w_0().child(command_text(&call.target, t)))
+        .child(
+            div()
+                .flex_none()
+                .font_weight(FontWeight::BOLD)
+                .text_color(k.prompt)
+                .child("$"),
+        )
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .child(command_text(&call.target, t)),
+        )
         .child(copy);
 
     // The output.
     let text = call.output.to_string();
-    let lines: Vec<&str> = if text.is_empty() { vec![] } else { text.lines().collect() };
-    let hidden = if call.full { 0 } else { lines.len().saturating_sub(TAIL_LINES) };
+    let lines: Vec<&str> = if text.is_empty() {
+        vec![]
+    } else {
+        text.lines().collect()
+    };
+    let hidden = if call.full {
+        0
+    } else {
+        lines.len().saturating_sub(TAIL_LINES)
+    };
     let mut out = div().relative().px(px(10.)).py(px(7.)).flex().flex_col();
     if running {
+        out = out.child(div().w(px(7.)).h(px(14.)).bg(k.prompt).with_animation(
+            SharedString::from(format!("cursor-{key}")),
+            Animation::new(Duration::from_millis(1000)).repeat(),
+            |d, delta| d.opacity(if delta < 0.5 { 1. } else { 0. }),
+        ));
+    } else if call.status == ToolStatus::Declined {
         out = out.child(
             div()
-                .w(px(7.))
-                .h(px(14.))
-                .bg(k.prompt)
-                .with_animation(SharedString::from(format!("cursor-{key}")), Animation::new(Duration::from_millis(1000)).repeat(), |d, delta| d.opacity(if delta < 0.5 { 1. } else { 0. })),
+                .italic()
+                .text_color(k.muted)
+                .child("Not run: you declined it."),
         );
-    } else if call.status == ToolStatus::Declined {
-        out = out.child(div().italic().text_color(k.muted).child("Not run: you declined it."));
     } else if lines.is_empty() {
         out = out.child(div().italic().text_color(k.muted).child("No output"));
     } else {
-        let shown = lines[hidden..].iter().map(|l| div().whitespace_nowrap().child(output_text(l, t)));
+        let shown = lines[hidden..]
+            .iter()
+            .map(|l| div().whitespace_nowrap().child(output_text(l, t)));
         out = out.children(shown);
         if hidden > 0 {
             // The cut-off top fades out, as in Forge.
-            out = out.child(div().absolute().top_0().left_0().right_0().h(px(22.)).bg(linear_gradient(0., linear_color_stop(k.background, 0.), linear_color_stop(k.background.opacity(0.), 1.))));
+            out = out.child(div().absolute().top_0().left_0().right_0().h(px(22.)).bg(
+                linear_gradient(
+                    0.,
+                    linear_color_stop(k.background, 0.),
+                    linear_color_stop(k.background.opacity(0.), 1.),
+                ),
+            ));
         }
     }
     let out: AnyElement = if call.full && lines.len() > TAIL_LINES {
-        div().id(SharedString::from(format!("out-{key}"))).max_h(px(360.)).overflow_y_scroll().child(out).into_any_element()
+        div()
+            .id(SharedString::from(format!("out-{key}")))
+            .max_h(px(360.))
+            .overflow_y_scroll()
+            .child(out)
+            .into_any_element()
     } else {
         out.into_any_element()
     };
 
     // The footer: exit code, size, and the toggle.
     let footer = (!running && call.status != ToolStatus::Declined).then(|| {
-        let code = if call.status == ToolStatus::Failed { 1 } else { 0 };
-        let (fg, bg) = if code == 0 { (t.extra.success, t.extra.success_tint) } else { (t.extra.danger, t.extra.danger_tint) };
+        let code = if call.status == ToolStatus::Failed {
+            1
+        } else {
+            0
+        };
+        let (fg, bg) = if code == 0 {
+            (t.extra.success, t.extra.success_tint)
+        } else {
+            (t.extra.danger, t.extra.danger_tint)
+        };
         let (state, chat, msg, b) = (at.state.clone(), at.chat, at.msg, at.block);
+        let (copier, rerun, output, cmd) = (
+            at.state.clone(),
+            at.state.clone(),
+            call.output.to_string(),
+            call.target.to_string(),
+        );
+        let out_key: SharedString = format!("out-{key}").into();
+        let out_copied = at.copied.as_ref() == Some(&out_key);
         let fg_hover = k.foreground;
         let bg_hover = k.divider;
         div()
@@ -336,9 +440,61 @@ pub fn block(call: &ToolCall, at: &Where, t: &Theme) -> AnyElement {
             .font_family(t.font_sans.clone())
             .text_size(px(11.))
             .text_color(k.muted)
-            .child(div().px(px(5.)).rounded(px(3.)).bg(bg).text_color(fg).font_family(t.font_mono.clone()).child(format!("exit {code}")))
-            .child(format!("{} line{}", lines.len(), if lines.len() == 1 { "" } else { "s" }))
+            .child(
+                div()
+                    .px(px(5.))
+                    .rounded(px(3.))
+                    .bg(bg)
+                    .text_color(fg)
+                    .font_family(t.font_mono.clone())
+                    .child(format!("exit {code}")),
+            )
+            .child(format!(
+                "{} line{}",
+                lines.len(),
+                if lines.len() == 1 { "" } else { "s" }
+            ))
             .child(div().flex_1())
+            .child(
+                footer_button(
+                    &format!("copy-out-{key}"),
+                    if out_copied { "Copied" } else { "Copy output" },
+                    if out_copied {
+                        "icons/check.svg"
+                    } else {
+                        "icons/copy.svg"
+                    },
+                    fg_hover,
+                    bg_hover,
+                    k.muted,
+                    t,
+                )
+                .on_click(move |_, _, cx| {
+                    cx.write_to_clipboard(ClipboardItem::new_string(crate::export::plain(&output)));
+                    let key = out_key.clone();
+                    copier.update(cx, |s, cx| s.mark_copied(key, cx));
+                }),
+            )
+            .when(!at.busy, |d| {
+                d.child(
+                    footer_button(
+                        &format!("rerun-{key}"),
+                        "Run again",
+                        "icons/rotate-ccw.svg",
+                        fg_hover,
+                        bg_hover,
+                        k.muted,
+                        t,
+                    )
+                    .tooltip(|window, cx| {
+                        gpui::component::tooltip::Tooltip::new(
+                            "Ask Forge to run this command again (your mode's permissions apply)",
+                        )
+                        .build(window, cx)
+                    })
+                    .on_click(move |_, _, cx| rerun.update(cx, |s, cx| s.rerun(&cmd, cx))),
+                )
+            })
             .when(lines.len() > TAIL_LINES, |d| {
                 d.child(
                     div()
@@ -350,8 +506,17 @@ pub fn block(call: &ToolCall, at: &Where, t: &Theme) -> AnyElement {
                         .rounded(px(3.))
                         .cursor_pointer()
                         .hover(move |s| s.text_color(fg_hover).bg(bg_hover))
-                        .child(if call.full { "Show less".to_string() } else { format!("Show {hidden} earlier line{}", if hidden == 1 { "" } else { "s" }) })
-                        .on_click(move |_, _, cx| state.update(cx, |s, cx| s.toggle_full(chat, msg, b, cx))),
+                        .child(if call.full {
+                            "Show less".to_string()
+                        } else {
+                            format!(
+                                "Show {hidden} earlier line{}",
+                                if hidden == 1 { "" } else { "s" }
+                            )
+                        })
+                        .on_click(move |_, _, cx| {
+                            state.update(cx, |s, cx| s.toggle_full(chat, msg, b, cx))
+                        }),
                 )
             })
     });
@@ -371,13 +536,41 @@ pub fn block(call: &ToolCall, at: &Where, t: &Theme) -> AnyElement {
         .into_any_element()
 }
 
+/// A small text button in the terminal's footer.
+fn footer_button(
+    id: &str,
+    label: &'static str,
+    path: &'static str,
+    fg_hover: gpui::Hsla,
+    bg_hover: gpui::Hsla,
+    muted: gpui::Hsla,
+    t: &Theme,
+) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(SharedString::from(id.to_string()))
+        .h(px(20.))
+        .px(px(6.))
+        .flex()
+        .items_center()
+        .gap(px(4.))
+        .rounded(px(3.))
+        .cursor_pointer()
+        .hover(move |s| s.text_color(fg_hover).bg(bg_hover))
+        .child(icon(path, t.size.icon_xs, muted))
+        .child(label)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn kinds(line: &str) -> Vec<(Tok, &str)> {
         // Leak for terse assertions in tests only.
-        highlight(line).into_iter().filter(|(t, _)| *t != Tok::Plain).map(|(t, s)| (t, &*Box::leak(s.into_boxed_str()))).collect()
+        highlight(line)
+            .into_iter()
+            .filter(|(t, _)| *t != Tok::Plain)
+            .map(|(t, s)| (t, &*Box::leak(s.into_boxed_str())))
+            .collect()
     }
 
     #[test]
@@ -418,7 +611,25 @@ mod tests {
         assert_eq!(parts[1].0.fg, Some(2));
         assert_eq!(parts[1].1, "ok");
         assert!(parts[3].0.bold && parts[3].0.fg == Some(1));
-        assert_eq!(parts[4], (Style { bold: true, ..Default::default() }, "!".into()));
-        assert_eq!(ansi("\x1b[92mfine\x1b[0m"), vec![(Style { fg: Some(2), ..Default::default() }, "fine".into())]);
+        assert_eq!(
+            parts[4],
+            (
+                Style {
+                    bold: true,
+                    ..Default::default()
+                },
+                "!".into()
+            )
+        );
+        assert_eq!(
+            ansi("\x1b[92mfine\x1b[0m"),
+            vec![(
+                Style {
+                    fg: Some(2),
+                    ..Default::default()
+                },
+                "fine".into()
+            )]
+        );
     }
 }

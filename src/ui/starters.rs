@@ -45,7 +45,12 @@ pub const STARTERS: [Starter; 4] = [
 ];
 
 /// The starter cards (two by two) and, when there is one, the resume row.
-pub fn render(t: &Theme, state: &Entity<AppState>, composer: &Entity<Composer>, cx: &gpui::App) -> AnyElement {
+pub fn render(
+    t: &Theme,
+    state: &Entity<AppState>,
+    composer: &Entity<Composer>,
+    cx: &gpui::App,
+) -> AnyElement {
     let s = state.read(cx);
     let hover = t.colors.hover;
     let card = |i: usize, st: &Starter| {
@@ -66,22 +71,51 @@ pub fn render(t: &Theme, state: &Entity<AppState>, composer: &Entity<Composer>, 
             .bg(t.colors.surface)
             .cursor_pointer()
             .hover(move |d| d.bg(hover))
-            .child(div().pt(px(2.)).child(icon(st.icon, t.size.icon_sm, t.colors.text_muted)))
+            .child(
+                div()
+                    .pt(px(2.))
+                    .child(icon(st.icon, t.size.icon_sm, t.colors.text_muted)),
+            )
             .child(
                 div()
                     .flex_1()
                     .min_w_0()
                     .flex()
                     .flex_col()
-                    .child(div().font_weight(FontWeight::MEDIUM).text_color(t.colors.text_strong).child(st.title))
-                    .child(div().overflow_hidden().whitespace_nowrap().text_ellipsis().text_size(t.text.caption).text_color(t.colors.text_subtle).child(st.hint)),
+                    .child(
+                        div()
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(t.colors.text_strong)
+                            .child(st.title),
+                    )
+                    .child(
+                        div()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .text_size(t.text.caption)
+                            .text_color(t.colors.text_subtle)
+                            .child(st.hint),
+                    ),
             )
-            .on_click(move |_, window, app| composer.update(app, |c, cx| c.fill(prompt, window, cx)))
+            .on_click(move |_, window, app| {
+                composer.update(app, |c, cx| c.fill(prompt, window, cx))
+            })
     };
-    let row = |a: usize, b: usize| div().flex().gap(t.space.sm).child(card(a, &STARTERS[a])).child(card(b, &STARTERS[b]));
+    let row = |a: usize, b: usize| {
+        div()
+            .flex()
+            .gap(t.space.sm)
+            .child(card(a, &STARTERS[a]))
+            .child(card(b, &STARTERS[b]))
+    };
 
     // The most recent chat in this project, to pick up again.
-    let recent = s.chats.iter().filter(|c| c.project == s.current_project && !c.messages.is_empty()).min_by_key(|c| c.minutes_ago);
+    let recent = s
+        .chats
+        .iter()
+        .filter(|c| c.project == s.current_project && !c.messages.is_empty())
+        .min_by_key(|c| c.minutes_ago);
     let resume = recent.map(|c| {
         let (state, id) = (state.clone(), c.id);
         let title: SharedString = c.title.clone();
@@ -96,11 +130,35 @@ pub fn render(t: &Theme, state: &Entity<AppState>, composer: &Entity<Composer>, 
             .cursor_pointer()
             .text_color(t.colors.text_muted)
             .hover(move |d| d.bg(hover))
-            .child(icon("icons/history.svg", t.size.icon_sm, t.colors.text_subtle))
+            .child(icon(
+                "icons/history.svg",
+                t.size.icon_sm,
+                t.colors.text_subtle,
+            ))
             .child(div().flex_none().child("Resume"))
-            .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().font_weight(FontWeight::MEDIUM).text_color(t.colors.text).child(title))
-            .child(div().flex_none().text_size(t.text.caption).text_color(t.colors.text_subtle).child(super::sidebar::ago(c.minutes_ago)))
-            .child(icon("icons/arrow-right.svg", t.size.icon_xs, t.colors.text_subtle))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(t.colors.text)
+                    .child(title),
+            )
+            .child(
+                div()
+                    .flex_none()
+                    .text_size(t.text.caption)
+                    .text_color(t.colors.text_subtle)
+                    .child(super::sidebar::ago(c.minutes_ago)),
+            )
+            .child(icon(
+                "icons/arrow-right.svg",
+                t.size.icon_xs,
+                t.colors.text_subtle,
+            ))
             .on_click(move |_, _, app| state.update(app, |s, cx| s.open_chat(id, cx)))
     });
 

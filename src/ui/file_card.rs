@@ -11,7 +11,13 @@ use crate::theme::Theme;
 
 /// The page tile: a sheet with a few lines of "text" and the file's type.
 fn page(file: &FileRef, t: &Theme) -> AnyElement {
-    let line = |w: f32| div().h(px(2.)).w(relative(w)).rounded(t.radius.pill).bg(t.colors.text_subtle.opacity(0.35));
+    let line = |w: f32| {
+        div()
+            .h(px(2.))
+            .w(relative(w))
+            .rounded(t.radius.pill)
+            .bg(t.colors.text_subtle.opacity(0.35))
+    };
     div()
         .flex_none()
         .w(px(36.))
@@ -25,7 +31,15 @@ fn page(file: &FileRef, t: &Theme) -> AnyElement {
         .border_color(t.colors.border)
         // Concentric with the card: its 12px corner less the 8px between them.
         .rounded(t.radius.small)
-        .child(div().flex().flex_col().gap(px(3.)).child(line(0.9)).child(line(0.7)).child(line(0.8)))
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(3.))
+                .child(line(0.9))
+                .child(line(0.7))
+                .child(line(0.8)),
+        )
         .child(
             div()
                 .text_size(px(9.))
@@ -44,7 +58,13 @@ const CARD: f32 = 440.;
 const MARK: f32 = 40.;
 
 /// Title, type and Download: the card's text row.
-fn label_row(file: &FileRef, key: &str, state: Entity<AppState>, kind: &str, t: &Theme) -> gpui::Div {
+fn label_row(
+    file: &FileRef,
+    key: &str,
+    state: Entity<AppState>,
+    kind: &str,
+    t: &Theme,
+) -> gpui::Div {
     let hover = t.colors.hover;
     let to_save = file.clone();
     div()
@@ -58,8 +78,21 @@ fn label_row(file: &FileRef, key: &str, state: Entity<AppState>, kind: &str, t: 
                 .flex()
                 .flex_col()
                 .gap(px(2.))
-                .child(div().overflow_hidden().whitespace_nowrap().text_ellipsis().font_weight(FontWeight::SEMIBOLD).text_color(t.colors.text_strong).child(file.title()))
-                .child(div().text_size(t.text.caption).text_color(t.colors.text_muted).child(format!("{kind} · {}", file.kind()))),
+                .child(
+                    div()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(t.colors.text_strong)
+                        .child(file.title()),
+                )
+                .child(
+                    div()
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_muted)
+                        .child(format!("{kind} · {}", file.kind())),
+                ),
         )
         .child(
             div()
@@ -77,7 +110,11 @@ fn label_row(file: &FileRef, key: &str, state: Entity<AppState>, kind: &str, t: 
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(t.colors.text)
                 .hover(move |st| st.bg(hover))
-                .child(icon("icons/download.svg", t.size.icon_sm, t.colors.text_muted))
+                .child(icon(
+                    "icons/download.svg",
+                    t.size.icon_sm,
+                    t.colors.text_muted,
+                ))
                 .child("Download")
                 .on_click(move |_, _, cx| {
                     cx.stop_propagation();
@@ -86,12 +123,23 @@ fn label_row(file: &FileRef, key: &str, state: Entity<AppState>, kind: &str, t: 
         )
 }
 
-pub fn render(file: &FileRef, key: &str, state: Entity<AppState>, open: bool, scale: f32, t: &Theme) -> AnyElement {
+pub fn render(
+    file: &FileRef,
+    key: &str,
+    state: Entity<AppState>,
+    open: bool,
+    scale: f32,
+    t: &Theme,
+) -> AnyElement {
     if file.is_diagram() {
         return diagram_card(file, key, state, open, scale, t);
     }
     // Hovered, the edge darkens; open, it stays the accent.
-    let edge = if open { t.colors.primary.opacity(0.6) } else { t.colors.text_subtle.opacity(0.5) };
+    let edge = if open {
+        t.colors.primary.opacity(0.6)
+    } else {
+        t.colors.text_subtle.opacity(0.5)
+    };
     let opener = state.clone();
     let to_open = file.clone();
     div()
@@ -105,7 +153,11 @@ pub fn render(file: &FileRef, key: &str, state: Entity<AppState>, open: bool, sc
         .pr(t.space.md)
         .bg(t.colors.surface)
         .border_1()
-        .border_color(if open { t.colors.primary.opacity(0.6) } else { t.colors.border })
+        .border_color(if open {
+            t.colors.primary.opacity(0.6)
+        } else {
+            t.colors.border
+        })
         .rounded(t.radius.card)
         .cursor_pointer()
         .hover(move |st| st.border_color(edge))
@@ -114,19 +166,36 @@ pub fn render(file: &FileRef, key: &str, state: Entity<AppState>, open: bool, sc
             Some(kind) => super::file_mark::render(kind, MARK, scale),
             None => page(file, t),
         })
-        .child(label_row(file, key, state, file.label(), t).flex_1().min_w_0())
+        .child(
+            label_row(file, key, state, file.label(), t)
+                .flex_1()
+                .min_w_0(),
+        )
         .on_click(move |_, _, cx| opener.update(cx, |s, cx| s.open_doc(to_open.clone(), cx)))
         .into_any_element()
 }
 
 /// A diagram's card: the drawing itself on top, then its title and Download.
-fn diagram_card(file: &FileRef, key: &str, state: Entity<AppState>, open: bool, scale: f32, t: &Theme) -> AnyElement {
-    let edge = if open { t.colors.primary.opacity(0.6) } else { t.colors.text_subtle.opacity(0.5) };
+fn diagram_card(
+    file: &FileRef,
+    key: &str,
+    state: Entity<AppState>,
+    open: bool,
+    scale: f32,
+    t: &Theme,
+) -> AnyElement {
+    let edge = if open {
+        t.colors.primary.opacity(0.6)
+    } else {
+        t.colors.text_subtle.opacity(0.5)
+    };
     let opener = state.clone();
     let to_open = file.clone();
     // The drawing sits 8px inside the card, its corners concentric with it.
     let inner = CARD - 2. - 2. * f32::from(t.space.sm);
-    let drawing = crate::diagram::extract_svg(&file.content).and_then(|svg| super::diagram_view::fluid(&super::diagram_view::themed(svg, t.is_dark), inner, scale));
+    let drawing = crate::diagram::extract_svg(&file.content).and_then(|svg| {
+        super::diagram_view::fluid(&super::diagram_view::themed(svg, t.is_dark), inner, scale)
+    });
     div()
         .id(SharedString::from(format!("file-{key}")))
         .w_full()
@@ -138,11 +207,22 @@ fn diagram_card(file: &FileRef, key: &str, state: Entity<AppState>, open: bool, 
         .pb(t.space.sm + px(2.))
         .bg(t.colors.surface)
         .border_1()
-        .border_color(if open { t.colors.primary.opacity(0.6) } else { t.colors.border })
+        .border_color(if open {
+            t.colors.primary.opacity(0.6)
+        } else {
+            t.colors.border
+        })
         .rounded(t.radius.card)
         .cursor_pointer()
         .hover(move |st| st.border_color(edge))
-        .child(div().rounded(t.radius.small).overflow_hidden().border_1().border_color(t.colors.border).children(drawing))
+        .child(
+            div()
+                .rounded(t.radius.small)
+                .overflow_hidden()
+                .border_1()
+                .border_color(t.colors.border)
+                .children(drawing),
+        )
         .child(label_row(file, key, state, "Diagram", t).px(t.space.xs))
         .on_click(move |_, _, cx| opener.update(cx, |s, cx| s.open_doc(to_open.clone(), cx)))
         .into_any_element()

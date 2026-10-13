@@ -16,7 +16,10 @@ use std::f32::consts::{FRAC_PI_2, FRAC_PI_4};
 use std::sync::LazyLock;
 use std::time::Duration;
 
-use gpui::{canvas, div, point, prelude::*, px, Animation, AnimationExt, AnyElement, Bounds, ElementId, Hsla, PathBuilder, Pixels, Rgba, Window};
+use gpui::{
+    canvas, div, point, prelude::*, px, Animation, AnimationExt, AnyElement, Bounds, ElementId,
+    Hsla, PathBuilder, Pixels, Rgba, Window,
+};
 
 use crate::theme::Theme;
 
@@ -43,12 +46,45 @@ struct Face {
 }
 
 const FACES: [Face; 6] = [
-    Face { normal: [0., 1., 0.], corners: [[-1., 1., -1.], [1., 1., -1.], [1., 1., 1.], [-1., 1., 1.]] },
-    Face { normal: [0., -1., 0.], corners: [[-1., -1., -1.], [1., -1., -1.], [1., -1., 1.], [-1., -1., 1.]] },
-    Face { normal: [1., 0., 0.], corners: [[1., -1., -1.], [1., 1., -1.], [1., 1., 1.], [1., -1., 1.]] },
-    Face { normal: [-1., 0., 0.], corners: [[-1., -1., -1.], [-1., 1., -1.], [-1., 1., 1.], [-1., -1., 1.]] },
-    Face { normal: [0., 0., 1.], corners: [[-1., -1., 1.], [1., -1., 1.], [1., 1., 1.], [-1., 1., 1.]] },
-    Face { normal: [0., 0., -1.], corners: [[-1., -1., -1.], [1., -1., -1.], [1., 1., -1.], [-1., 1., -1.]] },
+    Face {
+        normal: [0., 1., 0.],
+        corners: [[-1., 1., -1.], [1., 1., -1.], [1., 1., 1.], [-1., 1., 1.]],
+    },
+    Face {
+        normal: [0., -1., 0.],
+        corners: [
+            [-1., -1., -1.],
+            [1., -1., -1.],
+            [1., -1., 1.],
+            [-1., -1., 1.],
+        ],
+    },
+    Face {
+        normal: [1., 0., 0.],
+        corners: [[1., -1., -1.], [1., 1., -1.], [1., 1., 1.], [1., -1., 1.]],
+    },
+    Face {
+        normal: [-1., 0., 0.],
+        corners: [
+            [-1., -1., -1.],
+            [-1., 1., -1.],
+            [-1., 1., 1.],
+            [-1., -1., 1.],
+        ],
+    },
+    Face {
+        normal: [0., 0., 1.],
+        corners: [[-1., -1., 1.], [1., -1., 1.], [1., 1., 1.], [-1., 1., 1.]],
+    },
+    Face {
+        normal: [0., 0., -1.],
+        corners: [
+            [-1., -1., -1.],
+            [1., -1., -1.],
+            [1., 1., -1.],
+            [-1., 1., -1.],
+        ],
+    },
 ];
 
 /// A face is drawn when its view-space normal points at the viewer.
@@ -112,7 +148,10 @@ fn place_voxels(rough: f32, yaw: f32, pitch: f32, overlap: f32) -> Vec<(Vec3, f3
         .iter()
         .map(|v| {
             let p = [0, 1, 2].map(|i| (v.at[i] * spread + v.jitter[i] * jitter) * pitch);
-            (to_view(p, yaw), pitch / 2. * (1. + (v.chip - 1.) * rough) + overlap)
+            (
+                to_view(p, yaw),
+                pitch / 2. * (1. + (v.chip - 1.) * rough) + overlap,
+            )
         })
         .collect();
     placed.sort_by(|a, b| a.0[2].total_cmp(&b.0[2]));
@@ -137,7 +176,11 @@ fn ease_out(t: f32) -> f32 {
     1. - (1. - t).powi(3)
 }
 fn ease_in_out(t: f32) -> f32 {
-    if t < 0.5 { 4. * t.powi(3) } else { 1. - (-2. * t + 2.).powi(3) / 2. }
+    if t < 0.5 {
+        4. * t.powi(3)
+    } else {
+        1. - (-2. * t + 2.).powi(3) / 2.
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -158,7 +201,11 @@ fn frame_at(ms: f32) -> Frame {
     Frame {
         beat,
         yaw: REST_YAW + (beat as f32 + ease_in_out(clamp01((f - 0.12) / 0.34))) * FRAC_PI_2,
-        rough: if struck { lerp(ROUGH[beat - 1], ROUGH[beat], ease_out(clamp01(f / 0.2))) } else { ease_in_out(clamp01((f - 0.2) / 0.55)) },
+        rough: if struck {
+            lerp(ROUGH[beat - 1], ROUGH[beat], ease_out(clamp01(f / 0.2)))
+        } else {
+            ease_in_out(clamp01((f - 0.2) / 0.55))
+        },
         squash: if !struck || f >= 0.36 {
             0.
         } else if f < 0.14 {
@@ -179,12 +226,24 @@ fn frame_at(ms: f32) -> Frame {
 }
 
 /// A finished frame, for reduced motion.
-const RESTING: Frame = Frame { beat: 3, yaw: REST_YAW, rough: 0., squash: 0., burst: 0. };
+const RESTING: Frame = Frame {
+    beat: 3,
+    yaw: REST_YAW,
+    rough: 0.,
+    squash: 0.,
+    burst: 0.,
+};
 
 /// `color-mix(in srgb, a p%, b)`.
 fn mix(a: Hsla, p: f32, b: Hsla) -> Hsla {
     let (a, b): (Rgba, Rgba) = (a.into(), b.into());
-    Rgba { r: a.r * p + b.r * (1. - p), g: a.g * p + b.g * (1. - p), b: a.b * p + b.b * (1. - p), a: 1. }.into()
+    Rgba {
+        r: a.r * p + b.r * (1. - p),
+        g: a.g * p + b.g * (1. - p),
+        b: a.b * p + b.b * (1. - p),
+        a: 1.,
+    }
+    .into()
 }
 
 fn hex(v: u32) -> Hsla {
@@ -230,41 +289,68 @@ fn draw(bounds: Bounds<Pixels>, frame: Frame, inks: &Inks, window: &mut Window) 
     let finish = 1. - frame.rough;
     let overlap = 0.35 * size / 24.;
 
-    let faces: Vec<(&Face, Vec3, [Vec3; 4])> =
-        FACES.iter().map(|f| (f, to_view(f.normal, frame.yaw), f.corners.map(|c| to_view(c, frame.yaw)))).filter(|(_, n, _)| faces_viewer(*n)).collect();
+    let faces: Vec<(&Face, Vec3, [Vec3; 4])> = FACES
+        .iter()
+        .map(|f| {
+            (
+                f,
+                to_view(f.normal, frame.yaw),
+                f.corners.map(|c| to_view(c, frame.yaw)),
+            )
+        })
+        .filter(|(_, n, _)| faces_viewer(*n))
+        .collect();
 
-    let cube = |window: &mut Window, cx: f32, cy: f32, centre: Vec3, half: f32, alpha: f32, heat: f32| {
-        for (face, normal, corners) in &faces {
-            let fill = |window: &mut Window, color: Hsla, a: f32| {
-                if a <= 0.004 {
-                    return;
+    let cube =
+        |window: &mut Window, cx: f32, cy: f32, centre: Vec3, half: f32, alpha: f32, heat: f32| {
+            for (face, normal, corners) in &faces {
+                let fill = |window: &mut Window, color: Hsla, a: f32| {
+                    if a <= 0.004 {
+                        return;
+                    }
+                    let mut b = PathBuilder::fill();
+                    for (i, c) in corners.iter().enumerate() {
+                        let p = point(
+                            px(ox + cx + (centre[0] + c[0] * half) * sx),
+                            px(oy + cy - (centre[1] + c[1] * half) * sy),
+                        );
+                        if i == 0 {
+                            b.move_to(p)
+                        } else {
+                            b.line_to(p)
+                        }
+                    }
+                    b.close();
+                    if let Ok(path) = b.build() {
+                        window.paint_path(path, color.opacity(a.min(1.)));
+                    }
+                };
+                let light = side_light(*normal);
+                if face.normal[1] == 1. {
+                    fill(window, inks.stock_top, alpha);
+                    fill(window, inks.top, alpha * finish);
+                } else {
+                    fill(window, inks.stock_shade, alpha);
+                    fill(window, inks.stock_lit, alpha * light);
+                    fill(window, inks.shade, alpha * finish);
+                    fill(window, inks.lit, alpha * light * finish);
                 }
-                let mut b = PathBuilder::fill();
-                for (i, c) in corners.iter().enumerate() {
-                    let p = point(px(ox + cx + (centre[0] + c[0] * half) * sx), px(oy + cy - (centre[1] + c[1] * half) * sy));
-                    if i == 0 { b.move_to(p) } else { b.line_to(p) }
+                // Sparks: a struck chunk glows hot, brightest on its lit faces.
+                if heat > 0. {
+                    fill(
+                        window,
+                        inks.spark,
+                        alpha
+                            * heat
+                            * if face.normal[1] == 1. {
+                                0.9
+                            } else {
+                                0.35 + 0.55 * light
+                            },
+                    );
                 }
-                b.close();
-                if let Ok(path) = b.build() {
-                    window.paint_path(path, color.opacity(a.min(1.)));
-                }
-            };
-            let light = side_light(*normal);
-            if face.normal[1] == 1. {
-                fill(window, inks.stock_top, alpha);
-                fill(window, inks.top, alpha * finish);
-            } else {
-                fill(window, inks.stock_shade, alpha);
-                fill(window, inks.stock_lit, alpha * light);
-                fill(window, inks.shade, alpha * finish);
-                fill(window, inks.lit, alpha * light * finish);
             }
-            // Sparks: a struck chunk glows hot, brightest on its lit faces.
-            if heat > 0. {
-                fill(window, inks.spark, alpha * heat * if face.normal[1] == 1. { 0.9 } else { 0.35 + 0.55 * light });
-            }
-        }
-    };
+        };
 
     for (centre, half) in place_voxels(frame.rough, frame.yaw, pitch, overlap) {
         cube(window, mid, mid, centre, half, 1., 0.);
@@ -275,14 +361,27 @@ fn draw(bounds: Bounds<Pixels>, frame: Frame, inks: &Inks, window: &mut Window) 
         let half = pitch * 0.2 * (0.6 + 0.4 * frame.burst);
         let alpha = clamp01(frame.burst * 2.5);
         for i in [frame.beat % 4, (frame.beat + 2) % 4, (frame.beat + 3) % 4] {
-            cube(window, mid + CHUNKS[i].0 * size * frame.burst, mid + CHUNKS[i].1 * size * frame.burst, [0., 0., 0.], half, alpha, frame.burst);
+            cube(
+                window,
+                mid + CHUNKS[i].0 * size * frame.burst,
+                mid + CHUNKS[i].1 * size * frame.burst,
+                [0., 0., 0.],
+                half,
+                alpha,
+                frame.burst,
+            );
         }
     }
 }
 
 fn still(t: &Theme, size: Pixels, color: Hsla, frame: Frame) -> impl IntoElement {
     let inks = Inks::new(color, t);
-    canvas(|_, _, _| {}, move |bounds, _, window, _| draw(bounds, frame, &inks, window)).size(size).flex_none()
+    canvas(
+        |_, _, _| {},
+        move |bounds, _, window, _| draw(bounds, frame, &inks, window),
+    )
+    .size(size)
+    .flex_none()
 }
 
 /// The finished cube, still: a reply that is done.
@@ -300,7 +399,9 @@ pub fn cube(t: &Theme, size: Pixels, color: Hsla, id: impl Into<ElementId>) -> A
     div()
         .size(size)
         .flex_none()
-        .with_animation(id, Animation::new(LOOP).repeat(), move |d, delta| d.child(still(&theme, size, color, frame_at(delta * 4. * BEAT))))
+        .with_animation(id, Animation::new(LOOP).repeat(), move |d, delta| {
+            d.child(still(&theme, size, color, frame_at(delta * 4. * BEAT)))
+        })
         .into_any_element()
 }
 
@@ -316,13 +417,20 @@ pub fn turning(t: &Theme, size: Pixels, color: Hsla, id: impl Into<ElementId>) -
     div()
         .size(size)
         .flex_none()
-        .with_animation(id, Animation::new(Duration::from_secs(7)).repeat(), move |d, delta| {
-            let p = clamp01(delta / TURN);
-            // Ease in and out: it gathers speed, then settles.
-            let eased = p * p * (3. - 2. * p);
-            let frame = Frame { yaw: REST_YAW + std::f32::consts::PI * eased, ..RESTING };
-            d.child(still(&theme, size, color, frame))
-        })
+        .with_animation(
+            id,
+            Animation::new(Duration::from_secs(7)).repeat(),
+            move |d, delta| {
+                let p = clamp01(delta / TURN);
+                // Ease in and out: it gathers speed, then settles.
+                let eased = p * p * (3. - 2. * p);
+                let frame = Frame {
+                    yaw: REST_YAW + std::f32::consts::PI * eased,
+                    ..RESTING
+                };
+                d.child(still(&theme, size, color, frame))
+            },
+        )
         .into_any_element()
 }
 
@@ -333,7 +441,10 @@ mod tests {
     #[test]
     fn there_are_26_voxels_and_corners_start_chipped() {
         assert_eq!(VOXELS.len(), 26);
-        assert!(VOXELS.iter().filter(|v| v.at.iter().all(|c| *c != 0.)).all(|v| v.chip < 0.71));
+        assert!(VOXELS
+            .iter()
+            .filter(|v| v.at.iter().all(|c| *c != 0.))
+            .all(|v| v.chip < 0.71));
     }
 
     #[test]

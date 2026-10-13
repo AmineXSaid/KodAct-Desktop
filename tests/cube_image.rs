@@ -11,18 +11,32 @@ use image::{ImageReader, Rgba32FImage, RgbaImage};
 
 const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/images");
 /// Every size rendered: 32, 48 and 96px at 1x, 1.25x, 1.5x, 1.75x, 2x, 2.5x, 3x.
-const SIZES: [u32; 16] = [32, 40, 48, 56, 60, 64, 72, 80, 84, 96, 120, 144, 168, 192, 240, 288];
+const SIZES: [u32; 16] = [
+    32, 40, 48, 56, 60, 64, 72, 80, 84, 96, 120, 144, 168, 192, 240, 288,
+];
 
 fn load(name: &str) -> RgbaImage {
-    ImageReader::open(format!("{DIR}/{name}")).unwrap_or_else(|e| panic!("{name}: {e}")).decode().unwrap_or_else(|e| panic!("{name}: {e}")).into_rgba8()
+    ImageReader::open(format!("{DIR}/{name}"))
+        .unwrap_or_else(|e| panic!("{name}: {e}"))
+        .decode()
+        .unwrap_or_else(|e| panic!("{name}: {e}"))
+        .into_rgba8()
 }
 
 fn to_linear(c: f32) -> f32 {
-    if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
+    if c <= 0.04045 {
+        c / 12.92
+    } else {
+        ((c + 0.055) / 1.055).powf(2.4)
+    }
 }
 
 fn to_srgb(c: f32) -> f32 {
-    if c <= 0.003_130_8 { c * 12.92 } else { 1.055 * c.powf(1. / 2.4) - 0.055 }
+    if c <= 0.003_130_8 {
+        c * 12.92
+    } else {
+        1.055 * c.powf(1. / 2.4) - 0.055
+    }
 }
 
 /// The original as the renderings frame it: its transparent margin cut
@@ -38,7 +52,12 @@ fn framed(original: &RgbaImage) -> RgbaImage {
     let (cw, ch) = (x1 - x0, y1 - y0);
     let side = cw.max(ch);
     let mut out = RgbaImage::new(side, side);
-    image::imageops::overlay(&mut out, &image::imageops::crop_imm(original, x0, y0, cw, ch).to_image(), ((side - cw) / 2) as i64, ((side - ch) / 2) as i64);
+    image::imageops::overlay(
+        &mut out,
+        &image::imageops::crop_imm(original, x0, y0, cw, ch).to_image(),
+        ((side - cw) / 2) as i64,
+        ((side - ch) / 2) as i64,
+    );
     out
 }
 
@@ -47,7 +66,12 @@ fn linear(src: &RgbaImage) -> Vec<[f64; 4]> {
     src.pixels()
         .map(|p| {
             let a = p[3] as f64 / 255.;
-            [to_linear(p[0] as f32 / 255.) as f64 * a, to_linear(p[1] as f32 / 255.) as f64 * a, to_linear(p[2] as f32 / 255.) as f64 * a, a]
+            [
+                to_linear(p[0] as f32 / 255.) as f64 * a,
+                to_linear(p[1] as f32 / 255.) as f64 * a,
+                to_linear(p[2] as f32 / 255.) as f64 * a,
+                a,
+            ]
         })
         .collect()
 }
@@ -79,7 +103,11 @@ fn reference(src: &RgbaImage, lin: &[[f64; 4]], n: u32) -> Rgba32FImage {
             let a = acc[3] / total;
             let px = out.get_pixel_mut(ox, oy);
             for c in 0..3 {
-                px[c] = if a > 1e-6 { to_srgb((acc[c] / total / a) as f32) } else { 0. };
+                px[c] = if a > 1e-6 {
+                    to_srgb((acc[c] / total / a) as f32)
+                } else {
+                    0.
+                };
             }
             px[3] = a as f32;
         }
@@ -99,28 +127,51 @@ fn stats(px: impl Iterator<Item = [f32; 4]>) -> ([f64; 3], f64) {
         alpha += p[3] as f64;
         count += 1.;
     }
-    (sum.map(|s| to_srgb((s / alpha) as f32) as f64 * 255.), alpha / count)
+    (
+        sum.map(|s| to_srgb((s / alpha) as f32) as f64 * 255.),
+        alpha / count,
+    )
 }
 
 /// FNV-1a, to pin the original file's bytes.
 fn fnv1a(bytes: &[u8]) -> u64 {
-    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ *b as u64).wrapping_mul(0x0100_0000_01b3))
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |h, b| {
+        (h ^ *b as u64).wrapping_mul(0x0100_0000_01b3)
+    })
 }
 
 #[test]
 fn the_original_is_kept_byte_for_byte() {
-    let bytes = std::fs::read(format!("{DIR}/cube-original.webp")).expect("the original is in the repo");
+    let bytes =
+        std::fs::read(format!("{DIR}/cube-original.webp")).expect("the original is in the repo");
     assert_eq!(bytes.len(), 209_940, "the original's size changed");
-    assert_eq!(fnv1a(&bytes), 0xa5a8_cadc_d0fc_f3ef, "the original's bytes changed");
+    assert_eq!(
+        fnv1a(&bytes),
+        0xa5a8_cadc_d0fc_f3ef,
+        "the original's bytes changed"
+    );
     let img = load("cube-original.webp");
     assert_eq!(img.dimensions(), (1254, 1254));
-    assert_eq!(img.get_pixel(0, 0)[3], 0, "the original's background is transparent");
+    assert_eq!(
+        img.get_pixel(0, 0)[3],
+        0,
+        "the original's background is transparent"
+    );
 }
 
 #[test]
 fn every_rendering_is_the_original_made_smaller() {
     let source = framed(&load("cube-original.webp"));
-    let src_f = || source.pixels().map(|p| [p[0] as f32 / 255., p[1] as f32 / 255., p[2] as f32 / 255., p[3] as f32 / 255.]);
+    let src_f = || {
+        source.pixels().map(|p| {
+            [
+                p[0] as f32 / 255.,
+                p[1] as f32 / 255.,
+                p[2] as f32 / 255.,
+                p[3] as f32 / 255.,
+            ]
+        })
+    };
     let (src_mean, src_cover) = stats(src_f());
     let lin = linear(&source);
     let mut report = vec![];
@@ -131,7 +182,11 @@ fn every_rendering_is_the_original_made_smaller() {
 
         // Transparent around the cube.
         for (x, y) in [(0, 0), (n - 1, 0), (0, n - 1), (n - 1, n - 1)] {
-            assert_eq!(out.get_pixel(x, y)[3], 0, "cube-{n}.png corner ({x},{y}) is transparent");
+            assert_eq!(
+                out.get_pixel(x, y)[3],
+                0,
+                "cube-{n}.png corner ({x},{y}) is transparent"
+            );
         }
 
         // Pixel for pixel against the reference, premultiplied (what you see over any background).
@@ -151,8 +206,17 @@ fn every_rendering_is_the_original_made_smaller() {
         let psnr = 10. * (255f64 * 255. / mse.max(1e-9)).log10();
 
         // The same colours and coverage as the original.
-        let (mean, cover) = stats(out.pixels().map(|p| [p[0] as f32 / 255., p[1] as f32 / 255., p[2] as f32 / 255., p[3] as f32 / 255.]));
-        let colour_shift = (0..3).map(|c| (mean[c] - src_mean[c]).abs()).fold(0., f64::max);
+        let (mean, cover) = stats(out.pixels().map(|p| {
+            [
+                p[0] as f32 / 255.,
+                p[1] as f32 / 255.,
+                p[2] as f32 / 255.,
+                p[3] as f32 / 255.,
+            ]
+        }));
+        let colour_shift = (0..3)
+            .map(|c| (mean[c] - src_mean[c]).abs())
+            .fold(0., f64::max);
 
         // The glow: the brightest blues are still as blue.
         let glow = |it: &mut dyn Iterator<Item = (f64, f64)>| {
@@ -166,18 +230,34 @@ fn every_rendering_is_the_original_made_smaller() {
         report.push(format!("{n:>3}px  PSNR {psnr:5.1} dB  colour shift {colour_shift:.2}/255  coverage {:.4} vs {:.4}  glow {glow_out:.0} vs {glow_ref:.0}", cover, src_cover));
         // The renderings use Lanczos, which keeps edges crisper than a plain
         // average; that sharpening is all the difference allowed.
-        assert!(psnr >= 28., "cube-{n}.png differs from the original reduced: PSNR {psnr:.1} dB");
-        assert!(colour_shift <= 2., "cube-{n}.png colours shifted by {colour_shift:.2}/255");
-        assert!((cover - src_cover).abs() <= 0.01, "cube-{n}.png coverage {cover:.4} vs {src_cover:.4}");
-        assert!((glow_out - glow_ref).abs() <= 8., "cube-{n}.png glow {glow_out:.0} vs {glow_ref:.0}");
+        assert!(
+            psnr >= 28.,
+            "cube-{n}.png differs from the original reduced: PSNR {psnr:.1} dB"
+        );
+        assert!(
+            colour_shift <= 2.,
+            "cube-{n}.png colours shifted by {colour_shift:.2}/255"
+        );
+        assert!(
+            (cover - src_cover).abs() <= 0.01,
+            "cube-{n}.png coverage {cover:.4} vs {src_cover:.4}"
+        );
+        assert!(
+            (glow_out - glow_ref).abs() <= 8.,
+            "cube-{n}.png glow {glow_out:.0} vs {glow_ref:.0}"
+        );
     }
     println!("{}", report.join("\n"));
 }
 
 #[test]
 fn every_rendering_is_bundled() {
-    let assets = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/assets.rs")).expect("assets.rs");
+    let assets = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/assets.rs"))
+        .expect("assets.rs");
     for n in SIZES {
-        assert!(assets.contains(&format!("\"cube-{n}\"")), "cube-{n}.png is not in the asset table");
+        assert!(
+            assets.contains(&format!("\"cube-{n}\"")),
+            "cube-{n}.png is not in the asset table"
+        );
     }
 }

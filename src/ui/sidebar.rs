@@ -5,8 +5,8 @@ use gpui::component::input::{Input, InputEvent, InputState};
 use std::time::Duration;
 
 use gpui::{
-    div, prelude::*, px, Animation, AnimationExt, Context, Entity, FontWeight, IntoElement, Render, SharedString,
-    Subscription, Window,
+    div, prelude::*, px, Animation, AnimationExt, Context, Entity, FontWeight, IntoElement, Render,
+    SharedString, Subscription, Window,
 };
 
 use super::*;
@@ -37,7 +37,10 @@ impl Sidebar {
                 let (now, search) = (state.read(cx).renaming, state.read(cx).search.clone());
                 if now != this.renaming {
                     this.renaming = now;
-                    if let Some(title) = now.and_then(|id| state.read(cx).chats.iter().find(|c| c.id == id)).map(|c| c.title.to_string()) {
+                    if let Some(title) = now
+                        .and_then(|id| state.read(cx).chats.iter().find(|c| c.id == id))
+                        .map(|c| c.title.to_string())
+                    {
                         this.rename.update(cx, |i, cx| {
                             i.set_value(title, window, cx);
                             i.focus(window, cx);
@@ -46,23 +49,28 @@ impl Sidebar {
                 }
                 // The search box follows the state (a rename can clear it).
                 if this.search.read(cx).value() != search {
-                    this.search.update(cx, |i, cx| i.set_value(search.to_string(), window, cx));
+                    this.search
+                        .update(cx, |i, cx| i.set_value(search.to_string(), window, cx));
                 }
                 cx.notify();
             }),
-            cx.subscribe_in(&rename, window, |this, input, ev: &InputEvent, window, cx| {
-                let Some(id) = this.renaming else { return };
-                match ev {
-                    InputEvent::PressEnter { .. } | InputEvent::Blur => {
-                        let title = input.read(cx).value().to_string();
-                        this.state.update(cx, |s, cx| s.rename_chat(id, &title, cx));
-                        if matches!(ev, InputEvent::PressEnter { .. }) {
-                            window.dispatch_action(Box::new(FocusComposer), cx);
+            cx.subscribe_in(
+                &rename,
+                window,
+                |this, input, ev: &InputEvent, window, cx| {
+                    let Some(id) = this.renaming else { return };
+                    match ev {
+                        InputEvent::PressEnter { .. } | InputEvent::Blur => {
+                            let title = input.read(cx).value().to_string();
+                            this.state.update(cx, |s, cx| s.rename_chat(id, &title, cx));
+                            if matches!(ev, InputEvent::PressEnter { .. }) {
+                                window.dispatch_action(Box::new(FocusComposer), cx);
+                            }
                         }
+                        _ => {}
                     }
-                    _ => {}
-                }
-            }),
+                },
+            ),
             cx.subscribe(&search, |this, input, ev: &InputEvent, cx| {
                 if matches!(ev, InputEvent::Change) {
                     let q = input.read(cx).value();
@@ -73,7 +81,14 @@ impl Sidebar {
                 }
             }),
         ];
-        Self { state, search, rename, renaming: None, menu_at: Default::default(), _subs: subs }
+        Self {
+            state,
+            search,
+            rename,
+            renaming: None,
+            menu_at: Default::default(),
+            _subs: subs,
+        }
     }
 }
 
@@ -83,7 +98,11 @@ impl Sidebar {
         let s = self.state.read(cx);
         let (open, all, name) = (s.filter_open, s.all_chats, s.project.clone());
         let hover = t.colors.hover;
-        let option = |id: &'static str, label: SharedString, on: bool, value: bool, state: Entity<AppState>| {
+        let option = |id: &'static str,
+                      label: SharedString,
+                      on: bool,
+                      value: bool,
+                      state: Entity<AppState>| {
             div()
                 .id(id)
                 .flex()
@@ -98,7 +117,9 @@ impl Sidebar {
                 .text_color(t.colors.text)
                 .hover(move |st| st.bg(hover))
                 .child(div().flex_1().child(label))
-                .child(div().w(t.size.icon).when(on, |d| d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.primary))))
+                .child(div().w(t.size.icon).when(on, |d| {
+                    d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.primary))
+                }))
                 .on_click(move |_, _, cx| {
                     state.update(cx, |s, cx| {
                         s.all_chats = value;
@@ -112,9 +133,29 @@ impl Sidebar {
             .top(t.size.icon + t.space.xs)
             .right_0()
             .w(px(220.))
-            .child(div().px(t.space.md).pt(t.space.xs).pb(t.space.xs).text_size(t.text.caption).text_color(t.colors.text_subtle).child("Show chats from"))
-            .child(option("filter-this", format!("This project ({name})").into(), !all, false, self.state.clone()))
-            .child(option("filter-all", "All projects".into(), all, true, self.state.clone()));
+            .child(
+                div()
+                    .px(t.space.md)
+                    .pt(t.space.xs)
+                    .pb(t.space.xs)
+                    .text_size(t.text.caption)
+                    .text_color(t.colors.text_subtle)
+                    .child("Show chats from"),
+            )
+            .child(option(
+                "filter-this",
+                format!("This project ({name})").into(),
+                !all,
+                false,
+                self.state.clone(),
+            ))
+            .child(option(
+                "filter-all",
+                "All projects".into(),
+                all,
+                true,
+                self.state.clone(),
+            ));
         let (toggle, close) = (self.state.clone(), self.state.clone());
         div()
             .relative()
@@ -134,7 +175,15 @@ impl Sidebar {
                     .cursor_pointer()
                     .hover(move |st| st.bg(hover))
                     .when(open || all, |d| d.bg(hover))
-                    .child(icon("icons/sliders-horizontal.svg", t.size.icon_sm, if all { t.colors.primary } else { t.colors.text_subtle }))
+                    .child(icon(
+                        "icons/sliders-horizontal.svg",
+                        t.size.icon_sm,
+                        if all {
+                            t.colors.primary
+                        } else {
+                            t.colors.text_subtle
+                        },
+                    ))
                     .on_click(move |_, _, cx| {
                         toggle.update(cx, |s, cx| {
                             s.filter_open = !s.filter_open;
@@ -159,14 +208,36 @@ impl Render for Sidebar {
         let projects_open = matches!(s.screen, Screen::Projects | Screen::Project(_));
         let loading = s.loading;
 
-        let mut list = div().id("chat-list").flex_1().min_h_0().overflow_y_scroll().px(t.space.sm).pb(t.space.md);
+        let mut list = div()
+            .id("chat-list")
+            .flex_1()
+            .min_h_0()
+            .overflow_y_scroll()
+            .px(t.space.sm)
+            .pb(t.space.md);
         // Chats of this project (or of every project, by the filter).
-        let shown = |c: &&crate::state::Chat| (s.all_chats || c.project == s.current_project) && (q.is_empty() || c.title.to_lowercase().contains(&q));
-        let pinned_projects: Vec<_> = s.projects.iter().filter(|p| p.pinned && q.is_empty()).collect();
+        let shown = |c: &&crate::state::Chat| {
+            (s.all_chats || c.project == s.current_project)
+                && (q.is_empty() || c.title.to_lowercase().contains(&q))
+        };
+        let pinned_projects: Vec<_> = s
+            .projects
+            .iter()
+            .filter(|p| p.pinned && q.is_empty())
+            .collect();
         let mut any = false;
         for group in GROUPS {
-            let rows: Vec<_> = s.chats.iter().filter(|c| c.group() == group).filter(shown).collect();
-            let projects_here = if group == "Pinned" { pinned_projects.as_slice() } else { &[] };
+            let rows: Vec<_> = s
+                .chats
+                .iter()
+                .filter(|c| c.group() == group)
+                .filter(shown)
+                .collect();
+            let projects_here = if group == "Pinned" {
+                pinned_projects.as_slice()
+            } else {
+                &[]
+            };
             if rows.is_empty() && projects_here.is_empty() {
                 continue;
             }
@@ -198,11 +269,39 @@ impl Render for Sidebar {
                         .px(t.space.md)
                         .rounded(t.radius.button)
                         .cursor_pointer()
-                        .text_color(if active { t.colors.text_strong } else { t.colors.text_muted })
-                        .when(active, |d| d.bg(t.extra.selected).border_1().border_color(t.colors.border).font_weight(FontWeight::MEDIUM))
+                        .text_color(if active {
+                            t.colors.text_strong
+                        } else {
+                            t.colors.text_muted
+                        })
+                        .when(active, |d| {
+                            d.bg(t.extra.selected)
+                                .border_1()
+                                .border_color(t.colors.border)
+                                .font_weight(FontWeight::MEDIUM)
+                        })
                         .when(!active, |d| d.hover(move |st| st.bg(hover)))
-                        .child(div().w(t.size.icon_sm).flex_none().flex().justify_center().child(icon("icons/folder-open.svg", t.size.icon_xs, t.colors.primary)))
-                        .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(p.name.clone()))
+                        .child(
+                            div()
+                                .w(t.size.icon_sm)
+                                .flex_none()
+                                .flex()
+                                .justify_center()
+                                .child(icon(
+                                    "icons/folder-open.svg",
+                                    t.size.icon_xs,
+                                    t.colors.primary,
+                                )),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .child(p.name.clone()),
+                        )
                         .on_click(move |_, _, cx| state.update(cx, |s, cx| s.show_project(id, cx))),
                 );
             }
@@ -212,7 +311,10 @@ impl Render for Sidebar {
                 let pinned = c.pinned;
                 let state = self.state.clone();
                 let state_pin = self.state.clone();
-                let ago: SharedString = match (s.all_chats && c.project != s.current_project).then(|| s.project(c.project)).flatten() {
+                let ago: SharedString = match (s.all_chats && c.project != s.current_project)
+                    .then(|| s.project(c.project))
+                    .flatten()
+                {
                     Some(p) => format!("{} · {}", p.name, ago(c.minutes_ago)).into(),
                     None => ago(c.minutes_ago).into(),
                 };
@@ -234,8 +336,17 @@ impl Render for Sidebar {
                         .px(t.space.md)
                         .rounded(t.radius.button)
                         .cursor_pointer()
-                        .text_color(if selected { t.colors.text_strong } else { t.colors.text_muted })
-                        .when(selected, |d| d.bg(t.extra.selected).border_1().border_color(t.colors.border).font_weight(FontWeight::MEDIUM))
+                        .text_color(if selected {
+                            t.colors.text_strong
+                        } else {
+                            t.colors.text_muted
+                        })
+                        .when(selected, |d| {
+                            d.bg(t.extra.selected)
+                                .border_1()
+                                .border_color(t.colors.border)
+                                .font_weight(FontWeight::MEDIUM)
+                        })
                         .when(!selected, |d| d.hover(move |st| st.bg(hover)))
                         .child(status_mark(status, id, &t))
                         .map(|d| {
@@ -246,14 +357,23 @@ impl Render for Sidebar {
                                     div()
                                         .flex_1()
                                         .min_w_0()
-                                        .capture_key_down(move |ev: &gpui::KeyDownEvent, window, cx| {
-                                            if ev.keystroke.key == "escape" {
-                                                cx.stop_propagation();
-                                                cancel.update(cx, |s, cx| s.cancel_rename(cx));
-                                                window.dispatch_action(Box::new(FocusComposer), cx);
-                                            }
-                                        })
-                                        .child(Input::new(&self.rename).appearance(false).text_size(t.text.body_sm)),
+                                        .capture_key_down(
+                                            move |ev: &gpui::KeyDownEvent, window, cx| {
+                                                if ev.keystroke.key == "escape" {
+                                                    cx.stop_propagation();
+                                                    cancel.update(cx, |s, cx| s.cancel_rename(cx));
+                                                    window.dispatch_action(
+                                                        Box::new(FocusComposer),
+                                                        cx,
+                                                    );
+                                                }
+                                            },
+                                        )
+                                        .child(
+                                            Input::new(&self.rename)
+                                                .appearance(false)
+                                                .text_size(t.text.body_sm),
+                                        ),
                                 )
                             } else {
                                 d.child(
@@ -263,7 +383,10 @@ impl Render for Sidebar {
                                         .overflow_hidden()
                                         .whitespace_nowrap()
                                         .text_ellipsis()
-                                        .when(unread, |d| d.font_weight(FontWeight::SEMIBOLD).text_color(t.colors.text_strong))
+                                        .when(unread, |d| {
+                                            d.font_weight(FontWeight::SEMIBOLD)
+                                                .text_color(t.colors.text_strong)
+                                        })
                                         .child(c.title.clone()),
                                 )
                                 .child(
@@ -292,10 +415,19 @@ impl Render for Sidebar {
                                                 .p(px(3.))
                                                 .rounded(t.radius.small)
                                                 .hover(move |st| st.bg(hover))
-                                                .child(icon("icons/pin.svg", t.size.icon_sm, if pinned { t.colors.primary } else { t.colors.text_subtle }))
+                                                .child(icon(
+                                                    "icons/pin.svg",
+                                                    t.size.icon_sm,
+                                                    if pinned {
+                                                        t.colors.primary
+                                                    } else {
+                                                        t.colors.text_subtle
+                                                    },
+                                                ))
                                                 .on_click(move |_, _, cx| {
                                                     cx.stop_propagation();
-                                                    state_pin.update(cx, |s, cx| s.toggle_pin(id, cx));
+                                                    state_pin
+                                                        .update(cx, |s, cx| s.toggle_pin(id, cx));
                                                 }),
                                         )
                                         .child(
@@ -305,12 +437,26 @@ impl Render for Sidebar {
                                                 .rounded(t.radius.small)
                                                 .hover(move |st| st.bg(hover))
                                                 .when(menu_open, |d| d.bg(hover))
-                                                .child(icon("icons/ellipsis.svg", t.size.icon_sm, t.colors.text_muted))
+                                                .child(icon(
+                                                    "icons/ellipsis.svg",
+                                                    t.size.icon_sm,
+                                                    t.colors.text_muted,
+                                                ))
                                                 .on_click(move |ev, _, cx| {
                                                     cx.stop_propagation();
                                                     let at = ev.position();
-                                                    let _ = me.update(cx, |this, _| this.menu_at = at);
-                                                    state_menu.update(cx, |s, cx| s.open_chat_menu(if s.chat_menu == Some(id) { None } else { Some(id) }, cx));
+                                                    let _ =
+                                                        me.update(cx, |this, _| this.menu_at = at);
+                                                    state_menu.update(cx, |s, cx| {
+                                                        s.open_chat_menu(
+                                                            if s.chat_menu == Some(id) {
+                                                                None
+                                                            } else {
+                                                                Some(id)
+                                                            },
+                                                            cx,
+                                                        )
+                                                    });
                                                 }),
                                         ),
                                 )
@@ -328,20 +474,39 @@ impl Render for Sidebar {
             }
         }
         if !any {
-            list = list.child(div().px(t.space.md).py(t.space.lg).text_color(t.colors.text_subtle).child(if q.is_empty() { "Chats you start appear here." } else { "No chat matches." }));
+            list = list.child(
+                div()
+                    .px(t.space.md)
+                    .py(t.space.lg)
+                    .text_color(t.colors.text_subtle)
+                    .child(if q.is_empty() {
+                        "Chats you start appear here."
+                    } else {
+                        "No chat matches."
+                    }),
+            );
         }
 
         // The open chat menu, anchored where it was asked for, over everything.
-        let menu = s.chat_menu.and_then(|id| s.chats.iter().find(|c| c.id == id)).map(|c| {
-            let close = self.state.clone();
-            gpui::deferred(
-                gpui::anchored()
-                    .position(self.menu_at)
-                    .snap_to_window_with_margin(t.space.sm)
-                    .child(div().on_mouse_down_out(move |_, _, cx| close.update(cx, |s, cx| s.open_chat_menu(None, cx))).child(super::chat_menu::render(&t, &self.state, c.id, c.pinned))),
-            )
-            .with_priority(2)
-        });
+        let menu = s
+            .chat_menu
+            .and_then(|id| s.chats.iter().find(|c| c.id == id))
+            .map(|c| {
+                let close = self.state.clone();
+                gpui::deferred(
+                    gpui::anchored()
+                        .position(self.menu_at)
+                        .snap_to_window_with_margin(t.space.sm)
+                        .child(
+                            div()
+                                .on_mouse_down_out(move |_, _, cx| {
+                                    close.update(cx, |s, cx| s.open_chat_menu(None, cx))
+                                })
+                                .child(super::chat_menu::render(&t, &self.state, c.id, c.pinned)),
+                        ),
+                )
+                .with_priority(2)
+            });
 
         div()
             .w(t.size.sidebar)
@@ -376,7 +541,9 @@ impl Render for Sidebar {
                             .child(icon("icons/plus.svg", t.size.icon, t.colors.text))
                             .child(div().flex_1().child("New chat"))
                             .child(kbd(&t, shortcut("N")))
-                            .on_click(|_, window, cx| window.dispatch_action(Box::new(NewChat), cx)),
+                            .on_click(|_, window, cx| {
+                                window.dispatch_action(Box::new(NewChat), cx)
+                            }),
                     )
                     .child(
                         div()
@@ -386,8 +553,16 @@ impl Render for Sidebar {
                             .h(t.size.row)
                             .pl(t.space.md)
                             .rounded(t.radius.button)
-                            .child(icon("icons/search.svg", t.size.icon_sm, t.colors.text_subtle))
-                            .child(div().flex_1().child(Input::new(&self.search).appearance(false).cleanable(true))),
+                            .child(icon(
+                                "icons/search.svg",
+                                t.size.icon_sm,
+                                t.colors.text_subtle,
+                            ))
+                            .child(
+                                div().flex_1().child(
+                                    Input::new(&self.search).appearance(false).cleanable(true),
+                                ),
+                            ),
                     )
                     .child(
                         div()
@@ -399,13 +574,32 @@ impl Render for Sidebar {
                             .px(t.space.md)
                             .rounded(t.radius.button)
                             .cursor_pointer()
-                            .text_color(if projects_open { t.colors.text_strong } else { t.colors.text_muted })
-                            .when(projects_open, |d| d.bg(t.extra.selected).border_1().border_color(t.colors.border).font_weight(FontWeight::MEDIUM))
+                            .text_color(if projects_open {
+                                t.colors.text_strong
+                            } else {
+                                t.colors.text_muted
+                            })
+                            .when(projects_open, |d| {
+                                d.bg(t.extra.selected)
+                                    .border_1()
+                                    .border_color(t.colors.border)
+                                    .font_weight(FontWeight::MEDIUM)
+                            })
                             .when(!projects_open, |d| d.hover(move |st| st.bg(hover)))
-                            .child(icon("icons/folder-open.svg", t.size.icon_sm, if projects_open { t.colors.text_strong } else { t.colors.text_subtle }))
+                            .child(icon(
+                                "icons/folder-open.svg",
+                                t.size.icon_sm,
+                                if projects_open {
+                                    t.colors.text_strong
+                                } else {
+                                    t.colors.text_subtle
+                                },
+                            ))
                             .child(div().flex_1().child("Projects"))
                             .child(kbd(&t, shortcut("Shift P")))
-                            .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenProjects), cx)),
+                            .on_click(|_, window, cx| {
+                                window.dispatch_action(Box::new(OpenProjects), cx)
+                            }),
                     )
                     .child(
                         div()
@@ -417,24 +611,56 @@ impl Render for Sidebar {
                             .px(t.space.md)
                             .rounded(t.radius.button)
                             .cursor_pointer()
-                            .text_color(if rules_open { t.colors.text_strong } else { t.colors.text_muted })
-                            .when(rules_open, |d| d.bg(t.extra.selected).border_1().border_color(t.colors.border).font_weight(FontWeight::MEDIUM))
+                            .text_color(if rules_open {
+                                t.colors.text_strong
+                            } else {
+                                t.colors.text_muted
+                            })
+                            .when(rules_open, |d| {
+                                d.bg(t.extra.selected)
+                                    .border_1()
+                                    .border_color(t.colors.border)
+                                    .font_weight(FontWeight::MEDIUM)
+                            })
                             .when(!rules_open, |d| d.hover(move |st| st.bg(hover)))
-                            .child(icon("icons/list-todo.svg", t.size.icon_sm, if rules_open { t.colors.text_strong } else { t.colors.text_subtle }))
+                            .child(icon(
+                                "icons/list-todo.svg",
+                                t.size.icon_sm,
+                                if rules_open {
+                                    t.colors.text_strong
+                                } else {
+                                    t.colors.text_subtle
+                                },
+                            ))
                             .child(div().flex_1().child("Rules and memory"))
                             .child(kbd(&t, shortcut("Shift R")))
-                            .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenRules), cx)),
+                            .on_click(|_, window, cx| {
+                                window.dispatch_action(Box::new(OpenRules), cx)
+                            }),
                     ),
             )
             .map(|d| {
                 if loading {
-                    d.child(div().flex_1().min_h_0().child(super::skeleton::chat_list(&t)))
+                    d.child(
+                        div()
+                            .flex_1()
+                            .min_h_0()
+                            .child(super::skeleton::chat_list(&t)),
+                    )
                 } else {
-                    d.child(div().flex_1().min_h_0().flex().flex_col().child(list).with_animation(
-                        "chats-in",
-                        Animation::new(Duration::from_millis(t.motion_ms)),
-                        |d, delta| d.opacity(delta),
-                    ))
+                    d.child(
+                        div()
+                            .flex_1()
+                            .min_h_0()
+                            .flex()
+                            .flex_col()
+                            .child(list)
+                            .with_animation(
+                                "chats-in",
+                                Animation::new(Duration::from_millis(t.motion_ms)),
+                                |d, delta| d.opacity(delta),
+                            ),
+                    )
                 }
             })
             .child(
@@ -460,11 +686,30 @@ impl Render for Sidebar {
                                     .min_w_0()
                                     .flex()
                                     .flex_col()
-                                    .child(div().font_weight(FontWeight::MEDIUM).text_color(t.colors.text_strong).overflow_hidden().whitespace_nowrap().text_ellipsis().child(name))
-                                    .child(div().text_size(t.text.caption).text_color(t.colors.text_subtle).child("Settings and providers")),
+                                    .child(
+                                        div()
+                                            .font_weight(FontWeight::MEDIUM)
+                                            .text_color(t.colors.text_strong)
+                                            .overflow_hidden()
+                                            .whitespace_nowrap()
+                                            .text_ellipsis()
+                                            .child(name),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_size(t.text.caption)
+                                            .text_color(t.colors.text_subtle)
+                                            .child("Settings and providers"),
+                                    ),
                             )
-                            .child(icon("icons/settings.svg", t.size.icon, t.colors.text_subtle))
-                            .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenSettings), cx)),
+                            .child(icon(
+                                "icons/settings.svg",
+                                t.size.icon,
+                                t.colors.text_subtle,
+                            ))
+                            .on_click(|_, window, cx| {
+                                window.dispatch_action(Box::new(OpenSettings), cx)
+                            }),
                     ),
             )
             .children(menu)
@@ -480,15 +725,31 @@ pub fn status_mark(status: ChatStatus, id: usize, t: &crate::theme::Theme) -> gp
         ChatStatus::Working => super::voxels::running(t.colors.sky, ("chat-working", id)),
         ChatStatus::NeedsYou => dot()
             .bg(t.colors.marigold)
-            .with_animation(("chat-needs", id), Animation::new(Duration::from_millis(1600)).repeat().with_easing(gpui::ease_in_out), |d, delta| {
-                d.opacity(0.45 + 0.55 * (1. - (delta * 2. - 1.).abs()))
-            })
+            .with_animation(
+                ("chat-needs", id),
+                Animation::new(Duration::from_millis(1600))
+                    .repeat()
+                    .with_easing(gpui::ease_in_out),
+                |d, delta| d.opacity(0.45 + 0.55 * (1. - (delta * 2. - 1.).abs())),
+            )
             .into_any_element(),
-        ChatStatus::Error => icon("icons/triangle-alert.svg", t.size.icon_xs, t.extra.danger).into_any_element(),
+        ChatStatus::Error => {
+            icon("icons/triangle-alert.svg", t.size.icon_xs, t.extra.danger).into_any_element()
+        }
         ChatStatus::Unread => dot().bg(t.colors.primary).into_any_element(),
-        ChatStatus::Idle => dot().border_1().border_color(t.colors.text_subtle.opacity(0.45)).into_any_element(),
+        ChatStatus::Idle => dot()
+            .border_1()
+            .border_color(t.colors.text_subtle.opacity(0.45))
+            .into_any_element(),
     };
-    div().w(t.size.icon_sm).flex_none().flex().items_center().justify_center().child(inner).into_any_element()
+    div()
+        .w(t.size.icon_sm)
+        .flex_none()
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(inner)
+        .into_any_element()
 }
 
 pub fn ago(minutes: u32) -> String {

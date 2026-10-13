@@ -26,11 +26,20 @@ pub(crate) fn rgba(c: Hsla) -> Rgba {
 pub(crate) fn over(fg: Hsla, bg: Hsla) -> Rgba {
     let (f, b) = (rgba(fg), rgba(bg));
     let a = f.a;
-    Rgba { r: f.r * a + b.r * (1. - a), g: f.g * a + b.g * (1. - a), b: f.b * a + b.b * (1. - a), a: 1. }
+    Rgba {
+        r: f.r * a + b.r * (1. - a),
+        g: f.g * a + b.g * (1. - a),
+        b: f.b * a + b.b * (1. - a),
+        a: 1.,
+    }
 }
 
 fn linear(c: f32) -> f32 {
-    if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
+    if c <= 0.04045 {
+        c / 12.92
+    } else {
+        ((c + 0.055) / 1.055).powf(2.4)
+    }
 }
 
 fn luminance(c: Rgba) -> f32 {
@@ -62,9 +71,18 @@ fn both() -> [(&'static str, Theme); 2] {
 /// The surfaces text sits on, by name: the window's three, the card on top,
 /// the selected row, and each with the hover wash over it.
 fn grounds(t: &Theme) -> Vec<(String, Hsla)> {
-    let base = [("chrome", t.extra.chrome), ("pane", t.extra.pane), ("stage", t.extra.stage), ("surface", t.colors.surface), ("selected", t.extra.selected)];
+    let base = [
+        ("chrome", t.extra.chrome),
+        ("pane", t.extra.pane),
+        ("stage", t.extra.stage),
+        ("surface", t.colors.surface),
+        ("selected", t.extra.selected),
+    ];
     let mut out: Vec<(String, Hsla)> = base.iter().map(|(n, c)| (n.to_string(), *c)).collect();
-    out.extend(base.iter().map(|(n, c)| (format!("{n}+hover"), Hsla::from(over(t.colors.hover, *c)))));
+    out.extend(
+        base.iter()
+            .map(|(n, c)| (format!("{n}+hover"), Hsla::from(over(t.colors.hover, *c)))),
+    );
     out
 }
 
@@ -72,19 +90,38 @@ fn grounds(t: &Theme) -> Vec<(String, Hsla)> {
 fn surfaces_step_evenly_from_the_title_bar_down() {
     for (mode, t) in both() {
         // Title bar, sidebar, session, card: each a step lighter.
-        let ladder = [t.extra.chrome, t.extra.pane, t.extra.stage, t.colors.surface].map(|c| oklab(rgba(c)));
+        let ladder = [
+            t.extra.chrome,
+            t.extra.pane,
+            t.extra.stage,
+            t.colors.surface,
+        ]
+        .map(|c| oklab(rgba(c)));
         let steps: Vec<f32> = ladder.windows(2).map(|w| w[1].0 - w[0].0).collect();
         let mean = steps.iter().sum::<f32>() / steps.len() as f32;
         for (i, s) in steps.iter().enumerate() {
-            assert!(*s >= 0.02, "{mode}: step {i} is {s:.4}, too close to tell apart");
-            assert!((s - mean).abs() <= 0.004, "{mode}: step {i} is {s:.4}, the mean is {mean:.4}; the ladder is uneven");
+            assert!(
+                *s >= 0.02,
+                "{mode}: step {i} is {s:.4}, too close to tell apart"
+            );
+            assert!(
+                (s - mean).abs() <= 0.004,
+                "{mode}: step {i} is {s:.4}, the mean is {mean:.4}; the ladder is uneven"
+            );
         }
         for (i, (_, chroma)) in ladder.iter().enumerate() {
-            assert!(*chroma <= 0.01, "{mode}: surface {i} has chroma {chroma:.4}; paper, not colour");
+            assert!(
+                *chroma <= 0.01,
+                "{mode}: surface {i} has chroma {chroma:.4}; paper, not colour"
+            );
         }
         // The selected row lifts off the sidebar at least as far as one step.
         let (pane, sel) = (oklab(rgba(t.extra.pane)).0, oklab(rgba(t.extra.selected)).0);
-        assert!(sel - pane >= mean, "{mode}: the selected row sits {:.4} above the sidebar", sel - pane);
+        assert!(
+            sel - pane >= mean,
+            "{mode}: the selected row sits {:.4} above the sidebar",
+            sel - pane
+        );
     }
 }
 
@@ -101,7 +138,10 @@ fn text_reads_on_every_surface() {
                 ("text_subtle", t.colors.text_subtle, 2.5),
             ] {
                 let c = contrast(fg, bg);
-                assert!(c >= floor, "{mode}: {name} on {ground} is {c:.2}:1, under {floor}:1");
+                assert!(
+                    c >= floor,
+                    "{mode}: {name} on {ground} is {c:.2}:1, under {floor}:1"
+                );
             }
         }
     }
@@ -112,7 +152,10 @@ fn hairlines_show_on_every_surface() {
     for (mode, t) in both() {
         for (ground, bg) in grounds(&t) {
             let c = contrast(t.colors.border, bg);
-            assert!(c >= 1.15, "{mode}: the hairline on {ground} is {c:.2}:1, too faint to see");
+            assert!(
+                c >= 1.15,
+                "{mode}: the hairline on {ground} is {c:.2}:1, too faint to see"
+            );
         }
     }
 }
@@ -130,23 +173,47 @@ fn coloured_text_reads_on_its_tint() {
             ("success", x.success, Hsla::from(over(x.success_tint, card))),
             ("danger", x.danger, Hsla::from(over(x.danger_tint, card))),
             ("warning", x.warning, Hsla::from(over(x.warning_tint, card))),
-            ("ping fast", x.ping_fast_fg, Hsla::from(over(x.ping_fast_bg, card))),
-            ("ping fair", x.ping_fair_fg, Hsla::from(over(x.ping_fair_bg, card))),
-            ("ping slow", x.ping_slow_fg, Hsla::from(over(x.ping_slow_bg, card))),
+            (
+                "ping fast",
+                x.ping_fast_fg,
+                Hsla::from(over(x.ping_fast_bg, card)),
+            ),
+            (
+                "ping fair",
+                x.ping_fair_fg,
+                Hsla::from(over(x.ping_fair_bg, card)),
+            ),
+            (
+                "ping slow",
+                x.ping_slow_fg,
+                Hsla::from(over(x.ping_slow_bg, card)),
+            ),
         ];
         for (name, fg, bg) in pairs {
             let c = contrast(fg, bg);
             assert!(c >= AA_TEXT, "{mode}: {name} is {c:.2}:1");
         }
         // A mode's colour marks the composer's edge and its icon (UI parts).
-        for (name, c) in [("edit", x.mode_edit), ("plan", x.mode_plan), ("bypass", x.mode_bypass), ("expert", x.mode_expert)] {
+        for (name, c) in [
+            ("edit", x.mode_edit),
+            ("plan", x.mode_plan),
+            ("bypass", x.mode_bypass),
+            ("expert", x.mode_expert),
+        ] {
             let r = contrast(c, card);
             assert!(r >= AA_UI, "{mode}: mode {name} is {r:.2}:1 on a card");
         }
         // Plan and Bypass also fill the send button, under a white arrow.
-        for (name, c) in [("plan", x.mode_plan), ("bypass", x.mode_bypass), ("default", x.fill)] {
+        for (name, c) in [
+            ("plan", x.mode_plan),
+            ("bypass", x.mode_bypass),
+            ("default", x.fill),
+        ] {
             let arrow = contrast(t.colors.primary_fg, c);
-            assert!(arrow >= AA_UI, "{mode}: the send arrow on {name} is {arrow:.2}:1");
+            assert!(
+                arrow >= AA_UI,
+                "{mode}: the send arrow on {name} is {arrow:.2}:1"
+            );
         }
     }
 }

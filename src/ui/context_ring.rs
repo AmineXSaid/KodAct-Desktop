@@ -5,12 +5,30 @@ use gpui::{canvas, point, px, Bounds, Hsla, IntoElement, PathBuilder, Pixels, St
 
 /// A ring `size` across, `fraction` (0..=1) of it drawn in `fill` over a
 /// full `track`.
-pub fn ring(size: Pixels, stroke: Pixels, fraction: f32, track: Hsla, fill: Hsla) -> impl IntoElement {
+pub fn ring(
+    size: Pixels,
+    stroke: Pixels,
+    fraction: f32,
+    track: Hsla,
+    fill: Hsla,
+) -> impl IntoElement {
     let f = fraction.clamp(0., 1.);
-    canvas(|_, _, _| {}, move |bounds, _, window, _| paint(bounds, stroke, f, track, fill, window)).size(size).flex_none()
+    canvas(
+        |_, _, _| {},
+        move |bounds, _, window, _| paint(bounds, stroke, f, track, fill, window),
+    )
+    .size(size)
+    .flex_none()
 }
 
-fn paint(bounds: Bounds<Pixels>, stroke: Pixels, f: f32, track: Hsla, fill: Hsla, window: &mut Window) {
+fn paint(
+    bounds: Bounds<Pixels>,
+    stroke: Pixels,
+    f: f32,
+    track: Hsla,
+    fill: Hsla,
+    window: &mut Window,
+) {
     let c = bounds.center();
     let r = (bounds.size.width.min(bounds.size.height) - stroke) / 2.;
     let at = |turn: f32| {

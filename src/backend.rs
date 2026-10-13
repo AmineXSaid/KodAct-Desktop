@@ -21,7 +21,7 @@ use serde_json::{json, Value};
 
 use crate::endpoints::{Profile, Wire};
 use crate::modes::ModeId;
-use crate::state::{DiffKind, DiffLine, ToolCall, ToolKind, ToolStatus};
+use crate::state::{DiffKind, DiffLine, Review, ToolCall, ToolKind, ToolStatus};
 
 /// What the process said, in the order it said it.
 #[derive(Debug, Clone, PartialEq)]
@@ -33,21 +33,46 @@ pub enum Event {
     /// A new text or thinking block starts: it doesn't run on from the last.
     Break,
     /// A tool call, with its full input.
-    ToolUse { id: String, name: String, input: Value },
+    ToolUse {
+        id: String,
+        name: String,
+        input: Value,
+    },
     /// A tool call's result.
-    ToolResult { id: String, output: String, is_error: bool },
+    ToolResult {
+        id: String,
+        output: String,
+        is_error: bool,
+    },
     /// Forge asks before running a tool.
-    Ask { request_id: String, tool_use_id: String, tool_name: String, input: Value, suggestions: Value },
+    Ask {
+        request_id: String,
+        tool_use_id: String,
+        tool_name: String,
+        input: Value,
+        suggestions: Value,
+    },
     /// Forge withdrew a question (the turn was interrupted).
     CancelAsk { request_id: String },
     /// An immediate command's answer (`/btw`): it ends no turn.
     Immediate { text: String, is_error: bool },
     /// A turn ended.
-    TurnEnd { ms: u64, usage: Option<crate::context::Usage>, error: Option<String> },
+    TurnEnd {
+        ms: u64,
+        usage: Option<crate::context::Usage>,
+        error: Option<String>,
+    },
     /// The process couldn't start a run (bad key, unknown model...).
     Error(String),
     /// The process is gone; `detail` is the end of what it wrote on stderr.
     Exited { code: Option<i32>, detail: String },
+    /// ForgeCLI took your message as a turn, under this id (`rewind_files` names turns by it).
+    UserAccepted { uuid: String },
+    /// The answer to a control request this app sent (`Session::request`).
+    ControlReply {
+        request_id: String,
+        result: Result<Value, String>,
+    },
 }
 
 // ---------------------------------------------------------------- launching
@@ -56,13 +81,21 @@ pub enum Event {
 /// case-insensitive, so a `Forge.exe` app would also answer to `forge.exe`
 /// (and launching it as the engine opens a second window).
 pub fn find_cli() -> Option<PathBuf> {
-    let me = std::env::current_exe().ok().and_then(|e| e.canonicalize().ok());
+    let me = std::env::current_exe()
+        .ok()
+        .and_then(|e| e.canonicalize().ok());
     let not_me = |p: &PathBuf| p.is_file() && p.canonicalize().ok() != me;
-    if let Some(p) = std::env::var_os("FORGE_CLI").map(PathBuf::from).filter(not_me) {
+    if let Some(p) = std::env::var_os("FORGE_CLI")
+        .map(PathBuf::from)
+        .filter(not_me)
+    {
         return Some(p);
     }
     let name = if cfg!(windows) { "forge.exe" } else { "forge" };
-    if let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(PathBuf::from)) {
+    if let Some(dir) = std::env::current_exe()
+        .ok()
+        .and_then(|e| e.parent().map(PathBuf::from))
+    {
         for beside in [dir.join(name), dir.join("bin").join(name)] {
             if not_me(&beside) {
                 return Some(beside);
@@ -70,7 +103,9 @@ pub fn find_cli() -> Option<PathBuf> {
         }
     }
     let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path).map(|d| d.join(name)).find(not_me)
+    std::env::split_paths(&path)
+        .map(|d| d.join(name))
+        .find(not_me)
 }
 
 /// How a chat's process starts: its arguments and the endpoint variables.
@@ -107,15 +142,35 @@ pub enum Conversation<'a> {
     Resume(&'a str),
 }
 
-pub fn launch(profile: &Profile, mode: ModeId, bypass_allowed: bool, conversation: Conversation) -> Result<Launch, String> {
+pub fn launch(
+    profile: &Profile,
+    mode: ModeId,
+    bypass_allowed: bool,
+    conversation: Conversation,
+) -> Result<Launch, String> {
     let token = crate::health::token(&profile.auth)?;
-    let mut args: Vec<String> = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--include-partial-messages", "--permission-prompt-tool", "stdio", "--model"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
+    let mut args: Vec<String> = [
+        "-p",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--include-partial-messages",
+        "--permission-prompt-tool",
+        "stdio",
+        "--model",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
     args.push(profile.model.clone());
     args.extend(crate::modes::cli_args(mode, bypass_allowed));
-    args.extend(["--append-system-prompt".to_string(), SURFACE_PROMPT.to_string()]);
+    args.extend([
+        "--append-system-prompt".to_string(),
+        SURFACE_PROMPT.to_string(),
+    ]);
+    // Each accepted message comes back with its turn id: Revert needs it.
+    args.push("--replay-user-messages".to_string());
     match conversation {
         Conversation::New(id) => args.extend(["--session-id".to_string(), id.to_string()]),
         Conversation::Resume(id) => args.extend(["--resume".to_string(), id.to_string()]),
@@ -139,7 +194,11 @@ pub fn launch(profile: &Profile, mode: ModeId, bypass_allowed: bool, conversatio
         }
     }
     if !profile.headers.is_empty() {
-        let lines: Vec<String> = profile.headers.iter().map(|(k, v)| format!("{k}: {v}")).collect();
+        let lines: Vec<String> = profile
+            .headers
+            .iter()
+            .map(|(k, v)| format!("{k}: {v}"))
+            .collect();
         env.push(("FORGE_CUSTOM_HEADERS".into(), lines.join("\n")));
     }
     if let Some(w) = profile.capabilities.context_window.filter(|w| *w > 0) {
@@ -160,9 +219,21 @@ pub struct Session {
 impl Session {
     pub fn spawn(exe: &Path, launch: &Launch, cwd: &Path) -> Result<Session, String> {
         let mut cmd = Command::new(exe);
-        cmd.args(&launch.args).current_dir(cwd).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        cmd.args(&launch.args)
+            .current_dir(cwd)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
         // Keys and endpoints this app may have inherited must not mix with the profile's.
-        for k in ["FORGE_BASE_URL", "FORGE_API_KEY", "FORGE_AUTH_TOKEN", "FORGE_OPENAI_BASE_URL", "FORGE_OPENAI_API_KEY", "FORGE_CUSTOM_HEADERS", "FORGE_MODEL"] {
+        for k in [
+            "FORGE_BASE_URL",
+            "FORGE_API_KEY",
+            "FORGE_AUTH_TOKEN",
+            "FORGE_OPENAI_BASE_URL",
+            "FORGE_OPENAI_API_KEY",
+            "FORGE_CUSTOM_HEADERS",
+            "FORGE_MODEL",
+        ] {
             cmd.env_remove(k);
         }
         cmd.envs(launch.env.iter().map(|(k, v)| (k, v)));
@@ -172,7 +243,9 @@ impl Session {
             const CREATE_NO_WINDOW: u32 = 0x0800_0000;
             cmd.creation_flags(CREATE_NO_WINDOW);
         }
-        let mut child = cmd.spawn().map_err(|e| format!("could not start {}: {e}", exe.display()))?;
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| format!("could not start {}: {e}", exe.display()))?;
         let stdin = child.stdin.take();
         let stdout = child.stdout.take().ok_or("no stdout")?;
         let mut stderr = child.stderr.take().ok_or("no stderr")?;
@@ -192,7 +265,9 @@ impl Session {
                 t.push_str(&String::from_utf8_lossy(&buf[..n]));
                 if t.len() > 8192 {
                     let cut = t.len() - 4096;
-                    let cut = (cut..t.len()).find(|i| t.is_char_boundary(*i)).unwrap_or(t.len());
+                    let cut = (cut..t.len())
+                        .find(|i| t.is_char_boundary(*i))
+                        .unwrap_or(t.len());
                     t.drain(..cut);
                 }
             }
@@ -215,39 +290,71 @@ impl Session {
             let _ = tx.send_blocking(Event::Exited { code, detail });
         });
 
-        Ok(Session { stdin: Arc::new(Mutex::new(stdin)), child, events: rx })
+        Ok(Session {
+            stdin: Arc::new(Mutex::new(stdin)),
+            child,
+            events: rx,
+        })
     }
 
     fn write(&self, v: Value) -> Result<(), String> {
         let mut guard = self.stdin.lock().unwrap();
         let w = guard.as_mut().ok_or("Forge's input is closed")?;
-        writeln!(w, "{v}").and_then(|_| w.flush()).map_err(|e| format!("could not reach Forge: {e}"))
+        writeln!(w, "{v}")
+            .and_then(|_| w.flush())
+            .map_err(|e| format!("could not reach Forge: {e}"))
     }
 
     pub fn send(&self, text: &str) -> Result<(), String> {
         self.write(user_line(text))
     }
 
-    pub fn answer(&self, request_id: &str, allow: bool, always: bool, input: &Value, suggestions: &Value) -> Result<(), String> {
+    /// Your message with its attachments (`attach::content_blocks`).
+    pub fn send_content(&self, content: Value) -> Result<(), String> {
+        self.write(json!({ "type": "user", "message": { "role": "user", "content": content }, "parent_tool_use_id": null, "session_id": "" }))
+    }
+
+    /// A control request whose answer matters: returns its id, and the
+    /// answer arrives as `Event::ControlReply`.
+    pub fn request(&self, request: Value) -> Result<String, String> {
+        self.control(request)
+    }
+
+    pub fn answer(
+        &self,
+        request_id: &str,
+        allow: bool,
+        always: bool,
+        input: &Value,
+        suggestions: &Value,
+    ) -> Result<(), String> {
         self.write(answer_line(request_id, allow, always, input, suggestions))
     }
 
-    fn control(&self, request: Value) -> Result<(), String> {
+    fn control(&self, request: Value) -> Result<String, String> {
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-        let id = format!("forge-gpui-{}", NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
+        let id = format!(
+            "forge-gpui-{}",
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        );
         self.write(json!({ "type": "control_request", "request_id": id, "request": request }))
+            .map(|_| id)
     }
 
     pub fn interrupt(&self) -> Result<(), String> {
-        self.control(json!({ "subtype": "interrupt" }))
+        self.control(json!({ "subtype": "interrupt" })).map(drop)
     }
 
     pub fn set_model(&self, model: &str) -> Result<(), String> {
         self.control(json!({ "subtype": "set_model", "model": model }))
+            .map(drop)
     }
 
     pub fn set_mode(&self, mode: ModeId) -> Result<(), String> {
-        self.control(json!({ "subtype": "set_permission_mode", "mode": mode.permission().cli_name() }))
+        self.control(
+            json!({ "subtype": "set_permission_mode", "mode": mode.permission().cli_name() }),
+        )
+        .map(drop)
     }
 }
 
@@ -268,7 +375,13 @@ pub fn user_line(text: &str) -> Value {
     json!({ "type": "user", "message": { "role": "user", "content": [{ "type": "text", "text": text }] }, "parent_tool_use_id": null, "session_id": "" })
 }
 
-pub fn answer_line(request_id: &str, allow: bool, always: bool, input: &Value, suggestions: &Value) -> Value {
+pub fn answer_line(
+    request_id: &str,
+    allow: bool,
+    always: bool,
+    input: &Value,
+    suggestions: &Value,
+) -> Value {
     let response = if allow {
         let mut r = json!({ "behavior": "allow", "updatedInput": input });
         if always && suggestions.as_array().is_some_and(|a| !a.is_empty()) {
@@ -294,13 +407,20 @@ pub struct Parser {
 
 impl Parser {
     pub fn line(&mut self, line: &str) -> Vec<Event> {
-        let Ok(v) = serde_json::from_str::<Value>(line) else { return vec![] };
+        let Ok(v) = serde_json::from_str::<Value>(line) else {
+            return vec![];
+        };
         let nested = v.get("parent_tool_use_id").is_some_and(|p| !p.is_null());
         let mut out = vec![];
         match v["type"].as_str() {
             Some("stream_event") if !nested => {
                 let ev = &v["event"];
-                if ev["type"] == "content_block_start" && matches!(ev["content_block"]["type"].as_str(), Some("text" | "thinking")) {
+                if ev["type"] == "content_block_start"
+                    && matches!(
+                        ev["content_block"]["type"].as_str(),
+                        Some("text" | "thinking")
+                    )
+                {
                     out.push(Event::Break);
                 }
                 if ev["type"] == "content_block_delta" {
@@ -312,7 +432,9 @@ impl Parser {
                         }
                         Some("thinking_delta") => {
                             self.streamed = true;
-                            out.push(Event::Thinking(d["thinking"].as_str().unwrap_or_default().into()));
+                            out.push(Event::Thinking(
+                                d["thinking"].as_str().unwrap_or_default().into(),
+                            ));
                         }
                         _ => {}
                     }
@@ -325,8 +447,14 @@ impl Parser {
                 }
                 for b in v["message"]["content"].as_array().into_iter().flatten() {
                     match b["type"].as_str() {
-                        Some("text") if !streamed => out.extend([Event::Break, Event::Text(b["text"].as_str().unwrap_or_default().into())]),
-                        Some("thinking") if !streamed => out.extend([Event::Break, Event::Thinking(b["thinking"].as_str().unwrap_or_default().into())]),
+                        Some("text") if !streamed => out.extend([
+                            Event::Break,
+                            Event::Text(b["text"].as_str().unwrap_or_default().into()),
+                        ]),
+                        Some("thinking") if !streamed => out.extend([
+                            Event::Break,
+                            Event::Thinking(b["thinking"].as_str().unwrap_or_default().into()),
+                        ]),
                         Some("tool_use") => out.push(Event::ToolUse {
                             id: b["id"].as_str().unwrap_or_default().into(),
                             name: b["name"].as_str().unwrap_or_default().into(),
@@ -335,6 +463,27 @@ impl Parser {
                         _ => {}
                     }
                 }
+            }
+            // Your message, echoed back with the id ForgeCLI gave its turn.
+            Some("user") if !nested && v["isReplay"] == true => {
+                if let Some(uuid) = v["uuid"].as_str() {
+                    out.push(Event::UserAccepted {
+                        uuid: uuid.to_string(),
+                    });
+                }
+            }
+            Some("control_response") => {
+                let r = &v["response"];
+                let request_id = r["request_id"].as_str().unwrap_or_default().to_string();
+                let result = if r["subtype"] == "success" {
+                    Ok(r["response"].clone())
+                } else {
+                    Err(r["error"]
+                        .as_str()
+                        .unwrap_or("the request failed")
+                        .to_string())
+                };
+                out.push(Event::ControlReply { request_id, result });
             }
             Some("user") if !nested => {
                 let content = &v["message"]["content"];
@@ -360,11 +509,16 @@ impl Parser {
                     });
                 }
             }
-            Some("control_cancel_request") => out.push(Event::CancelAsk { request_id: v["request_id"].as_str().unwrap_or_default().into() }),
+            Some("control_cancel_request") => out.push(Event::CancelAsk {
+                request_id: v["request_id"].as_str().unwrap_or_default().into(),
+            }),
             Some("result") if !nested => {
                 // An immediate command's answer (`/status`...) is not a turn.
                 if v["immediate"] == true {
-                    out.push(Event::Immediate { text: v["result"].as_str().unwrap_or_default().trim().to_string(), is_error: v["is_error"] == true });
+                    out.push(Event::Immediate {
+                        text: v["result"].as_str().unwrap_or_default().trim().to_string(),
+                        is_error: v["is_error"] == true,
+                    });
                     return out;
                 }
                 self.streamed = false;
@@ -379,16 +533,34 @@ impl Parser {
                 });
                 let interrupted = v["stop_reason"] == "interrupted";
                 let error = (v["is_error"] == true && !interrupted).then(|| {
-                    let errors: Vec<String> = v["errors"].as_array().into_iter().flatten().filter_map(|e| e.as_str().map(str::to_string)).collect();
+                    let errors: Vec<String> = v["errors"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|e| e.as_str().map(str::to_string))
+                        .collect();
                     if !errors.is_empty() {
                         errors.join("\n")
                     } else {
-                        v["result"].as_str().filter(|s| !s.is_empty()).unwrap_or("The turn ended with an error.").to_string()
+                        v["result"]
+                            .as_str()
+                            .filter(|s| !s.is_empty())
+                            .unwrap_or("The turn ended with an error.")
+                            .to_string()
                     }
                 });
-                out.push(Event::TurnEnd { ms: v["duration_ms"].as_u64().unwrap_or(0), usage: usage.filter(|u| u.total() > 0), error });
+                out.push(Event::TurnEnd {
+                    ms: v["duration_ms"].as_u64().unwrap_or(0),
+                    usage: usage.filter(|u| u.total() > 0),
+                    error,
+                });
             }
-            Some("error") => out.push(Event::Error(v["error"]["message"].as_str().unwrap_or("Forge could not start the run.").into())),
+            Some("error") => out.push(Event::Error(
+                v["error"]["message"]
+                    .as_str()
+                    .unwrap_or("Forge could not start the run.")
+                    .into(),
+            )),
             _ => {}
         }
         out
@@ -399,7 +571,11 @@ impl Parser {
 fn result_text(c: &Value) -> String {
     match c {
         Value::String(s) => s.clone(),
-        Value::Array(a) => a.iter().filter_map(|b| b["text"].as_str()).collect::<Vec<_>>().join("\n"),
+        Value::Array(a) => a
+            .iter()
+            .filter_map(|b| b["text"].as_str())
+            .collect::<Vec<_>>()
+            .join("\n"),
         Value::Null => String::new(),
         other => other.to_string(),
     }
@@ -412,17 +588,35 @@ pub fn tool_call(name: &str, input: &Value) -> ToolCall {
     let s = |k: &str| input[k].as_str().unwrap_or_default().to_string();
     let (kind, target, note, diff) = match name {
         "Read" | "NotebookRead" => (ToolKind::Read, s("file_path"), None, vec![]),
-        "Edit" => (ToolKind::Edit, s("file_path"), None, edit_diff(&s("old_string"), &s("new_string"))),
+        "Edit" => (
+            ToolKind::Edit,
+            s("file_path"),
+            None,
+            edit_diff(&s("old_string"), &s("new_string")),
+        ),
         "MultiEdit" => {
             let mut d = vec![];
             for e in input["edits"].as_array().into_iter().flatten() {
-                d.extend(edit_diff(e["old_string"].as_str().unwrap_or_default(), e["new_string"].as_str().unwrap_or_default()));
+                d.extend(edit_diff(
+                    e["old_string"].as_str().unwrap_or_default(),
+                    e["new_string"].as_str().unwrap_or_default(),
+                ));
             }
             (ToolKind::Edit, s("file_path"), None, d)
         }
         "NotebookEdit" => (ToolKind::Edit, s("notebook_path"), None, vec![]),
-        "Write" => (ToolKind::Write, s("file_path"), None, edit_diff("", &s("content"))),
-        "Bash" | "PowerShell" => (ToolKind::Bash, s("command"), input["description"].as_str().map(str::to_string), vec![]),
+        "Write" => (
+            ToolKind::Write,
+            s("file_path"),
+            None,
+            edit_diff("", &s("content")),
+        ),
+        "Bash" | "PowerShell" => (
+            ToolKind::Bash,
+            s("command"),
+            input["description"].as_str().map(str::to_string),
+            vec![],
+        ),
         "Grep" | "Glob" | "LS" => {
             let mut t = s("pattern");
             if let Some(p) = input["path"].as_str().filter(|p| !p.is_empty()) {
@@ -433,7 +627,10 @@ pub fn tool_call(name: &str, input: &Value) -> ToolCall {
         "WebFetch" => (ToolKind::Web, s("url"), None, vec![]),
         "WebSearch" => (ToolKind::Web, s("query"), None, vec![]),
         other => {
-            let summary = input["description"].as_str().or(input["prompt"].as_str()).map(|d| d.chars().take(80).collect::<String>());
+            let summary = input["description"]
+                .as_str()
+                .or(input["prompt"].as_str())
+                .map(|d| d.chars().take(80).collect::<String>());
             (ToolKind::Other, other.to_string(), summary, vec![])
         }
     };
@@ -446,14 +643,21 @@ pub fn tool_call(name: &str, input: &Value) -> ToolCall {
         diff,
         open: kind == ToolKind::Bash,
         full: false,
+        review: Review::Open,
     }
 }
 
 /// Removed lines, then added ones; long text is cut.
 fn edit_diff(old: &str, new: &str) -> Vec<DiffLine> {
     const MAX: usize = 400;
-    let del = old.lines().map(|l| DiffLine { kind: DiffKind::Del, text: l.to_string().into() });
-    let add = new.lines().map(|l| DiffLine { kind: DiffKind::Add, text: l.to_string().into() });
+    let del = old.lines().map(|l| DiffLine {
+        kind: DiffKind::Del,
+        text: l.to_string().into(),
+    });
+    let add = new.lines().map(|l| DiffLine {
+        kind: DiffKind::Add,
+        text: l.to_string().into(),
+    });
     del.chain(add).take(MAX).collect()
 }
 
@@ -461,7 +665,9 @@ fn edit_diff(old: &str, new: &str) -> Vec<DiffLine> {
 pub fn ask_text(tool: &str, input: &Value) -> (String, String) {
     let call = tool_call(tool, input);
     let title = match call.kind {
-        ToolKind::Edit | ToolKind::Write => format!("Allow Forge to edit {}?", file_name(&call.target)),
+        ToolKind::Edit | ToolKind::Write => {
+            format!("Allow Forge to edit {}?", file_name(&call.target))
+        }
         ToolKind::Bash => "Allow Forge to run this command?".to_string(),
         ToolKind::Web => "Allow Forge to use the web?".to_string(),
         ToolKind::Read | ToolKind::Search => "Allow Forge to read this?".to_string(),
@@ -497,14 +703,25 @@ mod tests {
         assert_eq!(ev[0], Event::Text("Hel".into()));
         assert_eq!(ev[1], Event::Text("lo".into()));
         assert!(matches!(&ev[2], Event::ToolUse { id, name, .. } if id == "t1" && name == "Bash"));
-        assert_eq!(ev[3], Event::ToolResult { id: "t1".into(), output: "a\nb".into(), is_error: false });
-        assert!(matches!(&ev[4], Event::TurnEnd { ms: 1500, usage: Some(u), error: None } if u.total() == 15));
+        assert_eq!(
+            ev[3],
+            Event::ToolResult {
+                id: "t1".into(),
+                output: "a\nb".into(),
+                is_error: false
+            }
+        );
+        assert!(
+            matches!(&ev[4], Event::TurnEnd { ms: 1500, usage: Some(u), error: None } if u.total() == 15)
+        );
         assert_eq!(ev.len(), 5);
     }
 
     #[test]
     fn unstreamed_text_comes_from_the_full_message() {
-        let ev = parse(&[json!({"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"text","text":"Hi"}]}})]);
+        let ev = parse(&[
+            json!({"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"text","text":"Hi"}]}}),
+        ]);
         assert_eq!(ev, vec![Event::Break, Event::Text("Hi".into())]);
     }
 
@@ -514,7 +731,13 @@ mod tests {
             json!({"type":"assistant","parent_tool_use_id":"task1","message":{"content":[{"type":"text","text":"inner"}]}}),
             json!({"type":"result","immediate":true,"num_turns":0,"is_error":false,"result":"The answer.\n"}),
         ]);
-        assert_eq!(ev, vec![Event::Immediate { text: "The answer.".into(), is_error: false }]);
+        assert_eq!(
+            ev,
+            vec![Event::Immediate {
+                text: "The answer.".into(),
+                is_error: false
+            }]
+        );
     }
 
     #[test]
@@ -524,7 +747,9 @@ mod tests {
             json!({"type":"result","is_error":true,"stop_reason":"end_turn","duration_ms":3,"errors":["HTTP 401: bad key"]}),
             json!({"type":"result","is_error":true,"stop_reason":"interrupted","duration_ms":3}),
         ]);
-        assert!(matches!(&ev[0], Event::Ask { request_id, tool_name, .. } if request_id == "forge-req-1" && tool_name == "Write"));
+        assert!(
+            matches!(&ev[0], Event::Ask { request_id, tool_name, .. } if request_id == "forge-req-1" && tool_name == "Write")
+        );
         assert!(matches!(&ev[1], Event::TurnEnd { error: Some(e), .. } if e.contains("401")));
         assert!(matches!(&ev[2], Event::TurnEnd { error: None, .. }));
     }
@@ -539,8 +764,13 @@ mod tests {
         assert_eq!(a["response"]["response"]["updatedInput"], input);
         assert_eq!(a["response"]["response"]["updatedPermissions"], sugg);
         let once = answer_line("r1", true, false, &input, &sugg);
-        assert!(once["response"]["response"].get("updatedPermissions").is_none());
-        assert_eq!(answer_line("r1", false, false, &input, &sugg)["response"]["response"]["behavior"], "deny");
+        assert!(once["response"]["response"]
+            .get("updatedPermissions")
+            .is_none());
+        assert_eq!(
+            answer_line("r1", false, false, &input, &sugg)["response"]["response"]["behavior"],
+            "deny"
+        );
     }
 
     #[test]
@@ -551,26 +781,49 @@ mod tests {
         let l = launch(&p, ModeId::Manual, false, Conversation::New(id)).unwrap();
         assert!(l.args.windows(2).any(|w| w == ["--session-id", id]));
         let r = launch(&p, ModeId::Manual, false, Conversation::Resume(id)).unwrap();
-        assert!(r.args.windows(2).any(|w| w == ["--resume", id]) && !r.args.iter().any(|a| a == "--session-id"));
+        assert!(
+            r.args.windows(2).any(|w| w == ["--resume", id])
+                && !r.args.iter().any(|a| a == "--session-id")
+        );
         assert!(!l.args.iter().any(|a| a.contains("sk-test")));
-        assert!(l.env.contains(&("FORGE_BASE_URL".into(), "https://gw.example".into())));
+        assert!(l
+            .env
+            .contains(&("FORGE_BASE_URL".into(), "https://gw.example".into())));
         assert!(l.env.contains(&("FORGE_API_KEY".into(), "sk-test".into())));
         assert!(l.args.windows(2).any(|w| w == ["--model", "m1"]));
-        assert!(l.args.windows(2).any(|w| w == ["--permission-mode", "default"]));
+        assert!(l
+            .args
+            .windows(2)
+            .any(|w| w == ["--permission-mode", "default"]));
         // The model is told its diagrams are drawn here.
-        assert!(l.args.windows(2).any(|w| w[0] == "--append-system-prompt" && w[1].contains("```mermaid")));
-        let o: Profile = serde_json::from_value(json!({"name":"o","baseUrl":"http://127.0.0.1:11434","wire":"openai","model":"q"})).unwrap();
+        assert!(l
+            .args
+            .windows(2)
+            .any(|w| w[0] == "--append-system-prompt" && w[1].contains("```mermaid")));
+        let o: Profile = serde_json::from_value(
+            json!({"name":"o","baseUrl":"http://127.0.0.1:11434","wire":"openai","model":"q"}),
+        )
+        .unwrap();
         let l = launch(&o, ModeId::Manual, false, Conversation::New(id)).unwrap();
-        assert!(l.env.contains(&("FORGE_OPENAI_BASE_URL".into(), "http://127.0.0.1:11434/v1".into())));
+        assert!(l.env.contains(&(
+            "FORGE_OPENAI_BASE_URL".into(),
+            "http://127.0.0.1:11434/v1".into()
+        )));
     }
 
     #[test]
     fn tool_rows() {
-        let c = tool_call("Edit", &json!({"file_path":"src/a.rs","old_string":"a","new_string":"b\nc"}));
+        let c = tool_call(
+            "Edit",
+            &json!({"file_path":"src/a.rs","old_string":"a","new_string":"b\nc"}),
+        );
         assert_eq!(c.kind, ToolKind::Edit);
         assert_eq!(c.diff.len(), 3);
         let c = tool_call("Grep", &json!({"pattern":"fn main","path":"src"}));
         assert_eq!(c.target.as_ref(), "fn main in src");
-        assert_eq!(tool_call("Task", &json!({"description":"look"})).kind, ToolKind::Other);
+        assert_eq!(
+            tool_call("Task", &json!({"description":"look"})).kind,
+            ToolKind::Other
+        );
     }
 }

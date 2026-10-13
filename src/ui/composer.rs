@@ -26,6 +26,13 @@ pub struct Composer {
     /// Holds the keyboard while the model window is open (no search box),
     /// so the arrows move through it instead of the text.
     menu_focus: gpui::FocusHandle,
+    /// The autocomplete row under the keyboard, and the word Esc closed it
+    /// for (it stays closed until the word changes).
+    ac_selected: usize,
+    ac_closed_for: Option<String>,
+    /// Enter just completed a word: the text box's own Enter that follows
+    /// must not send the message.
+    ac_took_enter: bool,
     _subs: Vec<Subscription>,
 }
 
@@ -33,8 +40,15 @@ impl Composer {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let t = cx.theme().clone();
         // The tallest the input grows, in lines of chat text.
-        let max_rows = (f32::from(t.size.composer_max) / (f32::from(t.text.body) * 1.5)).floor().max(2.) as usize;
-        let input = cx.new(|cx| TextareaState::new(window, cx).auto_grow(1, max_rows).placeholder("What should we build today?").submit_on_enter(true));
+        let max_rows = (f32::from(t.size.composer_max) / (f32::from(t.text.body) * 1.5))
+            .floor()
+            .max(2.) as usize;
+        let input = cx.new(|cx| {
+            TextareaState::new(window, cx)
+                .auto_grow(1, max_rows)
+                .placeholder("What should we build today?")
+                .submit_on_enter(true)
+        });
         let filter = cx.new(|cx| InputState::new(window, cx).placeholder("Search models…"));
         let subs = vec![
             cx.observe_in(&state, window, |this, state, window, cx| {
@@ -55,7 +69,12 @@ impl Composer {
                         window.focus(&this.menu_focus, cx);
                     }
                 }
-                if !open && this.picker_was_open && (this.menu_focus.is_focused(window) || gpui::Focusable::focus_handle(this.filter.read(cx), cx).is_focused(window)) {
+                if !open
+                    && this.picker_was_open
+                    && (this.menu_focus.is_focused(window)
+                        || gpui::Focusable::focus_handle(this.filter.read(cx), cx)
+                            .is_focused(window))
+                {
                     this.input.update(cx, |i, cx| i.focus(window, cx));
                 }
                 this.picker_was_open = open;
@@ -66,13 +85,35 @@ impl Composer {
                     cx.notify();
                 }
             }),
-            cx.subscribe_in(&input, window, |this, _, ev: &InputEvent, window, cx| match ev {
-                InputEvent::PressEnter { shift: false, .. } => this.submit(window, cx),
-                InputEvent::Change => cx.notify(),
-                _ => {}
-            }),
+            cx.subscribe_in(
+                &input,
+                window,
+                |this, _, ev: &InputEvent, window, cx| match ev {
+                    InputEvent::PressEnter { shift: false, .. } => this.submit(window, cx),
+                    InputEvent::Change => {
+                        this.ac_selected = 0;
+                        if super::autocomplete::trigger(&this.text(cx)).is_some() {
+                            this.state.update(cx, |s, cx| s.ensure_completions(cx));
+                        }
+                        cx.notify()
+                    }
+                    _ => {}
+                },
+            ),
         ];
-        Self { state, input, filter, active: None, picker_was_open: false, dismissed_at: None, menu_focus: cx.focus_handle(), _subs: subs }
+        Self {
+            state,
+            input,
+            filter,
+            active: None,
+            picker_was_open: false,
+            dismissed_at: None,
+            menu_focus: cx.focus_handle(),
+            ac_selected: 0,
+            ac_closed_for: None,
+            ac_took_enter: false,
+            _subs: subs,
+        }
     }
 
     pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
@@ -83,7 +124,9 @@ impl Composer {
     pub fn fill(&mut self, text: &str, window: &mut Window, cx: &mut Context<Self>) {
         self.input.update(cx, |i, cx| {
             i.set_value(text.to_string(), window, cx);
-            i.focus(window, cx);
+            // The caret goes to the end, where you go on typing.
+            let end = gpui::component::RopeExt::offset_to_position(i.text(), text.len());
+            i.set_cursor_position(end, window, cx);
         });
         cx.notify();
     }
@@ -93,16 +136,123 @@ impl Composer {
     }
 
     fn submit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if std::mem::take(&mut self.ac_took_enter) {
+            return;
+        }
         let text = self.text(cx);
         // Only `/btw` goes through while a reply runs.
         if self.state.read(cx).busy() && crate::state::parse_btw(&text).is_none() {
             return;
         }
-        if text.trim().is_empty() {
+        if text.trim().is_empty() && self.state.read(cx).attachments.is_empty() {
             return;
         }
         self.state.update(cx, |s, cx| s.send(text, cx));
         self.input.update(cx, |i, cx| i.set_value("", window, cx));
+    }
+
+    /// The autocomplete's word and rows, when it is open.
+    fn completion(
+        &self,
+        cx: &gpui::App,
+    ) -> Option<(super::autocomplete::Trigger, Vec<super::autocomplete::Item>)> {
+        let text = self.text(cx);
+        let trig = super::autocomplete::trigger(&text)?;
+        if self.ac_closed_for.as_deref() == Some(&text[trig.start..]) {
+            return None;
+        }
+        let rows = super::autocomplete::items(&trig, self.state.read(cx));
+        Some((trig, rows))
+    }
+
+    /// Complete with row `i`.
+    fn pick(&mut self, i: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((trig, mut rows)) = self.completion(cx) else {
+            return;
+        };
+        if i >= rows.len() {
+            return;
+        }
+        let text = self.text(cx);
+        let before = text[..trig.start].to_string();
+        match rows.swap_remove(i).pick {
+            super::autocomplete::Pick::Text(t) => self.fill(&format!("{before}{t}"), window, cx),
+            super::autocomplete::Pick::Action(a) => {
+                self.fill(&before, window, cx);
+                window.dispatch_action(a, cx);
+            }
+            super::autocomplete::Pick::Mode(m) => {
+                self.fill(&before, window, cx);
+                self.state.update(cx, |s, cx| s.set_mode(m, cx));
+            }
+        }
+        self.ac_selected = 0;
+    }
+
+    /// The autocomplete's keys, while it is open. True when it took the key.
+    fn completion_key(
+        &mut self,
+        ev: &gpui::KeyDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let Some((trig, rows)) = self.completion(cx) else {
+            return false;
+        };
+        let n = rows.len();
+        let k = &ev.keystroke;
+        if k.modifiers.secondary() || k.modifiers.alt {
+            return false;
+        }
+        match k.key.as_str() {
+            "down" if n > 0 => self.ac_selected = (self.ac_selected + 1) % n,
+            "up" if n > 0 => self.ac_selected = (self.ac_selected + n - 1) % n,
+            "enter" | "tab" if n > 0 && !k.modifiers.shift => {
+                let i = self.ac_selected.min(n - 1);
+                self.ac_took_enter = k.key == "enter";
+                self.pick(i, window, cx);
+            }
+            "escape" => self.ac_closed_for = Some(self.text(cx)[trig.start..].to_string()),
+            _ => return false,
+        }
+        cx.notify();
+        true
+    }
+
+    /// Paste with an image or copied files on the clipboard attaches them
+    /// (text pastes into the box as usual). True when it took the paste.
+    fn paste_files(&mut self, cx: &mut Context<Self>) -> bool {
+        let Some(item) = cx.read_from_clipboard() else {
+            return false;
+        };
+        let mut taken = false;
+        for entry in item.entries() {
+            match entry {
+                gpui::ClipboardEntry::Image(image) => {
+                    let ext = format!("{:?}", image.format).to_lowercase();
+                    let bytes = image.bytes.clone();
+                    self.state
+                        .update(cx, |s, cx| s.add_pasted_image(bytes, &ext, cx));
+                    taken = true;
+                }
+                gpui::ClipboardEntry::ExternalPaths(paths) => {
+                    let paths = paths.paths().to_vec();
+                    self.state
+                        .update(cx, |s, cx| s.add_attachment_paths(paths, cx));
+                    taken = true;
+                }
+                // Text that is only file paths (a "Copy path", a file:// list) attaches those files.
+                gpui::ClipboardEntry::String(text) => {
+                    let paths = crate::attach::paths_in(text.text());
+                    if !paths.is_empty() {
+                        self.state
+                            .update(cx, |s, cx| s.add_attachment_paths(paths, cx));
+                        taken = true;
+                    }
+                }
+            }
+        }
+        taken
     }
 
     /// Whether this click ends the press that just closed a menu (and so
@@ -120,7 +270,10 @@ impl Composer {
         }
         let query = self.filter.read(cx).value().to_string();
         let keys = super::model_menu::keys(self.state.read(cx), &query);
-        let at = self.active.as_ref().and_then(|a| keys.iter().position(|k| k == a));
+        let at = self
+            .active
+            .as_ref()
+            .and_then(|a| keys.iter().position(|k| k == a));
         match ev.keystroke.key.as_str() {
             "down" | "up" if !keys.is_empty() => {
                 let n = keys.len();
@@ -135,10 +288,17 @@ impl Composer {
                 if let Some(key) = self.active.clone() {
                     self.state.update(cx, |s, cx| {
                         if key == super::model_menu::EFFORT_ROW {
-                            let levels = s.active_profile().map(|p| p.effort_levels()).unwrap_or_default();
+                            let levels = s
+                                .active_profile()
+                                .map(|p| p.effort_levels())
+                                .unwrap_or_default();
                             s.effort = super::model_menu::next_effort(&levels, s.effort);
                             cx.notify();
-                        } else if super::model_menu::rows(s, &query).0.iter().any(|r| r.name == key && !r.disabled) {
+                        } else if super::model_menu::rows(s, &query)
+                            .0
+                            .iter()
+                            .any(|r| r.name == key && !r.disabled)
+                        {
                             s.select_profile(&key, cx);
                         }
                     });
@@ -188,15 +348,23 @@ impl Render for Composer {
         };
         let (dismiss_models, dismiss_modes) = (dismiss.clone(), dismiss);
         let me = cx.entity().downgrade();
-        let skip = move |ev: &gpui::ClickEvent, cx: &mut gpui::App| -> bool { me.update(cx, |c, _| c.just_dismissed(ev)).unwrap_or(false) };
+        let skip = move |ev: &gpui::ClickEvent, cx: &mut gpui::App| -> bool {
+            me.update(cx, |c, _| c.just_dismissed(ev)).unwrap_or(false)
+        };
 
         // The pieces that read the state are built first.
         let mode_trigger = super::mode_menu::trigger(&t, &state, cx, skip);
-        let modes_menu = self.state.read(cx).modes_open.then(|| super::mode_menu::menu(&t, &state, cx, move |pos, cx| dismiss_modes(pos, false, cx)));
+        let modes_menu = self.state.read(cx).modes_open.then(|| {
+            super::mode_menu::menu(&t, &state, cx, move |pos, cx| dismiss_modes(pos, false, cx))
+        });
         let query = self.filter.read(cx).value().to_string();
         let search = div()
             .m(px(4.))
-            .child(Input::new(&self.filter).appearance(false).text_size(t.text.body_sm))
+            .child(
+                Input::new(&self.filter)
+                    .appearance(false)
+                    .text_size(t.text.body_sm),
+            )
             .px(px(8.))
             .py(px(4.))
             .rounded(px(4.))
@@ -213,7 +381,18 @@ impl Render for Composer {
         };
         let s = self.state.read(cx);
         let (busy, mode, picker_open) = (s.busy(), s.mode, s.picker_open);
-        let model_menu = picker_open.then(|| super::model_menu::render(&t, &state, s, &query, self.active.as_deref(), search, on_hover, move |pos, cx| dismiss_models(pos, true, cx)));
+        let model_menu = picker_open.then(|| {
+            super::model_menu::render(
+                &t,
+                &state,
+                s,
+                &query,
+                self.active.as_deref(),
+                search,
+                on_hover,
+                move |pos, cx| dismiss_models(pos, true, cx),
+            )
+        });
         let model_name: SharedString = match (&s.endpoints, s.active_profile()) {
             (None, _) => "Model".into(),
             (Some(_), None) => "Set up an endpoint first".into(),
@@ -225,15 +404,58 @@ impl Render for Composer {
         // model picked now. Hidden when either isn't known.
         let profile = s.active_profile();
         let meter = crate::context::meter(
-            s.chat().and_then(|c| crate::context::last_usage(&c.messages)),
+            s.chat()
+                .and_then(|c| crate::context::last_usage(&c.messages)),
             profile.and_then(|p| p.context_window(s.health.get(&p.name))),
         )
-        .map(|m| (m, profile.map(|p| p.display().to_string()).unwrap_or_default()));
+        .map(|m| {
+            (
+                m,
+                profile.map(|p| p.display().to_string()).unwrap_or_default(),
+            )
+        });
 
-        let send_ready = busy || !empty;
+        let pending = super::attachments::pending(&t, &state, cx);
+        let completion = self.completion(cx).map(|(_, rows)| {
+            let me = cx.entity().downgrade();
+            let me2 = me.clone();
+            let selected = self.ac_selected.min(rows.len().saturating_sub(1));
+            let (loading, welcome) = {
+                let s = self.state.read(cx);
+                (
+                    s.completions_loading,
+                    s.chat().is_none_or(|c| c.messages.is_empty()),
+                )
+            };
+            let ranked =
+                super::autocomplete::trigger(&self.text(cx)).is_some_and(|t| !t.query.is_empty());
+            super::autocomplete::render(
+                &t,
+                &rows,
+                selected,
+                loading,
+                welcome,
+                ranked,
+                move |i, window, cx| {
+                    let _ = me.update(cx, |c, cx| c.pick(i, window, cx));
+                },
+                move |i, cx| {
+                    let _ = me2.update(cx, |c, cx| {
+                        if c.ac_selected != i {
+                            c.ac_selected = i;
+                            cx.notify();
+                        }
+                    });
+                },
+            )
+        });
+        let has_attachments = pending.is_some();
+        let send_ready = busy || !empty || has_attachments;
         // The send button takes the mode's colour, as in the extension.
         let send_bg = match mode {
-            crate::modes::ModeId::Plan | crate::modes::ModeId::Bypass => tint.unwrap_or(t.extra.fill),
+            crate::modes::ModeId::Plan | crate::modes::ModeId::Bypass => {
+                tint.unwrap_or(t.extra.fill)
+            }
             _ => t.extra.fill,
         };
         let send = div()
@@ -245,12 +467,24 @@ impl Render for Composer {
             .justify_center()
             .rounded(t.radius.pill)
             .when(busy, |d| {
-                d.bg(t.colors.text_strong).cursor_pointer().child(div().size(px(10.)).rounded(px(2.)).bg(t.colors.surface))
+                d.bg(t.colors.text_strong)
+                    .cursor_pointer()
+                    .child(div().size(px(10.)).rounded(px(2.)).bg(t.colors.surface))
             })
             .when(!busy, |d| {
                 d.bg(if send_ready { send_bg } else { t.colors.hover })
-                    .when(send_ready, |d| d.cursor_pointer().hover(move |st| st.opacity(0.9)))
-                    .child(icon("icons/arrow-up.svg", t.size.icon, if send_ready { t.colors.primary_fg } else { t.colors.text_subtle }))
+                    .when(send_ready, |d| {
+                        d.cursor_pointer().hover(move |st| st.opacity(0.9))
+                    })
+                    .child(icon(
+                        "icons/arrow-up.svg",
+                        t.size.icon,
+                        if send_ready {
+                            t.colors.primary_fg
+                        } else {
+                            t.colors.text_subtle
+                        },
+                    ))
             })
             .on_click(cx.listener(move |this, _, window, cx| {
                 if this.state.read(cx).busy() {
@@ -282,7 +516,15 @@ impl Render for Composer {
         let model_button = quiet("model", picker_open)
             .child(icon("icons/cpu.svg", t.size.icon_xs, t.colors.text_muted))
             .child(div().text_color(t.colors.text).child(model_name))
-            .children(pill_effort.map(|(label, color)| div().text_color(if color == t.colors.text_subtle { t.colors.text_muted } else { color }).child(label)))
+            .children(pill_effort.map(|(label, color)| {
+                div()
+                    .text_color(if color == t.colors.text_subtle {
+                        t.colors.text_muted
+                    } else {
+                        color
+                    })
+                    .child(label)
+            }))
             .on_click(cx.listener(|this, ev: &gpui::ClickEvent, window, cx| {
                 if !this.just_dismissed(ev) {
                     window.dispatch_action(Box::new(ToggleModelPicker), cx);
@@ -291,13 +533,23 @@ impl Render for Composer {
 
         let meter = meter.map(|(m, model)| {
             let f = m.fraction();
-            let colour = if f > 1. { t.extra.danger } else if f > 0.8 { t.extra.warning } else { t.colors.text_subtle };
+            let colour = if f > 1. {
+                t.extra.danger
+            } else if f > 0.8 {
+                t.extra.warning
+            } else {
+                t.colors.text_subtle
+            };
             let tip: SharedString = format!(
                 "{}{} / {} context used · {model}{}",
                 if m.estimated { "About " } else { "" },
                 crate::context::short(m.used),
                 crate::context::short(m.window),
-                if f > 1. { ". More than this model's window: the conversation will be compacted" } else { "" },
+                if f > 1. {
+                    ". More than this model's window: the conversation will be compacted"
+                } else {
+                    ""
+                },
             )
             .into();
             div()
@@ -309,10 +561,30 @@ impl Render for Composer {
                 .px(px(6.))
                 .text_size(t.text.caption)
                 .text_color(colour)
-                .child(super::context_ring::ring(px(14.), px(2.), f, t.colors.border, if f > 0.8 { colour } else { t.colors.primary }))
-                .child(if f > 0. && f < 0.01 { "<1%".to_string() } else { format!("{:.0}%", (f * 100.).round()) })
-                .tooltip(move |window, cx| gpui::component::tooltip::Tooltip::new(tip.clone()).build(window, cx))
+                .child(super::context_ring::ring(
+                    px(14.),
+                    px(2.),
+                    f,
+                    t.colors.border,
+                    if f > 0.8 { colour } else { t.colors.primary },
+                ))
+                .child(if f > 0. && f < 0.01 {
+                    "<1%".to_string()
+                } else {
+                    format!("{:.0}%", (f * 100.).round())
+                })
+                .rounded(t.radius.pill)
+                .cursor_pointer()
+                .hover(move |st| st.bg(hover))
+                .tooltip(move |window, cx| {
+                    gpui::component::tooltip::Tooltip::new(format!(
+                        "{tip} · click for the breakdown"
+                    ))
+                    .build(window, cx)
+                })
+                .on_click(|_, window, cx| window.dispatch_action(Box::new(super::ShowContext), cx))
         });
+        let context_popover = super::context_menu::render(&t, &state, cx);
 
         let composer = div()
             .key_context("Composer")
@@ -323,8 +595,33 @@ impl Render for Composer {
             .flex()
             .flex_col()
             .gap(px(6.))
-            .capture_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, window, cx| this.menu_key(ev, window, cx)))
+            // The text box's own Escape closes the autocomplete first, keeping the focus.
+            .capture_action(
+                cx.listener(|this, _: &gpui::component::input::Escape, _, cx| {
+                    if let Some((trig, _)) = this.completion(cx) {
+                        this.ac_closed_for = Some(this.text(cx)[trig.start..].to_string());
+                        cx.stop_propagation();
+                        cx.notify();
+                    }
+                }),
+            )
+            // The text box's own Paste: an image or files are attached instead.
+            .capture_action(
+                cx.listener(|this, _: &gpui::component::input::Paste, _, cx| {
+                    if this.paste_files(cx) {
+                        cx.stop_propagation();
+                    }
+                }),
+            )
+            .capture_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, window, cx| {
+                if this.completion_key(ev, window, cx) {
+                    return cx.stop_propagation();
+                }
+                this.menu_key(ev, window, cx)
+            }))
             .children(model_menu)
+            // Painted last, over the cards under the box on the new-chat screen.
+            .children(completion.map(|c| gpui::deferred(c).with_priority(2)))
             // The box: what you write, attach on the left, send on the right.
             .child(
                 div()
@@ -335,6 +632,17 @@ impl Render for Composer {
                     // The mode tints the box's edge, as it tints the extension's focus ring.
                     .border_color(tint.map(|c| c.opacity(0.55)).unwrap_or(t.colors.border))
                     .rounded(t.size.composer_radius)
+                    // Files dropped anywhere on the box are attached.
+                    .drag_over::<gpui::ExternalPaths>({
+                        let (edge, wash) = (t.colors.primary, t.colors.primary_tint);
+                        move |d, _, _, _| d.border_color(edge).bg(wash)
+                    })
+                    .on_drop(cx.listener(|this, paths: &gpui::ExternalPaths, _, cx| {
+                        let paths = paths.paths().to_vec();
+                        this.state
+                            .update(cx, |s, cx| s.add_attachment_paths(paths, cx));
+                    }))
+                    .children(pending)
                     .child(
                         // The text starts where the + glyph under it starts
                         // (the textarea adds 10px of its own).
@@ -344,7 +652,11 @@ impl Render for Composer {
                             .pb(px(8.))
                             .text_size(t.text.body)
                             .line_height(relative(1.5))
-                            .child(Textarea::new(&self.input).appearance(false).text_size(t.text.body)),
+                            .child(
+                                Textarea::new(&self.input)
+                                    .appearance(false)
+                                    .text_size(t.text.body),
+                            ),
                     )
                     // A soft rule between what you write and the tools under it,
                     // fading out at both ends, with a faint shade beneath.
@@ -357,21 +669,30 @@ impl Render for Composer {
                             // button sits square in the box's corner.
                             .p(px(7.))
                             .child(
-                                // Attaching comes in P2: drawn as "Soon", and its click says so.
-                                soon(
-                                    div()
-                                        .id("attach")
-                                        .size(px(26.))
-                                        .flex()
-                                        .items_center()
-                                        .justify_center()
-                                        .rounded(t.radius.pill)
-                                        .cursor_pointer()
-                                        .hover(move |st| st.bg(hover))
-                                        .child(icon("icons/plus.svg", t.size.icon, t.colors.text_muted)),
-                                    crate::stubs::ATTACH,
-                                )
-                                .on_click(cx.listener(|this, _, _, cx| this.state.update(cx, |s, cx| s.stub(crate::stubs::ATTACH, cx)))),
+                                div()
+                                    .id("attach")
+                                    .size(px(26.))
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .rounded(t.radius.pill)
+                                    .cursor_pointer()
+                                    .hover(move |st| st.bg(hover))
+                                    .child(icon(
+                                        "icons/paperclip.svg",
+                                        t.size.icon,
+                                        t.colors.text_muted,
+                                    ))
+                                    .tooltip(|window, cx| {
+                                        gpui::component::tooltip::Tooltip::new(format!(
+                                            "Attach files and images ({})",
+                                            super::shortcut("U")
+                                        ))
+                                        .build(window, cx)
+                                    })
+                                    .on_click(|_, window, cx| {
+                                        window.dispatch_action(Box::new(super::AttachFiles), cx)
+                                    }),
                             )
                             .child(div().flex_1())
                             .child(send),
@@ -380,6 +701,8 @@ impl Render for Composer {
             // Under it: the context meter, the model (and its effort), the mode.
             .child(
                 div()
+                    .relative()
+                    .children(context_popover)
                     .flex()
                     .items_center()
                     .gap(px(6.))
@@ -400,9 +723,29 @@ impl Render for Composer {
 fn divider(color: gpui::Hsla) -> impl IntoElement {
     use gpui::{linear_color_stop, linear_gradient};
     let half = |c: gpui::Hsla, out: bool| {
-        let (a, b) = if out { (c, c.opacity(0.)) } else { (c.opacity(0.), c) };
-        div().h_full().w(relative(0.5)).bg(linear_gradient(90., linear_color_stop(a, 0.), linear_color_stop(b, 1.)))
+        let (a, b) = if out {
+            (c, c.opacity(0.))
+        } else {
+            (c.opacity(0.), c)
+        };
+        div().h_full().w(relative(0.5)).bg(linear_gradient(
+            90.,
+            linear_color_stop(a, 0.),
+            linear_color_stop(b, 1.),
+        ))
     };
-    let line = |c: gpui::Hsla| div().h(px(1.)).w_full().flex().child(half(c, false)).child(half(c, true));
-    div().mx(px(14.)).flex().flex_col().child(line(color)).child(line(color.opacity(0.4)))
+    let line = |c: gpui::Hsla| {
+        div()
+            .h(px(1.))
+            .w_full()
+            .flex()
+            .child(half(c, false))
+            .child(half(c, true))
+    };
+    div()
+        .mx(px(14.))
+        .flex()
+        .flex_col()
+        .child(line(color))
+        .child(line(color.opacity(0.4)))
 }

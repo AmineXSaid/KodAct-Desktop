@@ -8,8 +8,8 @@ use gpui::component::input::{Input, InputEvent, InputState};
 use std::time::Duration;
 
 use gpui::{
-    div, prelude::*, px, relative, Animation, AnimationExt, AnyElement, Context, Entity, FocusHandle, FontWeight, IntoElement, Render, SharedString,
-    Subscription, Task, Window,
+    div, prelude::*, px, relative, Animation, AnimationExt, AnyElement, Context, Entity,
+    FocusHandle, FontWeight, IntoElement, Render, SharedString, Subscription, Task, Window,
 };
 
 use super::icon;
@@ -51,16 +51,33 @@ pub struct Onboarding {
 impl Onboarding {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input = cx.new(|cx| InputState::new(window, cx).placeholder("Your name"));
-        let subs = vec![cx.subscribe_in(&input, window, |this, _, ev: &InputEvent, window, cx| match ev {
-            InputEvent::PressEnter { .. } => this.submit(window, cx),
-            InputEvent::Change => {
-                this.error = None;
-                cx.notify();
-            }
-            _ => {}
-        })];
+        let subs =
+            vec![cx.subscribe_in(
+                &input,
+                window,
+                |this, _, ev: &InputEvent, window, cx| match ev {
+                    InputEvent::PressEnter { .. } => this.submit(window, cx),
+                    InputEvent::Change => {
+                        this.error = None;
+                        cx.notify();
+                    }
+                    _ => {}
+                },
+            )];
         let selected = state.read(cx).avatar.clone();
-        Self { state, input, error: None, step: Step::Name, leaving: None, forward: true, turn: 0, settle: None, selected, focus: cx.focus_handle(), _subs: subs }
+        Self {
+            state,
+            input,
+            error: None,
+            step: Step::Name,
+            leaving: None,
+            forward: true,
+            turn: 0,
+            settle: None,
+            selected,
+            focus: cx.focus_handle(),
+            _subs: subs,
+        }
     }
 
     /// Show it at the name: the current name filled in, the field focused.
@@ -134,7 +151,15 @@ impl Onboarding {
             return;
         }
         let rows: [&[&str]; 2] = [&avatars::WOMEN, &avatars::MEN];
-        let (r, c) = rows.iter().enumerate().find_map(|(r, row)| row.iter().position(|a| *a == self.selected.as_ref()).map(|c| (r, c))).unwrap_or((0, 0));
+        let (r, c) = rows
+            .iter()
+            .enumerate()
+            .find_map(|(r, row)| {
+                row.iter()
+                    .position(|a| *a == self.selected.as_ref())
+                    .map(|c| (r, c))
+            })
+            .unwrap_or((0, 0));
         let pick = match ev.keystroke.key.as_str() {
             "right" => Some(rows[r][(c + 1) % rows[r].len()]),
             "left" => Some(rows[r][(c + rows[r].len() - 1) % rows[r].len()]),
@@ -175,9 +200,19 @@ impl Onboarding {
             .rounded(t.size.composer_radius)
             .bg(t.colors.surface)
             .border_1()
-            .border_color(if self.error.is_some() { t.extra.danger } else { t.colors.border })
+            .border_color(if self.error.is_some() {
+                t.extra.danger
+            } else {
+                t.colors.border
+            })
             .text_size(t.text.body)
-            .child(div().flex_1().child(Input::new(&self.input).appearance(false).text_size(t.text.body)))
+            .child(
+                div().flex_1().child(
+                    Input::new(&self.input)
+                        .appearance(false)
+                        .text_size(t.text.body),
+                ),
+            )
             .child(
                 div()
                     .id("onboarding-continue")
@@ -189,7 +224,15 @@ impl Onboarding {
                     .rounded(t.radius.pill)
                     .bg(if empty { t.colors.hover } else { t.extra.fill })
                     .when(!empty, |d| d.cursor_pointer().hover(move |s| s.bg(hover)))
-                    .child(icon("icons/arrow-right.svg", t.size.icon, if empty { t.colors.text_subtle } else { t.colors.primary_fg }))
+                    .child(icon(
+                        "icons/arrow-right.svg",
+                        t.size.icon,
+                        if empty {
+                            t.colors.text_subtle
+                        } else {
+                            t.colors.primary_fg
+                        },
+                    ))
                     .on_click(cx.listener(|this, _, window, cx| this.submit(window, cx))),
             );
         div()
@@ -198,9 +241,25 @@ impl Onboarding {
             .flex_col()
             .items_center()
             .child(super::cube_image(96., window))
-            .child(heading(&t, if returning { "What should we call you now?" } else { "Hello. What should we call you?" }))
+            .child(heading(
+                &t,
+                if returning {
+                    "What should we call you now?"
+                } else {
+                    "Hello. What should we call you?"
+                },
+            ))
             .child(div().mt(t.space.xl).w(px(420.)).child(field))
-            .child(div().mt(t.space.sm).h(t.text.caption * 1.6).w(px(420.)).pl(t.space.lg).text_size(t.text.caption).text_color(t.extra.danger).children(self.error))
+            .child(
+                div()
+                    .mt(t.space.sm)
+                    .h(t.text.caption * 1.6)
+                    .w(px(420.))
+                    .pl(t.space.lg)
+                    .text_size(t.text.caption)
+                    .text_color(t.extra.danger)
+                    .children(self.error),
+            )
             .into_any_element()
     }
 
@@ -209,29 +268,37 @@ impl Onboarding {
         let name = self.state.read(cx).user_name.clone().unwrap_or_default();
         let selected = self.selected.clone();
         let row = |list: &'static [&'static str], cx: &mut Context<Self>| {
-            div().flex().justify_center().gap(t.space.md).children(list.iter().map(|a| {
-                let picked = selected.as_ref() == *a;
-                let a = *a;
-                let (ring, hover) = (t.colors.primary, t.colors.border);
-                // A ring round the one picked; a faint one on hover.
-                div()
-                    .id(SharedString::from(format!("avatar-{a}")))
-                    .p(px(3.))
-                    .rounded(t.radius.pill)
-                    .border_2()
-                    .border_color(if picked { ring } else { t.colors.border.opacity(0.) })
-                    .cursor_pointer()
-                    .when(!picked, |d| d.hover(move |st| st.border_color(hover)))
-                    .child(super::avatar_image(a, CHOICE, window))
-                    .on_click(cx.listener(move |this, ev: &gpui::ClickEvent, window, cx| {
-                        this.selected = a.into();
-                        // A double click keeps it straight away.
-                        if ev.click_count() > 1 {
-                            this.finish(window, cx);
-                        }
-                        cx.notify();
-                    }))
-            }))
+            div()
+                .flex()
+                .justify_center()
+                .gap(t.space.md)
+                .children(list.iter().map(|a| {
+                    let picked = selected.as_ref() == *a;
+                    let a = *a;
+                    let (ring, hover) = (t.colors.primary, t.colors.border);
+                    // A ring round the one picked; a faint one on hover.
+                    div()
+                        .id(SharedString::from(format!("avatar-{a}")))
+                        .p(px(3.))
+                        .rounded(t.radius.pill)
+                        .border_2()
+                        .border_color(if picked {
+                            ring
+                        } else {
+                            t.colors.border.opacity(0.)
+                        })
+                        .cursor_pointer()
+                        .when(!picked, |d| d.hover(move |st| st.border_color(hover)))
+                        .child(super::avatar_image(a, CHOICE, window))
+                        .on_click(cx.listener(move |this, ev: &gpui::ClickEvent, window, cx| {
+                            this.selected = a.into();
+                            // A double click keeps it straight away.
+                            if ev.click_count() > 1 {
+                                this.finish(window, cx);
+                            }
+                            cx.notify();
+                        }))
+                }))
         };
         let hover = t.colors.hover;
         let back = div()
@@ -245,7 +312,9 @@ impl Onboarding {
             .hover(move |st| st.bg(hover))
             .child("Back")
             .on_click(cx.listener(|this, _, window, cx| this.go(Step::Name, window, cx)));
-        let keep = crate::theme::primary_button(&t, "Continue").id("onboarding-keep").on_click(cx.listener(|this, _, window, cx| this.finish(window, cx)));
+        let keep = crate::theme::primary_button(&t, "Continue")
+            .id("onboarding-keep")
+            .on_click(cx.listener(|this, _, window, cx| this.finish(window, cx)));
         div()
             .w_full()
             .flex()
@@ -259,13 +328,32 @@ impl Onboarding {
                     .items_center()
                     .justify_center()
                     .child(super::avatar_image(&self.selected, PREVIEW, window))
-                    .with_animation(SharedString::from(format!("preview-{}", self.selected)), Animation::new(Duration::from_millis(260)).with_easing(gpui::ease_out_quint()), |d, k| {
-                        d.opacity(0.4 + 0.6 * k).mt(px(6. * (1. - k)))
-                    }),
+                    .with_animation(
+                        SharedString::from(format!("preview-{}", self.selected)),
+                        Animation::new(Duration::from_millis(260))
+                            .with_easing(gpui::ease_out_quint()),
+                        |d, k| d.opacity(0.4 + 0.6 * k).mt(px(6. * (1. - k))),
+                    ),
             )
             .child(heading(&t, &format!("Pick your avatar, {name}")))
-            .child(div().mt(t.space.xl).flex().flex_col().gap(t.space.md).child(row(&avatars::WOMEN, cx)).child(row(&avatars::MEN, cx)))
-            .child(div().mt(t.space.xl).flex().items_center().gap(t.space.sm).child(back).child(keep))
+            .child(
+                div()
+                    .mt(t.space.xl)
+                    .flex()
+                    .flex_col()
+                    .gap(t.space.md)
+                    .child(row(&avatars::WOMEN, cx))
+                    .child(row(&avatars::MEN, cx)),
+            )
+            .child(
+                div()
+                    .mt(t.space.xl)
+                    .flex()
+                    .items_center()
+                    .gap(t.space.sm)
+                    .child(back)
+                    .child(keep),
+            )
             .into_any_element()
     }
 }
@@ -293,30 +381,62 @@ impl Render for Onboarding {
             Step::Avatar => this.avatar_step(window, cx),
         };
         let first = self.turn == 0;
-        let entering = div().absolute().top_0().left_0().w_full().child(step(self, self.step, window, cx)).with_animation(
-            SharedString::from(format!("onboarding-in-{}", self.turn)),
-            Animation::new(if first { Duration::from_millis(t.motion_ms * 2) } else { SLIDE }).with_easing(gpui::ease_out_quint()),
-            move |d, k| if first { d.opacity(k).mt(px(10. * (1. - k))) } else { d.opacity(k).ml(px(TRAVEL * dir * (1. - k))) },
-        );
+        let entering = div()
+            .absolute()
+            .top_0()
+            .left_0()
+            .w_full()
+            .child(step(self, self.step, window, cx))
+            .with_animation(
+                SharedString::from(format!("onboarding-in-{}", self.turn)),
+                Animation::new(if first {
+                    Duration::from_millis(t.motion_ms * 2)
+                } else {
+                    SLIDE
+                })
+                .with_easing(gpui::ease_out_quint()),
+                move |d, k| {
+                    if first {
+                        d.opacity(k).mt(px(10. * (1. - k)))
+                    } else {
+                        d.opacity(k).ml(px(TRAVEL * dir * (1. - k)))
+                    }
+                },
+            );
         let leaving = self.leaving.map(|s| {
-            div().absolute().top_0().left_0().w_full().child(step(self, s, window, cx)).with_animation(
-                SharedString::from(format!("onboarding-out-{}", self.turn)),
-                Animation::new(SLIDE).with_easing(gpui::ease_out_quint()),
-                move |d, k| d.opacity((1. - 1.6 * k).max(0.)).ml(px(-TRAVEL * dir * k)),
-            )
+            div()
+                .absolute()
+                .top_0()
+                .left_0()
+                .w_full()
+                .child(step(self, s, window, cx))
+                .with_animation(
+                    SharedString::from(format!("onboarding-out-{}", self.turn)),
+                    Animation::new(SLIDE).with_easing(gpui::ease_out_quint()),
+                    move |d, k| d.opacity((1. - 1.6 * k).max(0.)).ml(px(-TRAVEL * dir * k)),
+                )
         });
 
         div()
             .id("onboarding")
             .key_context("Onboarding")
             .track_focus(&self.focus)
-            .on_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, window, cx| this.key(ev, window, cx)))
+            .on_key_down(
+                cx.listener(|this, ev: &gpui::KeyDownEvent, window, cx| this.key(ev, window, cx)),
+            )
             .flex_1()
             .flex()
             .items_center()
             .justify_center()
             .bg(t.extra.stage)
             .pb(t.space.xxl * 2.)
-            .child(div().relative().w(px(560.)).h(px(480.)).children(leaving).child(entering))
+            .child(
+                div()
+                    .relative()
+                    .w(px(560.))
+                    .h(px(480.))
+                    .children(leaving)
+                    .child(entering),
+            )
     }
 }

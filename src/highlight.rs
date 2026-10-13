@@ -38,7 +38,8 @@ static SYNTAXES: LazyLock<SyntaxSet> = LazyLock::new(two_face::syntax::extra_new
 
 /// Parsed blocks, by hash of language and text. Small and bounded: cleared
 /// when it grows past what a few long chats need.
-static CACHE: LazyLock<Mutex<HashMap<u64, Arc<Vec<(Range<usize>, Kind)>>>>> = LazyLock::new(Default::default);
+static CACHE: LazyLock<Mutex<HashMap<u64, Arc<Vec<(Range<usize>, Kind)>>>>> =
+    LazyLock::new(Default::default);
 const CACHE_MAX: usize = 512;
 
 /// Load the grammars off the UI thread, so the first code block on screen
@@ -65,7 +66,9 @@ fn syntax(lang: &str) -> Option<&'static SyntaxReference> {
         "ps1" | "pwsh" => "powershell",
         other => other,
     };
-    SYNTAXES.find_syntax_by_token(alias).or_else(|| SYNTAXES.find_syntax_by_name(alias))
+    SYNTAXES
+        .find_syntax_by_token(alias)
+        .or_else(|| SYNTAXES.find_syntax_by_name(alias))
 }
 
 /// What a scope stack means for colour: the innermost scope that says
@@ -97,15 +100,38 @@ fn kind_of(stack: &ScopeStack) -> Kind {
             Kind::Operator
         } else if is("keyword") || is("storage") {
             Kind::Keyword
-        } else if is("support.macro") || is("entity.name.macro") || is("entity.name.function.macro") {
+        } else if is("support.macro") || is("entity.name.macro") || is("entity.name.function.macro")
+        {
             Kind::Type
         } else if is("entity.name.function") || is("support.function") || is("variable.function") {
             Kind::Function
-        } else if is("entity.name.type") || is("entity.name.class") || is("entity.name.struct") || is("entity.name.enum") || is("entity.name.trait") || is("entity.name.namespace") || is("support.type") || is("support.class") || is("entity.other.inherited-class") {
+        } else if is("entity.name.type")
+            || is("entity.name.class")
+            || is("entity.name.struct")
+            || is("entity.name.enum")
+            || is("entity.name.trait")
+            || is("entity.name.namespace")
+            || is("support.type")
+            || is("support.class")
+            || is("entity.other.inherited-class")
+        {
             Kind::Type
-        } else if is("entity.other.attribute-name") || is("variable.parameter") || is("variable.other.member") || is("variable.other.property") || is("support.type.property-name") || is("meta.mapping.key") || is("variable.other.constant") || is("variable.other.readwrite.shell") {
+        } else if is("entity.other.attribute-name")
+            || is("variable.parameter")
+            || is("variable.other.member")
+            || is("variable.other.property")
+            || is("support.type.property-name")
+            || is("meta.mapping.key")
+            || is("variable.other.constant")
+            || is("variable.other.readwrite.shell")
+        {
             Kind::Variable
-        } else if is("meta.annotation") || is("meta.attribute") || is("meta.preprocessor") || is("entity.name.tag") || is("meta.tag") {
+        } else if is("meta.annotation")
+            || is("meta.attribute")
+            || is("meta.preprocessor")
+            || is("entity.name.tag")
+            || is("meta.tag")
+        {
             Kind::Meta
         } else if is("entity.name.section") || is("markup.heading") {
             Kind::Function
@@ -139,7 +165,9 @@ pub fn highlight(code: &str, lang: &str) -> Arc<Vec<(Range<usize>, Kind)>> {
 }
 
 fn parse(code: &str, lang: &str) -> Vec<(Range<usize>, Kind)> {
-    let Some(syntax) = syntax(lang) else { return vec![(0..code.len(), Kind::Plain)] };
+    let Some(syntax) = syntax(lang) else {
+        return vec![(0..code.len(), Kind::Plain)];
+    };
     let mut state = ParseState::new(syntax);
     let mut stack = ScopeStack::new();
     let mut out: Vec<(Range<usize>, Kind)> = vec![];
@@ -175,7 +203,11 @@ mod tests {
     use super::*;
 
     fn kinds(code: &str, lang: &str) -> Vec<(String, Kind)> {
-        highlight(code, lang).iter().map(|(r, k)| (code[r.clone()].to_string(), *k)).filter(|(s, k)| *k != Kind::Plain && !s.trim().is_empty()).collect()
+        highlight(code, lang)
+            .iter()
+            .map(|(r, k)| (code[r.clone()].to_string(), *k))
+            .filter(|(s, k)| *k != Kind::Plain && !s.trim().is_empty())
+            .collect()
     }
 
     fn has(k: &[(String, Kind)], text: &str, kind: Kind) -> bool {
@@ -190,18 +222,37 @@ mod tests {
         assert!(has(&k, "// hi", Kind::Comment), "{k:?}");
         assert!(has(&k, "42", Kind::Number), "{k:?}");
         assert!(has(&k, "Hello", Kind::Str), "{k:?}");
-        assert!(has(&k, "println!", Kind::Type) || has(&k, "println", Kind::Function), "{k:?}");
+        assert!(
+            has(&k, "println!", Kind::Type) || has(&k, "println", Kind::Function),
+            "{k:?}"
+        );
     }
 
     #[test]
     fn colours_typescript_python_and_json() {
-        let ts = kinds("export const greet = (name: string): string => `hi ${name}`;\n", "ts");
+        let ts = kinds(
+            "export const greet = (name: string): string => `hi ${name}`;\n",
+            "ts",
+        );
         assert!(has(&ts, "const", Kind::Keyword), "{ts:?}");
         assert!(has(&ts, "string", Kind::Type), "{ts:?}");
-        let py = kinds("def greet(name):\n    return f\"hi {name}\"  # done\n", "py");
-        assert!(has(&py, "def", Kind::Keyword) && has(&py, "greet", Kind::Function) && has(&py, "# done", Kind::Comment), "{py:?}");
+        let py = kinds(
+            "def greet(name):\n    return f\"hi {name}\"  # done\n",
+            "py",
+        );
+        assert!(
+            has(&py, "def", Kind::Keyword)
+                && has(&py, "greet", Kind::Function)
+                && has(&py, "# done", Kind::Comment),
+            "{py:?}"
+        );
         let json = kinds("{\"name\": \"forge\", \"n\": 3, \"ok\": true}", "json");
-        assert!(has(&json, "name", Kind::Variable) && has(&json, "forge", Kind::Str) && has(&json, "3", Kind::Number), "{json:?}");
+        assert!(
+            has(&json, "name", Kind::Variable)
+                && has(&json, "forge", Kind::Str)
+                && has(&json, "3", Kind::Number),
+            "{json:?}"
+        );
     }
 
     #[test]
