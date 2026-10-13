@@ -426,6 +426,28 @@ pub fn project_files(dir: &Path, cap: usize) -> Vec<String> {
     out
 }
 
+/// The project's files and their folders, for the @ list: a folder ends
+/// in `/`; shallow entries first, a folder before the files beside it.
+pub fn project_entries(dir: &Path, cap: usize) -> Vec<String> {
+    let files = project_files(dir, cap);
+    let mut dirs = std::collections::BTreeSet::new();
+    for f in &files {
+        let mut p = f.as_str();
+        while let Some(i) = p.rfind('/') {
+            p = &p[..i];
+            if !dirs.insert(format!("{p}/")) {
+                break;
+            }
+        }
+    }
+    let mut out: Vec<String> = dirs.into_iter().chain(files).collect();
+    out.sort_by(|a, b| {
+        let depth = |s: &str| s.trim_end_matches('/').matches('/').count();
+        (depth(a), !a.ends_with('/'), a.as_str()).cmp(&(depth(b), !b.ends_with('/'), b.as_str()))
+    });
+    out
+}
+
 /// Files under `dir`, honouring `.gitignore` and skipping hidden folders.
 fn walk(dir: &Path, depth: usize) -> Vec<PathBuf> {
     if !dir.is_dir() {

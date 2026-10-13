@@ -7,8 +7,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use gpui::{
-    div, img, prelude::*, px, AnyElement, Entity, Image, ImageFormat, ObjectFit, PathPromptOptions,
-    SharedString,
+    div, img, prelude::*, px, AnimationExt, AnyElement, Entity, Image, ImageFormat, ObjectFit,
+    PathPromptOptions, SharedString,
 };
 
 use super::icon;
@@ -66,6 +66,20 @@ fn thumbnail(a: &Attachment) -> Option<Arc<Image>> {
     })
 }
 
+/// The colour a kind's icon takes, so a sheet, a PDF and an archive tell
+/// apart at a glance.
+fn kind_color(kind: Kind, t: &Theme) -> gpui::Hsla {
+    use crate::attach::Doc;
+    match kind {
+        Kind::Pdf => t.extra.danger,
+        Kind::Document(Doc::Sheet) => t.extra.success,
+        Kind::Document(Doc::Word) => t.colors.sky,
+        Kind::Document(Doc::Slides) => t.colors.marigold,
+        Kind::Image(_) => t.colors.primary,
+        _ => t.colors.text_muted,
+    }
+}
+
 /// One chip: the picture (or the file's icon), its name and size, and a
 /// remove button when `remove` is given.
 fn chip(
@@ -92,15 +106,51 @@ fn chip(
             .justify_center()
             .rounded(t.radius.small)
             .bg(t.extra.inset)
-            .child(icon(a.icon(), t.size.icon_sm, t.colors.text_muted))
+            .child(if a.pending {
+                icon(
+                    "icons/loader-circle.svg",
+                    t.size.icon_sm,
+                    t.colors.text_muted,
+                )
+                .with_animation(
+                    SharedString::from(format!("{id}-spin")),
+                    gpui::Animation::new(std::time::Duration::from_millis(900)).repeat(),
+                    |svg, d| {
+                        svg.with_transformation(gpui::Transformation::rotate(gpui::percentage(d)))
+                    },
+                )
+                .into_any_element()
+            } else {
+                icon(a.icon(), t.size.icon_sm, kind_color(a.kind, t)).into_any_element()
+            })
             .into_any_element(),
     };
-    let where_: SharedString = a
+    // The tooltip: where it came from, where its copy is, and any note.
+    let mut tip = a
         .path
         .as_ref()
         .map(|p| p.display().to_string())
-        .unwrap_or_else(|| a.name.to_string())
-        .into();
+        .unwrap_or_else(|| a.name.to_string());
+    if let Some(at) = &a.saved_at {
+        tip.push_str(&format!("\nIn the project at {at}"));
+    }
+    if let Some(x) = &a.extracted {
+        tip.push_str(&format!("\nOpened into {}/", x.to));
+    }
+    if let Some(n) = &a.note {
+        let mut c = n.chars();
+        let first: String = c
+            .next()
+            .map(|f| f.to_uppercase().collect())
+            .unwrap_or_default();
+        tip.push_str(&format!("\n{first}{}", c.as_str()));
+    }
+    let where_: SharedString = tip.into();
+    let warn = a.note.is_some()
+        && matches!(
+            a.kind,
+            Kind::Archive | Kind::File | Kind::Document(_) | Kind::Pdf
+        );
     div()
         .id(id.clone())
         .flex()
@@ -133,17 +183,19 @@ fn chip(
                 )
                 .child(
                     div()
+                        .flex()
+                        .items_center()
+                        .gap(px(3.))
                         .text_size(t.text.caption - px(1.))
                         .text_color(t.colors.text_subtle)
-                        .child(format!(
-                            "{} · {}",
-                            match a.kind {
-                                Kind::Image(_) => "Image",
-                                Kind::Text => "Text",
-                                Kind::File => "File, by path",
-                            },
-                            a.size_text()
-                        )),
+                        .when(warn, |d| {
+                            d.child(icon(
+                                "icons/triangle-alert.svg",
+                                t.size.icon_xs,
+                                t.extra.warning,
+                            ))
+                        })
+                        .child(a.summary()),
                 ),
         )
         .tooltip(move |window, cx| {

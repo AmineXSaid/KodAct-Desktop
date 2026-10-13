@@ -33,6 +33,9 @@ pub struct Composer {
     /// Enter just completed a word: the text box's own Enter that follows
     /// must not send the message.
     ac_took_enter: bool,
+    /// Where the autocomplete's word starts (its byte offset), and the
+    /// caret's place and line height there, in the window.
+    ac_anchor: Option<(usize, gpui::Point<gpui::Pixels>, gpui::Pixels)>,
     _subs: Vec<Subscription>,
 }
 
@@ -112,6 +115,7 @@ impl Composer {
             ac_selected: 0,
             ac_closed_for: None,
             ac_took_enter: false,
+            ac_anchor: None,
             _subs: subs,
         }
     }
@@ -165,8 +169,9 @@ impl Composer {
         Some((trig, rows))
     }
 
-    /// Complete with row `i`.
-    fn pick(&mut self, i: usize, window: &mut Window, cx: &mut Context<Self>) {
+    /// Complete with row `i`. `open`: Tab on a folder lists what is in it
+    /// instead of adding it.
+    fn pick(&mut self, i: usize, open: bool, window: &mut Window, cx: &mut Context<Self>) {
         let Some((trig, mut rows)) = self.completion(cx) else {
             return;
         };
@@ -177,6 +182,12 @@ impl Composer {
         let before = text[..trig.start].to_string();
         match rows.swap_remove(i).pick {
             super::autocomplete::Pick::Text(t) => self.fill(&format!("{before}{t}"), window, cx),
+            super::autocomplete::Pick::Folder(p) => {
+                let m = super::autocomplete::mention(&p);
+                // A quoted path can't be typed on from; it is added instead.
+                let end = if open && !m.contains('"') { "" } else { " " };
+                self.fill(&format!("{before}{m}{end}"), window, cx)
+            }
             super::autocomplete::Pick::Action(a) => {
                 self.fill(&before, window, cx);
                 window.dispatch_action(a, cx);
@@ -196,21 +207,26 @@ impl Composer {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
+        let k = &ev.keystroke;
+        if k.modifiers.secondary() || k.modifiers.alt || k.modifiers.shift {
+            return false;
+        }
+        self.completion_nav(k.key.as_str(), window, cx)
+    }
+
+    /// Move through the list, pick from it or close it. True when it took `key`.
+    fn completion_nav(&mut self, key: &str, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let Some((trig, rows)) = self.completion(cx) else {
             return false;
         };
         let n = rows.len();
-        let k = &ev.keystroke;
-        if k.modifiers.secondary() || k.modifiers.alt {
-            return false;
-        }
-        match k.key.as_str() {
+        match key {
             "down" if n > 0 => self.ac_selected = (self.ac_selected + 1) % n,
             "up" if n > 0 => self.ac_selected = (self.ac_selected + n - 1) % n,
-            "enter" | "tab" if n > 0 && !k.modifiers.shift => {
+            "enter" | "tab" if n > 0 => {
                 let i = self.ac_selected.min(n - 1);
-                self.ac_took_enter = k.key == "enter";
-                self.pick(i, window, cx);
+                self.ac_took_enter = key == "enter";
+                self.pick(i, key == "tab", window, cx);
             }
             "escape" => self.ac_closed_for = Some(self.text(cx)[trig.start..].to_string()),
             _ => return false,
@@ -416,6 +432,20 @@ impl Render for Composer {
         });
 
         let pending = super::attachments::pending(&t, &state, cx);
+        // The list opens at the word being completed: where the caret was
+        // when its sign was typed (the input's last layout), kept while the
+        // word is typed on.
+        let trig_start = super::autocomplete::trigger(&self.text(cx)).map(|t| t.start);
+        if trig_start.is_none() {
+            self.ac_anchor = None;
+        } else if self.ac_anchor.map(|a| Some(a.0)) != Some(trig_start) {
+            let input = self.input.read(cx);
+            self.ac_anchor = input.cursor_layout().map(|(b, line)| {
+                let scroll = input.scroll_offset();
+                (trig_start.unwrap_or(0), b.origin + scroll, line)
+            });
+        }
+        let caret = self.ac_anchor.map(|(_, at, line)| (at, line));
         let completion = self.completion(cx).map(|(_, rows)| {
             let me = cx.entity().downgrade();
             let me2 = me.clone();
@@ -434,10 +464,13 @@ impl Render for Composer {
                 &rows,
                 selected,
                 loading,
-                welcome,
+                super::autocomplete::Place {
+                    caret,
+                    below: welcome,
+                },
                 ranked,
                 move |i, window, cx| {
-                    let _ = me.update(cx, |c, cx| c.pick(i, window, cx));
+                    let _ = me.update(cx, |c, cx| c.pick(i, false, window, cx));
                 },
                 move |i, cx| {
                     let _ = me2.update(cx, |c, cx| {
@@ -602,6 +635,39 @@ impl Render for Composer {
                         this.ac_closed_for = Some(this.text(cx)[trig.start..].to_string());
                         cx.stop_propagation();
                         cx.notify();
+                    }
+                }),
+            )
+            // The text box binds ↑ ↓ Tab and Enter to its own actions, which
+            // run before any key listener: while the list is open they move
+            // through it and pick from it instead.
+            .capture_action(
+                cx.listener(|this, _: &gpui::component::input::MoveUp, window, cx| {
+                    if this.completion_nav("up", window, cx) {
+                        cx.stop_propagation();
+                    }
+                }),
+            )
+            .capture_action(cx.listener(
+                |this, _: &gpui::component::input::MoveDown, window, cx| {
+                    if this.completion_nav("down", window, cx) {
+                        cx.stop_propagation();
+                    }
+                },
+            ))
+            .capture_action(cx.listener(
+                |this, _: &gpui::component::input::IndentInline, window, cx| {
+                    if this.completion_nav("tab", window, cx) {
+                        cx.stop_propagation();
+                    }
+                },
+            ))
+            .capture_action(
+                cx.listener(|this, e: &gpui::component::input::Enter, window, cx| {
+                    if !e.secondary && !e.shift && this.completion_nav("enter", window, cx) {
+                        // Stopped here, the box never sends: nothing to swallow later.
+                        this.ac_took_enter = false;
+                        cx.stop_propagation();
                     }
                 }),
             )

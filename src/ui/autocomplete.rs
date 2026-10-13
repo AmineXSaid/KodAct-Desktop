@@ -50,6 +50,8 @@ pub enum Pick {
     Action(Box<dyn Action>),
     /// Clear the word, then switch to this mode.
     Mode(ModeId),
+    /// A folder (its path ends in `/`): Enter adds it, Tab opens it in the list.
+    Folder(String),
 }
 
 pub struct Item {
@@ -59,6 +61,8 @@ pub struct Item {
     pub icon: &'static str,
     pub pick: Pick,
     pub positions: Vec<usize>,
+    /// A row of the @ list: a file or a folder of the project.
+    pub file: bool,
 }
 
 /// The most rows listed.
@@ -150,6 +154,7 @@ pub fn items(trig: &Trigger, s: &AppState) -> Vec<Item> {
                     icon,
                     pick,
                     positions,
+                    file: false,
                 },
             ));
         }
@@ -201,16 +206,8 @@ pub fn items(trig: &Trigger, s: &AppState) -> Vec<Item> {
             order += 1;
         }
     } else {
-        for (order, f) in s.completion_files().iter().enumerate() {
-            push(
-                order,
-                f.clone(),
-                String::new(),
-                "Files",
-                "icons/file-text.svg",
-                Pick::Text(format!("@{f} ")),
-            );
-        }
+        drop(push);
+        return file_items(q, &s.completion_files());
     }
     if !q.is_empty() {
         scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
@@ -222,6 +219,108 @@ pub fn items(trig: &Trigger, s: &AppState) -> Vec<Item> {
         .collect()
 }
 
+/// `@path` as ForgeCLI reads it: quoted when it has a space.
+pub fn mention(path: &str) -> String {
+    if path.contains(char::is_whitespace) {
+        format!("@\"{path}\"")
+    } else {
+        format!("@{path}")
+    }
+}
+
+/// An entry's name and its folder: `src/ui/a.rs` → (`a.rs`, `src/ui`).
+fn split(entry: &str) -> (&str, &str) {
+    let trimmed = entry.trim_end_matches('/');
+    match trimmed.rfind('/') {
+        Some(i) => (&trimmed[i + 1..], &trimmed[..i]),
+        None => (trimmed, ""),
+    }
+}
+
+/// The @ list, as the extension shows it: files and folders, the project's
+/// top level when nothing is typed, a folder's contents once its path ends
+/// in `/`, and otherwise the best matches by name (then by path).
+pub fn file_items(q: &str, entries: &[String]) -> Vec<Item> {
+    let item = |entry: &String, positions: Vec<usize>| {
+        let folder = entry.ends_with('/');
+        let (name, dir) = split(entry);
+        Item {
+            label: name.to_string().into(),
+            detail: dir.to_string().into(),
+            group: if folder { "Folders" } else { "Files" },
+            icon: "",
+            pick: if folder {
+                Pick::Folder(entry.clone())
+            } else {
+                Pick::Text(format!("{} ", mention(entry)))
+            },
+            positions,
+            file: true,
+        }
+    };
+    let (base, rest) = match q.rfind('/') {
+        Some(i) => (&q[..=i], &q[i + 1..]),
+        None => ("", q),
+    };
+    let known_base = base.is_empty() || entries.iter().any(|e| e == base);
+    let mut scored: Vec<(i32, usize, Item)> = vec![];
+    if known_base && (base.len() > 0 || rest.is_empty()) {
+        // One folder's contents (the top level when nothing is typed).
+        for (order, e) in entries.iter().enumerate() {
+            let parent = e.trim_end_matches('/').rfind('/').map_or("", |i| &e[..=i]);
+            if parent != base {
+                continue;
+            }
+            if let Some((score, pos)) = fuzzy(rest, split(e).0) {
+                scored.push((score, order, item(e, pos)));
+            }
+        }
+    } else {
+        for (order, e) in entries.iter().enumerate() {
+            let (name, _) = split(e);
+            // A match in the name beats one spread over the path.
+            if let Some((score, pos)) = fuzzy(rest, name).filter(|_| base.is_empty()) {
+                // A name that starts with what you typed comes first (scores are ×10).
+                let prefix = if name.to_lowercase().starts_with(&rest.to_lowercase()) {
+                    1_000
+                } else {
+                    0
+                };
+                scored.push((score * 2 + prefix, order, item(e, pos)));
+            } else if let Some((score, _)) = fuzzy(q, e) {
+                scored.push((score, order, item(e, vec![])));
+            }
+        }
+    }
+    if !rest.is_empty() {
+        scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    }
+    scored
+        .into_iter()
+        .take(MAX_ROWS)
+        .map(|(_, _, i)| i)
+        .collect()
+}
+
+/// A folder path that fits: its tail, which says the most (`…/ui/blocks`).
+fn tail(path: &str, max: usize) -> String {
+    let n = path.chars().count();
+    if n <= max {
+        return path.to_string();
+    }
+    let skip = n - max + 1;
+    format!("…{}", path.chars().skip(skip).collect::<String>())
+}
+
+/// Where the list opens: at the caret (window coordinates of the word's
+/// start, and the line's height), above it, or below it on the new-chat
+/// screen where the box sits mid-window. None: over the box's left edge.
+#[derive(Clone, Copy)]
+pub struct Place {
+    pub caret: Option<(gpui::Point<gpui::Pixels>, gpui::Pixels)>,
+    pub below: bool,
+}
+
 /// The popover. `selected` is the row under the keyboard; a click on a row
 /// calls `on_pick` with its index.
 pub fn render(
@@ -229,11 +328,12 @@ pub fn render(
     rows: &[Item],
     selected: usize,
     loading: bool,
-    below: bool,
+    place: Place,
     ranked: bool,
     on_pick: impl Fn(usize, &mut gpui::Window, &mut gpui::App) + Clone + 'static,
     on_hover: impl Fn(usize, &mut gpui::App) + Clone + 'static,
 ) -> AnyElement {
+    let files = rows.first().is_some_and(|r| r.file);
     let mut list = div()
         .id("autocomplete-list")
         .flex()
@@ -244,8 +344,9 @@ pub fn render(
     let mut last_group = "";
     for (i, item) in rows.iter().enumerate() {
         // Ranked by match, rows of one group no longer sit together: each
-        // names its group instead of a header over them.
-        if !ranked && item.group != last_group {
+        // names its group instead of a header over them. The @ list has no
+        // groups: its icons say file or folder.
+        if !ranked && !item.file && item.group != last_group {
             last_group = item.group;
             list = list.child(
                 div()
@@ -260,17 +361,59 @@ pub fn render(
         }
         let on = i == selected;
         let (pick, hover) = (on_pick.clone(), on_hover.clone());
-        list = list.child(
-            div()
-                .id(("ac", i))
-                .flex()
-                .items_center()
-                .gap(t.space.md)
+        let row = div()
+            .id(("ac", i))
+            .flex()
+            .items_center()
+            .rounded(t.radius.button)
+            .cursor_pointer()
+            .when(on, |d| d.bg(t.colors.hover))
+            .on_mouse_move(move |_, _, cx| hover(i, cx))
+            .on_click(move |_, window, cx| pick(i, window, cx));
+        let row = if item.file {
+            // Name first, its folder after it, dimmed and cut from the left.
+            let folder = matches!(item.pick, Pick::Folder(_));
+            let (glyph, color) = super::file_icon::for_name(&item.label, folder, t);
+            row.gap(t.space.sm)
+                .h(t.size.control)
+                .px(t.space.sm)
+                .child(icon(glyph, t.size.icon_sm, color))
+                .child(
+                    div()
+                        .flex_none()
+                        .max_w(px(240.))
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .text_color(if on {
+                            t.colors.text_strong
+                        } else {
+                            t.colors.text
+                        })
+                        .child(highlighted(&item.label, &item.positions, t)),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_subtle)
+                        .child(tail(&item.detail, 32)),
+                )
+                .when(folder, |d| {
+                    d.child(icon(
+                        "icons/chevron-right.svg",
+                        t.size.icon_xs,
+                        t.colors.text_subtle,
+                    ))
+                })
+        } else {
+            row.gap(t.space.md)
                 .h(t.size.row)
                 .px(t.space.md)
-                .rounded(t.radius.button)
-                .cursor_pointer()
-                .when(on, |d| d.bg(t.colors.hover))
                 .child(icon(
                     item.icon,
                     t.size.icon_sm,
@@ -283,15 +426,10 @@ pub fn render(
                 .child(
                     div()
                         .flex_none()
-                        .max_w(px(260.))
+                        .max_w(px(220.))
                         .overflow_hidden()
                         .whitespace_nowrap()
                         .text_ellipsis()
-                        .font_family(if item.group == "Files" {
-                            t.font_mono.clone()
-                        } else {
-                            t.font_sans.clone()
-                        })
                         .child(highlighted(&item.label, &item.positions, t)),
                 )
                 .child(
@@ -305,7 +443,7 @@ pub fn render(
                         .text_color(t.colors.text_subtle)
                         .child(item.detail.clone()),
                 )
-                .when(ranked && item.group != "Files", |d| {
+                .when(ranked, |d| {
                     d.child(
                         div()
                             .flex_none()
@@ -314,9 +452,8 @@ pub fn render(
                             .child(item.group),
                     )
                 })
-                .on_mouse_move(move |_, _, cx| hover(i, cx))
-                .on_click(move |_, window, cx| pick(i, window, cx)),
-        );
+        };
+        list = list.child(row);
     }
     if rows.is_empty() {
         list = list.child(
@@ -331,20 +468,26 @@ pub fn render(
                 }),
         );
     }
-    div()
+    let hints: &[&str] = if files {
+        &["↑↓ choose", "Enter add", "Tab open folder", "Esc close"]
+    } else {
+        &["↑↓ choose", "Enter or Tab complete", "Esc close"]
+    };
+    let mut footer = div()
+        .flex()
+        .gap(t.space.lg)
+        .px(t.space.md)
+        .py(t.space.xs)
+        .border_t_1()
+        .border_color(t.colors.border)
+        .text_size(t.text.caption)
+        .text_color(t.colors.text_subtle);
+    for h in hints {
+        footer = footer.child(*h);
+    }
+    let card = div()
         .id("autocomplete")
-        .absolute()
-        // Above the box in a chat; below it on the new-chat screen, where
-        // the box sits mid-window with little room above.
-        .map(|d| {
-            if below {
-                d.top_full().mt(px(8.))
-            } else {
-                d.bottom_full().mb(px(8.))
-            }
-        })
-        .left_0()
-        .right_0()
+        .occlude()
         .flex()
         .flex_col()
         .bg(t.colors.surface)
@@ -353,26 +496,94 @@ pub fn render(
         .rounded(t.radius.card)
         .shadow(t.elevation_popover())
         .child(list)
-        .child(
-            div()
-                .flex()
-                .gap(t.space.lg)
-                .px(t.space.lg)
-                .py(t.space.xs)
-                .border_t_1()
-                .border_color(t.colors.border)
-                .text_size(t.text.caption)
-                .text_color(t.colors.text_subtle)
-                .child("↑↓ choose")
-                .child("Enter or Tab complete")
-                .child("Esc close"),
-        )
-        .into_any_element()
+        .child(footer);
+    match place.caret {
+        // At the word being completed, as an editor's completion list.
+        Some((at, line)) => {
+            let gap = px(6.);
+            let (pos, corner) = if place.below {
+                (
+                    gpui::point(at.x - t.space.md, at.y + line + gap),
+                    gpui::Anchor::TopLeft,
+                )
+            } else {
+                (
+                    gpui::point(at.x - t.space.md, at.y - gap),
+                    gpui::Anchor::BottomLeft,
+                )
+            };
+            gpui::anchored()
+                .position(pos)
+                .anchor(corner)
+                .snap_to_window_with_margin(t.space.sm)
+                .child(card.w(t.size.completion_width))
+                .into_any_element()
+        }
+        None => card
+            .absolute()
+            .map(|d| {
+                if place.below {
+                    d.top_full().mt(px(8.))
+                } else {
+                    d.bottom_full().mb(px(8.))
+                }
+            })
+            .left_0()
+            .w(t.size.completion_width)
+            .into_any_element(),
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::trigger;
+    use super::{file_items, mention, trigger, Pick};
+
+    fn entries() -> Vec<String> {
+        [
+            "src/",
+            "src/ui/",
+            "Cargo.toml",
+            "README.md",
+            "src/main.rs",
+            "src/state.rs",
+            "src/ui/composer.rs",
+            "docs/a b.md",
+            "docs/",
+        ]
+        .map(String::from)
+        .to_vec()
+    }
+
+    fn labels(q: &str) -> Vec<String> {
+        file_items(q, &entries())
+            .iter()
+            .map(|i| i.label.to_string())
+            .collect()
+    }
+
+    #[test]
+    fn the_at_list_shows_folders_and_files_like_the_extension() {
+        // Nothing typed: the top level, as given (folders first in the index).
+        assert_eq!(labels(""), ["src", "Cargo.toml", "README.md", "docs"]);
+        // A folder's path: what is in it.
+        assert_eq!(labels("src/"), ["ui", "main.rs", "state.rs"]);
+        assert_eq!(labels("src/ui/"), ["composer.rs"]);
+        assert_eq!(labels("src/st"), ["state.rs"]);
+        // Anything else: by name first.
+        assert_eq!(labels("comp")[0], "composer.rs");
+        // Starting with the query beats a scattered match.
+        let more: Vec<String> = ["src/ui/command_palette.rs", "src/ui/composer.rs"]
+            .map(String::from)
+            .to_vec();
+        assert_eq!(file_items("comp", &more)[0].label.as_ref(), "composer.rs");
+        let rows = file_items("comp", &entries());
+        assert_eq!(rows[0].detail.as_ref(), "src/ui");
+        assert!(matches!(&rows[0].pick, Pick::Text(t) if t == "@src/ui/composer.rs "));
+        let ui = file_items("src/", &entries());
+        assert!(matches!(&ui[0].pick, Pick::Folder(p) if p == "src/ui/"));
+        // A space in a path is quoted, as ForgeCLI reads it.
+        assert_eq!(mention("docs/a b.md"), "@\"docs/a b.md\"");
+    }
 
     #[test]
     fn the_word_at_the_end_is_completed() {

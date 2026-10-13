@@ -34,6 +34,7 @@ mod palette_check;
 mod profile;
 mod rules;
 mod secrets;
+mod stage;
 mod state;
 mod stubs;
 #[cfg(test)]

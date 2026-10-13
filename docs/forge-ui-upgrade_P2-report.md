@@ -81,3 +81,45 @@ The registry test now checks that each stub is referenced through its `stubs::` 
   - Real drag and drop from a file manager. The drop handler shares its code with paste, which was tested.
   - Anything on Windows. On Windows, copied files arrive as `ExternalPaths`; on X11, GPUI does not read `text/uri-list`, which is why the path-text fallback exists.
 - **Not done:** browser-use. It fits better as a ForgeCLI tool than as UI, so it was left for a ForgeCLI change.
+
+## Follow-up: any file attaches, and the @ list as the extension draws it
+
+Modelled on Forge for VS Code (`attachmentStaging.ts`, `types/attachment.ts`,
+`imageResize.ts`, the @ dropdown in `ChatInputBox.vue`), written fresh in Rust.
+
+**Attachments (`src/attach.rs`, new `src/stage.rs`).**
+- **Any file attaches.** Each file shows as a chip at once, marked "Preparing…" while it is read off the UI thread. A message can't go until every chip is ready.
+- **Images** are scaled to a 1568 px long edge, and re-encoded as JPEG when still over about 1 MB. A big pasted screenshot no longer ends the turn with no answer.
+- **Text files** go inline, as before.
+- **PDFs** go as a document block on an Anthropic endpoint. On an OpenAI-shaped endpoint they go as their text (lopdf).
+- **Word and PowerPoint** go as Markdown text. **xlsx, xlsm, xls, xlsb and ods** go as CSV, one block per sheet. Text is capped at 200K characters, and the model is told when it was cut.
+- **Archives** are opened in the project: zip, tar, tar.gz, gz and 7z are built in (pure Rust). rar, xz, bz2 and zstd tarballs, iso and cab go to an installed 7-Zip, then `unrar`, then `tar` (bsdtar reads rar and 7z on Windows). If none of these is installed, the archive is still saved, and the chip and the message say why it wasn't opened. Entries can't leave their folder, links are dropped, and extraction stops at 5000 files or 512 MB.
+- **Anything else** (pcap, sqlite, binaries…) is copied into the project and named by its path, with a hint on what reads it (e.g. `tshark` for a capture).
+- **Where copies go.** Every copy lives in `.forge/attachments/<id>/`, which carries a `.gitignore` of `*`. Removing a chip removes its copy.
+- **Chips** show a coloured icon for the kind and a summary such as "Spreadsheet · 7 KB", "Archive · 2 files" or "Packet capture". A warning mark appears when the file has a note. The tooltip gives the source path, the copy's path in the project, and the note.
+
+**ForgeCLI (`AmineXSaid/ForgeCLI`, same branch).** On OpenAI-compatible endpoints:
+- A PDF document block goes as its text; ForgeCLI used to drop it.
+- When the Read tool returns a PDF, it goes as text, not as its base64.
+- Images that a tool returned follow in the next user message.
+- Verified end to end: the real binary, a scripted OpenAI endpoint, and a LibreOffice PDF.
+
+**The @ list (`src/ui/autocomplete.rs`, new `src/ui/file_icon.rs`).**
+- **Where it opens.** It opens at the word being completed: above the caret in a chat, below it on the new-chat screen. It is 460 px wide, a new `completion_width` token.
+- **Rows** show an icon for the file type, the name with the matched letters in bold, and the folder dimmed after it.
+- **Folders** are listed, with a chevron.
+- **Nothing typed** shows the project's top level.
+- **Folders and Enter.** Tab on a folder lists what is in it; Enter adds it. Paths with spaces are quoted the way ForgeCLI reads them.
+- **Ranking.** Names that start with what you typed come first.
+- **Keys.** ↑, ↓, Tab and Enter now drive the list. The text box binds them to its own actions, which run before key listeners, so before this fix the arrow keys never reached the list.
+
+**Seen on Linux (Xvfb), light and dark:**
+- Seven files pasted as paths (PDF, pcapng, docx, rar, zip, xlsx, 7z), each staged and sorted by type.
+- The real ForgeCLI on the mock Anthropic endpoint received the PDF as a document block.
+- The OpenAI-wire mock received the PDF's text, the sheets as CSV, and the zip's file list.
+- The @ list with Tab into `src` and a search.
+
+**Not verified:**
+- Opening a real RAR: no extractor is installed here, and there is no fixture.
+- Drag and drop from a file manager.
+- Anything on Windows.

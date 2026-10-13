@@ -789,6 +789,8 @@ pub struct AppState {
     generations: u64,
     /// Files waiting in the composer to go with the next message.
     pub attachments: Vec<crate::attach::Attachment>,
+    /// The last attachment id given (a chip is matched to its result by it).
+    attachment_seq: u64,
     /// Pasted images so far, to number their names.
     pasted: usize,
     /// Answers ForgeCLI gives at once, in the order asked, by chat: `true`
@@ -916,6 +918,7 @@ impl AppState {
             clock: None,
             generations: 0,
             attachments: vec![],
+            attachment_seq: 0,
             pasted: 0,
             immediate_queue: Default::default(),
             requests: Default::default(),
@@ -1808,7 +1811,7 @@ impl AppState {
             let (files, commands) = cx
                 .background_spawn(async move {
                     (
-                        crate::rules::project_files(&d, 20_000),
+                        crate::rules::project_entries(&d, 20_000),
                         crate::commands::custom(&d),
                     )
                 })
@@ -2092,8 +2095,10 @@ impl AppState {
 
     // ------------------------------------------------------------ attachments
 
-    /// Attach files (the picker, a drop, a paste of copied files): each is
-    /// read off the UI thread, then waits in the composer.
+    /// Attach files (the picker, a drop, a paste of copied files). Each
+    /// shows as a chip at once, "Preparing…", while it is read, copied into
+    /// the project and, for an archive, opened (`attach::prepare`, off the
+    /// UI thread); a message can't go until they are ready.
     pub fn add_attachment_paths(&mut self, paths: Vec<std::path::PathBuf>, cx: &mut Context<Self>) {
         let room = crate::attach::MAX_FILES.saturating_sub(self.attachments.len());
         if room == 0 {
@@ -2108,39 +2113,82 @@ impl AppState {
             .filter(|p| !self.attachments.iter().any(|a| a.path.as_ref() == Some(p)))
             .take(room)
             .collect();
-        cx.spawn(async move |this, cx| {
-            let read: Vec<Result<crate::attach::Attachment, String>> = cx
-                .background_spawn(
-                    async move { paths.iter().map(|p| crate::attach::read(p)).collect() },
-                )
-                .await;
-            let _ = this.update(cx, |s, cx| {
-                let mut errors = vec![];
-                for r in read {
-                    match r {
-                        Ok(a) => s.attachments.push(a),
-                        Err(e) => errors.push(e),
-                    }
-                }
-                if let Some(e) = errors.first() {
-                    s.show_toast(format!("Couldn't attach {e}"), cx);
-                } else if skipped > 0 {
-                    s.show_toast(
-                        format!(
-                            "Attached the first files; a message takes up to {}.",
-                            crate::attach::MAX_FILES
-                        ),
-                        cx,
-                    );
-                }
-                cx.notify();
+        if skipped > 0 {
+            self.show_toast(
+                format!(
+                    "Attached the first files; a message takes up to {}.",
+                    crate::attach::MAX_FILES
+                ),
+                cx,
+            );
+        }
+        let project = self.project_dir.clone();
+        for path in paths {
+            self.attachment_seq += 1;
+            let id = self.attachment_seq;
+            self.attachments.push(crate::attach::Attachment {
+                id,
+                name: path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default()
+                    .into(),
+                size: std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0),
+                path: Some(path.clone()),
+                pending: true,
+                ..Default::default()
             });
-        })
-        .detach();
+            let project = project.clone();
+            cx.spawn(async move |this, cx| {
+                let made = cx
+                    .background_spawn(async move { crate::attach::prepare(&path, &project, id) })
+                    .await;
+                let _ = this.update(cx, |s, cx| s.attachment_ready(id, made, cx));
+            })
+            .detach();
+        }
+        cx.notify();
     }
 
-    /// An image pasted from the clipboard (`ext` names its format). One too
-    /// big to send inline is written to Forge's temp folder, to go by path.
+    /// A prepared attachment takes its chip's place; if the chip was removed
+    /// meanwhile, what was copied into the project goes too.
+    fn attachment_ready(
+        &mut self,
+        id: u64,
+        made: Result<crate::attach::Attachment, String>,
+        cx: &mut Context<Self>,
+    ) {
+        let slot = self.attachments.iter().position(|a| a.id == id);
+        match (made, slot) {
+            (Ok(a), Some(i)) => {
+                if let Some(n) = a.note.as_deref().filter(|_| {
+                    matches!(
+                        a.kind,
+                        crate::attach::Kind::Archive | crate::attach::Kind::File
+                    )
+                }) {
+                    self.show_toast(format!("{}: {n}", a.name), cx);
+                }
+                self.attachments[i] = a;
+            }
+            (Ok(a), None) => {
+                if let Some(d) = a.staged_dir {
+                    cx.background_spawn(async move { crate::stage::discard(&d) })
+                        .detach();
+                }
+            }
+            (Err(e), slot) => {
+                if let Some(i) = slot {
+                    self.attachments.remove(i);
+                }
+                self.show_toast(format!("Couldn't attach {e}"), cx);
+            }
+        }
+        cx.notify();
+    }
+
+    /// An image pasted from the clipboard. It is scaled down if big; one
+    /// that can't be decoded is saved into the project and goes by path.
     pub fn add_pasted_image(&mut self, bytes: Vec<u8>, ext: &str, cx: &mut Context<Self>) {
         if self.attachments.len() >= crate::attach::MAX_FILES {
             return self.show_toast(
@@ -2149,42 +2197,36 @@ impl AppState {
             );
         }
         self.pasted += 1;
-        let n = self.pasted;
-        let ext = ext.to_string();
+        self.attachment_seq += 1;
+        let (n, id) = (self.pasted, self.attachment_seq);
+        self.attachments.push(crate::attach::Attachment {
+            id,
+            name: format!("Pasted image {n}.{ext}").into(),
+            size: bytes.len() as u64,
+            pending: true,
+            ..Default::default()
+        });
+        let project = self.project_dir.clone();
         cx.spawn(async move |this, cx| {
             let made = cx
-                .background_spawn(async move {
-                    let mut a =
-                        crate::attach::pasted_image(bytes.clone(), n).unwrap_or_else(|| {
-                            crate::attach::Attachment {
-                                name: format!("Pasted image {n}.{ext}").into(),
-                                path: None,
-                                kind: crate::attach::Kind::File,
-                                size: bytes.len() as u64,
-                                bytes: Some(std::sync::Arc::from(bytes.into_boxed_slice())),
-                            }
-                        });
-                    if a.kind == crate::attach::Kind::File {
-                        crate::attach::ensure_path(&mut a)?;
-                        a.bytes = None;
-                    }
-                    Ok::<_, String>(a)
-                })
+                .background_spawn(
+                    async move { crate::attach::pasted_image(bytes, n, &project, id) },
+                )
                 .await;
-            let _ = this.update(cx, |s, cx| match made {
-                Ok(a) => {
-                    s.attachments.push(a);
-                    cx.notify();
-                }
-                Err(e) => s.show_toast(format!("Couldn't attach the pasted image: {e}"), cx),
-            });
+            let _ = this.update(cx, |s, cx| s.attachment_ready(id, made, cx));
         })
         .detach();
+        cx.notify();
     }
 
+    /// Remove a chip; what it copied into the project goes with it.
     pub fn remove_attachment(&mut self, i: usize, cx: &mut Context<Self>) {
         if i < self.attachments.len() {
-            self.attachments.remove(i);
+            let a = self.attachments.remove(i);
+            if let Some(d) = a.staged_dir {
+                cx.background_spawn(async move { crate::stage::discard(&d) })
+                    .detach();
+            }
             cx.notify();
         }
     }
@@ -2851,6 +2893,15 @@ impl AppState {
         if (text.is_empty() && self.attachments.is_empty()) || self.busy() {
             return;
         }
+        if let Some(a) = self.attachments.iter().find(|a| a.pending) {
+            return self.show_toast(
+                format!(
+                    "{} is still being prepared; send when its chip is ready.",
+                    a.name
+                ),
+                cx,
+            );
+        }
         let attachments = std::mem::take(&mut self.attachments);
         let id = match self.current {
             Some(id) => id,
@@ -2879,7 +2930,7 @@ impl AppState {
             c.messages.push(Message::User {
                 text: text.clone().into(),
                 sent: SystemTime::now(),
-                attachments: attachments.clone(),
+                attachments: attachments.iter().map(|a| a.for_history()).collect(),
                 turn: None,
             });
             c.version += 1;
@@ -2985,8 +3036,11 @@ impl AppState {
                 if attachments.is_empty() {
                     l.session.send(&text)
                 } else {
-                    l.session
-                        .send_content(crate::attach::content_blocks(&text, &attachments))
+                    l.session.send_content(crate::attach::content_blocks(
+                        &text,
+                        &attachments,
+                        l.profile.wire == crate::endpoints::Wire::Anthropic,
+                    ))
                 }
             })
             .unwrap_or(Err("Forge isn't running.".into()));

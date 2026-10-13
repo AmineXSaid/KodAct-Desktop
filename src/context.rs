@@ -97,6 +97,17 @@ pub fn breakdown(messages: &[Message]) -> Breakdown {
                     .map(|a| match a.kind {
                         crate::attach::Kind::Image(_) => 1_000,
                         crate::attach::Kind::Text => a.size.div_ceil(4),
+                        // A document's text goes in; a PDF as a document costs about as much.
+                        crate::attach::Kind::Pdf | crate::attach::Kind::Document(_) => a
+                            .text
+                            .as_ref()
+                            .map_or(a.size.div_ceil(8), |t| (t.len() as u64).div_ceil(4)),
+                        crate::attach::Kind::Archive => {
+                            20 + a
+                                .extracted
+                                .as_ref()
+                                .map_or(0, |x| x.files.len() as u64 * 12)
+                        }
                         crate::attach::Kind::File => 20,
                     })
                     .sum::<u64>();

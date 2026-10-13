@@ -13,6 +13,7 @@ pub mod context_ring;
 pub mod diagram_view;
 pub mod doc_pane;
 pub mod file_card;
+pub mod file_icon;
 pub mod file_mark;
 pub mod find_bar;
 pub mod forge_cube;

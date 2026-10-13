@@ -34,7 +34,7 @@ impl Kind {
     pub fn of(name: &str) -> Option<Kind> {
         let ext = name.rsplit_once('.')?.1.to_ascii_lowercase();
         Some(match ext.as_str() {
-            "xlsx" | "xlsm" => Kind::Xlsx,
+            "xlsx" | "xlsm" | "xls" | "xlsb" | "ods" => Kind::Xlsx,
             "docx" => Kind::Docx,
             "pptx" => Kind::Pptx,
             "pdf" => Kind::Pdf,
@@ -81,6 +81,65 @@ pub fn preview(name: &str, bytes: &[u8]) -> Result<Preview, String> {
         Kind::Pptx => pptx(bytes).map(Preview::Markdown),
         Kind::Pdf => pdf(bytes).map(Preview::Markdown),
     }
+}
+
+/// A Word or PowerPoint file, or a PDF, as text (Markdown for the first
+/// two); for an attached file, which the model reads.
+pub fn text(kind: Kind, bytes: &[u8]) -> Result<String, String> {
+    match kind {
+        Kind::Docx => docx(bytes),
+        Kind::Pptx => pptx(bytes),
+        Kind::Pdf => pdf(bytes),
+        Kind::Xlsx => Err("a workbook: use sheets_csv".into()),
+    }
+}
+
+/// Every sheet of a workbook as CSV, in order, until `budget` characters;
+/// the bool is true when something was cut.
+pub fn sheets_csv(bytes: &[u8], budget: usize) -> Result<(Vec<(String, String)>, bool), String> {
+    use calamine::{Data, Reader as _};
+    let mut book = calamine::open_workbook_auto_from_rs(Cursor::new(bytes.to_vec()))
+        .map_err(|e| format!("not a workbook Forge can read: {e}"))?;
+    let cell = |d: &Data| -> String {
+        let s = match d {
+            Data::Empty => String::new(),
+            Data::Int(i) => i.to_string(),
+            Data::Float(f) => number(*f),
+            Data::Bool(b) => if *b { "TRUE" } else { "FALSE" }.to_string(),
+            Data::String(s) | Data::DateTimeIso(s) | Data::DurationIso(s) => s.clone(),
+            Data::DateTime(d) => number(d.as_f64()),
+            Data::Error(e) => format!("#{e:?}").to_uppercase(),
+        };
+        if s.contains([',', '"', '\n', '\r']) {
+            format!("\"{}\"", s.replace('"', "\"\""))
+        } else {
+            s
+        }
+    };
+    let mut left = budget;
+    let mut cut = false;
+    let mut out = vec![];
+    for name in book.sheet_names().to_vec() {
+        if left == 0 {
+            cut = true;
+            break;
+        }
+        let range = book.worksheet_range(&name).map_err(|e| e.to_string())?;
+        let mut csv = String::new();
+        for row in range.rows() {
+            let line = row.iter().map(cell).collect::<Vec<_>>().join(",");
+            let line = line.trim_end_matches(',');
+            if csv.len() + line.len() + 1 > left {
+                cut = true;
+                break;
+            }
+            csv.push_str(line);
+            csv.push('\n');
+        }
+        left -= csv.len().min(left);
+        out.push((name, csv));
+    }
+    Ok((out, cut))
 }
 
 /// A number as a spreadsheet shows it by default: no trailing zeros.

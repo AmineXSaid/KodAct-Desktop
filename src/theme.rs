@@ -467,6 +467,7 @@ pub struct Sizes {
     pub attach_thumb: Pixels,       // 28: an attachment chip's picture or icon
     pub attach_chip: Pixels,        // 220: an attachment chip's widest
     pub popover_list: Pixels,       // 300: the tallest an autocomplete or context list grows
+    pub completion_width: Pixels,   // 460: the / and @ lists, opened at the caret
 }
 
 impl Default for Sizes {
@@ -500,6 +501,7 @@ impl Default for Sizes {
             attach_thumb: px(28.),
             attach_chip: px(220.),
             popover_list: px(300.),
+            completion_width: px(460.),
         }
     }
 }

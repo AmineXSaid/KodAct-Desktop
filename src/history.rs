@@ -86,9 +86,18 @@ pub struct SavedAttachment {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<PathBuf>,
-    /// `image/png` for an image, `text`, or `file`.
+    /// `image/png` for an image; `text`, `pdf`, `word`, `slides`, `sheet`,
+    /// `archive` or `file`.
     pub kind: String,
     pub size: u64,
+    /// The copy in the project (`.forge/attachments/…`), relative to it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub saved_at: Option<String>,
+    /// For an archive: where it was opened, and how many files it held.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opened_to: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub files: Option<usize>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
@@ -326,12 +335,11 @@ fn save_messages(chat: &Chat, project: &Path) -> SavedChat {
                         .map(|a| SavedAttachment {
                             name: a.name.to_string(),
                             path: a.path.clone(),
-                            kind: match a.kind {
-                                crate::attach::Kind::Image(m) => m.to_string(),
-                                crate::attach::Kind::Text => "text".into(),
-                                crate::attach::Kind::File => "file".into(),
-                            },
+                            kind: a.kind.key(),
                             size: a.size,
+                            saved_at: a.saved_at.clone(),
+                            opened_to: a.extracted.as_ref().map(|x| x.to.clone()),
+                            files: a.extracted.as_ref().map(|x| x.count),
                         })
                         .collect(),
                     turn: turn.as_ref().map(|t| t.to_string()),
@@ -455,15 +463,7 @@ pub fn messages_of(saved: &SavedChat) -> Vec<Message> {
                 attachments: attachments
                     .iter()
                     .map(|a| {
-                        let kind = match a.kind.as_str() {
-                            "text" => crate::attach::Kind::Text,
-                            "file" => crate::attach::Kind::File,
-                            m => ["image/png", "image/jpeg", "image/gif", "image/webp"]
-                                .into_iter()
-                                .find(|k| *k == m)
-                                .map(crate::attach::Kind::Image)
-                                .unwrap_or(crate::attach::Kind::File),
-                        };
+                        let kind = crate::attach::Kind::from_key(&a.kind);
                         // An image's picture is read back for its thumbnail, if it's still there.
                         let bytes = matches!(kind, crate::attach::Kind::Image(_))
                             .then(|| a.path.as_ref().and_then(|p| std::fs::read(p).ok()))
@@ -475,6 +475,15 @@ pub fn messages_of(saved: &SavedChat) -> Vec<Message> {
                             kind,
                             size: a.size,
                             bytes,
+                            saved_at: a.saved_at.clone(),
+                            extracted: a.opened_to.clone().map(|to| {
+                                std::sync::Arc::new(crate::stage::Extracted {
+                                    to,
+                                    count: a.files.unwrap_or(0),
+                                    ..Default::default()
+                                })
+                            }),
+                            ..Default::default()
                         }
                     })
                     .collect(),
@@ -610,9 +619,10 @@ mod tests {
                 attachments: vec![crate::attach::Attachment {
                     name: "r.pdf".into(),
                     path: Some("/p/r.pdf".into()),
-                    kind: crate::attach::Kind::File,
+                    kind: crate::attach::Kind::Pdf,
                     size: 9,
-                    bytes: None,
+                    saved_at: Some(".forge/attachments/1/r.pdf".into()),
+                    ..Default::default()
                 }],
                 turn: Some("turn-1".into()),
             },
@@ -713,7 +723,7 @@ mod tests {
             matches!(&v[0].tail[0], Message::Assistant { blocks } if matches!(&blocks[0], Block::Text(t) if t.as_ref() == "An older answer."))
         );
         assert!(
-            matches!(&m[0], Message::User { sent, attachments, turn, .. } if secs(*sent) == 1_700_000_000 && attachments[0].name.as_ref() == "r.pdf" && turn.as_deref() == Some("turn-1"))
+            matches!(&m[0], Message::User { sent, attachments, turn, .. } if secs(*sent) == 1_700_000_000 && attachments[0].name.as_ref() == "r.pdf" && attachments[0].kind == crate::attach::Kind::Pdf && attachments[0].saved_at.as_deref() == Some(".forge/attachments/1/r.pdf") && turn.as_deref() == Some("turn-1"))
         );
     }
 

@@ -520,7 +520,11 @@ impl Render for ChatView {
                 // message starts below it.
                 .when(ix == 0, |d| {
                     let pill = !super::tasks::tasks(&chat.messages).is_empty();
-                    d.pt(if pill { t.space.xl + t.size.control } else { t.space.xl })
+                    d.pt(if pill {
+                        t.space.xl + t.size.control
+                    } else {
+                        t.space.xl
+                    })
                 })
                 .child(
                     div()

@@ -28,9 +28,19 @@ chrono = { version = "=0.4.45", default-features = false, features = ["clock"] }
 # Office files and PDFs Forge made, read for the side panel (office.rs):
 # spreadsheets (calamine), Word and PowerPoint XML (zip, quick-xml), PDF text (lopdf).
 calamine = { version = "=0.36.1", default-features = false }
-zip = { version = "=8.6.0", default-features = false, features = ["deflate"] }
+# Attachments (stage.rs) also open archives with it: the pure-Rust codecs
+# only (deflate, deflate64, bzip2, lzma, xz).
+zip = { version = "=8.6.0", default-features = false, features = ["deflate", "deflate64", "bzip2", "lzma", "xz"] }
 quick-xml = "=0.41.0"
 lopdf = { version = "=0.45.0", default-features = false }
+# Attachments (stage.rs): .tar, .tar.gz and .gz (tar, flate2; MIT/Apache-2.0)
+# and .7z (sevenz-rust2, Apache-2.0, pure Rust) are opened for the model. RAR
+# has no permissively licensed decoder: an installed 7-Zip, unrar or bsdtar
+# opens it. Big pictures are scaled down before they're sent (image, MIT/Apache-2.0).
+tar = { version = "=0.4.46", default-features = false }
+flate2 = "=1.1.10"
+sevenz-rust2 = { version = "=0.24.0", default-features = false, features = ["bzip2", "deflate"] }
+image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 # Events from each chat's ForgeCLI process to the UI (backend.rs).
 async-channel = "=2.5.0"
 
