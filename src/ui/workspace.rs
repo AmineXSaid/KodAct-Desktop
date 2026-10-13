@@ -603,6 +603,9 @@ impl Render for Workspace {
                     this.focus_composer(window, cx);
                 }
             }))
+            .on_action(cx.listener(|this, _: &ToggleBrowser, _, cx| {
+                this.state.update(cx, |s, cx| s.toggle_browser(cx))
+            }))
             .on_action(cx.listener(|this, _: &ToggleTheme, _, cx| {
                 let dark = !this.state.read(cx).dark;
                 this.state.update(cx, |s, cx| {

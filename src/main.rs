@@ -15,6 +15,7 @@ mod assets;
 mod attach;
 mod avatars;
 mod backend;
+mod browser;
 mod commands;
 mod context;
 mod diagram;

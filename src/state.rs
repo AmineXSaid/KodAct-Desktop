@@ -706,6 +706,8 @@ pub struct AppState {
     pub default_mode: ModeId,
     /// Bypass permissions has been allowed, behind its warning.
     pub bypass_allowed: bool,
+    /// The web browser (browser-use) is given to new ForgeCLI sessions.
+    pub browser: bool,
     /// The Modes menu is open; its Bypass warning is showing.
     pub modes_open: bool,
     pub bypass_warning: bool,
@@ -876,6 +878,7 @@ impl AppState {
             kept_modes: Default::default(),
             default_mode: ModeId::Manual,
             bypass_allowed: false,
+            browser: crate::browser::enabled(),
             modes_open: false,
             bypass_warning: false,
             dark: false,
@@ -2231,6 +2234,39 @@ impl AppState {
         }
     }
 
+    /// Turn the web browser on or off. Chats that aren't replying restart
+    /// their ForgeCLI on their next message (resuming the conversation), so
+    /// the change reaches them; a running reply keeps what it started with.
+    pub fn toggle_browser(&mut self, cx: &mut Context<Self>) {
+        let on = !self.browser;
+        if on && crate::browser::uvx().is_none() {
+            return self.show_toast(
+                "The web browser runs through uv. Install uv (docs.astral.sh/uv), then turn it on again.",
+                cx,
+            );
+        }
+        if let Err(e) = crate::browser::set_enabled(on) {
+            return self.show_toast(format!("Couldn't save the setting: {e}"), cx);
+        }
+        self.browser = on;
+        let working: Vec<usize> = self
+            .chats
+            .iter()
+            .filter(|c| self.status(c) == ChatStatus::Working || !c.resumable)
+            .map(|c| c.id)
+            .collect();
+        self.sessions.retain(|id, _| working.contains(id));
+        self.show_toast(
+            if on {
+                "Web browser on: Forge can open pages, click, type and take screenshots (browser-use). Each step asks first."
+            } else {
+                "Web browser off."
+            },
+            cx,
+        );
+        cx.notify();
+    }
+
     /// Show a diagram's source, or its drawing again.
     pub fn toggle_diagram_code(&mut self, key: SharedString, cx: &mut Context<Self>) {
         let set = std::sync::Arc::make_mut(&mut self.diagram_code);
@@ -3076,8 +3112,16 @@ impl AppState {
         } else {
             crate::backend::Conversation::New(&session_id)
         };
-        let launch =
+        let mut launch =
             crate::backend::launch(&profile, self.mode, self.bypass_allowed, conversation)?;
+        // The web browser: browser-use's MCP server, run by uvx.
+        if self.browser {
+            if let Some(uvx) = crate::browser::uvx() {
+                launch
+                    .args
+                    .extend(["--mcp-config".to_string(), crate::browser::mcp_config(&uvx)]);
+            }
+        }
         if resumable {
             self.resuming.insert(id);
         } else {

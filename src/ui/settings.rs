@@ -503,7 +503,8 @@ impl Settings {
 
     fn general(&self, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
         let s = self.state.read(cx);
-        let (dark, default_mode, bypass) = (s.dark, s.default_mode, s.bypass_allowed);
+        let (dark, default_mode, bypass, browser) =
+            (s.dark, s.default_mode, s.bypass_allowed, s.browser);
         let name_row = div()
             .flex()
             .items_center()
@@ -597,6 +598,16 @@ impl Settings {
                     cx.notify();
                 }))
             });
+        let browser_row = div()
+            .flex()
+            .items_center()
+            .gap(px(10.))
+            .child(div().flex_1().min_w_0().text_size(t.text.caption).text_color(t.colors.text_subtle).line_height(relative(1.4)).child("Lets Forge open web pages, click, type and take screenshots, through browser-use (run by uv). Each step asks first."))
+            .child(
+                Self::chip(t, "browser", if browser { "On · turn off" } else { "Turn on" }, browser)
+                    .flex_none()
+                    .on_click(|_, window, cx| window.dispatch_action(Box::new(super::ToggleBrowser), cx)),
+            );
         div()
             .flex()
             .flex_col()
@@ -640,6 +651,14 @@ impl Settings {
                     .gap(px(8.))
                     .child(Self::section(t, "Bypass permissions", None))
                     .child(bypass_row),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(8.))
+                    .child(Self::section(t, "Web browser", None))
+                    .child(browser_row),
             )
             .into_any_element()
     }

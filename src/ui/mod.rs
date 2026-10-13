@@ -49,6 +49,7 @@ gpui::actions!(
         ToggleSidebar,
         ToggleCommandPalette,
         ToggleTheme,
+        ToggleBrowser,
         FocusComposer,
         ToggleModelPicker,
         CycleMode,

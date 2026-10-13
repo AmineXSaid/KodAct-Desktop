@@ -113,6 +113,12 @@ fn app_actions() -> Vec<(&'static str, &'static str, &'static str, Box<dyn Actio
             Box::new(ToggleTasks),
         ),
         (
+            "browser",
+            "Turn the web browser on or off (browser-use)",
+            "icons/globe.svg",
+            Box::new(ToggleBrowser),
+        ),
+        (
             "settings",
             "Open settings",
             "icons/settings.svg",

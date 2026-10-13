@@ -123,3 +123,29 @@ Modelled on Forge for VS Code (`attachmentStaging.ts`, `types/attachment.ts`,
 - Opening a real RAR: no extractor is installed here, and there is no fixture.
 - Drag and drop from a file manager.
 - Anything on Windows.
+
+## Follow-up: the web browser (browser-use)
+
+You asked for this as an additional resource; until now it was left out.
+
+**What it is.** Forge Desktop now has a **Web browser** switch: in Settings → General, in the palette, and as `/browser` in the `/` list. With it on, every chat's ForgeCLI gets browser-use's MCP server (github.com/browser-use/browser-use, MIT). The model can then:
+- open pages, click and type;
+- read a page's state (its interactive elements), extract its content, take screenshots;
+- manage tabs.
+
+Each step asks permission like any other tool.
+
+**How it runs.** It runs as its own process through `uvx` (from uv), pinned to `browser-use[cli]==0.13.11` (`src/browser.rs`). Nothing is installed into the app, and nothing is linked into it.
+- If `uv` is missing, turning it on says how to get it, and the switch stays off.
+- Turning it on or off restarts idle chats' ForgeCLI on their next message, resuming the conversation, so the change reaches them.
+
+**Seen on Linux:**
+- The real ForgeCLI with the server: the model was offered 16 browser tools. It opened a local page, and `browser_get_state` returned its title and the page's "Press me" button.
+- The app launched a chat's ForgeCLI with the server once the switch was on.
+- The switch in Settings, light and dark; the palette entry and its toast.
+
+In this container Chrome needed a display (Xvfb) and `IN_DOCKER=true`, because it runs as root. On a desktop, browser-use opens a visible Chrome window.
+
+**Not verified:**
+- On Windows.
+- With a real model choosing the steps itself.

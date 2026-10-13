@@ -142,6 +142,16 @@ impl CommandPalette {
                 Box::new(ToggleTheme),
             ),
             act(
+                if s.browser {
+                    "Turn the web browser off"
+                } else {
+                    "Turn the web browser on (browser-use)"
+                },
+                "icons/globe.svg",
+                None,
+                Box::new(ToggleBrowser),
+            ),
+            act(
                 "Choose a model",
                 "icons/cpu.svg",
                 Some(shortcut("/")),
