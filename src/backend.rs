@@ -127,12 +127,15 @@ fn cli_base_url(profile: &Profile) -> String {
 }
 
 /// What the desktop adds to ForgeCLI's system prompt: how replies are shown
-/// here, so the model draws diagrams Forge can render in the chat
-/// (`mermaid.rs`) rather than ASCII art.
+/// here, so the model draws diagrams Forge can render in the chat: with
+/// the Diagram Design skill (`plugin.rs`), or in Mermaid (`mermaid.rs`)
+/// for a quick sketch, never in ASCII art.
 pub const SURFACE_PROMPT: &str = "You are running inside Forge Desktop, which renders your replies as Markdown. \
-When a diagram would explain structure or flow better than prose (architecture, a request's path, states, a sequence of calls), \
-draw it in a ```mermaid fenced block: flowchart (any direction, subgraphs allowed), sequenceDiagram or stateDiagram-v2. \
-Forge draws these inline. An ```svg block with one <svg> also renders. Never draw diagrams with ASCII art.";
+When the user asks for a diagram, or a diagram would explain structure or flow better than prose (architecture, a request's path, \
+data flow, states, a sequence of calls, a data model, a timeline, a comparison), use the diagram-design skill: it writes a \
+self-contained HTML file around one SVG in Forge's own style, and Forge shows that file as a diagram in the chat. Save it in the \
+project (e.g. under docs/diagrams/) and name it in your reply. For a quick sketch inside a reply, a ```mermaid fenced block \
+(flowchart, sequenceDiagram or stateDiagram-v2) or an ```svg block with one <svg> also renders inline. Never draw diagrams with ASCII art.";
 
 /// Which ForgeCLI conversation a process runs: a new one under the id the
 /// desktop chose, or one already on disk, resumed.
@@ -169,6 +172,13 @@ pub fn launch(
         "--append-system-prompt".to_string(),
         SURFACE_PROMPT.to_string(),
     ]);
+    // Forge's plugin: Diagram Design and the office-documents skill.
+    if let Some(dir) = crate::plugin::dir() {
+        args.extend([
+            "--plugin-dir".to_string(),
+            dir.to_string_lossy().into_owned(),
+        ]);
+    }
     // Each accepted message comes back with its turn id: Revert needs it.
     args.push("--replay-user-messages".to_string());
     match conversation {
@@ -626,6 +636,16 @@ pub fn tool_call(name: &str, input: &Value) -> ToolCall {
         }
         "WebFetch" => (ToolKind::Web, s("url"), None, vec![]),
         "WebSearch" => (ToolKind::Web, s("query"), None, vec![]),
+        // A skill reads as its name, without its plugin's prefix.
+        "Skill" => {
+            let skill = s("skill");
+            let name = skill
+                .rsplit(':')
+                .next()
+                .unwrap_or(&skill)
+                .trim_start_matches('/');
+            (ToolKind::Other, format!("skill {name}"), None, vec![])
+        }
         other => {
             let summary = input["description"]
                 .as_str()

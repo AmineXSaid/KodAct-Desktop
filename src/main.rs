@@ -32,6 +32,7 @@ mod modes;
 mod office;
 #[cfg(test)]
 mod palette_check;
+mod plugin;
 mod profile;
 mod rules;
 mod secrets;

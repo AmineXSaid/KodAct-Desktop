@@ -3436,7 +3436,7 @@ impl AppState {
         let ext = name.rsplit_once('.')?.1.to_ascii_lowercase();
         if !matches!(
             ext.as_str(),
-            "md" | "markdown" | "svg" | "docx" | "xlsx" | "pptx" | "pdf"
+            "md" | "markdown" | "svg" | "html" | "htm" | "docx" | "xlsx" | "pptx" | "pdf"
         ) {
             return None;
         }
@@ -3456,6 +3456,13 @@ impl AppState {
             }
         };
         let bytes = std::fs::read(&full).ok()?;
+        // An HTML page gets a card only when it is a diagram (Diagram
+        // Design's pages are); other pages stay a tool row.
+        if matches!(ext.as_str(), "html" | "htm")
+            && !crate::diagram::is_diagram(&name, &String::from_utf8_lossy(&bytes))
+        {
+            return None;
+        }
         let binary = matches!(ext.as_str(), "docx" | "xlsx" | "pptx" | "pdf");
         Some(FileRef {
             name: name.into(),
