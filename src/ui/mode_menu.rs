@@ -28,17 +28,6 @@ pub fn tint(t: &Theme, mode: ModeId) -> Option<Hsla> {
     }
 }
 
-/// The colour the working cube is painted in this mode: Forge blue, the
-/// foreground in Edit automatically, Plan's blue, Bypass's red.
-pub fn cube_color(t: &Theme, mode: ModeId) -> Hsla {
-    match mode {
-        ModeId::Manual | ModeId::Expert => t.colors.primary,
-        ModeId::AcceptEdits => t.colors.text_strong,
-        ModeId::Plan => t.extra.mode_plan,
-        ModeId::Bypass => t.extra.mode_bypass,
-    }
-}
-
 /// `⇧`, `tab`: a key in the header hint.
 fn key(t: &Theme, text: &'static str) -> impl IntoElement {
     div()

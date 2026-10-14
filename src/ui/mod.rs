@@ -1,6 +1,7 @@
 //! The window's views. `workspace` composes them; each file is one component.
 
 pub mod agents_editor;
+pub mod agents_view;
 pub mod approvals;
 pub mod attachments;
 pub mod autocomplete;
@@ -21,7 +22,6 @@ pub mod file_card;
 pub mod file_icon;
 pub mod file_mark;
 pub mod find_bar;
-pub mod forge_cube;
 pub mod guide;
 pub mod hooks_editor;
 pub mod markdown;
@@ -127,6 +127,43 @@ pub fn cube_image(size: f32, window: &gpui::Window) -> gpui::Img {
     gpui::img(SharedString::from(format!("images/cube-{file}.png")))
         .size(gpui::px(size))
         .flex_none()
+}
+
+/// The Forge logo (the cube picture) at `size`, from the rendering made for
+/// twice that, so it stays sharp up to a 2x screen without a window to ask.
+pub fn logo(size: f32) -> gpui::Img {
+    const MADE: [u32; 16] = [
+        32, 40, 48, 56, 60, 64, 72, 80, 84, 96, 120, 144, 168, 192, 240, 288,
+    ];
+    let want = (size * 2.).round() as u32;
+    let file = MADE.iter().copied().find(|n| *n >= want).unwrap_or(288);
+    gpui::img(SharedString::from(format!("images/cube-{file}.png")))
+        .size(gpui::px(size))
+        .flex_none()
+}
+
+/// The logo at work: it breathes (a slow rise and fall, a little light) while
+/// Forge works. Reduced motion: still.
+pub fn logo_working(size: f32, id: impl Into<gpui::ElementId>) -> gpui::AnyElement {
+    use gpui::AnimationExt as _;
+    if motion::reduced_motion() {
+        return logo(size).into_any_element();
+    }
+    gpui::div()
+        .size(gpui::px(size))
+        .flex_none()
+        .relative()
+        .child(logo(size))
+        .with_animation(
+            id,
+            gpui::Animation::new(std::time::Duration::from_millis(1600)).repeat(),
+            move |d, k| {
+                let wave = (k * std::f32::consts::TAU).sin();
+                d.top(gpui::px(-1.5 * wave))
+                    .opacity(0.78 + 0.22 * (0.5 + 0.5 * wave))
+            },
+        )
+        .into_any_element()
 }
 
 /// Your avatar, drawn `size` px square at this screen's density.

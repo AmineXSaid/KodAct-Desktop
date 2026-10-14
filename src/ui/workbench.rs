@@ -188,6 +188,13 @@ pub struct View<'a> {
     pub messages: &'a [Message],
     /// The Browser tab's live view (`browser_view.rs`).
     pub browser: gpui::AnyView,
+    /// The chat's sub-agents, and the cards opened.
+    pub agents: &'a [crate::state::AgentRun],
+    pub agents_open: &'a std::collections::HashSet<String>,
+    /// Forge's mark, for the top of the agents' tree.
+    pub logo: AnyElement,
+    /// The chat's turn is still going.
+    pub working: bool,
     pub copied: Option<SharedString>,
     pub width: f32,
     pub below: bool,
@@ -223,6 +230,13 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
             PanelTab::Plan,
             "Plan".into(),
             v.tab == PanelTab::Plan,
+        ))
+        .child(tab(
+            t,
+            &state,
+            PanelTab::Agents,
+            format!("Agents{}", count(v.agents.len())),
+            v.tab == PanelTab::Agents,
         ))
         .child(tab(
             t,
@@ -323,6 +337,20 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
                     ))
             }))
             .into_any_element(),
+        PanelTab::Agents => super::agents_view::render(
+            super::agents_view::View {
+                runs: v.agents,
+                request: v.messages.iter().rev().find_map(|m| match m {
+                    Message::User { text, .. } => Some(text.clone()),
+                    _ => None,
+                }),
+                logo: v.logo,
+                working: v.working,
+            },
+            state.clone(),
+            v.agents_open,
+            t,
+        ),
         PanelTab::Files if files.is_empty() => empty(
             t,
             "icons/folder-open.svg",

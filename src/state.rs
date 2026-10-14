@@ -115,6 +115,7 @@ impl ToolCall {
         match self.target.as_ref() {
             "ExitPlanMode" => "plan".into(),
             "TodoWrite" => "task list".into(),
+            "Task" | "Agent" => "agent".into(),
             _ => self.target.clone(),
         }
     }
@@ -154,6 +155,54 @@ pub enum Block {
     File(FileRef),
 }
 
+/// A sub-agent Forge started (a `Task` / `Agent` tool call), as the
+/// Agents panel shows it.
+#[derive(Clone, Debug)]
+pub struct AgentRun {
+    /// The tool call that started it.
+    pub id: String,
+    /// Its kind (`subagent_type`): Explore, general-purpose, a custom agent.
+    pub kind: String,
+    /// What it is for, in a few words.
+    pub task: String,
+    /// What it was told.
+    pub prompt: String,
+    pub started: std::time::Instant,
+    pub ended: Option<std::time::Instant>,
+    pub failed: bool,
+    pub steps: Vec<AgentStep>,
+    /// Its latest words; once it ends, its answer.
+    pub said: String,
+}
+
+/// One tool call a sub-agent made.
+#[derive(Clone, Debug)]
+pub struct AgentStep {
+    pub id: String,
+    pub kind: ToolKind,
+    /// What it acts on, or a command's description.
+    pub what: String,
+    /// A command's own description stands alone ("Run the tests").
+    pub described: bool,
+    pub status: ToolStatus,
+}
+
+impl AgentStep {
+    /// "Reading src/main.rs" while it runs, "Read src/main.rs" after.
+    pub fn label(&self) -> String {
+        if self.described {
+            self.what.clone()
+        } else {
+            format!("{} {}", self.kind.verb(self.status), self.what)
+        }
+    }
+}
+
+/// The tools that start a sub-agent.
+pub fn is_agent_tool(name: &str) -> bool {
+    matches!(name, "Task" | "Agent")
+}
+
 /// The panel's browser as the UI shows it.
 #[derive(Default)]
 pub struct WebPage {
@@ -176,6 +225,8 @@ pub enum PanelTab {
     Plan,
     /// Every file the chat made: Markdown, workbooks, PDFs, diagrams.
     Files,
+    /// Its sub-agents at work.
+    Agents,
     /// What the browser is on, its latest screenshot, its recent steps.
     Browser,
 }
@@ -882,6 +933,10 @@ pub struct AppState {
     pub web: Option<std::sync::Arc<crate::web_view::WebView>>,
     /// What it shows: the page, its tabs, whether it is loading.
     pub web_page: WebPage,
+    /// Each chat's sub-agents, in the order they started (`agents_view.rs`).
+    pub agents: std::collections::HashMap<usize, Vec<AgentRun>>,
+    /// Agent cards opened to show their steps, by the agent's id.
+    pub agents_open: std::collections::HashSet<String>,
     /// A diagram in the panel fits its width (else it shows at actual size).
     pub doc_fit: bool,
     /// The side panel sits below the chat instead of beside it.
@@ -1066,6 +1121,8 @@ impl AppState {
             panel: None,
             web: None,
             web_page: WebPage::default(),
+            agents: std::collections::HashMap::new(),
+            agents_open: std::collections::HashSet::new(),
             doc_fit: true,
             doc_below: false,
             doc_preview: None,
@@ -2244,6 +2301,124 @@ impl AppState {
         };
         if let Some(tab) = tab.filter(|_| self.doc.is_none() && self.current == Some(chat)) {
             self.panel = Some(tab);
+        }
+    }
+
+    /// Open or close an agent's card.
+    pub fn toggle_agent(&mut self, id: &str, cx: &mut Context<Self>) {
+        if !self.agents_open.remove(id) {
+            self.agents_open.insert(id.to_string());
+        }
+        cx.notify();
+    }
+
+    /// What the engine says about sub-agents: one starting (a `Task` or
+    /// `Agent` call), its steps, its words, its end.
+    fn on_agent_event(&mut self, chat: usize, ev: &crate::backend::Event) {
+        use crate::backend::Event;
+        let now = std::time::Instant::now();
+        let runs = self.agents.entry(chat).or_default();
+        match ev {
+            Event::ToolUse { id, name, input } if is_agent_tool(name) => {
+                let s = |k: &str| input[k].as_str().unwrap_or_default().to_string();
+                let kind = s("subagent_type");
+                runs.push(AgentRun {
+                    id: id.clone(),
+                    kind: if kind.is_empty() {
+                        "agent".into()
+                    } else {
+                        kind
+                    },
+                    task: {
+                        let d = s("description");
+                        if d.is_empty() {
+                            "A sub-task".into()
+                        } else {
+                            d
+                        }
+                    },
+                    prompt: s("prompt"),
+                    started: now,
+                    ended: None,
+                    failed: false,
+                    steps: vec![],
+                    said: String::new(),
+                });
+                if self.doc.is_none() && self.current == Some(chat) {
+                    self.panel = Some(PanelTab::Agents);
+                }
+            }
+            Event::ToolResult {
+                id,
+                output,
+                is_error,
+            } => {
+                if let Some(r) = runs.iter_mut().find(|r| &r.id == id) {
+                    r.ended = Some(now);
+                    r.failed = *is_error;
+                    if !output.trim().is_empty() {
+                        r.said = output.clone();
+                    }
+                    for s in r
+                        .steps
+                        .iter_mut()
+                        .filter(|s| s.status == ToolStatus::Running)
+                    {
+                        s.status = ToolStatus::Done;
+                    }
+                }
+            }
+            Event::SubTool {
+                parent,
+                id,
+                name,
+                input,
+            } => {
+                if let Some(r) = runs.iter_mut().find(|r| &r.id == parent) {
+                    let call = crate::backend::tool_call(name, input);
+                    let (what, described) = match (&call.note, call.kind) {
+                        (Some(n), ToolKind::Bash) => (n.to_string(), true),
+                        _ => (call.shown_target().to_string(), false),
+                    };
+                    r.steps.push(AgentStep {
+                        id: id.clone(),
+                        kind: call.kind,
+                        what,
+                        described,
+                        status: ToolStatus::Running,
+                    });
+                }
+            }
+            Event::SubResult {
+                parent,
+                id,
+                is_error,
+            } => {
+                if let Some(s) = runs
+                    .iter_mut()
+                    .find(|r| &r.id == parent)
+                    .and_then(|r| r.steps.iter_mut().find(|s| &s.id == id))
+                {
+                    s.status = if *is_error {
+                        ToolStatus::Failed
+                    } else {
+                        ToolStatus::Done
+                    };
+                }
+            }
+            Event::SubText { parent, text } => {
+                if let Some(r) = runs.iter_mut().find(|r| &r.id == parent) {
+                    r.said = text.clone();
+                }
+            }
+            // A turn that ends with agents still going stopped them.
+            Event::TurnEnd { .. } | Event::Exited { .. } => {
+                for r in runs.iter_mut().filter(|r| r.ended.is_none()) {
+                    r.ended = Some(now);
+                    r.failed = true;
+                }
+            }
+            _ => {}
         }
     }
 
@@ -3819,6 +3994,7 @@ impl AppState {
         if self.sessions.get(&chat).map(|l| l.generation) != Some(generation) {
             return;
         }
+        self.on_agent_event(chat, &ev);
         if !matches!(ev, Event::Exited { .. } | Event::Error(_)) {
             self.resuming.remove(&chat);
         } else if self.resuming.remove(&chat) {
@@ -3883,6 +4059,8 @@ impl AppState {
             }
         }
         match ev {
+            // Sub-agents fill the Agents panel (`on_agent_event`), not the transcript.
+            Event::SubTool { .. } | Event::SubResult { .. } | Event::SubText { .. } => {}
             Event::Break => {
                 self.fresh_block.insert(chat);
             }
@@ -4317,6 +4495,39 @@ impl AppState {
     }
 
     fn apply(&mut self, chat: usize, step: Step, cx: &mut Context<Self>) {
+        if let Step::Agent(ev) = &step {
+            self.on_agent_event(chat, ev);
+            // The agent's own row in the reply, as a real one has.
+            match ev {
+                crate::backend::Event::ToolUse { name, input, .. } => {
+                    let call = crate::backend::tool_call(name, input);
+                    self.apply(
+                        chat,
+                        Step::ToolStart(
+                            call.kind,
+                            call.target.to_string(),
+                            call.note.map(|n| n.to_string()),
+                        ),
+                        cx,
+                    );
+                }
+                crate::backend::Event::ToolResult { .. } => {
+                    // The oldest agent row still running is the one done.
+                    if let Some(Message::Assistant { blocks }) =
+                        self.chat_mut(chat).and_then(|c| c.messages.last_mut())
+                    {
+                        if let Some(Block::Tool(t)) = blocks.iter_mut().find(|b| {
+                            matches!(b, Block::Tool(t) if is_agent_tool(&t.target) && t.status == ToolStatus::Running)
+                        }) {
+                            t.status = ToolStatus::Done;
+                        }
+                    }
+                }
+                _ => {}
+            }
+            cx.notify();
+            return;
+        }
         let Some(c) = self.chat_mut(chat) else { return };
         let ends_with_assistant = matches!(c.messages.last(), Some(Message::Assistant { .. }));
         if !ends_with_assistant && !matches!(step, Step::End { .. }) {
@@ -4421,6 +4632,8 @@ enum Step {
     Use(&'static str, serde_json::Value, String),
     /// A file the reply made: its card.
     File(FileRef),
+    /// What the engine says about a sub-agent, as it would say it.
+    Agent(crate::backend::Event),
     End {
         seconds: f32,
     },
@@ -4435,6 +4648,7 @@ impl Step {
             Step::Ask(..) => 300,
             Step::Use(..) => 500,
             Step::File(..) => 300,
+            Step::Agent(..) => 380,
             Step::Denied | Step::End { .. } => 250,
         }
     }
@@ -4473,6 +4687,80 @@ const DEMO_CHARTS: &str = "Where the time went:\n\n```mermaid\npie title Time pe
 
 /// The demo's ASCII answer, for checking that box drawing keeps its columns.
 const DEMO_ASCII: &str = "Here it is in ASCII.\n\n```text\n┌──────────────┐     ┌──────────────┐\n│  Forge app   │ ──▶ │   ForgeCLI   │\n└──────┬───────┘     └──────┬───────┘\n       │ stream-json        │ HTTPS\n       ▼                    ▼\n┌──────────────┐     ┌──────────────┐\n│  Chat view   │ ◀── │    Model     │\n└──────────────┘     └──────────────┘\n```\n\nAnd the same without a fence:\n\n+--------+      +---------+\n| Client | ---> | Server  |\n+--------+      +---------+\n     |               |\n     v               v\n  [ UI ]         [ DB ]\n";
+
+/// The demo's sub-agents: three reviewers at once, each with its own steps
+/// and answer, as the engine reports them.
+fn demo_agents() -> Vec<Step> {
+    use crate::backend::Event;
+    use serde_json::json;
+    let start = |id: &str, kind: &str, task: &str, prompt: &str| {
+        Step::Agent(Event::ToolUse {
+            id: id.into(),
+            name: "Task".into(),
+            input: json!({ "subagent_type": kind, "description": task, "prompt": prompt }),
+        })
+    };
+    let tool = |parent: &str, id: &str, name: &str, input: serde_json::Value| {
+        Step::Agent(Event::SubTool {
+            parent: parent.into(),
+            id: id.into(),
+            name: name.into(),
+            input,
+        })
+    };
+    let done = |parent: &str, id: &str| {
+        Step::Agent(Event::SubResult {
+            parent: parent.into(),
+            id: id.into(),
+            is_error: false,
+        })
+    };
+    let say = |parent: &str, text: &str| {
+        Step::Agent(Event::SubText {
+            parent: parent.into(),
+            text: text.into(),
+        })
+    };
+    let end = |id: &str, out: &str| {
+        Step::Agent(Event::ToolResult {
+            id: id.into(),
+            output: out.into(),
+            is_error: false,
+        })
+    };
+    let mut s = words(
+        "I'll split the review across three agents: one per area, working at the same time.",
+        Step::Say,
+    );
+    s.extend([
+        start("a1", "Explore", "Map the chat pipeline", "Find how a message travels from the composer to ForgeCLI and back. List the files and the functions on the path."),
+        start("a2", "code-reviewer", "Review the side panel", "Review src/ui/workbench.rs and src/ui/doc_pane.rs for bugs and dead code. Report findings with file:line."),
+        start("a3", "test-runner", "Check the tests", "Run the test suite, and list any test that is slow or flaky."),
+        tool("a1", "a1t1", "Grep", json!({ "pattern": "fn send", "path": "src" })),
+        tool("a2", "a2t1", "Read", json!({ "file_path": "src/ui/workbench.rs" })),
+        tool("a3", "a3t1", "Bash", json!({ "command": "cargo test", "description": "Run the tests" })),
+        done("a1", "a1t1"),
+        tool("a1", "a1t2", "Read", json!({ "file_path": "src/state.rs" })),
+        done("a2", "a2t1"),
+        tool("a2", "a2t2", "Read", json!({ "file_path": "src/ui/doc_pane.rs" })),
+        done("a1", "a1t2"),
+        tool("a1", "a1t3", "Read", json!({ "file_path": "src/backend.rs" })),
+        say("a2", "workbench.rs looks sound; checking how doc_pane leads back to the file list."),
+        done("a2", "a2t2"),
+        tool("a2", "a2t3", "Grep", json!({ "pattern": "from_panel", "path": "src/ui" })),
+        done("a1", "a1t3"),
+        say("a1", "The path: composer.rs → AppState::send → backend::Session::send (stream-json) → Parser::line → AppState::on_event → the transcript."),
+        end("a1", "The path: composer.rs → AppState::send → backend::Session::send (stream-json) → Parser::line → AppState::on_event → the transcript."),
+        done("a2", "a2t3"),
+        done("a3", "a3t1"),
+        tool("a3", "a3t2", "Bash", json!({ "command": "cargo test -- --report-time", "description": "Time each test" })),
+        end("a2", "No bugs found. One note: the panel's Files list dedupes by name, so two files with the same name in different folders show once."),
+        done("a3", "a3t2"),
+        end("a3", "235 tests pass. The slowest is the real-browser test (about 20 s, ignored by default); none is flaky."),
+    ]);
+    s.extend(words("All three are done: the chat path is mapped, the side panel review found no bugs (one note on duplicate names), and the 235 tests pass.", Step::Say));
+    s
+}
 
 /// The demo's planned task: a plan, its task list, a look in the browser
 /// and the files it made, which the side panel's tabs show.
@@ -4561,6 +4849,11 @@ fn script(prompt: &str) -> Vec<Step> {
     ));
     // Asked to draw something: the reply draws it, as a Mermaid diagram.
     let lower = prompt.to_lowercase();
+    if lower.contains("agent") {
+        s.extend(demo_agents());
+        s.push(Step::End { seconds: 14.2 });
+        return s;
+    }
     if lower.contains("plan") {
         s.extend(demo_plan());
         s.push(Step::End { seconds: 5.2 });

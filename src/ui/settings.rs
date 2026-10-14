@@ -1201,7 +1201,7 @@ impl Settings {
                     .flex()
                     .items_center()
                     .gap(px(12.))
-                    .child(super::forge_cube::finished(t, px(40.), t.colors.primary))
+                    .child(super::logo(40.))
                     .child(
                         div()
                             .flex()

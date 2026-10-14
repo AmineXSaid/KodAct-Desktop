@@ -456,7 +456,6 @@ impl Render for ChatView {
                         last: ix + 1 == chat.messages.len(),
                         first_in_turn: after_user && matches!(m, Message::Assistant { .. }),
                         live_turn: s.busy() && last_user.is_none_or(|u| ix > u),
-                        cube: super::mode_menu::cube_color(&t, s.mode),
                         open_doc: s.doc.clone(),
                         scale: window.scale_factor(),
                         rating: s.ratings.get(&(chat.id, ix)).copied(),
@@ -489,13 +488,7 @@ impl Render for ChatView {
                     message::render(m, &ctx, &t)
                 }
                 None => match &step {
-                    Some((label, since)) => working_line(
-                        &t,
-                        label,
-                        *since,
-                        s_turn_seed(chat),
-                        super::mode_menu::cube_color(&t, s.mode),
-                    ),
+                    Some((label, since)) => working_line(&t, label, *since, s_turn_seed(chat)),
                     None => div().into_any_element(),
                 },
             };
@@ -589,8 +582,7 @@ fn shimmer(label: &str, sweep: f32, t: &crate::theme::Theme) -> StyledText {
     StyledText::new(label.to_string()).with_runs(runs)
 }
 
-/// Forge's working line, as the extension draws it: the cube being
-/// struck into shape (tinted by the mode), then what the reply is doing and
+/// Forge's working line: the logo breathing, then what the reply is doing and
 /// for how long, or, between steps, a verb typing itself in. A light
 /// sweeps across the words.
 fn working_line(
@@ -598,7 +590,6 @@ fn working_line(
     label: &str,
     since: Instant,
     seed: usize,
-    cube: gpui::Hsla,
 ) -> gpui::AnyElement {
     let theme = t.clone();
     let text = label.to_string();
@@ -608,7 +599,7 @@ fn working_line(
         .gap(px(4.))
         .h(px(24.))
         .mt(px(4.))
-        .child(super::forge_cube::cube(t, px(24.), cube, "working-cube"))
+        .child(super::logo_working(24., "working-cube"))
         .child(div().font_weight(FontWeight::MEDIUM).with_animation(
             SharedString::from(format!("working-{label}")),
             Animation::new(Duration::from_millis(2200)).repeat(),

@@ -269,13 +269,8 @@ impl Workspace {
                     .flex_col()
                     .items_center()
                     .gap(t.space.xl)
-                    // The cube above the greeting, both centred, turning slowly.
-                    .child(super::forge_cube::turning(
-                        &t,
-                        px(84.),
-                        t.colors.primary,
-                        "welcome-cube",
-                    ))
+                    // The Forge logo above the greeting, both centred.
+                    .child(super::logo(84.))
                     .child(
                         div()
                             .w_full()
@@ -495,6 +490,13 @@ impl Render for Workspace {
                         tab,
                         messages: s.chat().map_or(&[][..], |c| c.messages.as_slice()),
                         browser: self.browser.clone().into(),
+                        agents: s
+                            .current
+                            .and_then(|c| s.agents.get(&c))
+                            .map_or(&[][..], |r| r.as_slice()),
+                        agents_open: &s.agents_open,
+                        logo: super::cube_image(32., window).into_any_element(),
+                        working: s.busy(),
                         copied: s.copied.clone(),
                         width: fit.width,
                         below: s.doc_below,

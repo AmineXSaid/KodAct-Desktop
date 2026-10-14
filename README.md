@@ -81,7 +81,7 @@ table in step.
     `message`, `markdown`, `composer`, `command_palette`, `onboarding`,
     `shortcuts`, `projects`, `rules_view`, `doc_pane` (a file in the side panel,
     beside or below the chat), `workbench` (the side panel's Plan, Files
-    and Browser tabs), `browser_view` (the live browser in it), `project_map`;
+    and Browser tabs), `browser_view` (the live browser in it), `agents_view` (sub-agents at work), `project_map`;
   - in a chat: `attachments`, `autocomplete`, `context_menu`, `tasks`,
     `approvals`, `versions`, `find_bar`, `terminal`, `file_card`;
   - Settings: `settings` (the window and its nav, General, Models, About),

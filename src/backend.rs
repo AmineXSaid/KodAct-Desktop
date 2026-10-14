@@ -32,6 +32,21 @@ pub enum Event {
     Thinking(String),
     /// A new text or thinking block starts: it doesn't run on from the last.
     Break,
+    /// A sub-agent's own tool call; `parent` is the call that started it.
+    SubTool {
+        parent: String,
+        id: String,
+        name: String,
+        input: Value,
+    },
+    /// A sub-agent's tool call finished.
+    SubResult {
+        parent: String,
+        id: String,
+        is_error: bool,
+    },
+    /// A sub-agent's words (its latest message, which ends as its answer).
+    SubText { parent: String, text: String },
     /// A tool call, with its full input.
     ToolUse {
         id: String,
@@ -425,6 +440,51 @@ impl Parser {
         };
         let nested = v.get("parent_tool_use_id").is_some_and(|p| !p.is_null());
         let mut out = vec![];
+        // A sub-agent's messages: its steps, for the Agents panel.
+        if nested {
+            let parent = v["parent_tool_use_id"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string();
+            let content = v["message"]["content"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            match v["type"].as_str() {
+                Some("assistant") => {
+                    let text: Vec<&str> = content
+                        .iter()
+                        .filter(|b| b["type"] == "text")
+                        .filter_map(|b| b["text"].as_str())
+                        .collect();
+                    if !text.is_empty() {
+                        out.push(Event::SubText {
+                            parent: parent.clone(),
+                            text: text.join("\n"),
+                        });
+                    }
+                    for b in content.iter().filter(|b| b["type"] == "tool_use") {
+                        out.push(Event::SubTool {
+                            parent: parent.clone(),
+                            id: b["id"].as_str().unwrap_or_default().into(),
+                            name: b["name"].as_str().unwrap_or_default().into(),
+                            input: b["input"].clone(),
+                        });
+                    }
+                }
+                Some("user") => {
+                    for b in content.iter().filter(|b| b["type"] == "tool_result") {
+                        out.push(Event::SubResult {
+                            parent: parent.clone(),
+                            id: b["tool_use_id"].as_str().unwrap_or_default().into(),
+                            is_error: b["is_error"].as_bool().unwrap_or(false),
+                        });
+                    }
+                }
+                _ => {}
+            }
+            return out;
+        }
         match v["type"].as_str() {
             Some("stream_event") if !nested => {
                 let ev = &v["event"];
@@ -799,17 +859,38 @@ mod tests {
     }
 
     #[test]
-    fn sub_agent_lines_are_skipped_and_immediate_results_end_no_turn() {
+    fn sub_agent_lines_become_its_steps_and_immediate_results_end_no_turn() {
         let ev = parse(&[
-            json!({"type":"assistant","parent_tool_use_id":"task1","message":{"content":[{"type":"text","text":"inner"}]}}),
+            json!({"type":"assistant","parent_tool_use_id":"task1","message":{"content":[
+                {"type":"text","text":"inner"},
+                {"type":"tool_use","id":"s1","name":"Read","input":{"file_path":"a.rs"}}]}}),
+            json!({"type":"user","parent_tool_use_id":"task1","message":{"content":[
+                {"type":"tool_result","tool_use_id":"s1","content":"x"}]}}),
             json!({"type":"result","immediate":true,"num_turns":0,"is_error":false,"result":"The answer.\n"}),
         ]);
         assert_eq!(
             ev,
-            vec![Event::Immediate {
-                text: "The answer.".into(),
-                is_error: false
-            }]
+            vec![
+                Event::SubText {
+                    parent: "task1".into(),
+                    text: "inner".into()
+                },
+                Event::SubTool {
+                    parent: "task1".into(),
+                    id: "s1".into(),
+                    name: "Read".into(),
+                    input: json!({"file_path":"a.rs"})
+                },
+                Event::SubResult {
+                    parent: "task1".into(),
+                    id: "s1".into(),
+                    is_error: false
+                },
+                Event::Immediate {
+                    text: "The answer.".into(),
+                    is_error: false
+                }
+            ]
         );
     }
 
