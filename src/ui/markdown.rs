@@ -456,7 +456,8 @@ fn runs_streaming(spans: &[Span], t: &Theme, color: gpui::Hsla) -> StyledText {
 }
 
 /// Splits `runs` so the last `n` characters of `text` step down in opacity
-/// toward the end: whole near the start of the tail, faint at its end.
+/// toward the end: whole near the start of the tail, about a third at its
+/// end, still legible.
 fn fade_tail(text: &str, runs: Vec<TextRun>, n: usize) -> Vec<TextRun> {
     let chars = text.chars().count();
     if chars == 0 || n == 0 {
@@ -493,7 +494,7 @@ fn fade_tail(text: &str, runs: Vec<TextRun>, n: usize) -> Vec<TextRun> {
             if a >= b {
                 continue;
             }
-            let fade = 1. - 0.8 * (k + 1) as f32 / tail as f32;
+            let fade = 1. - 0.65 * (k + 1) as f32 / tail as f32;
             let mut r = run.clone();
             r.len = b - a;
             r.color = r.color.opacity(fade);
