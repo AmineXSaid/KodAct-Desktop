@@ -269,6 +269,10 @@ impl McpEditor {
         } else {
             error.map(|e| (t.extra.danger, e))
         };
+        // Nothing to check without a server.
+        if catalog.servers.is_empty() {
+            return out.into_any_element();
+        }
         out.child(
             div()
                 .flex()

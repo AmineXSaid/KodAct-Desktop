@@ -6,19 +6,18 @@
 //!
 //! When a stub is wired, delete its row; the tests keep the table tidy.
 //!
-//! P2 wired Attach and Continue (resumed conversations); what is left here
-//! is either for P3 or only missing in `FORGE_DEMO`.
-//!
-//! History: the Settings stubs the P1 brief lists (Diagnostics, Capability
-//! probe, Profiles, and the twelve placeholder tabs) left the app when
-//! Settings was rebuilt in a1a9a82; Settings now shows only sections that
-//! work. Their specs return with P3.
+//! After the three-step upgrade (P1 to P3), what is left here is blocked:
+//! on something ForgeCLI doesn't do yet, or on a hosted service Forge
+//! doesn't have (each row's `waits_on` says which), or it is missing only
+//! in `FORGE_DEMO`. P3 wired the Settings sections, Diagnostics and Profiles;
+//! the model-side capability probe stays here, waiting on ForgeCLI.
 
-/// Which upgrade step wires a stub, or `Demo` for what only `FORGE_DEMO`
-/// lacks (it has no ForgeCLI behind it).
+/// Why a stub is still a stub.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Step {
-    P3,
+    /// Waits on ForgeCLI or a service (`Stub::waits_on`).
+    Blocked,
+    /// Only `FORGE_DEMO` lacks it: it has no ForgeCLI behind it.
     Demo,
 }
 
@@ -34,8 +33,8 @@ pub struct Stub {
     pub does: &'static str,
     /// What pressing it says now.
     pub toast: &'static str,
-    /// It needs ForgeCLI to do something it can't yet.
-    pub engine: bool,
+    /// What it waits on, in a few words: ForgeCLI support, or a service.
+    pub waits_on: &'static str,
     pub step: Step,
 }
 
@@ -54,23 +53,23 @@ pub const STUBS: &[Stub] = &[
         place: "src/ui/message.rs, #good-* / #bad-*",
         does: "Send a reply's rating, with an optional note, to the team.",
         toast: "Thanks. Your rating is kept on this PC; sending it to the team is coming soon.",
-        engine: true,
-        step: Step::P3,
+        waits_on: "a feedback service for Forge",
+        step: Step::Blocked,
     },
     Stub {
         id: CONTINUE_NO_SESSION,
         place: "src/ui/message.rs, #continue-*",
         does: "Resume a stopped reply whose conversation ForgeCLI never wrote.",
         toast: "ForgeCLI has no record of this conversation, so it can't pick up where it stopped. Send a message to start again.",
-        engine: true,
-        step: Step::P3,
+        waits_on: "ForgeCLI keeping a conversation it never wrote",
+        step: Step::Blocked,
     },
     Stub {
         id: REVERT_DEMO,
         place: "src/ui/message.rs, #revert-*",
         does: "Put files back as they were before a message, from ForgeCLI's checkpoints.",
         toast: "Revert uses ForgeCLI's checkpoints, and the demo has no ForgeCLI behind it.",
-        engine: true,
+        waits_on: "ForgeCLI (the demo has none)",
         step: Step::Demo,
     },
     Stub {
@@ -78,31 +77,31 @@ pub const STUBS: &[Stub] = &[
         place: "src/ui/message.rs, #revert-*",
         does: "Revert changes from a message sent before Forge learnt ForgeCLI's turn ids.",
         toast: "This message has no ForgeCLI checkpoint (it was sent by an older Forge), so its changes can't be reverted from here.",
-        engine: true,
-        step: Step::P3,
+        waits_on: "a checkpoint this old message never had",
+        step: Step::Blocked,
     },
     Stub {
         id: REAPPLY,
         place: "src/ui/message.rs, #reapply-*",
         does: "Apply a reverted change again.",
         toast: "Applying a reverted change again needs ForgeCLI to roll checkpoints forward, which it can't yet. Ask Forge to make the change again.",
-        engine: true,
-        step: Step::P3,
+        waits_on: "ForgeCLI rolling checkpoints forward",
+        step: Step::Blocked,
     },
     Stub {
         id: SHARE_LINK,
         place: "src/ui/chat_menu.rs, #chat-menu-share",
         does: "Upload a conversation and copy a link to it.",
         toast: "Copied the conversation as JSON. Share links are coming soon.",
-        engine: true,
-        step: Step::P3,
+        waits_on: "a hosted service for share links",
+        step: Step::Blocked,
     },
     Stub {
         id: COMPACT_DEMO,
         place: "src/ui/context_menu.rs, #compact (src/state.rs, compact)",
         does: "Summarize the conversation to free context (ForgeCLI's /compact).",
         toast: "Compacting runs in ForgeCLI, and the demo has no ForgeCLI behind it.",
-        engine: true,
+        waits_on: "ForgeCLI (the demo has none)",
         step: Step::Demo,
     },
     Stub {
@@ -110,8 +109,8 @@ pub const STUBS: &[Stub] = &[
         place: "src/ui/diagnostics.rs, #capability-probe",
         does: "Check what a model can do: stream, call tools, read images, think.",
         toast: "Model checks are coming. They need ForgeCLI to report what a model supports. The endpoint's check already sends one real message.",
-        engine: true,
-        step: Step::P3,
+        waits_on: "ForgeCLI reporting what a model supports",
+        step: Step::Blocked,
     },
 ];
 
@@ -123,16 +122,10 @@ pub const RESERVED_ICONS: &[(&str, &str, Step)] = &[];
 impl Stub {
     /// The tooltip line: what it will do, and when.
     pub fn soon_line(&self) -> String {
-        let when = match self.step {
-            Step::P3 => "a later update",
-            Step::Demo => "not in the demo",
-        };
-        let needs = if self.engine && self.step != Step::Demo {
-            " · needs ForgeCLI support"
-        } else {
-            ""
-        };
-        format!("Soon ({when}{needs}) · {}", self.does)
+        match self.step {
+            Step::Blocked => format!("Soon (waits on {}) · {}", self.waits_on, self.does),
+            Step::Demo => format!("Not in the demo · {}", self.does),
+        }
     }
 }
 
@@ -162,6 +155,11 @@ mod tests {
             assert!(
                 !s.place.is_empty() && !s.does.is_empty() && !s.toast.is_empty(),
                 "{} is incomplete",
+                s.id
+            );
+            assert!(
+                !s.waits_on.is_empty(),
+                "{} doesn't say what it waits on",
                 s.id
             );
             // The old decoy wording is gone: a stub says what is coming.
