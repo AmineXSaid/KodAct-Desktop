@@ -317,7 +317,7 @@ impl Render for PluginsEditor {
         out.child(
             div()
                 .text_size(t.text.caption)
-                .text_color(t.colors.text_subtle)
+                .text_color(t.colors.text_muted)
                 .line_height(gpui::relative(1.4))
                 .child("Planned: browsing and installing plugins from a marketplace. It waits on ForgeCLI, which loads plugin folders but has no marketplace yet."),
         )

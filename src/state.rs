@@ -633,6 +633,8 @@ struct Live {
     profile: crate::endpoints::Profile,
     /// Which process this is: events from one that was replaced are dropped.
     generation: u64,
+    /// Started with Expert's output style, which is fixed for a process.
+    expert: bool,
 }
 
 /// A permission question Forge is waiting on, and where its card is.
@@ -2878,6 +2880,14 @@ impl AppState {
                 cx,
             );
         };
+        // Expert's output style is part of the process's system prompt: going
+        // into or out of Expert restarts the chat's ForgeCLI, resuming the
+        // conversation.
+        let expert = self.mode == ModeId::Expert;
+        let resumable = self.chats.iter().any(|c| c.id == id && c.resumable);
+        if resumable && self.sessions.get(&id).is_some_and(|l| l.expert != expert) {
+            self.sessions.remove(&id);
+        }
         if !self.sessions.contains_key(&id) {
             if let Err(e) = self.start_session(id, profile, cx) {
                 return self.show_toast(format!("Couldn't start Forge to compact: {e}"), cx);
@@ -3959,7 +3969,7 @@ impl AppState {
         profile: crate::endpoints::Profile,
         cx: &mut Context<Self>,
     ) -> Result<(), String> {
-        let exe = crate::backend::find_cli().ok_or("ForgeCLI wasn't found. Put forge.exe beside ForgeDesktop.exe, or set FORGE_CLI to its path.")?;
+        let exe = crate::backend::find_cli().ok_or("ForgeCLI wasn't found. Reinstall Forge (it puts forge.exe in the bin folder beside the app), or set FORGE_CLI to its path.")?;
         let (session_id, resumable) = self
             .chats
             .iter()
@@ -3983,16 +3993,14 @@ impl AppState {
                 ]);
             }
         }
-        // The settings profile, layered above the other settings files.
-        if let Some(path) = self
+        // The settings profile, layered above the other settings files, and
+        // Expert's output style on top of it.
+        let profile_path = self
             .settings_profile
             .as_deref()
-            .and_then(crate::setting_profiles::path_of)
-        {
-            launch.args.extend([
-                "--settings".to_string(),
-                path.to_string_lossy().into_owned(),
-            ]);
+            .and_then(crate::setting_profiles::path_of);
+        if let Some(flag) = crate::modes::flag_settings(self.mode, profile_path.as_deref()) {
+            launch.args.extend(["--settings".to_string(), flag]);
         }
         if resumable {
             self.resuming.insert(id);
@@ -4027,6 +4035,7 @@ impl AppState {
                 _pump: pump,
                 profile,
                 generation,
+                expert: self.mode == ModeId::Expert,
             },
         );
         Ok(())

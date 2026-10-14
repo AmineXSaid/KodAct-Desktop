@@ -34,7 +34,7 @@ pub struct ItemContext {
     /// This turn is the one still running.
     pub live_turn: bool,
     /// The colour the cube is painted while this turn runs (the mode's).
-
+    pub cube: gpui::Hsla,
     /// The file open beside the chat, so its card shows it is open.
     pub open_doc: Option<crate::state::FileRef>,
     /// Device pixels per logical pixel, for diagrams drawn to exact size.
@@ -435,12 +435,14 @@ fn user(
 fn turn_header(cx: &ItemContext, t: &Theme) -> AnyElement {
     const CUBE: f32 = 20.;
     let mark = if cx.live_turn {
-        super::logo_working(
+        super::forge_cube::working(
             CUBE,
+            cx.cube,
+            t,
             SharedString::from(format!("turn-cube-{}-{}", cx.chat, cx.index)),
         )
     } else {
-        super::logo(CUBE).into_any_element()
+        super::forge_cube::mark(CUBE, t.extra.cube_brand, t)
     };
     div()
         .flex()

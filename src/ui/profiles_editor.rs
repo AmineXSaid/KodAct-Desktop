@@ -256,7 +256,7 @@ impl Render for ProfilesEditor {
         out.child(
             div()
                 .text_size(t.text.caption)
-                .text_color(t.colors.text_subtle)
+                .text_color(t.colors.text_muted)
                 .line_height(gpui::relative(1.4))
                 .child("A profile file takes the same keys as settings.json. Switching restarts each idle chat's ForgeCLI on its next message, resuming its conversation."),
         )

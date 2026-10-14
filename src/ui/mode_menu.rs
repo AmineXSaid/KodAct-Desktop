@@ -4,11 +4,8 @@
 //! its description, and a check on the current one. Picking Bypass the
 //! first time shows its warning in the menu before it is allowed.
 
-use std::time::Duration;
-
 use gpui::{
-    div, prelude::*, px, Animation, AnimationExt, App, Entity, FontWeight, Hsla, IntoElement,
-    SharedString,
+    div, prelude::*, px, AnimationExt, App, Entity, FontWeight, Hsla, IntoElement, SharedString,
 };
 
 use super::icon;
@@ -256,9 +253,7 @@ pub fn menu(
         )
         .child(rows)
         .children(warning_card)
-        .with_animation(
-            "modes-in",
-            Animation::new(Duration::from_millis(170)).with_easing(gpui::ease_out_quint()),
-            |d, k| d.opacity(k).mb(px(8. - 6. * (1. - k))),
-        )
+        .with_animation("modes-in", super::motion::pop_in(t), |d, k| {
+            d.opacity(k).mb(px(8. - 6. * (1. - k)))
+        })
 }

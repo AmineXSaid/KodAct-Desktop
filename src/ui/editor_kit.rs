@@ -35,7 +35,7 @@ pub fn header(t: &Theme, title: &str, hint: &str, action: Option<AnyElement>) ->
                 .child(
                     div()
                         .text_size(t.text.caption)
-                        .text_color(t.colors.text_subtle)
+                        .text_color(t.colors.text_muted)
                         .line_height(relative(1.4))
                         .child(hint.to_string()),
                 ),
@@ -49,7 +49,7 @@ pub fn group(t: &Theme, label: impl Into<SharedString>) -> gpui::Div {
         .pt(t.space.sm)
         .text_size(t.text.caption)
         .font_weight(FontWeight::MEDIUM)
-        .text_color(t.colors.text_subtle)
+        .text_color(t.colors.text_muted)
         .child(label.into())
 }
 
@@ -203,7 +203,7 @@ pub fn field(t: &Theme, label: &str, hint: Option<&str>, control: AnyElement) ->
         .children(hint.map(|h| {
             div()
                 .text_size(t.text.caption)
-                .text_color(t.colors.text_subtle)
+                .text_color(t.colors.text_muted)
                 .line_height(relative(1.4))
                 .child(h.to_string())
         }))

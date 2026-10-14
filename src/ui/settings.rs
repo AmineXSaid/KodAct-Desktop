@@ -575,7 +575,7 @@ impl Settings {
             .children(hint.map(|h| {
                 div()
                     .text_size(t.text.caption)
-                    .text_color(t.colors.text_subtle)
+                    .text_color(t.colors.text_muted)
                     .line_height(relative(1.4))
                     .child(h.to_string())
             }))
@@ -731,7 +731,7 @@ impl Settings {
             .flex()
             .items_center()
             .gap(px(10.))
-            .child(div().flex_1().text_size(t.text.caption).text_color(t.colors.text_subtle).line_height(relative(1.4)).child("Lets Forge run any tool without asking. Only for throwaway folders or a sandbox."))
+            .child(div().flex_1().text_size(t.text.caption).text_color(t.colors.text_muted).line_height(relative(1.4)).child("Lets Forge run any tool without asking. Only for throwaway folders or a sandbox."))
             .child(if bypass {
                 Self::chip(t, "bypass", "Allowed · turn off", false).on_click(move |_, _, cx| state.update(cx, |s, cx| {
                     s.bypass_allowed = false;
@@ -750,7 +750,7 @@ impl Settings {
             .flex()
             .items_center()
             .gap(px(10.))
-            .child(div().flex_1().min_w_0().text_size(t.text.caption).text_color(t.colors.text_subtle).line_height(relative(1.4)).child("Lets Forge's agents drive the browser in the side panel: open pages and tabs, click, type, read, run scripts, take screenshots. You watch it live. Each step asks first."))
+            .child(div().flex_1().min_w_0().text_size(t.text.caption).text_color(t.colors.text_muted).line_height(relative(1.4)).child("Lets Forge's agents drive the browser in the side panel: open pages and tabs, click, type, read, run scripts, take screenshots. You watch it live. Each step asks first."))
             .child(
                 Self::chip(t, "browser", if browser { "On · turn off" } else { "Turn on" }, browser)
                     .flex_none()
@@ -841,8 +841,8 @@ impl Settings {
                 ),
                 crate::health::Check::Failed { detail }
                 | crate::health::Check::Unreachable { detail } => (t.extra.danger, detail.clone()),
-                _ if syncing => (t.colors.text_subtle, "checking…".into()),
-                _ => (t.colors.text_subtle, "not checked yet".into()),
+                _ if syncing => (t.colors.text_muted, "checking…".into()),
+                _ => (t.colors.text_muted, "not checked yet".into()),
             };
             let in_use = active.as_deref() == Some(p.name.as_str());
             let (use_state, edit_p, rm_name) = (self.state.clone(), p.clone(), p.name.clone());
@@ -905,7 +905,7 @@ impl Settings {
                                     .whitespace_nowrap()
                                     .text_ellipsis()
                                     .text_size(t.text.caption)
-                                    .text_color(t.colors.text_subtle)
+                                    .text_color(t.colors.text_muted)
                                     .child(format!(
                                         "{} · {} · {}",
                                         p.name,
@@ -1150,7 +1150,7 @@ impl Settings {
                     .flex_col()
                     .gap(px(4.))
                     .child(Self::field(t, "API key", &self.ep_key))
-                    .child(div().text_size(t.text.caption).text_color(t.colors.text_subtle).child(if cfg!(windows) { "Kept in Windows Credential Manager, never in a file. Local servers need none." } else { "Kept in a private file in Forge's config folder, never in endpoints.json. Local servers need none." })),
+                    .child(div().text_size(t.text.caption).text_color(t.colors.text_muted).child(if cfg!(windows) { "Kept in Windows Credential Manager, never in a file. Local servers need none." } else { "Kept in a private file in Forge's config folder, never in endpoints.json. Local servers need none." })),
             )
             .child(div().flex().flex_col().gap(px(8.)).child(model_row).when(!self.models.is_empty(), |d| d.child(list)))
             .children(status.map(|(c, i, s)| div().flex().items_start().gap(px(6.)).text_size(t.text.caption).text_color(c).line_height(relative(1.4)).child(div().pt(px(1.)).child(icon(i, t.size.icon_xs, c))).child(div().flex_1().child(s))))
@@ -1179,7 +1179,7 @@ impl Settings {
                     div()
                         .w(px(130.))
                         .text_size(t.text.caption)
-                        .text_color(t.colors.text_subtle)
+                        .text_color(t.colors.text_muted)
                         .child(k.to_string()),
                 )
                 .child(
@@ -1216,7 +1216,7 @@ impl Settings {
                             .child(
                                 div()
                                     .text_size(t.text.caption)
-                                    .text_color(t.colors.text_subtle)
+                                    .text_color(t.colors.text_muted)
                                     .child(format!("Version {}", env!("CARGO_PKG_VERSION"))),
                             ),
                     ),
@@ -1287,7 +1287,7 @@ impl Render for Settings {
                     .pt(px(10.))
                     .pb(px(2.))
                     .text_size(t.text.caption)
-                    .text_color(t.colors.text_subtle)
+                    .text_color(t.colors.text_muted)
                     .child(*group),
             );
             for (this_tab, path, label) in items.iter().copied() {

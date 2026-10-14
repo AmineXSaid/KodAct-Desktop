@@ -479,6 +479,7 @@ impl Render for Workspace {
                 below: s.doc_below,
                 from_panel: s.panel.is_some(),
             };
+            let (pane_width, pane_below) = (fit.width, fit.below);
             let read = s
                 .doc_preview
                 .as_ref()
@@ -520,6 +521,7 @@ impl Render for Workspace {
                     )
                 })
                 .or(panel)
+                .map(|p| super::motion::slide_in(p, pane_width, pane_below, &t))
         };
         let main = if screen == Screen::Rules {
             main.child(self.rules.clone())

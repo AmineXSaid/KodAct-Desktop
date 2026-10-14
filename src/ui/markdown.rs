@@ -555,7 +555,7 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                 .border_l_2()
                 .border_color(t.colors.border)
                 .pl(t.space.md)
-                .child(runs(&spans, t, FontWeight::NORMAL, t.colors.text_body))
+                .child(runs(&spans, t, FontWeight::NORMAL, t.colors.text))
                 .into_any_element(),
             Block::Rule => div()
                 .h(t.size.hairline)

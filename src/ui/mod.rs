@@ -22,6 +22,7 @@ pub mod file_card;
 pub mod file_icon;
 pub mod file_mark;
 pub mod find_bar;
+pub mod forge_cube;
 pub mod guide;
 pub mod hooks_editor;
 pub mod markdown;
@@ -140,30 +141,6 @@ pub fn logo(size: f32) -> gpui::Img {
     gpui::img(SharedString::from(format!("images/cube-{file}.png")))
         .size(gpui::px(size))
         .flex_none()
-}
-
-/// The logo at work: it breathes (a slow rise and fall, a little light) while
-/// Forge works. Reduced motion: still.
-pub fn logo_working(size: f32, id: impl Into<gpui::ElementId>) -> gpui::AnyElement {
-    use gpui::AnimationExt as _;
-    if motion::reduced_motion() {
-        return logo(size).into_any_element();
-    }
-    gpui::div()
-        .size(gpui::px(size))
-        .flex_none()
-        .relative()
-        .child(logo(size))
-        .with_animation(
-            id,
-            gpui::Animation::new(std::time::Duration::from_millis(1600)).repeat(),
-            move |d, k| {
-                let wave = (k * std::f32::consts::TAU).sin();
-                d.top(gpui::px(-1.5 * wave))
-                    .opacity(0.78 + 0.22 * (0.5 + 0.5 * wave))
-            },
-        )
-        .into_any_element()
 }
 
 /// Your avatar, drawn `size` px square at this screen's density.

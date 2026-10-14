@@ -35,7 +35,7 @@ pub struct Colors {
 
 #[derive(Clone, Copy)]
 pub struct TypeScale {
-    pub caption: Pixels,    // 11.5
+    pub caption: Pixels,    // 12: whole pixels render crisp
     pub body_sm: Pixels,    // 13 – default UI text in a desktop app
     pub body: Pixels,       // 14 – the composer's text
     pub subheading: Pixels, // 18
@@ -94,7 +94,7 @@ impl Theme {
             is_dark,
             colors,
             text: TypeScale {
-                caption: px(11.5),
+                caption: px(12.),
                 body_sm: px(13.),
                 body: px(14.),
                 subheading: px(18.),
@@ -235,6 +235,14 @@ pub struct ExtraColors {
     pub mode_plan: Hsla,   // Plan
     pub mode_bypass: Hsla, // Bypass permissions
     pub mode_expert: Hsla, // Expert
+    // Forge's cube, as Forge for VS Code paints it (forge-tokens.css): the
+    // brand purple, lit with white and shaded with near-black; raw stock in
+    // graphite; sparks in orange.
+    pub cube_brand: Hsla,
+    pub cube_light: Hsla,
+    pub cube_dark: Hsla,
+    pub cube_stock: Hsla,
+    pub cube_spark: Hsla,
     // A model's ping chip: answered fast, fair, slow (never red).
     pub ping_fast_bg: Hsla,
     pub ping_fast_fg: Hsla,
@@ -271,6 +279,11 @@ impl ExtraColors {
                 mode_plan: rgb(0x428fdc).into(),
                 mode_bypass: rgb(0xec5941).into(),
                 mode_expert: rgb(0xd99530).into(),
+                cube_brand: rgb(0x9475db).into(), // Pajamas purple 400
+                cube_light: rgb(0xffffff).into(),
+                cube_dark: rgb(0x050408).into(),
+                cube_stock: rgb(0x646163).into(),
+                cube_spark: rgb(0xd99530).into(),
                 ping_fast_bg: hsla(148. / 360., 0.78, 0.29, 0.22),
                 ping_fast_fg: rgb(0x91d4a8).into(),
                 ping_fair_bg: hsla(30. / 360., 0.04, 0.92, 0.1),
@@ -303,6 +316,11 @@ impl ExtraColors {
                 mode_plan: rgb(0x1f75cb).into(),
                 mode_bypass: rgb(0xa32c12).into(),
                 mode_expert: rgb(0xc17d10).into(),
+                cube_brand: rgb(0x7759c2).into(), // Pajamas brand purple 02p
+                cube_light: rgb(0xffffff).into(),
+                cube_dark: rgb(0x050408).into(),
+                cube_stock: rgb(0x646163).into(),
+                cube_spark: rgb(0xd99530).into(),
                 ping_fast_bg: rgb(0xc3e6cd).into(),
                 ping_fast_fg: rgb(0x306440).into(),
                 ping_fair_bg: rgb(0xdcdbd9).into(),
@@ -452,9 +470,11 @@ pub struct Sizes {
     pub composer_width: Pixels,     // 560: the composer's widest, wherever it sits
     pub palette: Pixels,            // command palette width
     pub hairline: Pixels,           // 1
-    pub line_height_chat: f32,      // 1.45 for prose
-    pub chat_text: Pixels,          // 13.5: replies and your messages
+    pub line_height_chat: f32,      // 20px lines at 14px: whole pixels, crisp
+    pub chat_text: Pixels,          // 14: replies and your messages, on whole pixels
     pub greeting: Pixels,           // 28: the new-chat greeting, in the display serif
+    pub panel_in_ms: u64,           // 280: the side panel sliding in
+    pub pop_in_ms: u64,             // 160: a menu or dialog rising into place
     pub doc_text: Pixels,           // 15: a document in the side panel
     pub doc_title: Pixels,          // 28: its title, in the display serif
     pub line_height_doc: f32,       // 1.65: a document's leading
@@ -488,9 +508,11 @@ impl Default for Sizes {
             composer_width: px(560.),
             palette: px(560.),
             hairline: px(1.),
-            line_height_chat: 1.45,
-            chat_text: px(13.5),
+            line_height_chat: 20. / 14.,
+            chat_text: px(14.),
             greeting: px(28.),
+            panel_in_ms: 280,
+            pop_in_ms: 160,
             doc_text: px(15.),
             doc_title: px(28.),
             line_height_doc: 1.65,

@@ -257,7 +257,7 @@ impl McpEditor {
             out = out.child(
                 div()
                     .text_size(t.text.caption)
-                    .text_color(t.colors.text_subtle)
+                    .text_color(t.colors.text_muted)
                     .child("The web browser (Settings → General) adds Forge's browser tools for each chat too; it isn't saved in these files."),
             );
         }
@@ -351,15 +351,15 @@ impl McpEditor {
             )
         } else if server.disabled {
             (
-                t.colors.text_subtle,
+                t.colors.text_muted,
                 "Turned off (disabledMcpjsonServers).".into(),
             )
         } else {
             match checked {
                 Some(s) if s.starts_with("connected") => (t.extra.success, s),
                 Some(s) if s.starts_with("failed") => (t.extra.danger, s),
-                Some(s) => (t.colors.text_subtle, s),
-                None => (t.colors.text_subtle, "Not checked yet".into()),
+                Some(s) => (t.colors.text_muted, s),
+                None => (t.colors.text_muted, "Not checked yet".into()),
             }
         };
         let auth = match &server.transport {

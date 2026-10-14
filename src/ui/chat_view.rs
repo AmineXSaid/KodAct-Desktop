@@ -483,12 +483,19 @@ impl Render for ChatView {
                             vec![]
                         },
                         versions_open: s.versions_open == Some((chat.id, ix)),
+                        cube: super::forge_cube::tint(s.mode, &t),
                         sources: s.diagram_code.clone(),
                     };
                     message::render(m, &ctx, &t)
                 }
                 None => match &step {
-                    Some((label, since)) => working_line(&t, label, *since, s_turn_seed(chat)),
+                    Some((label, since)) => working_line(
+                        &t,
+                        label,
+                        *since,
+                        s_turn_seed(chat),
+                        super::forge_cube::tint(s.mode, &t),
+                    ),
                     None => div().into_any_element(),
                 },
             };
@@ -590,6 +597,7 @@ fn working_line(
     label: &str,
     since: Instant,
     seed: usize,
+    cube: gpui::Hsla,
 ) -> gpui::AnyElement {
     let theme = t.clone();
     let text = label.to_string();
@@ -599,7 +607,7 @@ fn working_line(
         .gap(px(4.))
         .h(px(24.))
         .mt(px(4.))
-        .child(super::logo_working(24., "working-cube"))
+        .child(super::forge_cube::working(24., cube, t, "working-cube"))
         .child(div().font_weight(FontWeight::MEDIUM).with_animation(
             SharedString::from(format!("working-{label}")),
             Animation::new(Duration::from_millis(2200)).repeat(),

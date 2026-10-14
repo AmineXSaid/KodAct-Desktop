@@ -36,11 +36,11 @@ pub enum ModeId {
     Bypass,
 }
 
-/// The output style Expert turns on (from the bundled plugin).
-#[cfg_attr(not(test), allow(dead_code))] // ForgeCLI has no output styles yet, so Expert runs as Manual
-pub const EXPERT_OUTPUT_STYLE: &str = "forge:Expert";
+/// The output style Expert turns on (`output-styles/expert.md` in the
+/// bundled plugin; ForgeCLI finds plugin styles by their plain name).
+pub const EXPERT_OUTPUT_STYLE: &str = "Expert";
 /// Its text, for when the CLI is launched with Forge's plugin.
-#[cfg_attr(not(test), allow(dead_code))] // ForgeCLI has no output styles yet, so Expert runs as Manual
+#[cfg_attr(not(test), allow(dead_code))]
 pub const EXPERT_STYLE_MD: &str = include_str!("../assets/forge-plugin/output-styles/expert.md");
 
 impl ModeId {
@@ -98,7 +98,6 @@ impl ModeId {
     }
 
     /// The session's output style: Expert's, else none (cleared).
-    #[cfg_attr(not(test), allow(dead_code))] // ForgeCLI has no output styles yet, so Expert runs as Manual
     pub fn output_style(self) -> Option<&'static str> {
         (self == ModeId::Expert).then_some(EXPERT_OUTPUT_STYLE)
     }
@@ -135,6 +134,22 @@ pub fn initial(setting: ModeId, bypass_allowed: bool) -> ModeId {
     }
 }
 
+/// `--settings` for a chat's process: the settings profile's file as it is,
+/// or, in Expert, the profile's settings (if any) with Expert's output style
+/// over them, as JSON. None: no flag settings.
+pub fn flag_settings(mode: ModeId, profile: Option<&std::path::Path>) -> Option<String> {
+    let Some(style) = mode.output_style() else {
+        return profile.map(|p| p.to_string_lossy().into_owned());
+    };
+    let mut settings = profile
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        .filter(serde_json::Value::is_object)
+        .unwrap_or_else(|| serde_json::json!({}));
+    settings["outputStyle"] = serde_json::Value::from(style);
+    Some(settings.to_string())
+}
+
 /// The flags a chat's `forge` process starts with for `mode`. While Bypass
 /// is allowed the switch is always passed, so the mode can change mid-session.
 pub fn cli_args(mode: ModeId, bypass_allowed: bool) -> Vec<String> {
@@ -165,7 +180,7 @@ mod tests {
     #[test]
     fn expert_is_manual_with_its_style() {
         assert_eq!(ModeId::Expert.permission(), Permission::Default);
-        assert_eq!(ModeId::Expert.output_style(), Some("forge:Expert"));
+        assert_eq!(ModeId::Expert.output_style(), Some("Expert"));
         assert_eq!(ModeId::Manual.output_style(), None);
         assert!(EXPERT_STYLE_MD.contains("name: Expert"));
     }
@@ -189,5 +204,28 @@ mod tests {
         assert!(ModeId::Manual.kept(false) && ModeId::AcceptEdits.kept(false));
         assert!(!ModeId::Plan.kept(true) && !ModeId::Expert.kept(true));
         assert!(ModeId::Bypass.kept(true) && !ModeId::Bypass.kept(false));
+    }
+
+    #[test]
+    fn expert_launches_with_its_output_style_over_the_profile() {
+        assert_eq!(flag_settings(ModeId::Manual, None), None);
+        assert_eq!(
+            flag_settings(ModeId::Expert, None).as_deref(),
+            Some(r#"{"outputStyle":"Expert"}"#)
+        );
+        let dir = std::env::temp_dir().join(format!("forge-modes-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let profile = dir.join("work.json");
+        std::fs::write(&profile, r#"{"model":"m","outputStyle":"Terse"}"#).unwrap();
+        assert_eq!(
+            flag_settings(ModeId::Plan, Some(&profile)),
+            Some(profile.to_string_lossy().into_owned()),
+            "other modes pass the profile's file"
+        );
+        let v: serde_json::Value =
+            serde_json::from_str(&flag_settings(ModeId::Expert, Some(&profile)).unwrap()).unwrap();
+        assert_eq!(v["outputStyle"], "Expert");
+        assert_eq!(v["model"], "m", "the profile's settings stay");
+        std::fs::remove_dir_all(dir).ok();
     }
 }

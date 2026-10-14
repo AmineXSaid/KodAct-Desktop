@@ -25,9 +25,9 @@ Scale: 4px (small), 8px (buttons, rows), 12px (cards, popovers), 16px (the compo
 Interface: Hanken Grotesk (Anthropic Sans when installed or in Forge's `fonts` folder; never bundled)
 Display: Source Serif 4 Display (the greeting)
 Code: JetBrains Mono
-Scale: 11.5 caption, 13 UI and chat, 14 input, 18 subheading, 20 heading, 28 greeting
+Scale: 12 caption, 13 UI and chat, 14 input, 18 subheading, 20 heading, 28 greeting
 Weights: 400, 500 (labels, buttons), 600 (headings, the project name)
-Prose line height: 1.45
+Prose line height: 1.4285715
 
 ### Icons
 Lucide, 2px stroke as drawn. Sizes: 12 / 14 / 16 / 20 only.
@@ -133,7 +133,7 @@ Contrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of w
 ### Sidebar Row
 - Height: 30px, radius 8px
 - Selected: `selected` with a hairline, 500 weight
-- Group labels: 11.5px caption
+- Group labels: 12px caption
 
 ## Decisions
 

@@ -200,7 +200,7 @@ impl Render for SandboxEditor {
         .child(
             div()
                 .text_size(t.text.caption)
-                .text_color(t.colors.text_subtle)
+                .text_color(t.colors.text_muted)
                 .child(match winner {
                     Some((l, m)) => format!("New chats here use {m}, from {}.", l.hint()),
                     None => "No file sets a mode, so commands aren't sandboxed: Forge asks before each one that changes something.".to_string(),

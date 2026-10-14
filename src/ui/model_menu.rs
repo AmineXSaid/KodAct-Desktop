@@ -434,11 +434,9 @@ pub fn render(
         )
         .children(effort)
         .child(setup_links(t))
-        .with_animation(
-            "models-in",
-            Animation::new(Duration::from_millis(170)).with_easing(gpui::ease_out_quint()),
-            |d, k| d.opacity(k).mb(px(8. - 6. * (1. - k))),
-        )
+        .with_animation("models-in", super::motion::pop_in(t), |d, k| {
+            d.opacity(k).mb(px(8. - 6. * (1. - k)))
+        })
 }
 
 /// Under the list: the setup guide and the file, one click each.

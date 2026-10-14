@@ -191,7 +191,7 @@ impl SkillsEditor {
         out = out.child(
             div()
                 .text_size(t.text.caption)
-                .text_color(t.colors.text_subtle)
+                .text_color(t.colors.text_muted)
                 .child("ForgeCLI also brings its own: /code-review, /security-review, /simplify, /verify, /init and more. A skill of yours with the same name replaces one."),
         );
         let mut links = div().flex().gap(px(14.)).pt(px(4.));

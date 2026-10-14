@@ -3,11 +3,12 @@
 ;   makensis -DAPP_EXE=<ForgeDesktop.exe> -DCLI_EXE=<forge.exe> -DVERSION=0.1.0 \
 ;            -DOUT=<Forge-Setup.exe> installer/forge.nsi
 ;
-; Built by installer/build.sh. Lays out:
-;   <Program Files>\Forge\Forge.exe        the desktop app
-;   <Program Files>\Forge\bin\forge.exe    ForgeCLI (the app finds it in bin\)
-; plus Start menu and desktop shortcuts, an optional PATH entry for `forge`
-; (the current user's), and an uninstaller in Apps & features.
+; Built by installer/build.sh. A per-user install: no administrator rights,
+; no UAC prompt. Lays out:
+;   %LOCALAPPDATA%\Programs\Forge\Forge.exe        the desktop app
+;   %LOCALAPPDATA%\Programs\Forge\bin\forge.exe    ForgeCLI (the app finds it in bin\)
+; plus the user's Start menu and desktop shortcuts, an optional PATH entry for
+; `forge` (the user's), and an uninstaller in Apps & features (the user's).
 
 ; A 64-bit installer: Forge runs on 64-bit Windows only.
 Target amd64-unicode
@@ -31,9 +32,9 @@ SetCompressor /SOLID lzma
 
 Name "${NAME}"
 OutFile "${OUT}"
-InstallDir "$PROGRAMFILES64\Forge"
-InstallDirRegKey HKLM "Software\Forge" "InstallDir"
-RequestExecutionLevel admin
+InstallDir "$LOCALAPPDATA\Programs\Forge"
+InstallDirRegKey HKCU "Software\Forge" "InstallDir"
+RequestExecutionLevel user
 BrandingText "Forge ${VERSION}"
 
 VIProductVersion "${VERSION}.0"
@@ -68,18 +69,18 @@ Section "Forge desktop app" SecApp
   File "/oname=forge.ico" "..\assets\forge.ico"
 
   WriteUninstaller "$INSTDIR\Uninstall.exe"
-  WriteRegStr HKLM "Software\Forge" "InstallDir" "$INSTDIR"
-  WriteRegStr HKLM "${UNINST_KEY}" "DisplayName" "Forge"
-  WriteRegStr HKLM "${UNINST_KEY}" "DisplayVersion" "${VERSION}"
-  WriteRegStr HKLM "${UNINST_KEY}" "Publisher" "Forge"
-  WriteRegStr HKLM "${UNINST_KEY}" "DisplayIcon" "$INSTDIR\Forge.exe,0"
-  WriteRegStr HKLM "${UNINST_KEY}" "InstallLocation" "$INSTDIR"
-  WriteRegStr HKLM "${UNINST_KEY}" "UninstallString" '"$INSTDIR\Uninstall.exe"'
-  WriteRegStr HKLM "${UNINST_KEY}" "QuietUninstallString" '"$INSTDIR\Uninstall.exe" /S'
-  WriteRegDWORD HKLM "${UNINST_KEY}" "NoModify" 1
-  WriteRegDWORD HKLM "${UNINST_KEY}" "NoRepair" 1
+  WriteRegStr HKCU "Software\Forge" "InstallDir" "$INSTDIR"
+  WriteRegStr HKCU "${UNINST_KEY}" "DisplayName" "Forge"
+  WriteRegStr HKCU "${UNINST_KEY}" "DisplayVersion" "${VERSION}"
+  WriteRegStr HKCU "${UNINST_KEY}" "Publisher" "Forge"
+  WriteRegStr HKCU "${UNINST_KEY}" "DisplayIcon" "$INSTDIR\Forge.exe,0"
+  WriteRegStr HKCU "${UNINST_KEY}" "InstallLocation" "$INSTDIR"
+  WriteRegStr HKCU "${UNINST_KEY}" "UninstallString" '"$INSTDIR\Uninstall.exe"'
+  WriteRegStr HKCU "${UNINST_KEY}" "QuietUninstallString" '"$INSTDIR\Uninstall.exe" /S'
+  WriteRegDWORD HKCU "${UNINST_KEY}" "NoModify" 1
+  WriteRegDWORD HKCU "${UNINST_KEY}" "NoRepair" 1
 
-  SetShellVarContext all
+  SetShellVarContext current
   CreateShortcut "$SMPROGRAMS\Forge.lnk" "$INSTDIR\Forge.exe" "" "$INSTDIR\Forge.exe" 0
 SectionEnd
 
@@ -95,7 +96,7 @@ Section "Add forge to PATH" SecPath
 SectionEnd
 
 Section "Desktop shortcut" SecDesktop
-  SetShellVarContext all
+  SetShellVarContext current
   CreateShortcut "$DESKTOP\Forge.lnk" "$INSTDIR\Forge.exe" "" "$INSTDIR\Forge.exe" 0
 SectionEnd
 
@@ -153,7 +154,7 @@ Function AddToPath
     ${EndIf}
   ${EndIf}
   WriteRegExpandStr HKCU "${ENV_KEY}" "Path" $1
-  WriteRegStr HKLM "Software\Forge" "AddedToPath" "$0"
+  WriteRegStr HKCU "Software\Forge" "AddedToPath" "$0"
   SendMessage ${HWND_BROADCAST} ${WM_SETTINGCHANGE} 0 "STR:Environment" /TIMEOUT=2000
   done:
   Pop $2
@@ -241,13 +242,13 @@ FunctionEnd
 ; ------------------------------------------------------------------ uninstall
 
 Section "Uninstall"
-  ReadRegStr $0 HKLM "Software\Forge" "AddedToPath"
+  ReadRegStr $0 HKCU "Software\Forge" "AddedToPath"
   ${If} $0 != ""
     Push $0
     Call un.RemoveFromPath
   ${EndIf}
 
-  SetShellVarContext all
+  SetShellVarContext current
   Delete "$SMPROGRAMS\Forge.lnk"
   Delete "$DESKTOP\Forge.lnk"
 
@@ -258,6 +259,6 @@ Section "Uninstall"
   Delete "$INSTDIR\Uninstall.exe"
   RMDir "$INSTDIR"
 
-  DeleteRegKey HKLM "${UNINST_KEY}"
-  DeleteRegKey HKLM "Software\Forge"
+  DeleteRegKey HKCU "${UNINST_KEY}"
+  DeleteRegKey HKCU "Software\Forge"
 SectionEnd

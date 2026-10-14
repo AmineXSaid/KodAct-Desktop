@@ -2,12 +2,13 @@
 
 `installer/build.sh` cross-compiles the desktop app and ForgeCLI for Windows
 (MinGW, `x86_64-pc-windows-gnu`) and packs both with NSIS (`forge.nsi`) into
-`target/installer/Forge-Setup-<version>.exe`, a 64-bit installer:
+`target/installer/Forge-Setup-<version>.exe`, a 64-bit per-user installer
+(no administrator rights, no UAC prompt):
 
 | Installed | Where |
 |---|---|
-| The desktop app | `C:\Program Files\Forge\Forge.exe` |
-| ForgeCLI | `C:\Program Files\Forge\bin\forge.exe` (the app finds it there) |
+| The desktop app | `%LOCALAPPDATA%\Programs\Forge\Forge.exe` |
+| ForgeCLI | `%LOCALAPPDATA%\Programs\Forge\bin\forge.exe` (the app finds it there) |
 | Shortcuts | Start menu; desktop (optional) |
 | `forge` on PATH | the user's PATH (optional, on by default) |
 | Uninstaller | `Uninstall.exe`, listed in Apps & features |
