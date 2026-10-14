@@ -15,6 +15,7 @@ macro_rules! icons {
 
 icons!(
     "archive",
+    "unplug",
     "arrow-left",
     "panel-right",
     "arrow-right",

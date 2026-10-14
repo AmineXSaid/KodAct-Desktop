@@ -29,6 +29,8 @@ pub struct Workspace {
     chat: Entity<ChatView>,
     composer: Entity<Composer>,
     palette: Entity<CommandPalette>,
+    /// The remote quick pick, above the status bar's remote indicator.
+    remote_picker: Entity<super::remote_menu::RemotePicker>,
     onboarding: Entity<Onboarding>,
     rules: Entity<RulesView>,
     projects: Entity<ProjectsView>,
@@ -52,6 +54,8 @@ impl Workspace {
         let chat = cx.new(|cx| ChatView::new(state.clone(), cx));
         let composer = cx.new(|cx| Composer::new(state.clone(), window, cx));
         let palette = cx.new(|cx| CommandPalette::new(state.clone(), window, cx));
+        let remote_picker =
+            cx.new(|cx| super::remote_menu::RemotePicker::new(state.clone(), window, cx));
         let onboarding = cx.new(|cx| Onboarding::new(state.clone(), window, cx));
         let rules = cx.new(|cx| RulesView::new(state.clone(), window, cx));
         let projects = cx.new(|cx| ProjectsView::new(state.clone(), composer.clone(), cx));
@@ -67,6 +71,7 @@ impl Workspace {
             chat,
             composer,
             palette,
+            remote_picker,
             onboarding,
             rules,
             projects,
@@ -935,6 +940,11 @@ impl Render for Workspace {
             }))
             .on_action(cx.listener(|_, _: &Quit, _, cx| cx.quit()))
             .child(self.title_bar(cx))
+            .children(super::status_bar::banner(
+                self.state.read(cx),
+                self.state.clone(),
+                &t,
+            ))
             .when(onboarding, |d| d.child(self.onboarding.clone()))
             .when(!onboarding, |d| {
                 d.child(
@@ -945,6 +955,12 @@ impl Render for Workspace {
                         .when(sidebar_open, |d| d.child(self.sidebar.clone()))
                         .child(main),
                 )
+                .child(super::status_bar::render(
+                    self.state.read(cx),
+                    self.state.clone(),
+                    self.remote_picker.clone(),
+                    &t,
+                ))
             })
             .when(palette_open, |d| d.child(self.palette.clone()))
             .child(self.side.clone())

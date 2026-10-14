@@ -473,6 +473,7 @@ pub struct Sizes {
     pub line_height_chat: f32,      // 20px lines at 14px: whole pixels, crisp
     pub chat_text: Pixels,          // 14: replies and your messages, on whole pixels
     pub greeting: Pixels,           // 28: the new-chat greeting, in the display serif
+    pub statusbar: Pixels,          // 26: the status bar at the foot of the window
     pub panel_in_ms: u64,           // 280: the side panel sliding in
     pub pop_in_ms: u64,             // 160: a menu or dialog rising into place
     pub doc_text: Pixels,           // 15: a document in the side panel
@@ -511,6 +512,7 @@ impl Default for Sizes {
             line_height_chat: 20. / 14.,
             chat_text: px(14.),
             greeting: px(28.),
+            statusbar: px(26.),
             panel_in_ms: 280,
             pop_in_ms: 160,
             doc_text: px(15.),

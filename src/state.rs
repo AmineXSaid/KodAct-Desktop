@@ -929,6 +929,13 @@ pub struct AppState {
     remote_ready: std::collections::HashMap<crate::remote::Target, crate::remote::Provisioned>,
     /// A connection being made: the target and what it is doing now.
     pub remote_busy: Option<(crate::remote::Target, SharedString)>,
+    /// The current remote stopped answering: how many reconnection tries so
+    /// far (the banner and the indicator say "Reconnecting…").
+    pub remote_lost: Option<(crate::remote::Target, u32)>,
+    /// Checks the current remote answers, every 15 s (`remote_heartbeat`).
+    remote_heartbeat: Option<Task<()>>,
+    /// The last connection that failed, and why (the indicator turns red).
+    pub remote_failed: Option<(crate::remote::Target, SharedString)>,
     /// SSH hosts whose new key the person agreed to trust.
     trusted_hosts: std::collections::HashSet<String>,
     /// The remote indicator's menu, while it's open.
@@ -1137,6 +1144,9 @@ impl AppState {
             project_dir,
             remote_ready: Default::default(),
             remote_busy: None,
+            remote_failed: None,
+            remote_lost: None,
+            remote_heartbeat: None,
             trusted_hosts: Default::default(),
             remote_menu: None,
             browser_http: None,
@@ -4579,6 +4589,7 @@ impl AppState {
     ) {
         let extra = self.remote_extra(&target);
         let (tx, rx) = async_channel::unbounded::<String>();
+        self.remote_failed = None;
         self.remote_busy = Some((
             target.clone(),
             format!("Connecting to {}…", target.label()).into(),
@@ -4611,7 +4622,11 @@ impl AppState {
                 s.remote_busy = None;
                 match result {
                     Ok(ready) => {
+                        if s.remote_lost.as_ref().is_some_and(|(t, _)| *t == target) {
+                            s.remote_lost = None;
+                        }
                         s.remote_ready.insert(target, ready);
+                        s.ensure_heartbeat(cx);
                         if let Some((id, text, attachments)) = then {
                             s.replies.remove(&id);
                             s.send_to_forge(id, text, attachments, cx);
@@ -4622,6 +4637,8 @@ impl AppState {
                             let menu = s.remote_menu.get_or_insert_with(Default::default);
                             menu.host_key =
                                 Some((target.clone(), host.clone(), fingerprint.clone()));
+                        } else {
+                            s.remote_failed = Some((target.clone(), e.to_string().into()));
                         }
                         match then {
                             Some((id, ..)) => {
@@ -4814,6 +4831,8 @@ impl AppState {
     /// Back to this machine: the first local project becomes current.
     pub fn close_remote(&mut self, cx: &mut Context<Self>) {
         self.remote_menu = None;
+        self.remote_failed = None;
+        self.remote_lost = None;
         if let Some(id) = self
             .projects
             .iter()
@@ -4824,6 +4843,88 @@ impl AppState {
             self.new_chat(cx);
         }
         cx.notify();
+    }
+
+    /// "Retry" on the connection banner: connect again now.
+    pub fn retry_remote(&mut self, cx: &mut Context<Self>) {
+        if let Some(r) = self.current_remote() {
+            self.remote_lost = None;
+            self.connect(r.target, None, cx);
+        }
+    }
+
+    /// Every 15 s, check the current remote still answers. When it stops,
+    /// say so and try again with a growing pause (1, 2, 4 … 30 s); after
+    /// `MAX` tries it shows as failed until you retry.
+    fn ensure_heartbeat(&mut self, cx: &mut Context<Self>) {
+        const MAX: u32 = 8;
+        if self.remote_heartbeat.is_some() {
+            return;
+        }
+        let task = cx.spawn(async move |this, cx| {
+            let mut pause = Duration::from_secs(15);
+            loop {
+                cx.background_executor().timer(pause).await;
+                let Ok(Some((target, extra))) = this.update(cx, |s, _| {
+                    let r = s.current_remote()?;
+                    let watched = s.remote_ready.contains_key(&r.target)
+                        || s.remote_lost
+                            .as_ref()
+                            .is_some_and(|(t, n)| *t == r.target && *n < MAX);
+                    watched.then(|| (r.target.clone(), s.remote_extra(&r.target)))
+                }) else {
+                    if this.update(cx, |_, _| ()).is_err() {
+                        return;
+                    }
+                    pause = Duration::from_secs(15);
+                    continue;
+                };
+                let probe = target.clone();
+                let ok = cx
+                    .background_spawn(async move { crate::remote::probe(&probe, &extra) })
+                    .await;
+                let next = this.update(cx, |s, cx| {
+                    let next = match ok {
+                        Ok(_) => {
+                            if s.remote_lost.take().is_some() {
+                                s.remote_busy = None;
+                                s.remote_failed = None;
+                                s.show_toast(format!("Reconnected to {}.", target.label()), cx);
+                                // Ready again (ForgeCLI is still there: no upload).
+                                s.connect(target.clone(), None, cx);
+                            }
+                            Duration::from_secs(15)
+                        }
+                        Err(e) => {
+                            // Chats there start again (resuming) once it answers.
+                            s.remote_ready.remove(&target);
+                            let tries = s.remote_lost.as_ref().map_or(0, |(_, n)| *n) + 1;
+                            if tries >= MAX {
+                                s.remote_lost = Some((target.clone(), tries));
+                                s.remote_busy = None;
+                                s.remote_failed = Some((target.clone(), e.to_string().into()));
+                                Duration::from_secs(15)
+                            } else {
+                                s.remote_lost = Some((target.clone(), tries));
+                                s.remote_busy = Some((
+                                    target.clone(),
+                                    format!("Reconnecting to {}…", target.label()).into(),
+                                ));
+                                Duration::from_secs(1 << (tries - 1).min(5))
+                                    .min(Duration::from_secs(30))
+                            }
+                        }
+                    };
+                    cx.notify();
+                    next
+                });
+                match next {
+                    Ok(p) => pause = p,
+                    Err(_) => return,
+                }
+            }
+        });
+        self.remote_heartbeat = Some(task);
     }
 
     /// The browser's tool server over HTTP, started on first use: (port, token).
