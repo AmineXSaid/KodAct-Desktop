@@ -46,6 +46,7 @@ pub const REVERT_NO_CHECKPOINT: &str = "revert-no-checkpoint";
 pub const REAPPLY: &str = "reapply";
 pub const SHARE_LINK: &str = "share-link";
 pub const COMPACT_DEMO: &str = "compact-demo";
+pub const CAPABILITY_PROBE: &str = "capability-probe";
 
 pub const STUBS: &[Stub] = &[
     Stub {
@@ -103,6 +104,14 @@ pub const STUBS: &[Stub] = &[
         toast: "Compacting runs in ForgeCLI, and the demo has no ForgeCLI behind it.",
         engine: true,
         step: Step::Demo,
+    },
+    Stub {
+        id: CAPABILITY_PROBE,
+        place: "src/ui/diagnostics.rs, #capability-probe",
+        does: "Check what a model can do: stream, call tools, read images, think.",
+        toast: "Model checks are coming. They need ForgeCLI to report what a model supports. The endpoint's check already sends one real message.",
+        engine: true,
+        step: Step::P3,
     },
 ];
 
@@ -171,6 +180,7 @@ mod tests {
             include_str!("state.rs"),
             include_str!("ui/chat_menu.rs"),
             include_str!("ui/context_menu.rs"),
+            include_str!("ui/diagnostics.rs"),
         ];
         let consts = include_str!("stubs.rs");
         for s in STUBS {

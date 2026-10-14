@@ -11,6 +11,7 @@ pub mod composer;
 pub mod confirm;
 pub mod context_menu;
 pub mod context_ring;
+pub mod diagnostics;
 pub mod diagram_view;
 pub mod doc_pane;
 pub mod editor_kit;

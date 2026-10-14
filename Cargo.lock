@@ -2070,6 +2070,7 @@ dependencies = [
  "lopdf",
  "pulldown-cmark",
  "quick-xml",
+ "rustls",
  "serde",
  "serde_json",
  "sevenz-rust2",
@@ -2077,6 +2078,8 @@ dependencies = [
  "tar",
  "two-face",
  "ureq",
+ "url",
+ "webpki-roots 0.26.11",
  "zip",
 ]
 

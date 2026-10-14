@@ -902,6 +902,17 @@ impl Settings {
                             },
                         )),
                     )
+                    .child({
+                        let (state, name) = (self.state.clone(), p.name.clone());
+                        super::editor_kit::icon_button(
+                            t,
+                            SharedString::from(format!("diagnose-{}", p.name)),
+                            "icons/stethoscope.svg",
+                            "Diagnose: DNS, connection, TLS and the key, step by step",
+                            false,
+                        )
+                        .on_click(move |_, _, cx| state.update(cx, |s, cx| s.diagnose(&name, cx)))
+                    })
                     .child(
                         div()
                             .id(SharedString::from(format!("rm-{}", p.name)))
@@ -1266,27 +1277,35 @@ impl Render for Settings {
                 );
             }
         }
-        let body = match tab {
-            SettingsTab::General => self.general(&t, cx),
-            SettingsTab::Models if self.form => self.models_form(&t, cx),
-            SettingsTab::Models => self.models_list(&t, cx),
-            SettingsTab::Commands => self.commands.clone().into_any_element(),
-            SettingsTab::Agents => self.agents.clone().into_any_element(),
-            SettingsTab::Skills => self.skills.clone().into_any_element(),
-            SettingsTab::Hooks => self.hooks.clone().into_any_element(),
-            SettingsTab::Mcp => self.mcp.clone().into_any_element(),
-            SettingsTab::Permissions => self.permissions.clone().into_any_element(),
-            SettingsTab::Sandbox => self.sandbox.clone().into_any_element(),
-            SettingsTab::Network => {
-                super::planned::render(&t, &super::planned::NETWORK).into_any_element()
-            }
-            SettingsTab::Environments => self.env.clone().into_any_element(),
-            SettingsTab::Memory => self.memory.clone().into_any_element(),
-            SettingsTab::Plugins => self.plugins.clone().into_any_element(),
-            SettingsTab::Guide => super::guide::render(&t).into_any_element(),
-            SettingsTab::About => self.about(&t),
-            _ => div().into_any_element(),
-        };
+        let body =
+            match tab {
+                SettingsTab::General => self.general(&t, cx),
+                SettingsTab::Models if self.form => self.models_form(&t, cx),
+                SettingsTab::Models if self.state.read(cx).diagnosis.is_some() => {
+                    let d =
+                        self.state.read(cx).diagnosis.as_ref().map(|d| {
+                            super::diagnostics::render(&t, d, &self.state).into_any_element()
+                        });
+                    d.unwrap_or_else(|| div().into_any_element())
+                }
+                SettingsTab::Models => self.models_list(&t, cx),
+                SettingsTab::Commands => self.commands.clone().into_any_element(),
+                SettingsTab::Agents => self.agents.clone().into_any_element(),
+                SettingsTab::Skills => self.skills.clone().into_any_element(),
+                SettingsTab::Hooks => self.hooks.clone().into_any_element(),
+                SettingsTab::Mcp => self.mcp.clone().into_any_element(),
+                SettingsTab::Permissions => self.permissions.clone().into_any_element(),
+                SettingsTab::Sandbox => self.sandbox.clone().into_any_element(),
+                SettingsTab::Network => {
+                    super::planned::render(&t, &super::planned::NETWORK).into_any_element()
+                }
+                SettingsTab::Environments => self.env.clone().into_any_element(),
+                SettingsTab::Memory => self.memory.clone().into_any_element(),
+                SettingsTab::Plugins => self.plugins.clone().into_any_element(),
+                SettingsTab::Guide => super::guide::render(&t).into_any_element(),
+                SettingsTab::About => self.about(&t),
+                _ => div().into_any_element(),
+            };
         let close = div()
             .id("settings-close")
             .absolute()

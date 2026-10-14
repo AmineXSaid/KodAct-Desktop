@@ -18,6 +18,7 @@ mod backend;
 mod browser;
 mod commands;
 mod context;
+mod diagnose;
 mod diagram;
 mod downloads;
 mod endpoints;

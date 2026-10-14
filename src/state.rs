@@ -430,6 +430,15 @@ impl SettingsTab {
     }
 }
 
+/// An endpoint being diagnosed (`diagnose.rs`), step by step.
+pub struct Diagnosis {
+    pub profile: String,
+    pub steps: Vec<crate::diagnose::Step>,
+    pub running: bool,
+    /// Which run this is: a newer one replaces an older one's updates.
+    run: u64,
+}
+
 /// What the Settings editors show: ForgeCLI's files for this project.
 #[derive(Default)]
 pub struct Engine {
@@ -873,6 +882,10 @@ pub struct AppState {
     compacting: std::collections::HashSet<usize>,
     /// ForgeCLI's own files, for the Settings editors.
     pub engine: Engine,
+    /// Settings → Models → Diagnose: the endpoint checked and its steps.
+    pub diagnosis: Option<Diagnosis>,
+    /// Counts diagnoses, so a stale run's steps never land on a new one.
+    diagnosis_seq: u64,
     next_id: usize,
 }
 
@@ -991,6 +1004,8 @@ impl AppState {
             approvals_open: false,
             compacting: Default::default(),
             engine: Default::default(),
+            diagnosis: None,
+            diagnosis_seq: 0,
             next_id,
         }
     }
@@ -1707,6 +1722,9 @@ impl AppState {
     /// and starts watching them.
     pub fn settings_tab(&mut self, tab: SettingsTab, cx: &mut Context<Self>) {
         self.settings_tab = tab;
+        if tab != SettingsTab::Models {
+            self.diagnosis = None;
+        }
         if tab.reads_engine_files() {
             self.reload_engine(cx);
             self.watch_engine(cx);
@@ -1777,6 +1795,58 @@ impl AppState {
                 }
             });
         }));
+    }
+
+    /// Diagnose an endpoint: DNS, TCP, TLS, HTTP, then the key, off the UI
+    /// thread, each step shown as it ends.
+    pub fn diagnose(&mut self, name: &str, cx: &mut Context<Self>) {
+        let Some(profile) = self
+            .endpoints
+            .as_ref()
+            .and_then(|e| e.profiles.iter().find(|p| p.name == name).cloned())
+        else {
+            return;
+        };
+        self.diagnosis_seq += 1;
+        let run = self.diagnosis_seq;
+        self.diagnosis = Some(Diagnosis {
+            profile: name.to_string(),
+            steps: crate::diagnose::waiting(),
+            running: true,
+            run,
+        });
+        let (tx, rx) = async_channel::unbounded::<(usize, crate::diagnose::Step)>();
+        cx.background_spawn(async move {
+            let key = crate::health::token(&profile.auth).ok().flatten();
+            crate::diagnose::run(&profile, key, |i, step| {
+                let _ = tx.try_send((i, step));
+            });
+        })
+        .detach();
+        cx.spawn(async move |this, cx| {
+            while let Ok((i, step)) = rx.recv().await {
+                let alive = this.update(cx, |s, cx| {
+                    if let Some(d) = s.diagnosis.as_mut().filter(|d| d.run == run) {
+                        d.steps[i] = step;
+                        cx.notify();
+                        true
+                    } else {
+                        false
+                    }
+                });
+                if !matches!(alive, Ok(true)) {
+                    return;
+                }
+            }
+            let _ = this.update(cx, |s, cx| {
+                if let Some(d) = s.diagnosis.as_mut().filter(|d| d.run == run) {
+                    d.running = false;
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+        cx.notify();
     }
 
     /// Ask ForgeCLI which MCP servers start (`forge mcp list`, in the project).

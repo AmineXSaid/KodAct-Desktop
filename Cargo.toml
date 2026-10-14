@@ -23,6 +23,11 @@ two-face = { version = "=0.5.2", default-features = false, features = ["syntect-
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 ureq = { version = "=2.12.1", default-features = false, features = ["tls", "json"] }
+# Settings > Models > Diagnose: a TLS handshake of its own, with the same
+# rustls and roots ureq uses (no new code in the build).
+rustls = { version = "=0.23.45", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+webpki-roots = "=0.26.11"
+url = "=2.5.8"
 # The local hour, for the new-chat greeting.
 chrono = { version = "=0.4.45", default-features = false, features = ["clock"] }
 # Office files and PDFs Forge made, read for the side panel (office.rs):
