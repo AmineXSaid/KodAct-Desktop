@@ -111,6 +111,18 @@ pub fn palette(t: &crate::theme::Theme) -> crate::mermaid::Palette {
         group_fill: css(t.extra.inset),
         note_fill: css(t.extra.warning_tint),
         note_stroke: css(t.colors.marigold.opacity(0.6)),
+        series: [
+            t.colors.primary,
+            t.colors.marigold,
+            t.extra.success,
+            t.colors.coral,
+            t.colors.sky,
+            t.extra.danger,
+            t.colors.text_muted,
+        ]
+        .into_iter()
+        .map(css)
+        .collect(),
     }
 }
 

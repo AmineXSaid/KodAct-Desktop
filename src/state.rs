@@ -4260,6 +4260,12 @@ fn diff(lines: &[(DiffKind, &str)]) -> Vec<DiffLine> {
 /// The demo's drawn answer: a flowchart and a sequence, in Mermaid.
 const DEMO_DIAGRAM: &str = "Here is how a message travels through Forge.\n\n```mermaid\nflowchart TD\n  A[You type a message] --> B{Endpoint set up?}\n  B -->|no| C[Settings › Models]\n  C --> D\n  B -->|yes| D[ForgeCLI process]\n  D -.->|stream-json| E([Reply in the chat])\n  D --> F[(Session log)]\n```\n\nAnd the turn itself, step by step:\n\n```mermaid\nsequenceDiagram\n  autonumber\n  participant U as You\n  participant D as Forge\n  participant C as ForgeCLI\n  U->>D: Send\n  D->>C: user turn\n  loop each tool call\n    C-->>D: tool_use / tool_result\n  end\n  C-->>D: result\n  D-->>U: Reply\n```";
 
+/// The demo's charts: a pie and an xychart, drawn natively.
+const DEMO_CHARTS: &str = "Where the time went:\n\n```mermaid\npie title Time per task\n  \"Reading\" : 42\n  \"Writing\" : 30\n  \"Tests\" : 12\n```\n\nAnd per month:\n\n```mermaid\nxychart-beta\n  title \"Replies\"\n  x-axis [jan, feb, mar, apr]\n  y-axis \"Replies\" 0 --> 100\n  bar [20, 45, 60, 80]\n  line [25, 40, 70, 90]\n```\n";
+
+/// The demo's ASCII answer, for checking that box drawing keeps its columns.
+const DEMO_ASCII: &str = "Here it is in ASCII.\n\n```text\n┌──────────────┐     ┌──────────────┐\n│  Forge app   │ ──▶ │   ForgeCLI   │\n└──────┬───────┘     └──────┬───────┘\n       │ stream-json        │ HTTPS\n       ▼                    ▼\n┌──────────────┐     ┌──────────────┐\n│  Chat view   │ ◀── │    Model     │\n└──────────────┘     └──────────────┘\n```\n\nAnd the same without a fence:\n\n+--------+      +---------+\n| Client | ---> | Server  |\n+--------+      +---------+\n     |               |\n     v               v\n  [ UI ]         [ DB ]\n";
+
 fn script(prompt: &str) -> Vec<Step> {
     let mut s = vec![];
     s.extend(words(
@@ -4268,6 +4274,16 @@ fn script(prompt: &str) -> Vec<Step> {
     ));
     // Asked to draw something: the reply draws it, as a Mermaid diagram.
     let lower = prompt.to_lowercase();
+    if lower.contains("chart") {
+        s.extend(words(DEMO_CHARTS, Step::Say));
+        s.push(Step::End { seconds: 2.4 });
+        return s;
+    }
+    if lower.contains("ascii") {
+        s.extend(words(DEMO_ASCII, Step::Say));
+        s.push(Step::End { seconds: 3.1 });
+        return s;
+    }
     if ["diagram", "draw", "flow", "sequence", "architecture"]
         .iter()
         .any(|w| lower.contains(w))

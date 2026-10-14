@@ -27,7 +27,6 @@ pub struct Colors {
     pub primary_fg: Hsla,
     pub primary_tint: Hsla, // ghost CTA bg, selection wash
     pub marigold: Hsla,
-    #[allow(dead_code)] // in the palette; nothing is coral right now
     pub coral: Hsla,
     pub sky: Hsla,
     #[allow(dead_code)] // in the palette; nothing uses it right now

@@ -6,8 +6,10 @@
 //! node shapes, labelled solid / dotted / thick links, chains, `&`,
 //! subgraphs), state diagrams (`stateDiagram` / `-v2`) and sequence
 //! diagrams (participants, actors, the arrow kinds, notes, loop / alt / opt /
-//! par frames, autonumber). Anything else returns `None`, and the reply shows
-//! the source as code.
+//! par frames, autonumber), and in `charts.rs`: class and ER diagrams,
+//! mindmaps, pie, gantt, timeline, user journey, xychart, quadrant chart and
+//! git graph. Anything else returns `None`, and the reply shows the source
+//! as code.
 //!
 //! Flowcharts are laid out in layers: ranks by longest path (cycles broken
 //! where a depth-first walk finds them), long links routed through dummy
@@ -16,6 +18,8 @@
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
+
+mod charts;
 
 /// The colours a drawing uses, as SVG colour strings (from the theme).
 #[derive(Clone, Debug, PartialEq)]
@@ -31,6 +35,8 @@ pub struct Palette {
     pub group_fill: String,
     pub note_fill: String,
     pub note_stroke: String,
+    /// Series colours for charts, in order (pie slices, bars, sections).
+    pub series: Vec<String>,
 }
 
 impl Palette {
@@ -50,6 +56,7 @@ impl Palette {
             group_fill: s("#f5f5f5"),
             note_fill: s("#fff8e1"),
             note_stroke: s("#e0c070"),
+            series: vec![s("#0075de"), s("#e0a030"), s("#2a9d5c")],
         }
     }
 }
@@ -89,6 +96,25 @@ pub fn render(source: &str, p: &Palette) -> Option<String> {
             let s = parse_sequence(body)?;
             Some(draw_sequence(&s, p))
         }
+        "classdiagram" | "classdiagram-v2" => {
+            let (g, dir) = charts::class(body)?;
+            Some(draw_graph(&g, dir, p))
+        }
+        "erdiagram" => {
+            let (g, dir) = charts::er(body)?;
+            Some(draw_graph(&g, dir, p))
+        }
+        "mindmap" => {
+            let (g, dir) = charts::mindmap(source)?;
+            Some(draw_graph(&g, dir, p))
+        }
+        "pie" => charts::pie(head, body, p),
+        "gantt" => charts::gantt(body, p),
+        "timeline" => charts::timeline(body, p),
+        "journey" => charts::journey(body, p),
+        "xychart-beta" | "xychart" => charts::xychart(body, p),
+        "quadrantchart" => charts::quadrant(body, p),
+        "gitgraph" | "gitgraph:" => charts::gitgraph(body, p),
         _ => None,
     }
 }
@@ -204,6 +230,8 @@ enum Shape {
     Cylinder,
     Start,
     End,
+    /// A class or an entity: a name band, then members (`charts.rs`).
+    Table,
 }
 
 #[derive(Clone, Debug)]
@@ -573,6 +601,7 @@ fn node_size(n: &Node) -> (f32, f32) {
         }
         Shape::Hexagon => (w + 24., h),
         Shape::Cylinder => (w, h + 12.),
+        Shape::Table => charts::table_size(&n.label),
         _ => (w.max(48.), h),
     }
 }
@@ -1023,7 +1052,7 @@ fn draw_shape(out: &mut String, n: &Placed, shape: Shape, p: &Palette) {
             out,
             r#"<rect x="{x:.1}" y="{y:.1}" width="{w:.1}" height="{h:.1}" rx="4" {style}/>"#
         ),
-        Shape::Round => write!(
+        Shape::Round | Shape::Table => write!(
             out,
             r#"<rect x="{x:.1}" y="{y:.1}" width="{w:.1}" height="{h:.1}" rx="10" {style}/>"#
         ),
@@ -1377,7 +1406,9 @@ fn draw_graph(g: &Graph, dir: Dir, p: &Palette) -> String {
     }
     for (n, pl) in g.nodes.iter().zip(&laid.nodes) {
         draw_shape(&mut body, pl, n.shape, p);
-        if !matches!(n.shape, Shape::Start | Shape::End) {
+        if n.shape == Shape::Table {
+            charts::table_text(&mut body, pl, &n.label, p);
+        } else if !matches!(n.shape, Shape::Start | Shape::End) {
             text_block(&mut body, &n.label, pl.x, pl.y, &p.text, 500);
         }
     }
@@ -1909,7 +1940,8 @@ mod tests {
     #[test]
     fn unknown_or_broken_sources_are_left_as_code() {
         let p = Palette::test();
-        assert!(render("pie title Pets\n\"Dogs\" : 3", &p).is_none());
+        assert!(render("pie title Pets\n\"Dogs\" : 3", &p).is_some());
+        assert!(render("C4Context\nPerson(a, \"A\")", &p).is_none());
         assert!(render("", &p).is_none());
         assert!(render("graph TD\n-->", &p).is_none());
         assert!(fence_svg("rust", "fn main() {}", &p).is_none());

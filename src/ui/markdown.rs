@@ -71,6 +71,102 @@ struct TableBuild {
     in_head: bool,
 }
 
+/// Box-drawing, block, shape and arrow characters: only drawings use them.
+fn drawing_char(c: char) -> bool {
+    matches!(c, '\u{2190}'..='\u{21FF}' | '\u{2500}'..='\u{25FF}' | '\u{27F5}'..='\u{27FF}')
+}
+
+/// A line that only a drawing would have: box drawing, `+--+` corners or
+/// ASCII arrows.
+fn drawing_line(l: &str) -> bool {
+    l.chars().any(drawing_char)
+        || [
+            "+--", "--+", "-+-", "-->", "<--", "==>", "<==", "|--", "--|", "-.->",
+        ]
+        .iter()
+        .any(|p| l.contains(p))
+}
+
+/// A line laid out in columns: a drawing's line, a run of three spaces
+/// inside it, or nothing but connectors (`|`, `v`, `^`…).
+fn laid_out_line(l: &str) -> bool {
+    let t = l.trim();
+    !t.is_empty()
+        && (drawing_line(l)
+            || t.contains("   ")
+            || t.split_whitespace().all(|w| {
+                matches!(
+                    w,
+                    "|" | "v" | "^" | "V" | "/" | "\\" | "+" | "*" | "<" | ">"
+                )
+            }))
+}
+
+/// A table's `|---|:-:|` row.
+fn table_rule(l: &str) -> bool {
+    let t = l.trim();
+    t.contains('-') && t.contains('|') && t.chars().all(|c| matches!(c, '|' | '-' | ':' | ' '))
+}
+
+/// ASCII drawings a reply wrote without a fence are wrapped in one, so they
+/// keep their columns in the mono face instead of running together as prose.
+fn fence_ascii_art(src: &str) -> std::borrow::Cow<'_, str> {
+    let lines: Vec<&str> = src.split('\n').collect();
+    let mut out: Vec<String> = Vec::with_capacity(lines.len());
+    let mut changed = false;
+    let mut fence: Option<&str> = None;
+    let mut i = 0;
+    while i < lines.len() {
+        let t = lines[i].trim_start();
+        if let Some(f) = fence {
+            if t.starts_with(f) {
+                fence = None;
+            }
+            out.push(lines[i].to_string());
+            i += 1;
+            continue;
+        }
+        if t.starts_with("```") || t.starts_with("~~~") {
+            fence = Some(&t[..3]);
+            out.push(lines[i].to_string());
+            i += 1;
+            continue;
+        }
+        // A paragraph: the lines up to the next blank one or fence.
+        let mut j = i;
+        while j < lines.len() && !lines[j].trim().is_empty() && {
+            let tj = lines[j].trim_start();
+            j == i || !(tj.starts_with("```") || tj.starts_with("~~~"))
+        } {
+            j += 1;
+        }
+        let para = &lines[i..j.max(i + 1)];
+        let laid = para.iter().filter(|l| laid_out_line(l)).count();
+        let is_art = para.len() >= 2
+            && laid >= 2
+            && laid * 5 >= para.len() * 3
+            && para.iter().any(|l| drawing_line(l))
+            && !para.iter().any(|l| table_rule(l))
+            && !para
+                .iter()
+                .all(|l| l.starts_with("    ") || l.starts_with('\t'));
+        if is_art {
+            changed = true;
+            out.push("```text".into());
+            out.extend(para.iter().map(|l| l.to_string()));
+            out.push("```".into());
+        } else {
+            out.extend(para.iter().map(|l| l.to_string()));
+        }
+        i = j.max(i + 1);
+    }
+    if changed {
+        out.join("\n").into()
+    } else {
+        src.into()
+    }
+}
+
 fn parse(src: &str) -> Vec<Block> {
     let mut out = vec![];
     let mut spans: Vec<Span> = vec![];
@@ -106,8 +202,9 @@ fn parse(src: &str) -> Vec<Block> {
         }
     };
 
+    let src = fence_ascii_art(src);
     for ev in Parser::new_ext(
-        src,
+        &src,
         Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS,
     ) {
         let style = Span {
@@ -928,6 +1025,32 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn ascii_drawings_without_a_fence_keep_their_columns() {
+        let art = "+--------+      +---------+\n| Client | ---> | Server  |\n+--------+      +---------+\n     |               |\n     v               v";
+        let b = parse(&format!("Here:\n\n{art}\n\nDone."));
+        assert_eq!(
+            b[1],
+            Block::Code {
+                lang: "text".into(),
+                code: art.into()
+            }
+        );
+        // Box drawing too, and a fenced drawing is left alone.
+        let boxed = "┌──────┐\n│ Forge │\n└──┬───┘\n   ▼";
+        assert!(matches!(&parse(boxed)[0], Block::Code { lang, .. } if lang == "text"));
+        let fenced = format!("```\n{art}\n```");
+        assert_eq!(fence_ascii_art(&fenced), fenced);
+        // Prose, lists and tables are not drawings.
+        for md in [
+            "Run it, then --> check the log.\nIt should pass.",
+            "- one --> two\n- three",
+            "| a   | b |\n|---|---|\n| 1 --> 2 | 3 |",
+        ] {
+            assert_eq!(fence_ascii_art(md), md);
+        }
     }
 
     #[test]

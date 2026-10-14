@@ -127,15 +127,18 @@ fn cli_base_url(profile: &Profile) -> String {
 }
 
 /// What the desktop adds to ForgeCLI's system prompt: how replies are shown
-/// here, so the model draws diagrams Forge can render in the chat: with
-/// the Diagram Design skill (`plugin.rs`), or in Mermaid (`mermaid.rs`)
-/// for a quick sketch, never in ASCII art.
-pub const SURFACE_PROMPT: &str = "You are running inside Forge Desktop, which renders your replies as Markdown. \
-When the user asks for a diagram, or a diagram would explain structure or flow better than prose (architecture, a request's path, \
-data flow, states, a sequence of calls, a data model, a timeline, a comparison), use the diagram-design skill: it writes a \
-self-contained HTML file around one SVG in Forge's own style, and Forge shows that file as a diagram in the chat. Save it in the \
-project (e.g. under docs/diagrams/) and name it in your reply. For a quick sketch inside a reply, a ```mermaid fenced block \
-(flowchart, sequenceDiagram or stateDiagram-v2) or an ```svg block with one <svg> also renders inline. Never draw diagrams with ASCII art.";
+/// here. Every diagram is drawn with the Diagram Design skill (`plugin.rs`)
+/// unless the user names another format (Mermaid, ASCII, SVG, ...), which
+/// then wins; Mermaid and SVG blocks still render inline (`mermaid.rs`).
+pub const SURFACE_PROMPT: &str = "You are running inside Forge Desktop, which renders your replies as Markdown and draws diagrams in the chat. \
+Diagram Design is the default for every diagram. When the user asks for a diagram, chart or graph, or one would explain structure \
+or flow better than prose (architecture, a request's path, data flow, states, a sequence of calls, a data model, a timeline, a \
+comparison), use the diagram-design skill unless the user names another format: it writes a self-contained HTML file around one \
+SVG in Forge's own style, and Forge shows that file as a diagram in the chat. Save it in the project (e.g. under docs/diagrams/) \
+and name it in your reply. When the user asks for a specific format (Mermaid, ASCII art, SVG, PlantUML, Graphviz, a table...), \
+use exactly that format without hesitating. When the diagram-design skill is not available, fall back to a ```mermaid fenced \
+block or an ```svg block with one <svg>; both render inline here (Mermaid: flowchart, sequenceDiagram, stateDiagram-v2, \
+classDiagram, erDiagram, mindmap, pie, gantt, timeline, journey, xychart-beta, quadrantChart, gitGraph). Put ASCII art in a ```text block so it keeps its alignment.";
 
 /// Which ForgeCLI conversation a process runs: a new one under the id the
 /// desktop chose, or one already on disk, resumed.
@@ -815,11 +818,17 @@ mod tests {
             .args
             .windows(2)
             .any(|w| w == ["--permission-mode", "default"]));
-        // The model is told its diagrams are drawn here.
-        assert!(l
+        // The model is told Diagram Design is the default, and that a
+        // format the user names (Mermaid, ASCII, ...) wins.
+        let surface = l
             .args
             .windows(2)
-            .any(|w| w[0] == "--append-system-prompt" && w[1].contains("```mermaid")));
+            .find(|w| w[0] == "--append-system-prompt")
+            .map(|w| w[1].clone())
+            .unwrap();
+        assert!(surface.contains("Diagram Design is the default"));
+        assert!(surface.contains("unless the user names another format"));
+        assert!(surface.contains("```mermaid") && surface.contains("ASCII"));
         let o: Profile = serde_json::from_value(
             json!({"name":"o","baseUrl":"http://127.0.0.1:11434","wire":"openai","model":"q"}),
         )
