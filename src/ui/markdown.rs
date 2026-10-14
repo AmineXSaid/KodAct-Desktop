@@ -490,9 +490,10 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                 .into_any_element(),
             Block::Heading(level, spans) => div()
                 .text_size(match (level, doc) {
-                    (1, false) => t.text.body + px(1.),
-                    (2, false) => t.text.body_sm + px(1.),
-                    (_, false) => t.size.chat_text,
+                    // A step above the 14px body each, on whole pixels.
+                    (1, false) => t.size.chat_text + px(3.),
+                    (2, false) => t.size.chat_text + px(2.),
+                    (_, false) => t.size.chat_text + px(1.),
                     (2, true) => t.text.subheading,
                     (_, true) => t.text.body,
                 })
@@ -663,7 +664,7 @@ fn code_block(lang: &str, code: String, key: &str, t: &Theme, copy: &CopyContext
                 .border_b_1()
                 .border_color(t.colors.border)
                 .text_size(t.text.caption)
-                .text_color(t.colors.text_subtle)
+                .text_color(t.colors.text_muted)
                 .child(
                     div()
                         .font_family(t.font_mono.clone())

@@ -139,7 +139,7 @@ impl Sidebar {
                     .pt(t.space.xs)
                     .pb(t.space.xs)
                     .text_size(t.text.caption)
-                    .text_color(t.colors.text_subtle)
+                    .text_color(t.colors.text_muted)
                     .child("Show chats from"),
             )
             .child(option(
@@ -252,7 +252,7 @@ impl Render for Sidebar {
                     .pb(t.space.xs)
                     .text_size(t.text.caption)
                     .font_weight(FontWeight::MEDIUM)
-                    .text_color(t.colors.text_subtle)
+                    .text_color(t.colors.text_muted)
                     .child(div().flex_1().child(group))
                     .when(first, |d| d.children(filter.take())),
             );
@@ -393,7 +393,7 @@ impl Render for Sidebar {
                                     div()
                                         .flex_none()
                                         .text_size(t.text.caption)
-                                        .text_color(t.colors.text_subtle)
+                                        .text_color(t.colors.text_muted)
                                         .group_hover("row", |st| st.invisible())
                                         .when(menu_open, |d| d.invisible())
                                         .child(ago),
@@ -478,7 +478,7 @@ impl Render for Sidebar {
                 div()
                     .px(t.space.md)
                     .py(t.space.lg)
-                    .text_color(t.colors.text_subtle)
+                    .text_color(t.colors.text_muted)
                     .child(if q.is_empty() {
                         "Chats you start appear here."
                     } else {
@@ -698,7 +698,7 @@ impl Render for Sidebar {
                                     .child(
                                         div()
                                             .text_size(t.text.caption)
-                                            .text_color(t.colors.text_subtle)
+                                            .text_color(t.colors.text_muted)
                                             .child("Settings and providers"),
                                     ),
                             )
