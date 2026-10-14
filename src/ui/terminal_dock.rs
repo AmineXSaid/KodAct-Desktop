@@ -202,6 +202,49 @@ impl TerminalDock {
         cx.notify();
     }
 
+    /// "Show in terminal": an Agent tab with a command and what it printed,
+    /// read-only, badged with where it ran.
+    pub fn show_feed(
+        &mut self,
+        feed: crate::state::AgentFeed,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let t = cx.theme().clone();
+        let (cw, ch) = cell(window, &t);
+        let b = self.grid.get();
+        let size = if b.size.width > px(0.) {
+            Size {
+                cols: (b.size.width / cw).floor().max(2.) as u16,
+                rows: (b.size.height / ch).floor().max(1.) as u16,
+            }
+        } else {
+            Size { cols: 80, rows: 24 }
+        };
+        let shell = Shell {
+            label: format!("Agent · {}", feed.title),
+            program: String::new(),
+            args: vec![],
+            cwd: None,
+        };
+        let session = Session::replay(
+            shell,
+            &feed.bytes(),
+            size,
+            crate::app_settings::get().scrollback,
+        );
+        self.tabs.push(Tab {
+            id: self.next_id,
+            session: Arc::new(session),
+            place: feed.place,
+        });
+        self.next_id += 1;
+        self.active = self.tabs.len() - 1;
+        self.error = None;
+        window.focus(&self.focus, cx);
+        cx.notify();
+    }
+
     /// Terminal: Kill. The active shell's process is ended; its tab stays,
     /// saying so, until a key closes it.
     pub fn kill(&mut self, cx: &mut Context<Self>) {
@@ -415,6 +458,10 @@ impl TerminalDock {
         if m.platform {
             return false;
         }
+        // Output only: keys don't reach anything (copy above still works).
+        if s.is_replay() {
+            return k.key_char.is_some() || key == "enter" || key == "backspace";
+        }
         // A shell that ended: any key closes its tab.
         if s.exited.load(Ordering::SeqCst) {
             self.close(self.active, window, cx);
@@ -582,6 +629,8 @@ impl TerminalDock {
                             t.size.icon_xs,
                             t.colors.text_subtle,
                         )
+                    } else if tab.session.is_replay() {
+                        icon("icons/sparkles.svg", t.size.icon_xs, t.colors.primary)
                     } else {
                         icon("icons/terminal.svg", t.size.icon_xs, t.colors.text_muted)
                     })
@@ -885,7 +934,8 @@ impl TerminalDock {
         let session = s.clone();
         let exited = s.exited.load(Ordering::SeqCst);
         // An ended shell takes no input: no cursor, a note where it was.
-        let cursor = cursor.filter(|_| !exited);
+        let replay = s.is_replay();
+        let cursor = cursor.filter(|_| !exited && !replay);
         div()
             .id("terminal-screen")
             .relative()

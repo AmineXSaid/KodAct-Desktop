@@ -118,6 +118,10 @@ shell on a pseudo-terminal (ConPTY on Windows), drawn by a terminal emulator
   Clear and Kill the terminal too. The header's badge says where the active
   terminal runs (Local, or the remote).
 - The dock's open state and width come back at the next launch.
+- **Agent commands:** each command the agent runs, and each approval it
+  asks for, carries a badge saying where it runs ("on SSH: box", "on this
+  computer"). "Show in terminal" under a command opens it and its output in
+  a read-only Agent tab.
 
 ## Settings
 

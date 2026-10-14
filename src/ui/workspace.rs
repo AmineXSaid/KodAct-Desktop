@@ -1081,6 +1081,21 @@ impl Render for Workspace {
                     this.toggle_terminal(window, cx);
                 }
             }))
+            .on_action(cx.listener(|this, _: &ShowAgentOutput, window, cx| {
+                let feed = this.state.update(cx, |s, _| s.take_agent_feed());
+                let Some(feed) = feed else {
+                    this.state
+                        .update(cx, |s, cx| s.show_toast("No command in this chat yet.", cx));
+                    return;
+                };
+                this.state.update(cx, |s, cx| {
+                    s.terminal_open = true;
+                    s.save_window();
+                    cx.notify();
+                });
+                this.terminal
+                    .update(cx, |d, cx| d.show_feed(feed, window, cx));
+            }))
             .on_action(cx.listener(|this, _: &ClearTerminal, _, cx| {
                 this.terminal.update(cx, |d, cx| d.clear(cx))
             }))

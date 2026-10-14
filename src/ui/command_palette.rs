@@ -304,6 +304,12 @@ impl CommandPalette {
                 Box::new(NewTerminal),
             ),
             act(
+                "Show the last command in the terminal",
+                "icons/terminal.svg",
+                None,
+                Box::new(ShowAgentOutput),
+            ),
+            act(
                 "Focus the terminal",
                 "icons/terminal.svg",
                 None,

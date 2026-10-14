@@ -79,6 +79,7 @@ gpui::actions!(
         AttachContainer,
         CloseRemote,
         ToggleTerminal,
+        ShowAgentOutput,
         OpenAppSettings,
         KillTerminal,
         ClearTerminal,

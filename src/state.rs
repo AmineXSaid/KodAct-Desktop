@@ -104,6 +104,42 @@ pub struct ToolCall {
     pub review: Review,
 }
 
+/// A command and what it printed, for a read-only tab in the terminal dock.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AgentFeed {
+    pub title: String,
+    pub command: String,
+    pub output: String,
+    /// The remote's label and icon, or None for this computer.
+    pub place: Option<(String, &'static str)>,
+}
+
+impl AgentFeed {
+    pub fn of(c: &ToolCall, place: Option<(String, &'static str)>) -> AgentFeed {
+        AgentFeed {
+            title: c
+                .note
+                .as_ref()
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| "Agent".into()),
+            command: c.target.to_string(),
+            output: c.output.to_string(),
+            place,
+        }
+    }
+
+    /// The bytes a terminal would have seen: the prompt line, then the
+    /// output with terminal line ends.
+    pub fn bytes(&self) -> Vec<u8> {
+        let mut out = format!("\x1b[1m$ {}\x1b[0m\r\n", self.command);
+        for line in self.output.lines() {
+            out.push_str(line);
+            out.push_str("\r\n");
+        }
+        out.into_bytes()
+    }
+}
+
 impl ToolCall {
     /// What its row calls it: the browser's tools as `browser · click`, a
     /// plan and a task list by name, anything else as its target.
@@ -1059,6 +1095,9 @@ pub struct AppState {
     pub terminal_share: f32,
     /// The dock's left edge is being dragged.
     pub terminal_resizing: bool,
+    /// A command's output to show in the dock ("Show in terminal"): its
+    /// title, the text, and where it ran.
+    pub agent_feed: Option<AgentFeed>,
     /// Diagrams in replies showing their source instead (by block key).
     pub diagram_code: std::sync::Arc<std::collections::HashSet<SharedString>>,
     /// Chats are still loading: screens show placeholders.
@@ -1226,6 +1265,7 @@ impl AppState {
             terminal_open: crate::app_settings::load_window().terminal_open,
             terminal_share: crate::app_settings::load_window().terminal_share,
             terminal_resizing: false,
+            agent_feed: None,
             diagram_code: Default::default(),
             loading: true,
             load: None,
@@ -4547,6 +4587,25 @@ impl AppState {
 // ---------------------------------------------------------------- remote development
 
 impl AppState {
+    /// What "Show in terminal" shows: the command asked for, or else the
+    /// current chat's latest one.
+    pub fn take_agent_feed(&mut self) -> Option<AgentFeed> {
+        if let Some(f) = self.agent_feed.take() {
+            return Some(f);
+        }
+        let chat = self.chat()?;
+        let place = self
+            .chat_remote(chat.id)
+            .map(|r| (r.target.label(), r.target.icon()));
+        chat.messages.iter().rev().find_map(|m| match m {
+            Message::Assistant { blocks, .. } => blocks.iter().rev().find_map(|b| match b {
+                Block::Tool(c) if c.kind == ToolKind::Bash => Some(AgentFeed::of(c, place.clone())),
+                _ => None,
+            }),
+            _ => None,
+        })
+    }
+
     /// Keep the dock as it is now for the next launch.
     pub fn save_window(&self) {
         crate::app_settings::save_window(crate::app_settings::WindowState {

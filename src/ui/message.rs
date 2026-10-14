@@ -24,6 +24,9 @@ use crate::theme::{self, Theme};
 
 pub struct ItemContext {
     pub state: Entity<AppState>,
+    /// Where this chat's agent runs: the remote's label and icon, or None
+    /// for this computer. Commands and approvals carry it as a badge.
+    pub place: Option<(SharedString, &'static str)>,
     pub chat: usize,
     pub index: usize,
     pub copied: Option<SharedString>,
@@ -592,6 +595,48 @@ fn status_icon(status: ToolStatus, t: &Theme) -> AnyElement {
     }
 }
 
+/// Where a command runs: "on SSH: box" in the accent for a remote chat,
+/// "on this computer" quietly otherwise.
+pub fn env_badge(place: &Option<(SharedString, &'static str)>, t: &Theme) -> AnyElement {
+    let (label, glyph, fg, bg) = match place {
+        Some((label, glyph)) => (
+            format!("on {label}"),
+            *glyph,
+            t.colors.primary,
+            t.colors.primary_tint,
+        ),
+        None => (
+            "on this computer".to_string(),
+            "icons/laptop.svg",
+            t.colors.text_muted,
+            t.extra.inset,
+        ),
+    };
+    div()
+        .flex()
+        .flex_none()
+        .items_center()
+        .gap(t.space.xs)
+        .h(px(18.))
+        .px(t.space.sm)
+        .max_w(px(200.))
+        .rounded(t.radius.pill)
+        .bg(bg)
+        .text_size(t.text.caption)
+        .font_weight(FontWeight::NORMAL)
+        .text_color(fg)
+        .child(icon(glyph, t.size.icon_xs, fg))
+        .child(
+            div()
+                .min_w_0()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .child(label),
+        )
+        .into_any_element()
+}
+
 fn tool(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
     let hover = t.colors.hover;
     let adds = call.diff.iter().filter(|l| l.kind == DiffKind::Add).count();
@@ -650,6 +695,7 @@ fn tool(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
                         .child(n)
                 })),
         })
+        .when(shell, |d| d.child(env_badge(&cx.place, t)))
         .child(div().flex_1())
         .when(adds + dels > 0, |d| {
             d.child(
@@ -672,6 +718,7 @@ fn tool(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
         if shell {
             let at = terminal::Where {
                 state: cx.state.clone(),
+                place: cx.place.clone(),
                 chat: cx.chat,
                 msg: cx.index,
                 block: b,
@@ -936,7 +983,9 @@ fn permission(
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(t.colors.text_strong)
                         .child(title.clone()),
-                ),
+                )
+                .child(div().flex_1())
+                .when(!is_plan, |d| d.child(env_badge(&cx.place, t))),
         )
         .child(div().text_color(t.colors.text_body).child(detail.clone()))
         .child(

@@ -232,12 +232,49 @@ pub struct Session {
     pub shell: Shell,
     pub term: Arc<FairMutex<Term<Listener>>>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
-    master: Mutex<Box<dyn MasterPty + Send>>,
-    child: Mutex<Box<dyn portable_pty::Child + Send + Sync>>,
+    /// None for a replay: output shown, no process behind it.
+    master: Option<Mutex<Box<dyn MasterPty + Send>>>,
+    child: Option<Mutex<Box<dyn portable_pty::Child + Send + Sync>>>,
     title: Arc<Mutex<Option<String>>>,
     size: Mutex<Size>,
     /// The shell ended (the tab says so; it no longer takes input).
     pub exited: Arc<AtomicBool>,
+}
+
+impl Session {
+    /// A read-only terminal showing `bytes` as a terminal would (colours,
+    /// line ends): what an agent's command printed, replayed in the dock.
+    pub fn replay(shell: Shell, bytes: &[u8], size: Size, scrollback: usize) -> Session {
+        let writer: Arc<Mutex<Box<dyn Write + Send>>> =
+            Arc::new(Mutex::new(Box::new(std::io::sink())));
+        let title = Arc::new(Mutex::new(None));
+        let listener = Listener {
+            writer: writer.clone(),
+            title: title.clone(),
+        };
+        let config = Config {
+            scrolling_history: scrollback,
+            ..Config::default()
+        };
+        let mut term = Term::new(config, &size, listener);
+        let mut parser: Processor = Processor::new();
+        parser.advance(&mut term, bytes);
+        Session {
+            shell,
+            term: Arc::new(FairMutex::new(term)),
+            writer,
+            master: None,
+            child: None,
+            title,
+            size: Mutex::new(size),
+            exited: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    /// Output only: no process to type into.
+    pub fn is_replay(&self) -> bool {
+        self.child.is_none()
+    }
 }
 
 impl Session {
@@ -304,8 +341,8 @@ impl Session {
             shell,
             term,
             writer,
-            master: Mutex::new(pty.master),
-            child: Mutex::new(child),
+            master: Some(Mutex::new(pty.master)),
+            child: Some(Mutex::new(child)),
             title,
             size: Mutex::new(size),
             exited,
@@ -330,12 +367,14 @@ impl Session {
         }
         *cur = size;
         self.term.lock().resize(size);
-        let _ = self.master.lock().unwrap().resize(PtySize {
-            rows: size.rows,
-            cols: size.cols,
-            pixel_width: 0,
-            pixel_height: 0,
-        });
+        if let Some(m) = &self.master {
+            let _ = m.lock().unwrap().resize(PtySize {
+                rows: size.rows,
+                cols: size.cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            });
+        }
     }
 
     pub fn size(&self) -> Size {
@@ -353,7 +392,9 @@ impl Session {
     }
 
     pub fn kill(&self) {
-        let _ = self.child.lock().unwrap().kill();
+        if let Some(c) = &self.child {
+            let _ = c.lock().unwrap().kill();
+        }
     }
 }
 
@@ -528,5 +569,28 @@ mod tests {
                 std::thread::sleep(Duration::from_millis(50));
             }
         }
+    }
+
+    #[test]
+    fn a_replay_shows_output_without_a_process() {
+        let shell = Shell {
+            label: "Agent".into(),
+            program: String::new(),
+            args: vec![],
+            cwd: None,
+        };
+        let s = Session::replay(
+            shell,
+            b"$ ls\r\n\x1b[34mbin\x1b[0m  src\r\n",
+            Size { cols: 40, rows: 5 },
+            100,
+        );
+        assert!(s.is_replay());
+        assert_eq!(row(&s, 0), "$ ls");
+        assert_eq!(row(&s, 1), "bin  src");
+        s.input(b"ignored");
+        s.resize(Size { cols: 30, rows: 4 });
+        s.kill();
+        assert_eq!(s.term.lock().columns(), 30);
     }
 }

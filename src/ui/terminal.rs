@@ -280,6 +280,8 @@ fn output_text(line: &str, t: &Theme) -> StyledText {
 /// What the block needs from its place in the transcript.
 pub struct Where {
     pub state: Entity<AppState>,
+    /// Where the chat's agent runs, for "Show in terminal".
+    pub place: Option<(SharedString, &'static str)>,
     pub chat: usize,
     pub msg: usize,
     pub block: usize,
@@ -475,6 +477,32 @@ pub fn block(call: &ToolCall, at: &Where, t: &Theme) -> AnyElement {
                     copier.update(cx, |s, cx| s.mark_copied(key, cx));
                 }),
             )
+            .child({
+                let feed = crate::state::AgentFeed::of(
+                    call,
+                    at.place.as_ref().map(|(l, i)| (l.to_string(), *i)),
+                );
+                let shower = at.state.clone();
+                footer_button(
+                    &format!("show-{key}"),
+                    "Show in terminal",
+                    "icons/terminal.svg",
+                    fg_hover,
+                    bg_hover,
+                    k.muted,
+                    t,
+                )
+                .tooltip(|window, cx| {
+                    gpui::component::tooltip::Tooltip::new(
+                        "Open this command and its output in a terminal tab",
+                    )
+                    .build(window, cx)
+                })
+                .on_click(move |_, window, cx| {
+                    shower.update(cx, |s, _| s.agent_feed = Some(feed.clone()));
+                    window.dispatch_action(Box::new(super::ShowAgentOutput), cx);
+                })
+            })
             .when(!at.busy, |d| {
                 d.child(
                     footer_button(

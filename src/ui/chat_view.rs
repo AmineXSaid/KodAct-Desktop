@@ -449,6 +449,9 @@ impl Render for ChatView {
                         .rposition(|m| matches!(m, Message::User { .. }));
                     let ctx = ItemContext {
                         state: state.clone(),
+                        place: s
+                            .chat_remote(chat.id)
+                            .map(|r| (r.target.label().into(), r.target.icon())),
                         chat: chat.id,
                         index: ix,
                         copied: s.copied.clone(),
