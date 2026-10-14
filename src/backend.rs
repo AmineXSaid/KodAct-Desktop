@@ -731,11 +731,28 @@ pub fn tool_call(name: &str, input: &Value) -> ToolCall {
         }
         // The browser's tools say what they act on: a URL, the text typed.
         browser if browser.starts_with(crate::browser::TOOL_PREFIX) => {
-            let what = ["url", "text", "query", "selector", "tab_id", "direction"]
-                .iter()
-                .find_map(|k| input[*k].as_str().filter(|v| !v.is_empty()))
-                .map(str::to_string)
-                .or_else(|| input["index"].as_u64().map(|i| format!("element {i}")));
+            let what = [
+                "url",
+                "text",
+                "expression",
+                "key",
+                "value",
+                "selector",
+                "url_contains",
+                "id",
+                "direction",
+            ]
+            .iter()
+            .find_map(|k| input[*k].as_str().filter(|v| !v.is_empty()))
+            .map(|v| {
+                let one_line = v.split_whitespace().collect::<Vec<_>>().join(" ");
+                if one_line.chars().count() > 120 {
+                    format!("{}…", one_line.chars().take(120).collect::<String>())
+                } else {
+                    one_line
+                }
+            })
+            .or_else(|| input["index"].as_u64().map(|i| format!("element {i}")));
             (ToolKind::Other, browser.to_string(), what, vec![])
         }
         // A skill reads as its name, without its plugin's prefix.
@@ -804,6 +821,37 @@ pub fn ask_text(tool: &str, input: &Value) -> (String, String) {
         ToolKind::Bash => "Allow Forge to run this command?".to_string(),
         ToolKind::Web => "Allow Forge to use the web?".to_string(),
         ToolKind::Read | ToolKind::Search => "Allow Forge to read this?".to_string(),
+        // The browser's tools: what it would do there, and on what.
+        ToolKind::Other if tool.starts_with(crate::browser::TOOL_PREFIX) => {
+            let action = match &tool[crate::browser::TOOL_PREFIX.len()..] {
+                "navigate" => "open a page",
+                "state" | "text" | "html" => "read the page",
+                "click" => "click",
+                "type" => "type",
+                "press" => "press a key",
+                "select" => "choose an option",
+                "hover" => "point at something",
+                "scroll" => "scroll",
+                "eval" => "run JavaScript",
+                "wait" => "wait on the page",
+                "screenshot" => "take a screenshot",
+                "console" => "read the console",
+                "tabs" => "list the tabs",
+                "new_tab" => "open a new tab",
+                "switch_tab" => "switch tabs",
+                "close_tab" => "close a tab",
+                "back" => "go back",
+                "forward" => "go forward",
+                "reload" => "reload the page",
+                _ => "act",
+            };
+            return (
+                format!("Allow Forge to {action} in the browser?"),
+                call.note
+                    .map(|n| n.to_string())
+                    .unwrap_or_else(|| "The page in the side panel".into()),
+            );
+        }
         ToolKind::Other => format!("Allow Forge to use {tool}?"),
     };
     (title, call.target.to_string())
@@ -892,6 +940,19 @@ mod tests {
                 }
             ]
         );
+    }
+
+    #[test]
+    fn browser_asks_say_what_and_where() {
+        let (title, detail) = ask_text(
+            "mcp__forge-browser__navigate",
+            &json!({"url": "https://example.com"}),
+        );
+        assert_eq!(title, "Allow Forge to open a page in the browser?");
+        assert_eq!(detail, "https://example.com");
+        let (title, detail) = ask_text("mcp__forge-browser__eval", &json!({}));
+        assert_eq!(title, "Allow Forge to run JavaScript in the browser?");
+        assert_eq!(detail, "The page in the side panel");
     }
 
     #[test]
