@@ -429,7 +429,12 @@ pub fn project_files(dir: &Path, cap: usize) -> Vec<String> {
 /// The project's files and their folders, for the @ list: a folder ends
 /// in `/`; shallow entries first, a folder before the files beside it.
 pub fn project_entries(dir: &Path, cap: usize) -> Vec<String> {
-    let files = project_files(dir, cap);
+    entries_of(project_files(dir, cap))
+}
+
+/// Files (project-relative, `/`-separated) and the folders they're in, in
+/// the @ list's order.
+pub fn entries_of(files: Vec<String>) -> Vec<String> {
     let mut dirs = std::collections::BTreeSet::new();
     for f in &files {
         let mut p = f.as_str();

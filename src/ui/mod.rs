@@ -39,6 +39,7 @@ pub mod plugins_editor;
 pub mod profiles_editor;
 pub mod project_map;
 pub mod projects;
+pub mod remote_menu;
 pub mod rules_view;
 pub mod sandbox_editor;
 pub mod settings;
@@ -69,6 +70,12 @@ gpui::actions!(
         ToggleCommandPalette,
         ToggleTheme,
         ToggleBrowser,
+        OpenRemoteMenu,
+        ConnectWsl,
+        ConnectHost,
+        ReopenInContainer,
+        AttachContainer,
+        CloseRemote,
         FocusComposer,
         ToggleModelPicker,
         CycleMode,

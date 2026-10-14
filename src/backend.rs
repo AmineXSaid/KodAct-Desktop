@@ -250,9 +250,34 @@ pub struct Session {
 impl Session {
     pub fn spawn(exe: &Path, launch: &Launch, cwd: &Path) -> Result<Session, String> {
         let mut cmd = Command::new(exe);
-        cmd.args(&launch.args)
-            .current_dir(cwd)
-            .stdin(Stdio::piped())
+        cmd.args(&launch.args).current_dir(cwd);
+        Self::start(cmd, launch, &[], &exe.display().to_string())
+    }
+
+    /// ForgeCLI in a remote project (`remote.rs`): started through WSL, SSH
+    /// or docker, its environment written to stdin first, never on a
+    /// command line.
+    pub fn spawn_remote(
+        remote: &crate::remote::Remote,
+        forge: &str,
+        launch: &Launch,
+        extra: &crate::remote::Extra,
+    ) -> Result<Session, String> {
+        let (cmd, prelude) = crate::remote::launch(remote, forge, &launch.args, &launch.env, extra);
+        let none = Launch {
+            args: vec![],
+            env: vec![],
+        };
+        Self::start(cmd, &none, &prelude, &remote.target.label())
+    }
+
+    fn start(
+        mut cmd: Command,
+        launch: &Launch,
+        prelude: &[u8],
+        what: &str,
+    ) -> Result<Session, String> {
+        cmd.stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         // Keys and endpoints this app may have inherited must not mix with the profile's.
@@ -276,8 +301,15 @@ impl Session {
         }
         let mut child = cmd
             .spawn()
-            .map_err(|e| format!("could not start {}: {e}", exe.display()))?;
-        let stdin = child.stdin.take();
+            .map_err(|e| format!("could not start {what}: {e}"))?;
+        let mut stdin = child.stdin.take();
+        if !prelude.is_empty() {
+            if let Some(w) = stdin.as_mut() {
+                w.write_all(prelude)
+                    .and_then(|_| w.flush())
+                    .map_err(|e| format!("could not reach {what}: {e}"))?;
+            }
+        }
         let stdout = child.stdout.take().ok_or("no stdout")?;
         let mut stderr = child.stderr.take().ok_or("no stderr")?;
         let child = Arc::new(Mutex::new(child));

@@ -150,6 +150,22 @@ impl Workspace {
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(t.colors.text_strong)
                                 .child(s.project.clone())
+                                // A remote project says where it lives.
+                                .children(s.current_remote().map(|r| {
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(4.))
+                                        .font_weight(FontWeight::NORMAL)
+                                        .text_size(t.text.caption)
+                                        .text_color(t.colors.text_muted)
+                                        .child(icon(
+                                            r.target.icon(),
+                                            t.size.icon_xs,
+                                            t.colors.text_muted,
+                                        ))
+                                        .child(r.target.label())
+                                }))
                                 .child(icon(
                                     if s.switcher_open {
                                         "icons/chevron-up.svg"
@@ -667,6 +683,35 @@ impl Render for Workspace {
             }))
             .on_action(cx.listener(|this, _: &ToggleBrowser, _, cx| {
                 this.state.update(cx, |s, cx| s.toggle_browser(cx))
+            }))
+            // Remote development (`ui/remote_menu.rs`): the sidebar opens so
+            // its indicator's menu shows.
+            .on_action(cx.listener(|this, _: &OpenRemoteMenu, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.sidebar_open = true;
+                    s.toggle_remote_menu(cx)
+                })
+            }))
+            .on_action(cx.listener(|this, _: &ConnectWsl, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.open_remote_page(crate::state::RemotePage::Wsl, cx)
+                })
+            }))
+            .on_action(cx.listener(|this, _: &ConnectHost, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.open_remote_page(crate::state::RemotePage::Ssh, cx)
+                })
+            }))
+            .on_action(cx.listener(|this, _: &AttachContainer, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.open_remote_page(crate::state::RemotePage::Containers, cx)
+                })
+            }))
+            .on_action(cx.listener(|this, _: &ReopenInContainer, _, cx| {
+                this.state.update(cx, |s, cx| s.reopen_in_container(cx))
+            }))
+            .on_action(cx.listener(|this, _: &CloseRemote, _, cx| {
+                this.state.update(cx, |s, cx| s.close_remote(cx))
             }))
             .on_action(cx.listener(|this, _: &ToggleTheme, _, cx| {
                 let dark = !this.state.read(cx).dark;

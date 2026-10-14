@@ -289,6 +289,49 @@ impl CommandPalette {
             ),
             act("Quit", "icons/x.svg", Some(shortcut("Q")), Box::new(Quit)),
         ];
+        // Remote development: the same as the remote indicator's menu.
+        out.extend([
+            act(
+                "Show the remote menu",
+                "icons/plug.svg",
+                Some(shortcut("Alt O")),
+                Box::new(OpenRemoteMenu),
+            ),
+            act(
+                "Connect to WSL",
+                "icons/terminal.svg",
+                None,
+                Box::new(ConnectWsl),
+            ),
+            act(
+                "Connect to Host (SSH)",
+                "icons/server.svg",
+                None,
+                Box::new(ConnectHost),
+            ),
+            act(
+                "Attach to Running Container",
+                "icons/box.svg",
+                None,
+                Box::new(AttachContainer),
+            ),
+        ]);
+        if s.has_devcontainer() {
+            out.push(act(
+                "Reopen in Container",
+                "icons/box.svg",
+                None,
+                Box::new(ReopenInContainer),
+            ));
+        }
+        if s.current_remote().is_some() {
+            out.push(act(
+                "Close remote connection",
+                "icons/x.svg",
+                None,
+                Box::new(CloseRemote),
+            ));
+        }
         out.insert(
             1,
             act(

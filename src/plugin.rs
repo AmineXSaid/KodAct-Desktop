@@ -40,6 +40,16 @@ pub fn dir() -> Option<PathBuf> {
     .clone()
 }
 
+/// The plugin's files, `(path inside the plugin, bytes)`, for a remote copy.
+pub fn files() -> &'static [(&'static str, &'static [u8])] {
+    embedded::FILES
+}
+
+/// A content hash of the plugin: a new plugin unpacks to a new folder.
+pub fn hash() -> &'static str {
+    embedded::HASH
+}
+
 /// The skills the plugin brings, as ForgeCLI names them (`forge:<name>`),
 /// with their descriptions.
 pub fn skills() -> Vec<(String, String)> {

@@ -20,6 +20,8 @@ pub struct Sidebar {
     /// The title being edited (F2, or Rename in a chat's menu).
     rename: Entity<InputState>,
     renaming: Option<usize>,
+    /// The remote menu's box for typing an SSH host.
+    host: Entity<InputState>,
     /// Where the open chat menu sits: under the ⋯ button, or at the click.
     menu_at: gpui::Point<gpui::Pixels>,
     _subs: Vec<Subscription>,
@@ -31,6 +33,7 @@ impl Sidebar {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search chats"));
         let rename = cx.new(|cx| InputState::new(window, cx).placeholder("Chat title"));
+        let host = cx.new(|cx| InputState::new(window, cx).placeholder("user@host"));
         let subs = vec![
             cx.observe_in(&state, window, |this, state, window, cx| {
                 // Renaming starts: the title goes in the box, and the box takes the keyboard.
@@ -80,11 +83,26 @@ impl Sidebar {
                     });
                 }
             }),
+            // Enter in the host box: browse that host's home folder.
+            cx.subscribe(&host, {
+                let state = state.clone();
+                move |_, input, ev: &InputEvent, cx| {
+                    if let InputEvent::PressEnter { .. } = ev {
+                        let h = input.read(cx).value().trim().to_string();
+                        if !h.is_empty() {
+                            state.update(cx, |s, cx| {
+                                s.browse_remote(crate::remote::Target::Ssh(h), "~".into(), cx)
+                            });
+                        }
+                    }
+                }
+            }),
         ];
         Self {
             state,
             search,
             rename,
+            host,
             renaming: None,
             menu_at: Default::default(),
             _subs: subs,
@@ -207,6 +225,11 @@ impl Render for Sidebar {
         let rules_open = s.screen == Screen::Rules;
         let projects_open = matches!(s.screen, Screen::Projects | Screen::Project(_));
         let loading = s.loading;
+        let remote_chip = super::remote_menu::indicator(s, self.state.clone(), &t);
+        let remote_menu = s
+            .remote_menu
+            .is_some()
+            .then(|| super::remote_menu::menu(s, self.state.clone(), &self.host, &t));
 
         let mut list = div()
             .id("chat-list")
@@ -665,9 +688,12 @@ impl Render for Sidebar {
             })
             .child(
                 div()
+                    .relative()
                     .border_t_1()
                     .border_color(t.colors.border)
                     .p(t.space.sm)
+                    .child(remote_chip)
+                    .children(remote_menu.map(|m| gpui::deferred(m).with_priority(2)))
                     .child(
                         div()
                             .id("sidebar-settings")

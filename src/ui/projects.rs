@@ -172,7 +172,9 @@ impl ProjectsView {
                         .gap(t.space.sm)
                         .text_size(t.text.caption)
                         .text_color(t.colors.text_subtle)
-                        .child(branch_pill(t, p.branch.clone()))
+                        .when(!p.branch.is_empty(), |d| {
+                            d.child(branch_pill(t, p.branch.clone()))
+                        })
                         .child(div().flex_1())
                         .child(div().flex_none().whitespace_nowrap().child(format!(
                             "{chats} chat{} · {}",
@@ -351,7 +353,9 @@ impl ProjectsView {
                                                         home.as_deref(),
                                                     )),
                                             )
-                                            .child(branch_pill(t, p.branch.clone())),
+                                            .when(!p.branch.is_empty(), |d| {
+                                                d.child(branch_pill(t, p.branch.clone()))
+                                            }),
                                     ),
                             )
                             .child(

@@ -378,6 +378,40 @@ pub struct Chat {
     pub versions: Vec<Version>,
 }
 
+/// The remote indicator's menu (`ui/remote_menu.rs`): which page shows and
+/// what discovery found. Lists are None while they load.
+#[derive(Clone, Debug, Default)]
+pub struct RemoteMenu {
+    pub page: RemotePage,
+    pub distros: Option<Result<Vec<crate::remote::Distro>, String>>,
+    pub hosts: Vec<String>,
+    pub containers: Option<Result<Vec<crate::remote::Container>, String>>,
+    /// Picking a folder on a target.
+    pub folder: Option<RemoteFolder>,
+    /// An SSH host's unknown key, waiting for "Trust".
+    pub host_key: Option<(crate::remote::Target, String, String)>,
+    pub error: Option<SharedString>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum RemotePage {
+    #[default]
+    Root,
+    Wsl,
+    Ssh,
+    Containers,
+    Folder,
+}
+
+/// A folder being browsed on a target: where, and what's in it (None while
+/// it loads).
+#[derive(Clone, Debug)]
+pub struct RemoteFolder {
+    pub target: crate::remote::Target,
+    pub path: String,
+    pub entries: Option<Result<Vec<crate::remote::Entry>, String>>,
+}
+
 /// A replaced version of a conversation: from your message at `at` on, as
 /// it was, and the ForgeCLI conversation it had (restoring it resumes that).
 #[derive(Clone, Debug)]
@@ -891,6 +925,16 @@ pub struct AppState {
     pub project: SharedString,
     /// The project's folder: `FORGE_PROJECT_DIR`, else where Forge started.
     pub project_dir: std::path::PathBuf,
+    /// Remote targets ForgeCLI was put on this run (`remote.rs`).
+    remote_ready: std::collections::HashMap<crate::remote::Target, crate::remote::Provisioned>,
+    /// A connection being made: the target and what it is doing now.
+    pub remote_busy: Option<(crate::remote::Target, SharedString)>,
+    /// SSH hosts whose new key the person agreed to trust.
+    trusted_hosts: std::collections::HashSet<String>,
+    /// The remote indicator's menu, while it's open.
+    pub remote_menu: Option<RemoteMenu>,
+    /// The browser's tool server over HTTP, for remote agents: (port, token).
+    browser_http: Option<(u16, String)>,
     pub screen: Screen,
     pub branch: SharedString,
     pub chats: Vec<Chat>,
@@ -1091,6 +1135,11 @@ impl AppState {
                 .into(),
             project: projects[0].name.clone(),
             project_dir,
+            remote_ready: Default::default(),
+            remote_busy: None,
+            trusted_hosts: Default::default(),
+            remote_menu: None,
+            browser_http: None,
             branch: projects[0].branch.clone(),
             current_project: projects[0].id,
             projects,
@@ -1655,10 +1704,7 @@ impl AppState {
             return self.show_project(id, cx);
         }
         let id = self.projects.iter().map(|p| p.id).max().unwrap_or(0) + 1;
-        let name = path
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| path.display().to_string());
+        let name = project_name(&path);
         self.projects.push(Project {
             id,
             name: name.into(),
@@ -2618,14 +2664,26 @@ impl AppState {
             return;
         }
         self.completions_loading = true;
+        let remote = self
+            .current_remote()
+            .map(|r| (self.remote_extra(&r.target), r));
         cx.spawn(async move |this, cx| {
             let d = dir.clone();
             let (files, commands) = cx
                 .background_spawn(async move {
-                    (
-                        crate::rules::project_entries(&d, 20_000),
-                        crate::commands::custom(&d),
-                    )
+                    match remote {
+                        // A remote project's files come over the connection.
+                        Some((extra, r)) => (
+                            crate::remote::project_files(&r.target, &r.path, 20_000, &extra)
+                                .map(crate::rules::entries_of)
+                                .unwrap_or_default(),
+                            vec![],
+                        ),
+                        None => (
+                            crate::rules::project_entries(&d, 20_000),
+                            crate::commands::custom(&d),
+                        ),
+                    }
                 })
                 .await;
             let _ = this.update(cx, |s, cx| {
@@ -2880,14 +2938,6 @@ impl AppState {
                 cx,
             );
         };
-        // Expert's output style is part of the process's system prompt: going
-        // into or out of Expert restarts the chat's ForgeCLI, resuming the
-        // conversation.
-        let expert = self.mode == ModeId::Expert;
-        let resumable = self.chats.iter().any(|c| c.id == id && c.resumable);
-        if resumable && self.sessions.get(&id).is_some_and(|l| l.expert != expert) {
-            self.sessions.remove(&id);
-        }
         if !self.sessions.contains_key(&id) {
             if let Err(e) = self.start_session(id, profile, cx) {
                 return self.show_toast(format!("Couldn't start Forge to compact: {e}"), cx);
@@ -3929,6 +3979,23 @@ impl AppState {
                 }
             }
         }
+        // Expert's output style is part of the process's system prompt: going
+        // into or out of Expert restarts the chat's ForgeCLI, resuming the
+        // conversation.
+        let expert = self.mode == ModeId::Expert;
+        let resumable = self.chats.iter().any(|c| c.id == id && c.resumable);
+        if resumable && self.sessions.get(&id).is_some_and(|l| l.expert != expert) {
+            self.sessions.remove(&id);
+        }
+        // A remote project's first message connects (and installs ForgeCLI
+        // there if needed) in the background, then sends.
+        if !self.sessions.contains_key(&id) {
+            if let Some(remote) = self.chat_remote(id) {
+                if !self.remote_ready.contains_key(&remote.target) {
+                    return self.connect_then_send(id, remote.target, text, attachments, cx);
+                }
+            }
+        }
         if !self.sessions.contains_key(&id) {
             if let Err(e) = self.start_session(id, profile, cx) {
                 return self.notice(id, e, true);
@@ -3969,7 +4036,7 @@ impl AppState {
         profile: crate::endpoints::Profile,
         cx: &mut Context<Self>,
     ) -> Result<(), String> {
-        let exe = crate::backend::find_cli().ok_or("ForgeCLI wasn't found. Reinstall Forge (it puts forge.exe in the bin folder beside the app), or set FORGE_CLI to its path.")?;
+        let remote = self.chat_remote(id);
         let (session_id, resumable) = self
             .chats
             .iter()
@@ -3984,8 +4051,19 @@ impl AppState {
         let mut launch =
             crate::backend::launch(&profile, self.mode, self.bypass_allowed, conversation)?;
         // The web browser: Forge's own browser tools (this executable, as
-        // an MCP server) on the browser in the side panel.
-        if self.browser {
+        // an MCP server) on the browser in the side panel. A remote agent
+        // reaches them over HTTP, forwarded back to this machine.
+        let mut extra = crate::remote::Extra::default();
+        if self.browser && remote.is_some() {
+            if let Some((port, token)) = self.ensure_browser_http(cx) {
+                let there = crate::remote::forward_port(&session_id, port);
+                launch.args.extend([
+                    "--mcp-config".to_string(),
+                    crate::remote::browser_mcp_config(there, &token),
+                ]);
+                extra.reverse.push(format!("{there}:127.0.0.1:{port}"));
+            }
+        } else if self.browser {
             if let (Some(cdp), Ok(exe)) = (self.ensure_web(cx), std::env::current_exe()) {
                 launch.args.extend([
                     "--mcp-config".to_string(),
@@ -3999,7 +4077,11 @@ impl AppState {
             .settings_profile
             .as_deref()
             .and_then(crate::setting_profiles::path_of);
-        if let Some(flag) = crate::modes::flag_settings(self.mode, profile_path.as_deref()) {
+        if let Some(mut flag) = crate::modes::flag_settings(self.mode, profile_path.as_deref()) {
+            // A remote ForgeCLI can't read this machine's file: send its settings.
+            if remote.is_some() && !flag.trim_start().starts_with('{') {
+                flag = std::fs::read_to_string(&flag).unwrap_or_else(|_| "{}".into());
+            }
             launch.args.extend(["--settings".to_string(), flag]);
         }
         if resumable {
@@ -4007,13 +4089,43 @@ impl AppState {
         } else {
             self.resuming.remove(&id);
         }
-        let project = self.chats.iter().find(|c| c.id == id).map(|c| c.project);
-        let dir = project
-            .and_then(|p| self.project(p))
-            .map(|p| p.path.clone())
-            .filter(|p| p.is_dir())
-            .unwrap_or_else(|| self.project_dir.clone());
-        let session = crate::backend::Session::spawn(&exe, &launch, &dir)?;
+        let session = if let Some(remote) = &remote {
+            let ready = self
+                .remote_ready
+                .get(&remote.target)
+                .cloned()
+                .ok_or_else(|| format!("Not connected to {} yet.", remote.target.label()))?;
+            // Forge's plugin, as put on the remote.
+            if let Some(i) = launch.args.iter().position(|a| a == "--plugin-dir") {
+                if let Some(dir) = launch.args.get_mut(i + 1) {
+                    *dir = ready.plugin.clone();
+                }
+            }
+            if let crate::remote::Target::Ssh(host) = &remote.target {
+                extra.accept_new_host_key = self.trusted_hosts.contains(host);
+                // An endpoint on this computer (a local model server) is
+                // forwarded to the same port on the host.
+                for (k, v) in launch.env.iter_mut() {
+                    if k.ends_with("BASE_URL") {
+                        if let Some(port) = crate::remote::local_port(v) {
+                            let there = crate::remote::forward_port(&session_id, port);
+                            extra.reverse.push(format!("{there}:127.0.0.1:{port}"));
+                            *v = crate::remote::with_port(v, there);
+                        }
+                    }
+                }
+            }
+            crate::backend::Session::spawn_remote(remote, &ready.forge, &launch, &extra)?
+        } else {
+            let exe = crate::backend::find_cli().ok_or("ForgeCLI wasn't found. Reinstall Forge (it puts forge.exe in the bin folder beside the app), or set FORGE_CLI to its path.")?;
+            let project = self.chats.iter().find(|c| c.id == id).map(|c| c.project);
+            let dir = project
+                .and_then(|p| self.project(p))
+                .map(|p| p.path.clone())
+                .filter(|p| p.is_dir())
+                .unwrap_or_else(|| self.project_dir.clone());
+            crate::backend::Session::spawn(&exe, &launch, &dir)?
+        };
         let events = session.events.clone();
         self.generations += 1;
         let generation = self.generations;
@@ -4180,7 +4292,11 @@ impl AppState {
                         }
                     });
                     // A document Forge wrote gets its card in the reply.
-                    if let Some(file) = written.and_then(|p| self.written_file(chat, &p)) {
+                    if let Some(remote) = self.chat_remote(chat) {
+                        if let Some(p) = written {
+                            self.remote_written_file(chat, remote, p, cx);
+                        }
+                    } else if let Some(file) = written.and_then(|p| self.written_file(chat, &p)) {
                         self.push_block(chat, Block::File(file));
                     }
                 }
@@ -4309,10 +4425,16 @@ impl AppState {
                 }
                 self.asks.remove(&chat);
                 self.stale_turns.remove(&chat);
+                let remote = self.chat_remote(chat);
                 if self.replies.contains_key(&chat) {
-                    let why = match code {
-                        Some(c) => format!("Forge stopped (exit code {c})."),
-                        None => "Forge stopped.".to_string(),
+                    let why = match (&remote, code) {
+                        // ssh exits 255 when the connection drops.
+                        (Some(r), Some(255) | None) => format!(
+                            "The connection to {} ended. Your next message reconnects and picks the conversation up.",
+                            r.target.label()
+                        ),
+                        (_, Some(c)) => format!("Forge stopped (exit code {c})."),
+                        (_, None) => "Forge stopped.".to_string(),
                     };
                     let text = if detail.is_empty() {
                         why
@@ -4354,6 +4476,373 @@ impl AppState {
             }
         };
         let bytes = std::fs::read(&full).ok()?;
+        file_card(name, ext, full.display().to_string(), bytes)
+    }
+
+    /// A document Forge wrote on a remote, read back over the connection
+    /// (off this thread); its card joins the reply when it arrives.
+    fn remote_written_file(
+        &mut self,
+        chat: usize,
+        remote: crate::remote::Remote,
+        path: String,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(name) = path.rsplit('/').next().map(str::to_string) else {
+            return;
+        };
+        let Some(ext) = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()) else {
+            return;
+        };
+        if !matches!(
+            ext.as_str(),
+            "md" | "markdown" | "svg" | "html" | "htm" | "docx" | "xlsx" | "pptx" | "pdf"
+        ) {
+            return;
+        }
+        let full = if path.starts_with('/') || path.starts_with('~') {
+            path
+        } else {
+            format!("{}/{path}", remote.path.trim_end_matches('/'))
+        };
+        let extra = self.remote_extra(&remote.target);
+        let task = cx.background_spawn(async move {
+            crate::remote::read_file(&remote.target, &full, 64 << 20, &extra)
+                .ok()
+                .and_then(|bytes| file_card(name, ext, full, bytes))
+        });
+        cx.spawn(async move |this, cx| {
+            if let Some(file) = task.await {
+                let _ = this.update(cx, |s, cx| {
+                    s.push_block(chat, Block::File(file));
+                    s.mark_dirty(chat, cx);
+                    cx.notify();
+                });
+            }
+        })
+        .detach();
+    }
+}
+
+// ---------------------------------------------------------------- remote development
+
+impl AppState {
+    /// The current project, when it lives on a remote.
+    pub fn current_remote(&self) -> Option<crate::remote::Remote> {
+        self.project(self.current_project)
+            .and_then(|p| crate::remote::Remote::parse(&p.path))
+    }
+
+    /// Where a chat runs: its project's remote, or None for this machine.
+    pub fn chat_remote(&self, chat: usize) -> Option<crate::remote::Remote> {
+        self.chats
+            .iter()
+            .find(|c| c.id == chat)
+            .and_then(|c| self.project(c.project))
+            .and_then(|p| crate::remote::Remote::parse(&p.path))
+    }
+
+    /// ForgeCLI is on this target and answered: chats there start at once.
+    pub fn remote_connected(&self, target: &crate::remote::Target) -> bool {
+        self.remote_ready.contains_key(target)
+    }
+
+    fn remote_extra(&self, target: &crate::remote::Target) -> crate::remote::Extra {
+        crate::remote::Extra {
+            accept_new_host_key: matches!(target, crate::remote::Target::Ssh(h) if self.trusted_hosts.contains(h)),
+            reverse: vec![],
+        }
+    }
+
+    /// A remote chat's first message: connect, then send it. The chat
+    /// shows as working meanwhile.
+    fn connect_then_send(
+        &mut self,
+        id: usize,
+        target: crate::remote::Target,
+        text: String,
+        attachments: Vec<crate::attach::Attachment>,
+        cx: &mut Context<Self>,
+    ) {
+        self.replies.insert(id, Task::ready(()));
+        self.turn_started.insert(id, std::time::Instant::now());
+        self.connect(target, Some((id, text, attachments)), cx);
+    }
+
+    /// Put this app's ForgeCLI on a target (off this thread; what it's doing
+    /// shows on the remote indicator), then send the message that waited.
+    pub fn connect(
+        &mut self,
+        target: crate::remote::Target,
+        then: Option<(usize, String, Vec<crate::attach::Attachment>)>,
+        cx: &mut Context<Self>,
+    ) {
+        let extra = self.remote_extra(&target);
+        let (tx, rx) = async_channel::unbounded::<String>();
+        self.remote_busy = Some((
+            target.clone(),
+            format!("Connecting to {}…", target.label()).into(),
+        ));
+        let job = target.clone();
+        let task = cx.background_spawn(async move {
+            crate::remote::provision(&job, &extra, &|m: &str| {
+                let _ = tx.send_blocking(m.to_string());
+            })
+        });
+        cx.spawn(async move |this, cx| {
+            while let Ok(m) = rx.recv().await {
+                let gone = this
+                    .update(cx, |s, cx| {
+                        if let Some((_, msg)) = &mut s.remote_busy {
+                            *msg = m.into();
+                        }
+                        cx.notify();
+                    })
+                    .is_err();
+                if gone {
+                    break;
+                }
+            }
+        })
+        .detach();
+        cx.spawn(async move |this, cx| {
+            let result = task.await;
+            let _ = this.update(cx, |s, cx| {
+                s.remote_busy = None;
+                match result {
+                    Ok(ready) => {
+                        s.remote_ready.insert(target, ready);
+                        if let Some((id, text, attachments)) = then {
+                            s.replies.remove(&id);
+                            s.send_to_forge(id, text, attachments, cx);
+                        }
+                    }
+                    Err(e) => {
+                        if let crate::remote::Error::UnknownHostKey { host, fingerprint } = &e {
+                            let menu = s.remote_menu.get_or_insert_with(Default::default);
+                            menu.host_key =
+                                Some((target.clone(), host.clone(), fingerprint.clone()));
+                        }
+                        match then {
+                            Some((id, ..)) => {
+                                s.notice(id, e.to_string(), true);
+                                s.finish_turn(id, cx);
+                            }
+                            None => s.show_toast(e.to_string(), cx),
+                        }
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Open or close the remote indicator's menu. Opening looks for WSL
+    /// distros, SSH hosts, containers and a dev container (off this thread).
+    pub fn toggle_remote_menu(&mut self, cx: &mut Context<Self>) {
+        if self.remote_menu.take().is_some() {
+            return cx.notify();
+        }
+        self.remote_menu = Some(RemoteMenu::default());
+        let task = cx.background_spawn(async move {
+            (
+                crate::remote::wsl_distros().map_err(|e| e.to_string()),
+                crate::remote::ssh_hosts(),
+                crate::remote::containers().map_err(|e| e.to_string()),
+            )
+        });
+        cx.spawn(async move |this, cx| {
+            let (distros, hosts, containers) = task.await;
+            let _ = this.update(cx, |s, cx| {
+                if let Some(m) = &mut s.remote_menu {
+                    m.distros = Some(distros);
+                    m.hosts = hosts;
+                    m.containers = Some(containers);
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
+    /// The remote menu, opened on a page (from the command palette).
+    pub fn open_remote_page(&mut self, page: RemotePage, cx: &mut Context<Self>) {
+        self.sidebar_open = true;
+        if self.remote_menu.is_none() {
+            self.toggle_remote_menu(cx);
+        }
+        self.remote_page(page, cx);
+    }
+
+    pub fn remote_page(&mut self, page: RemotePage, cx: &mut Context<Self>) {
+        if let Some(m) = &mut self.remote_menu {
+            m.page = page;
+            m.error = None;
+        }
+        cx.notify();
+    }
+
+    /// Show a folder on a target in the menu, to pick the project's folder.
+    pub fn browse_remote(
+        &mut self,
+        target: crate::remote::Target,
+        path: String,
+        cx: &mut Context<Self>,
+    ) {
+        let menu = self.remote_menu.get_or_insert_with(Default::default);
+        menu.page = RemotePage::Folder;
+        menu.error = None;
+        menu.folder = Some(RemoteFolder {
+            target: target.clone(),
+            path: path.clone(),
+            entries: None,
+        });
+        let extra = self.remote_extra(&target);
+        let job = target.clone();
+        let task = cx.background_spawn(async move { crate::remote::list_dir(&job, &path, &extra) });
+        cx.spawn(async move |this, cx| {
+            let result = task.await;
+            let _ = this.update(cx, |s, cx| {
+                let Some(m) = &mut s.remote_menu else { return };
+                let Some(f) = m.folder.as_mut().filter(|f| f.target == target) else {
+                    return;
+                };
+                match result {
+                    Ok((full, entries)) => {
+                        f.path = full;
+                        f.entries = Some(Ok(entries));
+                    }
+                    Err(crate::remote::Error::UnknownHostKey { host, fingerprint }) => {
+                        f.entries = Some(Err("Waiting for you to trust the host.".into()));
+                        m.host_key = Some((target, host, fingerprint));
+                    }
+                    Err(e) => f.entries = Some(Err(e.to_string())),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
+    /// "Trust" on an unknown SSH host key: remember it (ssh then records
+    /// it in known_hosts) and carry on browsing there.
+    pub fn trust_host(&mut self, cx: &mut Context<Self>) {
+        let Some((target, host, _)) = self.remote_menu.as_mut().and_then(|m| m.host_key.take())
+        else {
+            return;
+        };
+        self.trusted_hosts.insert(host);
+        self.browse_remote(target, "~".into(), cx);
+    }
+
+    /// Work in a remote folder: it becomes the current project, and
+    /// ForgeCLI is put there in the background.
+    pub fn open_remote_folder(&mut self, remote: crate::remote::Remote, cx: &mut Context<Self>) {
+        self.remote_menu = None;
+        let target = remote.target.clone();
+        self.add_project(remote.to_path(), cx);
+        if !self.remote_ready.contains_key(&target) {
+            self.connect(target, None, cx);
+        }
+    }
+
+    /// Reopen the current (local) folder in its dev container.
+    pub fn reopen_in_container(&mut self, cx: &mut Context<Self>) {
+        let dir = self.project_dir.clone();
+        if crate::remote::Remote::parse(&dir).is_some() || !dir.is_dir() {
+            return self.show_toast(
+                "Open the local folder first: its dev container starts from it.",
+                cx,
+            );
+        }
+        self.remote_menu = None;
+        let placeholder = crate::remote::Target::Container {
+            name: "dev container".into(),
+            user: None,
+        };
+        self.remote_busy = Some((placeholder, "Starting the dev container…".into()));
+        let (tx, rx) = async_channel::unbounded::<String>();
+        let task = cx.background_spawn(async move {
+            crate::remote::devcontainer_up(&dir, &|m: &str| {
+                let _ = tx.send_blocking(m.to_string());
+            })
+        });
+        cx.spawn(async move |this, cx| {
+            while let Ok(m) = rx.recv().await {
+                if this
+                    .update(cx, |s, cx| {
+                        if let Some((_, msg)) = &mut s.remote_busy {
+                            *msg = m.into();
+                        }
+                        cx.notify();
+                    })
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        })
+        .detach();
+        cx.spawn(async move |this, cx| {
+            let result = task.await;
+            let _ = this.update(cx, |s, cx| {
+                s.remote_busy = None;
+                match result {
+                    Ok(remote) => s.open_remote_folder(remote, cx),
+                    Err(e) => s.show_toast(e.to_string(), cx),
+                }
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
+    /// The current folder has a dev container definition.
+    pub fn has_devcontainer(&self) -> bool {
+        crate::remote::Remote::parse(&self.project_dir).is_none()
+            && (self
+                .project_dir
+                .join(".devcontainer")
+                .join("devcontainer.json")
+                .is_file()
+                || self.project_dir.join(".devcontainer.json").is_file())
+    }
+
+    /// Back to this machine: the first local project becomes current.
+    pub fn close_remote(&mut self, cx: &mut Context<Self>) {
+        self.remote_menu = None;
+        if let Some(id) = self
+            .projects
+            .iter()
+            .find(|p| crate::remote::Remote::parse(&p.path).is_none())
+            .map(|p| p.id)
+        {
+            self.select_project(id, cx);
+            self.new_chat(cx);
+        }
+        cx.notify();
+    }
+
+    /// The browser's tool server over HTTP, started on first use: (port, token).
+    fn ensure_browser_http(&mut self, cx: &mut Context<Self>) -> Option<(u16, String)> {
+        if let Some(h) = &self.browser_http {
+            return Some(h.clone());
+        }
+        let cdp = self.ensure_web(cx)?;
+        let token = crate::history::new_id().replace('-', "");
+        let port =
+            crate::browser_mcp::serve_http(&cdp, &crate::browser::focus_file(), &token).ok()?;
+        self.browser_http = Some((port, token));
+        self.browser_http.clone()
+    }
+}
+
+/// A written document's card: Markdown, a diagram, an Office file or a PDF.
+fn file_card(name: String, ext: String, full: String, bytes: Vec<u8>) -> Option<FileRef> {
+    {
         // An HTML page gets a card only when it is a diagram (Diagram
         // Design's pages are); other pages stay a tool row.
         if matches!(ext.as_str(), "html" | "htm")
@@ -4364,7 +4853,7 @@ impl AppState {
         let binary = matches!(ext.as_str(), "docx" | "xlsx" | "pptx" | "pdf");
         Some(FileRef {
             name: name.into(),
-            path: Some(full.display().to_string().into()),
+            path: Some(full.into()),
             content: if binary {
                 "".into()
             } else {
@@ -4373,7 +4862,9 @@ impl AppState {
             bytes: binary.then(|| std::sync::Arc::from(bytes.into_boxed_slice())),
         })
     }
+}
 
+impl AppState {
     /// Add a block to the reply being written (starting one if needed); where it went.
     fn push_block(&mut self, chat: usize, block: Block) -> Option<(usize, usize)> {
         let c = self.chat_mut(chat)?;
@@ -4999,11 +5490,7 @@ fn script(prompt: &str) -> Vec<Step> {
 fn initial_projects(here: &std::path::Path) -> Vec<Project> {
     let project = |id, path: std::path::PathBuf, opened| Project {
         id,
-        name: path
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| path.display().to_string())
-            .into(),
+        name: project_name(&path).into(),
         branch: git_branch(&path).into(),
         path,
         pinned: false,
@@ -5011,11 +5498,22 @@ fn initial_projects(here: &std::path::Path) -> Vec<Project> {
     };
     let mut out = vec![project(1, here.to_path_buf(), 0)];
     for path in saved_projects() {
-        if path.is_dir() && !out.iter().any(|p| p.path == path) {
+        let remote = crate::remote::Remote::parse(&path).is_some();
+        if (remote || path.is_dir()) && !out.iter().any(|p| p.path == path) {
             out.push(project(out.len() + 1, path, 60));
         }
     }
     out
+}
+
+/// A project's name: its folder's (a remote one's too).
+fn project_name(path: &std::path::Path) -> String {
+    if let Some(r) = crate::remote::Remote::parse(path) {
+        return r.name();
+    }
+    path.file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.display().to_string())
 }
 
 fn projects_file() -> Option<std::path::PathBuf> {

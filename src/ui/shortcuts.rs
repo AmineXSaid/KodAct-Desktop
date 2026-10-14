@@ -27,6 +27,11 @@ pub const SHORTCUTS: &[(&str, &str, &str)] = &[
     ("secondary-shift-a", "Chats that need you", "Chats"),
     ("secondary-shift-m", "The project map", "Chats"),
     (
+        "secondary-alt-o",
+        "Remote: WSL, SSH host or container",
+        "Chats",
+    ),
+    (
         "secondary-shift-e",
         "Side panel: plan, files, browser",
         "Conversation",

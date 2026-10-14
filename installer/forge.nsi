@@ -7,6 +7,8 @@
 ; no UAC prompt. Lays out:
 ;   %LOCALAPPDATA%\Programs\Forge\Forge.exe        the desktop app
 ;   %LOCALAPPDATA%\Programs\Forge\bin\forge.exe    ForgeCLI (the app finds it in bin\)
+;   %LOCALAPPDATA%\Programs\Forge\bin\linux-x86_64\forge   ForgeCLI for Linux, put on
+;                                     WSL distros, SSH hosts and containers
 ; plus the user's Start menu and desktop shortcuts, an optional PATH entry for
 ; `forge` (the user's), and an uninstaller in Apps & features (the user's).
 
@@ -88,6 +90,9 @@ Section "ForgeCLI (forge)" SecCli
   SectionIn RO
   SetOutPath "$INSTDIR\bin"
   File "/oname=forge.exe" "${CLI_EXE}"
+  ; Remote development: the app copies this to a remote the first time.
+  SetOutPath "$INSTDIR\bin\linux-x86_64"
+  File "/oname=forge" "${LINUX_CLI}"
 SectionEnd
 
 Section "Add forge to PATH" SecPath
@@ -252,6 +257,8 @@ Section "Uninstall"
   Delete "$SMPROGRAMS\Forge.lnk"
   Delete "$DESKTOP\Forge.lnk"
 
+  Delete "$INSTDIR\bin\linux-x86_64\forge"
+  RMDir "$INSTDIR\bin\linux-x86_64"
   Delete "$INSTDIR\bin\forge.exe"
   RMDir "$INSTDIR\bin"
   Delete "$INSTDIR\Forge.exe"

@@ -866,9 +866,126 @@ pub fn serve(devtools_http: &str, focus_file: &Path) {
     }
 }
 
+/// Serve the same MCP over HTTP on `127.0.0.1:<port>` (`POST /mcp/<token>`,
+/// one JSON-RPC message per request, its answer as JSON): for a ForgeCLI on
+/// a remote, which reaches it through an `ssh -R` forward (`remote.rs`).
+/// Requests without the token are refused. Returns the port.
+pub fn serve_http(devtools_http: &str, focus_file: &Path, token: &str) -> std::io::Result<u16> {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+    let port = listener.local_addr()?.port();
+    let browser = std::sync::Arc::new(std::sync::Mutex::new(Browser::new(
+        devtools_http,
+        focus_file,
+    )));
+    let path = format!("/mcp/{token}");
+    std::thread::spawn(move || {
+        for stream in listener.incoming().map_while(Result::ok) {
+            let (browser, path) = (browser.clone(), path.clone());
+            std::thread::spawn(move || {
+                let _ = http_exchange(stream, &path, &browser);
+            });
+        }
+    });
+    Ok(port)
+}
+
+/// One HTTP/1.1 request and its answer (the connection then closes).
+fn http_exchange(
+    mut stream: std::net::TcpStream,
+    path: &str,
+    browser: &std::sync::Mutex<Browser>,
+) -> std::io::Result<()> {
+    use std::io::Read;
+    stream.set_read_timeout(Some(Duration::from_secs(30)))?;
+    let mut reader = std::io::BufReader::new(stream.try_clone()?);
+    let mut request = String::new();
+    reader.read_line(&mut request)?;
+    let mut length = 0usize;
+    loop {
+        let mut h = String::new();
+        if reader.read_line(&mut h)? == 0 || h.trim().is_empty() {
+            break;
+        }
+        if let Some((k, v)) = h.split_once(':') {
+            if k.trim().eq_ignore_ascii_case("content-length") {
+                length = v.trim().parse().unwrap_or(0);
+            }
+        }
+    }
+    let mut parts = request.split_whitespace();
+    let (method, target) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
+    let respond = |stream: &mut std::net::TcpStream, status: &str, body: &str| {
+        let head = format!(
+            "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        stream
+            .write_all(head.as_bytes())
+            .and_then(|_| stream.write_all(body.as_bytes()))
+            .and_then(|_| stream.flush())
+    };
+    if target != path {
+        return respond(&mut stream, "404 Not Found", "{}");
+    }
+    match method {
+        "POST" => {
+            let mut body = vec![0u8; length.min(16 * 1024 * 1024)];
+            reader.read_exact(&mut body)?;
+            let Ok(msg) = serde_json::from_slice::<Value>(&body) else {
+                return respond(&mut stream, "400 Bad Request", "{}");
+            };
+            let answer = handle(&mut browser.lock().unwrap(), &msg);
+            match answer {
+                Some(r) => respond(&mut stream, "200 OK", &r.to_string()),
+                None => respond(&mut stream, "202 Accepted", ""),
+            }
+        }
+        // No server-sent stream and no sessions: GET and DELETE just answer.
+        "GET" => respond(&mut stream, "405 Method Not Allowed", "{}"),
+        _ => respond(&mut stream, "200 OK", "{}"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The HTTP server answers MCP with the token and refuses without it.
+    #[test]
+    fn speaks_mcp_over_http() {
+        use std::io::Read;
+        let port =
+            serve_http("http://127.0.0.1:1", Path::new("/nonexistent/focus"), "tok").unwrap();
+        let post = |path: &str, body: &str| {
+            let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+            write!(
+                s,
+                "POST {path} HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
+            let mut out = String::new();
+            s.read_to_string(&mut out).unwrap();
+            out
+        };
+        let init = post(
+            "/mcp/tok",
+            r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26"}}"#,
+        );
+        assert!(init.starts_with("HTTP/1.1 200"), "{init}");
+        assert!(init.contains(r#""name":"forge-browser""#));
+        let list = post(
+            "/mcp/tok",
+            r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#,
+        );
+        assert!(list.contains(r#""name":"navigate""#));
+        let note = post(
+            "/mcp/tok",
+            r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
+        );
+        assert!(note.starts_with("HTTP/1.1 202"));
+        assert!(post("/mcp/wrong", "{}").starts_with("HTTP/1.1 404"));
+    }
 
     fn browser() -> Browser {
         Browser::new("http://127.0.0.1:1", Path::new("/nonexistent/focus"))

@@ -48,6 +48,7 @@ table in step.
 | Ctrl/⌘ Shift R | Rules and memory |
 | Ctrl/⌘ Shift A | Chats that need you |
 | Ctrl/⌘ Shift M | The project map |
+| Ctrl/⌘ Alt O | Remote: WSL, SSH host or container |
 | Ctrl/⌘ L | Focus the composer |
 | Ctrl/⌘ U | Attach files and images |
 | Ctrl/⌘ Shift T | This turn's tasks |
@@ -60,6 +61,37 @@ table in step.
 | Shift Tab | Next permission mode |
 | Esc | Stop the reply, or close what's open |
 | Enter / Shift Enter | Send / new line |
+
+## Remote development
+
+As in VS Code, the chip at the bottom left of the sidebar says where the
+project lives, and its menu (Ctrl/⌘ Alt O, or the command palette) moves it:
+**Connect to WSL** (a distro), **Connect to Host** (SSH, from
+`~/.ssh/config` or `user@host`), **Reopen in Container** (the folder's
+`.devcontainer`) and **Attach to Running Container**, then a folder there.
+A chat in a remote project runs its ForgeCLI on that machine, so its tools,
+shell, git and files are the remote's; this app stays the UI
+(`src/remote.rs`).
+
+- The first connection installs ForgeCLI there (`~/.forge/bin`), from the
+  static Linux build the installer puts in `bin\linux-x86_64\forge`
+  (or `FORGE_REMOTE_CLI`).
+- SSH uses the system's OpenSSH client with your keys or agent (no
+  passwords). A host seen for the first time shows its key fingerprint and
+  waits for "Trust".
+- API keys reach the remote on the process's stdin, never on a command line.
+  A model server on this computer (`localhost`) and the side panel's browser
+  are forwarded to SSH hosts (`ssh -R`); for WSL and containers they need
+  localhost to be shared (WSL's mirrored networking, a container on the host
+  network).
+- If the connection drops, the next message reconnects and resumes the
+  conversation.
+
+Tested here: SSH (an OpenSSH server in a container), a running container,
+and dev containers from an image and from a Dockerfile, each with the real
+ForgeCLI and the scripted model (`cargo test real_ -- --include-ignored`,
+see `src/remote.rs`). WSL runs the same way through `wsl.exe` but has only
+been checked by its unit tests (no Windows machine here).
 
 ## Layout
 

@@ -83,3 +83,15 @@ on the Anthropic Messages API (streaming). What it showed:
 - Not seen: the title bar. Under Wine without a window manager, the top 30 px
   (the caption area GPUI draws in through `WM_NCCALCSIZE`) is not shown. It
   needs a look on a real Windows.
+
+## Remote development (`src/remote.rs`, `ui/remote_menu.rs`)
+
+| Check | How | Result |
+|---|---|---|
+| Transports, quoting, boot script, discovery parsers, tar, errors | `cargo test remote::` (14 tests; the boot script and tar run under a real `sh`/`tar`) | pass |
+| SSH: unknown host key → fingerprint → trust; install ForgeCLI once; modes ask as locally; key never in argv; process ends with its stdin | `cargo test real_remotes -- --include-ignored` against an OpenSSH server in a container | pass |
+| Running container (`docker exec`) | same test, `FORGE_TEST_CONTAINER` | pass |
+| Dev container from an image and from a Dockerfile, `postCreateCommand`, folder mounted, reopen reuses it | `cargo test real_devcontainer -- --include-ignored` | pass |
+| Browser tools reach a remote agent over `ssh -R` (HTTP MCP) | in `real_remotes` | 21 tools offered |
+| The app: Ctrl+Alt+O menu → Connect to Host → trust → folder → chat (Manual asks; commands run on the host); a dropped connection resumes on the next message (`--resume`, same id); two chats on one host at once; a written .md's card read back from the host; attach to a container (Edit automatically: only `rm` asks); Reopen in Container; Close remote connection; light and dark | driven with xdotool, screenshots | pass |
+| WSL | unit tests only (command line, `wsl -l -v` in UTF-16) | not run: no Windows here |
