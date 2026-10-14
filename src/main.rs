@@ -46,6 +46,7 @@ mod state;
 mod stubs;
 #[cfg(test)]
 mod system_md;
+mod term_session;
 mod theme;
 mod ui;
 mod web_view;
@@ -82,10 +83,16 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("secondary-\\", ToggleSplit, Some("Workspace")),
         KeyBinding::new("secondary-shift-e", TogglePanel, Some("Workspace")),
         KeyBinding::new("secondary-alt-o", OpenRemoteMenu, None),
+        KeyBinding::new("ctrl-`", ToggleTerminal, None),
+        KeyBinding::new("ctrl-~", NewTerminal, None),
         KeyBinding::new("secondary-shift-m", ShowProjectMap, Some("Workspace")),
         KeyBinding::new("shift-tab", CycleMode, Some("Composer")),
         KeyBinding::new("escape", StopReply, Some("Workspace")),
     ]);
+    // Ctrl+Shift+` as a platform may spell it instead of Ctrl+~ (the
+    // sheet lists the key once, as `ctrl-~`).
+    let new_terminal_alias = "ctrl-shift-`";
+    cx.bind_keys([KeyBinding::new(new_terminal_alias, NewTerminal, None)]);
 }
 
 /// A crash leaves its reason in `crash.log` in Forge's config folder: a

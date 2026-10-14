@@ -123,6 +123,21 @@ fn render() -> String {
             "the document panel's narrowest (it takes half the session)",
         ),
         ("doc_measure", z.doc_measure, "a document's widest line"),
+        (
+            "terminal_text",
+            z.terminal_text,
+            "the terminal dock's monospace",
+        ),
+        (
+            "terminal_min",
+            z.terminal_min,
+            "the terminal dock's narrowest",
+        ),
+        (
+            "edge_bar",
+            z.edge_bar,
+            "the jewel edge a window draws as it opens",
+        ),
     ] {
         let _ = writeln!(w, "- `{name}`: {}px, {role}", px(v));
     }
@@ -162,6 +177,21 @@ fn render() -> String {
             oklab(rgba(a)).0,
             hex(b),
             oklab(rgba(b)).0
+        );
+    }
+    let _ = writeln!(w);
+
+    let _ = writeln!(
+        w,
+        "### Terminal\nThe dock's 16 colours, on `stage` (`palette_check.rs` holds them to AA).\n"
+    );
+    let _ = writeln!(w, "| # | Light | Dark |\n|---|---|---|");
+    for i in 0..16 {
+        let _ = writeln!(
+            w,
+            "| {i} | `{}` | `{}` |",
+            hex(l.extra.ansi[i]),
+            hex(d.extra.ansi[i])
         );
     }
     let _ = writeln!(w);

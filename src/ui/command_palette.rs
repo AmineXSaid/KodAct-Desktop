@@ -292,6 +292,18 @@ impl CommandPalette {
         // Remote development: the same as the remote indicator's menu.
         out.extend([
             act(
+                "Show or hide the terminal",
+                "icons/terminal.svg",
+                Some("Ctrl `".into()),
+                Box::new(ToggleTerminal),
+            ),
+            act(
+                "New terminal",
+                "icons/terminal.svg",
+                Some("Ctrl Shift `".into()),
+                Box::new(NewTerminal),
+            ),
+            act(
                 "Show the remote menu",
                 "icons/plug.svg",
                 Some(shortcut("Alt O")),

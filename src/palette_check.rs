@@ -227,3 +227,29 @@ fn the_measures_agree_with_known_values() {
     let (l, c) = oklab(rgba(white));
     assert!((l - 1.).abs() < 0.001 && c < 0.001);
 }
+
+/// The terminal's colours read on the dock: the bright and normal colours
+/// at AA for text, black (it marks the darkest text in light, a muted
+/// background in dark) at least as a UI part.
+#[test]
+fn terminal_colours_read_on_the_dock() {
+    for t in [Theme::light(), Theme::dark()] {
+        let bg = t.extra.stage;
+        for (i, c) in t.extra.ansi.iter().enumerate() {
+            let need = match (i, t.is_dark) {
+                // Black in dark mode is meant to sit back.
+                (0, true) => 1.0,
+                (8, true) => AA_UI,
+                // Bright white is ink in light, so held to text too.
+                _ => AA_TEXT,
+            };
+            let r = contrast(*c, bg);
+            assert!(
+                r >= need,
+                "ansi[{i}] {:.2}:1 on the dock in {} (needs {need})",
+                r,
+                if t.is_dark { "dark" } else { "light" }
+            );
+        }
+    }
+}

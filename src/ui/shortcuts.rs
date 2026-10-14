@@ -31,6 +31,8 @@ pub const SHORTCUTS: &[(&str, &str, &str)] = &[
         "Remote: WSL, SSH host or container",
         "Chats",
     ),
+    ("ctrl-`", "Show or hide the terminal", "General"),
+    ("ctrl-~", "New terminal", "General"),
     (
         "secondary-shift-e",
         "Side panel: plan, files, browser",
@@ -63,6 +65,7 @@ pub fn keys(binding: &str) -> Vec<String> {
         .filter(|p| !p.is_empty())
         .map(|p| match p {
             "secondary" => if mac { "⌘" } else { "Ctrl" }.to_string(),
+            "ctrl" => if mac { "⌃" } else { "Ctrl" }.to_string(),
             "shift" => if mac { "⇧" } else { "Shift" }.to_string(),
             "alt" => if mac { "⌥" } else { "Alt" }.to_string(),
             "escape" => "Esc".to_string(),

@@ -43,6 +43,9 @@ Lucide, 2px stroke as drawn. Sizes: 12 / 14 / 16 / 20 only.
 - `hairline`: 1px, every border
 - `doc_pane`: 460px, the document panel's narrowest (it takes half the session)
 - `doc_measure`: 680px, a document's widest line
+- `terminal_text`: 13px, the terminal dock's monospace
+- `terminal_min`: 280px, the terminal dock's narrowest
+- `edge_bar`: 3px, the jewel edge a window draws as it opens
 
 ### Surfaces
 One ladder, darkest at the top of the window, even steps in OKLab lightness.
@@ -54,6 +57,28 @@ One ladder, darkest at the top of the window, even steps in OKLab lightness.
 | `stage` | `#f9f7f5` | 0.977 | `#1c1b19` | 0.222 | the session: chat, welcome, Rules, Projects |
 | `surface` | `#ffffff` | 1.000 | `#22211f` | 0.248 | cards, the composer, popovers |
 | `selected` | `#ffffff` | 1.000 | `#2a2927` | 0.281 | the selected sidebar row |
+
+### Terminal
+The dock's 16 colours, on `stage` (`palette_check.rs` holds them to AA).
+
+| # | Light | Dark |
+|---|---|---|
+| 0 | `#2b2a28` | `#3a3936` |
+| 1 | `#b8322a` | `#ff7b72` |
+| 2 | `#2a7a35` | `#7ee08f` |
+| 3 | `#845d00` | `#f2cc60` |
+| 4 | `#1f5fbf` | `#79b8ff` |
+| 5 | `#8a3fa8` | `#d2a8ff` |
+| 6 | `#1d737c` | `#76e3ea` |
+| 7 | `#6d6a65` | `#d6d3ce` |
+| 8 | `#5c5a56` | `#6e6c68` |
+| 9 | `#c23d30` | `#ffa198` |
+| 10 | `#2e7f38` | `#a5eda9` |
+| 11 | `#8d6400` | `#f8e08e` |
+| 12 | `#2f6fd1` | `#a5d0ff` |
+| 13 | `#9c4fbb` | `#e2c5ff` |
+| 14 | `#1e7a84` | `#b3f0ff` |
+| 15 | `#3d3b38` | `#ffffff` |
 
 ### Colors
 Contrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of white text on a fill.

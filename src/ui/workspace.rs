@@ -31,6 +31,8 @@ pub struct Workspace {
     palette: Entity<CommandPalette>,
     /// The remote quick pick, above the status bar's remote indicator.
     remote_picker: Entity<super::remote_menu::RemotePicker>,
+    /// The terminal dock on the right; its shells outlive hiding it.
+    terminal: Entity<super::terminal_dock::TerminalDock>,
     onboarding: Entity<Onboarding>,
     rules: Entity<RulesView>,
     projects: Entity<ProjectsView>,
@@ -56,6 +58,8 @@ impl Workspace {
         let palette = cx.new(|cx| CommandPalette::new(state.clone(), window, cx));
         let remote_picker =
             cx.new(|cx| super::remote_menu::RemotePicker::new(state.clone(), window, cx));
+        let terminal =
+            cx.new(|cx| super::terminal_dock::TerminalDock::new(state.clone(), window, cx));
         let onboarding = cx.new(|cx| Onboarding::new(state.clone(), window, cx));
         let rules = cx.new(|cx| RulesView::new(state.clone(), window, cx));
         let projects = cx.new(|cx| ProjectsView::new(state.clone(), composer.clone(), cx));
@@ -72,6 +76,7 @@ impl Workspace {
             composer,
             palette,
             remote_picker,
+            terminal,
             onboarding,
             rules,
             projects,
@@ -92,6 +97,76 @@ impl Workspace {
 
     fn focus_composer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.composer.update(cx, |c, cx| c.focus(window, cx));
+    }
+
+    /// Ctrl+`: show the dock (starting a shell when it has none) and give
+    /// it the keyboard, or hide it and hand the keyboard back.
+    fn toggle_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let open = self.state.read(cx).terminal_open;
+        self.state.update(cx, |s, cx| {
+            s.terminal_open = !open;
+            cx.notify();
+        });
+        if open {
+            self.focus_composer(window, cx);
+        } else {
+            self.terminal.update(cx, |d, cx| {
+                if d.has_tabs() {
+                    d.focus(window, cx);
+                } else {
+                    d.open(None, window, cx);
+                }
+            });
+        }
+    }
+
+    /// Ctrl+Shift+`: a new terminal tab, showing the dock.
+    fn new_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.state.update(cx, |s, cx| {
+            s.terminal_open = true;
+            cx.notify();
+        });
+        self.terminal.update(cx, |d, cx| d.open(None, window, cx));
+    }
+
+    /// The dock beside the session: its share of the window, held between
+    /// its narrowest and three fifths, with a grip on its left edge.
+    fn dock(&self, window: &Window, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let t = cx.theme().clone();
+        let vw = f32::from(window.viewport_size().width);
+        let share = self.state.read(cx).terminal_share;
+        let width = (vw * share)
+            .min(vw * 0.6)
+            .max(f32::from(t.size.terminal_min));
+        let grip = self.state.clone();
+        let line = t.colors.primary;
+        let pane = div()
+            .relative()
+            .size_full()
+            .flex()
+            .border_l_1()
+            .border_color(t.colors.border)
+            .child(self.terminal.clone())
+            .child(
+                div()
+                    .id("terminal-grip")
+                    .absolute()
+                    .left(px(-3.))
+                    .top_0()
+                    .bottom_0()
+                    .w(px(6.))
+                    .cursor(gpui::CursorStyle::ResizeLeftRight)
+                    .hover(move |st| st.bg(line.opacity(0.35)))
+                    .on_mouse_down(gpui::MouseButton::Left, move |_, _, cx| {
+                        grip.update(cx, |s, cx| {
+                            s.terminal_resizing = true;
+                            cx.notify();
+                        });
+                        cx.stop_propagation();
+                    }),
+            )
+            .into_any_element();
+        super::motion::slide_in(pane, width, false, &t)
     }
 
     fn title_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -238,6 +313,52 @@ impl Workspace {
                 )
                 .child(div().flex_1())
                 .children(super::approvals::render(&t, &self.state, cx))
+                .child({
+                    let open = s.terminal_open;
+                    let unseen = !open && self.terminal.read(cx).unseen;
+                    div()
+                        .id("toggle-terminal")
+                        .relative()
+                        .size(t.size.control)
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded(t.radius.button)
+                        .cursor_pointer()
+                        .when(open, |d| d.bg(t.colors.primary_tint))
+                        .when(!open, |d| d.hover(move |st| st.bg(hover)))
+                        .child(icon(
+                            "icons/terminal.svg",
+                            t.size.icon,
+                            if open {
+                                t.colors.primary
+                            } else {
+                                t.colors.text_muted
+                            },
+                        ))
+                        .when(unseen, |d| {
+                            d.child(
+                                div()
+                                    .absolute()
+                                    .top(px(4.))
+                                    .right(px(4.))
+                                    .size(px(6.))
+                                    .rounded(t.radius.pill)
+                                    .bg(t.colors.primary),
+                            )
+                        })
+                        .tooltip(move |window, cx| {
+                            gpui::component::tooltip::Tooltip::new(if unseen {
+                                "Terminal: new output (Ctrl+`)"
+                            } else {
+                                "Terminal (Ctrl+`)"
+                            })
+                            .build(window, cx)
+                        })
+                        .on_click(cx.listener(|_, _, window, cx| {
+                            window.dispatch_action(Box::new(ToggleTerminal), cx)
+                        }))
+                })
                 .child(
                     button("toggle-panel", "icons/panel-right.svg").on_click(cx.listener(
                         |_, _, window, cx| window.dispatch_action(Box::new(TogglePanel), cx),
@@ -469,6 +590,8 @@ impl Render for Workspace {
         let (find_open, shortcuts_open) = (s.find.is_some(), s.shortcuts_open);
         let empty = s.chat().is_none_or(|c| c.messages.is_empty());
         let below = s.doc_below;
+        let terminal_open = s.terminal_open;
+        let dock = self.dock(window, cx);
 
         let main = div().flex_1().min_w_0().flex().flex_col().bg(t.extra.stage);
         // A file opened from a reply, or the setup guide, sits beside the session.
@@ -934,6 +1057,36 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &ContinueReply, _, cx| {
                 this.state.update(cx, |s, cx| s.continue_reply(cx))
             }))
+            .on_action(
+                cx.listener(|this, _: &ToggleTerminal, window, cx| {
+                    this.toggle_terminal(window, cx)
+                }),
+            )
+            .on_action(
+                cx.listener(|this, _: &NewTerminal, window, cx| this.new_terminal(window, cx)),
+            )
+            .on_mouse_move(cx.listener(|this, ev: &gpui::MouseMoveEvent, window, cx| {
+                if !this.state.read(cx).terminal_resizing {
+                    return;
+                }
+                let vw = f32::from(window.viewport_size().width);
+                let share = ((vw - f32::from(ev.position.x)) / vw).clamp(0.05, 0.6);
+                this.state.update(cx, |s, cx| {
+                    s.terminal_share = share;
+                    cx.notify();
+                });
+            }))
+            .on_mouse_up(
+                gpui::MouseButton::Left,
+                cx.listener(|this, _, _, cx| {
+                    this.state.update(cx, |s, cx| {
+                        if s.terminal_resizing {
+                            s.terminal_resizing = false;
+                            cx.notify();
+                        }
+                    })
+                }),
+            )
             .on_action(cx.listener(|_, _: &Quit, _, cx| cx.quit()))
             .child(self.title_bar(cx))
             .children(super::status_bar::banner(
@@ -949,7 +1102,8 @@ impl Render for Workspace {
                         .min_h_0()
                         .flex()
                         .when(sidebar_open, |d| d.child(self.sidebar.clone()))
-                        .child(main),
+                        .child(main)
+                        .when(terminal_open, |d| d.child(dock)),
                 )
                 .child(super::status_bar::render(
                     self.state.read(cx),

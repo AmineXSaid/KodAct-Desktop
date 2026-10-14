@@ -54,6 +54,7 @@ pub mod starters;
 pub mod status_bar;
 pub mod tasks;
 pub mod terminal;
+pub mod terminal_dock;
 pub mod versions;
 pub mod voxels;
 pub mod workbench;
@@ -77,6 +78,8 @@ gpui::actions!(
         ReopenInContainer,
         AttachContainer,
         CloseRemote,
+        ToggleTerminal,
+        NewTerminal,
         FocusComposer,
         ToggleModelPicker,
         CycleMode,

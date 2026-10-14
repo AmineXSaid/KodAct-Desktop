@@ -49,6 +49,8 @@ table in step.
 | Ctrl/⌘ Shift A | Chats that need you |
 | Ctrl/⌘ Shift M | The project map |
 | Ctrl/⌘ Alt O | Remote: WSL, SSH host or container |
+| Ctrl ` | Show or hide the terminal |
+| Ctrl Shift ` | New terminal |
 | Ctrl/⌘ L | Focus the composer |
 | Ctrl/⌘ U | Attach files and images |
 | Ctrl/⌘ Shift T | This turn's tasks |
@@ -92,6 +94,26 @@ and dev containers from an image and from a Dockerfile, each with the real
 ForgeCLI and the scripted model (`cargo test real_ -- --include-ignored`,
 see `src/remote.rs`). WSL runs the same way through `wsl.exe` but has only
 been checked by its unit tests (no Windows machine here).
+
+## Terminal
+
+Ctrl+` (or the terminal button in the title bar) shows a terminal dock on
+the right, in the current project's folder. Hiding it keeps its shells
+running; the button shows a dot when one prints while hidden. Each tab is a
+shell on a pseudo-terminal (ConPTY on Windows), drawn by a terminal emulator
+(`alacritty_terminal`): colours, full-screen programs, scrollback.
+
+- **Tabs:** + (Ctrl+Shift+`) opens another; the menu beside it picks the shell
+  (PowerShell, cmd and WSL distros on Windows; `$SHELL`, bash, zsh, fish, sh
+  elsewhere). A shell that ends says so, and any key closes its tab.
+- **Remote projects:** the shell runs there, in the project folder, over
+  `ssh -tt`, `wsl.exe` or `docker exec -it`; resizes reach it.
+- **Keys go to the shell** (Ctrl+L, Ctrl+R, Ctrl+C...), except Ctrl+`,
+  Ctrl+Shift+`, Ctrl+K and Ctrl+Alt+O. Copy with Ctrl+Shift+C, or Ctrl+C
+  while text is selected; paste with Ctrl+Shift+V. Drag to select, double-
+  click for a word, triple-click for a line.
+- **Size:** drag the dock's left edge (between 280 px and three fifths of the
+  window).
 
 ## Layout
 

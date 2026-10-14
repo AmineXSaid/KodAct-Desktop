@@ -250,6 +250,10 @@ pub struct ExtraColors {
     pub ping_fair_fg: Hsla,
     pub ping_slow_bg: Hsla,
     pub ping_slow_fg: Hsla,
+    // The terminal dock's 16 colours: black, red, green, yellow, blue,
+    // magenta, cyan, white, then the bright eight. Tuned to read on `stage`
+    // in each mode; "white" is a grey in light so it never vanishes.
+    pub ansi: [Hsla; 16],
 }
 
 impl ExtraColors {
@@ -290,6 +294,24 @@ impl ExtraColors {
                 ping_fair_fg: rgb(0xdcdbd9).into(),
                 ping_slow_bg: hsla(34. / 360., 1., 0.34, 0.22),
                 ping_slow_fg: rgb(0xe9be74).into(),
+                ansi: [
+                    rgb(0x3a3936).into(),
+                    rgb(0xff7b72).into(),
+                    rgb(0x7ee08f).into(),
+                    rgb(0xf2cc60).into(),
+                    rgb(0x79b8ff).into(),
+                    rgb(0xd2a8ff).into(),
+                    rgb(0x76e3ea).into(),
+                    rgb(0xd6d3ce).into(),
+                    rgb(0x6e6c68).into(),
+                    rgb(0xffa198).into(),
+                    rgb(0xa5eda9).into(),
+                    rgb(0xf8e08e).into(),
+                    rgb(0xa5d0ff).into(),
+                    rgb(0xe2c5ff).into(),
+                    rgb(0xb3f0ff).into(),
+                    rgb(0xffffff).into(),
+                ],
             }
         } else {
             Self {
@@ -327,6 +349,24 @@ impl ExtraColors {
                 ping_fair_fg: rgb(0x4d4b4e).into(),
                 ping_slow_bg: rgb(0xf5d9a8).into(),
                 ping_slow_fg: rgb(0x894b16).into(),
+                ansi: [
+                    rgb(0x2b2a28).into(),
+                    rgb(0xb8322a).into(),
+                    rgb(0x2a7a35).into(),
+                    rgb(0x845d00).into(),
+                    rgb(0x1f5fbf).into(),
+                    rgb(0x8a3fa8).into(),
+                    rgb(0x1d737c).into(),
+                    rgb(0x6d6a65).into(),
+                    rgb(0x5c5a56).into(),
+                    rgb(0xc23d30).into(),
+                    rgb(0x2e7f38).into(),
+                    rgb(0x8d6400).into(),
+                    rgb(0x2f6fd1).into(),
+                    rgb(0x9c4fbb).into(),
+                    rgb(0x1e7a84).into(),
+                    rgb(0x3d3b38).into(),
+                ],
             }
         }
     }
@@ -479,6 +519,8 @@ pub struct Sizes {
     pub stagger_ms: u64,            // 18: each row of an opening list starting after the one above
     pub edge_draw_ms: u64,          // 140: a window's jewel edge drawing down as it opens
     pub edge_bar: Pixels,           // 3: that jewel edge's width
+    pub terminal_text: Pixels,      // 13: the terminal dock's monospace
+    pub terminal_min: Pixels,       // 280: the terminal dock's narrowest
     pub doc_text: Pixels,           // 15: a document in the side panel
     pub doc_title: Pixels,          // 28: its title, in the display serif
     pub line_height_doc: f32,       // 1.65: a document's leading
@@ -521,6 +563,8 @@ impl Default for Sizes {
             stagger_ms: 18,
             edge_draw_ms: 140,
             edge_bar: px(3.),
+            terminal_text: px(13.),
+            terminal_min: px(280.),
             doc_text: px(15.),
             doc_title: px(28.),
             line_height_doc: 1.65,

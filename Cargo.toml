@@ -42,6 +42,10 @@ lopdf = { version = "=0.45.0", default-features = false }
 hayro = "=0.8.0"
 # The live browser in the side panel talks to Chromium over the DevTools
 # protocol, a WebSocket (web_view.rs; tungstenite, MIT/Apache-2.0).
+# The terminal dock: pseudo-terminals (ConPTY on Windows) and the terminal
+# emulator (grid, scrollback, escape sequences). MIT and Apache-2.0.
+portable-pty = "=0.9.0"
+alacritty_terminal = "=0.26.0"
 tungstenite = { version = "=0.30.0", default-features = false, features = ["handshake"] }
 # Attachments (stage.rs): .tar, .tar.gz and .gz (tar, flate2; MIT/Apache-2.0)
 # and .7z (sevenz-rust2, Apache-2.0, pure Rust) are opened for the model. RAR

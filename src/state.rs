@@ -1052,6 +1052,13 @@ pub struct AppState {
     pub confirm: Option<Confirm>,
     /// The keyboard shortcuts sheet is open.
     pub shortcuts_open: bool,
+    /// The terminal dock is showing on the right (its shells live on while
+    /// it is hidden).
+    pub terminal_open: bool,
+    /// The dock's share of the window's width.
+    pub terminal_share: f32,
+    /// The dock's left edge is being dragged.
+    pub terminal_resizing: bool,
     /// Diagrams in replies showing their source instead (by block key).
     pub diagram_code: std::sync::Arc<std::collections::HashSet<SharedString>>,
     /// Chats are still loading: screens show placeholders.
@@ -1216,6 +1223,9 @@ impl AppState {
             chat_menu: None,
             confirm: None,
             shortcuts_open: false,
+            terminal_open: false,
+            terminal_share: 0.35,
+            terminal_resizing: false,
             diagram_code: Default::default(),
             loading: true,
             load: None,
@@ -4537,6 +4547,28 @@ impl AppState {
 // ---------------------------------------------------------------- remote development
 
 impl AppState {
+    /// Where a new terminal starts: the current project's remote (and
+    /// whether its SSH host was trusted here), or its folder on this
+    /// computer.
+    pub fn terminal_place(&self) -> (Option<crate::remote::Remote>, std::path::PathBuf, bool) {
+        let remote = self.current_remote();
+        let trusted = match remote.as_ref().map(|r| &r.target) {
+            Some(crate::remote::Target::Ssh(host)) => self.trusted_hosts.contains(host),
+            _ => false,
+        };
+        let dir = self
+            .project(self.current_project)
+            .filter(|_| remote.is_none())
+            .map(|p| std::path::PathBuf::from(&p.path))
+            .filter(|p| p.is_dir())
+            .or_else(|| {
+                std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+                    .map(std::path::PathBuf::from)
+            })
+            .unwrap_or_else(|| std::path::PathBuf::from("."));
+        (remote, dir, trusted)
+    }
+
     /// The current project, when it lives on a remote.
     pub fn current_remote(&self) -> Option<crate::remote::Remote> {
         self.project(self.current_project)
