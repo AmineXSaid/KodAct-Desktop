@@ -52,3 +52,18 @@ on the Anthropic Messages API (streaming). What it showed:
   ends in `startup_failure` before any step (an account or Actions setting).
 - The .exe imports `icuuc.dll` (`u_strlen`), part of Windows 10 1703 and
   later.
+
+## Installer (`installer/`)
+
+- `installer/build.sh` built `Forge-Setup-0.1.0.exe` (24.5 MB, 64-bit NSIS)
+  from MinGW release builds of the app and ForgeCLI, with no warnings. Neither
+  .exe needs a MinGW DLL.
+- Under Wine, a silent install put `Forge.exe` and `bin\forge.exe` (byte for
+  byte the builds) in `C:\Program Files\Forge`, with the Start menu and
+  desktop shortcuts and the Apps & features entry; `forge --version` ran from
+  PATH. Uninstall removed all of it. The PATH entry was appended once (a second
+  install added nothing), removed on uninstall, and left alone when it was
+  already there before the install.
+- The app, forge.exe, the installer and the uninstaller all carry the Forge
+  cube (16 to 256 px). The wizard was seen under Wine; not yet run on a real
+  Windows.

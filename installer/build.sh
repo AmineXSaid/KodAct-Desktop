@@ -15,10 +15,14 @@ version="$(grep -m1 '^version' "$here/Cargo.toml" | cut -d'"' -f2)"
 (cd "$cli" && cargo build --release --target "$target" -p forge-cli)
 (cd "$here" && cargo build --release --target "$target")
 
-mkdir -p "$out"
+# Symbols out: the app's .exe drops from ~100 MB.
+mkdir -p "$out/stage/app" "$out/stage/cli"  # apart: NSIS matches names case-blind
+x86_64-w64-mingw32-strip -o "$out/stage/app/Forge.exe" "$here/target/$target/release/forge-gpui.exe"
+x86_64-w64-mingw32-strip -o "$out/stage/cli/forge.exe" "$cli/target/$target/release/forge.exe"
+
 makensis -V2 -WX \
-  -DAPP_EXE="$here/target/$target/release/forge-gpui.exe" \
-  -DCLI_EXE="$cli/target/$target/release/forge.exe" \
+  -DAPP_EXE="$out/stage/app/Forge.exe" \
+  -DCLI_EXE="$out/stage/cli/forge.exe" \
   -DVERSION="$version" \
   -DOUT="$out/Forge-Setup-$version.exe" \
   "$here/installer/forge.nsi"
