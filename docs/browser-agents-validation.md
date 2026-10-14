@@ -67,3 +67,19 @@ on the Anthropic Messages API (streaming). What it showed:
 - The app, forge.exe, the installer and the uninstaller all carry the Forge
   cube (16 to 256 px). The wizard was seen under Wine; not yet run on a real
   Windows.
+
+## The Windows app under Wine
+
+- Wine 9 lacks `IDWriteFontCollection1::GetFontSet`, so GPUI found no font and
+  panicked. The vendored `gpui-pre-windows` now falls back to the older
+  DirectWrite lookup, and opens the window without Direct Manipulation where
+  it can't start (`vendor/gpui-pre-windows/FORGE-CHANGES.md`).
+- With `GPUI_DISABLE_DIRECT_COMPOSITION=1` and Microsoft's `d3dcompiler_47.dll`
+  (Wine's compiler has no `StructuredBuffer`), the installed `Forge.exe` ran
+  under Wine: it found `bin\forge.exe` by itself and, with the scripted model,
+  went through the plan scenario: Plan chip, the plan card, "Approved · Edit
+  automatically", the chip on Edit automatically, notes.txt written without an
+  ask, and an ask for `rm notes.txt`.
+- Not seen: the title bar. Under Wine without a window manager, the top 30 px
+  (the caption area GPUI draws in through `WM_NCCALCSIZE`) is not shown. It
+  needs a look on a real Windows.

@@ -888,9 +888,9 @@ impl WindowsWindowInner {
         self.state.scale_factor.set(new_scale_factor);
         self.state.border_offset.update(handle).log_err();
 
-        self.state
-            .direct_manipulation
-            .set_scale_factor(new_scale_factor);
+        if let Some(dm) = &self.state.direct_manipulation {
+            dm.set_scale_factor(new_scale_factor);
+        }
 
         if is_maximized {
             // Get the monitor and its work area at the new DPI
@@ -1321,7 +1321,9 @@ impl WindowsWindowInner {
     }
 
     fn handle_dm_pointer_hit_test(&self, wparam: WPARAM) -> Option<isize> {
-        self.state.direct_manipulation.on_pointer_hit_test(wparam);
+        if let Some(dm) = &self.state.direct_manipulation {
+            dm.on_pointer_hit_test(wparam);
+        }
         None
     }
 
@@ -1343,9 +1345,13 @@ impl WindowsWindowInner {
         };
         let mut request_frame = self.state.callbacks.request_frame.take()?;
 
-        self.state.direct_manipulation.update();
-
-        let events = self.state.direct_manipulation.drain_events();
+        let events = match &self.state.direct_manipulation {
+            Some(dm) => {
+                dm.update();
+                dm.drain_events()
+            }
+            None => Vec::new(),
+        };
         if !events.is_empty() {
             if let Some(mut func) = self.state.callbacks.input.take() {
                 for event in events {
