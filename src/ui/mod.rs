@@ -183,7 +183,7 @@ pub fn kbd(t: &Theme, text: impl Into<SharedString>) -> Div {
     div()
         .flex_none()
         .text_size(t.text.caption)
-        .text_color(t.colors.text_subtle)
+        .text_color(t.colors.text_muted)
         .child(text.into())
 }
 

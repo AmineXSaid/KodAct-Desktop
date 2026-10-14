@@ -302,7 +302,7 @@ impl ExtraColors {
                 warning_tint: hsla(40. / 360., 1., 0.53, 0.2),
                 diff_add: hsla(134. / 360., 0.55, 0.4, 0.12),
                 diff_del: hsla(7. / 360., 0.92, 0.58, 0.1),
-                scrim: hsla(30. / 360., 0.1, 0.05, 0.32),
+                scrim: hsla(30. / 360., 0.1, 0.05, 0.42), // the dialog stands clear of the chat
                 selected: rgb(0xffffff).into(),
                 // OKLab L 0.926 / 0.953 / 0.977, then the white card:
                 // even steps of 0.025, one warm hue, chroma falling to 0.

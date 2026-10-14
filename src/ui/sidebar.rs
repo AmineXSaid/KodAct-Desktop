@@ -556,7 +556,7 @@ impl Render for Sidebar {
                             .child(icon(
                                 "icons/search.svg",
                                 t.size.icon_sm,
-                                t.colors.text_subtle,
+                                t.colors.text_muted,
                             ))
                             .child(
                                 div().flex_1().child(
@@ -592,7 +592,7 @@ impl Render for Sidebar {
                                 if projects_open {
                                     t.colors.text_strong
                                 } else {
-                                    t.colors.text_subtle
+                                    t.colors.text_muted
                                 },
                             ))
                             .child(div().flex_1().child("Projects"))
@@ -629,7 +629,7 @@ impl Render for Sidebar {
                                 if rules_open {
                                     t.colors.text_strong
                                 } else {
-                                    t.colors.text_subtle
+                                    t.colors.text_muted
                                 },
                             ))
                             .child(div().flex_1().child("Rules and memory"))

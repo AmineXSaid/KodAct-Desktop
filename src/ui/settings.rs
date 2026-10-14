@@ -1257,7 +1257,8 @@ impl Render for Settings {
         let mut side = div()
             .id("settings-nav")
             .w(t.size.settings_nav)
-            .flex_none()
+            .flex_1()
+            .min_h_0()
             .flex()
             .flex_col()
             .gap(px(2.))
@@ -1389,7 +1390,29 @@ impl Render for Settings {
             .shadow(t.elevation_popover())
             .overflow_hidden()
             .on_click(|_, _, cx| cx.stop_propagation())
-            .child(side)
+            // The list scrolls: a fade at its foot says there is more.
+            .child(
+                div()
+                    .relative()
+                    .flex_none()
+                    .flex()
+                    .flex_col()
+                    .child(side)
+                    .child(
+                        div()
+                            .absolute()
+                            .bottom_0()
+                            .left_0()
+                            .right(t.size.hairline)
+                            .h(t.space.xl)
+                            .rounded_bl(PANEL_RADIUS - t.size.hairline)
+                            .bg(gpui::linear_gradient(
+                                180.,
+                                gpui::linear_color_stop(t.extra.pane.opacity(0.), 0.),
+                                gpui::linear_color_stop(t.extra.pane, 1.),
+                            )),
+                    ),
+            )
             .child(
                 div()
                     .id("settings-body")
