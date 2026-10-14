@@ -43,8 +43,6 @@ pub enum Event {
         id: String,
         output: String,
         is_error: bool,
-        /// An image the tool returned (a browser screenshot), decoded.
-        image: Option<Vec<u8>>,
     },
     /// Forge asks before running a tool.
     Ask {
@@ -508,7 +506,6 @@ impl Parser {
                             id: b["tool_use_id"].as_str().unwrap_or_default().into(),
                             output: result_text(&b["content"]),
                             is_error: b["is_error"].as_bool().unwrap_or(false),
-                            image: result_image(&b["content"]),
                         });
                     }
                 }
@@ -595,16 +592,6 @@ fn result_text(c: &Value) -> String {
         Value::Null => String::new(),
         other => other.to_string(),
     }
-}
-
-/// The last image in a tool result's content, as bytes.
-fn result_image(c: &Value) -> Option<Vec<u8>> {
-    c.as_array()?
-        .iter()
-        .rev()
-        .find(|b| b["type"] == "image")
-        .and_then(|b| b["source"]["data"].as_str().or(b["data"].as_str()))
-        .and_then(crate::browser::decode_base64)
 }
 
 // ---------------------------------------------------------------- tool rows
@@ -795,7 +782,6 @@ mod tests {
                 id: "t1".into(),
                 output: "a\nb".into(),
                 is_error: false,
-                image: None,
             }
         );
         assert!(

@@ -154,6 +154,21 @@ pub enum Block {
     File(FileRef),
 }
 
+/// The panel's browser as the UI shows it.
+#[derive(Default)]
+pub struct WebPage {
+    /// The latest picture of the page.
+    pub frame: Option<std::sync::Arc<gpui::RenderImage>>,
+    pub url: String,
+    pub title: String,
+    pub loading: bool,
+    pub tabs: Vec<crate::web_view::TabInfo>,
+    /// The tab on screen.
+    pub active: String,
+    /// Why there is no browser, when there isn't.
+    pub error: Option<String>,
+}
+
 /// What the side panel shows when no file is open in it.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum PanelTab {
@@ -863,8 +878,10 @@ pub struct AppState {
     /// The side panel's tab when no file is open in it: the plan, the
     /// chat's files or the browser (`ui/workbench.rs`). None: closed.
     pub panel: Option<PanelTab>,
-    /// The browser's latest screenshot in each chat, by chat id.
-    pub browser_shots: std::collections::HashMap<usize, std::sync::Arc<gpui::Image>>,
+    /// The browser in the side panel (`web_view.rs`), once started.
+    pub web: Option<std::sync::Arc<crate::web_view::WebView>>,
+    /// What it shows: the page, its tabs, whether it is loading.
+    pub web_page: WebPage,
     /// A diagram in the panel fits its width (else it shows at actual size).
     pub doc_fit: bool,
     /// The side panel sits below the chat instead of beside it.
@@ -1047,7 +1064,8 @@ impl AppState {
             copied: None,
             doc: None,
             panel: None,
-            browser_shots: std::collections::HashMap::new(),
+            web: None,
+            web_page: WebPage::default(),
             doc_fit: true,
             doc_below: false,
             doc_preview: None,
@@ -2229,11 +2247,102 @@ impl AppState {
         }
     }
 
-    /// Show the side panel on `tab`, closing any file open in it.
+    /// Show the side panel on `tab`, closing any file open in it. The
+    /// browser starts when its tab first shows.
     pub fn show_panel(&mut self, tab: PanelTab, cx: &mut Context<Self>) {
         self.doc = None;
         self.panel = Some(tab);
+        if tab == PanelTab::Browser {
+            self.ensure_web(cx);
+        }
         cx.notify();
+    }
+
+    /// The panel's browser, started if it isn't running: its DevTools
+    /// address, or None when there is no Chromium to run.
+    pub fn ensure_web(&mut self, cx: &mut Context<Self>) -> Option<String> {
+        if let Some(w) = &self.web {
+            return Some(w.cdp_url.clone());
+        }
+        let Some(exe) = crate::web_view::find_chromium() else {
+            self.web_page.error = Some(
+                "Forge needs Chromium, Chrome or Edge for the browser. Install one, or run: uvx playwright install chromium"
+                    .into(),
+            );
+            cx.notify();
+            return None;
+        };
+        let profile = crate::profile::dir()
+            .unwrap_or_else(std::env::temp_dir)
+            .join("browser");
+        match crate::web_view::start(&exe, &profile) {
+            Ok((view, updates)) => {
+                let cdp = view.cdp_url.clone();
+                self.web = Some(std::sync::Arc::new(view));
+                self.web_page = WebPage {
+                    loading: true,
+                    ..WebPage::default()
+                };
+                cx.spawn(async move |this, cx| {
+                    while let Ok(u) = updates.recv().await {
+                        if this.update(cx, |s, cx| s.on_web(u, cx)).is_err() {
+                            break;
+                        }
+                    }
+                })
+                .detach();
+                cx.notify();
+                Some(cdp)
+            }
+            Err(e) => {
+                self.web_page.error = Some(format!("The browser could not start: {e}"));
+                cx.notify();
+                None
+            }
+        }
+    }
+
+    fn on_web(&mut self, u: crate::web_view::Update, cx: &mut Context<Self>) {
+        use crate::web_view::Update;
+        match u {
+            Update::Frame(img) => {
+                // The last picture leaves the GPU's atlas as the next arrives.
+                if let Some(old) = self.web_page.frame.replace(img) {
+                    cx.drop_image(old, None);
+                }
+            }
+            Update::Page { url, title } => {
+                self.web_page.url = url;
+                self.web_page.title = title;
+            }
+            Update::Tabs(tabs, on) => {
+                self.web_page.tabs = tabs;
+                self.web_page.active = on;
+            }
+            Update::Loading(l) => self.web_page.loading = l,
+            Update::Closed(why) => {
+                self.web = None;
+                if let Some(old) = self.web_page.frame.take() {
+                    cx.drop_image(old, None);
+                }
+                self.web_page = WebPage {
+                    error: Some(format!("The browser stopped: {why}.")),
+                    ..WebPage::default()
+                };
+            }
+        }
+        cx.notify();
+    }
+
+    /// Something for the panel's browser to do (starting it if need be).
+    pub fn web_send(&mut self, cmd: crate::web_view::Cmd, cx: &mut Context<Self>) {
+        if self.web.is_none() {
+            self.web_page.error = None;
+            self.ensure_web(cx);
+        }
+        if let Some(w) = &self.web {
+            w.send(cmd);
+        }
     }
 
     /// Open or close the side panel (on the plan when it opens).
@@ -2775,7 +2884,7 @@ impl AppState {
         self.restart_idle_engines();
         self.show_toast(
             if on {
-                "Web browser on: Forge can open pages, click, type and take screenshots (browser-use). Each step asks first."
+                "Web browser on: Forge can open pages, click and type in the browser in the side panel, where you watch it work. Each step asks first."
             } else {
                 "Web browser off."
             },
@@ -3631,12 +3740,21 @@ impl AppState {
         };
         let mut launch =
             crate::backend::launch(&profile, self.mode, self.bypass_allowed, conversation)?;
-        // The web browser: browser-use's MCP server, run by uvx.
+        // The web browser: browser-use's MCP server, run by uvx, driving
+        // the browser in the side panel.
         if self.browser {
             if let Some(uvx) = crate::browser::uvx() {
-                launch
-                    .args
-                    .extend(["--mcp-config".to_string(), crate::browser::mcp_config(&uvx)]);
+                let dir = crate::profile::dir().map(|d| d.join("browser-use"));
+                let shared = match (self.ensure_web(cx), dir) {
+                    (Some(cdp), Some(dir)) => {
+                        crate::browser::write_config(&dir, &cdp).ok().map(|_| dir)
+                    }
+                    _ => None,
+                };
+                launch.args.extend([
+                    "--mcp-config".to_string(),
+                    crate::browser::mcp_config(&uvx, shared.as_deref()),
+                ]);
             }
         }
         // The settings profile, layered above the other settings files.
@@ -3794,19 +3912,7 @@ impl AppState {
                 id,
                 output,
                 is_error,
-                image,
             } => {
-                if let Some(png) = image {
-                    let format = if png.starts_with(&[0xff, 0xd8]) {
-                        gpui::ImageFormat::Jpeg
-                    } else {
-                        gpui::ImageFormat::Png
-                    };
-                    self.browser_shots.insert(
-                        chat,
-                        std::sync::Arc::new(gpui::Image::from_bytes(format, png)),
-                    );
-                }
                 if let Some(&(m, b)) = self.tool_rows.get(&(chat, id)) {
                     let mut written = None;
                     self.update_tool(chat, m, b, |t| {

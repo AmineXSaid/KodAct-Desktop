@@ -40,6 +40,9 @@ quick-xml = "=0.41.0"
 lopdf = { version = "=0.45.0", default-features = false }
 # PDF pages drawn as pictures in the side panel (hayro: pure Rust, MIT/Apache-2.0).
 hayro = "=0.8.0"
+# The live browser in the side panel talks to Chromium over the DevTools
+# protocol, a WebSocket (web_view.rs; tungstenite, MIT/Apache-2.0).
+tungstenite = { version = "=0.30.0", default-features = false, features = ["handshake"] }
 # Attachments (stage.rs): .tar, .tar.gz and .gz (tar, flate2; MIT/Apache-2.0)
 # and .7z (sevenz-rust2, Apache-2.0, pure Rust) are opened for the model. RAR
 # has no permissively licensed decoder: an installed 7-Zip, unrar or bsdtar
@@ -54,6 +57,10 @@ async-channel = "=2.5.0"
 # Endpoint keys, in Windows Credential Manager (secrets.rs). MIT/Apache-2.0.
 [target.'cfg(windows)'.dependencies]
 keyring = { version = "=3.6.3", default-features = false, features = ["windows-native"] }
+
+[build-dependencies]
+# The Windows .exe icon (build.rs): assets/forge.rc compiled in. MIT.
+embed-resource = "=3.0.12"
 
 [dev-dependencies]
 # Tests only: decode the cube picture and its renderings to check them pixel by pixel.

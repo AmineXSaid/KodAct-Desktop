@@ -73,13 +73,15 @@ table in step.
 - `src/diagnose.rs`: an endpoint's DNS, TCP, TLS, HTTP and key checks.
 - `src/endpoints.rs`, `src/health.rs`, `src/secrets.rs`: endpoint profiles, their checks, and keys.
 - `src/profile.rs`: your name and avatar on disk. `src/stubs.rs`: what isn't wired yet, and why.
+- `src/web_view.rs`: the side panel's browser: a headless Chromium (Playwright's, else Chrome or Edge)
+  shown live over the DevTools protocol, which browser-use drives too (`src/browser.rs`).
 - `src/assets.rs`: bundled icons (Lucide, ISC) and fonts (Hanken Grotesk, JetBrains Mono, Source Serif 4; OFL).
 - `src/ui/`: one file per part:
   - the window: `workspace` (title bar, welcome), `sidebar`, `chat_view`,
     `message`, `markdown`, `composer`, `command_palette`, `onboarding`,
     `shortcuts`, `projects`, `rules_view`, `doc_pane` (a file in the side panel,
     beside or below the chat), `workbench` (the side panel's Plan, Files
-    and Browser tabs), `project_map`;
+    and Browser tabs), `browser_view` (the live browser in it), `project_map`;
   - in a chat: `attachments`, `autocomplete`, `context_menu`, `tasks`,
     `approvals`, `versions`, `find_bar`, `terminal`, `file_card`;
   - Settings: `settings` (the window and its nav, General, Models, About),

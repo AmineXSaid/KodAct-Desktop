@@ -35,6 +35,7 @@ pub struct Workspace {
     side: Entity<SideChat>,
     settings: Entity<Settings>,
     find: Entity<FindBar>,
+    browser: Entity<super::browser_view::BrowserView>,
     confirm: Entity<ConfirmWindow>,
     focus: FocusHandle,
 }
@@ -57,6 +58,7 @@ impl Workspace {
         let side = cx.new(|cx| SideChat::new(state.clone(), window, cx));
         let settings = cx.new(|cx| Settings::new(state.clone(), window, cx));
         let find = cx.new(|cx| FindBar::new(state.clone(), window, cx));
+        let browser = cx.new(|cx| super::browser_view::BrowserView::new(state.clone(), window, cx));
         let confirm = cx.new(|cx| ConfirmWindow::new(state.clone(), window, cx));
         let first_run = state.read(cx).onboarding;
         let ws = Self {
@@ -71,6 +73,7 @@ impl Workspace {
             side,
             settings,
             find,
+            browser,
             confirm,
             focus: cx.focus_handle(),
         };
@@ -491,8 +494,7 @@ impl Render for Workspace {
                     super::workbench::View {
                         tab,
                         messages: s.chat().map_or(&[][..], |c| c.messages.as_slice()),
-                        shot: s.current.and_then(|c| s.browser_shots.get(&c).cloned()),
-                        browser_on: s.browser,
+                        browser: self.browser.clone().into(),
                         copied: s.copied.clone(),
                         width: fit.width,
                         below: s.doc_below,

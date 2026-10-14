@@ -4,6 +4,7 @@ pub mod agents_editor;
 pub mod approvals;
 pub mod attachments;
 pub mod autocomplete;
+pub mod browser_view;
 pub mod chat_menu;
 pub mod chat_view;
 pub mod command_palette;

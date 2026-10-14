@@ -1,15 +1,13 @@
 //! The side panel's own tabs, shown when no file is open in it: the chat's
 //! **Plan** (the plan it proposed and its task list), its **Files** (every
 //! Markdown file, workbook, PDF, Word file, deck and diagram it made, each
-//! opening in the file view, `doc_pane.rs`) and the **Browser** (the page
-//! the browser is on, its latest screenshot and its recent steps).
+//! opening in the file view, `doc_pane.rs`) and the **Browser** (a live
+//! browser, `browser_view.rs`).
 //!
-//! Everything here is read from the chat's blocks, so a chat reloaded from
-//! disk shows its plan and files again; only the screenshot is kept in memory.
+//! The plan and files are read from the chat's blocks, so a chat reloaded
+//! from disk shows them again.
 
-use gpui::{
-    div, img, prelude::*, px, relative, AnyElement, Entity, FontWeight, ObjectFit, SharedString,
-};
+use gpui::{div, prelude::*, px, relative, AnyElement, Entity, FontWeight, SharedString};
 
 use super::icon;
 use super::markdown::{self, CopyContext, Look};
@@ -66,36 +64,11 @@ pub fn files(messages: &[Message]) -> Vec<FileRef> {
     out
 }
 
-/// The browser's steps in the chat, oldest first: (action, what, status).
-pub fn browser_steps(messages: &[Message]) -> Vec<(String, Option<String>, ToolStatus)> {
-    tools(messages)
-        .filter_map(|t| {
-            let action = t.target.strip_prefix(crate::browser::TOOL_PREFIX)?;
-            let action = action
-                .strip_prefix("browser_")
-                .unwrap_or(action)
-                .replace('_', " ");
-            Some((action, t.note.as_ref().map(|n| n.to_string()), t.status))
-        })
-        .collect()
-}
-
-/// The page the browser is on: the last URL it navigated to or reported.
-pub fn browser_url(messages: &[Message]) -> Option<String> {
-    tools(messages)
-        .filter(|t| t.target.starts_with(crate::browser::TOOL_PREFIX))
-        .filter_map(|t| {
-            if t.target.ends_with("_get_state") {
-                serde_json::from_str::<serde_json::Value>(&t.output)
-                    .ok()
-                    .and_then(|v| v["url"].as_str().map(str::to_string))
-            } else if t.target.ends_with("_navigate") {
-                t.note.as_ref().map(|n| n.to_string())
-            } else {
-                None
-            }
-        })
-        .last()
+/// Forge is driving the browser: a browser tool runs in the chat now.
+pub fn agent_browsing(messages: &[Message]) -> bool {
+    tools(messages).any(|t| {
+        t.status == ToolStatus::Running && t.target.starts_with(crate::browser::TOOL_PREFIX)
+    })
 }
 
 fn tools(messages: &[Message]) -> impl Iterator<Item = &crate::state::ToolCall> {
@@ -213,8 +186,8 @@ fn section_title(t: &Theme, text: &str) -> gpui::Div {
 pub struct View<'a> {
     pub tab: PanelTab,
     pub messages: &'a [Message],
-    pub shot: Option<std::sync::Arc<gpui::Image>>,
-    pub browser_on: bool,
+    /// The Browser tab's live view (`browser_view.rs`).
+    pub browser: gpui::AnyView,
     pub copied: Option<SharedString>,
     pub width: f32,
     pub below: bool,
@@ -225,7 +198,6 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
     let files = files(v.messages);
     let plan = plan(v.messages);
     let todos = todos(v.messages);
-    let steps = browser_steps(v.messages);
     let count = |n: usize| {
         if n == 0 {
             String::new()
@@ -415,104 +387,7 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
                 .on_click(move |_, _, cx| opener.update(cx, |s, cx| s.open_doc(f.clone(), cx)))
         }))
         .into_any_element(),
-        PanelTab::Browser if !v.browser_on && steps.is_empty() => empty(
-            t,
-            "icons/globe.svg",
-            "The browser is off",
-            "Turn it on and Forge can open pages, click, type and take screenshots. What it sees shows here as it works.",
-            Some(
-                crate::theme::ghost_button(t, "Turn on the browser")
-                    .id("panel-browser-on")
-                    .on_click(|_, window, cx| window.dispatch_action(Box::new(super::ToggleBrowser), cx))
-                    .into_any_element(),
-            ),
-        ),
-        PanelTab::Browser if steps.is_empty() && v.shot.is_none() => empty(
-            t,
-            "icons/globe.svg",
-            "Nothing browsed yet",
-            "Ask Forge to open a page, fill a form or check a site. The page it is on, its latest screenshot and each step show here.",
-            None,
-        ),
-        PanelTab::Browser => {
-            let url = browser_url(v.messages);
-            let room = v.width - 2. * f32::from(t.space.xl) - 2.;
-            pad(div())
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(t.space.sm)
-                        .h(t.size.control + px(6.))
-                        .px(t.space.md)
-                        .rounded(t.radius.pill)
-                        .bg(t.extra.inset)
-                        .border_1()
-                        .border_color(t.colors.border)
-                        .child(icon("icons/globe.svg", t.size.icon_sm, t.colors.text_muted))
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .overflow_hidden()
-                                .whitespace_nowrap()
-                                .text_ellipsis()
-                                .font_family(t.font_mono.clone())
-                                .text_size(t.text.caption)
-                                .text_color(t.colors.text)
-                                .child(url.unwrap_or_else(|| "No page yet".into())),
-                        ),
-                )
-                .child(match v.shot {
-                    Some(shot) => div()
-                        .w(px(room))
-                        .h(px(room * 0.62))
-                        .rounded(t.radius.small)
-                        .overflow_hidden()
-                        .border_1()
-                        .border_color(t.colors.border)
-                        .bg(t.extra.inset)
-                        .child(img(shot).size_full().object_fit(ObjectFit::Contain))
-                        .into_any_element(),
-                    None => div()
-                        .px(t.space.md)
-                        .py(t.space.lg)
-                        .rounded(t.radius.small)
-                        .bg(t.extra.inset)
-                        .text_size(t.text.body_sm)
-                        .text_color(t.colors.text_muted)
-                        .child("No screenshot yet: one shows here when Forge takes it.")
-                        .into_any_element(),
-                })
-                .child(section_title(t, "Steps"))
-                .child(div().flex().flex_col().gap(t.space.sm).children(
-                    steps.iter().enumerate().rev().take(30).map(|(i, (action, what, status))| {
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(t.space.sm)
-                            .text_size(t.text.body_sm)
-                            .child(super::tasks::status_icon(*status, t, format!("bstep-{i}").into()))
-                            .child(
-                                div()
-                                    .flex_none()
-                                    .text_color(t.colors.text_strong)
-                                    .first_letter_uppercase(action),
-                            )
-                            .children(what.clone().map(|w| {
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .overflow_hidden()
-                                    .whitespace_nowrap()
-                                    .text_ellipsis()
-                                    .text_color(t.colors.text_muted)
-                                    .child(w)
-                            }))
-                    }),
-                ))
-                .into_any_element()
-        }
+        PanelTab::Browser => div().size_full().child(v.browser.clone()).into_any_element(),
     };
 
     div()
@@ -533,21 +408,6 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
                 .child(body),
         )
         .into_any_element()
-}
-
-trait FirstUpper {
-    fn first_letter_uppercase(self, s: &str) -> Self;
-}
-
-impl FirstUpper for gpui::Div {
-    fn first_letter_uppercase(self, s: &str) -> Self {
-        let mut c = s.chars();
-        let text = c
-            .next()
-            .map(|f| f.to_uppercase().collect::<String>() + c.as_str())
-            .unwrap_or_default();
-        self.child(text)
-    }
 }
 
 #[cfg(test)]
@@ -589,26 +449,18 @@ mod tests {
     }
 
     #[test]
-    fn the_browser_view_follows_its_tools() {
-        let mut m = reply(&[
-            (
-                "mcp__browser-use__browser_navigate",
-                json!({"url": "https://a.example"}),
-            ),
-            ("mcp__browser-use__browser_click", json!({"index": 4})),
-        ]);
-        let steps = browser_steps(&m);
-        assert_eq!(steps[0].0, "navigate");
-        assert_eq!(steps[1].1.as_deref(), Some("element 4"));
-        assert_eq!(browser_url(&m).as_deref(), Some("https://a.example"));
-        // A page's state names where it really is (after a redirect, a click).
+    fn forge_is_browsing_while_a_browser_tool_runs() {
+        let mut m = reply(&[(
+            "mcp__browser-use__browser_navigate",
+            json!({"url": "https://a.example"}),
+        )]);
+        assert!(agent_browsing(&m));
         if let Message::Assistant { blocks } = &mut m[0] {
-            let mut st =
-                crate::backend::tool_call("mcp__browser-use__browser_get_state", &json!({}));
-            st.output = r#"{"url": "https://a.example/next"}"#.into();
-            blocks.push(Block::Tool(st));
+            if let Block::Tool(t) = &mut blocks[0] {
+                t.status = ToolStatus::Done;
+            }
         }
-        assert_eq!(browser_url(&m).as_deref(), Some("https://a.example/next"));
+        assert!(!agent_browsing(&m));
     }
 
     #[test]

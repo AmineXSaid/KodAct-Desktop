@@ -46,6 +46,7 @@ mod stubs;
 mod system_md;
 mod theme;
 mod ui;
+mod web_view;
 
 use gpui::component::TitleBar;
 use gpui::{

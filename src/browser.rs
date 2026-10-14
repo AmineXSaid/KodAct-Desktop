@@ -6,7 +6,8 @@
 //!
 //! It runs as its own process through `uvx` (from uv), pinned to one
 //! version, so nothing is installed into the app and nothing is linked into
-//! it. The switch is a plain file in Forge's config folder (`browser.txt`).
+//! it. It drives the browser Forge runs and shows in the side panel
+//! (`web_view.rs`), rather than opening a window of its own. The switch is a plain file in Forge's config folder (`browser.txt`).
 
 use std::path::{Path, PathBuf};
 
@@ -71,17 +72,37 @@ pub fn uvx() -> Option<PathBuf> {
     dirs.into_iter().map(|d| d.join(exe)).find(|p| p.is_file())
 }
 
-/// The `--mcp-config` JSON that starts browser-use with `uvx`.
-pub fn mcp_config(uvx: &Path) -> String {
-    serde_json::json!({
-        "mcpServers": {
-            SERVER: {
-                "command": uvx.to_string_lossy(),
-                "args": ["--from", PACKAGE, "browser-use", "--mcp"],
-            }
-        }
-    })
-    .to_string()
+/// The `--mcp-config` JSON that starts browser-use with `uvx`. With
+/// `config_dir`, browser-use reads its settings from there
+/// (`BROWSER_USE_CONFIG_DIR`): `write_config` puts the address of Forge's
+/// own browser in it, so the agent drives the browser the panel shows.
+pub fn mcp_config(uvx: &Path, config_dir: Option<&Path>) -> String {
+    let mut server = serde_json::json!({
+        "command": uvx.to_string_lossy(),
+        "args": ["--from", PACKAGE, "browser-use", "--mcp"],
+    });
+    if let Some(dir) = config_dir {
+        server["env"] = serde_json::json!({ "BROWSER_USE_CONFIG_DIR": dir.to_string_lossy() });
+    }
+    serde_json::json!({ "mcpServers": { SERVER: server } }).to_string()
+}
+
+/// browser-use's settings for Forge: one browser profile, connected to the
+/// browser at `cdp_url` instead of opening one of its own.
+pub fn write_config(dir: &Path, cdp_url: &str) -> std::io::Result<()> {
+    std::fs::create_dir_all(dir)?;
+    let config = serde_json::json!({
+        "browser_profile": { "forge": {
+            "id": "forge", "default": true, "created_at": "2026-01-01T00:00:00",
+            "cdp_url": cdp_url, "headless": true, "keep_alive": true,
+        } },
+        "llm": {},
+        "agent": {},
+    });
+    std::fs::write(
+        dir.join("config.json"),
+        serde_json::to_string_pretty(&config)?,
+    )
 }
 
 #[cfg(test)]
@@ -100,7 +121,13 @@ mod tests {
 
     #[test]
     fn the_config_runs_the_pinned_server_through_uvx() {
-        let c: serde_json::Value = serde_json::from_str(&mcp_config(Path::new("/u/uvx"))).unwrap();
+        let c: serde_json::Value =
+            serde_json::from_str(&mcp_config(Path::new("/u/uvx"), Some(Path::new("/cfg"))))
+                .unwrap();
+        assert_eq!(
+            c["mcpServers"]["browser-use"]["env"]["BROWSER_USE_CONFIG_DIR"],
+            "/cfg"
+        );
         let s = &c["mcpServers"]["browser-use"];
         assert_eq!(s["command"], "/u/uvx");
         assert_eq!(
