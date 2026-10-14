@@ -168,7 +168,7 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 fn unhex(s: &str) -> Option<Vec<u8>> {
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return None;
     }
     (0..s.len())
@@ -547,7 +547,7 @@ pub fn load_all(dir: &Path) -> Vec<SavedChat> {
         .filter_map(|t| serde_json::from_str::<SavedChat>(&t).ok())
         .filter(|c| c.version <= VERSION && valid_id(&c.session))
         .collect();
-    out.sort_by(|a, b| b.updated.cmp(&a.updated));
+    out.sort_by_key(|c| std::cmp::Reverse(c.updated));
     out
 }
 

@@ -114,10 +114,13 @@ pub fn palette(t: &crate::theme::Theme) -> crate::mermaid::Palette {
     }
 }
 
+/// Each fenced diagram drawn, by its source's hash and the theme.
+type Fences = HashMap<(u64, bool), Option<Arc<str>>>;
+
 thread_local! {
     /// Fences already turned into drawings, by source and theme: a reply
     /// re-renders on every streamed word, but its diagram is laid out once.
-    static FENCES: RefCell<HashMap<(u64, bool), Option<Arc<str>>>> = RefCell::new(HashMap::new());
+    static FENCES: RefCell<Fences> = RefCell::new(HashMap::new());
 }
 
 /// The drawing for a fenced block, if it is a diagram (`mermaid::fence_svg`),

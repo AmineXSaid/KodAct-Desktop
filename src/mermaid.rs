@@ -282,7 +282,10 @@ fn is_id_char(c: char) -> bool {
 }
 
 /// A node at `s`: its id, its label and shape if given, and what follows.
-fn parse_node(s: &str) -> Option<(String, Option<(String, Shape)>, &str)> {
+/// A node as written: its id, its label and shape if given, and the rest of the line.
+type NodeRef<'a> = (String, Option<(String, Shape)>, &'a str);
+
+fn parse_node(s: &str) -> Option<NodeRef<'_>> {
     let s = s.trim_start();
     let end = s
         .char_indices()
@@ -471,7 +474,7 @@ fn parse_state(body: &[&str]) -> Option<(Graph, Dir)> {
             let id = raw.trim_end_matches(":::").to_string();
             let label = names.get(&id).cloned().unwrap_or_else(|| id.clone());
             let exists = g.nodes.iter().any(|n| n.id == id);
-            g.node(&id, (!exists).then(|| (label, Shape::Round)), None)
+            g.node(&id, (!exists).then_some((label, Shape::Round)), None)
         };
     for line in body {
         let l = line.trim();
@@ -660,6 +663,8 @@ fn layer(g: &Graph) -> Layered {
     }
     // Long edges pass through a dummy on every rank between.
     let mut paths = vec![];
+    // The layout is index-heavy (ranks, slots, edges): indices read clearer here.
+    #[allow(clippy::needless_range_loop)]
     for i in 0..g.edges.len() {
         let (a, b) = dag(i);
         let mut path = vec![(
@@ -697,7 +702,9 @@ fn order(g: &Graph, l: &mut Layered) {
         Slot::Dummy(e) => (1usize, *e),
     };
     // Edges between adjacent ranks, as slot keys.
-    let mut links: Vec<((usize, (usize, usize)), (usize, (usize, usize)))> = vec![];
+    // Each end: (rank, slot), with the edge it belongs to.
+    type End = (usize, (usize, usize));
+    let mut links: Vec<(End, End)> = vec![];
     for (path, _) in &l.paths {
         for w in path.windows(2) {
             let a = (w[0].0, key(&l.ranks[w[0].0][w[0].1]));
@@ -1575,6 +1582,7 @@ fn draw_sequence(s: &Seq, p: &Palette) -> String {
     }
     let mut xs = vec![];
     let mut x = MARGIN + 20.;
+    #[allow(clippy::needless_range_loop)]
     for i in 0..n {
         xs.push(x + widths[i] / 2.);
         x += widths[i] + gaps.get(i).copied().unwrap_or(0.);
@@ -1591,7 +1599,9 @@ fn draw_sequence(s: &Seq, p: &Palette) -> String {
             };
     let mut y = MARGIN + head_h + 22.;
     let mut body = String::new();
-    let mut frames: Vec<(f32, String, String, Vec<(f32, String)>)> = vec![];
+    // An open frame: its top, kind, label, and its branches (top, label).
+    type Frame = (f32, String, String, Vec<(f32, String)>);
+    let mut frames: Vec<Frame> = vec![];
     let mut drawn_frames = String::new();
     let mut number = 0;
     for st in &s.steps {
@@ -1804,7 +1814,7 @@ fn draw_sequence(s: &Seq, p: &Palette) -> String {
             );
             text_block(
                 &mut heads,
-                &[a.1.clone()],
+                std::slice::from_ref(&a.1),
                 x,
                 top + head_h / 2.,
                 &p.text,

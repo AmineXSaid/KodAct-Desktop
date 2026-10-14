@@ -38,8 +38,10 @@ static SYNTAXES: LazyLock<SyntaxSet> = LazyLock::new(two_face::syntax::extra_new
 
 /// Parsed blocks, by hash of language and text. Small and bounded: cleared
 /// when it grows past what a few long chats need.
-static CACHE: LazyLock<Mutex<HashMap<u64, Arc<Vec<(Range<usize>, Kind)>>>>> =
-    LazyLock::new(Default::default);
+/// A highlighted text's spans, shared from the cache.
+type Spans = Arc<Vec<(Range<usize>, Kind)>>;
+
+static CACHE: LazyLock<Mutex<HashMap<u64, Spans>>> = LazyLock::new(Default::default);
 const CACHE_MAX: usize = 512;
 
 /// Load the grammars off the UI thread, so the first code block on screen

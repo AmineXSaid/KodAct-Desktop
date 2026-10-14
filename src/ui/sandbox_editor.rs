@@ -123,7 +123,7 @@ impl Render for SandboxEditor {
             return out.child(kit::loading(&t));
         };
         if let Some((_, Err(e))) = values.iter().find(|(l, v)| *l == self.layer && v.is_err()) {
-            return out.children(kit::problems(&t, &[e.clone()]));
+            return out.children(kit::problems(&t, std::slice::from_ref(e)));
         }
         let cur = self.current();
         let mode = cur

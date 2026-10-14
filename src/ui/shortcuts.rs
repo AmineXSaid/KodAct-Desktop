@@ -234,6 +234,18 @@ mod tests {
         }
     }
 
+    /// The README's key table lists every binding on the sheet.
+    #[test]
+    fn the_readme_lists_every_key() {
+        let readme = include_str!("../../README.md");
+        for (_, what, _) in SHORTCUTS {
+            assert!(
+                readme.contains(&format!("| {what} |")),
+                "README.md's key table is missing \"{what}\""
+            );
+        }
+    }
+
     #[test]
     fn keys_read_naturally() {
         if !cfg!(target_os = "macos") {

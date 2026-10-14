@@ -287,7 +287,7 @@ pub fn run(profile: &Profile, key: Option<String>, mut report: impl FnMut(usize,
                 },
                 models.len(),
                 if models.len() == 1 { "" } else { "s" },
-                if models.is_empty() || models.iter().any(|m| *m == profile.model) {
+                if models.is_empty() || models.contains(&profile.model) {
                     String::new()
                 } else {
                     format!("; {} isn't in it", profile.model)

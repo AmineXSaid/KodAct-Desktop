@@ -67,7 +67,13 @@ pub struct Settings {
 const PANEL_RADIUS: gpui::Pixels = px(14.);
 
 /// The sections, in groups, with each one's icon and name.
-const SECTIONS: &[(&str, &[(SettingsTab, &str, &str)])] = &[
+/// A nav group: its heading and its sections (tab, icon, name).
+type Section = (
+    &'static str,
+    &'static [(SettingsTab, &'static str, &'static str)],
+);
+
+const SECTIONS: &[Section] = &[
     (
         "Forge",
         &[

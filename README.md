@@ -30,25 +30,73 @@ folder (`%APPDATA%\Forge` on Windows; `FORGE_CONFIG_DIR` overrides it).
 
 ## Keys
 
+The same list is the shortcuts sheet (F1) and the Guide (Settings → Guide);
+`src/ui/shortcuts.rs` is its source, and tests keep it, `main.rs` and this
+table in step.
+
 | Keys | Does |
 | --- | --- |
-| Ctrl/⌘ K | Command palette |
-| Ctrl/⌘ N | New chat |
+| Ctrl/⌘ K | Search or run a command |
+| F1 | Keyboard shortcuts |
+| Ctrl/⌘ , | Settings |
+| Ctrl/⌘ Shift L | Light or dark theme |
 | Ctrl/⌘ B | Show or hide the sidebar |
-| Ctrl/⌘ / | Model picker |
-| Ctrl/⌘ Shift L | Light or dark |
+| Ctrl/⌘ Q | Quit |
+| Ctrl/⌘ N | New chat |
+| F2 | Rename this chat |
+| Ctrl/⌘ Shift P | Projects |
+| Ctrl/⌘ Shift R | Rules and memory |
+| Ctrl/⌘ Shift A | Chats that need you |
+| Ctrl/⌘ Shift M | The project map |
+| Ctrl/⌘ L | Focus the composer |
+| Ctrl/⌘ U | Attach files and images |
+| Ctrl/⌘ Shift T | This turn's tasks |
+| Ctrl/⌘ \ | Side panel beside or below the chat |
+| Ctrl/⌘ F | Find in the conversation |
+| Ctrl/⌘ J | Jump to the latest message |
 | Ctrl/⌘ Shift C | Copy the last reply |
-| Shift Tab | Cycle the permission mode |
+| Ctrl/⌘ / | Choose a model |
+| Shift Tab | Next permission mode |
+| Esc | Stop the reply, or close what's open |
 | Enter / Shift Enter | Send / new line |
-| Esc | Stop the reply |
 
 ## Layout
 
 - `src/theme.rs`: every colour, size, radius and font. Nothing else hardcodes them.
 - `src/state.rs`: the app state, the transcript model, demo chats and the scripted reply.
 - `src/backend.rs`: each chat's `forge` process: launch, the stream-json events, permission answers.
-- `src/profile.rs`: your name on disk.
+- `src/forge_files.rs`: ForgeCLI's own files (commands, agents, skills, hooks,
+  MCP servers, permissions, env, sandbox, plugin folders, FORGE.md), read and
+  written exactly as ForgeCLI loads them; the Settings editors sit on it.
+- `src/setting_profiles.rs`: settings profiles, passed to ForgeCLI as `--settings`.
+- `src/diagnose.rs`: an endpoint's DNS, TCP, TLS, HTTP and key checks.
+- `src/endpoints.rs`, `src/health.rs`, `src/secrets.rs`: endpoint profiles, their checks, and keys.
+- `src/profile.rs`: your name and avatar on disk. `src/stubs.rs`: what isn't wired yet, and why.
 - `src/assets.rs`: bundled icons (Lucide, ISC) and fonts (Hanken Grotesk, JetBrains Mono, Source Serif 4; OFL).
-- `src/ui/`: one file per part: `workspace` (title bar, welcome), `sidebar`,
-  `chat_view`, `message`, `markdown`, `composer`, `command_palette`,
-  `onboarding`, `hammer` (the Forge mark).
+- `src/ui/`: one file per part:
+  - the window: `workspace` (title bar, welcome), `sidebar`, `chat_view`,
+    `message`, `markdown`, `composer`, `command_palette`, `onboarding`,
+    `shortcuts`, `projects`, `rules_view`, `doc_pane` (the side panel,
+    beside or below the chat), `project_map`;
+  - in a chat: `attachments`, `autocomplete`, `context_menu`, `tasks`,
+    `approvals`, `versions`, `find_bar`, `terminal`, `file_card`;
+  - Settings: `settings` (the window and its nav, General, Models, About),
+    `diagnostics`, `profiles_editor`, `slash_commands`, `agents_editor`,
+    `skills_editor`, `hooks_editor`, `mcp_editor`, `permissions_editor`,
+    `sandbox_editor`, `env_editor`, `memory_view`, `plugins_editor`,
+    `planned` (Network), `guide`, and `editor_kit`, the pieces they share.
+- `scripts/screenshots.sh`: light and dark screenshots of every screen (see below).
+- `.github/workflows/windows.yml`: fmt, clippy (`-D warnings`) and tests on
+  Linux for every push and pull request; the Windows build and tests.
+
+## Screenshots
+
+```sh
+cargo build && scripts/screenshots.sh            # into screenshots/
+```
+
+It runs the app on a virtual display (Xvfb `:99`, 1280×860) in demo mode
+with a throwaway config folder, drives it with `xdotool`, and saves
+welcome, chat, map, split, projects and every Settings section, light and
+dark. It needs Xvfb, xdotool, ImageMagick and a Vulkan driver (without a
+GPU, Mesa's lavapipe: `mesa-vulkan-drivers`). Linux only.

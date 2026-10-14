@@ -127,7 +127,7 @@ impl Render for EnvEditor {
         }
         let saved = self.saved();
         if let Err(e) = &saved {
-            return out.children(kit::problems(&t, &[e.clone()]));
+            return out.children(kit::problems(&t, std::slice::from_ref(e)));
         }
         let saved = saved.unwrap_or_default();
         // Fill the box with what's saved when the file (or its text) changes.

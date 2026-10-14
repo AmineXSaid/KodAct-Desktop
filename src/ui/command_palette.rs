@@ -76,13 +76,12 @@ impl CommandPalette {
             cx.new(|cx| InputState::new(window, cx).placeholder("Search commands, chats, models…"));
         let subs = vec![
             cx.observe(&state, |_, _, cx| cx.notify()),
-            cx.subscribe_in(&query, window, |this, _, ev: &InputEvent, _, cx| match ev {
-                InputEvent::Change => {
+            // Enter is handled once, in the key capture below.
+            cx.subscribe_in(&query, window, |this, _, ev: &InputEvent, _, cx| {
+                if matches!(ev, InputEvent::Change) {
                     this.selected = 0;
                     cx.notify();
                 }
-                // Enter is handled once, in the key capture below.
-                _ => {}
             }),
         ];
         Self {

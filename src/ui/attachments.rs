@@ -82,12 +82,7 @@ fn kind_color(kind: Kind, t: &Theme) -> gpui::Hsla {
 
 /// One chip: the picture (or the file's icon), its name and size, and a
 /// remove button when `remove` is given.
-fn chip(
-    a: &Attachment,
-    id: SharedString,
-    t: &Theme,
-    remove: Option<Box<dyn Fn(&mut gpui::App) + 'static>>,
-) -> AnyElement {
+fn chip(a: &Attachment, id: SharedString, t: &Theme, remove: Option<OnRemove>) -> AnyElement {
     let hover = t.colors.hover;
     let thumb = thumbnail(a);
     let lead: AnyElement = match thumb {
@@ -255,3 +250,5 @@ pub fn sent(t: &Theme, list: &[Attachment], key: &str) -> Option<AnyElement> {
     }
     Some(row.into_any_element())
 }
+/// What a chip's × does.
+type OnRemove = Box<dyn Fn(&mut gpui::App) + 'static>;

@@ -1,14 +1,20 @@
-# The Windows build: Forge's .exe, made on Windows with MSVC and the Windows
-# SDK (GPUI compiles its shaders with the SDK's fxc.exe in release builds).
-# Each push to main builds it, keeps it as an artifact for 30 days, and puts
-# it on the `windows-build` branch (one commit, replaced each time), so it can
-# also be fetched with plain git. Then the tests run, on Windows.
+# The gates and the Windows build.
+#
+# `checks` (Linux) runs on every push and pull request: rustfmt, clippy with
+# warnings as errors, a debug build, then the tests. A red check is a broken
+# commit.
+#
+# `build` (Windows) makes Forge's .exe with MSVC and the Windows SDK (GPUI
+# compiles its shaders with the SDK's fxc.exe in release builds). A push to
+# main keeps it as an artifact for 30 days and puts it on the `windows-build`
+# branch (one commit, replaced each time), so it can also be fetched with
+# plain git. Then clippy and the tests run, on Windows.
 
 name: Windows build
 
 on:
   push:
-    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -19,6 +25,54 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      # GPUI on Linux: fontconfig, xkbcommon (with X11) and the X11 and
+      # Wayland libraries it links.
+      - name: System libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libfontconfig1-dev libfreetype-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libx11-dev libx11-xcb-dev libxcb1-dev libxcb-xkb-dev \
+            libwayland-dev libvulkan-dev
+
+      - name: Rust
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy
+          rustup default stable
+          rustc --version
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Build (no warnings)
+        env:
+          RUSTFLAGS: -D warnings
+        run: cargo build --locked
+
+      - name: Test
+        env:
+          RUSTFLAGS: -D warnings
+        run: cargo test --locked
+
   build:
     runs-on: windows-latest
     timeout-minutes: 90
@@ -27,7 +81,7 @@ jobs:
 
       - name: Rust
         run: |
-          rustup toolchain install stable --profile minimal
+          rustup toolchain install stable --profile minimal --component clippy
           rustup default stable
           rustc --version
 
@@ -80,6 +134,9 @@ jobs:
           git add forge-gpui.exe BUILD.txt
           git commit -q -m "Windows build of ${GITHUB_SHA::7}"
           git push --force -q "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" windows-build
+
+      - name: Clippy
+        run: cargo clippy --release --locked --all-targets -- -D warnings
 
       - name: Test
         run: cargo test --release --locked

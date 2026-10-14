@@ -1374,7 +1374,7 @@ impl AppState {
             });
         }
         // Pinned first is the sidebar's job; here, the most recent first.
-        self.chats.sort_by(|a, b| b.updated.cmp(&a.updated));
+        self.chats.sort_by_key(|c| std::cmp::Reverse(c.updated));
         if added_project {
             let paths: Vec<std::path::PathBuf> = self
                 .projects

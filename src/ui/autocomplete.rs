@@ -212,7 +212,6 @@ pub fn items(trig: &Trigger, s: &AppState) -> Vec<Item> {
             order += 1;
         }
     } else {
-        drop(push);
         return file_items(q, &s.completion_files());
     }
     if !q.is_empty() {
@@ -270,7 +269,7 @@ pub fn file_items(q: &str, entries: &[String]) -> Vec<Item> {
     };
     let known_base = base.is_empty() || entries.iter().any(|e| e == base);
     let mut scored: Vec<(i32, usize, Item)> = vec![];
-    if known_base && (base.len() > 0 || rest.is_empty()) {
+    if known_base && (!base.is_empty() || rest.is_empty()) {
         // One folder's contents (the top level when nothing is typed).
         for (order, e) in entries.iter().enumerate() {
             let parent = e.trim_end_matches('/').rfind('/').map_or("", |i| &e[..=i]);
@@ -329,6 +328,7 @@ pub struct Place {
 
 /// The popover. `selected` is the row under the keyboard; a click on a row
 /// calls `on_pick` with its index.
+#[allow(clippy::too_many_arguments)]
 pub fn render(
     t: &Theme,
     rows: &[Item],
