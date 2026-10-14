@@ -18,6 +18,9 @@ use crate::theme::Theme;
 
 const COPY_KEY: &str = "doc-pane-copy";
 
+/// How much of the height the panel takes when split below the chat.
+const BELOW_SHARE: f32 = 0.45;
+
 fn tool_button(
     t: &Theme,
     id: &'static str,
@@ -47,6 +50,8 @@ pub struct Fit {
     pub scale: f32,
     /// A diagram fits the panel (else it shows at its own size).
     pub fit: bool,
+    /// Split below the chat (else beside it).
+    pub below: bool,
 }
 
 /// How wide the panel is when the session area is `main` wide: half for a
@@ -175,6 +180,19 @@ pub fn render(
             )
         })
         .child(
+            tool_button(
+                t,
+                "doc-split",
+                "icons/split.svg",
+                if fit.below {
+                    "Put it beside the chat"
+                } else {
+                    "Put it below the chat"
+                },
+            )
+            .on_click(|_, window, cx| window.dispatch_action(Box::new(super::ToggleSplit), cx)),
+        )
+        .child(
             tool_button(t, "doc-download", "icons/download.svg", "Download")
                 .on_click(move |_, _, cx| saver.update(cx, |s, cx| s.download(&to_save, cx))),
         )
@@ -238,7 +256,8 @@ pub fn render(
             )),
             Some(Ok(p)) => match p.as_ref() {
                 crate::office::Preview::Sheets(sheets) => {
-                    return finish(
+                    return finish_at(
+                        fit.below,
                         file,
                         header,
                         body.child(
@@ -307,12 +326,14 @@ pub fn render(
         )
     };
 
-    finish(file, header, body, fit.width, t)
+    finish_at(fit.below, file, header, body, fit.width, t)
 }
 
-/// The panel around its header and body: a fixed width, the card surface,
-/// a hairline on its left, and a short entrance.
-fn finish(
+/// The panel around its header and body: beside the chat, a fixed width
+/// with a hairline on its left; below it, the full width and part of the
+/// height with a hairline on top. The card surface, and a short entrance.
+fn finish_at(
+    below: bool,
     file: &FileRef,
     header: gpui::Div,
     body: gpui::Stateful<gpui::Div>,
@@ -321,12 +342,11 @@ fn finish(
 ) -> AnyElement {
     div()
         .flex_none()
-        .w(px(width))
-        .h_full()
+        .when(!below, |d| d.w(px(width)).h_full().border_l_1())
+        .when(below, |d| d.w_full().h(relative(BELOW_SHARE)).border_t_1())
         .flex()
         .flex_col()
         .bg(t.colors.surface)
-        .border_l_1()
         .border_color(t.colors.border)
         .child(header)
         .child(body)

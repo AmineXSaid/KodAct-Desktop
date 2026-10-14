@@ -381,6 +381,28 @@ impl ProjectsView {
                                     }),
                             )
                             .child(
+                                div()
+                                    .id("project-map")
+                                    .flex()
+                                    .items_center()
+                                    .gap(t.space.xs)
+                                    .h(t.size.control + px(4.))
+                                    .px(t.space.md)
+                                    .rounded(t.radius.button)
+                                    .cursor_pointer()
+                                    .text_color(t.colors.text_muted)
+                                    .hover(move |st| st.bg(hover))
+                                    .child(icon(
+                                        "icons/map.svg",
+                                        t.size.icon_sm,
+                                        t.colors.text_muted,
+                                    ))
+                                    .child("Map")
+                                    .on_click(|_, window, cx| {
+                                        window.dispatch_action(Box::new(ShowProjectMap), cx)
+                                    }),
+                            )
+                            .child(
                                 theme::ghost_button(t, "Rules and memory")
                                     .id("project-rules")
                                     .on_click(|_, window, cx| {

@@ -118,10 +118,7 @@ pub const STUBS: &[Stub] = &[
 /// Icons bundled now for features a later step wires. Kept so they aren't
 /// mistaken for dead assets and dropped (the tests check they are bundled).
 #[cfg_attr(not(test), allow(dead_code))]
-pub const RESERVED_ICONS: &[(&str, &str, Step)] = &[
-    ("map", "Project and file map", Step::P3),
-    ("split", "Split (multi-pane) view", Step::P3),
-];
+pub const RESERVED_ICONS: &[(&str, &str, Step)] = &[];
 
 impl Stub {
     /// The tooltip line: what it will do, and when.

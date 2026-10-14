@@ -188,6 +188,22 @@ impl CommandPalette {
                 Box::new(OpenProjects),
             ),
             act(
+                "The project map",
+                "icons/map.svg",
+                Some(shortcut("Shift M")),
+                Box::new(ShowProjectMap),
+            ),
+            act(
+                if s.doc_below {
+                    "Put the side panel beside the chat"
+                } else {
+                    "Put the side panel below the chat"
+                },
+                "icons/split.svg",
+                Some(shortcut("\\")),
+                Box::new(ToggleSplit),
+            ),
+            act(
                 "Rules and memory",
                 "icons/list-todo.svg",
                 Some(shortcut("Shift R")),

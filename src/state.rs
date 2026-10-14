@@ -431,6 +431,56 @@ impl SettingsTab {
     }
 }
 
+/// The project map (`ui/project_map.rs`): the project's folders at a glance.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ProjectMap {
+    pub project: std::path::PathBuf,
+    /// Top-level folders, with the files under each.
+    pub folders: Vec<(String, usize)>,
+    /// Files at the top level.
+    pub files: Vec<String>,
+    pub total: usize,
+    /// The walk stopped at its cap: there are more.
+    pub capped: bool,
+}
+
+/// How many files the map's walk reads at most.
+pub const MAP_CAP: usize = 20_000;
+
+impl ProjectMap {
+    /// Sum project-relative paths (`/`-separated) by top-level folder.
+    pub fn from_files(project: std::path::PathBuf, paths: &[String]) -> Self {
+        let mut folders: std::collections::BTreeMap<String, usize> = Default::default();
+        let mut files = vec![];
+        for p in paths {
+            match p.split_once('/') {
+                Some((dir, _)) => *folders.entry(dir.to_string()).or_default() += 1,
+                None => files.push(p.clone()),
+            }
+        }
+        files.sort();
+        let mut folders: Vec<(String, usize)> = folders.into_iter().collect();
+        // Biggest first: where the code is.
+        folders.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        ProjectMap {
+            project,
+            total: paths.len(),
+            capped: paths.len() >= MAP_CAP,
+            folders,
+            files,
+        }
+    }
+}
+
+/// A file a chat changed (its Write and Edit rows), for the map.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Edited {
+    pub path: String,
+    /// How many of the chat's tool calls changed it.
+    pub times: usize,
+    pub review: Review,
+}
+
 /// An endpoint being diagnosed (`diagnose.rs`), step by step.
 pub struct Diagnosis {
     pub profile: String,
@@ -785,6 +835,8 @@ pub struct AppState {
     pub doc: Option<FileRef>,
     /// A diagram in the panel fits its width (else it shows at actual size).
     pub doc_fit: bool,
+    /// The side panel sits below the chat instead of beside it.
+    pub doc_below: bool,
     /// An Office file or PDF in the panel, read: by file name, the preview
     /// or why it couldn't be read. None while it is being read.
     pub doc_preview: Option<(
@@ -889,6 +941,9 @@ pub struct AppState {
     pub diagnosis: Option<Diagnosis>,
     /// Counts diagnoses, so a stale run's steps never land on a new one.
     diagnosis_seq: u64,
+    /// The project map is open, and its last read (None while reading).
+    pub map_open: bool,
+    pub map: Option<ProjectMap>,
     /// The settings profile each chat's ForgeCLI gets (`--settings`).
     pub settings_profile: Option<String>,
     next_id: usize,
@@ -960,6 +1015,7 @@ impl AppState {
             copied: None,
             doc: None,
             doc_fit: true,
+            doc_below: false,
             doc_preview: None,
             doc_sheet: 0,
             copied_reset: None,
@@ -1011,6 +1067,8 @@ impl AppState {
             engine: Default::default(),
             diagnosis: None,
             diagnosis_seq: 0,
+            map_open: false,
+            map: None,
             settings_profile: crate::setting_profiles::active(),
             next_id,
         }
@@ -1809,6 +1867,77 @@ impl AppState {
                 }
             });
         }));
+    }
+
+    /// Open or close the project map; opening reads the project again.
+    pub fn toggle_map(&mut self, cx: &mut Context<Self>) {
+        self.map_open = !self.map_open;
+        self.palette_open = false;
+        if self.map_open {
+            let project = self.project_dir.clone();
+            if self.map.as_ref().is_some_and(|m| m.project != project) {
+                self.map = None;
+            }
+            cx.spawn(async move |this, cx| {
+                let map = cx
+                    .background_spawn({
+                        let project = project.clone();
+                        async move {
+                            let files = crate::rules::project_files(&project, MAP_CAP);
+                            ProjectMap::from_files(project, &files)
+                        }
+                    })
+                    .await;
+                let _ = this.update(cx, |s, cx| {
+                    if s.project_dir == map.project {
+                        s.map = Some(map);
+                        cx.notify();
+                    }
+                });
+            })
+            .detach();
+        }
+        cx.notify();
+    }
+
+    /// The files the current chat changed, most changed first, as
+    /// project-relative paths where they're inside the project.
+    pub fn edited_files(&self) -> Vec<Edited> {
+        let Some(chat) = self.chat() else {
+            return vec![];
+        };
+        let mut out: Vec<Edited> = vec![];
+        for m in &chat.messages {
+            let Message::Assistant { blocks } = m else {
+                continue;
+            };
+            for b in blocks {
+                let Block::Tool(t) = b else { continue };
+                if !matches!(t.kind, ToolKind::Edit | ToolKind::Write)
+                    || t.status != ToolStatus::Done
+                {
+                    continue;
+                }
+                let path = std::path::Path::new(t.target.as_ref());
+                let shown = path
+                    .strip_prefix(&self.project_dir)
+                    .map(|r| r.to_string_lossy().replace('\\', "/"))
+                    .unwrap_or_else(|_| t.target.to_string());
+                match out.iter_mut().find(|e| e.path == shown) {
+                    Some(e) => {
+                        e.times += 1;
+                        e.review = t.review;
+                    }
+                    None => out.push(Edited {
+                        path: shown,
+                        times: 1,
+                        review: t.review,
+                    }),
+                }
+            }
+        }
+        out.sort_by(|a, b| b.times.cmp(&a.times).then(a.path.cmp(&b.path)));
+        out
     }
 
     /// Diagnose an endpoint: DNS, TCP, TLS, HTTP, then the key, off the UI

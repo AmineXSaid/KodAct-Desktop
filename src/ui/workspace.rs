@@ -448,6 +448,7 @@ impl Render for Workspace {
         );
         let (find_open, shortcuts_open) = (s.find.is_some(), s.shortcuts_open);
         let empty = s.chat().is_none_or(|c| c.messages.is_empty());
+        let below = s.doc_below;
 
         let main = div().flex_1().min_w_0().flex().flex_col().bg(t.extra.stage);
         // A file opened from a reply, or the setup guide, sits beside the session.
@@ -465,9 +466,14 @@ impl Render for Workspace {
                 .as_ref()
                 .is_some_and(|f| f.is_diagram() || f.office() == Some(crate::office::Kind::Xlsx));
             let fit = super::doc_pane::Fit {
-                width: super::doc_pane::width(main_width, wide, &t),
+                width: if s.doc_below {
+                    main_width
+                } else {
+                    super::doc_pane::width(main_width, wide, &t)
+                },
                 scale: window.scale_factor(),
                 fit: s.doc_fit,
+                below: s.doc_below,
             };
             let read = s
                 .doc_preview
@@ -496,10 +502,12 @@ impl Render for Workspace {
                     .flex_1()
                     .min_h_0()
                     .flex()
+                    .when(below, |d| d.flex_col())
                     .child(
                         div()
                             .flex_1()
                             .min_w_0()
+                            .min_h_0()
                             .overflow_hidden()
                             .flex()
                             .flex_col()
@@ -568,6 +576,7 @@ impl Render for Workspace {
                     .flex_1()
                     .min_h_0()
                     .flex()
+                    .when(below, |d| d.flex_col())
                     .child(conversation)
                     .children(pane),
             )
@@ -583,6 +592,25 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &NewChat, window, cx| {
                 this.state.update(cx, |s, cx| s.new_chat(cx));
                 this.focus_composer(window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &ShowProjectMap, _, cx| {
+                this.state.update(cx, |s, cx| s.toggle_map(cx))
+            }))
+            .on_action(cx.listener(|this, _: &ToggleSplit, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.doc_below = !s.doc_below;
+                    if s.doc.is_none() {
+                        s.show_toast(
+                            if s.doc_below {
+                                "Files you open from a chat will show below it."
+                            } else {
+                                "Files you open from a chat will show beside it."
+                            },
+                            cx,
+                        );
+                    }
+                    cx.notify();
+                })
             }))
             .on_action(cx.listener(|this, _: &ToggleSidebar, _, cx| {
                 this.state.update(cx, |s, cx| {
@@ -634,7 +662,9 @@ impl Render for Workspace {
                 };
                 this.state.update(cx, |s, cx| {
                     // Esc closes what is open, the newest first, before it stops a reply.
-                    if s.shortcuts_open
+                    if s.map_open {
+                        s.toggle_map(cx);
+                    } else if s.shortcuts_open
                         || s.chat_menu.is_some()
                         || s.approvals_open
                         || s.context_open
@@ -840,6 +870,9 @@ impl Render for Workspace {
             .when(palette_open, |d| d.child(self.palette.clone()))
             .child(self.side.clone())
             .child(self.settings.clone())
+            .when(self.state.read(cx).map_open, |d| {
+                d.child(super::project_map::render(&t, &self.state, cx))
+            })
             .when(shortcuts_open, |d| {
                 d.child(super::shortcuts::render(&t, &self.state))
             })

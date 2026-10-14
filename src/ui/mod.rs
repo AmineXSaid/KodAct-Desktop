@@ -35,6 +35,7 @@ pub mod permissions_editor;
 pub mod planned;
 pub mod plugins_editor;
 pub mod profiles_editor;
+pub mod project_map;
 pub mod projects;
 pub mod rules_view;
 pub mod sandbox_editor;
@@ -78,6 +79,8 @@ gpui::actions!(
         OpenPermissions,
         OpenProfiles,
         OpenGuide,
+        ToggleSplit,
+        ShowProjectMap,
         CopyLastReply,
         ChangeName,
         ChangeAvatar,

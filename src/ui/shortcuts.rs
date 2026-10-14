@@ -25,6 +25,12 @@ pub const SHORTCUTS: &[(&str, &str, &str)] = &[
     ("secondary-u", "Attach files and images", "Conversation"),
     ("secondary-shift-t", "This turn's tasks", "Conversation"),
     ("secondary-shift-a", "Chats that need you", "Chats"),
+    ("secondary-shift-m", "The project map", "Chats"),
+    (
+        "secondary-\\",
+        "Side panel beside or below the chat",
+        "Conversation",
+    ),
     ("secondary-f", "Find in the conversation", "Conversation"),
     ("secondary-j", "Jump to the latest message", "Conversation"),
     ("secondary-shift-c", "Copy the last reply", "Conversation"),
@@ -206,10 +212,12 @@ mod tests {
     #[test]
     fn the_sheet_matches_the_keymap() {
         let main = include_str!("../main.rs");
-        let bound: Vec<&str> = main
+        // As written in the source: `\\` there is one backslash.
+        let bound: Vec<String> = main
             .split("KeyBinding::new(\"")
             .skip(1)
             .filter_map(|rest| rest.split('"').next())
+            .map(|k| k.replace("\\\\", "\\"))
             .collect();
         assert!(bound.len() > 10, "{bound:?}");
         for b in &bound {
@@ -220,7 +228,7 @@ mod tests {
         }
         for (k, _, _) in SHORTCUTS {
             assert!(
-                bound.contains(k),
+                bound.iter().any(|b| b == k),
                 "{k} is on the sheet but main.rs doesn't bind it"
             );
         }
