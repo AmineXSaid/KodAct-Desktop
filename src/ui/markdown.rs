@@ -377,6 +377,8 @@ pub struct CopyContext {
     pub scale: f32,
     /// Diagrams showing their source instead of the drawing (`AppState::diagram_code`).
     pub sources: std::sync::Arc<std::collections::HashSet<SharedString>>,
+    /// The reply is still arriving: its newest words fade in at the end.
+    pub streaming: bool,
 }
 
 fn runs(spans: &[Span], t: &Theme, base_weight: FontWeight, color: gpui::Hsla) -> StyledText {
@@ -391,6 +393,18 @@ fn runs_in(
     base_weight: FontWeight,
     color: gpui::Hsla,
 ) -> StyledText {
+    let (text, runs) = run_list(spans, t, family, base_weight, color);
+    StyledText::new(text).with_runs(runs)
+}
+
+/// The text of `spans` and its styled runs.
+fn run_list(
+    spans: &[Span],
+    t: &Theme,
+    family: &SharedString,
+    base_weight: FontWeight,
+    color: gpui::Hsla,
+) -> (String, Vec<TextRun>) {
     let mut text = String::new();
     let mut runs = vec![];
     for s in spans {
@@ -427,7 +441,66 @@ fn runs_in(
             }),
         });
     }
+    (text, runs)
+}
+
+/// How many characters at the end of a reply still arriving fade in.
+const TAIL_CHARS: usize = 24;
+
+/// A paragraph still arriving: its last few words fade toward the end, so
+/// new text eases in rather than popping onto the line.
+fn runs_streaming(spans: &[Span], t: &Theme, color: gpui::Hsla) -> StyledText {
+    let (text, runs) = run_list(spans, t, &t.font_sans, FontWeight::NORMAL, color);
+    let runs = fade_tail(&text, runs, TAIL_CHARS);
     StyledText::new(text).with_runs(runs)
+}
+
+/// Splits `runs` so the last `n` characters of `text` step down in opacity
+/// toward the end: whole near the start of the tail, faint at its end.
+fn fade_tail(text: &str, runs: Vec<TextRun>, n: usize) -> Vec<TextRun> {
+    let chars = text.chars().count();
+    if chars == 0 || n == 0 {
+        return runs;
+    }
+    let start_char = chars.saturating_sub(n);
+    // Byte offset of every character from the tail's start, plus the end.
+    let mut cuts: Vec<usize> = text
+        .char_indices()
+        .skip(start_char)
+        .map(|(i, _)| i)
+        .collect();
+    cuts.push(text.len());
+    let tail = cuts.len() - 1;
+    let tail_start = cuts[0];
+    let mut out = vec![];
+    let mut pos = 0;
+    for run in runs {
+        let (lo, hi) = (pos, pos + run.len);
+        pos = hi;
+        if hi <= tail_start {
+            out.push(run);
+            continue;
+        }
+        if lo < tail_start {
+            out.push(TextRun {
+                len: tail_start - lo,
+                ..run.clone()
+            });
+        }
+        // One run per character in the tail, each a little fainter.
+        for (k, w) in cuts.windows(2).enumerate() {
+            let (a, b) = (w[0].max(lo), w[1].min(hi));
+            if a >= b {
+                continue;
+            }
+            let fade = 1. - 0.8 * (k + 1) as f32 / tail as f32;
+            let mut r = run.clone();
+            r.len = b - a;
+            r.color = r.color.opacity(fade);
+            out.push(r);
+        }
+    }
+    out
 }
 
 pub fn render(src: &str, t: &Theme, copy: &CopyContext) -> AnyElement {
@@ -449,6 +522,7 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
         .text_size(size)
         .line_height(relative(leading));
     let mut prev: Option<&'static str> = None;
+    let last = blocks.len().saturating_sub(1);
     for (n, b) in blocks.into_iter().enumerate() {
         // Space above a block depends on what it follows: list items sit
         // close together, headings and code get room above them.
@@ -473,6 +547,9 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
         };
         prev = Some(kind);
         let el: AnyElement = match b {
+            Block::Para(spans) if copy.streaming && n == last => div()
+                .child(runs_streaming(&spans, t, t.colors.text))
+                .into_any_element(),
             Block::Para(spans) => div()
                 .child(runs(&spans, t, FontWeight::NORMAL, t.colors.text))
                 .into_any_element(),
@@ -1064,5 +1141,33 @@ mod tests {
                 code: "cargo te".into()
             })
         );
+    }
+
+    #[test]
+    fn a_streaming_tail_fades_toward_the_end() {
+        let t = crate::theme::Theme::light();
+        let text = "Hello wörld, the newest words";
+        let spans = [Span {
+            text: text.into(),
+            ..Default::default()
+        }];
+        let (text, runs) =
+            super::run_list(&spans, &t, &t.font_sans, FontWeight::NORMAL, t.colors.text);
+        let faded = super::fade_tail(&text, runs, 8);
+        // The runs still cover the text exactly, on character boundaries.
+        assert_eq!(faded.iter().map(|r| r.len).sum::<usize>(), text.len());
+        assert_eq!(faded.len(), 1 + 8);
+        // Whole before the tail, fainter step by step inside it.
+        assert_eq!(faded[0].color, t.colors.text);
+        let alphas: Vec<f32> = faded.iter().map(|r| r.color.a).collect();
+        assert!(alphas.windows(2).all(|w| w[1] < w[0]));
+        // Shorter than the tail: every character fades.
+        let one = TextRun {
+            len: "ö".len(),
+            ..faded[0].clone()
+        };
+        let short = super::fade_tail("ö", vec![one], 8);
+        assert_eq!(short.len(), 1);
+        assert!(short[0].color.a < t.colors.text.a);
     }
 }

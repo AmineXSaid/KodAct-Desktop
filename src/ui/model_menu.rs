@@ -402,7 +402,7 @@ pub fn render(
                 )
         });
 
-    div()
+    let menu = div()
         .id("models-menu")
         .on_mouse_down_out(move |ev, _, cx| on_out(ev.position, cx))
         .absolute()
@@ -433,10 +433,8 @@ pub fn render(
                 .child(list),
         )
         .children(effort)
-        .child(setup_links(t))
-        .with_animation("models-in", super::motion::pop_in(t), |d, k| {
-            d.opacity(k).mb(px(8. - 6. * (1. - k)))
-        })
+        .child(setup_links(t));
+    super::motion::edge_draw(menu, "models-in", t.colors.primary, 8., t)
 }
 
 /// Under the list: the setup guide and the file, one click each.

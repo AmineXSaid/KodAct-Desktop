@@ -327,6 +327,7 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
                         &md,
                         t,
                         &CopyContext {
+                            streaming: false,
                             state: state.clone(),
                             key: "panel-plan".into(),
                             copied: v.copied.clone(),

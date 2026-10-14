@@ -604,44 +604,43 @@ impl Render for CommandPalette {
                 );
             }
             let on = i == selected;
-            list = list.child(
-                div()
-                    .id(("cmd", i))
-                    .flex()
-                    .items_center()
-                    .gap(t.space.md)
-                    .h(t.size.row + px(2.))
-                    .px(t.space.md)
-                    .rounded(t.radius.button)
-                    .cursor_pointer()
-                    .when(on, |d| d.bg(t.colors.hover))
-                    .child(icon(
-                        cmd.icon,
-                        t.size.icon_sm,
-                        if on {
-                            t.colors.text
-                        } else {
-                            t.colors.text_muted
-                        },
-                    ))
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .overflow_hidden()
-                            .whitespace_nowrap()
-                            .text_ellipsis()
-                            .child(highlighted(&cmd.label, pos, &t)),
-                    )
-                    .children(cmd.hint.clone().map(|h| kbd(&t, h)))
-                    .on_mouse_move(cx.listener(move |this, _, _, cx| {
-                        if this.selected != i {
-                            this.selected = i;
-                            cx.notify();
-                        }
-                    }))
-                    .on_click(cx.listener(|this, _, window, cx| this.run(window, cx))),
-            );
+            let row = div()
+                .id(("cmd", i))
+                .flex()
+                .items_center()
+                .gap(t.space.md)
+                .h(t.size.row + px(2.))
+                .px(t.space.md)
+                .rounded(t.radius.button)
+                .cursor_pointer()
+                .when(on, |d| d.bg(t.colors.hover))
+                .child(icon(
+                    cmd.icon,
+                    t.size.icon_sm,
+                    if on {
+                        t.colors.text
+                    } else {
+                        t.colors.text_muted
+                    },
+                ))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .child(highlighted(&cmd.label, pos, &t)),
+                )
+                .children(cmd.hint.clone().map(|h| kbd(&t, h)))
+                .on_mouse_move(cx.listener(move |this, _, _, cx| {
+                    if this.selected != i {
+                        this.selected = i;
+                        cx.notify();
+                    }
+                }))
+                .on_click(cx.listener(|this, _, window, cx| this.run(window, cx)));
+            list = list.child(super::motion::row_in(row, ("cmd-in", i), i, &t));
         }
         if count == 0 {
             list = list.child(
@@ -682,7 +681,7 @@ impl Render for CommandPalette {
                 this.close(cx);
                 window.dispatch_action(Box::new(FocusComposer), cx);
             }))
-            .child(
+            .child(super::motion::edge_draw(
                 theme::popover(&t)
                     .id("palette")
                     .w(t.size.palette)
@@ -728,11 +727,16 @@ impl Render for CommandPalette {
                                 if count == 1 { "" } else { "s" }
                             )),
                     )
-                    .with_animation(
-                        "palette-in",
-                        gpui::Animation::new(fade).with_easing(gpui::ease_in_out),
-                        |d, delta| d.opacity(delta),
-                    ),
+                    .relative(),
+                "palette-in",
+                t.colors.primary,
+                0.,
+                &t,
+            ))
+            .with_animation(
+                "palette-scrim-in",
+                gpui::Animation::new(fade).with_easing(gpui::ease_in_out),
+                |d, delta| d.opacity(delta),
             )
     }
 }

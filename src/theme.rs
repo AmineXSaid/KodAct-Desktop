@@ -476,6 +476,9 @@ pub struct Sizes {
     pub statusbar: Pixels,          // 26: the status bar at the foot of the window
     pub panel_in_ms: u64,           // 280: the side panel sliding in
     pub pop_in_ms: u64,             // 160: a menu or dialog rising into place
+    pub stagger_ms: u64,            // 18: each row of an opening list starting after the one above
+    pub edge_draw_ms: u64,          // 140: a window's jewel edge drawing down as it opens
+    pub edge_bar: Pixels,           // 3: that jewel edge's width
     pub doc_text: Pixels,           // 15: a document in the side panel
     pub doc_title: Pixels,          // 28: its title, in the display serif
     pub line_height_doc: f32,       // 1.65: a document's leading
@@ -515,6 +518,9 @@ impl Default for Sizes {
             statusbar: px(26.),
             panel_in_ms: 280,
             pop_in_ms: 160,
+            stagger_ms: 18,
+            edge_draw_ms: 140,
+            edge_bar: px(3.),
             doc_text: px(15.),
             doc_title: px(28.),
             line_height_doc: 1.65,

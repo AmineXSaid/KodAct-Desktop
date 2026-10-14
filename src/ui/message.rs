@@ -466,12 +466,13 @@ fn assistant(blocks: &[Block], cx: &ItemContext, t: &Theme) -> AnyElement {
             blocks
                 .iter()
                 .enumerate()
-                .map(|(b, block)| self::block(block, b, cx, t)),
+                .map(|(b, block)| self::block(block, b, b + 1 == blocks.len(), cx, t)),
         )
         .into_any_element()
 }
 
-fn block(block: &Block, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
+/// `newest`: the reply's last block, the one still growing while it streams.
+fn block(block: &Block, b: usize, newest: bool, cx: &ItemContext, t: &Theme) -> AnyElement {
     match block {
         Block::Text(text) => markdown::render(
             text,
@@ -482,6 +483,7 @@ fn block(block: &Block, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
                 copied: cx.copied.clone(),
                 scale: cx.scale,
                 sources: cx.sources.clone(),
+                streaming: cx.busy && cx.last && newest,
             },
         ),
         Block::Thinking { text, open } => thinking(text, *open, b, cx, t),

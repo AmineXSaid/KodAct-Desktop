@@ -391,7 +391,8 @@ impl Workspace {
             );
         }
         let (all, open) = (self.state.clone(), self.state.clone());
-        theme::popover(&t)
+        let menu = theme::popover(&t)
+            .id("switcher")
             .absolute()
             .top(t.size.control + t.space.xs)
             .left_0()
@@ -425,13 +426,8 @@ impl Workspace {
                         });
                         super::projects::open_folder(open.clone(), cx);
                     }),
-            )
-            .with_animation(
-                "switcher-in",
-                gpui::Animation::new(std::time::Duration::from_millis(t.motion_ms))
-                    .with_easing(gpui::ease_in_out),
-                |d, delta| d.opacity(delta),
-            )
+            );
+        super::motion::edge_draw(menu, "switcher-in", t.colors.primary, 0., &t)
     }
 
     fn toast(&self, cx: &mut Context<Self>) -> Option<impl IntoElement> {

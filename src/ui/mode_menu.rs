@@ -4,9 +4,7 @@
 //! its description, and a check on the current one. Picking Bypass the
 //! first time shows its warning in the menu before it is allowed.
 
-use gpui::{
-    div, prelude::*, px, AnimationExt, App, Entity, FontWeight, Hsla, IntoElement, SharedString,
-};
+use gpui::{div, prelude::*, px, App, Entity, FontWeight, Hsla, IntoElement, SharedString};
 
 use super::icon;
 use crate::modes::ModeId;
@@ -207,7 +205,7 @@ pub fn menu(
             )
     });
 
-    div()
+    let menu = div()
         .id("modes-menu")
         .on_mouse_down_out(move |ev, _, cx| on_out(ev.position, cx))
         .absolute()
@@ -252,8 +250,6 @@ pub fn menu(
                 ),
         )
         .child(rows)
-        .children(warning_card)
-        .with_animation("modes-in", super::motion::pop_in(t), |d, k| {
-            d.opacity(k).mb(px(8. - 6. * (1. - k)))
-        })
+        .children(warning_card);
+    super::motion::edge_draw(menu, "modes-in", t.colors.primary, 8., t)
 }

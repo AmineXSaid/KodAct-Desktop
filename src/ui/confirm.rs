@@ -4,8 +4,8 @@
 //! opens.
 
 use gpui::{
-    div, prelude::*, px, AnimationExt, Context, Entity, FocusHandle, FontWeight, IntoElement,
-    KeyDownEvent, Render, Subscription, Window,
+    div, prelude::*, px, Context, Entity, FocusHandle, FontWeight, IntoElement, KeyDownEvent,
+    Render, Subscription, Window,
 };
 
 use crate::state::{AppState, Confirm};
@@ -160,9 +160,10 @@ impl Render for ConfirmWindow {
                 gpui::MouseButton::Left,
                 cx.listener(|this, _, window, cx| this.cancel(window, cx)),
             )
-            .child(
+            .child(super::motion::edge_draw(
                 theme::popover(&t)
                     .id("confirm")
+                    .relative()
                     .occlude()
                     .w(px(440.))
                     .p(t.space.xl)
@@ -213,14 +214,12 @@ impl Render for ConfirmWindow {
                                         cx.listener(|this, _, window, cx| this.confirm(window, cx)),
                                     ),
                             ),
-                    )
-                    .with_animation(
-                        "confirm-in",
-                        gpui::Animation::new(std::time::Duration::from_millis(t.motion_ms))
-                            .with_easing(gpui::ease_in_out),
-                        |d, delta| d.opacity(delta),
                     ),
-            )
+                "confirm-in",
+                t.extra.danger,
+                0.,
+                &t,
+            ))
             .into_any_element()
     }
 }

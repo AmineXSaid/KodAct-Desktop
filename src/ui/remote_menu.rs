@@ -86,6 +86,8 @@ pub struct RemotePicker {
     /// The page (and folder) the query was typed on: a new page or folder
     /// starts with an empty box.
     page: Option<(RemotePage, Option<String>)>,
+    /// Counts pages shown, so each new page's rows play their opening.
+    opening: usize,
     _subs: Vec<Subscription>,
 }
 
@@ -108,6 +110,7 @@ impl RemotePicker {
                     }
                     this.page = page.clone();
                     this.selected = 0;
+                    this.opening += 1;
                     if let Some((page, _)) = page {
                         let hint = match Some(page) {
                             Some(RemotePage::Ssh) => "Type a host from ~/.ssh/config, or user@host",
@@ -135,6 +138,7 @@ impl RemotePicker {
             query,
             selected: 0,
             page: None,
+            opening: 0,
             _subs: subs,
         }
     }
@@ -593,83 +597,87 @@ impl Render for RemotePicker {
             }
             let hover = t.colors.hover;
             let act = r.act.clone();
-            list = list.child(
-                div()
-                    .id(("remote-row", i))
-                    .flex()
-                    .items_center()
-                    .gap(t.space.sm)
-                    .min_h(t.size.row)
-                    .px(t.space.md)
-                    .py(px(4.))
-                    .mx(t.space.xs)
-                    .rounded(t.radius.small)
-                    .when(on, |d| d.bg(t.colors.hover))
-                    .when(enabled_row, |d| {
-                        d.cursor_pointer().hover(move |st| st.bg(hover))
-                    })
-                    .child(icon(
-                        r.icon,
-                        t.size.icon_sm,
-                        if enabled_row {
-                            t.colors.text_muted
-                        } else {
-                            t.colors.text_subtle
-                        },
-                    ))
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .flex_col()
-                            .child(
-                                div()
-                                    .overflow_hidden()
-                                    .whitespace_nowrap()
-                                    .text_ellipsis()
-                                    .text_color(if enabled_row {
-                                        t.colors.text
-                                    } else {
-                                        t.colors.text_muted
-                                    })
-                                    .child(r.label.clone()),
-                            )
-                            .children(r.caption.clone().map(|c| {
-                                div()
-                                    .text_size(t.text.caption)
-                                    .text_color(t.colors.text_muted)
-                                    .overflow_hidden()
-                                    .whitespace_nowrap()
-                                    .text_ellipsis()
-                                    .child(c)
-                            })),
-                    )
-                    .children(r.badge.map(|b| {
-                        div()
-                            .flex_none()
-                            .text_size(t.text.caption)
-                            .text_color(t.colors.text_muted)
-                            .child(b)
-                    }))
-                    .children(
-                        r.trailing
-                            .map(|g| icon(g, t.size.icon_xs, t.colors.text_subtle)),
-                    )
-                    .on_mouse_move(cx.listener(move |this, _, _, cx| {
-                        if let Some(n) = my_index {
-                            if this.selected != n {
-                                this.selected = n;
-                                cx.notify();
-                            }
+            let row = div()
+                .id(("remote-row", i))
+                .flex()
+                .items_center()
+                .gap(t.space.sm)
+                .min_h(t.size.row)
+                .px(t.space.md)
+                .py(px(4.))
+                .mx(t.space.xs)
+                .rounded(t.radius.small)
+                .when(on, |d| d.bg(t.colors.hover))
+                .when(enabled_row, |d| {
+                    d.cursor_pointer().hover(move |st| st.bg(hover))
+                })
+                .child(icon(
+                    r.icon,
+                    t.size.icon_sm,
+                    if enabled_row {
+                        t.colors.text_muted
+                    } else {
+                        t.colors.text_subtle
+                    },
+                ))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .child(
+                            div()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .text_color(if enabled_row {
+                                    t.colors.text
+                                } else {
+                                    t.colors.text_muted
+                                })
+                                .child(r.label.clone()),
+                        )
+                        .children(r.caption.clone().map(|c| {
+                            div()
+                                .text_size(t.text.caption)
+                                .text_color(t.colors.text_muted)
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .child(c)
+                        })),
+                )
+                .children(r.badge.map(|b| {
+                    div()
+                        .flex_none()
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_muted)
+                        .child(b)
+                }))
+                .children(
+                    r.trailing
+                        .map(|g| icon(g, t.size.icon_xs, t.colors.text_subtle)),
+                )
+                .on_mouse_move(cx.listener(move |this, _, _, cx| {
+                    if let Some(n) = my_index {
+                        if this.selected != n {
+                            this.selected = n;
+                            cx.notify();
                         }
-                    }))
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        if let Some(a) = act.clone() {
-                            this.run(a, window, cx);
-                        }
-                    })),
-            );
+                    }
+                }))
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    if let Some(a) = act.clone() {
+                        this.run(a, window, cx);
+                    }
+                }));
+            list = list.child(super::motion::row_in(
+                row,
+                ("remote-row-in", (self.opening << 12) + i),
+                i,
+                &t,
+            ));
         }
         if let Some((text, error)) = status {
             list = list.child(note(&t, text, error));
@@ -761,7 +769,7 @@ impl Render for RemotePicker {
 
         let run_rows = rows.clone();
         let lift = f32::from(t.space.xs);
-        theme::popover(&t)
+        let menu = theme::popover(&t)
             .id("remote-menu")
             .absolute()
             .bottom_full()
@@ -799,11 +807,8 @@ impl Render for RemotePicker {
                     }
                 })
             }))
-            .child(body)
-            .with_animation("remote-menu-in", super::motion::pop_in(&t), move |d, k| {
-                d.opacity(k).mb(px(lift - 3. * (1. - k)))
-            })
-            .into_any_element()
+            .child(body);
+        super::motion::edge_draw(menu, "remote-menu-in", t.colors.primary, lift, &t)
     }
 }
 

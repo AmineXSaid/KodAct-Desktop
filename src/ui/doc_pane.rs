@@ -341,6 +341,7 @@ pub fn render(
                     md,
                     t,
                     &CopyContext {
+                        streaming: false,
                         state,
                         key: "doc".into(),
                         copied,
@@ -366,6 +367,7 @@ pub fn render(
                 &file.content,
                 t,
                 &CopyContext {
+                    streaming: false,
                     state,
                     key: "doc".into(),
                     copied,

@@ -616,6 +616,7 @@ impl RulesView {
                 &s.body,
                 t,
                 &CopyContext {
+                    streaming: false,
                     state: self.state.clone(),
                     key: format!("rules-{}", s.path.display()),
                     copied,
