@@ -750,7 +750,7 @@ impl Settings {
             .flex()
             .items_center()
             .gap(px(10.))
-            .child(div().flex_1().min_w_0().text_size(t.text.caption).text_color(t.colors.text_subtle).line_height(relative(1.4)).child("Lets Forge open web pages, click, type and take screenshots, through browser-use (run by uv). Each step asks first."))
+            .child(div().flex_1().min_w_0().text_size(t.text.caption).text_color(t.colors.text_subtle).line_height(relative(1.4)).child("Lets Forge's agents drive the browser in the side panel: open pages and tabs, click, type, read, run scripts, take screenshots. You watch it live. Each step asks first."))
             .child(
                 Self::chip(t, "browser", if browser { "On · turn off" } else { "Turn on" }, browser)
                     .flex_none()

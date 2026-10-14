@@ -144,7 +144,7 @@ impl CommandPalette {
                 if s.browser {
                     "Turn the web browser off"
                 } else {
-                    "Turn the web browser on (browser-use)"
+                    "Turn the web browser on for Forge's agents"
                 },
                 "icons/globe.svg",
                 None,

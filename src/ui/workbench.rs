@@ -479,7 +479,7 @@ mod tests {
     #[test]
     fn forge_is_browsing_while_a_browser_tool_runs() {
         let mut m = reply(&[(
-            "mcp__browser-use__browser_navigate",
+            "mcp__forge-browser__navigate",
             json!({"url": "https://a.example"}),
         )]);
         assert!(agent_browsing(&m));

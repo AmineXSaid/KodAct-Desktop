@@ -16,6 +16,7 @@ mod attach;
 mod avatars;
 mod backend;
 mod browser;
+mod browser_mcp;
 mod commands;
 mod context;
 mod diagnose;
@@ -112,6 +113,24 @@ fn log_crashes() {
 }
 
 fn main() {
+    // `--browser-mcp <devtools> <focus-file>`: serve the browser tools to a
+    // ForgeCLI (`browser_mcp.rs`) instead of opening the window.
+    let args: Vec<String> = std::env::args().collect();
+    // `--browser-guard <chromium> <args…>`: the side panel's browser, closed
+    // when the app goes (`web_view.rs`).
+    if args.get(1).map(String::as_str) == Some("--browser-guard") {
+        web_view::guard(&args[2..]);
+        return;
+    }
+    if args.get(1).map(String::as_str) == Some("--browser-mcp") {
+        let devtools = args.get(2).cloned().unwrap_or_default();
+        let focus = args
+            .get(3)
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(browser::focus_file);
+        browser_mcp::serve(&devtools, &focus);
+        return;
+    }
     log_crashes();
     gpui::application()
         .with_assets(assets::Assets)

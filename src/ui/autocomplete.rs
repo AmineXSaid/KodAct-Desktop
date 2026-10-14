@@ -114,7 +114,7 @@ fn app_actions() -> Vec<(&'static str, &'static str, &'static str, Box<dyn Actio
         ),
         (
             "browser",
-            "Turn the web browser on or off (browser-use)",
+            "Turn the web browser on or off for Forge's agents",
             "icons/globe.svg",
             Box::new(ToggleBrowser),
         ),

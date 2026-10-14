@@ -914,7 +914,7 @@ pub struct AppState {
     pub default_mode: ModeId,
     /// Bypass permissions has been allowed, behind its warning.
     pub bypass_allowed: bool,
-    /// The web browser (browser-use) is given to new ForgeCLI sessions.
+    /// The web browser tools (`browser_mcp.rs`) are given to new ForgeCLI sessions.
     pub browser: bool,
     /// The Modes menu is open; its Bypass warning is showing.
     pub modes_open: bool,
@@ -2441,7 +2441,7 @@ impl AppState {
         }
         let Some(exe) = crate::web_view::find_chromium() else {
             self.web_page.error = Some(
-                "Forge needs Chromium, Chrome or Edge for the browser. Install one, or run: uvx playwright install chromium"
+                "Forge needs Chromium, Chrome or Edge for the browser. Install one, or run: npx playwright install chromium"
                     .into(),
             );
             cx.notify();
@@ -2450,7 +2450,7 @@ impl AppState {
         let profile = crate::profile::dir()
             .unwrap_or_else(std::env::temp_dir)
             .join("browser");
-        match crate::web_view::start(&exe, &profile) {
+        match crate::web_view::start(&exe, &profile, &crate::browser::focus_file()) {
             Ok((view, updates)) => {
                 let cdp = view.cdp_url.clone();
                 self.web = Some(std::sync::Arc::new(view));
@@ -3046,9 +3046,9 @@ impl AppState {
 
     pub fn toggle_browser(&mut self, cx: &mut Context<Self>) {
         let on = !self.browser;
-        if on && crate::browser::uvx().is_none() {
+        if on && crate::web_view::find_chromium().is_none() {
             return self.show_toast(
-                "The web browser runs through uv. Install uv (docs.astral.sh/uv), then turn it on again.",
+                "Forge's browser needs Chromium, Chrome or Edge. Install one (or run: npx playwright install chromium), then turn it on again.",
                 cx,
             );
         }
@@ -3059,7 +3059,7 @@ impl AppState {
         self.restart_idle_engines();
         self.show_toast(
             if on {
-                "Web browser on: Forge can open pages, click and type in the browser in the side panel, where you watch it work. Each step asks first."
+                "Web browser on: Forge's agents drive the browser in the side panel (open, click, type, read, run scripts, screenshots) while you watch. Each step asks first."
             } else {
                 "Web browser off."
             },
@@ -3915,20 +3915,13 @@ impl AppState {
         };
         let mut launch =
             crate::backend::launch(&profile, self.mode, self.bypass_allowed, conversation)?;
-        // The web browser: browser-use's MCP server, run by uvx, driving
-        // the browser in the side panel.
+        // The web browser: Forge's own browser tools (this executable, as
+        // an MCP server) on the browser in the side panel.
         if self.browser {
-            if let Some(uvx) = crate::browser::uvx() {
-                let dir = crate::profile::dir().map(|d| d.join("browser-use"));
-                let shared = match (self.ensure_web(cx), dir) {
-                    (Some(cdp), Some(dir)) => {
-                        crate::browser::write_config(&dir, &cdp).ok().map(|_| dir)
-                    }
-                    _ => None,
-                };
+            if let (Some(cdp), Ok(exe)) = (self.ensure_web(cx), std::env::current_exe()) {
                 launch.args.extend([
                     "--mcp-config".to_string(),
-                    crate::browser::mcp_config(&uvx, shared.as_deref()),
+                    crate::browser::mcp_config(&exe, &cdp, &crate::browser::focus_file()),
                 ]);
             }
         }
@@ -4791,22 +4784,22 @@ fn demo_plan() -> Vec<Step> {
             String::new(),
         ),
         Step::Use(
-            "mcp__browser-use__browser_navigate",
+            "mcp__forge-browser__navigate",
             json!({"url": "https://vendor.example/pricing"}),
             "Navigated to: https://vendor.example/pricing".into(),
         ),
         Step::Use(
-            "mcp__browser-use__browser_get_state",
+            "mcp__forge-browser__state",
             json!({}),
             r#"{"url": "https://vendor.example/pricing#teams", "title": "Pricing"}"#.into(),
         ),
         Step::Use(
-            "mcp__browser-use__browser_click",
+            "mcp__forge-browser__click",
             json!({"index": 7}),
             "Clicked element 7".into(),
         ),
         Step::Use(
-            "mcp__browser-use__browser_extract_content",
+            "mcp__forge-browser__text",
             json!({"query": "the Teams plan's price per seat"}),
             "Teams: 14 per seat per month".into(),
         ),
@@ -5089,10 +5082,10 @@ fn mock_chats() -> Vec<Chat> {
                     {"content": "Round-trip test", "status": "in_progress"},
                     {"content": "Windows run with a read-only file", "status": "pending"}
                 ]}))),
-                done(crate::backend::tool_call("mcp__browser-use__browser_navigate", &serde_json::json!({"url": "https://serde.rs/field-attrs.html"}))),
-                done(crate::backend::tool_call("mcp__browser-use__browser_get_state", &serde_json::json!({}))),
-                done(crate::backend::tool_call("mcp__browser-use__browser_click", &serde_json::json!({"index": 12}))),
-                done(crate::backend::tool_call("mcp__browser-use__browser_extract_content", &serde_json::json!({"query": "how #[serde(alias)] works"}))),
+                done(crate::backend::tool_call("mcp__forge-browser__navigate", &serde_json::json!({"url": "https://serde.rs/field-attrs.html"}))),
+                done(crate::backend::tool_call("mcp__forge-browser__state", &serde_json::json!({}))),
+                done(crate::backend::tool_call("mcp__forge-browser__click", &serde_json::json!({"index": 12}))),
+                done(crate::backend::tool_call("mcp__forge-browser__text", &serde_json::json!({"query": "how #[serde(alias)] works"}))),
                 Block::Tool(ToolCall { kind: ToolKind::Read, target: "src/settings.rs".into(), note: None, status: ToolStatus::Done, output: "pub struct Settings { pub theme: String, pub model: String, pub permissions: Vec<String> }".into(), diff: vec![], open: false, full: false, review: Review::Open }),
                 Block::Tool(ToolCall {
                     kind: ToolKind::Write,

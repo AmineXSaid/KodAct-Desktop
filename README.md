@@ -74,7 +74,11 @@ table in step.
 - `src/endpoints.rs`, `src/health.rs`, `src/secrets.rs`: endpoint profiles, their checks, and keys.
 - `src/profile.rs`: your name and avatar on disk. `src/stubs.rs`: what isn't wired yet, and why.
 - `src/web_view.rs`: the side panel's browser: a headless Chromium (Playwright's, else Chrome or Edge)
-  shown live over the DevTools protocol, which browser-use drives too (`src/browser.rs`).
+  shown live over the DevTools protocol, started through a guard (`--browser-guard`) so it closes
+  with the app however the app ends.
+- `src/browser_mcp.rs`: the browser tools for ForgeCLI's agents, served by this same program
+  (`--browser-mcp`): navigate, state (numbered elements), click, type, press, select, hover,
+  scroll, text, html, eval, wait, screenshot, console and tabs, on the page the panel shows.
 - `src/assets.rs`: bundled icons (Lucide, ISC) and fonts (Hanken Grotesk, JetBrains Mono, Source Serif 4; OFL).
 - `src/ui/`: one file per part:
   - the window: `workspace` (title bar, welcome), `sidebar`, `chat_view`,

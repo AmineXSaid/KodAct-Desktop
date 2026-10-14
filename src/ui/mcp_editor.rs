@@ -258,7 +258,7 @@ impl McpEditor {
                 div()
                     .text_size(t.text.caption)
                     .text_color(t.colors.text_subtle)
-                    .child("The web browser (Settings → General) adds browser-use for each chat too; it isn't saved in these files."),
+                    .child("The web browser (Settings → General) adds Forge's browser tools for each chat too; it isn't saved in these files."),
             );
         }
         let status = if checking {

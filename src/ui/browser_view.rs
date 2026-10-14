@@ -3,7 +3,7 @@
 //! address (type a URL or words to search) and "open in your browser"; a
 //! thin bar while a page loads; then the page itself, which you click,
 //! scroll and type into as in any browser. When Forge drives it (the
-//! browser-use tools), a badge says so and you watch it work.
+//! browser tools, `browser_mcp.rs`), a badge says so and you watch it work.
 
 use std::cell::Cell;
 use std::rc::Rc;

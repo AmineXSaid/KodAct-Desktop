@@ -2,8 +2,8 @@
 //! shown live in the panel and driven by the agent at the same time.
 //!
 //! Forge starts Chromium itself (Playwright's build when it is installed,
-//! else Chrome or Edge) with a DevTools port, and browser-use's MCP server is
-//! told to connect to that port instead of opening a window of its own
+//! else Chrome or Edge) with a DevTools port, and the agent's browser tools are
+//! connected to that port (`browser_mcp.rs`), so there is no window of its own
 //! (`browser.rs`). The panel watches the page through the DevTools protocol:
 //! a screencast sends a JPEG each time the page changes, and your clicks,
 //! scrolling and typing go back as input events. So what the agent does and
@@ -105,7 +105,7 @@ pub enum Update {
 pub struct WebView {
     child: Mutex<Child>,
     cmds: mpsc::Sender<Cmd>,
-    /// Where browser-use connects: `http://127.0.0.1:<port>`.
+    /// Where the browser tools connect: `http://127.0.0.1:<port>`.
     pub cdp_url: String,
 }
 
@@ -117,7 +117,44 @@ impl WebView {
 
 impl Drop for WebView {
     fn drop(&mut self) {
-        let _ = self.child.lock().map(|mut c| c.kill());
+        // Closing the guard's stdin closes the browser; kill makes sure.
+        let _ = self.child.lock().map(|mut c| {
+            drop(c.stdin.take());
+            c.kill()
+        });
+    }
+}
+
+/// `forge-gpui --browser-guard <chromium> <args…>`: run the browser, and
+/// close it as soon as stdin closes, which happens when Forge exits, quits
+/// or crashes. So the browser never outlives the app.
+pub fn guard(args: &[String]) {
+    let Some((exe, rest)) = args.split_first() else {
+        return;
+    };
+    let mut cmd = Command::new(exe);
+    cmd.args(rest).stdin(Stdio::null()).stdout(Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    let Ok(child) = cmd.spawn() else {
+        std::process::exit(1);
+    };
+    let child = Arc::new(Mutex::new(child));
+    let watched = child.clone();
+    std::thread::spawn(move || {
+        let mut sink = Vec::new();
+        let _ = std::io::Read::read_to_end(&mut std::io::stdin(), &mut sink);
+        let _ = watched.lock().map(|mut c| c.kill());
+        std::process::exit(0);
+    });
+    loop {
+        if let Ok(Some(status)) = child.lock().map(|mut c| c.try_wait().ok().flatten()) {
+            std::process::exit(status.code().unwrap_or(0));
+        }
+        std::thread::sleep(Duration::from_millis(200));
     }
 }
 
@@ -239,29 +276,44 @@ fn free_port() -> Result<u16, String> {
 pub fn start(
     exe: &Path,
     profile: &Path,
+    focus: &Path,
 ) -> Result<(WebView, async_channel::Receiver<Update>), String> {
+    let focus = focus.to_path_buf();
     std::fs::create_dir_all(profile).map_err(|e| e.to_string())?;
     let port = free_port()?;
-    let mut cmd = Command::new(exe);
-    cmd.args([
-        "--headless=new",
-        &format!("--remote-debugging-port={port}"),
-        "--remote-debugging-address=127.0.0.1",
-        "--no-first-run",
-        "--no-default-browser-check",
-        "--disable-features=Translate,MediaRouter",
-        "--hide-scrollbars",
-        "--mute-audio",
-        &format!("--window-size={},{}", VIEWPORT.0, VIEWPORT.1),
-        &format!("--user-data-dir={}", profile.display()),
-    ]);
+    let mut chrome: Vec<String> = vec![
+        "--headless=new".into(),
+        format!("--remote-debugging-port={port}"),
+        "--remote-debugging-address=127.0.0.1".into(),
+        "--no-first-run".into(),
+        "--no-default-browser-check".into(),
+        "--disable-features=Translate,MediaRouter".into(),
+        "--hide-scrollbars".into(),
+        "--mute-audio".into(),
+        format!("--window-size={},{}", VIEWPORT.0, VIEWPORT.1),
+        format!("--user-data-dir={}", profile.display()),
+    ];
     if needs_no_sandbox() {
-        cmd.arg("--no-sandbox");
+        chrome.push("--no-sandbox".into());
     }
-    cmd.arg("about:blank")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped());
+    chrome.push("about:blank".into());
+    // Through the guard (this program, `--browser-guard`), which closes the
+    // browser when Forge goes, however it goes; tests run it directly.
+    let mut cmd = match std::env::current_exe() {
+        Ok(me) if !cfg!(test) => {
+            let mut c = Command::new(me);
+            c.arg("--browser-guard").arg(exe).args(&chrome);
+            c.stdin(Stdio::piped());
+            c
+        }
+        _ => {
+            let mut c = Command::new(exe);
+            c.args(&chrome);
+            c.stdin(Stdio::null());
+            c
+        }
+    };
+    cmd.stdout(Stdio::null()).stderr(Stdio::piped());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -288,7 +340,7 @@ pub fn start(
             }
         });
         let why = match found_rx.recv_timeout(Duration::from_secs(30)) {
-            Ok(ws) => match devtools(&ws, cmd_rx, &up_tx) {
+            Ok(ws) => match devtools(&ws, cmd_rx, &up_tx, &focus) {
                 Ok(()) => "the browser closed".to_string(),
                 Err(e) => e,
             },
@@ -321,13 +373,33 @@ fn decode(jpeg: &[u8]) -> Option<Arc<RenderImage>> {
 
 type Socket = tungstenite::WebSocket<TcpStream>;
 
-struct Conn {
+/// A DevTools connection: commands out, answers and events back.
+pub(crate) struct Conn {
     ws: Socket,
     next: u64,
 }
 
+/// Connect to a DevTools WebSocket (`ws://127.0.0.1:<port>/devtools/…`).
+pub(crate) fn connect(ws_url: &str) -> Result<Conn, String> {
+    let host = ws_url
+        .strip_prefix("ws://")
+        .and_then(|r| r.split('/').next())
+        .ok_or("a bad DevTools address")?;
+    let stream = TcpStream::connect(host).map_err(|e| e.to_string())?;
+    let (ws, _) = tungstenite::client(ws_url, stream).map_err(|e| e.to_string())?;
+    ws.get_ref()
+        .set_read_timeout(Some(Duration::from_millis(30)))
+        .map_err(|e| e.to_string())?;
+    Ok(Conn { ws, next: 0 })
+}
+
 impl Conn {
-    fn send(&mut self, session: Option<&str>, method: &str, params: Value) -> Result<u64, String> {
+    pub(crate) fn send(
+        &mut self,
+        session: Option<&str>,
+        method: &str,
+        params: Value,
+    ) -> Result<u64, String> {
         self.next += 1;
         let mut msg = json!({ "id": self.next, "method": method, "params": params });
         if let Some(s) = session {
@@ -340,7 +412,7 @@ impl Conn {
     }
 
     /// The next message, or None when nothing came within the read timeout.
-    fn read(&mut self) -> Result<Option<Value>, String> {
+    pub(crate) fn read(&mut self) -> Result<Option<Value>, String> {
         match self.ws.read() {
             Ok(tungstenite::Message::Text(t)) => Ok(serde_json::from_str(t.as_str()).ok()),
             Ok(_) => Ok(None),
@@ -357,7 +429,7 @@ impl Conn {
     }
 
     /// Send and wait for the answer, passing on events that arrive meanwhile.
-    fn call(
+    pub(crate) fn call(
         &mut self,
         session: Option<&str>,
         method: &str,
@@ -449,7 +521,7 @@ fn attach(c: &mut Conn, target: &str, m: Metrics, events: &mut Vec<Value>) -> Re
 }
 
 /// The page tabs open now, newest last.
-fn pages(c: &mut Conn, events: &mut Vec<Value>) -> Result<Vec<TabInfo>, String> {
+pub(crate) fn pages(c: &mut Conn, events: &mut Vec<Value>) -> Result<Vec<TabInfo>, String> {
     let r = c.call(None, "Target.getTargets", json!({}), events)?;
     Ok(r["targetInfos"]
         .as_array()
@@ -464,21 +536,21 @@ fn pages(c: &mut Conn, events: &mut Vec<Value>) -> Result<Vec<TabInfo>, String> 
         .collect())
 }
 
+/// Say which tab is on screen, for the agent's tools (`browser_mcp.rs`).
+fn write_focus(path: &Path, id: &str) {
+    let tmp = path.with_extension("tmp");
+    if std::fs::write(&tmp, id).is_ok() {
+        let _ = std::fs::rename(&tmp, path);
+    }
+}
+
 fn devtools(
     ws_url: &str,
     cmds: mpsc::Receiver<Cmd>,
     up: &async_channel::Sender<Update>,
+    focus: &Path,
 ) -> Result<(), String> {
-    let host = ws_url
-        .strip_prefix("ws://")
-        .and_then(|r| r.split('/').next())
-        .ok_or("a bad DevTools address")?;
-    let stream = TcpStream::connect(host).map_err(|e| e.to_string())?;
-    let (ws, _) = tungstenite::client(ws_url, stream).map_err(|e| e.to_string())?;
-    ws.get_ref()
-        .set_read_timeout(Some(Duration::from_millis(30)))
-        .map_err(|e| e.to_string())?;
-    let mut c = Conn { ws, next: 0 };
+    let mut c = connect(ws_url)?;
     let mut events = vec![];
     c.call(
         None,
@@ -519,7 +591,25 @@ fn devtools(
         say(Update::Tabs(tabs, on.to_string()))
     };
     report(&mut c, &mut events, &tab.target)?;
+    write_focus(focus, &tab.target);
+    let mut focus_checked = Instant::now();
     loop {
+        // The agent's tools switched tabs: show the one they use.
+        if focus_checked.elapsed() > Duration::from_millis(250) {
+            focus_checked = Instant::now();
+            let want = std::fs::read_to_string(focus).unwrap_or_default();
+            let want = want.trim();
+            if !want.is_empty() && want != tab.target {
+                if pages(&mut c, &mut events)?.iter().any(|t| t.id == want) {
+                    let old = tab.session.clone();
+                    let _ = c.send(Some(&old), "Page.stopScreencast", json!({}));
+                    tab = attach(&mut c, want, metrics, &mut events)?;
+                    report(&mut c, &mut events, &tab.target)?;
+                } else {
+                    write_focus(focus, &tab.target);
+                }
+            }
+        }
         // What the panel asked for.
         while let Ok(cmd) = cmds.try_recv() {
             let s = Some(tab.session.as_str());
@@ -606,6 +696,7 @@ fn devtools(
                         let _ = c.send(Some(&old), "Page.stopScreencast", json!({}));
                         tab = attach(&mut c, &id, metrics, &mut events)?;
                         c.send(None, "Target.activateTarget", json!({ "targetId": id }))?;
+                        write_focus(focus, &tab.target);
                         report(&mut c, &mut events, &tab.target)?;
                     }
                 }
@@ -668,6 +759,7 @@ fn devtools(
                     let s = tab.session.clone();
                     let _ = c.send(Some(&s), "Page.stopScreencast", json!({}));
                     tab = attach(&mut c, &id, metrics, &mut events)?;
+                    write_focus(focus, &tab.target);
                 }
                 report(&mut c, &mut events, &tab.target)?;
             }
@@ -691,6 +783,7 @@ fn devtools(
                         }
                     };
                     tab = attach(&mut c, &next, metrics, &mut events)?;
+                    write_focus(focus, &tab.target);
                 }
                 report(&mut c, &mut events, &tab.target)?;
             }
@@ -706,7 +799,16 @@ fn devtools(
 /// anything else searched for.
 pub fn address(typed: &str) -> String {
     let t = typed.trim();
-    if t.contains("://") || t.starts_with("about:") {
+    let scheme_only = [
+        "about:",
+        "data:",
+        "file:",
+        "view-source:",
+        "chrome:",
+        "blob:",
+        "javascript:",
+    ];
+    if t.contains("://") || scheme_only.iter().any(|s| t.starts_with(s)) {
         return t.to_string();
     }
     let host_like = !t.contains(' ') && (t.contains('.') || t.starts_with("localhost"));
@@ -728,6 +830,11 @@ mod tests {
         assert_eq!(address("example.com"), "https://example.com");
         assert_eq!(address("localhost:3000/a"), "http://localhost:3000/a");
         assert_eq!(address("http://x.test"), "http://x.test");
+        assert_eq!(
+            address("data:text/html,<p>hi there</p>"),
+            "data:text/html,<p>hi there</p>"
+        );
+        assert_eq!(address("file:///C:/a b.html"), "file:///C:/a b.html");
         assert_eq!(address("rust gpui"), "https://duckduckgo.com/?q=rust+gpui");
     }
 
@@ -739,7 +846,7 @@ mod tests {
     fn drives_a_real_browser() {
         let exe = find_chromium().expect("no Chromium");
         let dir = std::env::temp_dir().join(format!("forge-web-{}", std::process::id()));
-        let (view, rx) = start(&exe, &dir).unwrap();
+        let (view, rx) = start(&exe, &dir.join("profile"), &dir.join("focus")).unwrap();
         view.send(Cmd::Navigate("data:text/html,<h1>Forge</h1>".into()));
         let (mut frames, mut on_page, mut loaded) = (0, false, false);
         let until = Instant::now() + Duration::from_secs(20);
