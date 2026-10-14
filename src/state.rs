@@ -426,6 +426,7 @@ impl SettingsTab {
                 | SettingsTab::Environments
                 | SettingsTab::Memory
                 | SettingsTab::Plugins
+                | SettingsTab::Profiles
         )
     }
 }
@@ -457,6 +458,8 @@ pub struct Engine {
     pub mcp_checking: bool,
     /// What went wrong with the last check (no ForgeCLI, it failed…).
     pub mcp_error: Option<String>,
+    /// The settings profiles (`setting_profiles.rs`), read with the catalog.
+    pub profiles: Vec<crate::setting_profiles::SettingsProfile>,
 }
 
 /// A folder Forge works in. Its chats, rules and memory belong to it.
@@ -886,6 +889,8 @@ pub struct AppState {
     pub diagnosis: Option<Diagnosis>,
     /// Counts diagnoses, so a stale run's steps never land on a new one.
     diagnosis_seq: u64,
+    /// The settings profile each chat's ForgeCLI gets (`--settings`).
+    pub settings_profile: Option<String>,
     next_id: usize,
 }
 
@@ -1006,6 +1011,7 @@ impl AppState {
             engine: Default::default(),
             diagnosis: None,
             diagnosis_seq: 0,
+            settings_profile: crate::setting_profiles::active(),
             next_id,
         }
     }
@@ -1742,12 +1748,17 @@ impl AppState {
         }
         self.engine.loading = true;
         cx.spawn(async move |this, cx| {
-            let (catalog, sig) = cx
+            let (catalog, sig, profiles) = cx
                 .background_spawn({
                     let project = project.clone();
                     async move {
-                        let sig = crate::forge_files::signature(&project);
-                        (crate::forge_files::load(&project), sig)
+                        let sig = crate::forge_files::signature(&project)
+                            ^ crate::setting_profiles::stamp();
+                        (
+                            crate::forge_files::load(&project),
+                            sig,
+                            crate::setting_profiles::list(),
+                        )
                     }
                 })
                 .await;
@@ -1757,6 +1768,7 @@ impl AppState {
                 // A project switched mid-read: that read is stale.
                 if s.project_dir == project {
                     s.engine.catalog = Some(catalog);
+                    s.engine.profiles = profiles;
                     s.engine.signature = sig;
                     s.engine.project = Some(project);
                     s.engine.loading = false;
@@ -1787,7 +1799,9 @@ impl AppState {
                 return;
             };
             let sig = cx
-                .background_spawn(async move { crate::forge_files::signature(&project) })
+                .background_spawn(async move {
+                    crate::forge_files::signature(&project) ^ crate::setting_profiles::stamp()
+                })
                 .await;
             let _ = this.update(cx, |s, cx| {
                 if sig != s.engine.signature && !s.engine.loading {
@@ -2513,6 +2527,37 @@ impl AppState {
     /// Turn the web browser on or off. Chats that aren't replying restart
     /// their ForgeCLI on their next message (resuming the conversation), so
     /// the change reaches them; a running reply keeps what it started with.
+    /// Idle chats' ForgeCLI processes end, so each starts again (resuming its
+    /// conversation) with the new arguments on its next message.
+    fn restart_idle_engines(&mut self) {
+        let working: Vec<usize> = self
+            .chats
+            .iter()
+            .filter(|c| self.status(c) == ChatStatus::Working || !c.resumable)
+            .map(|c| c.id)
+            .collect();
+        self.sessions.retain(|id, _| working.contains(id));
+    }
+
+    /// Use a settings profile (None: none, just the settings files).
+    pub fn use_settings_profile(&mut self, name: Option<String>, cx: &mut Context<Self>) {
+        if let Err(e) = crate::setting_profiles::set_active(name.as_deref()) {
+            return self.show_toast(format!("Couldn't save the choice: {e}"), cx);
+        }
+        self.settings_profile = name.clone();
+        self.restart_idle_engines();
+        self.show_toast(
+            match name {
+                Some(n) => {
+                    format!("Using the {n} profile. Chats pick it up on their next message.")
+                }
+                None => "No profile: chats use your settings files alone.".into(),
+            },
+            cx,
+        );
+        cx.notify();
+    }
+
     pub fn toggle_browser(&mut self, cx: &mut Context<Self>) {
         let on = !self.browser;
         if on && crate::browser::uvx().is_none() {
@@ -2525,13 +2570,7 @@ impl AppState {
             return self.show_toast(format!("Couldn't save the setting: {e}"), cx);
         }
         self.browser = on;
-        let working: Vec<usize> = self
-            .chats
-            .iter()
-            .filter(|c| self.status(c) == ChatStatus::Working || !c.resumable)
-            .map(|c| c.id)
-            .collect();
-        self.sessions.retain(|id, _| working.contains(id));
+        self.restart_idle_engines();
         self.show_toast(
             if on {
                 "Web browser on: Forge can open pages, click, type and take screenshots (browser-use). Each step asks first."
@@ -3397,6 +3436,17 @@ impl AppState {
                     .args
                     .extend(["--mcp-config".to_string(), crate::browser::mcp_config(&uvx)]);
             }
+        }
+        // The settings profile, layered above the other settings files.
+        if let Some(path) = self
+            .settings_profile
+            .as_deref()
+            .and_then(crate::setting_profiles::path_of)
+        {
+            launch.args.extend([
+                "--settings".to_string(),
+                path.to_string_lossy().into_owned(),
+            ]);
         }
         if resumable {
             self.resuming.insert(id);

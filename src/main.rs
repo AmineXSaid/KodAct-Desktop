@@ -38,6 +38,7 @@ mod plugin;
 mod profile;
 mod rules;
 mod secrets;
+mod setting_profiles;
 mod stage;
 mod state;
 mod stubs;

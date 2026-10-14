@@ -48,6 +48,8 @@ pub struct Settings {
     save_anyway: bool,
     detected: Vec<&'static str>,
     commands: Entity<super::slash_commands::SlashCommands>,
+    focus: gpui::FocusHandle,
+    was_open: bool,
     agents: Entity<super::agents_editor::AgentsEditor>,
     skills: Entity<super::skills_editor::SkillsEditor>,
     hooks: Entity<super::hooks_editor::HooksEditor>,
@@ -57,6 +59,7 @@ pub struct Settings {
     env: Entity<super::env_editor::EnvEditor>,
     plugins: Entity<super::plugins_editor::PluginsEditor>,
     memory: Entity<super::memory_view::MemoryView>,
+    profiles: Entity<super::profiles_editor::ProfilesEditor>,
     _subs: Vec<Subscription>,
 }
 
@@ -140,6 +143,16 @@ impl Settings {
                     state.update(cx, |s, _| s.settings_add = false);
                     this.open_form(None, window, cx);
                 }
+                // Keys go to Settings while it's open (not to the composer
+                // behind it), and back to the composer when it closes.
+                if open != this.was_open {
+                    this.was_open = open;
+                    if open {
+                        window.focus(&this.focus, cx);
+                    } else {
+                        window.dispatch_action(Box::new(FocusComposer), cx);
+                    }
+                }
                 if open && this.name.read(cx).value().is_empty() {
                     let n = state.read(cx).user_name.clone().unwrap_or_default();
                     this.name
@@ -175,6 +188,8 @@ impl Settings {
         let plugins =
             cx.new(|cx| super::plugins_editor::PluginsEditor::new(state.clone(), window, cx));
         let memory = cx.new(|cx| super::memory_view::MemoryView::new(state.clone(), window, cx));
+        let profiles =
+            cx.new(|cx| super::profiles_editor::ProfilesEditor::new(state.clone(), window, cx));
         Self {
             state,
             name,
@@ -191,6 +206,8 @@ impl Settings {
             save_anyway: false,
             detected: vec![],
             commands,
+            focus: cx.focus_handle(),
+            was_open: false,
             agents,
             skills,
             hooks,
@@ -200,7 +217,37 @@ impl Settings {
             env,
             plugins,
             memory,
+            profiles,
             _subs: subs,
+        }
+    }
+
+    /// Esc: back out of what's open inside Settings, newest first, else close it.
+    fn escape(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let tab = self.state.read(cx).settings_tab;
+        let closed_inner = match tab {
+            SettingsTab::Commands => self.commands.update(cx, |e, cx| e.back(cx)),
+            SettingsTab::Agents => self.agents.update(cx, |e, cx| e.back(cx)),
+            SettingsTab::Skills => self.skills.update(cx, |e, cx| e.back(cx)),
+            SettingsTab::Hooks => self.hooks.update(cx, |e, cx| e.back(cx)),
+            SettingsTab::Mcp => self.mcp.update(cx, |e, cx| e.back(cx)),
+            SettingsTab::Models if self.state.read(cx).diagnosis.is_some() => {
+                self.state.update(cx, |s, cx| {
+                    s.diagnosis = None;
+                    cx.notify();
+                });
+                true
+            }
+            _ => false,
+        };
+        if closed_inner || self.form {
+            self.form = false;
+            // The text box that had focus may be gone with the form: keep
+            // keys in Settings, so the next Esc closes it.
+            window.focus(&self.focus, cx);
+            cx.notify();
+        } else {
+            self.close(cx);
         }
     }
 
@@ -1302,9 +1349,9 @@ impl Render for Settings {
                 SettingsTab::Environments => self.env.clone().into_any_element(),
                 SettingsTab::Memory => self.memory.clone().into_any_element(),
                 SettingsTab::Plugins => self.plugins.clone().into_any_element(),
+                SettingsTab::Profiles => self.profiles.clone().into_any_element(),
                 SettingsTab::Guide => super::guide::render(&t).into_any_element(),
                 SettingsTab::About => self.about(&t),
-                _ => div().into_any_element(),
             };
         let close = div()
             .id("settings-close")
@@ -1357,23 +1404,16 @@ impl Render for Settings {
             .items_center()
             .justify_center()
             .bg(t.extra.scrim)
-            .on_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, _, cx| {
+            .track_focus(&self.focus)
+            // Esc arrives as the workspace's StopReply while Settings has
+            // focus, or as a key when one of its text boxes does.
+            .on_action(cx.listener(|this, _: &StopReply, window, cx| {
+                this.escape(window, cx);
+                cx.stop_propagation();
+            }))
+            .on_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, window, cx| {
                 if ev.keystroke.key == "escape" {
-                    let closed_inner = match this.state.read(cx).settings_tab {
-                        SettingsTab::Commands => this.commands.update(cx, |e, cx| e.back(cx)),
-                        SettingsTab::Agents => this.agents.update(cx, |e, cx| e.back(cx)),
-                        SettingsTab::Skills => this.skills.update(cx, |e, cx| e.back(cx)),
-                        SettingsTab::Hooks => this.hooks.update(cx, |e, cx| e.back(cx)),
-                        SettingsTab::Mcp => this.mcp.update(cx, |e, cx| e.back(cx)),
-                        _ => false,
-                    };
-                    if closed_inner {
-                    } else if this.form {
-                        this.form = false;
-                        cx.notify();
-                    } else {
-                        this.close(cx);
-                    }
+                    this.escape(window, cx);
                     cx.stop_propagation();
                 }
             }))
