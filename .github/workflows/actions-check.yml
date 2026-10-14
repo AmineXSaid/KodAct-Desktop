@@ -1,8 +1,0 @@
-# Temporary: does any workflow start on this account? (Removed after.)
-name: Actions check
-on: push
-jobs:
-  hello:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo hello
