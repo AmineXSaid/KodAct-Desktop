@@ -83,9 +83,11 @@ shell, git and files are the remote's; this app stays the UI
   `remote.serverInstallDir`), from the static Linux build the installer puts
   in `bin\linux-x86_64\forge` (or `FORGE_REMOTE_CLI`), and checks the copy
   by SHA-256.
-- SSH uses the system's OpenSSH client with your keys or agent (no
-  passwords). A host seen for the first time shows its key fingerprint and
-  waits for "Trust".
+- SSH uses the system's OpenSSH client with your keys or agent. A password
+  or a key's passphrase is asked in a dialog in the app (ssh's askpass, over
+  a localhost socket with a random token), kept in memory for this run and
+  never saved; a wrong one says so, and Try again asks again. A host seen
+  for the first time shows its key fingerprint and waits for "Trust".
 - API keys reach the remote on the process's stdin, never on a command line.
   A model server on this computer (`localhost`) and the side panel's browser
   are forwarded to SSH hosts (`ssh -R`); for WSL and containers they need

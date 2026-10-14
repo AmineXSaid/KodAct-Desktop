@@ -41,6 +41,8 @@ pub struct Workspace {
     find: Entity<FindBar>,
     browser: Entity<super::browser_view::BrowserView>,
     confirm: Entity<ConfirmWindow>,
+    /// SSH's password and passphrase prompts.
+    askpass: Entity<super::askpass::AskpassDialog>,
     focus: FocusHandle,
 }
 
@@ -68,6 +70,7 @@ impl Workspace {
         let find = cx.new(|cx| FindBar::new(state.clone(), window, cx));
         let browser = cx.new(|cx| super::browser_view::BrowserView::new(state.clone(), window, cx));
         let confirm = cx.new(|cx| ConfirmWindow::new(state.clone(), window, cx));
+        let askpass = cx.new(|cx| super::askpass::AskpassDialog::new(state.clone(), window, cx));
         let first_run = state.read(cx).onboarding;
         let ws = Self {
             state,
@@ -85,6 +88,7 @@ impl Workspace {
             find,
             browser,
             confirm,
+            askpass,
             focus: cx.focus_handle(),
         };
         if first_run {
@@ -1169,6 +1173,7 @@ impl Render for Workspace {
                 d.child(super::shortcuts::render(&t, &self.state))
             })
             .child(self.confirm.clone())
+            .child(self.askpass.clone())
             .children(self.toast(cx))
     }
 }

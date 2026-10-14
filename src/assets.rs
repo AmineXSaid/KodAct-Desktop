@@ -19,6 +19,7 @@ icons!(
     "eraser",
     "clipboard-paste",
     "laptop",
+    "key-round",
     "arrow-left",
     "panel-right",
     "arrow-right",

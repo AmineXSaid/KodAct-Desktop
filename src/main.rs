@@ -9,7 +9,6 @@
 // Which shell commands run without asking, per mode (Forge for VS Code's
 // rules). Called when a chat's CLI asks for permission; this UI shell has no
 // CLI yet, so outside its tests nothing calls it.
-mod app_settings;
 #[cfg_attr(not(test), allow(dead_code))]
 mod approve;
 mod assets;
@@ -51,6 +50,10 @@ mod term_session;
 mod theme;
 mod ui;
 mod web_view;
+
+// Forge's own settings file, and SSH passwords asked in the app.
+mod app_settings;
+mod askpass;
 
 use gpui::component::TitleBar;
 use gpui::{
@@ -126,6 +129,12 @@ fn main() {
     // `--browser-mcp <devtools> <focus-file>`: serve the browser tools to a
     // ForgeCLI (`browser_mcp.rs`) instead of opening the window.
     let args: Vec<String> = std::env::args().collect();
+    // Run by ssh as its askpass program: hand the prompt to the app's dialog
+    // and print the answer (`askpass.rs`).
+    if let Ok(addr) = std::env::var(askpass::ENV) {
+        let prompt = args.get(1).cloned().unwrap_or_default();
+        std::process::exit(askpass::client(&addr, &prompt));
+    }
     // `--browser-guard <chromium> <args…>`: the side panel's browser, closed
     // when the app goes (`web_view.rs`).
     if args.get(1).map(String::as_str) == Some("--browser-guard") {

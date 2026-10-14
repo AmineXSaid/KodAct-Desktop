@@ -323,6 +323,14 @@ impl RemotePicker {
             }
             RemotePage::Folder => {
                 if let Some(f) = &m.folder {
+                    // It failed (a refused sign-in, a timeout): Enter tries again.
+                    if let Some(Err(_)) = &f.entries {
+                        rows.push(Row::new(
+                            "icons/rotate-ccw.svg",
+                            "Try again",
+                            Act::Browse(f.target.clone(), f.path.clone()),
+                        ));
+                    }
                     if let Some(Ok(entries)) = &f.entries {
                         rows.push(
                             Row::new(

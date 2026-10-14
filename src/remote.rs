@@ -186,10 +186,19 @@ pub fn command(target: &Target, script: &str, args: &[String], extra: &Extra) ->
         Target::Ssh(host) => {
             let mut c = Command::new("ssh");
             c.args(crate::app_settings::get().ssh_args());
+            // Passwords and passphrases are asked in the app when it can
+            // (once, then remembered for this run); else keys only.
+            match crate::askpass::env() {
+                Some(env) => {
+                    c.args(["-o", "BatchMode=no", "-o", "NumberOfPasswordPrompts=1"]);
+                    c.envs(env);
+                }
+                None => {
+                    c.args(["-o", "BatchMode=yes"]);
+                }
+            }
             c.args([
                 "-T",
-                "-o",
-                "BatchMode=yes",
                 "-o",
                 "ConnectTimeout=15",
                 "-o",
@@ -313,10 +322,15 @@ pub fn run(
         let _ = err.read_to_string(&mut b);
         b
     });
-    let start = Instant::now();
+    let mut start = Instant::now();
     let status = loop {
         match child.try_wait() {
             Ok(Some(s)) => break s,
+            // A password being typed doesn't count against the timeout.
+            Ok(None) if crate::askpass::waiting() => {
+                start = Instant::now();
+                std::thread::sleep(Duration::from_millis(50));
+            }
             Ok(None) if start.elapsed() > timeout => {
                 let _ = child.kill();
                 let _ = child.wait();
@@ -389,8 +403,16 @@ impl Error {
                 }
                 if has("REMOTE HOST IDENTIFICATION HAS CHANGED") {
                     format!("{host}'s key has changed since you last connected. If that's expected, remove its old line from ~/.ssh/known_hosts.")
-                } else if has("Permission denied") {
-                    format!("{host} refused the sign-in. Forge signs in with your SSH keys or agent (no passwords): check `ssh {host}` works in a terminal.")
+                } else if has("Permission denied") || has("Too many authentication failures") {
+                    // A wrong answer is among the remembered ones: ask again next time.
+                    crate::askpass::forget();
+                    if crate::askpass::take_cancelled() {
+                        format!("Signing in to {host} was cancelled.")
+                    } else if crate::askpass::env().is_some() {
+                        format!("{host} refused the sign-in: the password or passphrase was wrong, or no key it accepts was offered. Connect again to retry.")
+                    } else {
+                        format!("{host} refused the sign-in. Forge signs in with your SSH keys or agent: check `ssh {host}` works in a terminal.")
+                    }
                 } else if has("Could not resolve hostname") {
                     format!("{host} couldn't be found (name not resolved).")
                 } else if has("Connection refused") {
@@ -1424,7 +1446,16 @@ mod tests {
         );
         assert_eq!(ssh.get_program(), "ssh");
         let a = args(&ssh);
-        assert!(a.contains(&"BatchMode=yes".into()));
+        // Keys only, unless the app's askpass runs (another test may have
+        // started it in this process): then ssh may ask, through it.
+        if crate::askpass::env().is_some() {
+            assert!(a.contains(&"BatchMode=no".into()));
+            assert!(ssh
+                .get_envs()
+                .any(|(k, v)| k == "SSH_ASKPASS_REQUIRE" && v == Some("force".as_ref())));
+        } else {
+            assert!(a.contains(&"BatchMode=yes".into()));
+        }
         assert_eq!(a[a.len() - 3..a.len() - 1], ["box", "--"]);
         assert_eq!(a.last().unwrap(), "sh -c 'echo $1' sh 'a b'");
         let e = Extra {

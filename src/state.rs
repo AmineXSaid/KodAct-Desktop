@@ -1095,6 +1095,9 @@ pub struct AppState {
     pub terminal_share: f32,
     /// The dock's left edge is being dragged.
     pub terminal_resizing: bool,
+    /// SSH prompts waiting on you (a password, a key's passphrase); the
+    /// first one shows as a dialog (`ui/askpass.rs`).
+    pub askpass: std::collections::VecDeque<crate::askpass::Request>,
     /// A command's output to show in the dock ("Show in terminal"): its
     /// title, the text, and where it ran.
     pub agent_feed: Option<AgentFeed>,
@@ -1266,6 +1269,7 @@ impl AppState {
             terminal_share: crate::app_settings::load_window().terminal_share,
             terminal_resizing: false,
             agent_feed: None,
+            askpass: Default::default(),
             diagram_code: Default::default(),
             loading: true,
             load: None,
@@ -1343,6 +1347,24 @@ impl AppState {
             }
         }));
         self.load_endpoints(false, cx);
+        // SSH passwords and passphrases are asked here, not in a terminal.
+        let (ask_tx, ask_rx) = async_channel::unbounded::<crate::askpass::Request>();
+        if crate::askpass::start(ask_tx).is_ok() {
+            cx.spawn(async move |this, cx| {
+                while let Ok(r) = ask_rx.recv().await {
+                    let gone = this
+                        .update(cx, |s, cx| {
+                            s.askpass.push_back(r);
+                            cx.notify();
+                        })
+                        .is_err();
+                    if gone {
+                        break;
+                    }
+                }
+            })
+            .detach();
+        }
         // Someone who never chose keeps the avatar they were given.
         if !self.avatar_saved && !self.onboarding {
             self.save_avatar(cx);
@@ -4604,6 +4626,15 @@ impl AppState {
             }),
             _ => None,
         })
+    }
+
+    /// Answer the SSH prompt on screen (None cancels it); the next one, if
+    /// any, shows.
+    pub fn answer_askpass(&mut self, answer: Option<String>, cx: &mut Context<Self>) {
+        if let Some(r) = self.askpass.pop_front() {
+            let _ = r.reply.send(answer);
+        }
+        cx.notify();
     }
 
     /// Keep the dock as it is now for the next launch.
