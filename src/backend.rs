@@ -32,6 +32,9 @@ pub enum Event {
     Thinking(String),
     /// A new text or thinking block starts: it doesn't run on from the last.
     Break,
+    /// ForgeCLI changed the permission mode itself (a plan approved, plan mode
+    /// entered, an answer that set a mode): `system/status`, `permissionMode`.
+    ModeChanged(String),
     /// A sub-agent's own tool call; `parent` is the call that started it.
     SubTool {
         parent: String,
@@ -359,6 +362,16 @@ impl Session {
         self.write(answer_line(request_id, allow, always, input, suggestions))
     }
 
+    /// Answer a plan (ExitPlanMode), as Forge for VS Code does.
+    pub fn answer_plan(
+        &self,
+        request_id: &str,
+        choice: PlanChoice,
+        input: &Value,
+    ) -> Result<(), String> {
+        self.write(plan_answer_line(request_id, choice, input))
+    }
+
     fn control(&self, request: Value) -> Result<String, String> {
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
         let id = format!(
@@ -421,6 +434,36 @@ pub fn answer_line(
     };
     json!({ "type": "control_response", "response": { "subtype": "success", "request_id": request_id, "response": response } })
 }
+
+/// How a plan is answered: start on it with edits approved automatically or
+/// one by one, or keep planning.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PlanChoice {
+    AutoAcceptEdits,
+    ApproveEdits,
+    KeepPlanning,
+}
+
+/// A plan's answer. Yes sets the session's mode in the same answer
+/// (`updatedPermissions`, `setMode`), so ForgeCLI leaves plan mode for the
+/// mode chosen and says so (`system/status`); No keeps planning.
+pub fn plan_answer_line(request_id: &str, choice: PlanChoice, input: &Value) -> Value {
+    let set_mode = |mode: &str| {
+        json!({ "behavior": "allow", "updatedInput": input,
+            "updatedPermissions": [{ "type": "setMode", "mode": mode, "destination": "session" }] })
+    };
+    let response = match choice {
+        PlanChoice::AutoAcceptEdits => set_mode("acceptEdits"),
+        PlanChoice::ApproveEdits => set_mode("default"),
+        PlanChoice::KeepPlanning => json!({ "behavior": "deny",
+            "message": "The user wants to keep planning. Don't start on the plan: ask what to change, and refine it with them." }),
+    };
+    json!({ "type": "control_response", "response": { "subtype": "success", "request_id": request_id, "response": response } })
+}
+
+/// The title of a plan's question card (`ask_text`), which the card shows
+/// with the plan's own answers.
+pub const PLAN_ASK_TITLE: &str = "Forge's plan is ready. Start on it?";
 
 // ---------------------------------------------------------------- the stream
 
@@ -557,6 +600,11 @@ impl Parser {
                         .to_string())
                 };
                 out.push(Event::ControlReply { request_id, result });
+            }
+            Some("system") if v["subtype"] == "status" => {
+                if let Some(m) = v["permissionMode"].as_str() {
+                    out.push(Event::ModeChanged(m.to_string()));
+                }
             }
             Some("user") if !nested => {
                 let content = &v["message"]["content"];
@@ -813,6 +861,13 @@ fn edit_diff(old: &str, new: &str) -> Vec<DiffLine> {
 
 /// What a permission card says about a tool call.
 pub fn ask_text(tool: &str, input: &Value) -> (String, String) {
+    if tool == "ExitPlanMode" {
+        return (
+            PLAN_ASK_TITLE.to_string(),
+            "The plan is in the side panel's Plan tab. Approve it to leave Plan mode and start, or keep planning."
+                .to_string(),
+        );
+    }
     let call = tool_call(tool, input);
     let title = match call.kind {
         ToolKind::Edit | ToolKind::Write => {
@@ -940,6 +995,31 @@ mod tests {
                 }
             ]
         );
+    }
+
+    #[test]
+    fn plans_are_answered_with_a_mode_or_kept() {
+        let input = json!({"plan": "p"});
+        let auto = plan_answer_line("r1", PlanChoice::AutoAcceptEdits, &input);
+        let r = &auto["response"]["response"];
+        assert_eq!(r["behavior"], "allow");
+        assert_eq!(
+            r["updatedPermissions"][0],
+            json!({"type": "setMode", "mode": "acceptEdits", "destination": "session"})
+        );
+        let manual = plan_answer_line("r1", PlanChoice::ApproveEdits, &input);
+        assert_eq!(
+            manual["response"]["response"]["updatedPermissions"][0]["mode"],
+            "default"
+        );
+        let keep = plan_answer_line("r1", PlanChoice::KeepPlanning, &input);
+        assert_eq!(keep["response"]["response"]["behavior"], "deny");
+        assert_eq!(ask_text("ExitPlanMode", &input).0, PLAN_ASK_TITLE);
+        // ForgeCLI's mode changes reach the app.
+        let ev = parse(&[
+            json!({"type":"system","subtype":"status","status":null,"permissionMode":"acceptEdits"}),
+        ]);
+        assert_eq!(ev, vec![Event::ModeChanged("acceptEdits".into())]);
     }
 
     #[test]

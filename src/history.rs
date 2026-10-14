@@ -295,6 +295,9 @@ fn save_messages(chat: &Chat, project: &Path) -> SavedChat {
                 Verdict::Pending | Verdict::Denied => "denied",
                 Verdict::Allowed => "allowed",
                 Verdict::AllowedAlways => "always",
+                Verdict::PlanAutoAccept => "plan_auto",
+                Verdict::PlanApprove => "plan_manual",
+                Verdict::KeepPlanning => "keep_planning",
             }
             .into(),
         },
@@ -423,6 +426,9 @@ pub fn messages_of(saved: &SavedChat) -> Vec<Message> {
             verdict: match verdict.as_str() {
                 "allowed" => Verdict::Allowed,
                 "always" => Verdict::AllowedAlways,
+                "plan_auto" => Verdict::PlanAutoAccept,
+                "plan_manual" => Verdict::PlanApprove,
+                "keep_planning" => Verdict::KeepPlanning,
                 _ => Verdict::Denied,
             },
         },

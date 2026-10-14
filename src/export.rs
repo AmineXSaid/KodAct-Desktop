@@ -168,6 +168,9 @@ fn block(out: &mut String, b: &Block) {
                 Verdict::Allowed => "allowed",
                 Verdict::AllowedAlways => "always allowed",
                 Verdict::Denied => "denied",
+                Verdict::PlanAutoAccept => "approved, edits automatically",
+                Verdict::PlanApprove => "approved, edits asked one by one",
+                Verdict::KeepPlanning => "sent back to keep planning",
             };
             out.push_str(&format!("- _{title}_ — {said}\n\n"));
         }

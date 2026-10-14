@@ -136,6 +136,12 @@ pub enum Verdict {
     Allowed,
     AllowedAlways,
     Denied,
+    /// A plan approved, its edits then made without asking.
+    PlanAutoAccept,
+    /// A plan approved, each edit then asked about.
+    PlanApprove,
+    /// A plan sent back: keep planning.
+    KeepPlanning,
 }
 
 #[derive(Clone, Debug)]
@@ -1720,6 +1726,31 @@ impl AppState {
             self.kept_modes.insert(id, self.mode);
         } else {
             self.kept_modes.remove(&id);
+        }
+    }
+
+    /// A chat's mode as ForgeCLI now runs it (it changed it itself, or a
+    /// plan's answer did): the mode chip follows, and the mode is kept for
+    /// the chat's next session. Expert stays Expert while the CLI is in its
+    /// own default mode.
+    fn mode_reported(&mut self, chat: usize, mode: ModeId) {
+        let current_here = if self.current == Some(chat) {
+            self.mode
+        } else {
+            self.kept_modes.get(&chat).copied().unwrap_or(self.mode)
+        };
+        let mode = if mode == ModeId::Manual && current_here == ModeId::Expert {
+            ModeId::Expert
+        } else {
+            mode
+        };
+        if self.current == Some(chat) {
+            self.mode = mode;
+            self.keep_mode();
+        } else if mode.kept(self.bypass_allowed) {
+            self.kept_modes.insert(chat, mode);
+        } else {
+            self.kept_modes.remove(&chat);
         }
     }
 
@@ -3651,6 +3682,33 @@ impl AppState {
             && verdict != Verdict::Pending
         {
             let ask = self.asks.remove(&chat).expect("checked above");
+            // A plan's own answers set the mode in the same reply.
+            let plan = match verdict {
+                Verdict::PlanAutoAccept => Some((
+                    crate::backend::PlanChoice::AutoAcceptEdits,
+                    ModeId::AcceptEdits,
+                )),
+                Verdict::PlanApprove => {
+                    Some((crate::backend::PlanChoice::ApproveEdits, ModeId::Manual))
+                }
+                Verdict::KeepPlanning => {
+                    Some((crate::backend::PlanChoice::KeepPlanning, ModeId::Plan))
+                }
+                _ => None,
+            };
+            if let Some((choice, mode)) = plan {
+                let sent = self
+                    .sessions
+                    .get(&chat)
+                    .map(|l| l.session.answer_plan(&ask.request_id, choice, &ask.input));
+                self.mode_reported(chat, mode);
+                if let Some(Err(e)) = sent {
+                    self.notice(chat, e, true);
+                    self.finish_turn(chat, cx);
+                }
+                cx.notify();
+                return;
+            }
             let allow = matches!(verdict, Verdict::Allowed | Verdict::AllowedAlways);
             if !allow {
                 if let Some(&(m, b)) = self.tool_rows.get(&(chat, ask.tool_use_id.clone())) {
@@ -4068,6 +4126,19 @@ impl AppState {
                         open: false,
                     },
                 );
+            }
+            Event::ModeChanged(m) => {
+                let mode = match m.as_str() {
+                    "acceptEdits" => Some(ModeId::AcceptEdits),
+                    "plan" => Some(ModeId::Plan),
+                    "bypassPermissions" => Some(ModeId::Bypass),
+                    "default" => Some(ModeId::Manual),
+                    _ => None,
+                };
+                if let Some(mode) = mode {
+                    self.mode_reported(chat, mode);
+                    cx.notify();
+                }
             }
             Event::Text(t) => self.apply(chat, Step::Say(t), cx),
             Event::Thinking(t) => self.apply(chat, Step::Think(t), cx),

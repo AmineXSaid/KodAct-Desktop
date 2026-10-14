@@ -885,6 +885,13 @@ fn permission(
     if verdict != Verdict::Pending {
         let (label, bg, fg) = match verdict {
             Verdict::Denied => ("Denied", t.extra.danger_tint, t.extra.danger),
+            Verdict::KeepPlanning => ("Keep planning", t.extra.warning_tint, t.extra.warning),
+            Verdict::PlanAutoAccept => (
+                "Approved · Edit automatically",
+                t.extra.success_tint,
+                t.extra.success,
+            ),
+            Verdict::PlanApprove => ("Approved · Manual", t.extra.success_tint, t.extra.success),
             Verdict::AllowedAlways => ("Always allowed", t.extra.success_tint, t.extra.success),
             _ => ("Allowed", t.extra.success_tint, t.extra.success),
         };
@@ -898,6 +905,7 @@ fn permission(
             .into_any_element();
     }
     let id = |name: &str| SharedString::from(format!("perm-{name}-{}-{}-{b}", cx.chat, cx.index));
+    let is_plan = title.as_ref() == crate::backend::PLAN_ASK_TITLE;
     let hover = t.colors.hover;
     div()
         .flex()
@@ -931,24 +939,48 @@ fn permission(
             div()
                 .flex()
                 .items_center()
+                .flex_wrap()
                 .gap(t.space.sm)
-                .child(
-                    theme::text_button(t, "Deny")
-                        .id(id("deny"))
-                        .on_click(answer(Verdict::Denied)),
-                )
-                .child(div().flex_1())
-                .child(
-                    theme::ghost_button(t, "Always allow")
-                        .id(id("always"))
-                        .hover(move |s| s.bg(hover))
-                        .on_click(answer(Verdict::AllowedAlways)),
-                )
-                .child(
-                    theme::primary_button(t, "Allow")
-                        .id(id("allow"))
-                        .on_click(answer(Verdict::Allowed)),
-                ),
+                // A plan: start on it (edits automatically, or each one
+                // asked), or keep planning; as Forge for VS Code has it.
+                .when(is_plan, |d| {
+                    d.child(
+                        theme::text_button(t, "No, keep planning")
+                            .id(id("keep"))
+                            .on_click(answer(Verdict::KeepPlanning)),
+                    )
+                    .child(div().flex_1())
+                    .child(
+                        theme::ghost_button(t, "Yes, ask before edits")
+                            .id(id("plan-manual"))
+                            .hover(move |s| s.bg(hover))
+                            .on_click(answer(Verdict::PlanApprove)),
+                    )
+                    .child(
+                        theme::primary_button(t, "Yes, edit automatically")
+                            .id(id("plan-auto"))
+                            .on_click(answer(Verdict::PlanAutoAccept)),
+                    )
+                })
+                .when(!is_plan, |d| {
+                    d.child(
+                        theme::text_button(t, "Deny")
+                            .id(id("deny"))
+                            .on_click(answer(Verdict::Denied)),
+                    )
+                    .child(div().flex_1())
+                    .child(
+                        theme::ghost_button(t, "Always allow")
+                            .id(id("always"))
+                            .hover(move |s| s.bg(hover))
+                            .on_click(answer(Verdict::AllowedAlways)),
+                    )
+                    .child(
+                        theme::primary_button(t, "Allow")
+                            .id(id("allow"))
+                            .on_click(answer(Verdict::Allowed)),
+                    )
+                }),
         )
         .into_any_element()
 }
