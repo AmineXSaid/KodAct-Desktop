@@ -25,16 +25,17 @@ use gpui::{
 };
 
 use super::icon;
+use crate::app_settings::CursorStyle;
 use crate::state::AppState;
 use crate::term_session::{self, Session, Shell, Size};
 use crate::theme::{ActiveTheme as _, Theme};
 
-/// Lines kept above the screen.
-const SCROLLBACK: usize = 10_000;
-
 struct Tab {
     id: usize,
     session: Arc<Session>,
+    /// Where it runs, for the header's badge: the remote's label and icon,
+    /// or None for this computer.
+    place: Option<(String, &'static str)>,
 }
 
 pub struct TerminalDock {
@@ -54,20 +55,33 @@ pub struct TerminalDock {
     grid: Rc<Cell<Bounds<Pixels>>>,
     /// A drag selecting text is under way.
     selecting: bool,
+    /// The right-click menu, open at this window position.
+    menu_at: Option<Point<Pixels>>,
     /// Wheel movement not yet a whole line.
     wheel: f32,
     _intercept: Subscription,
 }
 
+/// The terminal's text size: `terminal.fontSize` when set, else the token.
+fn text_size(t: &Theme) -> Pixels {
+    let set = crate::app_settings::get().font_size;
+    if (set - f32::from(t.size.terminal_text)).abs() < f32::EPSILON {
+        t.size.terminal_text
+    } else {
+        px(set)
+    }
+}
+
 /// One cell's width and height in the dock's monospace.
 fn cell(window: &Window, t: &Theme) -> (Pixels, Pixels) {
+    let size = text_size(t);
     let ts = window.text_system();
     let id = ts.resolve_font(&font(t.font_mono.clone()));
     let w = ts
-        .advance(id, t.size.terminal_text, 'm')
+        .advance(id, size, 'm')
         .map(|s| s.width)
-        .unwrap_or(t.size.terminal_text * 0.6);
-    (w, (t.size.terminal_text * 1.4).round())
+        .unwrap_or(size * 0.6);
+    (w, (size * 1.4).round())
 }
 
 impl TerminalDock {
@@ -101,6 +115,7 @@ impl TerminalDock {
             error: None,
             grid: Rc::new(Cell::new(Bounds::default())),
             selecting: false,
+            menu_at: None,
             wheel: 0.,
             _intercept: intercept,
         }
@@ -145,7 +160,13 @@ impl TerminalDock {
             Size { cols: 80, rows: 24 }
         };
         let (tx, rx) = async_channel::bounded::<()>(1);
-        match Session::start(shell, size, SCROLLBACK, move || {
+        let place = self
+            .state
+            .read(cx)
+            .current_remote()
+            .map(|r| (r.target.label(), r.target.icon()));
+        let scrollback = crate::app_settings::get().scrollback;
+        match Session::start(shell, size, scrollback, move || {
             let _ = tx.try_send(());
         }) {
             Ok(session) => {
@@ -153,6 +174,7 @@ impl TerminalDock {
                 self.tabs.push(Tab {
                     id: self.next_id,
                     session: Arc::new(session),
+                    place,
                 });
                 self.next_id += 1;
                 self.active = self.tabs.len() - 1;
@@ -180,6 +202,162 @@ impl TerminalDock {
         cx.notify();
     }
 
+    /// Terminal: Kill. The active shell's process is ended; its tab stays,
+    /// saying so, until a key closes it.
+    pub fn kill(&mut self, cx: &mut Context<Self>) {
+        self.menu_at = None;
+        if let Some(s) = self.session() {
+            s.kill();
+        }
+        cx.notify();
+    }
+
+    /// Terminal: Clear. The scrollback goes, and the shell redraws its
+    /// prompt on a clean screen (Ctrl+L), as `clear` would.
+    pub fn clear(&mut self, cx: &mut Context<Self>) {
+        use alacritty_terminal::vte::ansi::{ClearMode, Handler as _};
+        self.menu_at = None;
+        if let Some(s) = self.session().cloned() {
+            {
+                let mut term = s.term.lock();
+                term.clear_screen(ClearMode::Saved);
+                term.scroll_display(Scroll::Bottom);
+            }
+            s.input(b"\x0c");
+        }
+        cx.notify();
+    }
+
+    fn copy(&mut self, cx: &mut Context<Self>) {
+        self.menu_at = None;
+        if let Some(s) = self.session() {
+            let text = s
+                .term
+                .lock()
+                .selection_to_string()
+                .filter(|t| !t.is_empty());
+            if let Some(text) = text {
+                cx.write_to_clipboard(ClipboardItem::new_string(text));
+                s.term.lock().selection = None;
+            }
+        }
+        cx.notify();
+    }
+
+    fn paste_clipboard(&mut self, cx: &mut Context<Self>) {
+        self.menu_at = None;
+        if let (Some(s), Some(text)) = (
+            self.session().cloned(),
+            cx.read_from_clipboard().and_then(|c| c.text()),
+        ) {
+            self.paste(&s, &text);
+        }
+        cx.notify();
+    }
+
+    /// The right-click menu: copy, paste, clear, kill.
+    fn context_menu(&self, at: Point<Pixels>, cx: &mut Context<Self>) -> AnyElement {
+        let t = cx.theme().clone();
+        let hover = t.colors.hover;
+        let has_selection = self.session().is_some_and(|s| {
+            s.term
+                .lock()
+                .selection_to_string()
+                .is_some_and(|x| !x.is_empty())
+        });
+        let item = |id: &'static str,
+                    glyph: &'static str,
+                    label: &'static str,
+                    keys: &'static str,
+                    on: bool| {
+            div()
+                .id(id)
+                .flex()
+                .items_center()
+                .gap(t.space.sm)
+                .h(t.size.row)
+                .px(t.space.md)
+                .rounded(t.radius.small)
+                .when(on, |d| d.cursor_pointer().hover(move |st| st.bg(hover)))
+                .text_color(if on {
+                    t.colors.text
+                } else {
+                    t.colors.text_subtle
+                })
+                .child(icon(
+                    glyph,
+                    t.size.icon_sm,
+                    if on {
+                        t.colors.text_muted
+                    } else {
+                        t.colors.text_subtle
+                    },
+                ))
+                .child(div().flex_1().child(label))
+                .child(
+                    div()
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_subtle)
+                        .child(keys),
+                )
+        };
+        let menu = crate::theme::popover(&t)
+            .id("terminal-context-menu")
+            .relative()
+            .w(px(220.))
+            .occlude()
+            .text_size(t.text.body_sm)
+            .child(
+                item(
+                    "term-copy",
+                    "icons/copy.svg",
+                    "Copy",
+                    "Ctrl+Shift+C",
+                    has_selection,
+                )
+                .when(has_selection, |d| {
+                    d.on_click(cx.listener(|this, _, _, cx| this.copy(cx)))
+                }),
+            )
+            .child(
+                item(
+                    "term-paste",
+                    "icons/clipboard-paste.svg",
+                    "Paste",
+                    "Ctrl+Shift+V",
+                    true,
+                )
+                .on_click(cx.listener(|this, _, _, cx| this.paste_clipboard(cx))),
+            )
+            .child(div().my(t.space.xs).h(t.size.hairline).bg(t.colors.border))
+            .child(
+                item("term-clear", "icons/eraser.svg", "Clear", "", true)
+                    .on_click(cx.listener(|this, _, _, cx| this.clear(cx))),
+            )
+            .child(
+                item("term-kill", "icons/circle-slash.svg", "Kill", "", true)
+                    .on_click(cx.listener(|this, _, _, cx| this.kill(cx))),
+            )
+            .on_mouse_down_out(cx.listener(|this, _, _, cx| {
+                this.menu_at = None;
+                cx.notify();
+            }));
+        gpui::deferred(
+            gpui::anchored()
+                .position(at)
+                .snap_to_window_with_margin(t.space.sm)
+                .child(super::motion::edge_draw(
+                    menu,
+                    "terminal-context-menu-in",
+                    t.colors.primary,
+                    0.,
+                    &t,
+                )),
+        )
+        .with_priority(2)
+        .into_any_element()
+    }
+
     /// Close tab `i`; the last one closing hides the dock.
     fn close(&mut self, i: usize, window: &mut Window, cx: &mut Context<Self>) {
         if i >= self.tabs.len() {
@@ -190,6 +368,7 @@ impl TerminalDock {
         if self.tabs.is_empty() {
             self.state.update(cx, |s, cx| {
                 s.terminal_open = false;
+                s.save_window();
                 cx.notify();
             });
             window.dispatch_action(Box::new(super::FocusComposer), cx);
@@ -206,8 +385,9 @@ impl TerminalDock {
         let m = &k.modifiers;
         let key = k.key.as_str();
         // Esc closes the shell menu before it reaches the shell.
-        if self.picker && key == "escape" {
+        if (self.picker || self.menu_at.is_some()) && key == "escape" {
             self.picker = false;
+            self.menu_at = None;
             cx.notify();
             return true;
         }
@@ -479,6 +659,50 @@ impl TerminalDock {
                 })),
         )
         .child(div().flex_1())
+        .children(self.tabs.get(self.active).map(|tab| {
+            // Where the active terminal runs.
+            let (label, glyph) = tab
+                .place
+                .clone()
+                .unwrap_or_else(|| ("Local".into(), "icons/laptop.svg"));
+            div()
+                .flex()
+                .flex_none()
+                .items_center()
+                .gap(t.space.xs)
+                .h(px(20.))
+                .px(t.space.sm)
+                .rounded(t.radius.pill)
+                .bg(if tab.place.is_some() {
+                    t.colors.primary_tint
+                } else {
+                    t.extra.inset
+                })
+                .text_size(t.text.caption)
+                .text_color(if tab.place.is_some() {
+                    t.colors.primary
+                } else {
+                    t.colors.text_muted
+                })
+                .max_w(px(160.))
+                .child(icon(
+                    glyph,
+                    t.size.icon_xs,
+                    if tab.place.is_some() {
+                        t.colors.primary
+                    } else {
+                        t.colors.text_muted
+                    },
+                ))
+                .child(
+                    div()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .child(label),
+                )
+        }))
         .child(
             button("terminal-hide", "icons/minus.svg")
                 .tooltip(|window, cx| {
@@ -671,7 +895,7 @@ impl TerminalDock {
             .px(t.space.sm)
             .pt(t.space.xs)
             .font_family(mono.clone())
-            .text_size(t.size.terminal_text)
+            .text_size(text_size(&t))
             .line_height(ch)
             .text_color(fg)
             .cursor(gpui::CursorStyle::IBeam)
@@ -709,12 +933,30 @@ impl TerminalDock {
                             .top(ch * row as f32)
                             .w(cw)
                             .h(ch);
-                        if focused {
-                            at.bg(t.colors.primary)
+                        match (focused, crate::app_settings::get().cursor_style) {
+                            (false, _) => at.border_1().border_color(t.colors.primary),
+                            (true, CursorStyle::Block) => at
+                                .bg(t.colors.primary)
                                 .text_color(t.colors.surface)
-                                .child(cursor_char.to_string())
-                        } else {
-                            at.border_1().border_color(t.colors.primary)
+                                .child(cursor_char.to_string()),
+                            (true, CursorStyle::Bar) => at.child(
+                                div()
+                                    .absolute()
+                                    .left_0()
+                                    .top_0()
+                                    .bottom_0()
+                                    .w(px(2.))
+                                    .bg(t.colors.primary),
+                            ),
+                            (true, CursorStyle::Underline) => at.child(
+                                div()
+                                    .absolute()
+                                    .left_0()
+                                    .right_0()
+                                    .bottom_0()
+                                    .h(px(2.))
+                                    .bg(t.colors.primary),
+                            ),
                         }
                     }))
                     .when(exited, |d| {
@@ -746,6 +988,14 @@ impl TerminalDock {
                 MouseButton::Left,
                 cx.listener(|this, ev, window, cx| this.mouse_down(ev, window, cx)),
             )
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(|this, ev: &MouseDownEvent, window, cx| {
+                    window.focus(&this.focus, cx);
+                    this.menu_at = Some(ev.position);
+                    cx.notify();
+                }),
+            )
             .on_mouse_move(cx.listener(|this, ev, window, cx| this.mouse_move(ev, window, cx)))
             .on_mouse_up(
                 MouseButton::Left,
@@ -763,6 +1013,7 @@ impl Render for TerminalDock {
             self.unseen = false;
         }
         let picker = self.picker.then(|| self.shell_menu(cx));
+        let menu = self.menu_at.map(|at| self.context_menu(at, cx));
         div()
             .id("terminal-dock")
             .key_context("Terminal")
@@ -775,6 +1026,7 @@ impl Render for TerminalDock {
             .child(self.tab_bar(cx))
             .child(self.screen(window, cx))
             .children(picker)
+            .children(menu)
             .on_mouse_down_out(cx.listener(|this, _, _, cx| {
                 if this.picker {
                     this.picker = false;

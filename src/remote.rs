@@ -185,6 +185,7 @@ pub fn command(target: &Target, script: &str, args: &[String], extra: &Extra) ->
         }
         Target::Ssh(host) => {
             let mut c = Command::new("ssh");
+            c.args(crate::app_settings::get().ssh_args());
             c.args([
                 "-T",
                 "-o",
@@ -439,6 +440,7 @@ fn fingerprint(host: &str) -> Option<String> {
     // The real name and port, as ssh resolves them (~/.ssh/config aliases).
     let (mut name, mut port) = ssh_host_port(host);
     if let Ok(o) = Command::new("ssh")
+        .args(crate::app_settings::get().ssh_args())
         .args(["-G", host])
         .stderr(Stdio::null())
         .output()
@@ -717,7 +719,11 @@ pub fn ssh_hosts() -> Vec<String> {
         return vec![];
     };
     let ssh = home.join(".ssh");
-    let text = std::fs::read_to_string(ssh.join("config")).unwrap_or_default();
+    let file = crate::app_settings::get()
+        .ssh_config_file
+        .map(|f| PathBuf::from(crate::app_settings::expand_home(&f)))
+        .unwrap_or_else(|| ssh.join("config"));
+    let text = std::fs::read_to_string(file).unwrap_or_default();
     let include = |f: &str| {
         if f.contains(['*', '?']) {
             return None;
@@ -1099,9 +1105,10 @@ pub fn provision(
         ))
     })?;
     let bin = std::fs::read(&local).map_err(|e| Error::Other(e.to_string()))?;
-    let forge = format!("~/.forge/bin/forge-{}", content_id(&bin));
+    let base = crate::app_settings::get().server_install_dir;
+    let forge = format!("{base}/bin/forge-{}", content_id(&bin));
     let plugin_files = crate::plugin::files();
-    let plugin = format!("~/.forge/plugin-{}/forge", crate::plugin::hash());
+    let plugin = format!("{base}/plugin-{}/forge", crate::plugin::hash());
     let check = format!(
         r#"{TILDE}
 [ -x "$(x "$1")" ] && echo forge
@@ -1131,6 +1138,8 @@ f=$(x "$1"); mkdir -p "$(dirname "$f")" && cat > "$f.part" && chmod 755 "$f.part
             Duration::from_secs(600),
             extra,
         )?;
+        progress(&format!("Checking ForgeCLI on {}…", target.label()));
+        verify_upload(target, &forge, &bin, extra)?;
     }
     if !have.lines().any(|l| l == "plugin") {
         let archive = tar(plugin_files);
@@ -1148,6 +1157,56 @@ d=$(x "$1"); mkdir -p "$d" && tar -xf - -C "$d" && touch "$d/.unpacked""#
         )?;
     }
     Ok(Provisioned { forge, plugin })
+}
+
+/// The uploaded file matches what was sent: its SHA-256 there (or, on a
+/// system without `sha256sum`/`shasum`, its size). A mismatch removes it, so
+/// the next connect uploads it again.
+fn verify_upload(target: &Target, file: &str, bytes: &[u8], extra: &Extra) -> Result<(), Error> {
+    let script = format!(
+        r#"{TILDE}
+f=$(x "$1")
+if command -v sha256sum >/dev/null 2>&1; then echo "sha256 $(sha256sum "$f" | cut -d' ' -f1)"
+elif command -v shasum >/dev/null 2>&1; then echo "sha256 $(shasum -a 256 "$f" | cut -d' ' -f1)"
+else echo "size $(wc -c < "$f" | tr -d ' ')"; fi"#
+    );
+    let out = run(
+        target,
+        &script,
+        &[file.to_string()],
+        b"",
+        Duration::from_secs(120),
+        extra,
+    )?;
+    let out = String::from_utf8_lossy(&out);
+    if upload_matches(out.trim(), bytes) {
+        return Ok(());
+    }
+    let _ = run(
+        target,
+        &format!("{TILDE}\nrm -f \"$(x \"$1\")\""),
+        &[file.to_string()],
+        b"",
+        Duration::from_secs(30),
+        extra,
+    );
+    Err(Error::Other(format!(
+        "ForgeCLI arrived damaged on {}. It was removed; connect again to upload it once more.",
+        target.label()
+    )))
+}
+
+/// Whether the remote's report (`sha256 <hex>` or `size <n>`) fits `bytes`.
+fn upload_matches(report: &str, bytes: &[u8]) -> bool {
+    match report.split_once(' ') {
+        Some(("sha256", hex)) => {
+            let d = ring::digest::digest(&ring::digest::SHA256, bytes);
+            let want: String = d.as_ref().iter().map(|b| format!("{b:02x}")).collect();
+            hex.trim().eq_ignore_ascii_case(&want)
+        }
+        Some(("size", n)) => n.trim().parse::<usize>().ok() == Some(bytes.len()),
+        _ => false,
+    }
 }
 
 /// A ustar archive of `(path, bytes)` files, for `tar -x` on the remote.
@@ -1948,5 +2007,82 @@ mod tests {
                 ("b.txt", false)
             ]
         );
+    }
+
+    #[test]
+    fn uploads_are_checked() {
+        let bytes = b"forge";
+        let d = ring::digest::digest(&ring::digest::SHA256, bytes);
+        let hex: String = d.as_ref().iter().map(|b| format!("{b:02x}")).collect();
+        assert!(upload_matches(&format!("sha256 {hex}"), bytes));
+        assert!(upload_matches(
+            &format!("sha256 {}", hex.to_uppercase()),
+            bytes
+        ));
+        assert!(upload_matches("size 5", bytes));
+        assert!(!upload_matches("size 4", bytes));
+        assert!(!upload_matches("", bytes));
+        assert!(!upload_matches("sha256 00", bytes));
+    }
+
+    /// A real upload is checked, and a damaged one is caught and removed:
+    /// `FORGE_TEST_SSH` names the host, `FORGE_REMOTE_CLI` the ForgeCLI.
+    #[test]
+    #[ignore]
+    fn real_upload_is_verified() {
+        let host = std::env::var("FORGE_TEST_SSH").expect("FORGE_TEST_SSH");
+        let t = Target::Ssh(host);
+        let extra = Extra {
+            accept_new_host_key: true,
+            reverse: vec![],
+        };
+        let base = crate::app_settings::get().server_install_dir;
+        // Start clean, so the upload (and its check) happens.
+        run(
+            &t,
+            &format!("{TILDE}\nrm -rf \"$(x \"$1\")/bin\""),
+            &[base],
+            b"",
+            Duration::from_secs(30),
+            &extra,
+        )
+        .unwrap();
+        let steps = std::sync::Mutex::new(vec![]);
+        let p = provision(&t, &extra, &|m: &str| {
+            steps.lock().unwrap().push(m.to_string())
+        })
+        .unwrap();
+        assert!(
+            steps
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|m| m.starts_with("Checking ForgeCLI")),
+            "{:?}",
+            steps.lock().unwrap()
+        );
+        // Damage the copy there: the check fails and removes it.
+        run(
+            &t,
+            &format!("{TILDE}\nprintf x >> \"$(x \"$1\")\""),
+            std::slice::from_ref(&p.forge),
+            b"",
+            Duration::from_secs(30),
+            &extra,
+        )
+        .unwrap();
+        let bin = std::fs::read(local_forge("x86_64").unwrap()).unwrap();
+        let err = verify_upload(&t, &p.forge, &bin, &extra).unwrap_err();
+        assert!(err.to_string().contains("damaged"), "{err}");
+        let gone = run(
+            &t,
+            &format!("{TILDE}\n[ -e \"$(x \"$1\")\" ] && echo there || echo gone"),
+            std::slice::from_ref(&p.forge),
+            b"",
+            Duration::from_secs(30),
+            &extra,
+        )
+        .unwrap();
+        assert_eq!(String::from_utf8_lossy(&gone).trim(), "gone");
     }
 }

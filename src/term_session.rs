@@ -47,7 +47,32 @@ pub fn shells(
             .iter()
             .map(|sh| remote_shell(r, sh, trust_new_key))
             .collect(),
-        None => local_shells(local_dir),
+        None => {
+            let mut out = local_shells(local_dir);
+            // The setting's shell first: a new terminal runs it.
+            if let Some(want) = crate::app_settings::get().default_shell {
+                let name = |p: &str| {
+                    std::path::Path::new(p)
+                        .file_stem()
+                        .map(|s| s.to_string_lossy().to_lowercase())
+                };
+                if let Some(i) = out.iter().position(|s| name(&s.program) == name(&want)) {
+                    let s = out.remove(i);
+                    out.insert(0, s);
+                } else {
+                    out.insert(
+                        0,
+                        Shell {
+                            label: want.clone(),
+                            program: want,
+                            args: vec![],
+                            cwd: local_dir.is_dir().then(|| local_dir.to_path_buf()),
+                        },
+                    );
+                }
+            }
+            out
+        }
     }
 }
 
@@ -115,11 +140,12 @@ pub fn remote_shell(r: &Remote, shell: &str, trust_new_key: bool) -> Shell {
     };
     let (program, args): (&str, Vec<String>) = match &r.target {
         Target::Ssh(host) => {
-            let mut a = vec![
+            let mut a = crate::app_settings::get().ssh_args();
+            a.extend([
                 "-tt".to_string(),
                 "-o".into(),
                 "ServerAliveInterval=15".into(),
-            ];
+            ]);
             if trust_new_key {
                 a.extend(["-o".into(), "StrictHostKeyChecking=accept-new".into()]);
             }

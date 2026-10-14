@@ -304,6 +304,30 @@ impl CommandPalette {
                 Box::new(NewTerminal),
             ),
             act(
+                "Focus the terminal",
+                "icons/terminal.svg",
+                None,
+                Box::new(FocusTerminal),
+            ),
+            act(
+                "Clear the terminal",
+                "icons/eraser.svg",
+                None,
+                Box::new(ClearTerminal),
+            ),
+            act(
+                "Kill the terminal",
+                "icons/circle-slash.svg",
+                None,
+                Box::new(KillTerminal),
+            ),
+            act(
+                "Open Forge settings (settings.json)",
+                "icons/file-pen.svg",
+                None,
+                Box::new(OpenAppSettings),
+            ),
+            act(
                 "Show the remote menu",
                 "icons/plug.svg",
                 Some(shortcut("Alt O")),

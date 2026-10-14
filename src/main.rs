@@ -9,6 +9,7 @@
 // Which shell commands run without asking, per mode (Forge for VS Code's
 // rules). Called when a chat's CLI asks for permission; this UI shell has no
 // CLI yet, so outside its tests nothing calls it.
+mod app_settings;
 #[cfg_attr(not(test), allow(dead_code))]
 mod approve;
 mod assets;

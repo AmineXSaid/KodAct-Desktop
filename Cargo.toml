@@ -46,6 +46,9 @@ hayro = "=0.8.0"
 # emulator (grid, scrollback, escape sequences). MIT and Apache-2.0.
 portable-pty = "=0.9.0"
 alacritty_terminal = "=0.26.0"
+# SHA-256 of the ForgeCLI uploaded to a remote, checked against the copy
+# there. Already built for rustls; named here at the same pin. ISC-style.
+ring = { version = "=0.17.14", default-features = false }
 tungstenite = { version = "=0.30.0", default-features = false, features = ["handshake"] }
 # Attachments (stage.rs): .tar, .tar.gz and .gz (tar, flate2; MIT/Apache-2.0)
 # and .7z (sevenz-rust2, Apache-2.0, pure Rust) are opened for the model. RAR

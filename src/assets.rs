@@ -16,6 +16,9 @@ macro_rules! icons {
 icons!(
     "archive",
     "unplug",
+    "eraser",
+    "clipboard-paste",
+    "laptop",
     "arrow-left",
     "panel-right",
     "arrow-right",

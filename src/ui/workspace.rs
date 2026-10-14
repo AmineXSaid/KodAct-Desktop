@@ -92,6 +92,12 @@ impl Workspace {
         } else {
             ws.composer.update(cx, |c, cx| c.focus(window, cx));
         }
+        // The dock was left open: it comes back with a shell in it, and the
+        // keyboard stays with the composer.
+        if !first_run && ws.state.read(cx).terminal_open {
+            ws.terminal.update(cx, |d, cx| d.open(None, window, cx));
+            ws.composer.update(cx, |c, cx| c.focus(window, cx));
+        }
         ws
     }
 
@@ -105,6 +111,7 @@ impl Workspace {
         let open = self.state.read(cx).terminal_open;
         self.state.update(cx, |s, cx| {
             s.terminal_open = !open;
+            s.save_window();
             cx.notify();
         });
         if open {
@@ -124,6 +131,7 @@ impl Workspace {
     fn new_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.state.update(cx, |s, cx| {
             s.terminal_open = true;
+            s.save_window();
             cx.notify();
         });
         self.terminal.update(cx, |d, cx| d.open(None, window, cx));
@@ -1065,6 +1073,23 @@ impl Render for Workspace {
             .on_action(
                 cx.listener(|this, _: &NewTerminal, window, cx| this.new_terminal(window, cx)),
             )
+            .on_action(cx.listener(|this, _: &FocusTerminal, window, cx| {
+                if this.state.read(cx).terminal_open && this.terminal.read(cx).has_tabs() {
+                    this.terminal.update(cx, |d, cx| d.focus(window, cx));
+                } else {
+                    this.state.update(cx, |s, _| s.terminal_open = false);
+                    this.toggle_terminal(window, cx);
+                }
+            }))
+            .on_action(cx.listener(|this, _: &ClearTerminal, _, cx| {
+                this.terminal.update(cx, |d, cx| d.clear(cx))
+            }))
+            .on_action(cx.listener(|this, _: &KillTerminal, _, cx| {
+                this.terminal.update(cx, |d, cx| d.kill(cx))
+            }))
+            .on_action(cx.listener(|this, _: &OpenAppSettings, _, cx| {
+                this.state.update(cx, |s, cx| s.open_app_settings(cx))
+            }))
             .on_mouse_move(cx.listener(|this, ev: &gpui::MouseMoveEvent, window, cx| {
                 if !this.state.read(cx).terminal_resizing {
                     return;
@@ -1082,6 +1107,7 @@ impl Render for Workspace {
                     this.state.update(cx, |s, cx| {
                         if s.terminal_resizing {
                             s.terminal_resizing = false;
+                            s.save_window();
                             cx.notify();
                         }
                     })

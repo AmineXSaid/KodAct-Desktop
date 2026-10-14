@@ -2152,6 +2152,7 @@ dependencies = [
  "portable-pty",
  "pulldown-cmark",
  "quick-xml",
+ "ring",
  "rustls",
  "serde",
  "serde_json",

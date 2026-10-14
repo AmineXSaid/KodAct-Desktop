@@ -1223,8 +1223,8 @@ impl AppState {
             chat_menu: None,
             confirm: None,
             shortcuts_open: false,
-            terminal_open: false,
-            terminal_share: 0.35,
+            terminal_open: crate::app_settings::load_window().terminal_open,
+            terminal_share: crate::app_settings::load_window().terminal_share,
             terminal_resizing: false,
             diagram_code: Default::default(),
             loading: true,
@@ -4547,6 +4547,37 @@ impl AppState {
 // ---------------------------------------------------------------- remote development
 
 impl AppState {
+    /// Keep the dock as it is now for the next launch.
+    pub fn save_window(&self) {
+        crate::app_settings::save_window(crate::app_settings::WindowState {
+            terminal_open: self.terminal_open,
+            terminal_share: self.terminal_share,
+        });
+    }
+
+    /// Open Forge's settings.json in your editor, writing one with every key
+    /// at its default first if there is none. Edits apply at their next use.
+    pub fn open_app_settings(&mut self, cx: &mut Context<Self>) {
+        self.palette_open = false;
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let file = cx
+                .background_spawn(async { crate::app_settings::ensure_file() })
+                .await;
+            let _ = this.update(cx, |s, cx| match file {
+                Some(path) => {
+                    cx.open_with_system(&path);
+                    s.show_toast(
+                        "Opened settings.json: remote connections and the terminal. Changes apply the next time they're used.",
+                        cx,
+                    );
+                }
+                None => s.show_toast("Couldn't write settings.json in Forge's config folder.", cx),
+            });
+        })
+        .detach();
+    }
+
     /// Where a new terminal starts: the current project's remote (and
     /// whether its SSH host was trusted here), or its folder on this
     /// computer.
@@ -4887,9 +4918,9 @@ impl AppState {
 
     /// Every 15 s, check the current remote still answers. When it stops,
     /// say so and try again with a growing pause (1, 2, 4 … 30 s); after
-    /// `MAX` tries it shows as failed until you retry.
+    /// `remote.reconnect.maxAttempts` tries (8 unless set) it shows as failed until you retry.
     fn ensure_heartbeat(&mut self, cx: &mut Context<Self>) {
-        const MAX: u32 = 8;
+        let max = crate::app_settings::get().reconnect_max_attempts;
         if self.remote_heartbeat.is_some() {
             return;
         }
@@ -4902,7 +4933,7 @@ impl AppState {
                     let watched = s.remote_ready.contains_key(&r.target)
                         || s.remote_lost
                             .as_ref()
-                            .is_some_and(|(t, n)| *t == r.target && *n < MAX);
+                            .is_some_and(|(t, n)| *t == r.target && *n < max);
                     watched.then(|| (r.target.clone(), s.remote_extra(&r.target)))
                 }) else {
                     if this.update(cx, |_, _| ()).is_err() {
@@ -4931,7 +4962,7 @@ impl AppState {
                             // Chats there start again (resuming) once it answers.
                             s.remote_ready.remove(&target);
                             let tries = s.remote_lost.as_ref().map_or(0, |(_, n)| *n) + 1;
-                            if tries >= MAX {
+                            if tries >= max {
                                 s.remote_lost = Some((target.clone(), tries));
                                 s.remote_busy = None;
                                 s.remote_failed = Some((target.clone(), e.to_string().into()));

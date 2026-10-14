@@ -114,6 +114,28 @@ shell on a pseudo-terminal (ConPTY on Windows), drawn by a terminal emulator
   click for a word, triple-click for a line.
 - **Size:** drag the dock's left edge (between 280 px and three fifths of the
   window).
+- **Right-click** for copy, paste, clear and kill; the palette has Focus,
+  Clear and Kill the terminal too. The header's badge says where the active
+  terminal runs (Local, or the remote).
+- The dock's open state and width come back at the next launch.
+
+## Settings
+
+Forge's own settings file, `settings.json` in its config folder ("Open Forge
+settings" in the command palette writes one with every key):
+
+| Key | Default | Does |
+| --- | --- | --- |
+| `remote.ssh.configFile` | `~/.ssh/config` | ssh config used to list and reach hosts (`ssh -F`) |
+| `remote.ssh.extraArgs` | `[]` | more arguments for every `ssh` |
+| `remote.serverInstallDir` | `~/.forge` | where ForgeCLI goes on a remote |
+| `remote.reconnect.maxAttempts` | `8` | reconnect tries before a remote shows as failed |
+| `terminal.defaultShell` | first found | the shell a new terminal runs |
+| `terminal.scrollback` | `10000` | lines kept above the screen |
+| `terminal.fontSize` | `13` | the terminal's text size |
+| `terminal.cursorStyle` | `block` | `block`, `bar` or `underline` |
+
+Changes apply the next time they're used; no restart.
 
 ## Layout
 
