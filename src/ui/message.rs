@@ -638,7 +638,7 @@ fn tool(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
                         .font_family(t.font_mono.clone())
                         .text_size(t.text.caption + px(0.5))
                         .text_color(t.colors.text_muted)
-                        .child(call.target.clone()),
+                        .child(call.shown_target()),
                 )
                 .children(call.note.clone().map(|n| {
                     div()

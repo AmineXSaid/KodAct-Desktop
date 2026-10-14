@@ -36,8 +36,8 @@ pub fn tasks(messages: &[Message]) -> Vec<Task> {
                     // A command reads as its description ("Run the tests"), as its row does.
                     let label = match (&t.note, t.kind) {
                         (Some(n), ToolKind::Bash) => n.to_string(),
-                        (Some(n), ToolKind::Other) => format!("{} · {n}", t.target),
-                        _ => format!("{} {}", t.kind.verb(t.status), t.target),
+                        (Some(n), ToolKind::Other) => format!("{} · {n}", t.shown_target()),
+                        _ => format!("{} {}", t.kind.verb(t.status), t.shown_target()),
                     };
                     out.push(Task {
                         msg: i,
@@ -52,7 +52,7 @@ pub fn tasks(messages: &[Message]) -> Vec<Task> {
     out
 }
 
-fn status_icon(status: ToolStatus, t: &Theme, key: SharedString) -> AnyElement {
+pub(super) fn status_icon(status: ToolStatus, t: &Theme, key: SharedString) -> AnyElement {
     match status {
         ToolStatus::Running => icon("icons/loader-circle.svg", t.size.icon_sm, t.colors.sky)
             .with_animation(

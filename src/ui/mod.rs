@@ -52,6 +52,7 @@ pub mod tasks;
 pub mod terminal;
 pub mod versions;
 pub mod voxels;
+pub mod workbench;
 pub mod workspace;
 
 use gpui::{div, prelude::*, svg, App, Div, Hsla, Pixels, SharedString, Svg};
@@ -80,6 +81,7 @@ gpui::actions!(
         OpenProfiles,
         OpenGuide,
         ToggleSplit,
+        TogglePanel,
         ShowProjectMap,
         CopyLastReply,
         ChangeName,

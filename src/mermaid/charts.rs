@@ -35,6 +35,7 @@ fn text(
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 fn rect(
     out: &mut String,
     x: f32,
@@ -1247,7 +1248,10 @@ fn list(s: &str) -> Option<Vec<String>> {
 }
 
 /// An axis line: its title, then `[categories]` or `min --> max`.
-fn axis(rest: &str) -> (Option<String>, Option<Vec<String>>, Option<(f32, f32)>) {
+/// An axis: its title, its categories, or its range.
+type Axis = (Option<String>, Option<Vec<String>>, Option<(f32, f32)>);
+
+fn axis(rest: &str) -> Axis {
     let rest = rest.trim();
     let (title, rest) = if let Some(r) = rest.strip_prefix('"') {
         match r.split_once('"') {

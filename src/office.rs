@@ -72,6 +72,72 @@ pub struct CellText {
 pub enum Preview {
     Sheets(Vec<Sheet>),
     Markdown(String),
+    /// A PDF's pages, drawn as they print.
+    Pages(Vec<Page>),
+}
+
+/// One PDF page as a picture, and its size in pixels.
+#[derive(Clone)]
+pub struct Page {
+    pub image: std::sync::Arc<gpui::Image>,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl std::fmt::Debug for Page {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Page({}x{})", self.width, self.height)
+    }
+}
+
+impl PartialEq for Page {
+    fn eq(&self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&self.image, &other.image)
+    }
+}
+
+/// The most pages drawn; past them the panel says how many more there are.
+pub const MAX_PAGES: usize = 40;
+
+/// A PDF's pages as PNGs, drawn by hayro at 1.5 pixels per point (sharp
+/// on a 1x screen, fair on 2x). `Err` when it can't draw them; the panel
+/// then shows the text.
+fn pages(bytes: &[u8]) -> Result<Vec<Page>, String> {
+    use hayro::hayro_interpret::InterpreterSettings;
+    use hayro::hayro_syntax::Pdf;
+    let pdf = Pdf::new(bytes.to_vec()).map_err(|e| format!("not a PDF Forge can draw: {e:?}"))?;
+    let cache = hayro::RenderCache::new();
+    let settings = InterpreterSettings::default();
+    let mut out = vec![];
+    for page in pdf.pages().iter().take(MAX_PAGES) {
+        let pixmap = hayro::render(
+            page,
+            &cache,
+            &settings,
+            &hayro::RenderSettings::default(),
+            &hayro::PixmapSettings {
+                x_scale: 1.5,
+                y_scale: 1.5,
+                bg_color: hayro::vello_cpu::color::palette::css::WHITE,
+            },
+        );
+        let (width, height) = (u32::from(pixmap.width()), u32::from(pixmap.height()));
+        // An opaque page: premultiplied and straight alpha are the same.
+        let rgba = image::RgbaImage::from_raw(width, height, pixmap.data_as_u8_slice().to_vec())
+            .ok_or("a page Forge could not draw")?;
+        let mut png = Vec::new();
+        rgba.write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png)
+            .map_err(|e| e.to_string())?;
+        out.push(Page {
+            image: std::sync::Arc::new(gpui::Image::from_bytes(gpui::ImageFormat::Png, png)),
+            width,
+            height,
+        });
+    }
+    if out.is_empty() {
+        return Err("the PDF has no pages".into());
+    }
+    Ok(out)
 }
 
 pub fn preview(name: &str, bytes: &[u8]) -> Result<Preview, String> {
@@ -79,7 +145,11 @@ pub fn preview(name: &str, bytes: &[u8]) -> Result<Preview, String> {
         Kind::Xlsx => sheets(bytes).map(Preview::Sheets),
         Kind::Docx => docx(bytes).map(Preview::Markdown),
         Kind::Pptx => pptx(bytes).map(Preview::Markdown),
-        Kind::Pdf => pdf(bytes).map(Preview::Markdown),
+        // Drawn when hayro can (a panic in it is caught), else its text.
+        Kind::Pdf => std::panic::catch_unwind(|| pages(bytes))
+            .unwrap_or_else(|_| Err("the PDF could not be drawn".into()))
+            .map(Preview::Pages)
+            .or_else(|_| pdf(bytes).map(Preview::Markdown)),
     }
 }
 
@@ -709,10 +779,18 @@ mod tests {
     }
 
     #[test]
-    fn reads_the_pdf_page_by_page() {
-        let Preview::Markdown(md) = preview("q3-budget.pdf", PDF).unwrap() else {
-            panic!()
+    fn draws_the_pdf_as_pages() {
+        let Preview::Pages(pages) = preview("q3-budget.pdf", PDF).unwrap() else {
+            panic!("not drawn")
         };
+        assert!(!pages.is_empty());
+        // A4 or Letter at 1.5 px per point, taller than wide.
+        assert!(pages[0].width > 800 && pages[0].height > pages[0].width);
+    }
+
+    #[test]
+    fn reads_the_pdf_page_by_page() {
+        let md = text(Kind::Pdf, PDF).unwrap();
         assert!(md.starts_with("## Page 1"), "{md}");
         assert!(md.contains("Q3 budget update"), "{md}");
         assert!(md.contains("Licences fall to 700 EUR"), "{md}");

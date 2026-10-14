@@ -38,6 +38,8 @@ calamine = { version = "=0.36.1", default-features = false }
 zip = { version = "=8.6.0", default-features = false, features = ["deflate", "deflate64", "bzip2", "lzma", "xz"] }
 quick-xml = "=0.41.0"
 lopdf = { version = "=0.45.0", default-features = false }
+# PDF pages drawn as pictures in the side panel (hayro: pure Rust, MIT/Apache-2.0).
+hayro = "=0.8.0"
 # Attachments (stage.rs): .tar, .tar.gz and .gz (tar, flate2; MIT/Apache-2.0)
 # and .7z (sevenz-rust2, Apache-2.0, pure Rust) are opened for the model. RAR
 # has no permissively licensed decoder: an installed 7-Zip, unrar or bsdtar

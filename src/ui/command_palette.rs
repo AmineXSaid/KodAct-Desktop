@@ -193,6 +193,12 @@ impl CommandPalette {
                 Box::new(ShowProjectMap),
             ),
             act(
+                "Side panel: plan, files and browser",
+                "icons/panel-right.svg",
+                Some(shortcut("Shift E")),
+                Box::new(TogglePanel),
+            ),
+            act(
                 if s.doc_below {
                     "Put the side panel beside the chat"
                 } else {

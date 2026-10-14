@@ -51,6 +51,7 @@ table in step.
 | Ctrl/⌘ L | Focus the composer |
 | Ctrl/⌘ U | Attach files and images |
 | Ctrl/⌘ Shift T | This turn's tasks |
+| Ctrl/⌘ Shift E | Side panel: plan, files, browser |
 | Ctrl/⌘ \ | Side panel beside or below the chat |
 | Ctrl/⌘ F | Find in the conversation |
 | Ctrl/⌘ J | Jump to the latest message |
@@ -76,8 +77,9 @@ table in step.
 - `src/ui/`: one file per part:
   - the window: `workspace` (title bar, welcome), `sidebar`, `chat_view`,
     `message`, `markdown`, `composer`, `command_palette`, `onboarding`,
-    `shortcuts`, `projects`, `rules_view`, `doc_pane` (the side panel,
-    beside or below the chat), `project_map`;
+    `shortcuts`, `projects`, `rules_view`, `doc_pane` (a file in the side panel,
+    beside or below the chat), `workbench` (the side panel's Plan, Files
+    and Browser tabs), `project_map`;
   - in a chat: `attachments`, `autocomplete`, `context_menu`, `tasks`,
     `approvals`, `versions`, `find_bar`, `terminal`, `file_card`;
   - Settings: `settings` (the window and its nav, General, Models, About),

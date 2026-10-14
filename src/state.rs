@@ -104,6 +104,22 @@ pub struct ToolCall {
     pub review: Review,
 }
 
+impl ToolCall {
+    /// What its row calls it: the browser's tools as `browser · click`, a
+    /// plan and a task list by name, anything else as its target.
+    pub fn shown_target(&self) -> SharedString {
+        if let Some(action) = self.target.strip_prefix(crate::browser::TOOL_PREFIX) {
+            let action = action.strip_prefix("browser_").unwrap_or(action);
+            return format!("browser · {}", action.replace('_', " ")).into();
+        }
+        match self.target.as_ref() {
+            "ExitPlanMode" => "plan".into(),
+            "TodoWrite" => "task list".into(),
+            _ => self.target.clone(),
+        }
+    }
+}
+
 /// A file change's review: not looked at yet, kept, or reverted on disk.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Review {
@@ -136,6 +152,17 @@ pub enum Block {
     },
     /// A file Forge made for you: a card in the reply, opened beside the chat.
     File(FileRef),
+}
+
+/// What the side panel shows when no file is open in it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PanelTab {
+    /// The chat's latest plan and task list.
+    Plan,
+    /// Every file the chat made: Markdown, workbooks, PDFs, diagrams.
+    Files,
+    /// What the browser is on, its latest screenshot, its recent steps.
+    Browser,
 }
 
 /// A file Forge made: shown as a card in the reply (`ui/file_card.rs`),
@@ -833,6 +860,11 @@ pub struct AppState {
     pub copied: Option<SharedString>,
     /// The file open in the side panel, beside the chat.
     pub doc: Option<FileRef>,
+    /// The side panel's tab when no file is open in it: the plan, the
+    /// chat's files or the browser (`ui/workbench.rs`). None: closed.
+    pub panel: Option<PanelTab>,
+    /// The browser's latest screenshot in each chat, by chat id.
+    pub browser_shots: std::collections::HashMap<usize, std::sync::Arc<gpui::Image>>,
     /// A diagram in the panel fits its width (else it shows at actual size).
     pub doc_fit: bool,
     /// The side panel sits below the chat instead of beside it.
@@ -1014,6 +1046,8 @@ impl AppState {
             picker_open: false,
             copied: None,
             doc: None,
+            panel: None,
+            browser_shots: std::collections::HashMap::new(),
             doc_fit: true,
             doc_below: false,
             doc_preview: None,
@@ -2178,6 +2212,45 @@ impl AppState {
             });
         })
         .detach();
+    }
+
+    /// A plan, or the browser starting, shows in the side panel when it
+    /// isn't showing a file and the chat is the one on screen.
+    fn panel_follows(&mut self, chat: usize, tool: &str) {
+        let tab = if tool == "ExitPlanMode" {
+            Some(PanelTab::Plan)
+        } else if tool.starts_with(crate::browser::TOOL_PREFIX) && self.panel.is_none() {
+            Some(PanelTab::Browser)
+        } else {
+            None
+        };
+        if let Some(tab) = tab.filter(|_| self.doc.is_none() && self.current == Some(chat)) {
+            self.panel = Some(tab);
+        }
+    }
+
+    /// Show the side panel on `tab`, closing any file open in it.
+    pub fn show_panel(&mut self, tab: PanelTab, cx: &mut Context<Self>) {
+        self.doc = None;
+        self.panel = Some(tab);
+        cx.notify();
+    }
+
+    /// Open or close the side panel (on the plan when it opens).
+    pub fn toggle_panel(&mut self, cx: &mut Context<Self>) {
+        if self.doc.is_some() || self.panel.is_some() {
+            self.doc = None;
+            self.panel = None;
+        } else {
+            self.panel = Some(PanelTab::Plan);
+        }
+        cx.notify();
+    }
+
+    pub fn close_panel(&mut self, cx: &mut Context<Self>) {
+        self.doc = None;
+        self.panel = None;
+        cx.notify();
     }
 
     pub fn close_doc(&mut self, cx: &mut Context<Self>) {
@@ -3710,6 +3783,7 @@ impl AppState {
             Event::Text(t) => self.apply(chat, Step::Say(t), cx),
             Event::Thinking(t) => self.apply(chat, Step::Think(t), cx),
             Event::ToolUse { id, name, input } => {
+                self.panel_follows(chat, &name);
                 if let Some(at) =
                     self.push_block(chat, Block::Tool(crate::backend::tool_call(&name, &input)))
                 {
@@ -3720,7 +3794,19 @@ impl AppState {
                 id,
                 output,
                 is_error,
+                image,
             } => {
+                if let Some(png) = image {
+                    let format = if png.starts_with(&[0xff, 0xd8]) {
+                        gpui::ImageFormat::Jpeg
+                    } else {
+                        gpui::ImageFormat::Png
+                    };
+                    self.browser_shots.insert(
+                        chat,
+                        std::sync::Arc::new(gpui::Image::from_bytes(format, png)),
+                    );
+                }
                 if let Some(&(m, b)) = self.tool_rows.get(&(chat, id)) {
                     let mut written = None;
                     self.update_tool(chat, m, b, |t| {
@@ -4171,6 +4257,14 @@ impl AppState {
                     t.diff = diff;
                 }
             }
+            (Step::Use(name, input, output), Some(blocks)) => {
+                let mut t = crate::backend::tool_call(name, &input);
+                t.status = ToolStatus::Done;
+                t.output = output.into();
+                blocks.push(Block::Tool(t));
+                self.panel_follows(chat, name);
+            }
+            (Step::File(f), Some(blocks)) => blocks.push(Block::File(f)),
             (Step::Ask(title, detail), Some(blocks)) => blocks.push(Block::Permission {
                 title: title.into(),
                 detail: detail.into(),
@@ -4217,7 +4311,13 @@ enum Step {
     ToolDone(String, Vec<DiffLine>),
     Ask(String, String),
     Denied,
-    End { seconds: f32 },
+    /// A tool call as ForgeCLI sends it (name and input), done with its output.
+    Use(&'static str, serde_json::Value, String),
+    /// A file the reply made: its card.
+    File(FileRef),
+    End {
+        seconds: f32,
+    },
 }
 
 impl Step {
@@ -4227,6 +4327,8 @@ impl Step {
             Step::ToolStart(..) => 350,
             Step::ToolDone(..) => 900,
             Step::Ask(..) => 300,
+            Step::Use(..) => 500,
+            Step::File(..) => 300,
             Step::Denied | Step::End { .. } => 250,
         }
     }
@@ -4266,6 +4368,85 @@ const DEMO_CHARTS: &str = "Where the time went:\n\n```mermaid\npie title Time pe
 /// The demo's ASCII answer, for checking that box drawing keeps its columns.
 const DEMO_ASCII: &str = "Here it is in ASCII.\n\n```text\n┌──────────────┐     ┌──────────────┐\n│  Forge app   │ ──▶ │   ForgeCLI   │\n└──────┬───────┘     └──────┬───────┘\n       │ stream-json        │ HTTPS\n       ▼                    ▼\n┌──────────────┐     ┌──────────────┐\n│  Chat view   │ ◀── │    Model     │\n└──────────────┘     └──────────────┘\n```\n\nAnd the same without a fence:\n\n+--------+      +---------+\n| Client | ---> | Server  |\n+--------+      +---------+\n     |               |\n     v               v\n  [ UI ]         [ DB ]\n";
 
+/// The demo's planned task: a plan, its task list, a look in the browser
+/// and the files it made, which the side panel's tabs show.
+fn demo_plan() -> Vec<Step> {
+    use serde_json::json;
+    let file = |name: &str, path: &str, content: &str, bytes: Option<&'static [u8]>| {
+        Step::File(FileRef {
+            name: name.to_string().into(),
+            path: Some(path.to_string().into()),
+            content: content.to_string().into(),
+            bytes: bytes.map(Into::into),
+        })
+    };
+    let mut s = vec![
+        Step::Use(
+            "ExitPlanMode",
+            json!({"plan": "## Update the Q3 budget\n\n1. **Read** the budget sheet and the finance team's notes.\n2. **Check** the licence prices on the vendor's page.\n3. **Update** licences and travel, then recalculate the totals.\n4. **Write** a one-page memo and a PDF for the review.\n\nNothing else in the workbook changes."}),
+            String::new(),
+        ),
+        Step::Use(
+            "TodoWrite",
+            json!({"todos": [
+                {"content": "Read the budget sheet", "status": "completed"},
+                {"content": "Check licence prices", "status": "completed"},
+                {"content": "Update and recalculate", "status": "in_progress"},
+                {"content": "Write the memo and the PDF", "status": "pending"}
+            ]}),
+            String::new(),
+        ),
+        Step::Use(
+            "mcp__browser-use__browser_navigate",
+            json!({"url": "https://vendor.example/pricing"}),
+            "Navigated to: https://vendor.example/pricing".into(),
+        ),
+        Step::Use(
+            "mcp__browser-use__browser_get_state",
+            json!({}),
+            r#"{"url": "https://vendor.example/pricing#teams", "title": "Pricing"}"#.into(),
+        ),
+        Step::Use(
+            "mcp__browser-use__browser_click",
+            json!({"index": 7}),
+            "Clicked element 7".into(),
+        ),
+        Step::Use(
+            "mcp__browser-use__browser_extract_content",
+            json!({"query": "the Teams plan's price per seat"}),
+            "Teams: 14 per seat per month".into(),
+        ),
+    ];
+    s.extend(words("I checked the vendor's prices, updated the budget and wrote it up. The files are in the side panel.", Step::Say));
+    s.extend([
+        file(
+            "settings-migration-plan.md",
+            "docs/settings-migration-plan.md",
+            include_str!("../assets/docs/settings-migration-plan.md"),
+            None,
+        ),
+        file(
+            "q3-budget.xlsx",
+            "finance/q3-budget.xlsx",
+            "",
+            Some(include_bytes!("../assets/docs/samples/q3-budget.xlsx")),
+        ),
+        file(
+            "q3-budget.pdf",
+            "finance/q3-budget.pdf",
+            "",
+            Some(include_bytes!("../assets/docs/samples/q3-budget.pdf")),
+        ),
+        file(
+            "forge-chat-path.html",
+            "docs/forge-chat-path.html",
+            include_str!("../assets/docs/forge-chat-path.html"),
+            None,
+        ),
+    ]);
+    s
+}
+
 fn script(prompt: &str) -> Vec<Step> {
     let mut s = vec![];
     s.extend(words(
@@ -4274,6 +4455,11 @@ fn script(prompt: &str) -> Vec<Step> {
     ));
     // Asked to draw something: the reply draws it, as a Mermaid diagram.
     let lower = prompt.to_lowercase();
+    if lower.contains("plan") {
+        s.extend(demo_plan());
+        s.push(Step::End { seconds: 5.2 });
+        return s;
+    }
     if lower.contains("chart") {
         s.extend(words(DEMO_CHARTS, Step::Say));
         s.push(Step::End { seconds: 2.4 });
@@ -4484,12 +4670,30 @@ fn mock_chats() -> Vec<Chat> {
             },
         ]
     };
+    let done = |mut t: ToolCall| {
+        t.status = ToolStatus::Done;
+        Block::Tool(t)
+    };
     // A reply that wrote a plan: the write, a short note, and the file's card.
     const PLAN: &str = include_str!("../assets/docs/settings-migration-plan.md");
     let plan = vec![
         Message::user("Plan the migration of our settings to the new schema. Write it up so I can review it.".into(), minutes_ago(41)),
         Message::Assistant {
             blocks: vec![
+                // The plan it proposed, its task list, and a look at the docs
+                // in the browser: the side panel's Plan and Browser tabs.
+                done(crate::backend::tool_call("ExitPlanMode", &serde_json::json!({"plan": "## Migrate settings to the v2 schema\n\n1. **Read** `src/settings.rs` and list every field.\n2. **Map** each field to its v2 key; keep unknown keys as they are.\n3. **Back up** `settings.json` to `settings.v1.json` for one release.\n4. **Write** the migration, run it once on start-up, and log what moved.\n5. **Test** a round trip, and a read-only file on Windows.\n\nNothing is deleted: the backup stays until the next release."}))),
+                done(crate::backend::tool_call("TodoWrite", &serde_json::json!({"todos": [
+                    {"content": "Read the current settings struct", "status": "completed"},
+                    {"content": "Map every field to its v2 key", "status": "completed"},
+                    {"content": "Write up the migration plan", "status": "completed"},
+                    {"content": "Round-trip test", "status": "in_progress"},
+                    {"content": "Windows run with a read-only file", "status": "pending"}
+                ]}))),
+                done(crate::backend::tool_call("mcp__browser-use__browser_navigate", &serde_json::json!({"url": "https://serde.rs/field-attrs.html"}))),
+                done(crate::backend::tool_call("mcp__browser-use__browser_get_state", &serde_json::json!({}))),
+                done(crate::backend::tool_call("mcp__browser-use__browser_click", &serde_json::json!({"index": 12}))),
+                done(crate::backend::tool_call("mcp__browser-use__browser_extract_content", &serde_json::json!({"query": "how #[serde(alias)] works"}))),
                 Block::Tool(ToolCall { kind: ToolKind::Read, target: "src/settings.rs".into(), note: None, status: ToolStatus::Done, output: "pub struct Settings { pub theme: String, pub model: String, pub permissions: Vec<String> }".into(), diff: vec![], open: false, full: false, review: Review::Open }),
                 Block::Tool(ToolCall {
                     kind: ToolKind::Write,

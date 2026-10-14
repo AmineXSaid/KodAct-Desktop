@@ -15,6 +15,8 @@ macro_rules! icons {
 
 icons!(
     "archive",
+    "arrow-left",
+    "panel-right",
     "arrow-right",
     "arrow-up",
     "at-sign",

@@ -215,6 +215,11 @@ impl Workspace {
                 .child(div().flex_1())
                 .children(super::approvals::render(&t, &self.state, cx))
                 .child(
+                    button("toggle-panel", "icons/panel-right.svg").on_click(cx.listener(
+                        |_, _, window, cx| window.dispatch_action(Box::new(TogglePanel), cx),
+                    )),
+                )
+                .child(
                     button(
                         "toggle-theme",
                         if t.is_dark {
@@ -474,23 +479,43 @@ impl Render for Workspace {
                 scale: window.scale_factor(),
                 fit: s.doc_fit,
                 below: s.doc_below,
+                from_panel: s.panel.is_some(),
             };
             let read = s
                 .doc_preview
                 .as_ref()
                 .filter(|(n, _)| s.doc.as_ref().is_some_and(|f| f.name == *n))
                 .map(|(_, r)| r);
-            s.doc.as_ref().map(|f| {
-                super::doc_pane::render(
-                    f,
+            let panel = s.panel.map(|tab| {
+                super::workbench::render(
+                    super::workbench::View {
+                        tab,
+                        messages: s.chat().map_or(&[][..], |c| c.messages.as_slice()),
+                        shot: s.current.and_then(|c| s.browser_shots.get(&c).cloned()),
+                        browser_on: s.browser,
+                        copied: s.copied.clone(),
+                        width: fit.width,
+                        below: s.doc_below,
+                        scale: fit.scale,
+                    },
                     self.state.clone(),
-                    s.copied.clone(),
-                    fit,
-                    read,
-                    s.doc_sheet,
                     &t,
                 )
-            })
+            });
+            s.doc
+                .as_ref()
+                .map(|f| {
+                    super::doc_pane::render(
+                        f,
+                        self.state.clone(),
+                        s.copied.clone(),
+                        fit,
+                        read,
+                        s.doc_sheet,
+                        &t,
+                    )
+                })
+                .or(panel)
         };
         let main = if screen == Screen::Rules {
             main.child(self.rules.clone())
@@ -595,6 +620,9 @@ impl Render for Workspace {
             }))
             .on_action(cx.listener(|this, _: &ShowProjectMap, _, cx| {
                 this.state.update(cx, |s, cx| s.toggle_map(cx))
+            }))
+            .on_action(cx.listener(|this, _: &TogglePanel, _, cx| {
+                this.state.update(cx, |s, cx| s.toggle_panel(cx))
             }))
             .on_action(cx.listener(|this, _: &ToggleSplit, _, cx| {
                 this.state.update(cx, |s, cx| {

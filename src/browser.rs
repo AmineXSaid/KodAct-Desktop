@@ -14,6 +14,35 @@ use std::path::{Path, PathBuf};
 pub const PACKAGE: &str = "browser-use[cli]==0.13.11";
 /// The MCP server's name, so its tools are `mcp__browser-use__…`.
 pub const SERVER: &str = "browser-use";
+/// The prefix of the browser's tool names, as ForgeCLI calls them.
+pub const TOOL_PREFIX: &str = "mcp__browser-use__";
+
+/// Standard base64 (padding optional, whitespace skipped): a screenshot in
+/// a tool result.
+pub fn decode_base64(s: &str) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(s.len() * 3 / 4);
+    let (mut acc, mut bits) = (0u32, 0u32);
+    for c in s.bytes() {
+        let v = match c {
+            b'A'..=b'Z' => c - b'A',
+            b'a'..=b'z' => c - b'a' + 26,
+            b'0'..=b'9' => c - b'0' + 52,
+            b'+' | b'-' => 62,
+            b'/' | b'_' => 63,
+            b'=' => break,
+            b' ' | b'\n' | b'\r' | b'\t' => continue,
+            _ => return None,
+        };
+        acc = (acc << 6) | u32::from(v);
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+            acc &= (1 << bits) - 1;
+        }
+    }
+    (!out.is_empty()).then_some(out)
+}
 
 pub fn enabled() -> bool {
     crate::profile::dir()
@@ -58,6 +87,16 @@ pub fn mcp_config(uvx: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn base64_decodes() {
+        assert_eq!(
+            decode_base64("SGVsbG8sIEZvcmdlIQ==").unwrap(),
+            b"Hello, Forge!"
+        );
+        assert_eq!(decode_base64("SGk").unwrap(), b"Hi");
+        assert!(decode_base64("**").is_none());
+    }
 
     #[test]
     fn the_config_runs_the_pinned_server_through_uvx() {

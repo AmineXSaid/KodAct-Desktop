@@ -43,6 +43,8 @@ pub enum Event {
         id: String,
         output: String,
         is_error: bool,
+        /// An image the tool returned (a browser screenshot), decoded.
+        image: Option<Vec<u8>>,
     },
     /// Forge asks before running a tool.
     Ask {
@@ -506,6 +508,7 @@ impl Parser {
                             id: b["tool_use_id"].as_str().unwrap_or_default().into(),
                             output: result_text(&b["content"]),
                             is_error: b["is_error"].as_bool().unwrap_or(false),
+                            image: result_image(&b["content"]),
                         });
                     }
                 }
@@ -594,6 +597,16 @@ fn result_text(c: &Value) -> String {
     }
 }
 
+/// The last image in a tool result's content, as bytes.
+fn result_image(c: &Value) -> Option<Vec<u8>> {
+    c.as_array()?
+        .iter()
+        .rev()
+        .find(|b| b["type"] == "image")
+        .and_then(|b| b["source"]["data"].as_str().or(b["data"].as_str()))
+        .and_then(crate::browser::decode_base64)
+}
+
 // ---------------------------------------------------------------- tool rows
 
 /// A tool call as its row shows it.
@@ -639,6 +652,45 @@ pub fn tool_call(name: &str, input: &Value) -> ToolCall {
         }
         "WebFetch" => (ToolKind::Web, s("url"), None, vec![]),
         "WebSearch" => (ToolKind::Web, s("query"), None, vec![]),
+        // A plan is kept whole, a line per diff row, so the side panel
+        // (and a reloaded chat) can show it.
+        "ExitPlanMode" => (
+            ToolKind::Other,
+            "ExitPlanMode".to_string(),
+            Some("Proposed a plan".to_string()),
+            lines(&s("plan")),
+        ),
+        // The task list: `[x]` done, `[~]` in progress, `[ ]` to do.
+        "TodoWrite" => {
+            let todos = input["todos"].as_array().cloned().unwrap_or_default();
+            let done = todos.iter().filter(|t| t["status"] == "completed").count();
+            let rows: Vec<String> = todos
+                .iter()
+                .map(|t| {
+                    let mark = match t["status"].as_str() {
+                        Some("completed") => "[x]",
+                        Some("in_progress") => "[~]",
+                        _ => "[ ]",
+                    };
+                    format!("{mark} {}", t["content"].as_str().unwrap_or_default())
+                })
+                .collect();
+            (
+                ToolKind::Other,
+                "TodoWrite".to_string(),
+                Some(format!("{done} of {} done", todos.len())),
+                lines(&rows.join("\n")),
+            )
+        }
+        // The browser's tools say what they act on: a URL, the text typed.
+        browser if browser.starts_with(crate::browser::TOOL_PREFIX) => {
+            let what = ["url", "text", "query", "selector", "tab_id", "direction"]
+                .iter()
+                .find_map(|k| input[*k].as_str().filter(|v| !v.is_empty()))
+                .map(str::to_string)
+                .or_else(|| input["index"].as_u64().map(|i| format!("element {i}")));
+            (ToolKind::Other, browser.to_string(), what, vec![])
+        }
         // A skill reads as its name, without its plugin's prefix.
         "Skill" => {
             let skill = s("skill");
@@ -668,6 +720,17 @@ pub fn tool_call(name: &str, input: &Value) -> ToolCall {
         full: false,
         review: Review::Open,
     }
+}
+
+/// Text kept as unchanged diff rows, a line each.
+fn lines(text: &str) -> Vec<DiffLine> {
+    text.lines()
+        .take(2000)
+        .map(|l| DiffLine {
+            kind: DiffKind::Same,
+            text: l.to_string().into(),
+        })
+        .collect()
 }
 
 /// Removed lines, then added ones; long text is cut.
@@ -731,7 +794,8 @@ mod tests {
             Event::ToolResult {
                 id: "t1".into(),
                 output: "a\nb".into(),
-                is_error: false
+                is_error: false,
+                image: None,
             }
         );
         assert!(
