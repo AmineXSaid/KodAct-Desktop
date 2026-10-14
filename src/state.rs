@@ -4897,15 +4897,92 @@ impl AppState {
                 cx,
             );
         }
+        self.start_devcontainer(dir, false, cx);
+    }
+
+    /// The current remote is a dev container Forge started from a folder.
+    pub fn in_devcontainer(&self) -> bool {
+        self.current_remote()
+            .is_some_and(|r| crate::remote::is_devcontainer(&r.target))
+    }
+
+    /// The local folder of the current dev container, read off the UI
+    /// thread, then `then` with it (or a toast saying why not).
+    fn with_devcontainer_source(
+        &mut self,
+        then: impl FnOnce(&mut Self, std::path::PathBuf, &mut Context<Self>) + 'static,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(crate::remote::Target::Container { name, .. }) =
+            self.current_remote().map(|r| r.target)
+        else {
+            return self.show_toast("This project isn't in a dev container.", cx);
+        };
+        self.remote_menu = None;
+        cx.spawn(async move |this, cx| {
+            let found = cx
+                .background_spawn(async move { crate::remote::devcontainer_source(&name) })
+                .await;
+            let _ = this.update(cx, |s, cx| match found {
+                Ok(dir) if dir.is_dir() => then(s, dir, cx),
+                Ok(dir) => s.show_toast(
+                    format!("The folder it came from is gone: {}", dir.display()),
+                    cx,
+                ),
+                Err(e) => s.show_toast(e.to_string(), cx),
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
+    /// Remote: Rebuild container. The dev container is replaced by a fresh
+    /// one (image built again, postCreateCommand run again) for the same
+    /// folder; from a local folder with a devcontainer.json, its container.
+    pub fn rebuild_container(&mut self, cx: &mut Context<Self>) {
+        if self.in_devcontainer() {
+            self.with_devcontainer_source(|s, dir, cx| s.start_devcontainer(dir, true, cx), cx);
+        } else if self.has_devcontainer() {
+            let dir = self.project_dir.clone();
+            self.start_devcontainer(dir, true, cx);
+        } else {
+            self.show_toast("There's no dev container here to rebuild.", cx);
+        }
+    }
+
+    /// Remote: Reopen locally. Back to the folder on this computer that the
+    /// dev container was started from.
+    pub fn reopen_locally(&mut self, cx: &mut Context<Self>) {
+        if !self.in_devcontainer() {
+            return self.show_toast("This project isn't in a dev container.", cx);
+        }
+        self.with_devcontainer_source(
+            |s, dir, cx| {
+                s.remote_failed = None;
+                s.remote_lost = None;
+                s.add_project(dir, cx);
+            },
+            cx,
+        );
+    }
+
+    /// Start (or with `fresh`, rebuild) the dev container for `dir` and open
+    /// its folder there, saying each step in the status bar.
+    fn start_devcontainer(&mut self, dir: std::path::PathBuf, fresh: bool, cx: &mut Context<Self>) {
         self.remote_menu = None;
         let placeholder = crate::remote::Target::Container {
             name: "dev container".into(),
             user: None,
         };
-        self.remote_busy = Some((placeholder, "Starting the dev container…".into()));
+        let first = if fresh {
+            "Rebuilding the dev container…"
+        } else {
+            "Starting the dev container…"
+        };
+        self.remote_busy = Some((placeholder, first.into()));
         let (tx, rx) = async_channel::unbounded::<String>();
         let task = cx.background_spawn(async move {
-            crate::remote::devcontainer_up(&dir, &|m: &str| {
+            crate::remote::devcontainer_up(&dir, fresh, &|m: &str| {
                 let _ = tx.send_blocking(m.to_string());
             })
         });

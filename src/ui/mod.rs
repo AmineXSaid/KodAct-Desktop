@@ -76,6 +76,8 @@ gpui::actions!(
         ConnectWsl,
         ConnectHost,
         ReopenInContainer,
+        RebuildContainer,
+        ReopenLocally,
         AttachContainer,
         CloseRemote,
         ToggleTerminal,

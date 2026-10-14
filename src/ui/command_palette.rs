@@ -346,13 +346,13 @@ impl CommandPalette {
                 Box::new(ConnectWsl),
             ),
             act(
-                "Connect to Host (SSH)",
+                "Connect to SSH host",
                 "icons/server.svg",
                 None,
                 Box::new(ConnectHost),
             ),
             act(
-                "Attach to Running Container",
+                "Attach to running container",
                 "icons/box.svg",
                 None,
                 Box::new(AttachContainer),
@@ -360,10 +360,26 @@ impl CommandPalette {
         ]);
         if s.has_devcontainer() {
             out.push(act(
-                "Reopen in Container",
+                "Reopen in container",
                 "icons/box.svg",
                 None,
                 Box::new(ReopenInContainer),
+            ));
+        }
+        if s.in_devcontainer() || s.has_devcontainer() {
+            out.push(act(
+                "Rebuild container",
+                "icons/rotate-ccw.svg",
+                None,
+                Box::new(RebuildContainer),
+            ));
+        }
+        if s.in_devcontainer() {
+            out.push(act(
+                "Reopen folder locally",
+                "icons/laptop.svg",
+                None,
+                Box::new(ReopenLocally),
             ));
         }
         if s.current_remote().is_some() {

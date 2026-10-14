@@ -943,7 +943,33 @@ fn docker(args: &[&str]) -> Result<String, Error> {
 /// Reopen a local folder in its dev container: build or pull the image,
 /// start (or reuse) a container with the folder mounted, run
 /// `postCreateCommand` once, and return the remote project.
-pub fn devcontainer_up(dir: &Path, progress: &dyn Fn(&str)) -> Result<Remote, Error> {
+/// A container Forge started from a folder's devcontainer.json.
+pub fn is_devcontainer(target: &Target) -> bool {
+    matches!(target, Target::Container { name, .. } if name.starts_with("forge-dc-"))
+}
+
+/// The folder on this computer a dev container was started from (its
+/// `forge.devcontainer` label).
+pub fn devcontainer_source(name: &str) -> Result<PathBuf, Error> {
+    let dir = docker(&[
+        "inspect",
+        "--format",
+        "{{index .Config.Labels \"forge.devcontainer\"}}",
+        name,
+    ])?;
+    let dir = dir.trim();
+    if dir.is_empty() || dir == "<no value>" {
+        return Err(Error::Other(format!(
+            "{name} doesn't say which folder it came from."
+        )));
+    }
+    Ok(PathBuf::from(dir))
+}
+
+/// Start (or reuse) the dev container for `dir`. `fresh` rebuilds it: the
+/// old container goes, a Dockerfile is built again without cache, and the
+/// image is pulled again; postCreateCommand runs again.
+pub fn devcontainer_up(dir: &Path, fresh: bool, progress: &dyn Fn(&str)) -> Result<Remote, Error> {
     let (file, dc) = find_devcontainer(dir).ok_or_else(|| {
         Error::Other("This folder has no .devcontainer/devcontainer.json.".into())
     })?;
@@ -978,6 +1004,10 @@ pub fn devcontainer_up(dir: &Path, progress: &dyn Fn(&str)) -> Result<Remote, Er
         path: workspace.clone(),
     };
 
+    if fresh {
+        progress("Removing the old container…");
+        let _ = docker(&["rm", "-f", &name]);
+    }
     // Already there: start it if stopped.
     let existing = docker(&[
         "ps",
@@ -1007,14 +1037,14 @@ pub fn devcontainer_up(dir: &Path, progress: &dyn Fn(&str)) -> Result<Remote, Er
             let ctx = folder.join(dc.context.as_deref().unwrap_or("."));
             let tag = format!("forge-dc-{slug}-{key}:latest");
             progress("Building the dev container image…");
-            docker(&[
-                "build",
-                "-t",
-                &tag,
-                "-f",
-                &folder.join(df).to_string_lossy(),
-                &ctx.to_string_lossy(),
-            ])?;
+            let file = folder.join(df).to_string_lossy().into_owned();
+            let ctx = ctx.to_string_lossy().into_owned();
+            let mut args = vec!["build", "-t", &tag, "-f", &file];
+            if fresh {
+                args.push("--no-cache");
+            }
+            args.push(&ctx);
+            docker(&args)?;
             tag
         }
         (None, None) => {
@@ -1921,7 +1951,8 @@ mod tests {
             std::fs::write(dir.join("hello.txt"), "from the host\n").unwrap();
             let said = std::sync::Mutex::new(vec![]);
             let remote =
-                devcontainer_up(&dir, &|m| said.lock().unwrap().push(m.to_string())).unwrap();
+                devcontainer_up(&dir, false, &|m| said.lock().unwrap().push(m.to_string()))
+                    .unwrap();
             assert_eq!(
                 remote.path,
                 if case == "image" {
@@ -1947,7 +1978,7 @@ mod tests {
                 assert_eq!(String::from_utf8_lossy(&out).trim(), "made");
             }
             // Reopening finds the same container.
-            let again = devcontainer_up(&dir, &|_| {}).unwrap();
+            let again = devcontainer_up(&dir, false, &|_| {}).unwrap();
             assert_eq!(again, remote);
             let (asks, _) = modetest(&remote.target, "acceptEdits", &model, &Extra::default());
             assert_eq!(
@@ -1960,6 +1991,73 @@ mod tests {
             std::fs::remove_dir_all(&dir).ok();
             eprintln!("dev container ({case}) ok: {}", remote.target.label());
         }
+    }
+
+    /// Rebuild and the way back: a dev container knows its folder, and a
+    /// fresh start replaces it (its changes gone, postCreateCommand run
+    /// again, the folder still mounted). Needs `FORGE_TEST_IMAGE`.
+    #[test]
+    #[ignore]
+    fn real_devcontainer_rebuild() {
+        let image = std::env::var("FORGE_TEST_IMAGE").expect("FORGE_TEST_IMAGE");
+        let dir = std::env::temp_dir().join(format!("forge-dc-rebuild-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join(".devcontainer")).unwrap();
+        std::fs::write(
+            dir.join(".devcontainer/devcontainer.json"),
+            r#"{ "build": { "dockerfile": "Dockerfile" },
+                "postCreateCommand": "echo ran >> /tmp/post-create" }"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join(".devcontainer/Dockerfile"),
+            format!("FROM {image}\n"),
+        )
+        .unwrap();
+        std::fs::write(dir.join("hello.txt"), "from the host\n").unwrap();
+        let sh = |r: &Remote, script: &str| {
+            let out = run(
+                &r.target,
+                script,
+                &[],
+                b"",
+                Duration::from_secs(20),
+                &Extra::default(),
+            )
+            .unwrap();
+            String::from_utf8_lossy(&out).trim().to_string()
+        };
+        let first = devcontainer_up(&dir, false, &|_| {}).unwrap();
+        assert!(is_devcontainer(&first.target));
+        let Target::Container { name, .. } = &first.target else {
+            unreachable!()
+        };
+        assert_eq!(devcontainer_source(name).unwrap(), dir);
+        sh(&first, "touch /tmp/changed-inside");
+        let said = std::sync::Mutex::new(vec![]);
+        let again =
+            devcontainer_up(&dir, true, &|m| said.lock().unwrap().push(m.to_string())).unwrap();
+        assert_eq!(again, first, "same name and folder");
+        let said = said.lock().unwrap().clone();
+        assert!(said.iter().any(|m| m.contains("Removing")), "{said:?}");
+        assert!(said.iter().any(|m| m.contains("Building")), "{said:?}");
+        assert_eq!(
+            sh(
+                &again,
+                "[ -e /tmp/changed-inside ] && echo kept || echo gone"
+            ),
+            "gone"
+        );
+        assert_eq!(
+            sh(&again, "wc -l < /tmp/post-create"),
+            "1",
+            "postCreateCommand ran on the new one"
+        );
+        assert_eq!(
+            sh(&again, &format!("cat {}/hello.txt", again.path)),
+            "from the host"
+        );
+        let _ = docker(&["rm", "-f", name]);
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

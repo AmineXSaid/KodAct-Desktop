@@ -842,6 +842,12 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &ReopenInContainer, _, cx| {
                 this.state.update(cx, |s, cx| s.reopen_in_container(cx))
             }))
+            .on_action(cx.listener(|this, _: &RebuildContainer, _, cx| {
+                this.state.update(cx, |s, cx| s.rebuild_container(cx))
+            }))
+            .on_action(cx.listener(|this, _: &ReopenLocally, _, cx| {
+                this.state.update(cx, |s, cx| s.reopen_locally(cx))
+            }))
             .on_action(cx.listener(|this, _: &CloseRemote, _, cx| {
                 this.state.update(cx, |s, cx| s.close_remote(cx))
             }))

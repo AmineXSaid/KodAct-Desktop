@@ -27,6 +27,8 @@ enum Act {
     Page(RemotePage),
     Project(usize),
     Reopen,
+    Rebuild,
+    Local,
     Close,
     Browse(Target, String),
     Open(Remote),
@@ -193,8 +195,24 @@ impl RemotePicker {
                     )
                     .more(),
                 ];
+                // In a dev container: rebuild it, or go back to the folder.
+                if s.in_devcontainer() {
+                    actions.push(Row::new(
+                        "icons/rotate-ccw.svg",
+                        "Rebuild container",
+                        Act::Rebuild,
+                    ));
+                    actions.push(Row::new(
+                        "icons/laptop.svg",
+                        "Reopen folder locally",
+                        Act::Local,
+                    ));
+                }
                 let mut reopen = Row::new("icons/box.svg", "Reopen in container", Act::Reopen);
-                if !s.has_devcontainer() {
+                if s.in_devcontainer() {
+                    reopen.act = None;
+                    reopen.caption = Some("You're in it".into());
+                } else if !s.has_devcontainer() {
                     reopen.act = None;
                     reopen.caption = Some(if connected {
                         "Open the local folder first".into()
@@ -363,6 +381,8 @@ impl RemotePicker {
                 }
             }
             Act::Reopen => s.reopen_in_container(cx),
+            Act::Rebuild => s.rebuild_container(cx),
+            Act::Local => s.reopen_locally(cx),
             Act::Close => s.close_remote(cx),
             Act::Browse(t, p) => s.browse_remote(t, p, cx),
             Act::Open(r) => s.open_remote_folder(r, cx),

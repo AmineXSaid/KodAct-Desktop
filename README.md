@@ -66,18 +66,23 @@ table in step.
 
 ## Remote development
 
-As in VS Code, the chip at the bottom left of the sidebar says where the
-project lives, and its menu (Ctrl/⌘ Alt O, or the command palette) moves it:
-**Connect to WSL** (a distro), **Connect to Host** (SSH, from
-`~/.ssh/config` or `user@host`), **Reopen in Container** (the folder's
-`.devcontainer`) and **Attach to Running Container**, then a folder there.
+As in VS Code, the indicator at the left of the status bar says where the
+project lives (plug icon: this computer; amber while connecting; filled when
+connected; red when it failed), and its menu (Ctrl/⌘ Alt O, or the command
+palette) moves it: recent folders, **Connect to SSH host** (from
+`~/.ssh/config` or `user@host`), **Connect to WSL** (a distro), **Reopen in
+container** (the folder's `.devcontainer`) and **Attach to running
+container**, then a folder there. Inside a dev container, **Rebuild
+container** starts it afresh (image rebuilt, `postCreateCommand` run again)
+and **Reopen folder locally** goes back to the folder it came from.
 A chat in a remote project runs its ForgeCLI on that machine, so its tools,
 shell, git and files are the remote's; this app stays the UI
 (`src/remote.rs`).
 
-- The first connection installs ForgeCLI there (`~/.forge/bin`), from the
-  static Linux build the installer puts in `bin\linux-x86_64\forge`
-  (or `FORGE_REMOTE_CLI`).
+- The first connection installs ForgeCLI there (`~/.forge/bin`, or
+  `remote.serverInstallDir`), from the static Linux build the installer puts
+  in `bin\linux-x86_64\forge` (or `FORGE_REMOTE_CLI`), and checks the copy
+  by SHA-256.
 - SSH uses the system's OpenSSH client with your keys or agent (no
   passwords). A host seen for the first time shows its key fingerprint and
   waits for "Trust".
