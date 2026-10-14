@@ -435,12 +435,7 @@ pub fn menu(
         RemotePage::Ssh => {
             body = body
                 .child(back(t, &state, "SSH hosts", RemotePage::Root))
-                .child(
-                    div()
-                        .px(t.space.md)
-                        .py(t.space.xs)
-                        .child(Input::new(host)),
-                )
+                .child(div().px(t.space.md).py(t.space.xs).child(Input::new(host)))
                 .child(note(
                     t,
                     "Type user@host (or a Host from ~/.ssh/config) and press Enter.",
