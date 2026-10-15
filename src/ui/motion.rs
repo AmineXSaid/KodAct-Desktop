@@ -151,3 +151,67 @@ pub fn edge_draw(
     })
     .into_any_element()
 }
+
+/// A window or a page arriving: it fades in while it rises `rise` pixels into
+/// place. Keyed by `id`, so a new page (another Settings section) plays it
+/// again while the old one is simply gone: the content swaps, the frame stays.
+pub fn rise_in<E: gpui::Styled + gpui::IntoElement + 'static>(
+    el: E,
+    id: impl Into<gpui::ElementId>,
+    rise: f32,
+    t: &crate::theme::Theme,
+) -> gpui::AnyElement {
+    use gpui::{prelude::*, px, AnimationExt as _};
+    el.with_animation(id, once(t.size.pop_in_ms), move |d, k| {
+        d.opacity(k).mt(px(rise * (1. - k)))
+    })
+    .into_any_element()
+}
+
+/// The reverse of `rise_in`: a window going away fades out while it sinks
+/// `sink` pixels, over the same beat it took to arrive.
+pub fn sink_out<E: gpui::Styled + gpui::IntoElement + 'static>(
+    el: E,
+    id: impl Into<gpui::ElementId>,
+    sink: f32,
+    t: &crate::theme::Theme,
+) -> gpui::AnyElement {
+    use gpui::{prelude::*, px, AnimationExt as _};
+    let ms = if reduced_motion() {
+        1
+    } else {
+        t.size.pop_in_ms
+    };
+    let anim =
+        gpui::Animation::new(std::time::Duration::from_millis(ms)).with_easing(gpui::ease_in_out);
+    el.with_animation(id, anim, move |d, k| d.opacity(1. - k).mt(px(sink * k)))
+        .into_any_element()
+}
+
+/// How long `sink_out` takes, for whoever removes the window after it.
+pub fn out_ms(t: &crate::theme::Theme) -> u64 {
+    if reduced_motion() {
+        1
+    } else {
+        t.size.pop_in_ms
+    }
+}
+
+/// A backdrop dimming in (`out` false) or clearing (`out` true) under a window.
+pub fn scrim<E: gpui::Styled + gpui::IntoElement + 'static>(
+    el: E,
+    id: impl Into<gpui::ElementId>,
+    color: gpui::Hsla,
+    out: bool,
+    t: &crate::theme::Theme,
+) -> gpui::AnyElement {
+    use gpui::{prelude::*, AnimationExt as _};
+    el.with_animation(id, once(t.size.pop_in_ms), move |d, k| {
+        let k = if out { 1. - k } else { k };
+        d.bg(gpui::Hsla {
+            a: color.a * k,
+            ..color
+        })
+    })
+    .into_any_element()
+}

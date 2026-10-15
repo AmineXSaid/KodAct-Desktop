@@ -50,6 +50,8 @@ pub struct Settings {
     commands: Entity<super::slash_commands::SlashCommands>,
     focus: gpui::FocusHandle,
     was_open: bool,
+    /// Closing: the window is fading out, and goes when that is done.
+    closing: bool,
     agents: Entity<super::agents_editor::AgentsEditor>,
     skills: Entity<super::skills_editor::SkillsEditor>,
     hooks: Entity<super::hooks_editor::HooksEditor>,
@@ -214,6 +216,7 @@ impl Settings {
             commands,
             focus: cx.focus_handle(),
             was_open: false,
+            closing: false,
             agents,
             skills,
             hooks,
@@ -257,11 +260,27 @@ impl Settings {
         }
     }
 
+    /// The window sinks and fades out, then goes.
     fn close(&mut self, cx: &mut Context<Self>) {
-        self.state.update(cx, |s, cx| {
-            s.settings_open = false;
-            cx.notify();
-        });
+        if self.closing {
+            return;
+        }
+        self.closing = true;
+        cx.notify();
+        let ms = super::motion::out_ms(cx.theme());
+        cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(ms))
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.closing = false;
+                this.state.update(cx, |s, cx| {
+                    s.settings_open = false;
+                    cx.notify();
+                });
+            });
+        })
+        .detach();
     }
 
     fn set(input: &Entity<InputState>, v: &str, window: &mut Window, cx: &mut Context<Self>) {
@@ -581,6 +600,71 @@ impl Settings {
             }))
     }
 
+    /// A group of settings: a quiet heading over a white card whose rows
+    /// are split by hairlines.
+    fn card(t: &Theme, heading: &str, rows: Vec<AnyElement>) -> gpui::Div {
+        let mut card = div()
+            .flex()
+            .flex_col()
+            .bg(t.colors.surface)
+            .border_1()
+            .border_color(t.colors.border)
+            .rounded(t.radius.card);
+        for (i, row) in rows.into_iter().enumerate() {
+            card = card.child(
+                div()
+                    .when(i > 0, |d| d.border_t_1().border_color(t.colors.border))
+                    .child(row),
+            );
+        }
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(8.))
+            .child(
+                div()
+                    .px(px(4.))
+                    .text_size(t.text.caption)
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(t.colors.text_muted)
+                    .child(heading.to_string()),
+            )
+            .child(card)
+    }
+
+    /// One setting: its name and hint, and its control beside them, or
+    /// under them when `stacked`.
+    fn row(
+        t: &Theme,
+        title: &str,
+        hint: Option<&str>,
+        control: AnyElement,
+        stacked: bool,
+    ) -> AnyElement {
+        let label = Self::section(t, title, hint).flex_1().min_w_0();
+        if stacked {
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(10.))
+                .px(px(16.))
+                .py(px(14.))
+                .child(label)
+                .child(control)
+                .into_any_element()
+        } else {
+            div()
+                .flex()
+                .items_center()
+                .gap(px(16.))
+                .px(px(16.))
+                .py(px(14.))
+                .child(label)
+                .child(div().flex_none().child(control))
+                .into_any_element()
+        }
+    }
+
     fn field(t: &Theme, label: &str, input: &Entity<InputState>) -> gpui::Div {
         div()
             .flex()
@@ -727,88 +811,101 @@ impl Settings {
             );
         }
         let state = self.state.clone();
-        let bypass_row = div()
-            .flex()
-            .items_center()
-            .gap(px(10.))
-            .child(div().flex_1().text_size(t.text.caption).text_color(t.colors.text_muted).line_height(relative(1.4)).child("Lets Forge run any tool without asking. Only for throwaway folders or a sandbox."))
-            .child(if bypass {
-                Self::chip(t, "bypass", "Allowed · turn off", false).on_click(move |_, _, cx| state.update(cx, |s, cx| {
+        let bypass_row = div().child(if bypass {
+            Self::chip(t, "bypass", "Allowed · turn off", false).on_click(move |_, _, cx| {
+                state.update(cx, |s, cx| {
                     s.bypass_allowed = false;
                     if s.default_mode == crate::modes::ModeId::Bypass {
                         s.default_mode = crate::modes::ModeId::Manual;
                     }
                     cx.notify();
-                }))
-            } else {
-                Self::chip(t, "bypass", "Allow", false).on_click(move |_, _, cx| state.update(cx, |s, cx| {
+                })
+            })
+        } else {
+            Self::chip(t, "bypass", "Allow", false).on_click(move |_, _, cx| {
+                state.update(cx, |s, cx| {
                     s.bypass_allowed = true;
                     cx.notify();
-                }))
-            });
-        let browser_row = div()
-            .flex()
-            .items_center()
-            .gap(px(10.))
-            .child(div().flex_1().min_w_0().text_size(t.text.caption).text_color(t.colors.text_muted).line_height(relative(1.4)).child("Lets Forge's agents drive the browser in the side panel: open pages and tabs, click, type, read, run scripts, take screenshots. You watch it live. Each step asks first."))
-            .child(
-                Self::chip(t, "browser", if browser { "On · turn off" } else { "Turn on" }, browser)
-                    .flex_none()
-                    .on_click(|_, window, cx| window.dispatch_action(Box::new(super::ToggleBrowser), cx)),
-            );
-        div()
-            .flex()
-            .flex_col()
-            .gap(px(22.))
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(8.))
-                    .child(Self::section(
+                })
+            })
+        });
+        let browser_row = div().child(
+            Self::chip(
+                t,
+                "browser",
+                if browser { "On · turn off" } else { "Turn on" },
+                browser,
+            )
+            .flex_none()
+            .on_click(|_, window, cx| window.dispatch_action(Box::new(super::ToggleBrowser), cx)),
+        );
+        // Each group is one white card with hairline rows: the setting on
+        // the left, its control on the right (or below, when it is a row of
+        // choices), and the cards rise in one after another.
+        let groups: [(&str, Vec<AnyElement>); 3] = [
+            (
+                "You",
+                vec![
+                    Self::row(
                         t,
                         "Your name",
                         Some("What Forge calls you on the new-chat screen."),
-                    ))
-                    .child(name_row),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(8.))
-                    .child(Self::section(t, "Appearance", None))
-                    .child(appearance),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(8.))
-                    .child(Self::section(
+                        name_row.into_any_element(),
+                        true,
+                    ),
+                    Self::row(
                         t,
-                        "New chats start in",
-                        Some("Shift+Tab changes the mode inside a chat."),
-                    ))
-                    .child(modes),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(8.))
-                    .child(Self::section(t, "Bypass permissions", None))
-                    .child(bypass_row),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(8.))
-                    .child(Self::section(t, "Web browser", None))
-                    .child(browser_row),
-            )
-            .into_any_element()
+                        "Appearance",
+                        Some("Light or dark, for the whole app."),
+                        appearance.into_any_element(),
+                        false,
+                    ),
+                ],
+            ),
+            (
+                "Chats",
+                vec![Self::row(
+                    t,
+                    "New chats start in",
+                    Some("Shift+Tab changes the mode inside a chat."),
+                    modes.into_any_element(),
+                    true,
+                )],
+            ),
+            (
+                "Safety",
+                vec![
+                    Self::row(
+                        t,
+                        "Bypass permissions",
+                        Some("Lets Forge run any tool without asking. Only for throwaway folders or a sandbox."),
+                        bypass_row.into_any_element(),
+                        false,
+                    ),
+                    Self::row(
+                        t,
+                        "Web browser",
+                        Some("Lets Forge's agents drive the browser in the side panel: open pages and tabs, click, type, read, run scripts, take screenshots. You watch it live. Each step asks first."),
+                        browser_row.into_any_element(),
+                        false,
+                    ),
+                ],
+            ),
+        ];
+        let mut page = div().flex().flex_col().gap(px(20.)).child(Self::section(
+            t,
+            "General",
+            Some("Who you are, how Forge looks, and how new chats start."),
+        ));
+        for (i, (heading, rows)) in groups.into_iter().enumerate() {
+            page = page.child(super::motion::row_in_full(
+                Self::card(t, heading, rows),
+                ("general-card-in", i),
+                i,
+                t,
+            ));
+        }
+        page.into_any_element()
     }
 
     fn models_list(&self, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
@@ -1417,22 +1514,35 @@ impl Render for Settings {
                 div()
                     .id("settings-body")
                     .flex_1()
+                    .bg(t.colors.canvas)
+                    .rounded_tr(PANEL_RADIUS - t.size.hairline)
+                    .rounded_br(PANEL_RADIUS - t.size.hairline)
                     .min_w_0()
                     .overflow_y_scroll()
                     .pl(px(28.))
                     .pr(px(52.))
                     .py(px(24.))
-                    .child(body),
+                    // A new section arrives: it fades in and rises into place
+                    // while the frame and the nav stay where they are.
+                    .child(super::motion::rise_in(
+                        div().child(body),
+                        SharedString::from(format!(
+                            "settings-page-{tab:?}-{}-{}",
+                            self.form,
+                            self.state.read(cx).diagnosis.is_some()
+                        )),
+                        6.,
+                        &t,
+                    )),
             )
             .child(close);
-        div()
+        let scrim = div()
             .id("settings-scrim")
             .absolute()
             .inset_0()
             .flex()
             .items_center()
             .justify_center()
-            .bg(t.extra.scrim)
             .track_focus(&self.focus)
             // Esc arrives as the workspace's StopReply while Settings has
             // focus, or as a key when one of its text boxes does.
@@ -1450,7 +1560,22 @@ impl Render for Settings {
                 gpui::MouseButton::Left,
                 cx.listener(|this, _, _, cx| this.close(cx)),
             )
-            .child(panel.on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation()))
-            .into_any_element()
+            .child({
+                let panel =
+                    panel.on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation());
+                // The window rises and fades in as it opens; it sinks and
+                // fades out as it closes, and the backdrop clears with it.
+                if self.closing {
+                    super::motion::sink_out(panel, "settings-out", 8., &t)
+                } else {
+                    super::motion::rise_in(panel, "settings-in", 12., &t)
+                }
+            });
+        let scrim_id = if self.closing {
+            "settings-scrim-out"
+        } else {
+            "settings-scrim-in"
+        };
+        super::motion::scrim(scrim, scrim_id, t.extra.scrim, self.closing, &t)
     }
 }
