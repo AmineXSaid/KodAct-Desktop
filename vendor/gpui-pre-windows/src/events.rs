@@ -965,6 +965,14 @@ impl WindowsWindowInner {
             return None;
         }
 
+        // Windows asks for the hit test before it reports the move that got
+        // the cursor here, so the app's idea of where the mouse is lags one
+        // move behind. Coming off the title bar onto one of its buttons, that
+        // stale position still answers "drag": the click becomes a window
+        // move and never reaches the button. Tell the app where the cursor is
+        // first, so the answer is for this point. (Forge Desktop patch.)
+        self.update_mouse_for_hit_test(handle, lparam);
+
         let callback = self.state.callbacks.hit_test_window_control.take();
         let drag_area = if let Some(mut callback) = callback {
             let area = callback();
@@ -1026,6 +1034,43 @@ impl WindowsWindowInner {
         }
 
         drag_area
+    }
+
+    /// A mouse move to the hit test's point, unless a button is held (a drag
+    /// or a window move under way keeps its own events) or the point is
+    /// outside the window's client area.
+    fn update_mouse_for_hit_test(&self, handle: HWND, lparam: LPARAM) {
+        let held = [VK_LBUTTON, VK_RBUTTON, VK_MBUTTON]
+            .iter()
+            .any(|k| unsafe { GetKeyState(k.0 as i32) } < 0);
+        if held {
+            return;
+        }
+        let mut cursor_point = POINT {
+            x: lparam.signed_loword().into(),
+            y: lparam.signed_hiword().into(),
+        };
+        unsafe { ScreenToClient(handle, &mut cursor_point).ok().log_err() };
+        let mut rect = RECT::default();
+        if unsafe { GetClientRect(handle, &mut rect) }.is_err()
+            || cursor_point.x < rect.left
+            || cursor_point.y < rect.top
+            || cursor_point.x >= rect.right
+            || cursor_point.y >= rect.bottom
+        {
+            return;
+        }
+        // Re-entrant hit tests (while an input callback runs) leave it alone.
+        let Some(mut func) = self.state.callbacks.input.take() else {
+            return;
+        };
+        let scale_factor = self.state.scale_factor.get();
+        func(PlatformInput::MouseMove(MouseMoveEvent {
+            position: logical_point(cursor_point.x as f32, cursor_point.y as f32, scale_factor),
+            pressed_button: None,
+            modifiers: current_modifiers(),
+        }));
+        self.state.callbacks.input.set(Some(func));
     }
 
     fn handle_nc_mouse_move_msg(&self, handle: HWND, lparam: LPARAM) -> Option<isize> {
