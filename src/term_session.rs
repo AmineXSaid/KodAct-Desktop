@@ -435,6 +435,7 @@ mod tests {
 
     /// A real shell on a real pseudo-terminal: typed input runs, output and
     /// colours land in the grid, the size reaches the shell, and it ends.
+    #[cfg(unix)]
     #[test]
     fn a_shell_runs_in_the_grid() {
         let dir = std::env::temp_dir();
@@ -459,6 +460,33 @@ mod tests {
         while !s.exited.load(Ordering::SeqCst) {
             assert!(start.elapsed() < Duration::from_secs(10), "the shell ends");
             std::thread::sleep(Duration::from_millis(30));
+        }
+    }
+
+    /// Windows: cmd.exe on ConPTY, as the dock runs it. Typed input runs,
+    /// output lands in the grid, a resize reaches the console, and it ends.
+    #[cfg(windows)]
+    #[test]
+    fn a_windows_shell_runs_in_the_grid() {
+        let shell = Shell {
+            label: "Command Prompt".into(),
+            program: "cmd.exe".into(),
+            args: vec![],
+            cwd: Some(std::env::temp_dir()),
+        };
+        let s = Session::start(shell, Size { cols: 80, rows: 24 }, 1000, || {}).unwrap();
+        s.input(b"echo hello-forge-win\r");
+        assert!(wait(&s, "hello-forge-win"), "output reached the grid");
+        s.resize(Size {
+            cols: 100,
+            rows: 30,
+        });
+        assert_eq!(s.term.lock().columns(), 100);
+        s.input(b"exit\r");
+        let start = Instant::now();
+        while !s.exited.load(Ordering::SeqCst) {
+            assert!(start.elapsed() < Duration::from_secs(15), "the shell ends");
+            std::thread::sleep(Duration::from_millis(50));
         }
     }
 
@@ -493,11 +521,14 @@ mod tests {
             [_, _, _, _, _, script, ..] => script.clone(),
             other => panic!("{other:?}"),
         };
-        let out = std::process::Command::new("sh")
-            .args(["-c", &script.replace("exec sh -l", "pwd"), "sh", "/tmp"])
-            .output()
-            .unwrap();
-        assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "/tmp");
+        // Run by a local sh where there is one (the remote's own shell runs it).
+        if cfg!(unix) {
+            let out = std::process::Command::new("sh")
+                .args(["-c", &script.replace("exec sh -l", "pwd"), "sh", "/tmp"])
+                .output()
+                .unwrap();
+            assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "/tmp");
+        }
         let dc = remote_shell(
             &Remote {
                 target: Target::Container {

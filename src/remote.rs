@@ -1419,6 +1419,8 @@ mod tests {
         assert_eq!(plain.label(), "Container: web");
     }
 
+    // Runs the remote's scripts with a local sh: Unix only.
+    #[cfg(unix)]
     #[test]
     fn quoting_survives_the_shell() {
         for s in [
@@ -1496,6 +1498,8 @@ mod tests {
     /// The boot script, run by a real `sh`: the environment arrives on
     /// stdin (escapes and all), `~/` is expanded, the folder is entered, and
     /// the program gets the rest of stdin. Nothing secret is in argv.
+    // Runs the remote's scripts with a local sh: Unix only.
+    #[cfg(unix)]
     #[test]
     fn boot_reads_the_environment_from_stdin() {
         let home = std::env::temp_dir().join(format!("forge-boot-{}", std::process::id()));
@@ -1528,6 +1532,8 @@ mod tests {
         std::fs::remove_dir_all(home).ok();
     }
 
+    // Runs the remote's scripts with a local sh: Unix only.
+    #[cfg(unix)]
     #[test]
     fn a_missing_folder_says_so() {
         let out = Command::new("sh")
@@ -1650,6 +1656,8 @@ mod tests {
     }
 
     /// The archive unpacks with the system's `tar`, long paths included.
+    // Runs the remote's scripts with a local sh: Unix only.
+    #[cfg(unix)]
     #[test]
     fn tar_unpacks() {
         let dir = std::env::temp_dir().join(format!("forge-tar-{}", std::process::id()));

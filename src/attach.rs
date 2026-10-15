@@ -928,14 +928,14 @@ mod tests {
         let me = std::env::current_exe().unwrap();
         let p = me.display().to_string();
         assert_eq!(paths_in(&p), vec![me.clone()]);
-        assert_eq!(
-            paths_in(&format!("file://{}", p.replace(' ', "%20"))),
-            if cfg!(windows) {
-                vec![]
-            } else {
-                vec![me.clone()]
-            }
+        // A file URL as the platform writes it: file:///C:/x, file:///home/x.
+        let url = format!(
+            "file:///{}",
+            p.replace('\\', "/")
+                .trim_start_matches('/')
+                .replace(' ', "%20")
         );
+        assert_eq!(paths_in(&url), vec![me.clone()]);
         assert!(paths_in("just some words").is_empty());
         assert!(paths_in(&format!("{p}\nand words")).is_empty());
         assert!(paths_in("relative/path.rs").is_empty());
