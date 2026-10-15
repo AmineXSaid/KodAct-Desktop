@@ -20,6 +20,8 @@ pub struct Task {
     pub kind: ToolKind,
     pub status: ToolStatus,
     pub label: String,
+    /// An agent you stopped (its status reads Declined, like a denial).
+    pub stopped: bool,
 }
 
 /// The tasks of the newest turn, in order.
@@ -44,6 +46,8 @@ pub fn tasks(messages: &[Message]) -> Vec<Task> {
                         kind: t.kind,
                         status: t.status,
                         label,
+                        stopped: t.status == ToolStatus::Declined
+                            && t.output.starts_with(crate::state::AGENT_STOPPED),
                     });
                 }
             }
@@ -76,6 +80,32 @@ pub(super) fn status_icon(status: ToolStatus, t: &Theme, key: SharedString) -> A
     }
 }
 
+/// The pill's words: what is running, else what each task came to.
+fn summary(all: usize, running: usize, failed: usize, denied: usize, stopped: usize) -> String {
+    let noun = if all == 1 { "task" } else { "tasks" };
+    if running > 0 {
+        return format!("{running} running · {all} {noun}");
+    }
+    let done = all - failed - denied - stopped;
+    let mut parts = vec![];
+    if done > 0 {
+        parts.push(format!("{done} done"));
+    }
+    if failed > 0 {
+        parts.push(format!("{failed} failed"));
+    }
+    if denied > 0 {
+        parts.push(format!("{denied} denied"));
+    }
+    if stopped > 0 {
+        parts.push(format!("{stopped} stopped"));
+    }
+    if parts.len() == 1 && done > 0 {
+        return format!("{done} {noun} done");
+    }
+    parts.join(" · ")
+}
+
 /// The pill, and the list when open; None when the turn has no tasks.
 pub fn render(t: &Theme, state: &Entity<AppState>, cx: &gpui::App) -> Option<AnyElement> {
     let s = state.read(cx);
@@ -95,19 +125,14 @@ pub fn render(t: &Theme, state: &Entity<AppState>, cx: &gpui::App) -> Option<Any
     let open = s.tasks_open;
     let hover = t.colors.hover;
     let toggle = state.clone();
-    let summary = match (running, failed) {
-        (0, 0) => format!(
-            "{} {} done",
-            list.len(),
-            if list.len() == 1 { "task" } else { "tasks" }
-        ),
-        (0, f) => format!("{} tasks · {f} failed", list.len()),
-        (r, _) => format!(
-            "{r} running · {} {}",
-            list.len(),
-            if list.len() == 1 { "task" } else { "tasks" }
-        ),
-    };
+    // Declined is not done: you said no, or you stopped the agent.
+    let stopped = list.iter().filter(|t| t.stopped).count();
+    let denied = list
+        .iter()
+        .filter(|t| t.status == ToolStatus::Declined)
+        .count()
+        - stopped;
+    let summary = summary(list.len(), running, failed, denied, stopped);
     let pill = div()
         .id("tasks-pill")
         .flex()
@@ -213,6 +238,15 @@ pub fn render(t: &Theme, state: &Entity<AppState>, cx: &gpui::App) -> Option<Any
 mod tests {
     use super::*;
     use crate::state::{Review, ToolCall};
+
+    #[test]
+    fn the_pill_says_what_each_task_came_to() {
+        assert_eq!(summary(3, 2, 0, 0, 0), "2 running · 3 tasks");
+        assert_eq!(summary(1, 0, 0, 0, 0), "1 task done");
+        assert_eq!(summary(2, 0, 0, 1, 0), "1 done · 1 denied");
+        assert_eq!(summary(3, 0, 0, 0, 3), "3 stopped");
+        assert_eq!(summary(4, 0, 1, 0, 1), "2 done · 1 failed · 1 stopped");
+    }
 
     fn tool(kind: ToolKind, target: &str, status: ToolStatus) -> Block {
         Block::Tool(ToolCall {

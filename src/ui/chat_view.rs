@@ -152,172 +152,6 @@ impl ChatView {
     }
 }
 
-/// A seed that stays the same for one turn, so its idle verb changes only
-/// with time.
-fn s_turn_seed(c: &Chat) -> usize {
-    c.messages
-        .iter()
-        .filter(|m| matches!(m, Message::User { .. }))
-        .count()
-}
-
-/// The verbs the working line types while no step is named (the
-/// extension's list).
-const VERBS: &[&str] = &[
-    "Accomplishing",
-    "Actioning",
-    "Actualizing",
-    "Baking",
-    "Booping",
-    "Brewing",
-    "Calculating",
-    "Cerebrating",
-    "Channelling",
-    "Churning",
-    "Coalescing",
-    "Cogitating",
-    "Computing",
-    "Combobulating",
-    "Concocting",
-    "Considering",
-    "Contemplating",
-    "Cooking",
-    "Crafting",
-    "Creating",
-    "Crunching",
-    "Deciphering",
-    "Deliberating",
-    "Determining",
-    "Discombobulating",
-    "Doing",
-    "Effecting",
-    "Elucidating",
-    "Enchanting",
-    "Envisioning",
-    "Finagling",
-    "Flibbertigibbeting",
-    "Forging",
-    "Forming",
-    "Frolicking",
-    "Generating",
-    "Germinating",
-    "Hammering",
-    "Hatching",
-    "Herding",
-    "Honking",
-    "Ideating",
-    "Imagining",
-    "Incubating",
-    "Inferring",
-    "Manifesting",
-    "Marinating",
-    "Meandering",
-    "Moseying",
-    "Mulling",
-    "Mustering",
-    "Musing",
-    "Noodling",
-    "Percolating",
-    "Perusing",
-    "Philosophising",
-    "Pontificating",
-    "Pondering",
-    "Processing",
-    "Puttering",
-    "Puzzling",
-    "Reticulating",
-    "Ruminating",
-    "Scheming",
-    "Schlepping",
-    "Shimmying",
-    "Simmering",
-    "Smooshing",
-    "Spelunking",
-    "Spinning",
-    "Stewing",
-    "Sussing",
-    "Synthesizing",
-    "Thinking",
-    "Tinkering",
-    "Transmuting",
-    "Unfurling",
-    "Unravelling",
-    "Vibing",
-    "Wandering",
-    "Whirring",
-    "Wibbling",
-    "Working",
-    "Wrangling",
-];
-
-/// A small deterministic hash, for the verb picks and the typing's noise.
-fn mix_hash(a: u64) -> u64 {
-    let mut x = a.wrapping_mul(0x9E37_79B9_7F4A_7C15);
-    x ^= x >> 31;
-    x = x.wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    x ^ (x >> 29)
-}
-
-/// Which verb is showing `ms` into the wait, and since when: it changes
-/// after 2s, then 3s, then 5s, then every 5s.
-fn verb_at(seed: usize, ms: u64) -> (usize, u64) {
-    let mut start = 0;
-    let mut k = 0u64;
-    for step in [2000u64, 3000, 5000]
-        .into_iter()
-        .chain(std::iter::repeat(5000))
-    {
-        if ms < start + step {
-            break;
-        }
-        start += step;
-        k += 1;
-    }
-    let pick = |k: u64| (mix_hash(seed as u64 * 7919 + k) % VERBS.len() as u64) as usize;
-    (pick(k), start)
-}
-
-/// The typed verb `ms` into the wait: a sweep crosses it a character every
-/// 40ms, each cell going `▌`, then noise (`.`, `_` or the letter), then the
-/// letter; cells it hasn't reached still show the last verb.
-fn typed_verb(seed: usize, ms: u64) -> String {
-    let width = VERBS.iter().map(|v| v.len()).max().unwrap_or(0) + 3;
-    let pad = |v: &str| format!("{v:<width$}");
-    let (verb, since) = verb_at(seed, ms);
-    let target: Vec<char> = pad(&format!("{}...", VERBS[verb])).chars().collect();
-    let previous: Vec<char> = if since == 0 {
-        vec![' '; width]
-    } else {
-        let (prev, _) = verb_at(seed, since - 1);
-        pad(&format!("{}...", VERBS[prev])).chars().collect()
-    };
-    let d = ((ms - since) / 40) as i64;
-    (0..width)
-        .map(|p| {
-            let phase = d - p as i64;
-            let want = target[p];
-            if want == ' ' && phase >= 0 {
-                return ' ';
-            }
-            match phase {
-                i64::MIN..=-1 => previous[p],
-                0 => '▌',
-                1 | 2 => match mix_hash(
-                    (seed as u64) << 20 ^ (since << 8) ^ (p as u64 * 4 + phase as u64),
-                ) % 3
-                {
-                    0 => '.',
-                    1 => '_',
-                    _ => want,
-                },
-                _ => want,
-            }
-        })
-        .collect::<String>()
-        .trim_end()
-        .to_string()
-}
-
 /// What the reply is doing right now, as the working line says it; `None`
 /// while it waits on you (the permission card says that).
 fn step_label(c: &Chat) -> Option<String> {
@@ -332,6 +166,16 @@ fn step_label(c: &Chat) -> Option<String> {
             s.to_string()
         }
     };
+    let agents = blocks
+        .iter()
+        .filter(|b| {
+            matches!(b, Block::Tool(t) if t.status == ToolStatus::Running
+                && crate::state::is_agent_tool(&t.target))
+        })
+        .count();
+    if agents > 1 {
+        return Some(format!("{agents} agents working"));
+    }
     let label = match blocks.last() {
         Some(Block::Permission {
             verdict: Verdict::Pending,
@@ -362,8 +206,11 @@ fn step_label(c: &Chat) -> Option<String> {
             },
         },
         Some(Block::Thinking { .. }) => "Thinking".into(),
-        // No step to name: the line types a verb instead.
-        _ => String::new(),
+        Some(Block::Text(_)) => "Writing".into(),
+        // A step just ended, or a question was answered: the model reads
+        // the result and picks what comes next.
+        Some(_) => "Reading the result".into(),
+        None => "Waiting for the model".into(),
     };
     Some(label)
 }
@@ -515,13 +362,9 @@ impl Render for ChatView {
                     message::render(m, &ctx, &t)
                 }
                 None => match &step {
-                    Some((label, since)) => working_line(
-                        &t,
-                        label,
-                        *since,
-                        s_turn_seed(chat),
-                        writing_doc(chat, s.mode),
-                    ),
+                    Some((label, since)) => {
+                        working_line(&t, label, *since, writing_doc(chat, s.mode))
+                    }
                     None => div().into_any_element(),
                 },
             };
@@ -617,13 +460,11 @@ fn shimmer(label: &str, sweep: f32, t: &crate::theme::Theme) -> StyledText {
 
 /// Forge's working line: the logo turning (or, while Forge writes a plan or
 /// a document, a hand writing with a quill), then what the reply is doing and
-/// for how long, or, between steps, a verb typing itself in. A light
-/// sweeps across the words.
+/// for how long. A light sweeps across the words.
 fn working_line(
     t: &crate::theme::Theme,
     label: &str,
     since: Instant,
-    seed: usize,
     writing: bool,
 ) -> gpui::AnyElement {
     let theme = t.clone();
@@ -642,46 +483,20 @@ fn working_line(
         .child(div().font_weight(FontWeight::MEDIUM).with_animation(
             SharedString::from(format!("working-{label}")),
             Animation::new(Duration::from_millis(2200)).repeat(),
-            move |d, delta| {
-                let words = if text.is_empty() {
-                    typed_verb(seed, since.elapsed().as_millis() as u64)
-                } else {
-                    text.clone()
-                };
-                d.child(shimmer(&words, -0.3 + delta * 1.6, &theme))
-            },
+            move |d, delta| d.child(shimmer(&text, -0.3 + delta * 1.6, &theme)),
         ))
-        .when(!label.is_empty(), |d| {
-            d.child(
-                div()
-                    .ml(px(4.))
-                    .text_color(t.colors.text_subtle)
-                    .child(elapsed(since.elapsed().as_secs())),
-            )
-        })
+        .child(
+            div()
+                .ml(px(4.))
+                .text_color(t.colors.text_subtle)
+                .child(elapsed(since.elapsed().as_secs())),
+        )
         .into_any_element()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{elapsed, typed_verb, verb_at};
-
-    #[test]
-    fn the_verb_changes_on_the_extensions_cadence() {
-        assert_eq!(verb_at(1, 0).1, 0);
-        assert_eq!(verb_at(1, 1999).1, 0);
-        assert_eq!(verb_at(1, 2000).1, 2000);
-        assert_eq!(verb_at(1, 5000).1, 5000);
-        assert_eq!(verb_at(1, 10_000).1, 10_000);
-        assert_eq!(verb_at(1, 15_500).1, 15_000);
-    }
-
-    #[test]
-    fn the_verb_types_itself_in() {
-        assert_eq!(typed_verb(3, 0), "▌");
-        let done = typed_verb(3, 1900);
-        assert!(done.ends_with("...") && !done.contains('▌'), "{done}");
-    }
+    use super::elapsed;
 
     #[test]
     fn elapsed_reads_short() {

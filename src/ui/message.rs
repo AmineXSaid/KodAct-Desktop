@@ -462,7 +462,10 @@ fn assistant(blocks: &[Block], cx: &ItemContext, t: &Theme) -> AnyElement {
     let mut b = 0;
     while b < blocks.len() {
         let run = same_answers(blocks, b);
-        if run > 1 {
+        if denied_call(blocks, b) {
+            // The call never ran: its denial below says all there is.
+            b += 1;
+        } else if run > 1 {
             rows.push(answer_group(&blocks[b..b + run], blocks, b, cx, t));
             b += run;
         } else {
@@ -477,6 +480,14 @@ fn assistant(blocks: &[Block], cx: &ItemContext, t: &Theme) -> AnyElement {
         .when(cx.first_in_turn, |d| d.child(turn_header(cx, t)))
         .children(rows)
         .into_any_element()
+}
+
+/// `b` is a call whose question was denied (the question names it as its row).
+fn denied_call(blocks: &[Block], b: usize) -> bool {
+    matches!(blocks[b], Block::Tool(_))
+        && blocks[b + 1..].iter().any(|blk| {
+            matches!(blk, Block::Permission { verdict: Verdict::Denied, info, .. } if info.row == Some(b))
+        })
 }
 
 /// How many answered questions from `b` on say the same (same question,
@@ -1405,7 +1416,7 @@ fn permission(
 
 #[cfg(test)]
 mod tests {
-    use super::same_answers;
+    use super::{denied_call, same_answers};
     use crate::state::{Block, PermInfo, Verdict};
 
     fn ask(title: &str, verdict: Verdict) -> Block {
@@ -1435,5 +1446,21 @@ mod tests {
         // Text and unanswered questions are not answers.
         assert_eq!(same_answers(&blocks, 5), 0);
         assert_eq!(same_answers(&blocks, 6), 0);
+    }
+
+    #[test]
+    fn a_denied_call_shows_only_its_denial() {
+        let call = Block::Tool(crate::backend::tool_call(
+            "Bash",
+            &serde_json::json!({ "command": "rm -rf target" }),
+        ));
+        let mut denied = ask("Run a command", Verdict::Denied);
+        if let Block::Permission { info, .. } = &mut denied {
+            info.row = Some(0);
+        }
+        let blocks = [call.clone(), denied, call];
+        assert!(denied_call(&blocks, 0));
+        assert!(!denied_call(&blocks, 1));
+        assert!(!denied_call(&blocks, 2));
     }
 }
