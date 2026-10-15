@@ -705,6 +705,9 @@ struct Live {
     generation: u64,
     /// Started with Expert's output style, which is fixed for a process.
     expert: bool,
+    /// Relays carrying the remote's ports back here (WSL, containers):
+    /// they end with the session.
+    _relays: Vec<std::sync::Arc<crate::relay::Relay>>,
 }
 
 /// A permission question Forge is waiting on, and where its card is.
@@ -1095,6 +1098,11 @@ pub struct AppState {
     pub terminal_share: f32,
     /// The dock's left edge is being dragged.
     pub terminal_resizing: bool,
+    /// Each remote chat's model route in the proxy (`model_proxy.rs`), by
+    /// chat: replaced when its session restarts.
+    model_routes: std::collections::HashMap<usize, String>,
+    /// A relay that couldn't listen on the remote says why here.
+    relay_errors: async_channel::Sender<String>,
     /// SSH prompts waiting on you (a password, a key's passphrase); the
     /// first one shows as a dialog (`ui/askpass.rs`).
     pub askpass: std::collections::VecDeque<crate::askpass::Request>,
@@ -1270,6 +1278,8 @@ impl AppState {
             terminal_resizing: false,
             agent_feed: None,
             askpass: Default::default(),
+            model_routes: Default::default(),
+            relay_errors: async_channel::unbounded().0,
             diagram_code: Default::default(),
             loading: true,
             load: None,
@@ -1347,6 +1357,17 @@ impl AppState {
             }
         }));
         self.load_endpoints(false, cx);
+        // A relay that couldn't start: the toast says why.
+        let (relay_tx, relay_rx) = async_channel::unbounded::<String>();
+        self.relay_errors = relay_tx;
+        cx.spawn(async move |this, cx| {
+            while let Ok(m) = relay_rx.recv().await {
+                if this.update(cx, |s, cx| s.show_toast(m, cx)).is_err() {
+                    break;
+                }
+            }
+        })
+        .detach();
         // SSH passwords and passphrases are asked here, not in a terminal.
         let (ask_tx, ask_rx) = async_channel::unbounded::<crate::askpass::Request>();
         if crate::askpass::start(ask_tx).is_ok() {
@@ -4136,6 +4157,8 @@ impl AppState {
         // an MCP server) on the browser in the side panel. A remote agent
         // reaches them over HTTP, forwarded back to this machine.
         let mut extra = crate::remote::Extra::default();
+        // Ports on the remote that lead back here: (there, here).
+        let mut backs: Vec<(u16, u16)> = vec![];
         if self.browser && remote.is_some() {
             if let Some((port, token)) = self.ensure_browser_http(cx) {
                 let there = crate::remote::forward_port(&session_id, port);
@@ -4143,7 +4166,7 @@ impl AppState {
                     "--mcp-config".to_string(),
                     crate::remote::browser_mcp_config(there, &token),
                 ]);
-                extra.reverse.push(format!("{there}:127.0.0.1:{port}"));
+                backs.push((there, port));
             }
         } else if self.browser {
             if let (Some(cdp), Ok(exe)) = (self.ensure_web(cx), std::env::current_exe()) {
@@ -4171,6 +4194,7 @@ impl AppState {
         } else {
             self.resuming.remove(&id);
         }
+        let mut relays: Vec<std::sync::Arc<crate::relay::Relay>> = vec![];
         let session = if let Some(remote) = &remote {
             let ready = self
                 .remote_ready
@@ -4183,17 +4207,54 @@ impl AppState {
                     *dir = ready.plugin.clone();
                 }
             }
+            // Model calls go out from this computer: the remote gets the
+            // proxy's address (a port there leading back here) and a
+            // placeholder key; the real key, address and headers stay here.
+            if let Ok(port) = crate::model_proxy::start() {
+                if let Some(old) = self.model_routes.remove(&id) {
+                    crate::model_proxy::remove(&old);
+                }
+                let (route, remote_env) = proxied_env(&launch.env);
+                let token = crate::model_proxy::add(route);
+                let there = crate::remote::forward_port(&session_id, port);
+                backs.push((there, port));
+                let base = format!("http://127.0.0.1:{there}/p/{token}");
+                launch.env = remote_env
+                    .into_iter()
+                    .map(|(k, v)| {
+                        let v = if k.ends_with("BASE_URL") {
+                            base.clone()
+                        } else {
+                            v
+                        };
+                        (k, v)
+                    })
+                    .collect();
+                self.model_routes.insert(id, token);
+            }
+            // SSH carries them as -R forwards; WSL and containers through
+            // ForgeCLI's relay beside the session.
             if let crate::remote::Target::Ssh(host) = &remote.target {
                 extra.accept_new_host_key = self.trusted_hosts.contains(host);
-                // An endpoint on this computer (a local model server) is
-                // forwarded to the same port on the host.
-                for (k, v) in launch.env.iter_mut() {
-                    if k.ends_with("BASE_URL") {
-                        if let Some(port) = crate::remote::local_port(v) {
-                            let there = crate::remote::forward_port(&session_id, port);
-                            extra.reverse.push(format!("{there}:127.0.0.1:{port}"));
-                            *v = crate::remote::with_port(v, there);
+                for (there, here) in &backs {
+                    extra.reverse.push(format!("{there}:127.0.0.1:{here}"));
+                }
+            } else {
+                for (there, here) in &backs {
+                    match crate::relay::start(&remote.target, &ready.forge, *there, *here, &extra) {
+                        Ok(r) => {
+                            let r = std::sync::Arc::new(r);
+                            relays.push(r.clone());
+                            // Say so if it can't listen there (off this thread).
+                            let label = remote.target.label();
+                            let tx = self.relay_errors.clone();
+                            std::thread::spawn(move || {
+                                if let Err(e) = r.wait_ready(std::time::Duration::from_secs(30)) {
+                                    let _ = tx.send_blocking(format!("{label}: {e}"));
+                                }
+                            });
                         }
+                        Err(e) => return Err(e.to_string()),
                     }
                 }
             }
@@ -4230,6 +4291,7 @@ impl AppState {
                 profile,
                 generation,
                 expert: self.mode == ModeId::Expert,
+                _relays: relays,
             },
         );
         Ok(())
@@ -5863,6 +5925,45 @@ fn saved_projects() -> Vec<std::path::PathBuf> {
         .unwrap_or_default()
 }
 
+/// A remote ForgeCLI's model settings with the secrets taken out: the route
+/// the proxy keeps here (the real base URL, the key as the wire sends it,
+/// custom headers), and the environment the remote gets instead (the key a
+/// placeholder, no custom headers; the base URL is replaced by the caller).
+fn proxied_env(env: &[(String, String)]) -> (crate::model_proxy::Route, Vec<(String, String)>) {
+    let get = |k: &str| env.iter().find(|(n, _)| n == k).map(|(_, v)| v.clone());
+    let mut headers = vec![];
+    let base = if let Some(b) = get("FORGE_BASE_URL") {
+        if let Some(t) = get("FORGE_API_KEY") {
+            headers.push(("x-api-key".to_string(), t.clone()));
+            headers.push(("authorization".to_string(), format!("Bearer {t}")));
+        }
+        b
+    } else {
+        if let Some(t) = get("FORGE_OPENAI_API_KEY") {
+            headers.push(("authorization".to_string(), format!("Bearer {t}")));
+        }
+        get("FORGE_OPENAI_BASE_URL").unwrap_or_default()
+    };
+    if let Some(lines) = get("FORGE_CUSTOM_HEADERS") {
+        for l in lines.lines() {
+            if let Some((k, v)) = l.split_once(':') {
+                headers.push((k.trim().to_string(), v.trim().to_string()));
+            }
+        }
+    }
+    let remote = env
+        .iter()
+        .filter(|(k, _)| k != "FORGE_CUSTOM_HEADERS")
+        .map(|(k, v)| match k.as_str() {
+            "FORGE_API_KEY" | "FORGE_AUTH_TOKEN" | "FORGE_OPENAI_API_KEY" => {
+                (k.clone(), crate::model_proxy::PLACEHOLDER_KEY.to_string())
+            }
+            _ => (k.clone(), v.clone()),
+        })
+        .collect();
+    (crate::model_proxy::Route { base, headers }, remote)
+}
+
 /// Keep the folders you opened for next time (blocking: off the UI thread).
 fn save_projects(paths: Vec<std::path::PathBuf>) {
     let Some(f) = projects_file() else { return };
@@ -6167,6 +6268,50 @@ fn mock_chats() -> Vec<Chat> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn remote_sessions_get_no_secrets() {
+        let env: Vec<(String, String)> = [
+            ("FORGE_BASE_URL", "https://api.example.com"),
+            ("FORGE_API_KEY", "sk-real"),
+            ("FORGE_AUTH_TOKEN", "sk-real"),
+            ("FORGE_CUSTOM_HEADERS", "x-team: blue\nx-org: 7"),
+            ("FORGE_CONTEXT_WINDOW", "200000"),
+        ]
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+        let (route, remote) = super::proxied_env(&env);
+        assert_eq!(route.base, "https://api.example.com");
+        assert!(route
+            .headers
+            .contains(&("x-api-key".into(), "sk-real".into())));
+        assert!(route
+            .headers
+            .contains(&("authorization".into(), "Bearer sk-real".into())));
+        assert!(route.headers.contains(&("x-team".into(), "blue".into())));
+        let flat = format!("{remote:?}");
+        assert!(
+            !flat.contains("sk-real") && !flat.contains("x-team"),
+            "{flat}"
+        );
+        assert!(remote.contains(&("FORGE_CONTEXT_WINDOW".into(), "200000".into())));
+        // OpenAI-compatible: the bearer only.
+        let env = vec![
+            (
+                "FORGE_OPENAI_BASE_URL".to_string(),
+                "http://h/v1".to_string(),
+            ),
+            ("FORGE_OPENAI_API_KEY".to_string(), "k".to_string()),
+        ];
+        let (route, remote) = super::proxied_env(&env);
+        assert_eq!(route.base, "http://h/v1");
+        assert_eq!(
+            route.headers,
+            [("authorization".to_string(), "Bearer k".to_string())]
+        );
+        assert_eq!(remote[1].1, crate::model_proxy::PLACEHOLDER_KEY);
+    }
     use super::*;
 
     #[test]

@@ -88,11 +88,11 @@ shell, git and files are the remote's; this app stays the UI
   a localhost socket with a random token), kept in memory for this run and
   never saved; a wrong one says so, and Try again asks again. A host seen
   for the first time shows its key fingerprint and waits for "Trust".
-- API keys reach the remote on the process's stdin, never on a command line.
-  A model server on this computer (`localhost`) and the side panel's browser
-  are forwarded to SSH hosts (`ssh -R`); for WSL and containers they need
-  localhost to be shared (WSL's mirrored networking, a container on the host
-  network).
+- Model calls leave from this computer: a remote ForgeCLI gets a local
+  proxy's address (a port there leading back here: `ssh -R`, or ForgeCLI's
+  relay for WSL and containers) and a placeholder key. The real key,
+  address and headers never reach the remote (`src/model_proxy.rs`). The
+  side panel's browser comes back the same way.
 - If the connection drops, the next message reconnects and resumes the
   conversation.
 

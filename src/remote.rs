@@ -1296,6 +1296,7 @@ pub fn tar(files: &[(&str, &[u8])]) -> Vec<u8> {
 
 /// The port of a URL on this computer (`localhost`, `127.0.0.1`, `[::1]`),
 /// to forward to a remote; None for any other host.
+#[cfg(test)]
 pub fn local_port(url: &str) -> Option<u16> {
     let rest = url.split_once("://")?.1;
     let authority = rest.split('/').next()?;
@@ -1320,6 +1321,7 @@ pub fn forward_port(session: &str, local: u16) -> u16 {
 }
 
 /// `url` with its port replaced (the forward's end on the remote).
+#[cfg(test)]
 pub fn with_port(url: &str, port: u16) -> String {
     let Some((scheme, rest)) = url.split_once("://") else {
         return url.to_string();

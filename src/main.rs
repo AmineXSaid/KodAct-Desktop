@@ -54,6 +54,8 @@ mod web_view;
 // Forge's own settings file, and SSH passwords asked in the app.
 mod app_settings;
 mod askpass;
+mod model_proxy;
+mod relay;
 
 use gpui::component::TitleBar;
 use gpui::{
