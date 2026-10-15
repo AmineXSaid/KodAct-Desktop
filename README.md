@@ -36,7 +36,7 @@ table in step.
 
 | Keys | Does |
 | --- | --- |
-| Ctrl/⌘ K | Search or run a command |
+| Ctrl/⌘ K | Search files, chats and commands |
 | F1 | Keyboard shortcuts |
 | Ctrl/⌘ , | Settings |
 | Ctrl/⌘ Shift L | Light or dark theme |
@@ -63,6 +63,17 @@ table in step.
 | Shift Tab | Next permission mode |
 | Esc | Stop the reply, or close what's open |
 | Enter / Shift Enter | Send / new line |
+
+### Search
+
+Ctrl/⌘ K (or the search field in the title bar) finds commands, chats, models
+and modes, the project's files, and what was said in your chats, as you
+type. Results stay grouped, best group first. Start with `>` for commands
+only, `#` for chats, `@` for files. A document (Markdown, a diagram, an
+Office file, a PDF) opens in the side panel; any other file in the app your
+system opens it with; a chat found by what was said opens with the find bar
+on the words. With nothing found, Enter asks Forge in a new chat. Arrows,
+Page Up/Down and Ctrl+Home/End move through the list.
 
 ### Modes
 

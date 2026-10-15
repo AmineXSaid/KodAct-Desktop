@@ -49,6 +49,10 @@ impl FindBar {
     /// Show the bar and put the cursor in it, the last query selected for typing over.
     pub fn open(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.state.update(cx, |s, cx| s.open_find(cx));
+        // The palette found something in this chat: look for it.
+        if let Some(q) = self.state.update(cx, |s, _| s.find_request.take()) {
+            self.query.update(cx, |i, cx| i.set_value(q, window, cx));
+        }
         let q = self.query.read(cx).value().to_string();
         if !q.is_empty() {
             // Reopened: run the last query again on the conversation as it is now.

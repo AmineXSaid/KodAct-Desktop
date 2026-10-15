@@ -344,14 +344,36 @@ impl Workspace {
                         .min_w(px(240.))
                         .rounded(t.radius.button)
                         .bg(t.colors.hover)
+                        .border_1()
+                        .border_color(t.colors.hover)
                         .cursor_pointer()
                         .text_color(t.colors.text_subtle)
+                        .hover({
+                            let (edge, ink, fill) =
+                                (t.colors.border, t.colors.text_muted, t.colors.surface);
+                            move |st| st.bg(fill).border_color(edge).text_color(ink)
+                        })
+                        .when(s.palette_open, |d| {
+                            d.border_color(t.colors.primary)
+                                .text_color(t.colors.text_muted)
+                        })
+                        .tooltip(|window, cx| {
+                            gpui::component::tooltip::Tooltip::new(
+                                "Files, chats, commands, models. Start with > # or @ to narrow it",
+                            )
+                            .build(window, cx)
+                        })
                         .child(icon(
                             "icons/search.svg",
                             t.size.icon_sm,
                             t.colors.text_subtle,
                         ))
-                        .child(div().flex_1().child("Search or run a command"))
+                        .child(
+                            div()
+                                .flex_1()
+                                .whitespace_nowrap()
+                                .child("Search files, chats and commands"),
+                        )
                         .child(kbd(&t, shortcut("K")))
                         .on_click(cx.listener(|_, _, window, cx| {
                             window.dispatch_action(Box::new(ToggleCommandPalette), cx)

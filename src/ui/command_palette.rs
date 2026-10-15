@@ -1,10 +1,13 @@
-//! The command palette (Ctrl/⌘K): every action, every chat, every model and
-//! mode, fuzzy-filtered as you type. Arrow keys move, Enter runs, Esc closes.
+//! The command palette (Ctrl/⌘K): every action, chat, model and mode, the
+//! project's files and what was said in your chats, fuzzy-filtered as you
+//! type. A first `>` keeps to commands, `#` to chats, `@` to files. Arrow
+//! keys (and Page Up/Down, Home/End) move, Enter runs, Esc closes; with
+//! nothing found, Enter asks Forge.
 
 use gpui::component::input::{Input, InputEvent, InputState};
 use gpui::{
     div, font, prelude::*, px, Action, AnimationExt, Context, Entity, FontWeight, IntoElement,
-    KeyDownEvent, Render, SharedString, StyledText, Subscription, TextRun, Window,
+    KeyDownEvent, Render, ScrollHandle, SharedString, StyledText, Subscription, TextRun, Window,
 };
 
 use super::*;
@@ -17,13 +20,43 @@ enum Target {
     Chat(usize),
     Model(String),
     Mode(ModeId),
+    /// A project file, by its path in the project.
+    File(String),
+    /// A chat where the query was said: it opens with the find bar on it.
+    Message(usize, String),
+    /// Nothing matched: a new chat asking this.
+    Ask(String),
 }
+
+/// What a query looks through, from its first character.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Scope {
+    All,
+    Commands,
+    Chats,
+    Files,
+}
+
+fn scope(query: &str) -> (Scope, &str) {
+    match query.chars().next() {
+        Some('>') => (Scope::Commands, &query[1..]),
+        Some('#') => (Scope::Chats, &query[1..]),
+        Some('@') => (Scope::Files, &query[1..]),
+        _ => (Scope::All, query),
+    }
+}
+
+/// How many files and chats-said-it rows a query shows at most.
+const MAX_FILES: usize = 20;
+const MAX_SAID: usize = 8;
 
 struct Command {
     label: SharedString,
     group: &'static str,
     icon: &'static str,
     hint: Option<SharedString>,
+    /// A quieter second part: a file's folder, the words a chat said.
+    detail: Option<SharedString>,
     target: Target,
 }
 
@@ -31,6 +64,9 @@ pub struct CommandPalette {
     state: Entity<AppState>,
     query: Entity<InputState>,
     selected: usize,
+    scroll: ScrollHandle,
+    /// The selection moved by key: scroll it into view on the next frame.
+    reveal: bool,
     _subs: Vec<Subscription>,
 }
 
@@ -72,14 +108,15 @@ pub fn fuzzy(query: &str, text: &str) -> Option<(i32, Vec<usize>)> {
 
 impl CommandPalette {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let query =
-            cx.new(|cx| InputState::new(window, cx).placeholder("Search commands, chats, models…"));
+        let query = cx
+            .new(|cx| InputState::new(window, cx).placeholder("Search files, chats and commands…"));
         let subs = vec![
             cx.observe(&state, |_, _, cx| cx.notify()),
             // Enter is handled once, in the key capture below.
             cx.subscribe_in(&query, window, |this, _, ev: &InputEvent, _, cx| {
                 if matches!(ev, InputEvent::Change) {
                     this.selected = 0;
+                    this.reveal = true;
                     cx.notify();
                 }
             }),
@@ -88,12 +125,17 @@ impl CommandPalette {
             state,
             query,
             selected: 0,
+            scroll: ScrollHandle::new(),
+            reveal: false,
             _subs: subs,
         }
     }
 
     pub fn open(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.selected = 0;
+        self.reveal = true;
+        // The files `@` completes from are the ones the palette finds.
+        self.state.update(cx, |s, cx| s.ensure_completions(cx));
         self.query.update(cx, |q, cx| {
             q.set_value("", window, cx);
             q.focus(window, cx);
@@ -111,6 +153,7 @@ impl CommandPalette {
             group: "Actions",
             icon,
             hint,
+            detail: None,
             target: Target::Action(action),
         };
         let mut out = vec![
@@ -530,6 +573,7 @@ impl CommandPalette {
                 group: "Modes",
                 icon: m.icon(),
                 hint: (m == s.mode).then(|| "current".into()),
+                detail: None,
                 target: Target::Mode(m),
             });
         }
@@ -544,6 +588,7 @@ impl CommandPalette {
                 group: "Models",
                 icon: "icons/cpu.svg",
                 hint,
+                detail: None,
                 target: Target::Model(row.name),
             });
         }
@@ -553,6 +598,7 @@ impl CommandPalette {
                 group: "Chats",
                 icon: "icons/message-square.svg",
                 hint: Some(c.group().into()),
+                detail: None,
                 target: Target::Chat(c.id),
             });
         }
@@ -560,21 +606,62 @@ impl CommandPalette {
     }
 
     /// The commands that match, best first, with their matched positions.
+    /// While typing, each group stays together, the group with the best
+    /// match first.
     fn matches(&self, cx: &gpui::App) -> Vec<(Command, Vec<usize>)> {
-        let q = self.query.read(cx).value().to_string();
-        let mut scored: Vec<(i32, usize, Command, Vec<usize>)> = self
+        let raw = self.query.read(cx).value().to_string();
+        let (scope, q) = scope(&raw);
+        let q = q.trim();
+        let mut scored: Vec<(i32, Command, Vec<usize>)> = self
             .commands(cx)
             .into_iter()
-            .enumerate()
-            .filter_map(|(order, c)| fuzzy(&q, &c.label).map(|(score, pos)| (score, order, c, pos)))
+            .filter(|c| match scope {
+                Scope::All => true,
+                Scope::Commands => c.group != "Chats",
+                Scope::Chats => c.group == "Chats",
+                Scope::Files => false,
+            })
+            .filter_map(|c| fuzzy(q, &c.label).map(|(score, pos)| (score, c, pos)))
             .collect();
-        if !q.trim().is_empty() {
-            scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+        if !q.is_empty() {
+            let s = self.state.read(cx);
+            if matches!(scope, Scope::All | Scope::Files) {
+                scored.extend(file_matches(s, q, cx.theme()));
+            }
+            if matches!(scope, Scope::All | Scope::Chats) && q.chars().count() >= 2 {
+                scored.extend(said_matches(s, q));
+            }
+            // Groups together, best group first; within one, best first.
+            let mut best: std::collections::HashMap<&'static str, i32> = Default::default();
+            for (score, c, _) in &scored {
+                let b = best.entry(c.group).or_insert(i32::MIN);
+                *b = (*b).max(*score);
+            }
+            scored.sort_by(|a, b| {
+                best[b.1.group]
+                    .cmp(&best[a.1.group])
+                    .then(a.1.group.cmp(b.1.group))
+                    .then(b.0.cmp(&a.0))
+            });
+            if scored.is_empty() && scope != Scope::Files {
+                scored.push((
+                    0,
+                    Command {
+                        label: format!("Ask Forge: {q}").into(),
+                        group: "Nothing matches",
+                        icon: "icons/message-square.svg",
+                        hint: Some("Enter".into()),
+                        detail: Some("Starts a new chat".into()),
+                        target: Target::Ask(q.to_string()),
+                    },
+                    vec![],
+                ));
+            }
         }
         scored
             .into_iter()
-            .map(|(_, _, c, p)| (c, p))
-            .take(50)
+            .map(|(_, c, p)| (c, p))
+            .take(80)
             .collect()
     }
 
@@ -598,8 +685,129 @@ impl CommandPalette {
             Target::Chat(id) => self.state.update(cx, |s, cx| s.open_chat(id, cx)),
             Target::Model(name) => self.state.update(cx, |s, cx| s.select_profile(&name, cx)),
             Target::Mode(m) => self.state.update(cx, |s, cx| s.set_mode(m, cx)),
+            Target::File(rel) => self.state.update(cx, |s, cx| s.open_project_file(rel, cx)),
+            Target::Message(id, q) => {
+                self.state.update(cx, |s, cx| {
+                    s.open_chat(id, cx);
+                    s.find_request = Some(q);
+                });
+                window.dispatch_action(Box::new(ToggleFind), cx);
+            }
+            Target::Ask(q) => self.state.update(cx, |s, cx| {
+                s.new_chat(cx);
+                s.send(q, cx);
+            }),
         }
     }
+}
+
+/// The project's files that match, best first: on the file's name when it
+/// can, else on its whole path.
+fn file_matches(s: &AppState, q: &str, t: &Theme) -> Vec<(i32, Command, Vec<usize>)> {
+    let Some(files) = s.project_file_index() else {
+        return vec![];
+    };
+    let mut out: Vec<(i32, Command, Vec<usize>)> = files
+        .iter()
+        .filter(|f| !f.ends_with('/'))
+        .filter_map(|f| {
+            let (dir, name) = f.rsplit_once('/').map_or(("", f.as_str()), |(d, n)| (d, n));
+            let lower = q.to_lowercase();
+            let (score, pos) = match fuzzy(q, name).filter(|(_, pos)| runs(pos) <= 3) {
+                // A hit on the name beats one on the path; the name holding
+                // the query whole beats both.
+                Some((score, pos)) => {
+                    let whole = name.to_lowercase().contains(&lower);
+                    (score + 40 + if whole { 60 } else { 0 }, pos)
+                }
+                // On the path, only the query whole: letters strewn over a
+                // long path match almost anything.
+                None if f.to_lowercase().contains(&lower) => (fuzzy(q, f)?.0, vec![]),
+                None => return None,
+            };
+            Some((
+                score,
+                Command {
+                    label: name.to_string().into(),
+                    group: "Files",
+                    icon: super::file_icon::for_name(name, false, t).0,
+                    hint: None,
+                    detail: (!dir.is_empty()).then(|| dir.to_string().into()),
+                    target: Target::File(f.clone()),
+                },
+                pos,
+            ))
+        })
+        .collect();
+    out.sort_by_key(|f| std::cmp::Reverse(f.0));
+    out.truncate(MAX_FILES);
+    out
+}
+
+/// How many separate runs the matched positions make: "readme" in
+/// "README.md" is one, strewn over "forge-ui-upgrade.md" it is several.
+fn runs(positions: &[usize]) -> usize {
+    positions.windows(2).filter(|w| w[1] != w[0] + 1).count() + usize::from(!positions.is_empty())
+}
+
+/// Chats where `q` was said (your words or Forge's), newest chat first, with
+/// the words around it.
+fn said_matches(s: &AppState, q: &str) -> Vec<(i32, Command, Vec<usize>)> {
+    let needle = q.to_lowercase();
+    let mut out = vec![];
+    for c in &s.chats {
+        let said = c.messages.iter().rev().find_map(|m| match m {
+            crate::state::Message::User { text, .. } => snippet(text, &needle),
+            crate::state::Message::Assistant { blocks } => blocks.iter().find_map(|b| match b {
+                crate::state::Block::Text(t) => snippet(t, &needle),
+                _ => None,
+            }),
+            _ => None,
+        });
+        if let Some(said) = said {
+            out.push((
+                // Below a title that matches; the newest chat first.
+                -1 - out.len() as i32,
+                Command {
+                    label: c.title.clone(),
+                    group: "Said in chats",
+                    icon: "icons/message-square.svg",
+                    hint: None,
+                    detail: Some(said.into()),
+                    target: Target::Message(c.id, q.to_string()),
+                },
+                vec![],
+            ));
+            if out.len() == MAX_SAID {
+                break;
+            }
+        }
+    }
+    out
+}
+
+/// The words around the first place `text` holds `needle` (lower-case), on
+/// one line.
+fn snippet(text: &str, needle: &str) -> Option<String> {
+    let at = text.to_lowercase().find(needle)?;
+    // Back to characters: lower-casing can change byte lengths.
+    let lower = text.to_lowercase();
+    let at = lower[..at].chars().count();
+    let chars: Vec<char> = text.chars().collect();
+    let from = at.saturating_sub(24);
+    let to = (at + needle.chars().count() + 48).min(chars.len());
+    let mut out: String = chars[from..to]
+        .iter()
+        .map(|c| if c.is_whitespace() { ' ' } else { *c })
+        .collect();
+    out = out.split_whitespace().collect::<Vec<_>>().join(" ");
+    if from > 0 {
+        out.insert(0, '…');
+    }
+    if to < chars.len() {
+        out.push('…');
+    }
+    Some(out)
 }
 
 pub fn highlighted(label: &SharedString, positions: &[usize], t: &Theme) -> StyledText {
@@ -645,11 +853,16 @@ impl Render for CommandPalette {
             .flex_col()
             .max_h(px(380.))
             .overflow_y_scroll()
+            .track_scroll(&self.scroll)
             .p(t.space.xs);
         let mut last_group = "";
+        // The list's children: group labels as well as rows.
+        let mut child = 0;
+        let mut selected_child = 0;
         for (i, (cmd, pos)) in matches.iter().enumerate() {
             if cmd.group != last_group {
                 last_group = cmd.group;
+                child += 1;
                 list = list.child(
                     div()
                         .px(t.space.md)
@@ -662,6 +875,10 @@ impl Render for CommandPalette {
                 );
             }
             let on = i == selected;
+            if on {
+                selected_child = child;
+            }
+            child += 1;
             let row = div()
                 .id(("cmd", i))
                 .flex()
@@ -688,7 +905,16 @@ impl Render for CommandPalette {
                         .overflow_hidden()
                         .whitespace_nowrap()
                         .text_ellipsis()
-                        .child(highlighted(&cmd.label, pos, &t)),
+                        .child(highlighted(&cmd.label, pos, &t))
+                        .children(cmd.detail.clone().map(|d| {
+                            div()
+                                .ml(t.space.sm)
+                                .text_size(t.text.caption)
+                                .text_color(t.colors.text_subtle)
+                                .child(d)
+                        }))
+                        .flex()
+                        .items_baseline(),
                 )
                 .children(cmd.hint.clone().map(|h| kbd(&t, h)))
                 .on_mouse_move(cx.listener(move |this, _, _, cx| {
@@ -709,6 +935,9 @@ impl Render for CommandPalette {
                     .child("Nothing matches."),
             );
         }
+        if std::mem::take(&mut self.reveal) {
+            self.scroll.scroll_to_item(selected_child);
+        }
 
         let fade = std::time::Duration::from_millis(t.motion_ms);
         div()
@@ -725,6 +954,12 @@ impl Render for CommandPalette {
                 match ev.keystroke.key.as_str() {
                     "down" if count > 0 => this.selected = (this.selected + 1) % count,
                     "up" if count > 0 => this.selected = (this.selected + count - 1) % count,
+                    "pagedown" if count > 0 => this.selected = (this.selected + 8).min(count - 1),
+                    "pageup" => this.selected = this.selected.saturating_sub(8),
+                    "home" if ev.keystroke.modifiers.secondary() => this.selected = 0,
+                    "end" if ev.keystroke.modifiers.secondary() && count > 0 => {
+                        this.selected = count - 1
+                    }
                     "escape" => {
                         this.close(cx);
                         window.dispatch_action(Box::new(FocusComposer), cx);
@@ -732,6 +967,7 @@ impl Render for CommandPalette {
                     "enter" => this.run(window, cx),
                     _ => return,
                 }
+                this.reveal = true;
                 cx.stop_propagation();
                 cx.notify();
             }))
@@ -780,6 +1016,7 @@ impl Render for CommandPalette {
                             .child("Enter run")
                             .child("Esc close")
                             .child(div().flex_1())
+                            .child("> commands  # chats  @ files")
                             .child(format!(
                                 "{count} result{}",
                                 if count == 1 { "" } else { "s" }
@@ -802,6 +1039,31 @@ impl Render for CommandPalette {
 #[cfg(test)]
 mod tests {
     use super::fuzzy;
+
+    #[test]
+    fn matched_letters_count_their_runs() {
+        assert_eq!(super::runs(&[]), 0);
+        assert_eq!(super::runs(&[0, 1, 2]), 1);
+        assert_eq!(super::runs(&[0, 1, 5, 6, 9]), 3);
+    }
+
+    #[test]
+    fn a_snippet_is_the_words_around_the_hit_on_one_line() {
+        let text = "First line.\nThe chat pipeline starts in send_to_forge and ends in on_event, where every event the process sends lands, one by one, in order.";
+        let s = super::snippet(text, "send_to_forge").unwrap();
+        assert!(s.contains("send_to_forge") && !s.contains('\n'), "{s}");
+        assert!(s.starts_with('…') && s.ends_with('…'), "{s}");
+        assert_eq!(super::snippet(text, "absent"), None);
+    }
+
+    #[test]
+    fn a_first_character_narrows_the_search() {
+        use super::{scope, Scope};
+        assert_eq!(scope(">theme"), (Scope::Commands, "theme"));
+        assert_eq!(scope("#pipeline"), (Scope::Chats, "pipeline"));
+        assert_eq!(scope("@main.rs"), (Scope::Files, "main.rs"));
+        assert_eq!(scope("theme"), (Scope::All, "theme"));
+    }
 
     #[test]
     fn fuzzy_matches_in_order_and_prefers_word_starts() {

@@ -1139,6 +1139,9 @@ pub struct AppState {
     requests: std::collections::HashMap<String, Request>,
     /// For `@` completion: the project's files, read once per project.
     file_index: Option<(std::path::PathBuf, std::sync::Arc<Vec<String>>)>,
+    /// What the find bar searches for when it next opens (the palette found
+    /// it in this chat).
+    pub find_request: Option<String>,
     /// For `/` completion: the project's own commands (`.forge/commands`).
     custom_commands: Option<(std::path::PathBuf, Vec<crate::commands::Command>)>,
     /// A read of either is under way.
@@ -1295,6 +1298,7 @@ impl AppState {
             immediate_queue: Default::default(),
             requests: Default::default(),
             file_index: None,
+            find_request: None,
             custom_commands: None,
             completions_loading: false,
             context_open: false,
@@ -2837,6 +2841,80 @@ impl AppState {
                 s.file_index = Some((dir.clone(), std::sync::Arc::new(files)));
                 s.custom_commands = Some((dir, commands));
                 cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// The project's files, as `@` completes them (folders end in `/`),
+    /// once read; [`Self::ensure_completions`] reads them.
+    pub fn project_file_index(&self) -> Option<std::sync::Arc<Vec<String>>> {
+        self.file_index
+            .as_ref()
+            .filter(|(d, _)| *d == self.project_dir)
+            .map(|(_, f)| f.clone())
+    }
+
+    /// Open a project file (its path in the project, `/`-separated): a
+    /// document in the side panel, anything else in the app the system
+    /// opens it with. Read off the UI thread, over the connection when the
+    /// project is remote.
+    pub fn open_project_file(&mut self, rel: String, cx: &mut Context<Self>) {
+        let name = rel.rsplit('/').next().unwrap_or(&rel).to_string();
+        let ext = name
+            .rsplit_once('.')
+            .map(|(_, e)| e.to_ascii_lowercase())
+            .unwrap_or_default();
+        let remote = self
+            .current_remote()
+            .map(|r| (self.remote_extra(&r.target), r));
+        let local = self.project_dir.join(&rel);
+        let read = cx.background_spawn(async move {
+            match remote {
+                Some((extra, r)) => {
+                    let full = format!("{}/{rel}", r.path.trim_end_matches('/'));
+                    crate::remote::read_file(&r.target, &full, 64 << 20, &extra)
+                        .map(|b| (full, b, false))
+                        .map_err(|e| e.to_string())
+                }
+                None => std::fs::read(&local)
+                    .map(|b| (local.display().to_string(), b, true))
+                    .map_err(|e| e.to_string()),
+            }
+        });
+        cx.spawn(async move |this, cx| {
+            let read = read.await;
+            let _ = this.update(cx, |s, cx| match read {
+                Ok((full, bytes, is_local)) => {
+                    let doc = matches!(
+                        ext.as_str(),
+                        "md" | "markdown"
+                            | "svg"
+                            | "html"
+                            | "htm"
+                            | "docx"
+                            | "xlsx"
+                            | "pptx"
+                            | "pdf"
+                    );
+                    match doc.then(|| file_card(name.clone(), ext, full.clone(), bytes.clone())) {
+                        Some(Some(file)) => {
+                            s.doc = None;
+                            s.open_doc(file, cx);
+                        }
+                        _ if is_local => cx.open_with_system(std::path::Path::new(&full)),
+                        _ => {
+                            let file = FileRef {
+                                name: name.into(),
+                                path: Some(full.into()),
+                                content: "".into(),
+                                bytes: Some(std::sync::Arc::from(bytes.into_boxed_slice())),
+                            };
+                            s.open_externally(&file, cx);
+                        }
+                    }
+                }
+                Err(e) => s.show_toast(format!("Could not open {name}: {e}"), cx),
             });
         })
         .detach();

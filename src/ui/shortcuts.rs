@@ -11,7 +11,7 @@ use crate::theme::{self, Theme};
 
 /// (keystroke as bound in `main.rs`, what it does, its group).
 pub const SHORTCUTS: &[(&str, &str, &str)] = &[
-    ("secondary-k", "Search or run a command", "General"),
+    ("secondary-k", "Search files, chats and commands", "General"),
     ("f1", "Keyboard shortcuts", "General"),
     ("secondary-,", "Settings", "General"),
     ("secondary-shift-l", "Light or dark theme", "General"),
