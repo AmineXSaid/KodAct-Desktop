@@ -45,6 +45,7 @@ Lucide, 2px stroke as drawn. Sizes: 12 / 14 / 16 / 20 only.
 - `doc_measure`: 680px, a document's widest line
 - `terminal_text`: 13px, the terminal dock's monospace
 - `terminal_min`: 280px, the terminal dock's narrowest
+- `chat_min`: 400px, the chat's narrowest: the side panel, then the dock, give way to it
 - `remote_menu`: 288px, the remote quick pick's width
 - `edge_bar`: 3px, the jewel edge a window draws as it opens
 

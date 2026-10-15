@@ -141,15 +141,19 @@ impl Workspace {
         self.terminal.update(cx, |d, cx| d.open(None, window, cx));
     }
 
-    /// The dock beside the session: its share of the window, held between
-    /// its narrowest and three fifths, with a grip on its left edge.
-    fn dock(&self, window: &Window, cx: &mut Context<Self>) -> gpui::AnyElement {
-        let t = cx.theme().clone();
+    /// The width the dock asks for: its share of the window, held between
+    /// its narrowest and three fifths.
+    fn dock_want(&self, window: &Window, cx: &Context<Self>) -> f32 {
+        let t = cx.theme();
         let vw = f32::from(window.viewport_size().width);
-        let share = self.state.read(cx).terminal_share;
-        let width = (vw * share)
+        (vw * self.state.read(cx).terminal_share)
             .min(vw * 0.6)
-            .max(f32::from(t.size.terminal_min));
+            .max(f32::from(t.size.terminal_min))
+    }
+
+    /// The dock beside the session, `width` wide, with a grip on its left edge.
+    fn dock(&self, width: f32, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let t = cx.theme().clone();
         let grip = self.state.clone();
         let line = t.colors.primary;
         let pane = div()
@@ -672,29 +676,41 @@ impl Render for Workspace {
         let empty = s.chat().is_none_or(|c| c.messages.is_empty());
         let below = s.doc_below;
         let terminal_open = s.terminal_open;
-        let dock = self.dock(window, cx);
+        let side_open = s.doc.is_some() || s.panel.is_some();
+        // What is left of the window beside the sidebar is shared by the
+        // chat, the side panel and the dock; the chat keeps its narrowest.
+        let beside = f32::from(window.viewport_size().width)
+            - if sidebar_open {
+                f32::from(t.size.sidebar)
+            } else {
+                0.
+            };
+        let dock_want = self.dock_want(window, cx);
+        let wide = s
+            .doc
+            .as_ref()
+            .is_some_and(|f| f.is_diagram() || f.office() == Some(crate::office::Kind::Xlsx));
+        let (panel_w, dock_w) = share_out(
+            beside,
+            (side_open && !below).then(|| {
+                let after_dock = beside - if terminal_open { dock_want } else { 0. };
+                (
+                    super::doc_pane::width(after_dock, wide, &t),
+                    f32::from(t.size.doc_pane),
+                )
+            }),
+            terminal_open.then(|| (dock_want, f32::from(t.size.terminal_min))),
+            f32::from(t.size.chat_min),
+        );
+        let dock = self.dock(dock_w, cx);
 
         let main = div().flex_1().min_w_0().flex().flex_col().bg(t.extra.stage);
         // A file opened from a reply, or the setup guide, sits beside the session.
         let pane = {
             let s = self.state.read(cx);
-            let main_width = f32::from(window.viewport_size().width)
-                - if sidebar_open {
-                    f32::from(t.size.sidebar)
-                } else {
-                    0.
-                };
-            // Diagrams and workbooks get the wider panel.
-            let wide = s
-                .doc
-                .as_ref()
-                .is_some_and(|f| f.is_diagram() || f.office() == Some(crate::office::Kind::Xlsx));
+            let main_width = beside - if terminal_open { dock_w } else { 0. };
             let fit = super::doc_pane::Fit {
-                width: if s.doc_below {
-                    main_width
-                } else {
-                    super::doc_pane::width(main_width, wide, &t)
-                },
+                width: if s.doc_below { main_width } else { panel_w },
                 scale: window.scale_factor(),
                 fit: s.doc_fit,
                 below: s.doc_below,
@@ -1244,5 +1260,52 @@ impl Render for Workspace {
             .child(self.confirm.clone())
             .child(self.askpass.clone())
             .children(self.toast(cx))
+    }
+}
+
+/// The widths of the side panel and the dock, each given as (wanted,
+/// narrowest) when it is open, in `avail` beside the sidebar. Each gets what
+/// it wants while the chat keeps `chat_min`; past that the panel gives way
+/// first, then the dock, neither below its narrowest.
+fn share_out(
+    avail: f32,
+    panel: Option<(f32, f32)>,
+    dock: Option<(f32, f32)>,
+    chat_min: f32,
+) -> (f32, f32) {
+    let (mut p, p_min) = panel.unwrap_or((0., 0.));
+    let (mut d, d_min) = dock.unwrap_or((0., 0.));
+    let over = p + d + chat_min - avail;
+    if over > 0. {
+        let from_panel = over.min((p - p_min).max(0.));
+        p -= from_panel;
+        d -= (over - from_panel).min((d - d_min).max(0.));
+    }
+    (p, d)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::share_out;
+
+    #[test]
+    fn the_chat_keeps_its_narrowest_and_the_panel_gives_way_first() {
+        // Room for all: each gets what it wants.
+        assert_eq!(
+            share_out(2000., Some((600., 460.)), Some((500., 280.)), 400.),
+            (600., 500.)
+        );
+        // Tight: the panel shrinks to its narrowest before the dock gives way.
+        assert_eq!(
+            share_out(1300., Some((600., 460.)), Some((500., 280.)), 400.),
+            (460., 440.)
+        );
+        // Tighter still: both at their narrowest, the chat takes what's left.
+        assert_eq!(
+            share_out(900., Some((600., 460.)), Some((500., 280.)), 400.),
+            (460., 280.)
+        );
+        // Only the dock.
+        assert_eq!(share_out(1000., None, Some((700., 280.)), 400.), (0., 600.));
     }
 }

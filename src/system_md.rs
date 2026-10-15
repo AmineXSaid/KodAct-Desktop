@@ -134,6 +134,11 @@ fn render() -> String {
             "the terminal dock's narrowest",
         ),
         (
+            "chat_min",
+            z.chat_min,
+            "the chat's narrowest: the side panel, then the dock, give way to it",
+        ),
+        (
             "remote_menu",
             z.remote_menu,
             "the remote quick pick's width",

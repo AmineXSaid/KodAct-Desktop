@@ -521,6 +521,7 @@ pub struct Sizes {
     pub remote_menu: Pixels,        // 288: the remote quick pick's width
     pub terminal_text: Pixels,      // 13: the terminal dock's monospace
     pub terminal_min: Pixels,       // 280: the terminal dock's narrowest
+    pub chat_min: Pixels,           // 400: the chat's narrowest beside the panel and the dock
     pub doc_text: Pixels,           // 15: a document in the side panel
     pub doc_title: Pixels,          // 28: its title, in the display serif
     pub line_height_doc: f32,       // 1.65: a document's leading
@@ -570,6 +571,7 @@ impl Default for Sizes {
             doc_title: px(28.),
             line_height_doc: 1.65,
             doc_pane: px(460.),
+            chat_min: px(400.),
             doc_measure: px(680.),
             rules_list: px(340.),
             editor: px(420.),
