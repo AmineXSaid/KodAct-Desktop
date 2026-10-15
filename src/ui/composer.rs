@@ -339,7 +339,7 @@ impl Composer {
 }
 
 impl Render for Composer {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let state = self.state.clone();
         let empty = self.text(cx).trim().is_empty();
@@ -371,7 +371,9 @@ impl Render for Composer {
         // The pieces that read the state are built first.
         let mode_trigger = super::mode_menu::trigger(&t, &state, cx, skip);
         let modes_menu = self.state.read(cx).modes_open.then(|| {
-            super::mode_menu::menu(&t, &state, cx, move |pos, cx| dismiss_modes(pos, false, cx))
+            super::mode_menu::menu(&t, &state, window, cx, move |pos, cx| {
+                dismiss_modes(pos, false, cx)
+            })
         });
         let query = self.filter.read(cx).value().to_string();
         let search = div()
@@ -405,6 +407,7 @@ impl Render for Composer {
                 &query,
                 self.active.as_deref(),
                 search,
+                window,
                 on_hover,
                 move |pos, cx| dismiss_models(pos, true, cx),
             )
@@ -617,7 +620,7 @@ impl Render for Composer {
                 })
                 .on_click(|_, window, cx| window.dispatch_action(Box::new(super::ShowContext), cx))
         });
-        let context_popover = super::context_menu::render(&t, &state, cx);
+        let context_popover = super::context_menu::render(&t, &state, window, cx);
 
         let composer = div()
             .key_context("Composer")

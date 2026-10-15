@@ -48,9 +48,42 @@ fn kind_color(kind: &str, t: &Theme) -> Hsla {
 fn status_of(run: &AgentRun) -> ToolStatus {
     match (run.ended, run.failed) {
         (None, _) => ToolStatus::Running,
+        // You stopped it: not a failure, and not done.
+        (Some(_), _) if run.stopped => ToolStatus::Declined,
         (Some(_), true) => ToolStatus::Failed,
         (Some(_), false) => ToolStatus::Done,
     }
+}
+
+/// The small ghost Stop on a running card, and "Stop all" in the header.
+fn stop_button(
+    t: &Theme,
+    id: impl Into<gpui::ElementId>,
+    label: &str,
+) -> gpui::Stateful<gpui::Div> {
+    let hover = t.colors.hover;
+    div()
+        .id(id)
+        .flex_none()
+        .flex()
+        .items_center()
+        .gap(t.space.xs)
+        .px(t.space.sm)
+        .py(px(2.))
+        .rounded(t.radius.button)
+        .border_1()
+        .border_color(t.colors.border)
+        .text_size(t.text.caption)
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(t.colors.text_muted)
+        .cursor_pointer()
+        .hover(move |s| s.bg(hover))
+        .child(icon(
+            "icons/square.svg",
+            t.size.icon_xs,
+            t.colors.text_muted,
+        ))
+        .child(label.to_string())
 }
 
 fn spinner(t: &Theme, color: Hsla, key: String) -> AnyElement {
@@ -134,7 +167,13 @@ pub fn render(
             .into_any_element();
     }
     let running = v.runs.iter().filter(|r| r.ended.is_none()).count();
+    let stoppable = v
+        .runs
+        .iter()
+        .filter(|r| r.ended.is_none() && !r.stopping)
+        .count();
     let failed = v.runs.iter().filter(|r| r.failed).count();
+    let stopped = v.runs.iter().filter(|r| r.stopped).count();
     let steps: usize = v.runs.iter().map(|r| r.steps.len()).sum();
     let first = v.runs.iter().map(|r| r.started).min().unwrap_or(now);
     let last = if running > 0 {
@@ -213,6 +252,8 @@ pub fn render(
                                     "putting it together".to_string()
                                 } else if failed > 0 {
                                     format!("done, {failed} failed")
+                                } else if stopped > 0 {
+                                    format!("done, {stopped} stopped")
                                 } else {
                                     "all agents done".to_string()
                                 }),
@@ -227,14 +268,32 @@ pub fn render(
                         .text_color(t.colors.text_muted)
                         .child(r)
                 })),
-        );
+        )
+        .when(stoppable > 1, |d| {
+            let state = state.clone();
+            d.child(
+                stop_button(t, "agents-stop-all", "Stop all")
+                    .tooltip(|w, cx| {
+                        gpui::component::tooltip::Tooltip::new(
+                            "Stop every agent; Forge carries on with what they found (Ctrl+Shift+Esc)",
+                        )
+                        .build(w, cx)
+                    })
+                    .on_click(move |_, _, cx| {
+                        cx.stop_propagation();
+                        state.update(cx, |s, cx| s.stop_agents(cx));
+                    }),
+            )
+        });
 
     let cards = v.runs.iter().enumerate().map(|(i, run)| {
         let status = status_of(run);
         let color = kind_color(&run.kind, t);
         let is_open = open.contains(&run.id);
         let toggler = state.clone();
+        let stopper = state.clone();
         let id = run.id.clone();
+        let stop_id = run.id.clone();
         let took = run
             .ended
             .unwrap_or(now)
@@ -247,6 +306,10 @@ pub fn render(
             ToolStatus::Failed => (
                 icon("icons/circle-x.svg", t.size.icon_sm, t.extra.danger).into_any_element(),
                 t.extra.danger,
+            ),
+            ToolStatus::Declined => (
+                icon("icons/square.svg", t.size.icon_sm, t.colors.text_subtle).into_any_element(),
+                t.colors.text_subtle,
             ),
             _ => (
                 icon("icons/circle-check.svg", t.size.icon_sm, t.extra.success).into_any_element(),
@@ -314,11 +377,29 @@ pub fn render(
                             .text_size(t.text.caption)
                             .text_color(status_color)
                             .child(match status {
+                                ToolStatus::Running if run.stopping => "stopping…".to_string(),
                                 ToolStatus::Running => format!("running · {}", elapsed(took)),
                                 ToolStatus::Failed => format!("failed · {}", elapsed(took)),
-                                _ => format!("done · {}", elapsed(took)),
+                                ToolStatus::Declined => format!("stopped · {}", elapsed(took)),
+                                ToolStatus::Done => format!("done · {}", elapsed(took)),
                             }),
                     )
+                    .when(status == ToolStatus::Running && !run.stopping, |d| {
+                        d.child(
+                            stop_button(t, ("agent-stop", i), "Stop")
+                                .tooltip(|w, cx| {
+                                    gpui::component::tooltip::Tooltip::new(
+                                        "Stop this agent; the others go on",
+                                    )
+                                    .build(w, cx)
+                                })
+                                .on_click(move |_, _, cx| {
+                                    // The card's own click opens it; this one only stops.
+                                    cx.stop_propagation();
+                                    stopper.update(cx, |s, cx| s.stop_agent(&stop_id, cx));
+                                }),
+                        )
+                    })
                     .child(icon(
                         if is_open {
                             "icons/chevron-up.svg"
@@ -431,8 +512,9 @@ pub fn render(
                     })
             });
 
-        // The branch: a node on the spine, an elbow to the card.
-        div()
+        // The branch: a node on the spine, an elbow to the card. A new
+        // agent's branch rises into place as it starts.
+        let branch = div()
             .flex()
             .items_start()
             .child(
@@ -463,7 +545,13 @@ pub fn render(
                             .border_color(t.colors.surface),
                     ),
             )
-            .child(card)
+            .child(card);
+        super::motion::row_in(
+            branch,
+            SharedString::from(format!("agent-in-{}", run.id)),
+            0,
+            t,
+        )
     });
 
     div()

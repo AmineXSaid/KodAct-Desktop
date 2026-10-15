@@ -12,7 +12,7 @@
 
 use gpui::{
     div, prelude::*, px, AnyElement, Context, Entity, FontWeight, IntoElement, PathPromptOptions,
-    Render, SharedString, Window,
+    Pixels, Render, SharedString, Window,
 };
 
 use super::composer::Composer;
@@ -60,16 +60,76 @@ pub fn open_folder(state: Entity<AppState>, cx: &mut gpui::App) {
     .detach();
 }
 
-fn folder_badge(t: &Theme, size: gpui::Pixels) -> impl IntoElement {
+/// A project's mark: its initial on a tile in a colour of its own (the
+/// same each time), with a corner badge when the folder is remote (WSL, SSH
+/// or a container). It stands in for a folder icon wherever a project shows.
+pub fn project_tile(t: &Theme, name: &str, path: &std::path::Path, size: Pixels) -> AnyElement {
+    let colors = [
+        t.colors.primary,
+        t.colors.marigold,
+        t.extra.success,
+        t.colors.sky,
+        t.colors.coral,
+    ];
+    let h = name
+        .bytes()
+        .fold(7usize, |a, b| a.wrapping_mul(31).wrapping_add(b as usize));
+    let color = colors[h % colors.len()];
+    let initial: String = name
+        .chars()
+        .find(|c| c.is_alphanumeric())
+        .map(|c| c.to_uppercase().collect())
+        .unwrap_or_else(|| "·".into());
+    let remote = crate::remote::Remote::parse(path);
     div()
-        .size(size)
+        .relative()
         .flex_none()
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded(t.radius.button)
-        .bg(t.colors.primary_tint)
-        .child(icon("icons/folder-open.svg", size * 0.5, t.colors.primary))
+        .size(size)
+        .child(
+            div()
+                .size_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(t.radius.button)
+                .bg(color.opacity(0.16))
+                .border_1()
+                .border_color(color.opacity(0.28))
+                .text_size(size * 0.46)
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(color)
+                .child(initial),
+        )
+        // Too small a tile for a badge: the title bar names the remote beside it.
+        .children(remote.filter(|_| size >= px(32.)).map(|r| {
+            div()
+                .absolute()
+                .right(px(-3.))
+                .bottom(px(-3.))
+                .size(t.size.icon + px(2.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(t.radius.pill)
+                .bg(t.colors.surface)
+                .border_1()
+                .border_color(t.colors.border)
+                .child(icon(r.target.icon(), t.size.icon_xs, t.colors.text_muted))
+        }))
+        .into_any_element()
+}
+
+/// "3 chats · opened 2 h ago", or "open now" for the one you're in.
+pub fn project_meta(chats: usize, current: bool, opened_minutes_ago: u32) -> String {
+    format!(
+        "{chats} chat{} · {}",
+        if chats == 1 { "" } else { "s" },
+        if current {
+            "open now".to_string()
+        } else {
+            format!("opened {} ago", ago(opened_minutes_ago))
+        }
+    )
 }
 
 fn branch_pill(t: &Theme, branch: SharedString) -> impl IntoElement {
@@ -105,128 +165,215 @@ impl ProjectsView {
     fn list(&self, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
         let s = self.state.read(cx);
         let home = crate::rules::home_dir();
-        let hover = t.colors.text_subtle;
-        let mut projects = s.projects.clone();
+        let (hover_border, hover_bg) = (t.colors.text_subtle, t.colors.hover);
+        let mut projects: Vec<_> = s.projects.iter().filter(|p| p.saved).cloned().collect();
         projects.sort_by_key(|p| (!p.pinned, p.opened_minutes_ago));
-        let cards = projects.into_iter().map(|p| {
+        let connected: Vec<_> = s.projects.iter().filter(|p| !p.saved).cloned().collect();
+        let cards = projects.into_iter().enumerate().map(|(i, p)| {
             let chats = s.chats.iter().filter(|c| c.project == p.id).count();
             let current = p.id == s.current_project;
             let state = self.state.clone();
             let id = p.id;
-            div()
+            let path = match crate::remote::Remote::parse(&p.path) {
+                Some(r) => format!("{} · {}", r.target.label(), r.path),
+                None => crate::rules::display_path(&p.path, home.as_deref()),
+            };
+            let card = div()
                 .id(("project-card", p.id))
-                .w(px(300.))
+                .w(px(280.))
+                .min_h(px(148.))
                 .flex()
                 .flex_col()
-                .gap(t.space.md)
+                .gap(t.space.sm)
                 .p(t.space.lg)
                 .bg(t.colors.surface)
                 .border_1()
-                .border_color(t.colors.border)
+                .border_color(if current {
+                    t.colors.primary.opacity(0.45)
+                } else {
+                    t.colors.border
+                })
                 .rounded(t.radius.card)
                 .cursor_pointer()
-                .hover(move |st| st.border_color(hover))
+                .hover(move |st| st.border_color(hover_border))
                 .child(
                     div()
                         .flex()
-                        .items_center()
+                        .items_start()
                         .gap(t.space.md)
-                        .child(folder_badge(t, px(36.)))
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .flex()
-                                .flex_col()
-                                .child(
-                                    div()
-                                        .overflow_hidden()
-                                        .whitespace_nowrap()
-                                        .text_ellipsis()
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                        .text_color(t.colors.text_strong)
-                                        .child(p.name.clone()),
-                                )
-                                .child(
-                                    div()
-                                        .overflow_hidden()
-                                        .whitespace_nowrap()
-                                        .text_ellipsis()
-                                        .font_family(t.font_mono.clone())
-                                        .text_size(t.text.caption)
-                                        .text_color(t.colors.text_subtle)
-                                        .child(crate::rules::display_path(
-                                            &p.path,
-                                            home.as_deref(),
-                                        )),
-                                ),
-                        )
+                        .child(project_tile(t, &p.name, &p.path, px(36.)))
+                        .child(div().flex_1())
                         .when(p.pinned, |d| {
-                            d.child(icon("icons/pin.svg", t.size.icon_sm, t.colors.primary))
+                            d.child(icon("icons/pin.svg", t.size.icon_sm, t.colors.text_subtle))
                         }),
                 )
+                .child(
+                    div()
+                        .flex_none()
+                        .pt(t.space.xs)
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .text_size(t.text.body)
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(t.colors.text_strong)
+                        .child(p.name.clone()),
+                )
+                .child(
+                    div()
+                        .flex_none()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_subtle)
+                        .child(path),
+                )
+                .child(div().flex_1())
                 .child(
                     div()
                         .flex()
                         .items_center()
                         .gap(t.space.sm)
                         .text_size(t.text.caption)
-                        .text_color(t.colors.text_subtle)
+                        .text_color(t.colors.text_muted)
+                        .child(div().flex_none().whitespace_nowrap().child(project_meta(
+                            chats,
+                            current,
+                            p.opened_minutes_ago,
+                        )))
+                        .child(div().flex_1())
                         .when(!p.branch.is_empty(), |d| {
                             d.child(branch_pill(t, p.branch.clone()))
-                        })
-                        .child(div().flex_1())
-                        .child(div().flex_none().whitespace_nowrap().child(format!(
-                            "{chats} chat{} · {}",
-                            if chats == 1 { "" } else { "s" },
-                            if current {
-                                "open now".to_string()
-                            } else {
-                                format!("opened {} ago", ago(p.opened_minutes_ago))
-                            }
-                        ))),
+                        }),
                 )
-                .on_click(move |_, _, cx| state.update(cx, |s, cx| s.show_project(id, cx)))
+                .on_click(move |_, _, cx| state.update(cx, |s, cx| s.show_project(id, cx)));
+            // The cards rise onto the page one after another, like Notion's.
+            super::motion::row_in(card, ("project-card-in", id), i, t)
         });
+        // Folders you connected to but didn't make projects: one line each.
+        let connected_rows = connected.into_iter().map(|p| {
+            let (open, save) = (self.state.clone(), self.state.clone());
+            let id = p.id;
+            let place = crate::remote::Remote::parse(&p.path)
+                .map(|r| r.target.label())
+                .unwrap_or_else(|| crate::rules::display_path(&p.path, home.as_deref()));
+            div()
+                .id(("connected-row", p.id))
+                .flex()
+                .items_center()
+                .gap(t.space.md)
+                .px(t.space.md)
+                .py(t.space.sm)
+                .rounded(t.radius.button)
+                .cursor_pointer()
+                .hover(move |st| st.bg(hover_bg))
+                .child(project_tile(t, &p.name, &p.path, px(28.)))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .child(div().text_color(t.colors.text_strong).child(p.name.clone()))
+                        .child(
+                            div()
+                                .text_size(t.text.caption)
+                                .text_color(t.colors.text_subtle)
+                                .child(place),
+                        ),
+                )
+                .child(
+                    theme::text_button(t, "Save as project")
+                        .id(("connected-save", p.id))
+                        .text_size(t.text.caption)
+                        .on_click(move |_, _, cx| {
+                            cx.stop_propagation();
+                            save.update(cx, |s, cx| s.save_project(id, cx))
+                        }),
+                )
+                .on_click(move |_, _, cx| {
+                    open.update(cx, |s, cx| {
+                        s.select_project(id, cx);
+                        s.screen = Screen::Chat;
+                        cx.notify();
+                    })
+                })
+        });
+        let has_connected = s.projects.iter().any(|p| !p.saved);
         let state = self.state.clone();
         div()
             .id("projects-page")
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
-            .px(t.space.xxl)
-            .pt(t.space.xl)
-            .pb(t.space.xl)
             .flex()
-            .flex_col()
-            .gap(t.space.xl)
+            .justify_center()
+            .px(t.space.xxl)
+            .pt(t.space.xxl)
+            .pb(t.space.xxl)
             .child(
                 div()
+                    .w_full()
+                    .max_w(px(900.))
                     .flex()
-                    .items_start()
-                    .gap(t.space.lg)
+                    .flex_col()
+                    .gap(t.space.xl)
                     .child(
                         div()
-                            .flex_1()
                             .flex()
-                            .flex_col()
-                            .gap(t.space.xs)
-                            .child(div().text_size(t.text.heading_sm).font_weight(FontWeight::SEMIBOLD).text_color(t.colors.text_strong).child("Projects"))
+                            .items_end()
+                            .gap(t.space.lg)
                             .child(
                                 div()
-                                    .font_family(t.font_serif.clone())
-                                    .text_size(t.text.body)
-                                    .text_color(t.colors.text_body)
-                                    .child("Each project is a folder Forge works in. Its chats, rules and memory stay with it."),
+                                    .flex_1()
+                                    .min_w_0()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(t.space.xs)
+                                    .child(
+                                        div()
+                                            .font_family(t.font_display.clone())
+                                            .text_size(t.size.greeting)
+                                            .text_color(t.colors.text_strong)
+                                            .child("Projects"),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_size(t.text.body)
+                                            .text_color(t.colors.text_muted)
+                                            .child("A folder with its own chats, rules and memory. Open one to pick up where you left off."),
+                                    ),
+                            )
+                            .child(
+                                theme::primary_button(t, "New project")
+                                    .id("open-folder")
+                                    .flex_none()
+                                    .flex()
+                                    .items_center()
+                                    .gap(t.space.xs)
+                                    .on_click(move |_, _, cx| open_folder(state.clone(), cx)),
                             ),
                     )
-                    .child(
-                        theme::ghost_button(t, "Open folder…")
-                            .id("open-folder")
-                            .on_click(move |_, _, cx| open_folder(state.clone(), cx)),
-                    ),
+                    .child(div().flex().flex_wrap().gap(t.space.lg).children(cards))
+                    .when(has_connected, |d| {
+                        d.child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap(t.space.xs)
+                                .child(
+                                    div()
+                                        .px(t.space.md)
+                                        .text_size(t.text.caption)
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .text_color(t.colors.text_subtle)
+                                        .child("Connected, not saved as projects"),
+                                )
+                                .children(connected_rows),
+                        )
+                    }),
             )
-            .child(div().flex().flex_wrap().gap(t.space.lg).children(cards))
             .into_any_element()
     }
 
@@ -276,7 +423,10 @@ impl ProjectsView {
             })
             .collect();
         let (pin_state, back_state) = (self.state.clone(), self.state.clone());
+        let (save_state, forget_state) = (self.state.clone(), self.state.clone());
         let pinned = p.pinned;
+        // The folder Forge started in is always here; others can leave the list.
+        let (saved, removable) = (p.saved, s.projects.first().is_some_and(|f| f.id != id));
         div()
             .id("project-page")
             .flex_1()
@@ -323,7 +473,7 @@ impl ProjectsView {
                             .flex()
                             .items_center()
                             .gap(t.space.md)
-                            .child(folder_badge(t, px(44.)))
+                            .child(project_tile(t, &p.name, &p.path, px(44.)))
                             .child(
                                 div()
                                     .flex_1()
@@ -358,6 +508,42 @@ impl ProjectsView {
                                             }),
                                     ),
                             )
+                            .when(!saved, |d| {
+                                d.child(
+                                    theme::ghost_button(t, "Save as project")
+                                        .id("project-save")
+                                        .hover(move |st| st.bg(hover))
+                                        .on_click(move |_, _, cx| {
+                                            save_state.update(cx, |s, cx| s.save_project(id, cx))
+                                        }),
+                                )
+                            })
+                            .when(saved && removable, |d| {
+                                d.child(
+                                    div()
+                                        .id("project-forget")
+                                        .flex()
+                                        .items_center()
+                                        .gap(t.space.xs)
+                                        .h(t.size.control + px(4.))
+                                        .px(t.space.md)
+                                        .rounded(t.radius.button)
+                                        .cursor_pointer()
+                                        .text_color(t.colors.text_muted)
+                                        .hover(move |st| st.bg(hover))
+                                        .tooltip(|w, cx| {
+                                            gpui::component::tooltip::Tooltip::new(
+                                                "Take it off your projects; its chats and files stay",
+                                            )
+                                            .build(w, cx)
+                                        })
+                                        .child(icon("icons/x.svg", t.size.icon_sm, t.colors.text_muted))
+                                        .child("Remove")
+                                        .on_click(move |_, _, cx| {
+                                            forget_state.update(cx, |s, cx| s.forget_project(id, cx))
+                                        }),
+                                )
+                            })
                             .child(
                                 div()
                                     .id("project-pin")

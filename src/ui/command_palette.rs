@@ -543,6 +543,21 @@ impl CommandPalette {
                     ),
                 );
             }
+            if s.agents_running() {
+                chat.insert(
+                    0,
+                    act(
+                        "Stop all agents",
+                        "icons/square.svg",
+                        Some(
+                            crate::ui::shortcuts::keys("secondary-shift-x")
+                                .join(" ")
+                                .into(),
+                        ),
+                        Box::new(StopAgents),
+                    ),
+                );
+            }
             if s.busy() {
                 chat.insert(
                     0,
@@ -841,7 +856,7 @@ pub fn highlighted(label: &SharedString, positions: &[usize], t: &Theme) -> Styl
 }
 
 impl Render for CommandPalette {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let matches = self.matches(cx);
         let selected = self.selected.min(matches.len().saturating_sub(1));
@@ -851,7 +866,8 @@ impl Render for CommandPalette {
             .id("palette-list")
             .flex()
             .flex_col()
-            .max_h(px(380.))
+            // The palette sits three title bars down, its search above the list.
+            .max_h(px(380.).min(theme::fit_height(window, &t, t.size.titlebar * 5.)))
             .overflow_y_scroll()
             .track_scroll(&self.scroll)
             .p(t.space.xs);

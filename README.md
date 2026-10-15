@@ -62,6 +62,7 @@ table in step.
 | Ctrl/⌘ / | Choose a model |
 | Shift Tab | Next permission mode |
 | Esc | Stop the reply, or close what's open |
+| Ctrl/⌘ Shift X | Stop every agent; the reply goes on |
 | Enter / Shift Enter | Send / new line |
 
 ### Search

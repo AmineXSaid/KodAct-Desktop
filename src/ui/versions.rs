@@ -21,7 +21,7 @@ pub struct Row {
 }
 
 /// `just now`, `4 min ago`, `2 h ago`, `3 d ago`.
-fn ago(t: std::time::SystemTime) -> String {
+pub fn ago(t: std::time::SystemTime) -> String {
     let s = t.elapsed().map(|d| d.as_secs()).unwrap_or(0);
     match s {
         0..=59 => "just now".into(),

@@ -525,6 +525,7 @@ pub struct Sizes {
     pub completion_width: Pixels,   // 460: the / and @ lists, opened at the caret
     pub settings_nav: Pixels,       // 200: the Settings window's section list
     pub prompt_box: Pixels,         // 180: a prompt or instructions box in a Settings editor
+    pub viewport_margin: Pixels, // 12: the gap a menu or dialog keeps from the window's edge; past it, it scrolls
 }
 
 impl Default for Sizes {
@@ -571,6 +572,7 @@ impl Default for Sizes {
             completion_width: px(460.),
             settings_nav: px(200.),
             prompt_box: px(180.),
+            viewport_margin: px(12.),
         }
     }
 }
@@ -701,6 +703,28 @@ pub fn vrule(t: &Theme) -> Div {
         .w(t.size.hairline)
         .rounded(t.radius.line)
         .bg(t.colors.border)
+}
+
+/// The tallest a menu or dialog may grow when its top sits `top` below the
+/// window's top: the window's height less that and a margin. Past it, the
+/// surface scrolls (`fit_window`).
+pub fn fit_height(window: &gpui::Window, t: &Theme, top: Pixels) -> Pixels {
+    (window.viewport_size().height - top - t.size.viewport_margin).max(t.size.row * 3.)
+}
+
+/// Cap a menu or dialog at the window's height (from `top` down) and let it
+/// scroll past that, so a short window never cuts it off. A fixed cap
+/// (`cap`) still applies when the window is taller.
+pub fn fit_window(
+    el: gpui::Stateful<Div>,
+    window: &gpui::Window,
+    t: &Theme,
+    top: Pixels,
+    cap: Option<Pixels>,
+) -> gpui::Stateful<Div> {
+    let fit = fit_height(window, t, top);
+    el.max_h(cap.map_or(fit, |c| c.min(fit)))
+        .overflow_y_scroll()
 }
 
 /// Floating surface: menus, command palette, model picker.

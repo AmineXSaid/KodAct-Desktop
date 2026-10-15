@@ -10,7 +10,12 @@ use crate::state::AppState;
 use crate::theme::{self, Theme};
 
 /// The title bar's badge and its list; None while nothing waits.
-pub fn render(t: &Theme, state: &Entity<AppState>, cx: &gpui::App) -> Option<AnyElement> {
+pub fn render(
+    t: &Theme,
+    state: &Entity<AppState>,
+    window: &gpui::Window,
+    cx: &gpui::App,
+) -> Option<AnyElement> {
     let s = state.read(cx);
     let pending = s.pending_approvals();
     if pending.is_empty() {
@@ -112,31 +117,36 @@ pub fn render(t: &Theme, state: &Entity<AppState>, cx: &gpui::App) -> Option<Any
         }
         let close = state.clone();
         gpui::deferred(
-            theme::popover(t)
-                .id("approvals-list")
-                .occlude()
-                .absolute()
-                .top(t.size.control + t.space.xs)
-                .right_0()
-                .w(px(340.))
-                .on_mouse_down_out(move |_, _, cx| {
-                    close.update(cx, |s, cx| {
-                        if s.approvals_open {
-                            s.approvals_open = false;
-                            cx.notify();
-                        }
-                    })
+            theme::fit_window(
+                theme::popover(t).id("approvals-list"),
+                window,
+                t,
+                t.size.titlebar + t.size.control,
+                None,
+            )
+            .occlude()
+            .absolute()
+            .top(t.size.control + t.space.xs)
+            .right_0()
+            .w(px(340.))
+            .on_mouse_down_out(move |_, _, cx| {
+                close.update(cx, |s, cx| {
+                    if s.approvals_open {
+                        s.approvals_open = false;
+                        cx.notify();
+                    }
                 })
-                .child(
-                    div()
-                        .px(t.space.md)
-                        .pt(t.space.xs)
-                        .pb(t.space.xs)
-                        .text_size(t.text.caption)
-                        .text_color(t.colors.text_subtle)
-                        .child(SharedString::from("Waiting on your answer")),
-                )
-                .child(rows),
+            })
+            .child(
+                div()
+                    .px(t.space.md)
+                    .pt(t.space.xs)
+                    .pb(t.space.xs)
+                    .text_size(t.text.caption)
+                    .text_color(t.colors.text_subtle)
+                    .child(SharedString::from("Waiting on your answer")),
+            )
+            .child(rows),
         )
         .with_priority(2)
     });

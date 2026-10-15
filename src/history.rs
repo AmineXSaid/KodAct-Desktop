@@ -14,8 +14,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use crate::state::{
-    Block, Chat, DiffKind, DiffLine, FileRef, Message, Review, ToolCall, ToolKind, ToolStatus,
-    Verdict,
+    Block, Chat, Decider, DiffKind, DiffLine, FileRef, Message, PermInfo, Review, ToolCall,
+    ToolKind, ToolStatus, Verdict,
 };
 
 /// The format version written. Files from a newer Forge are left alone.
@@ -136,6 +136,20 @@ pub enum SavedBlock {
         title: String,
         detail: String,
         verdict: String,
+        /// The call's kind (`kind_name`).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        kind: Option<String>,
+        /// The "Always allow" rule that answered it, or `stopped`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        rule: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stopped: Option<bool>,
+        /// When it was answered, in seconds since 1970.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        at: Option<u64>,
+        /// The call's row in the same message.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        row: Option<usize>,
     },
     File {
         name: String,
@@ -287,9 +301,21 @@ fn save_messages(chat: &Chat, project: &Path) -> SavedChat {
             title,
             detail,
             verdict,
+            info,
         } => SavedBlock::Permission {
             title: title.to_string(),
             detail: detail.to_string(),
+            kind: info.kind.map(|k| kind_name(k).to_string()),
+            rule: match &info.by {
+                Decider::Rule(r) => Some(r.to_string()),
+                _ => None,
+            },
+            stopped: (info.by == Decider::Stopped).then_some(true),
+            at: info
+                .at
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs()),
+            row: info.row,
             verdict: match verdict {
                 // A question nobody answered is denied once the app is gone.
                 Verdict::Pending | Verdict::Denied => "denied",
@@ -420,9 +446,25 @@ pub fn messages_of(saved: &SavedChat) -> Vec<Message> {
             title,
             detail,
             verdict,
+            kind,
+            rule,
+            stopped,
+            at,
+            row,
         } => Block::Permission {
             title: title.clone().into(),
             detail: detail.clone().into(),
+            info: PermInfo {
+                kind: kind.as_deref().map(kind_of),
+                by: match (rule, stopped) {
+                    (Some(r), _) => Decider::Rule(r.clone().into()),
+                    (None, Some(true)) => Decider::Stopped,
+                    _ => Decider::You,
+                },
+                at: at.map(|s| std::time::UNIX_EPOCH + std::time::Duration::from_secs(s)),
+                row: *row,
+                open: false,
+            },
             verdict: match verdict.as_str() {
                 "allowed" => Verdict::Allowed,
                 "always" => Verdict::AllowedAlways,
@@ -657,6 +699,7 @@ mod tests {
                         title: "Edit?".into(),
                         detail: "d".into(),
                         verdict: Verdict::Pending,
+                        info: PermInfo::default(),
                     },
                     Block::File(FileRef {
                         name: "q.xlsx".into(),

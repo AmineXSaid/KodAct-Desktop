@@ -12,7 +12,12 @@ use crate::state::AppState;
 use crate::theme::{self, Theme};
 
 /// The popover, above the composer's controls.
-pub fn render(t: &Theme, state: &Entity<AppState>, cx: &gpui::App) -> Option<AnyElement> {
+pub fn render(
+    t: &Theme,
+    state: &Entity<AppState>,
+    win: &gpui::Window,
+    cx: &gpui::App,
+) -> Option<AnyElement> {
     let s = state.read(cx);
     if !s.context_open {
         return None;
@@ -103,7 +108,12 @@ pub fn render(t: &Theme, state: &Entity<AppState>, cx: &gpui::App) -> Option<Any
         .flex()
         .flex_col()
         .gap(px(4.))
-        .max_h(px(132.))
+        // Its card opens upward from the composer, the totals above the list.
+        .max_h(px(132.).min(crate::theme::fit_height(
+            win,
+            t,
+            t.size.titlebar + t.size.composer_clearance * 2.,
+        )))
         .overflow_y_scroll();
     let peak = turns
         .iter()

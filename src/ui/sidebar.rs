@@ -502,7 +502,13 @@ impl Render for Sidebar {
                                 .on_mouse_down_out(move |_, _, cx| {
                                     close.update(cx, |s, cx| s.open_chat_menu(None, cx))
                                 })
-                                .child(super::chat_menu::render(&t, &self.state, c.id, c.pinned)),
+                                .child(super::chat_menu::render(
+                                    &t,
+                                    &self.state,
+                                    c.id,
+                                    c.pinned,
+                                    window,
+                                )),
                         ),
                 )
                 .with_priority(2)

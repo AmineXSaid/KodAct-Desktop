@@ -299,7 +299,12 @@ impl TerminalDock {
     }
 
     /// The right-click menu: copy, paste, clear, kill.
-    fn context_menu(&self, at: Point<Pixels>, cx: &mut Context<Self>) -> AnyElement {
+    fn context_menu(
+        &self,
+        at: Point<Pixels>,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let t = cx.theme().clone();
         let hover = t.colors.hover;
         let has_selection = self.session().is_some_and(|s| {
@@ -344,47 +349,52 @@ impl TerminalDock {
                         .child(keys),
                 )
         };
-        let menu = crate::theme::popover(&t)
-            .id("terminal-context-menu")
-            .relative()
-            .w(px(220.))
-            .occlude()
-            .text_size(t.text.body_sm)
-            .child(
-                item(
-                    "term-copy",
-                    "icons/copy.svg",
-                    "Copy",
-                    "Ctrl+Shift+C",
-                    has_selection,
-                )
-                .when(has_selection, |d| {
-                    d.on_click(cx.listener(|this, _, _, cx| this.copy(cx)))
-                }),
+        let menu = crate::theme::fit_window(
+            crate::theme::popover(&t).id("terminal-context-menu"),
+            window,
+            &t,
+            t.size.viewport_margin,
+            None,
+        )
+        .relative()
+        .w(px(220.))
+        .occlude()
+        .text_size(t.text.body_sm)
+        .child(
+            item(
+                "term-copy",
+                "icons/copy.svg",
+                "Copy",
+                "Ctrl+Shift+C",
+                has_selection,
             )
-            .child(
-                item(
-                    "term-paste",
-                    "icons/clipboard-paste.svg",
-                    "Paste",
-                    "Ctrl+Shift+V",
-                    true,
-                )
-                .on_click(cx.listener(|this, _, _, cx| this.paste_clipboard(cx))),
+            .when(has_selection, |d| {
+                d.on_click(cx.listener(|this, _, _, cx| this.copy(cx)))
+            }),
+        )
+        .child(
+            item(
+                "term-paste",
+                "icons/clipboard-paste.svg",
+                "Paste",
+                "Ctrl+Shift+V",
+                true,
             )
-            .child(crate::theme::rule(&t).my(t.space.xs))
-            .child(
-                item("term-clear", "icons/eraser.svg", "Clear", "", true)
-                    .on_click(cx.listener(|this, _, _, cx| this.clear(cx))),
-            )
-            .child(
-                item("term-kill", "icons/circle-slash.svg", "Kill", "", true)
-                    .on_click(cx.listener(|this, _, _, cx| this.kill(cx))),
-            )
-            .on_mouse_down_out(cx.listener(|this, _, _, cx| {
-                this.menu_at = None;
-                cx.notify();
-            }));
+            .on_click(cx.listener(|this, _, _, cx| this.paste_clipboard(cx))),
+        )
+        .child(crate::theme::rule(&t).my(t.space.xs))
+        .child(
+            item("term-clear", "icons/eraser.svg", "Clear", "", true)
+                .on_click(cx.listener(|this, _, _, cx| this.clear(cx))),
+        )
+        .child(
+            item("term-kill", "icons/circle-slash.svg", "Kill", "", true)
+                .on_click(cx.listener(|this, _, _, cx| this.kill(cx))),
+        )
+        .on_mouse_down_out(cx.listener(|this, _, _, cx| {
+            this.menu_at = None;
+            cx.notify();
+        }));
         gpui::deferred(
             gpui::anchored()
                 .position(at)
@@ -764,7 +774,7 @@ impl TerminalDock {
         )
     }
 
-    fn shell_menu(&self, cx: &mut Context<Self>) -> AnyElement {
+    fn shell_menu(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         let t = cx.theme().clone();
         let hover = t.colors.hover;
         let mut list = div().flex().flex_col();
@@ -792,15 +802,20 @@ impl TerminalDock {
                     })),
             );
         }
-        let menu = crate::theme::popover(&t)
-            .id("terminal-shell-menu")
-            .absolute()
-            .top(t.size.row + px(4.))
-            .left(t.space.sm)
-            .w(px(240.))
-            .occlude()
-            .text_size(t.text.body_sm)
-            .child(list);
+        let menu = crate::theme::fit_window(
+            crate::theme::popover(&t).id("terminal-shell-menu"),
+            window,
+            &t,
+            t.size.titlebar + t.size.row,
+            None,
+        )
+        .absolute()
+        .top(t.size.row + px(4.))
+        .left(t.space.sm)
+        .w(px(240.))
+        .occlude()
+        .text_size(t.text.body_sm)
+        .child(list);
         super::motion::edge_draw(menu, "terminal-shell-menu-in", t.colors.primary, 0., &t)
     }
 
@@ -1070,8 +1085,8 @@ impl Render for TerminalDock {
         if self.state.read(cx).terminal_open {
             self.unseen = false;
         }
-        let picker = self.picker.then(|| self.shell_menu(cx));
-        let menu = self.menu_at.map(|at| self.context_menu(at, cx));
+        let picker = self.picker.then(|| self.shell_menu(window, cx));
+        let menu = self.menu_at.map(|at| self.context_menu(at, window, cx));
         div()
             .id("terminal-dock")
             .key_context("Terminal")

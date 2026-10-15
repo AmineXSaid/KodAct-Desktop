@@ -18,7 +18,8 @@ use super::icon;
 use super::markdown::{self, CopyContext};
 use super::terminal;
 use crate::state::{
-    AppState, Block, DiffKind, Message, Rating, Review, ToolCall, ToolKind, ToolStatus, Verdict,
+    AppState, Block, Decider, DiffKind, Message, PermInfo, Rating, Review, ToolCall, ToolKind,
+    ToolStatus, Verdict,
 };
 use crate::theme::{self, Theme};
 
@@ -456,22 +457,54 @@ fn turn_header(cx: &ItemContext, t: &Theme) -> AnyElement {
 }
 
 fn assistant(blocks: &[Block], cx: &ItemContext, t: &Theme) -> AnyElement {
+    // Answers in a row that say the same thing show as one row.
+    let mut rows = vec![];
+    let mut b = 0;
+    while b < blocks.len() {
+        let run = same_answers(blocks, b);
+        if run > 1 {
+            rows.push(answer_group(&blocks[b..b + run], blocks, b, cx, t));
+            b += run;
+        } else {
+            rows.push(self::block(blocks, b, cx, t));
+            b += 1;
+        }
+    }
     div()
         .flex()
         .flex_col()
         .gap(t.space.sm)
         .when(cx.first_in_turn, |d| d.child(turn_header(cx, t)))
-        .children(
-            blocks
-                .iter()
-                .enumerate()
-                .map(|(b, block)| self::block(block, b, b + 1 == blocks.len(), cx, t)),
-        )
+        .children(rows)
         .into_any_element()
 }
 
+/// How many answered questions from `b` on say the same (same question,
+/// same answer): 0 when `b` isn't one.
+fn same_answers(blocks: &[Block], b: usize) -> usize {
+    let key = |blk: &Block| match blk {
+        Block::Permission { title, verdict, .. }
+            if matches!(
+                verdict,
+                Verdict::Allowed | Verdict::AllowedAlways | Verdict::Denied
+            ) =>
+        {
+            Some((title.clone(), *verdict))
+        }
+        _ => None,
+    };
+    let Some(first) = blocks.get(b).and_then(key) else {
+        return 0;
+    };
+    blocks[b..]
+        .iter()
+        .take_while(|blk| key(blk).as_ref() == Some(&first))
+        .count()
+}
+
 /// `newest`: the reply's last block, the one still growing while it streams.
-fn block(block: &Block, b: usize, newest: bool, cx: &ItemContext, t: &Theme) -> AnyElement {
+fn block(blocks: &[Block], b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
+    let (block, newest) = (&blocks[b], b + 1 == blocks.len());
     match block {
         Block::Text(text) => markdown::render(
             text,
@@ -491,7 +524,8 @@ fn block(block: &Block, b: usize, newest: bool, cx: &ItemContext, t: &Theme) -> 
             title,
             detail,
             verdict,
-        } => permission(title, detail, *verdict, b, cx, t),
+            info,
+        } => permission(title, detail, *verdict, info, blocks, b, cx, t),
         Block::File(file) => super::file_card::render(
             file,
             &format!("{}-{}-{b}", cx.chat, cx.index),
@@ -670,7 +704,16 @@ fn tool(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
                     div()
                         .flex_none()
                         .font_weight(FontWeight::MEDIUM)
-                        .child(call.kind.verb(call.status)),
+                        // A sub-agent you stopped reads "Stopped", not "Skipped".
+                        .child(
+                            if call.status == ToolStatus::Declined
+                                && call.output.starts_with(crate::state::AGENT_STOPPED)
+                            {
+                                "Stopped"
+                            } else {
+                                call.kind.verb(call.status)
+                            },
+                        ),
                 )
                 .child(
                     div()
@@ -915,10 +958,330 @@ fn io_row(label: &'static str, text: SharedString, lang: &str, t: &Theme) -> imp
         )
 }
 
+/// What an answered question's call did, from its row: "exit 0",
+/// "failed", "+3 −1 lines", or nothing while it runs or when unknown.
+fn outcome(info: &PermInfo, blocks: &[Block]) -> Option<String> {
+    let Some(Block::Tool(call)) = info.row.and_then(|r| blocks.get(r)) else {
+        return None;
+    };
+    let (add, del) = call.diff.iter().fold((0, 0), |(a, d), l| match l.kind {
+        DiffKind::Add => (a + 1, d),
+        DiffKind::Del => (a, d + 1),
+        _ => (a, d),
+    });
+    match (call.status, call.kind) {
+        (ToolStatus::Running | ToolStatus::Declined, _) => None,
+        (ToolStatus::Failed, ToolKind::Bash) => Some("exit 1, failed".into()),
+        (ToolStatus::Failed, _) => Some("failed".into()),
+        (_, ToolKind::Bash) => Some("exit 0".into()),
+        (_, ToolKind::Edit | ToolKind::Write) if add + del > 0 => {
+            Some(format!("+{add} −{del} lines"))
+        }
+        (_, ToolKind::Edit | ToolKind::Write) => Some("edited".into()),
+        _ => Some("done".into()),
+    }
+}
+
+/// Who answered: "by you", "by the rule Bash(npm test:*)", or that the
+/// reply was stopped while it waited.
+fn decider(info: &PermInfo) -> String {
+    match &info.by {
+        Decider::Stopped => "the reply was stopped".into(),
+        Decider::Rule(r) => format!("by the rule {r}"),
+        Decider::You => "by you".into(),
+    }
+}
+
+/// "Allowed", "Always allowed" or "Denied".
+fn verdict_word(verdict: Verdict) -> &'static str {
+    match verdict {
+        Verdict::Denied => "Denied",
+        Verdict::AllowedAlways => "Always allowed",
+        _ => "Allowed",
+    }
+}
+
+/// The muted line under an answer: who, where, when, and what came of it.
+fn answer_meta(verdict: Verdict, info: &PermInfo, blocks: &[Block], cx: &ItemContext) -> String {
+    let mut parts = vec![match info.by {
+        Decider::Stopped => format!("{}: {}", verdict_word(verdict), decider(info)),
+        _ => format!("{} {}", verdict_word(verdict), decider(info)),
+    }];
+    parts.push(match &cx.place {
+        Some((label, _)) => format!("on {label}"),
+        None => "on this computer".into(),
+    });
+    if let Some(at) = info.at {
+        parts.push(super::versions::ago(at));
+    }
+    if verdict != Verdict::Denied {
+        parts.extend(outcome(info, blocks));
+    }
+    parts.join(" · ")
+}
+
+/// The call an answer was about, in mono, cut to one line (all of it in
+/// the tooltip).
+fn subject(text: &SharedString, id: SharedString, t: &Theme) -> AnyElement {
+    let full = text.clone();
+    let line: String = text.lines().next().unwrap_or_default().to_string();
+    div()
+        .id(id)
+        .min_w_0()
+        .overflow_hidden()
+        .whitespace_nowrap()
+        .text_ellipsis()
+        .font_family(t.font_mono.clone())
+        .text_size(t.text.caption)
+        .text_color(t.colors.text)
+        .child(line)
+        .tooltip(move |w, cx| gpui::component::tooltip::Tooltip::new(full.clone()).build(w, cx))
+        .into_any_element()
+}
+
+/// An answered question as one row: a shield in the answer's tone, the
+/// call's icon and what it ran on, then who answered, where, when and how
+/// it went.
+#[allow(clippy::too_many_arguments)]
+fn answered(
+    title: &SharedString,
+    detail: &SharedString,
+    verdict: Verdict,
+    info: &PermInfo,
+    blocks: &[Block],
+    b: usize,
+    cx: &ItemContext,
+    t: &Theme,
+) -> AnyElement {
+    let denied = verdict == Verdict::Denied;
+    let tone = if denied {
+        t.extra.danger
+    } else {
+        t.extra.success
+    };
+    let what = if detail.trim().is_empty() {
+        title.clone()
+    } else {
+        detail.clone()
+    };
+    div()
+        .flex()
+        .items_start()
+        .gap(t.space.sm)
+        .px(t.space.md)
+        .py(t.space.sm)
+        .rounded(t.radius.button)
+        .border_1()
+        .border_color(t.colors.border)
+        .bg(if denied {
+            t.extra.danger_tint
+        } else {
+            t.colors.surface
+        })
+        .child(div().pt(px(1.)).child(icon(
+            if denied {
+                "icons/shield-x.svg"
+            } else {
+                "icons/shield-check.svg"
+            },
+            t.size.icon_sm,
+            tone,
+        )))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(t.space.sm)
+                        .min_w_0()
+                        .children(
+                            info.kind
+                                .map(|k| icon(k.icon(), t.size.icon_xs, t.colors.text_muted)),
+                        )
+                        .child(subject(
+                            &what,
+                            SharedString::from(format!("perm-what-{}-{}-{b}", cx.chat, cx.index)),
+                            t,
+                        )),
+                )
+                .child(
+                    div()
+                        .text_size(t.text.caption)
+                        .text_color(if denied {
+                            t.extra.danger
+                        } else {
+                            t.colors.text_muted
+                        })
+                        .child(answer_meta(verdict, info, blocks, cx)),
+                ),
+        )
+        .into_any_element()
+}
+
+/// Answers in a row that say the same, as one row ("Allowed 3 commands")
+/// that opens to list them.
+fn answer_group(
+    run: &[Block],
+    blocks: &[Block],
+    b: usize,
+    cx: &ItemContext,
+    t: &Theme,
+) -> AnyElement {
+    let Some(Block::Permission { verdict, info, .. }) = run.first() else {
+        return div().into_any_element();
+    };
+    let (verdict, open) = (*verdict, info.open);
+    let denied = verdict == Verdict::Denied;
+    let tone = if denied {
+        t.extra.danger
+    } else {
+        t.extra.success
+    };
+    let n = run.len();
+    let noun = match info.kind {
+        Some(ToolKind::Bash) => "commands",
+        Some(ToolKind::Edit | ToolKind::Write) => "edits",
+        Some(ToolKind::Web) => "web requests",
+        Some(ToolKind::Read | ToolKind::Search) => "reads",
+        _ => "requests",
+    };
+    // The newest answer's time stands for the group.
+    let last = run.iter().rev().find_map(|blk| match blk {
+        Block::Permission { info, .. } => info.at,
+        _ => None,
+    });
+    let mut meta = vec![
+        decider(info),
+        match &cx.place {
+            Some((label, _)) => format!("on {label}"),
+            None => "on this computer".into(),
+        },
+    ];
+    meta.extend(last.map(super::versions::ago));
+    let hover = t.colors.hover;
+    let header = div()
+        .id(SharedString::from(format!(
+            "perm-group-{}-{}-{b}",
+            cx.chat, cx.index
+        )))
+        .flex()
+        .items_center()
+        .gap(t.space.sm)
+        .px(t.space.md)
+        .py(t.space.sm)
+        .cursor_pointer()
+        .hover(move |s| s.bg(hover))
+        .on_click(toggle(cx, b))
+        .child(icon(
+            if denied {
+                "icons/shield-x.svg"
+            } else {
+                "icons/shield-check.svg"
+            },
+            t.size.icon_sm,
+            tone,
+        ))
+        .child(
+            div()
+                .flex_none()
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(t.colors.text_strong)
+                .child(format!("{} {n} {noun}", verdict_word(verdict))),
+        )
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .text_size(t.text.caption)
+                .text_color(t.colors.text_muted)
+                .child(meta.join(" · ")),
+        )
+        .child(chevron(open, t));
+    div()
+        .flex()
+        .flex_col()
+        .rounded(t.radius.button)
+        .border_1()
+        .border_color(t.colors.border)
+        .bg(if denied {
+            t.extra.danger_tint
+        } else {
+            t.colors.surface
+        })
+        .overflow_hidden()
+        .child(header)
+        .when(open, |d| {
+            d.child(crate::theme::rule(t)).child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(t.space.xs)
+                    .px(t.space.md)
+                    .py(t.space.sm)
+                    .children(run.iter().enumerate().filter_map(|(j, blk)| {
+                        let Block::Permission {
+                            title,
+                            detail,
+                            info,
+                            ..
+                        } = blk
+                        else {
+                            return None;
+                        };
+                        let what = if detail.trim().is_empty() {
+                            title.clone()
+                        } else {
+                            detail.clone()
+                        };
+                        Some(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(t.space.sm)
+                                .min_w_0()
+                                .children(
+                                    info.kind.map(|k| {
+                                        icon(k.icon(), t.size.icon_xs, t.colors.text_muted)
+                                    }),
+                                )
+                                .child(div().flex_1().min_w_0().child(subject(
+                                    &what,
+                                    SharedString::from(format!(
+                                        "perm-item-{}-{}-{b}-{j}",
+                                        cx.chat, cx.index
+                                    )),
+                                    t,
+                                )))
+                                .children(outcome(info, blocks).filter(|_| !denied).map(|o| {
+                                    div()
+                                        .flex_none()
+                                        .text_size(t.text.caption)
+                                        .text_color(t.colors.text_muted)
+                                        .child(o)
+                                })),
+                        )
+                    })),
+            )
+        })
+        .into_any_element()
+}
+
+#[allow(clippy::too_many_arguments)]
 fn permission(
     title: &SharedString,
     detail: &SharedString,
     verdict: Verdict,
+    info: &PermInfo,
+    blocks: &[Block],
     b: usize,
     cx: &ItemContext,
     t: &Theme,
@@ -929,6 +1292,12 @@ fn permission(
             state.update(app, |s, cx| s.answer(chat, msg, b, v, cx))
         }
     };
+    if matches!(
+        verdict,
+        Verdict::Allowed | Verdict::AllowedAlways | Verdict::Denied
+    ) {
+        return answered(title, detail, verdict, info, blocks, b, cx, t);
+    }
     if verdict != Verdict::Pending {
         let (label, bg, fg) = match verdict {
             Verdict::Denied => ("Denied", t.extra.danger_tint, t.extra.danger),
@@ -1032,4 +1401,39 @@ fn permission(
                 }),
         )
         .into_any_element()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::same_answers;
+    use crate::state::{Block, PermInfo, Verdict};
+
+    fn ask(title: &str, verdict: Verdict) -> Block {
+        Block::Permission {
+            title: title.to_string().into(),
+            detail: "".into(),
+            verdict,
+            info: PermInfo::default(),
+        }
+    }
+
+    #[test]
+    fn identical_answers_group_and_others_stand_alone() {
+        let blocks = [
+            ask("Run a command", Verdict::Denied),
+            ask("Run a command", Verdict::Allowed),
+            ask("Run a command", Verdict::Allowed),
+            ask("Run a command", Verdict::Allowed),
+            ask("Edit a file", Verdict::AllowedAlways),
+            Block::Text("done".into()),
+            ask("Run a command", Verdict::Pending),
+        ];
+        assert_eq!(same_answers(&blocks, 0), 1);
+        assert_eq!(same_answers(&blocks, 1), 3);
+        assert_eq!(same_answers(&blocks, 2), 2);
+        assert_eq!(same_answers(&blocks, 4), 1);
+        // Text and unanswered questions are not answers.
+        assert_eq!(same_answers(&blocks, 5), 0);
+        assert_eq!(same_answers(&blocks, 6), 0);
+    }
 }

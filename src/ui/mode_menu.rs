@@ -126,6 +126,7 @@ pub fn trigger(
 pub fn menu(
     t: &Theme,
     state: &Entity<AppState>,
+    window: &gpui::Window,
     cx: &App,
     on_out: impl Fn(gpui::Point<gpui::Pixels>, &mut App) + 'static,
 ) -> impl IntoElement {
@@ -205,51 +206,69 @@ pub fn menu(
             )
     });
 
-    let menu = div()
-        .id("modes-menu")
-        .on_mouse_down_out(move |ev, _, cx| on_out(ev.position, cx))
-        .absolute()
-        .bottom_full()
-        .right_0()
-        .mb(px(8.))
-        .w(px(320.))
-        .pt(px(6.))
-        .pb(px(4.))
-        .bg(t.colors.surface)
-        .border_1()
-        .border_color(t.colors.border)
-        .rounded(t.radius.card)
-        .shadow_lg()
-        .occlude()
-        .text_size(t.text.body_sm)
-        .child(
-            div()
-                .px(px(12.))
-                .py(px(4.))
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(
-                    div()
-                        .text_size(t.text.caption)
-                        .text_color(t.colors.text_subtle)
-                        .child("Modes"),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(px(3.))
-                        .text_size(t.text.caption - px(1.))
-                        .text_color(t.colors.text_subtle)
-                        .opacity(0.8)
-                        .child(key(t, "⇧"))
-                        .child("+")
-                        .child(key(t, "tab"))
-                        .child("to switch"),
-                ),
+    // It opens upward from its chip and is kept inside the window: moved
+    // down when the chip sits high, and scrolling when the window is short.
+    let menu = crate::theme::fit_window(
+        div().id("modes-menu"),
+        window,
+        t,
+        t.size.viewport_margin,
+        None,
+    )
+    .on_mouse_down_out(move |ev, _, cx| on_out(ev.position, cx))
+    .relative()
+    .w(px(320.))
+    .pt(px(6.))
+    .pb(px(4.))
+    .bg(t.colors.surface)
+    .border_1()
+    .border_color(t.colors.border)
+    .rounded(t.radius.card)
+    .shadow_lg()
+    .occlude()
+    .text_size(t.text.body_sm)
+    .child(
+        div()
+            .px(px(12.))
+            .py(px(4.))
+            .flex()
+            .items_center()
+            .justify_between()
+            .child(
+                div()
+                    .text_size(t.text.caption)
+                    .text_color(t.colors.text_subtle)
+                    .child("Modes"),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(3.))
+                    .text_size(t.text.caption - px(1.))
+                    .text_color(t.colors.text_subtle)
+                    .opacity(0.8)
+                    .child(key(t, "⇧"))
+                    .child("+")
+                    .child(key(t, "tab"))
+                    .child("to switch"),
+            ),
+    )
+    .child(rows)
+    .children(warning_card);
+    div().absolute().top_0().right_0().child(
+        gpui::deferred(
+            gpui::anchored()
+                .anchor(gpui::Anchor::BottomRight)
+                .snap_to_window_with_margin(t.size.viewport_margin)
+                .child(div().pb(px(8.)).child(super::motion::edge_draw(
+                    menu,
+                    "modes-in",
+                    t.colors.primary,
+                    0.,
+                    t,
+                ))),
         )
-        .child(rows)
-        .children(warning_card);
-    super::motion::edge_draw(menu, "modes-in", t.colors.primary, 8., t)
+        .with_priority(2),
+    )
 }

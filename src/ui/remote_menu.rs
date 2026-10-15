@@ -449,7 +449,7 @@ fn note(t: &Theme, text: impl Into<SharedString>, error: bool) -> gpui::Div {
 }
 
 impl Render for RemotePicker {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let s = self.state.read(cx);
         let Some(m) = s.remote_menu.clone() else {
@@ -595,7 +595,12 @@ impl Render for RemotePicker {
 
         let mut list = div()
             .id("remote-list")
-            .max_h(px(296.))
+            // It opens upward from the status bar, its search above the list.
+            .max_h(px(296.).min(crate::theme::fit_height(
+                window,
+                &t,
+                t.size.titlebar + t.size.statusbar * 3.,
+            )))
             .overflow_y_scroll()
             .flex()
             .flex_col();

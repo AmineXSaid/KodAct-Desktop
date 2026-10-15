@@ -192,9 +192,55 @@ pub enum Block {
         title: SharedString,
         detail: SharedString,
         verdict: Verdict,
+        /// What the call was, who answered, when, and where its row is.
+        info: PermInfo,
     },
     /// A file Forge made for you: a card in the reply, opened beside the chat.
     File(FileRef),
+}
+
+/// Who answered a permission question.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum Decider {
+    /// You, on the card.
+    #[default]
+    You,
+    /// You, with "Always allow": the rule it added (`Bash(npm test:*)`).
+    Rule(SharedString),
+    /// Nobody: the reply was stopped while it waited, so it was denied.
+    Stopped,
+}
+
+/// What a permission card keeps besides its words, for the row it becomes
+/// once answered (`message.rs`).
+#[derive(Clone, Debug, Default)]
+pub struct PermInfo {
+    /// The kind of call it asked about (its icon); None in older chats.
+    pub kind: Option<ToolKind>,
+    pub by: Decider,
+    /// When it was answered.
+    pub at: Option<std::time::SystemTime>,
+    /// The call's own row in the same message, for its outcome.
+    pub row: Option<usize>,
+    /// A run of identical answers that starts here shows each one.
+    pub open: bool,
+}
+
+/// The rule "Always allow" adds, from a question's suggestions
+/// (`[{type: addRules, rules: [{toolName, ruleContent}]}]`): `Bash(npm test:*)`.
+pub fn rule_name(suggestions: &serde_json::Value) -> Option<String> {
+    suggestions
+        .as_array()?
+        .iter()
+        .filter(|s| s["type"] == "addRules")
+        .flat_map(|s| s["rules"].as_array().into_iter().flatten())
+        .find_map(|r| {
+            let tool = r["toolName"].as_str()?;
+            Some(match r["ruleContent"].as_str() {
+                Some(c) if !c.is_empty() => format!("{tool}({c})"),
+                _ => tool.to_string(),
+            })
+        })
 }
 
 /// A sub-agent Forge started (a `Task` / `Agent` tool call), as the
@@ -215,6 +261,10 @@ pub struct AgentRun {
     pub steps: Vec<AgentStep>,
     /// Its latest words; once it ends, its answer.
     pub said: String,
+    /// You asked Forge to stop it, and Forge hasn't said it has yet.
+    pub stopping: bool,
+    /// You stopped it; the rest of the turn went on without it.
+    pub stopped: bool,
 }
 
 /// One tool call a sub-agent made.
@@ -239,6 +289,14 @@ impl AgentStep {
         }
     }
 }
+
+/// How ForgeCLI's result for a sub-agent you stopped begins (its
+/// `forge_tools::AGENT_STOPPED`).
+pub const AGENT_STOPPED: &str = "Stopped by user";
+
+/// What a ForgeCLI too old for `stop_task` is told when asked to stop one agent.
+pub const CANT_STOP_AGENT: &str =
+    "This Forge can't stop one agent; update it, or press Esc to stop the whole reply.";
 
 /// The tools that start a sub-agent.
 pub fn is_agent_tool(name: &str) -> bool {
@@ -691,6 +749,9 @@ pub struct Project {
     pub pinned: bool,
     /// When it was last opened, in minutes before now.
     pub opened_minutes_ago: u32,
+    /// You made it a project (Open folder…, Save as project). A remote
+    /// folder you connected to is worked in without becoming one.
+    pub saved: bool,
 }
 
 // ---------------------------------------------------------------- the engine's bookkeeping
@@ -937,6 +998,8 @@ pub enum Request {
     RevertPlan { chat: usize, msg: usize },
     /// Revert them.
     Revert { chat: usize, msg: usize },
+    /// Stop these sub-agents (every running one when you chose "Stop all").
+    StopAgents { chat: usize, ids: Vec<String> },
 }
 
 // ---------------------------------------------------------------- the state
@@ -1609,6 +1672,8 @@ impl AppState {
                         .file_name()
                         .map(|n| n.to_string_lossy().into_owned())
                         .unwrap_or_else(|| c.project.display().to_string());
+                    // A remote folder's chats come back without making it a project.
+                    let saved = crate::remote::Remote::parse(&c.project).is_none();
                     self.projects.push(Project {
                         id,
                         name: name.into(),
@@ -1616,8 +1681,9 @@ impl AppState {
                         path: c.project.clone(),
                         pinned: false,
                         opened_minutes_ago: 60,
+                        saved,
                     });
-                    added_project = true;
+                    added_project |= saved;
                     id
                 }
             };
@@ -1649,14 +1715,7 @@ impl AppState {
         // Pinned first is the sidebar's job; here, the most recent first.
         self.chats.sort_by_key(|c| std::cmp::Reverse(c.updated));
         if added_project {
-            let paths: Vec<std::path::PathBuf> = self
-                .projects
-                .iter()
-                .skip(1)
-                .map(|p| p.path.clone())
-                .collect();
-            cx.background_spawn(async move { save_projects(paths) })
-                .detach();
+            self.save_projects(cx);
         }
     }
 
@@ -1806,29 +1865,84 @@ impl AppState {
 
     /// Add a folder as a project (or open it, if it already is one).
     pub fn add_project(&mut self, path: std::path::PathBuf, cx: &mut Context<Self>) {
-        if let Some(p) = self.projects.iter().find(|p| p.path == path) {
-            let id = p.id;
-            return self.show_project(id, cx);
+        let id = self.place_folder(path, true);
+        self.save_projects(cx);
+        self.show_project(id, cx);
+    }
+
+    /// Work in a folder without making it a project (a remote one you
+    /// connected to): the window moves there, to a new chat, and the
+    /// folder is listed under "Connected", not under your projects.
+    pub fn work_in_folder(&mut self, path: std::path::PathBuf, cx: &mut Context<Self>) {
+        let id = self.place_folder(path, false);
+        self.select_project(id, cx);
+        self.screen = Screen::Chat;
+        self.current = None;
+        cx.notify();
+    }
+
+    /// The project for `path`, added when there is none; `save` makes an
+    /// unsaved one a project too.
+    fn place_folder(&mut self, path: std::path::PathBuf, save: bool) -> usize {
+        if let Some(p) = self.projects.iter_mut().find(|p| p.path == path) {
+            p.saved |= save;
+            return p.id;
         }
         let id = self.projects.iter().map(|p| p.id).max().unwrap_or(0) + 1;
-        let name = project_name(&path);
         self.projects.push(Project {
             id,
-            name: name.into(),
+            name: project_name(&path).into(),
             branch: git_branch(&path).into(),
             path,
             pinned: false,
             opened_minutes_ago: 0,
+            saved: save,
         });
+        id
+    }
+
+    /// Save as project: a folder you were only connected to joins your projects.
+    pub fn save_project(&mut self, id: usize, cx: &mut Context<Self>) {
+        if let Some(p) = self.projects.iter_mut().find(|p| p.id == id) {
+            p.saved = true;
+        }
+        self.save_projects(cx);
+        cx.notify();
+    }
+
+    /// Remove from projects: the folder leaves your list (its chats stay,
+    /// under All projects). The folder Forge started in always stays.
+    pub fn forget_project(&mut self, id: usize, cx: &mut Context<Self>) {
+        if self.projects.first().is_some_and(|p| p.id == id) {
+            return;
+        }
+        let has_chats = self.chats.iter().any(|c| c.project == id);
+        if has_chats || id == self.current_project {
+            if let Some(p) = self.projects.iter_mut().find(|p| p.id == id) {
+                p.saved = false;
+                p.pinned = false;
+            }
+        } else {
+            self.projects.retain(|p| p.id != id);
+        }
+        self.save_projects(cx);
+        if self.screen == Screen::Project(id) {
+            self.screen = Screen::Projects;
+        }
+        cx.notify();
+    }
+
+    /// Write your projects (all but the folder Forge started in) to disk.
+    fn save_projects(&self, cx: &mut Context<Self>) {
         let paths: Vec<std::path::PathBuf> = self
             .projects
             .iter()
             .skip(1)
+            .filter(|p| p.saved)
             .map(|p| p.path.clone())
             .collect();
         cx.background_spawn(async move { save_projects(paths) })
             .detach();
-        self.show_project(id, cx);
     }
 
     pub fn toggle_project_pin(&mut self, id: usize, cx: &mut Context<Self>) {
@@ -2572,6 +2686,8 @@ impl AppState {
                     failed: false,
                     steps: vec![],
                     said: String::new(),
+                    stopping: false,
+                    stopped: false,
                 });
                 if self.doc.is_none() && self.current == Some(chat) {
                     self.panel = Some(PanelTab::Agents);
@@ -2582,9 +2698,12 @@ impl AppState {
                 output,
                 is_error,
             } => {
-                if let Some(r) = runs.iter_mut().find(|r| &r.id == id) {
+                // A run you stopped here (no engine, in the demo) has already ended.
+                if let Some(r) = runs.iter_mut().find(|r| &r.id == id && !r.stopped) {
                     r.ended = Some(now);
-                    r.failed = *is_error;
+                    r.stopping = false;
+                    r.stopped = output.starts_with(AGENT_STOPPED);
+                    r.failed = *is_error && !r.stopped;
                     if !output.trim().is_empty() {
                         r.said = output.clone();
                     }
@@ -2603,7 +2722,11 @@ impl AppState {
                 name,
                 input,
             } => {
-                if let Some(r) = runs.iter_mut().find(|r| &r.id == parent) {
+                // An ended run takes no more steps (one you stopped may still report one).
+                if let Some(r) = runs
+                    .iter_mut()
+                    .find(|r| &r.id == parent && r.ended.is_none())
+                {
                     let call = crate::backend::tool_call(name, input);
                     let (what, described) = match (&call.note, call.kind) {
                         (Some(n), ToolKind::Bash) => (n.to_string(), true),
@@ -2636,7 +2759,10 @@ impl AppState {
                 }
             }
             Event::SubText { parent, text } => {
-                if let Some(r) = runs.iter_mut().find(|r| &r.id == parent) {
+                if let Some(r) = runs
+                    .iter_mut()
+                    .find(|r| &r.id == parent && r.ended.is_none())
+                {
                     r.said = text.clone();
                 }
             }
@@ -2644,7 +2770,9 @@ impl AppState {
             Event::TurnEnd { .. } | Event::Exited { .. } => {
                 for r in runs.iter_mut().filter(|r| r.ended.is_none()) {
                     r.ended = Some(now);
-                    r.failed = true;
+                    r.stopped = r.stopping;
+                    r.failed = !r.stopping;
+                    r.stopping = false;
                 }
             }
             _ => {}
@@ -3500,6 +3628,9 @@ impl AppState {
         result: Result<serde_json::Value, String>,
         cx: &mut Context<Self>,
     ) {
+        if let Request::StopAgents { chat, ids } = req {
+            return self.on_stop_reply(chat, &ids, result, cx);
+        }
         let files = |v: &serde_json::Value| -> Result<Vec<String>, String> {
             if v["canRewind"] == false {
                 return Err(v["error"]
@@ -3553,6 +3684,7 @@ impl AppState {
                 );
                 self.touch(chat, cx);
             }
+            (Request::StopAgents { .. }, _) => {}
             (_, Err(e)) => self.show_toast(format!("Couldn't revert: {e}"), cx),
         }
         cx.notify();
@@ -3920,6 +4052,7 @@ impl AppState {
                 match blocks.get_mut(block) {
                     Some(Block::Thinking { open, .. }) => *open = !*open,
                     Some(Block::Tool(t)) => t.open = !t.open,
+                    Some(Block::Permission { info, .. }) => info.open = !info.open,
                     _ => {}
                 }
                 c.version += 1;
@@ -3941,6 +4074,18 @@ impl AppState {
         cx.notify();
     }
 
+    /// Who answered a permission question, when it wasn't you on the card.
+    fn set_decider(&mut self, chat: usize, msg: usize, block: usize, by: Decider) {
+        if let Some(c) = self.chat_mut(chat) {
+            if let Some(Message::Assistant { blocks }) = c.messages.get_mut(msg) {
+                if let Some(Block::Permission { info, .. }) = blocks.get_mut(block) {
+                    info.by = by;
+                }
+            }
+            c.version += 1;
+        }
+    }
+
     /// Answer the permission prompt the reply is waiting on.
     pub fn answer(
         &mut self,
@@ -3952,8 +4097,14 @@ impl AppState {
     ) {
         if let Some(c) = self.chat_mut(chat) {
             if let Some(Message::Assistant { blocks }) = c.messages.get_mut(msg) {
-                if let Some(Block::Permission { verdict: v, .. }) = blocks.get_mut(block) {
+                if let Some(Block::Permission {
+                    verdict: v, info, ..
+                }) = blocks.get_mut(block)
+                {
                     *v = verdict;
+                    if verdict != Verdict::Pending {
+                        info.at = Some(std::time::SystemTime::now());
+                    }
                 }
             }
             c.version += 1;
@@ -3966,6 +4117,11 @@ impl AppState {
             && verdict != Verdict::Pending
         {
             let ask = self.asks.remove(&chat).expect("checked above");
+            if verdict == Verdict::AllowedAlways {
+                if let Some(rule) = rule_name(&ask.suggestions) {
+                    self.set_decider(chat, msg, block, Decider::Rule(rule.into()));
+                }
+            }
             // A plan's own answers set the mode in the same reply.
             let plan = match verdict {
                 Verdict::PlanAutoAccept => Some((
@@ -4019,6 +4175,134 @@ impl AppState {
         cx.notify();
     }
 
+    /// Stop one sub-agent of the chat on screen; the rest of the turn goes on.
+    pub fn stop_agent(&mut self, id: &str, cx: &mut Context<Self>) {
+        self.stop_agent_runs(Some(id), cx);
+    }
+
+    /// Stop every running sub-agent of the chat on screen (Stop all,
+    /// Ctrl+Shift+Escape); Forge carries on with what they found.
+    pub fn stop_agents(&mut self, cx: &mut Context<Self>) {
+        self.stop_agent_runs(None, cx);
+    }
+
+    /// The chat on screen has a sub-agent still running.
+    pub fn agents_running(&self) -> bool {
+        self.current
+            .and_then(|c| self.agents.get(&c))
+            .is_some_and(|runs| runs.iter().any(|r| r.ended.is_none()))
+    }
+
+    fn stop_agent_runs(&mut self, only: Option<&str>, cx: &mut Context<Self>) {
+        let Some(chat) = self.current else { return };
+        let ids: Vec<String> = self
+            .agents
+            .get(&chat)
+            .into_iter()
+            .flatten()
+            .filter(|r| r.ended.is_none() && !r.stopping && only.is_none_or(|id| r.id == id))
+            .map(|r| r.id.clone())
+            .collect();
+        if ids.is_empty() {
+            return;
+        }
+        let sent = self.sessions.get(&chat).map(|l| match only {
+            Some(id) => l.session.stop_agent(id),
+            None => l.session.stop_agents(),
+        });
+        match sent {
+            Some(Ok(request)) => {
+                self.requests.insert(
+                    request,
+                    Request::StopAgents {
+                        chat,
+                        ids: ids.clone(),
+                    },
+                );
+                for r in self.agents.entry(chat).or_default() {
+                    if ids.contains(&r.id) {
+                        r.stopping = true;
+                    }
+                }
+            }
+            Some(Err(e)) => self.show_toast(format!("Couldn't stop the agent: {e}"), cx),
+            // No engine behind this chat (the demo): it stops here.
+            None => self.mark_agents_stopped(chat, &ids),
+        }
+        cx.notify();
+    }
+
+    /// Show sub-agents as stopped, and their rows in the chat with them.
+    fn mark_agents_stopped(&mut self, chat: usize, ids: &[String]) {
+        let now = std::time::Instant::now();
+        for r in self.agents.entry(chat).or_default() {
+            if ids.contains(&r.id) && r.ended.is_none() {
+                r.ended = Some(now);
+                r.stopping = false;
+                r.stopped = true;
+                r.failed = false;
+                for s in r
+                    .steps
+                    .iter_mut()
+                    .filter(|s| s.status == ToolStatus::Running)
+                {
+                    s.status = ToolStatus::Declined;
+                }
+            }
+        }
+        let order: Vec<String> = self.agents[&chat].iter().map(|r| r.id.clone()).collect();
+        for id in ids {
+            let stop = |t: &mut ToolCall| {
+                t.status = ToolStatus::Declined;
+                t.output = format!("{AGENT_STOPPED}.").into();
+            };
+            if let Some(&(m, b)) = self.tool_rows.get(&(chat, id.clone())) {
+                self.update_tool(chat, m, b, stop);
+            } else if let Some(n) = order.iter().position(|o| o == id) {
+                // The demo's rows have no ids: the agent's row is the nth agent row.
+                if let Some(Message::Assistant { blocks }) =
+                    self.chat_mut(chat).and_then(|c| c.messages.last_mut())
+                {
+                    if let Some(Block::Tool(t)) = blocks
+                        .iter_mut()
+                        .filter(|b| matches!(b, Block::Tool(t) if is_agent_tool(&t.target)))
+                        .nth(n)
+                    {
+                        stop(t);
+                    }
+                }
+            }
+        }
+        if let Some(c) = self.chat_mut(chat) {
+            c.version += 1;
+        }
+    }
+
+    /// ForgeCLI's answer to a stop: the agents' own results follow (and mark
+    /// them stopped); a refusal clears "stopping" and says why.
+    fn on_stop_reply(
+        &mut self,
+        chat: usize,
+        ids: &[String],
+        result: Result<serde_json::Value, String>,
+        cx: &mut Context<Self>,
+    ) {
+        let Err(e) = result else { return };
+        for r in self.agents.entry(chat).or_default() {
+            if ids.contains(&r.id) {
+                r.stopping = false;
+            }
+        }
+        if e.contains("nsupported") || e.contains("nknown") {
+            self.show_toast(CANT_STOP_AGENT, cx);
+        } else if e.starts_with("No running agent") {
+            // It ended on its own just before the stop arrived.
+        } else {
+            self.show_toast(format!("Couldn't stop the agent: {e}"), cx);
+        }
+        cx.notify();
+    }
+
     /// Stop the reply being played (the composer's Stop, Escape).
     pub fn stop(&mut self, cx: &mut Context<Self>) {
         let Some(id) = self.current else { return };
@@ -4036,6 +4320,7 @@ impl AppState {
         }
         if let Some(ask) = self.asks.remove(&id) {
             self.answer(id, ask.msg, ask.block, Verdict::Denied, cx);
+            self.set_decider(id, ask.msg, ask.block, Decider::Stopped);
         }
         {
             if let Some(c) = self.chat_mut(id) {
@@ -4128,6 +4413,9 @@ impl AppState {
         self.replies.insert(
             id,
             cx.spawn(async move |this, cx| {
+                // Only a question asked live can be denied live; a step that
+                // shows one already answered (`Step::Asked`) is history.
+                let mut asked = false;
                 for step in script(&text) {
                     let wait = step.delay();
                     cx.background_executor()
@@ -4145,9 +4433,11 @@ impl AppState {
                             .timer(Duration::from_millis(120))
                             .await;
                     }
-                    let denied = this
-                        .update(cx, |s, _| s.last_permission_denied(id))
-                        .unwrap_or(false);
+                    let denied = asked
+                        && this
+                            .update(cx, |s, _| s.last_permission_denied(id))
+                            .unwrap_or(false);
+                    asked = matches!(step, Step::Ask(..));
                     let step = if denied { Step::Denied } else { step };
                     let done = matches!(step, Step::End { .. } | Step::Denied);
                     if this.update(cx, |s, cx| s.apply(id, step, cx)).is_err() {
@@ -4545,7 +4835,10 @@ impl AppState {
                     let mut written = None;
                     self.update_tool(chat, m, b, |t| {
                         if t.status != ToolStatus::Declined {
-                            t.status = if is_error {
+                            t.status = if output.starts_with(AGENT_STOPPED) {
+                                // A sub-agent you stopped: not a failure.
+                                ToolStatus::Declined
+                            } else if is_error {
                                 ToolStatus::Failed
                             } else {
                                 ToolStatus::Done
@@ -4584,14 +4877,30 @@ impl AppState {
                     return;
                 }
                 let (title, detail) = crate::backend::ask_text(&tool_name, &input);
+                let row = self.tool_rows.get(&(chat, tool_use_id.clone())).copied();
+                let info = PermInfo {
+                    kind: Some(crate::backend::tool_call(&tool_name, &input).kind),
+                    ..Default::default()
+                };
                 if let Some((msg, block)) = self.push_block(
                     chat,
                     Block::Permission {
                         title: title.into(),
                         detail: detail.into(),
                         verdict: Verdict::Pending,
+                        info,
                     },
                 ) {
+                    // Its outcome is read from the call's row, when that is in the same message.
+                    if let Some((_, b)) = row.filter(|(m, _)| *m == msg) {
+                        if let Some(Message::Assistant { blocks }) =
+                            self.chat_mut(chat).and_then(|c| c.messages.get_mut(msg))
+                        {
+                            if let Some(Block::Permission { info, .. }) = blocks.get_mut(block) {
+                                info.row = Some(b);
+                            }
+                        }
+                    }
                     self.asks.insert(
                         chat,
                         Ask {
@@ -4610,6 +4919,7 @@ impl AppState {
                     let (m, b) = (ask.msg, ask.block);
                     self.asks.remove(&chat);
                     self.answer(chat, m, b, Verdict::Denied, cx);
+                    self.set_decider(chat, m, b, Decider::Stopped);
                 }
             }
             Event::Immediate { text, is_error } => {
@@ -5106,7 +5416,8 @@ impl AppState {
     pub fn open_remote_folder(&mut self, remote: crate::remote::Remote, cx: &mut Context<Self>) {
         self.remote_menu = None;
         let target = remote.target.clone();
-        self.add_project(remote.to_path(), cx);
+        // Connecting doesn't make a project: Save as project does, if you want one.
+        self.work_in_folder(remote.to_path(), cx);
         if !self.remote_ready.contains_key(&target) {
             self.connect(target, None, cx);
         }
@@ -5599,9 +5910,15 @@ impl AppState {
                         cx,
                     );
                 }
-                crate::backend::Event::ToolResult { .. } => {
+                crate::backend::Event::ToolResult { id, .. } => {
+                    // A run you stopped already shows so.
+                    let stopped = self
+                        .agents
+                        .get(&chat)
+                        .is_some_and(|runs| runs.iter().any(|r| &r.id == id && r.stopped));
                     // The oldest agent row still running is the one done.
-                    if let Some(Message::Assistant { blocks }) =
+                    if stopped {
+                    } else if let Some(Message::Assistant { blocks }) =
                         self.chat_mut(chat).and_then(|c| c.messages.last_mut())
                     {
                         if let Some(Block::Tool(t)) = blocks.iter_mut().find(|b| {
@@ -5670,11 +5987,53 @@ impl AppState {
                 self.panel_follows(chat, name);
             }
             (Step::File(f), Some(blocks)) => blocks.push(Block::File(f)),
-            (Step::Ask(title, detail), Some(blocks)) => blocks.push(Block::Permission {
-                title: title.into(),
-                detail: detail.into(),
-                verdict: Verdict::Pending,
-            }),
+            (Step::Ask(title, detail), Some(blocks)) => {
+                // The call it asks about is the row just before it.
+                let row = blocks.iter().rposition(|b| matches!(b, Block::Tool(_)));
+                let kind = row.and_then(|r| match &blocks[r] {
+                    Block::Tool(t) => Some(t.kind),
+                    _ => None,
+                });
+                blocks.push(Block::Permission {
+                    title: title.into(),
+                    detail: detail.into(),
+                    verdict: Verdict::Pending,
+                    info: PermInfo {
+                        kind,
+                        row,
+                        ..Default::default()
+                    },
+                })
+            }
+            (Step::Asked(name, input, output, verdict, by, own_row), Some(blocks)) => {
+                // A question answered before: its call, done, then the answer.
+                // A sub-agent's call has no row of its own in the reply.
+                let mut t = crate::backend::tool_call(name, &input);
+                t.status = if verdict == Verdict::Denied {
+                    ToolStatus::Declined
+                } else {
+                    ToolStatus::Done
+                };
+                t.output = output.into();
+                t.open = false;
+                let kind = t.kind;
+                if own_row {
+                    blocks.push(Block::Tool(t));
+                }
+                let (title, detail) = crate::backend::ask_text(name, &input);
+                blocks.push(Block::Permission {
+                    title: title.into(),
+                    detail: detail.into(),
+                    verdict,
+                    info: PermInfo {
+                        kind: Some(kind),
+                        by,
+                        at: Some(std::time::SystemTime::now()),
+                        row: own_row.then(|| blocks.len() - 1),
+                        open: false,
+                    },
+                });
+            }
             (Step::Denied, Some(blocks)) => {
                 if let Some(Block::Tool(t)) = blocks
                     .iter_mut()
@@ -5715,6 +6074,15 @@ enum Step {
     ToolStart(ToolKind, String, Option<String>),
     ToolDone(String, Vec<DiffLine>),
     Ask(String, String),
+    /// A call and the permission question it needed, already answered.
+    Asked(
+        &'static str,
+        serde_json::Value,
+        &'static str,
+        Verdict,
+        Decider,
+        bool,
+    ),
     Denied,
     /// A tool call as ForgeCLI sends it (name and input), done with its output.
     Use(&'static str, serde_json::Value, String),
@@ -5734,6 +6102,7 @@ impl Step {
             Step::ToolStart(..) => 350,
             Step::ToolDone(..) => 900,
             Step::Ask(..) => 300,
+            Step::Asked(..) => 450,
             Step::Use(..) => 500,
             Step::File(..) => 300,
             Step::Agent(..) => 380,
@@ -5778,6 +6147,37 @@ const DEMO_ASCII: &str = "Here it is in ASCII.\n\n```text\n┌──────
 
 /// The demo's sub-agents: three reviewers at once, each with its own steps
 /// and answer, as the engine reports them.
+/// Questions already answered: three of a sub-agent's commands you allowed
+/// (one row, opened to list them), an edit an "Always allow" rule let
+/// through, and a command you denied.
+fn demo_approvals() -> Vec<Step> {
+    use serde_json::json;
+    let bash = |cmd: &str, what: &str| json!({ "command": cmd, "description": what });
+    let mut s = words(
+        "Three agents need to look around the repo, so a few commands need your OK.",
+        Step::Say,
+    );
+    s.extend([
+        Step::Asked("Bash", bash("rm -rf target", "Clean the build"), "", Verdict::Denied, Decider::You, true),
+        Step::Asked("Bash", bash("git log --oneline -20", "Recent history"), "", Verdict::Allowed, Decider::You, false),
+        Step::Asked("Bash", bash("find . -name '*.toml' -not -path './target/*'", "Find the manifests"), "", Verdict::Allowed, Decider::You, false),
+        Step::Asked("Bash", bash("file target/release/forge", "Check the binary"), "", Verdict::Allowed, Decider::You, false),
+        Step::Asked(
+            "Edit",
+            json!({ "file_path": "src/main.rs", "old_string": "println!(\"Hello, world\");", "new_string": "println!(\"{}\", greeting());" }),
+            "The file was updated.",
+            Verdict::AllowedAlways,
+            Decider::Rule("Edit(src/**)".into()),
+            true,
+        ),
+    ]);
+    s.extend(words(
+        "The survey is done; I left the build folder alone, as you asked.",
+        Step::Say,
+    ));
+    s
+}
+
 fn demo_agents() -> Vec<Step> {
     use crate::backend::Event;
     use serde_json::json;
@@ -5942,6 +6342,11 @@ fn script(prompt: &str) -> Vec<Step> {
         s.push(Step::End { seconds: 14.2 });
         return s;
     }
+    if lower.contains("approv") {
+        s.extend(demo_approvals());
+        s.push(Step::End { seconds: 4.8 });
+        return s;
+    }
     if lower.contains("plan") {
         s.extend(demo_plan());
         s.push(Step::End { seconds: 5.2 });
@@ -6019,6 +6424,7 @@ fn initial_projects(here: &std::path::Path) -> Vec<Project> {
         path,
         pinned: false,
         opened_minutes_ago: opened,
+        saved: true,
     };
     let mut out = vec![project(1, here.to_path_buf(), 0)];
     for path in saved_projects() {
@@ -6399,6 +6805,22 @@ fn mock_chats() -> Vec<Chat> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn always_allow_names_the_rule_it_adds() {
+        let s = serde_json::json!([
+            {"type": "setMode", "mode": "acceptEdits"},
+            {"type": "addRules", "rules": [{"toolName": "Bash", "ruleContent": "npm test:*"}]}
+        ]);
+        assert_eq!(super::rule_name(&s).as_deref(), Some("Bash(npm test:*)"));
+        let s = serde_json::json!([{"type": "addRules", "rules": [{"toolName": "Edit"}]}]);
+        assert_eq!(super::rule_name(&s).as_deref(), Some("Edit"));
+        assert_eq!(super::rule_name(&serde_json::json!(null)), None);
+        assert_eq!(
+            super::rule_name(&serde_json::json!([{"type": "setMode"}])),
+            None
+        );
+    }
 
     #[test]
     fn remote_sessions_get_no_secrets() {

@@ -418,6 +418,17 @@ impl Session {
         self.control(json!({ "subtype": "interrupt" })).map(drop)
     }
 
+    /// Stop one sub-agent (its Task call's id); the turn goes on. Returns
+    /// the request's id: the answer says whether it was still running.
+    pub fn stop_agent(&self, id: &str) -> Result<String, String> {
+        self.control(json!({ "subtype": "stop_task", "task_id": id }))
+    }
+
+    /// Stop every sub-agent; the turn goes on.
+    pub fn stop_agents(&self) -> Result<String, String> {
+        self.control(json!({ "subtype": "stop_task", "all": true }))
+    }
+
     pub fn set_model(&self, model: &str) -> Result<(), String> {
         self.control(json!({ "subtype": "set_model", "model": model }))
             .map(drop)

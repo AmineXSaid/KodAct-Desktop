@@ -57,9 +57,9 @@ pub mod terminal;
 pub mod terminal_dock;
 pub mod versions;
 pub mod voxels;
-pub mod writing_hand;
 pub mod workbench;
 pub mod workspace;
+pub mod writing_hand;
 
 use gpui::{div, prelude::*, svg, App, Div, Hsla, Pixels, SharedString, Svg};
 
@@ -92,6 +92,7 @@ gpui::actions!(
         ToggleModelPicker,
         CycleMode,
         StopReply,
+        StopAgents,
         OpenSettings,
         OpenSlashCommands,
         OpenAgents,
@@ -175,9 +176,12 @@ pub fn turning_logo(size: f32, id: impl Into<gpui::ElementId>) -> gpui::AnyEleme
     const TURN_MS: f32 = 900.;
     const REST_MS: f32 = 450.;
     let frame = move |i: usize| {
-        gpui::img(SharedString::from(format!("images/turn/turn-{:02}.png", i % FRAMES)))
-            .size(px(size))
-            .flex_none()
+        gpui::img(SharedString::from(format!(
+            "images/turn/turn-{:02}.png",
+            i % FRAMES
+        )))
+        .size(px(size))
+        .flex_none()
     };
     if motion::reduced_motion() {
         return logo(size).into_any_element();

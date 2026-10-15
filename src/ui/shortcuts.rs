@@ -53,6 +53,11 @@ pub const SHORTCUTS: &[(&str, &str, &str)] = &[
         "Stop the reply, or close what's open",
         "Conversation",
     ),
+    (
+        "secondary-shift-x",
+        "Stop every agent; the reply goes on",
+        "Conversation",
+    ),
 ];
 
 pub const GROUPS: [&str; 3] = ["General", "Chats", "Conversation"];

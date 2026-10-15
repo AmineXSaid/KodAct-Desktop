@@ -159,6 +159,7 @@ pub fn render(
     query: &str,
     active: Option<&str>,
     search: AnyElement,
+    window: &gpui::Window,
     on_hover: impl Fn(String, &mut gpui::App) + Clone + 'static,
     on_out: impl Fn(gpui::Point<gpui::Pixels>, &mut gpui::App) + 'static,
 ) -> impl IntoElement {
@@ -428,7 +429,12 @@ pub fn render(
         .child(
             div()
                 .id("models-list")
-                .max_h(px(300.))
+                // Above the composer, under the search, over the effort and links.
+                .max_h(px(300.).min(crate::theme::fit_height(
+                    window,
+                    t,
+                    t.size.titlebar + t.size.composer_clearance * 2.,
+                )))
                 .overflow_y_scroll()
                 .child(list),
         )

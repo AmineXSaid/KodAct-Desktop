@@ -185,14 +185,14 @@ impl Workspace {
         super::motion::slide_in(pane, width, false, &t)
     }
 
-    fn title_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn title_bar(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         // Deferred so it paints above the page under the title bar.
         let switcher = self
             .state
             .read(cx)
             .switcher_open
-            .then(|| gpui::deferred(self.switcher(cx)).with_priority(1));
+            .then(|| gpui::deferred(self.switcher(window, cx)).with_priority(1));
         let s = self.state.read(cx);
         let hover = t.colors.hover;
         // Icon-only: each says what it does, with its key.
@@ -259,6 +259,12 @@ impl Workspace {
                                 .when(s.switcher_open, |d| d.bg(hover))
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(t.colors.text_strong)
+                                .child(super::projects::project_tile(
+                                    &t,
+                                    &s.project,
+                                    &s.project_dir,
+                                    px(18.),
+                                ))
                                 .child(s.project.clone())
                                 // A remote project says where it lives.
                                 .children(s.current_remote().map(|r| {
@@ -384,7 +390,7 @@ impl Workspace {
                         })),
                 )
                 .child(div().flex_1())
-                .children(super::approvals::render(&t, &self.state, cx))
+                .children(super::approvals::render(&t, &self.state, window, cx))
                 .child({
                     let open = s.terminal_open;
                     let unseen = !open && self.terminal.read(cx).unseen;
@@ -479,38 +485,47 @@ impl Workspace {
             crate::greeting::hour_now(),
             s.greeting_seed,
         );
+        // A short window scrolls it rather than cutting off the logo or the starters.
         div()
+            .id("welcome")
             .flex_1()
-            .flex()
-            .flex_col()
-            .items_center()
-            .justify_center()
-            .px(t.space.xl)
-            // A little above the middle, where the eye lands.
-            .pb(t.space.xxl * 2.)
+            .min_h_0()
+            .overflow_y_scroll()
             .child(
                 div()
-                    .w_full()
-                    .max_w(t.size.column - t.space.xxl * 2.)
+                    .min_h_full()
                     .flex()
                     .flex_col()
                     .items_center()
-                    .gap(t.space.xl)
-                    // The Forge logo above the greeting, both centred.
-                    .child(super::logo(84.))
+                    .justify_center()
+                    .px(t.space.xl)
+                    .py(t.space.xl)
+                    // A little above the middle, where the eye lands.
+                    .pb(t.space.xxl * 2.)
                     .child(
                         div()
                             .w_full()
-                            .text_center()
-                            .font_family(t.font_display.clone())
-                            .text_size(t.size.greeting)
-                            .text_color(t.colors.text_strong)
-                            .line_height(gpui::relative(1.15))
-                            .child(line),
-                    )
-                    .child(div().h(t.space.sm))
-                    .child(self.composer.clone())
-                    .child(super::starters::render(&t, &self.state, &self.composer, cx)),
+                            .max_w(t.size.column - t.space.xxl * 2.)
+                            .flex()
+                            .flex_col()
+                            .items_center()
+                            .gap(t.space.xl)
+                            // The Forge logo above the greeting, both centred.
+                            .child(super::logo(84.))
+                            .child(
+                                div()
+                                    .w_full()
+                                    .text_center()
+                                    .font_family(t.font_display.clone())
+                                    .text_size(t.size.greeting)
+                                    .text_color(t.colors.text_strong)
+                                    .line_height(gpui::relative(1.15))
+                                    .child(line),
+                            )
+                            .child(div().h(t.space.sm))
+                            .child(self.composer.clone())
+                            .child(super::starters::render(&t, &self.state, &self.composer, cx)),
+                    ),
             )
     }
 
@@ -522,117 +537,166 @@ impl Workspace {
 
     /// The title bar's project switcher: every project, then All projects
     /// and Open folder….
-    fn switcher(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    fn switcher(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let t = cx.theme().clone();
         let s = self.state.read(cx);
         let home = crate::rules::home_dir();
         let hover = t.colors.hover;
-        let mut projects = s.projects.clone();
+        let mut projects: Vec<_> = s.projects.iter().filter(|p| p.saved).cloned().collect();
         projects.sort_by_key(|p| (p.id != s.current_project, !p.pinned, p.opened_minutes_ago));
-        let row = |id: SharedString| {
+        let connected: Vec<_> = s.projects.iter().filter(|p| !p.saved).cloned().collect();
+        let row = |id: SharedString, current: bool| {
             div()
                 .id(id)
                 .flex()
                 .items_center()
-                .gap(t.space.sm)
-                .px(t.space.md)
-                .py(t.space.sm)
+                .gap(t.space.md)
+                .px(t.space.sm)
+                .py(t.space.xs + px(2.))
                 .rounded(t.radius.button)
                 .cursor_pointer()
+                .when(current, |d| d.bg(t.extra.selected))
                 .hover(move |st| st.bg(hover))
         };
-        let mut list = div().flex().flex_col().child(
+        let label = |text: &'static str| {
             div()
-                .px(t.space.md)
+                .px(t.space.sm)
                 .pt(t.space.sm)
                 .pb(t.space.xs)
                 .text_size(t.text.caption)
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(t.colors.text_subtle)
-                .child("Projects"),
-        );
-        for p in projects {
+                .child(text)
+        };
+        let entry = |p: &crate::state::Project, meta: String, current: bool| {
             let (state, id) = (self.state.clone(), p.id);
+            let tip: SharedString = crate::rules::display_path(&p.path, home.as_deref()).into();
+            row(format!("switch-{}", p.id).into(), current)
+                .tooltip(move |w, cx| {
+                    gpui::component::tooltip::Tooltip::new(tip.clone()).build(w, cx)
+                })
+                .child(super::projects::project_tile(&t, &p.name, &p.path, px(28.)))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .child(
+                            div()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(t.colors.text_strong)
+                                .child(p.name.clone()),
+                        )
+                        .child(
+                            div()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .text_size(t.text.caption)
+                                .text_color(t.colors.text_subtle)
+                                .child(meta),
+                        ),
+                )
+                .child(div().w(t.size.icon).when(current, |d| {
+                    d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.primary))
+                }))
+                .on_click(move |_, _, cx| {
+                    state.update(cx, |s, cx| {
+                        s.select_project(id, cx);
+                        if !matches!(s.screen, Screen::Rules) {
+                            s.screen = Screen::Chat;
+                        }
+                    })
+                })
+        };
+        let mut list = div().flex().flex_col().gap(px(2.)).child(label("Projects"));
+        // Rows rise in one after another as the menu opens.
+        let mut i = 0;
+        for p in &projects {
+            let chats = s.chats.iter().filter(|c| c.project == p.id).count();
             let current = p.id == s.current_project;
-            list = list.child(
-                row(format!("switch-{}", p.id).into())
-                    .child(icon(
-                        "icons/folder-open.svg",
-                        t.size.icon_sm,
-                        if current {
-                            t.colors.primary
-                        } else {
-                            t.colors.text_muted
-                        },
-                    ))
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .flex_col()
-                            .child(div().text_color(t.colors.text_strong).child(p.name.clone()))
-                            .child(
-                                div()
-                                    .overflow_hidden()
-                                    .whitespace_nowrap()
-                                    .text_ellipsis()
-                                    .font_family(t.font_mono.clone())
-                                    .text_size(t.text.caption)
-                                    .text_color(t.colors.text_subtle)
-                                    .child(crate::rules::display_path(&p.path, home.as_deref())),
-                            ),
-                    )
-                    .child(div().w(t.size.icon).when(current, |d| {
-                        d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.primary))
-                    }))
-                    .on_click(move |_, _, cx| {
-                        state.update(cx, |s, cx| {
-                            s.select_project(id, cx);
-                            if !matches!(s.screen, Screen::Rules) {
-                                s.screen = Screen::Chat;
-                            }
-                        })
-                    }),
+            let e = entry(
+                p,
+                super::projects::project_meta(chats, current, p.opened_minutes_ago),
+                current,
             );
+            list = list.child(super::motion::row_in(e, ("switch-in", i), i, &t));
+            i += 1;
+        }
+        // Folders you're connected to that aren't projects: here to come back to.
+        if !connected.is_empty() {
+            list = list.child(label("Connected"));
+            for p in &connected {
+                let place = crate::remote::Remote::parse(&p.path)
+                    .map(|r| r.target.label())
+                    .unwrap_or_default();
+                let current = p.id == s.current_project;
+                let e = entry(p, place, current);
+                list = list.child(super::motion::row_in(e, ("switch-in", i), i, &t));
+                i += 1;
+            }
         }
         let (all, open) = (self.state.clone(), self.state.clone());
-        let menu = theme::popover(&t)
-            .id("switcher")
-            .absolute()
-            .top(t.size.control + t.space.xs)
-            .left_0()
-            .w(px(320.))
-            .child(list)
-            .child(theme::rule(&t).my(t.space.xs))
-            .child(
-                row("switch-all".into())
-                    .child(icon(
-                        "icons/list-todo.svg",
-                        t.size.icon_sm,
-                        t.colors.text_muted,
-                    ))
-                    .child("All projects")
-                    .on_click(move |_, _, cx| {
-                        all.update(cx, |s, cx| {
-                            s.switcher_open = false;
-                            s.screen = Screen::Projects;
-                            cx.notify();
-                        })
-                    }),
-            )
-            .child(
-                row("switch-open".into())
-                    .child(icon("icons/plus.svg", t.size.icon_sm, t.colors.text_muted))
-                    .child("Open folder…")
-                    .on_click(move |_, _, cx| {
-                        open.update(cx, |s, cx| {
-                            s.switcher_open = false;
-                            cx.notify();
-                        });
-                        super::projects::open_folder(open.clone(), cx);
-                    }),
-            );
+        let menu = theme::fit_window(
+            theme::popover(&t).id("switcher"),
+            window,
+            &t,
+            t.size.titlebar,
+            None,
+        )
+        .absolute()
+        .top(t.size.control + t.space.xs)
+        .left_0()
+        .w(px(340.))
+        .p(t.space.xs)
+        .child(list)
+        .child(theme::rule(&t).my(t.space.xs))
+        .child(
+            row("switch-all".into(), false)
+                .child(
+                    div()
+                        .size(px(28.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(icon(
+                            "icons/layout-grid.svg",
+                            t.size.icon_sm,
+                            t.colors.text_muted,
+                        )),
+                )
+                .child(div().text_color(t.colors.text).child("All projects"))
+                .on_click(move |_, _, cx| {
+                    all.update(cx, |s, cx| {
+                        s.switcher_open = false;
+                        s.screen = Screen::Projects;
+                        cx.notify();
+                    })
+                }),
+        )
+        .child(
+            row("switch-open".into(), false)
+                .child(
+                    div()
+                        .size(px(28.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(icon("icons/plus.svg", t.size.icon_sm, t.colors.text_muted)),
+                )
+                .child(div().text_color(t.colors.text).child("New project…"))
+                .on_click(move |_, _, cx| {
+                    open.update(cx, |s, cx| {
+                        s.switcher_open = false;
+                        cx.notify();
+                    });
+                    super::projects::open_folder(open.clone(), cx);
+                }),
+        );
         super::motion::edge_draw(menu, "switcher-in", t.colors.primary, 0., &t)
     }
 
@@ -735,9 +799,9 @@ impl Render for Workspace {
                         agents_open: &s.agents_open,
                         // The logo turns while an agent runs or the reply is still going.
                         logo: if s.busy()
-                            || s.current.and_then(|c| s.agents.get(&c)).is_some_and(|r| {
-                                r.iter().any(|run| run.ended.is_none())
-                            })
+                            || s.current
+                                .and_then(|c| s.agents.get(&c))
+                                .is_some_and(|r| r.iter().any(|run| run.ended.is_none()))
                         {
                             super::turning_logo(32., "agents-logo")
                         } else {
@@ -969,6 +1033,9 @@ impl Render for Workspace {
             }))
             .on_action(cx.listener(|this, _: &CycleMode, _, cx| {
                 this.state.update(cx, |s, cx| s.cycle_mode(cx))
+            }))
+            .on_action(cx.listener(|this, _: &StopAgents, _, cx| {
+                this.state.update(cx, |s, cx| s.stop_agents(cx))
             }))
             .on_action(cx.listener(|this, _: &StopReply, window, cx| {
                 let (palette, picker) = {
@@ -1233,7 +1300,7 @@ impl Render for Workspace {
                 }),
             )
             .on_action(cx.listener(|_, _: &Quit, _, cx| cx.quit()))
-            .child(self.title_bar(cx))
+            .child(self.title_bar(window, cx))
             .children(super::status_bar::banner(
                 self.state.read(cx),
                 self.state.clone(),

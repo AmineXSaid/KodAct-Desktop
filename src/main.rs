@@ -95,6 +95,8 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("secondary-shift-m", ShowProjectMap, Some("Workspace")),
         KeyBinding::new("shift-tab", CycleMode, Some("Composer")),
         KeyBinding::new("escape", StopReply, Some("Workspace")),
+        // Not Ctrl+Shift+Esc: Windows keeps that for the Task Manager.
+        KeyBinding::new("secondary-shift-x", StopAgents, Some("Workspace")),
     ]);
     // Ctrl+Shift+` as a platform may spell it instead of Ctrl+~ (the
     // sheet lists the key once, as `ctrl-~`).

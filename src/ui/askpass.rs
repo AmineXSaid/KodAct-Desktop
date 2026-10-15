@@ -84,7 +84,7 @@ impl AskpassDialog {
 }
 
 impl Render for AskpassDialog {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let Some(prompt) = self
             .state
@@ -95,65 +95,68 @@ impl Render for AskpassDialog {
         else {
             return div().into_any_element();
         };
-        let card = theme::popover(&t)
-            .id("askpass")
-            .relative()
-            .occlude()
-            .w(px(420.))
-            .p(t.space.xl)
-            .flex()
-            .flex_col()
-            .gap(t.space.md)
-            .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(t.space.sm)
-                    .child(icon("icons/key-round.svg", t.size.icon, t.colors.primary))
-                    .child(
-                        div()
-                            .text_size(t.text.subheading)
-                            .font_family(t.font_display.clone())
-                            .text_color(t.colors.text_strong)
-                            .child(title(&prompt)),
-                    ),
-            )
-            .child(
-                div()
-                    .font_family(t.font_mono.clone())
-                    .text_size(t.text.caption)
-                    .text_color(t.colors.text_body)
-                    .child(prompt.clone()),
-            )
-            .child(Input::new(&self.input).mask_toggle())
-            .child(
-                div()
-                    .text_size(t.text.caption)
-                    .text_color(t.colors.text_muted)
-                    .child("Kept in memory until Forge closes, never saved."),
-            )
-            .child(
-                div()
-                    .flex()
-                    .justify_end()
-                    .gap(t.space.sm)
-                    .pt(t.space.sm)
-                    .child(
-                        theme::text_button(&t, "Cancel")
-                            .id("askpass-cancel")
-                            .on_click(
-                                cx.listener(|this, _, window, cx| this.answer(false, window, cx)),
-                            ),
-                    )
-                    .child(
-                        theme::primary_button(&t, "Continue")
-                            .id("askpass-ok")
-                            .on_click(
-                                cx.listener(|this, _, window, cx| this.answer(true, window, cx)),
-                            ),
-                    ),
-            );
+        let card = theme::fit_window(
+            theme::popover(&t).id("askpass"),
+            window,
+            &t,
+            t.size.viewport_margin,
+            None,
+        )
+        .relative()
+        .occlude()
+        .w(px(420.))
+        .p(t.space.xl)
+        .flex()
+        .flex_col()
+        .gap(t.space.md)
+        .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(t.space.sm)
+                .child(icon("icons/key-round.svg", t.size.icon, t.colors.primary))
+                .child(
+                    div()
+                        .text_size(t.text.subheading)
+                        .font_family(t.font_display.clone())
+                        .text_color(t.colors.text_strong)
+                        .child(title(&prompt)),
+                ),
+        )
+        .child(
+            div()
+                .font_family(t.font_mono.clone())
+                .text_size(t.text.caption)
+                .text_color(t.colors.text_body)
+                .child(prompt.clone()),
+        )
+        .child(Input::new(&self.input).mask_toggle())
+        .child(
+            div()
+                .text_size(t.text.caption)
+                .text_color(t.colors.text_muted)
+                .child("Kept in memory until Forge closes, never saved."),
+        )
+        .child(
+            div()
+                .flex()
+                .justify_end()
+                .gap(t.space.sm)
+                .pt(t.space.sm)
+                .child(
+                    theme::text_button(&t, "Cancel")
+                        .id("askpass-cancel")
+                        .on_click(
+                            cx.listener(|this, _, window, cx| this.answer(false, window, cx)),
+                        ),
+                )
+                .child(
+                    theme::primary_button(&t, "Continue")
+                        .id("askpass-ok")
+                        .on_click(cx.listener(|this, _, window, cx| this.answer(true, window, cx))),
+                ),
+        );
         div()
             .id("askpass-scrim")
             .key_context("Askpass")

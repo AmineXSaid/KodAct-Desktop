@@ -127,7 +127,13 @@ mod tests {
             "/assets/icons/ink-line.svg"
         ))
         .unwrap();
-        let d = drawn.split("d=\"M").nth(1).unwrap().split('"').next().unwrap();
+        let d = drawn
+            .split("d=\"M")
+            .nth(1)
+            .unwrap()
+            .split('"')
+            .next()
+            .unwrap();
         for pair in d.split(" L") {
             let mut it = pair.split(' ').map(|v| v.parse::<f32>().unwrap());
             let (x, y) = (it.next().unwrap(), it.next().unwrap());

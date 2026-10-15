@@ -425,18 +425,27 @@ impl Render for Onboarding {
                 cx.listener(|this, ev: &gpui::KeyDownEvent, window, cx| this.key(ev, window, cx)),
             )
             .flex_1()
-            .flex()
-            .items_center()
-            .justify_center()
+            .min_h_0()
+            // A window shorter than the steps scrolls them, never cuts them.
+            .overflow_y_scroll()
             .bg(t.extra.stage)
-            .pb(t.space.xxl * 2.)
             .child(
                 div()
-                    .relative()
-                    .w(px(560.))
-                    .h(px(480.))
-                    .children(leaving)
-                    .child(entering),
+                    .min_h_full()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .pt(t.space.xl)
+                    .pb(t.space.xxl * 2.)
+                    .child(
+                        div()
+                            .flex_none()
+                            .relative()
+                            .w(px(560.))
+                            .h(px(480.))
+                            .children(leaving)
+                            .child(entering),
+                    ),
             )
     }
 }
