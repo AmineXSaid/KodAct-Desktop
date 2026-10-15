@@ -192,9 +192,13 @@ impl Workspace {
         let s = self.state.read(cx);
         let hover = t.colors.hover;
         // Icon-only: each says what it does, with its key.
+        // Every control in the bar occludes it: on Windows the bar is the
+        // window's drag area, and a click on anything not occluding it is
+        // taken by the OS as the start of a window move, never a click.
         let button = |id: &'static str, path: &'static str, tip: &'static str| {
             div()
                 .id(id)
+                .occlude()
                 .tooltip(move |window, cx| {
                     gpui::component::tooltip::Tooltip::new(tip).build(window, cx)
                 })
@@ -239,6 +243,7 @@ impl Workspace {
                         .child(
                             div()
                                 .id("project")
+                                .occlude()
                                 .flex()
                                 .items_center()
                                 .gap(t.space.xs)
@@ -293,6 +298,7 @@ impl Workspace {
                     d.child(
                         div()
                             .id("branch")
+                            .occlude()
                             .flex()
                             .items_center()
                             .gap(t.space.xs)
@@ -329,6 +335,7 @@ impl Workspace {
                 .child(
                     div()
                         .id("palette-button")
+                        .occlude()
                         .flex()
                         .items_center()
                         .gap(t.space.sm)
@@ -357,6 +364,7 @@ impl Workspace {
                     let unseen = !open && self.terminal.read(cx).unseen;
                     div()
                         .id("toggle-terminal")
+                        .occlude()
                         .relative()
                         .size(t.size.control)
                         .flex()

@@ -22,6 +22,8 @@ pub fn render(t: &Theme, state: &Entity<AppState>, cx: &gpui::App) -> Option<Any
     let tint = t.extra.warning_tint;
     let badge = div()
         .id("approvals")
+        // Occludes the title bar's drag area (see workspace.rs).
+        .occlude()
         .flex()
         .items_center()
         .gap(t.space.xs)
