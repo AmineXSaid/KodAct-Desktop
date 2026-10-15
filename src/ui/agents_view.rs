@@ -72,7 +72,9 @@ fn stat(t: &Theme, value: String, label: &str, color: Hsla) -> gpui::Div {
         .px(t.space.md)
         .py(t.space.sm)
         .rounded(t.radius.button)
-        .bg(t.extra.inset)
+        .border_1()
+        .border_color(t.colors.border)
+        .bg(t.colors.surface)
         .child(
             div()
                 .text_size(t.text.subheading)

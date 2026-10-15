@@ -279,6 +279,13 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
             .pt(t.space.xl)
             .pb(t.space.xxl * 2.)
     };
+    // The Agents overview sits on the sidebar's deeper ground, so its
+    // cards stand off it; the other tabs are pages on the surface.
+    let ground = if v.tab == PanelTab::Agents {
+        t.extra.pane
+    } else {
+        t.colors.surface
+    };
     let body: AnyElement = match v.tab {
         PanelTab::Plan if plan.is_none() && todos.is_empty() => empty(
             t,
@@ -433,6 +440,7 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
                 .id("panel-body")
                 .flex_1()
                 .min_h_0()
+                .bg(ground)
                 .overflow_y_scroll()
                 .child(body),
         )
