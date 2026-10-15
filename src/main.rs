@@ -41,6 +41,7 @@ mod remote;
 mod rules;
 mod secrets;
 mod setting_profiles;
+mod shell_prompt;
 mod stage;
 mod state;
 mod stubs;

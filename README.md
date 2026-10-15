@@ -149,6 +149,10 @@ shell on a pseudo-terminal (ConPTY on Windows), drawn by a terminal emulator
 - **Right-click** for copy, paste, clear and kill; the palette has Focus,
   Clear and Kill the terminal too. The header's badge says where the active
   terminal runs (Local, or the remote).
+- **Colour:** bash, zsh, sh, PowerShell and cmd start with a prompt in the
+  dock's colours (bash, zsh and sh also colour `ls` and `grep`), after your
+  own startup files; a prompt you coloured yourself is kept
+  (`src/shell_prompt.rs`).
 - The dock's open state and width come back at the next launch.
 - **Agent commands:** each command the agent runs, and each approval it
   asks for, carries a badge saying where it runs ("on SSH: box", "on this

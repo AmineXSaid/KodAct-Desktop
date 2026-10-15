@@ -294,13 +294,18 @@ impl Session {
                 pixel_height: 0,
             })
             .map_err(|e| format!("Couldn't open a terminal: {e}"))?;
-        let mut cmd = CommandBuilder::new(&shell.program);
-        cmd.args(&shell.args);
+        // A prompt in the dock's colours (shell_prompt.rs).
+        let dressed = crate::shell_prompt::dress(&shell.program, &shell.args);
+        let mut cmd = CommandBuilder::new(&dressed.program);
+        cmd.args(&dressed.args);
         if let Some(d) = &shell.cwd {
             cmd.cwd(d);
         }
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
+        for (k, v) in &dressed.env {
+            cmd.env(k, v);
+        }
         let child = pty
             .slave
             .spawn_command(cmd)
