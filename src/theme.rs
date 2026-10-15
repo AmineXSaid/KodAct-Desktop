@@ -54,6 +54,7 @@ pub struct Space {
 
 #[derive(Clone, Copy)]
 pub struct Radius {
+    pub line: Pixels,   // 1: a line's ends, rounded just slightly
     pub small: Pixels,  // 4
     pub button: Pixels, // 8
     pub card: Pixels,   // 12
@@ -109,6 +110,7 @@ impl Theme {
                 xxl: px(32.),
             },
             radius: Radius {
+                line: px(1.),
                 small: px(4.),
                 button: px(8.),
                 card: px(12.),
@@ -251,8 +253,12 @@ pub struct ExtraColors {
     pub ping_slow_bg: Hsla,
     pub ping_slow_fg: Hsla,
     // The terminal dock's 16 colours: black, red, green, yellow, blue,
-    // magenta, cyan, white, then the bright eight. Tuned to read on `stage`
-    // in each mode; "white" is a grey in light so it never vanishes.
+    // magenta, cyan, white, then the bright eight. Forge for VS Code's
+    // (forge-tokens.css, Pajamas stops), on its terminal ink
+    // (`terminal.background`); "white" is a grey in light so it never vanishes.
+    // One divergence: light's yellows sit a stop darker (orange-600/500), as
+    // orange-400 reads at only 2.8:1 on the light ink; bright cyan is blue-500
+    // for the same reason.
     pub ansi: [Hsla; 16],
 }
 
@@ -295,22 +301,22 @@ impl ExtraColors {
                 ping_slow_bg: hsla(34. / 360., 1., 0.34, 0.22),
                 ping_slow_fg: rgb(0xe9be74).into(),
                 ansi: [
-                    rgb(0x3a3936).into(),
-                    rgb(0xff7b72).into(),
-                    rgb(0x7ee08f).into(),
-                    rgb(0xf2cc60).into(),
-                    rgb(0x79b8ff).into(),
-                    rgb(0xd2a8ff).into(),
-                    rgb(0x76e3ea).into(),
-                    rgb(0xd6d3ce).into(),
-                    rgb(0x6e6c68).into(),
-                    rgb(0xffa198).into(),
-                    rgb(0xa5eda9).into(),
-                    rgb(0xf8e08e).into(),
-                    rgb(0xa5d0ff).into(),
-                    rgb(0xe2c5ff).into(),
-                    rgb(0xb3f0ff).into(),
-                    rgb(0xffffff).into(),
+                    rgb(0x646163).into(),
+                    rgb(0xec5941).into(),
+                    rgb(0x2da160).into(),
+                    rgb(0xd99530).into(),
+                    rgb(0x428fdc).into(),
+                    rgb(0x9475db).into(),
+                    rgb(0x63a6e9).into(),
+                    rgb(0xc1bfbe).into(),
+                    rgb(0x747273).into(),
+                    rgb(0xf6806d).into(),
+                    rgb(0x52b87a).into(),
+                    rgb(0xe9be74).into(),
+                    rgb(0x63a6e9).into(),
+                    rgb(0xac93e6).into(),
+                    rgb(0x9dc7f1).into(),
+                    rgb(0xecebea).into(),
                 ],
             }
         } else {
@@ -350,22 +356,22 @@ impl ExtraColors {
                 ping_slow_bg: rgb(0xf5d9a8).into(),
                 ping_slow_fg: rgb(0x894b16).into(),
                 ansi: [
-                    rgb(0x2b2a28).into(),
-                    rgb(0xb8322a).into(),
-                    rgb(0x2a7a35).into(),
-                    rgb(0x845d00).into(),
-                    rgb(0x1f5fbf).into(),
-                    rgb(0x8a3fa8).into(),
-                    rgb(0x1d737c).into(),
-                    rgb(0x6d6a65).into(),
-                    rgb(0x5c5a56).into(),
-                    rgb(0xc23d30).into(),
-                    rgb(0x2e7f38).into(),
-                    rgb(0x8d6400).into(),
-                    rgb(0x2f6fd1).into(),
-                    rgb(0x9c4fbb).into(),
-                    rgb(0x1e7a84).into(),
-                    rgb(0x3d3b38).into(),
+                    rgb(0x28272d).into(),
+                    rgb(0xc02f12).into(),
+                    rgb(0x2f7549).into(),
+                    rgb(0x995715).into(),
+                    rgb(0x2f68b4).into(),
+                    rgb(0x6a4fb4).into(),
+                    rgb(0x1f75cb).into(),
+                    rgb(0x747273).into(),
+                    rgb(0x646163).into(),
+                    rgb(0xdd2b0e).into(),
+                    rgb(0x108548).into(),
+                    rgb(0xab6100).into(),
+                    rgb(0x1f75cb).into(),
+                    rgb(0x7b58cf).into(),
+                    rgb(0x1f75cb).into(),
+                    rgb(0x18171d).into(),
                 ],
             }
         }
@@ -519,6 +525,7 @@ pub struct Sizes {
     pub stagger_ms: u64,            // 18: each row of an opening list starting after the one above
     pub edge_draw_ms: u64,          // 140: a window's jewel edge drawing down as it opens
     pub edge_bar: Pixels,           // 3: that jewel edge's width
+    pub remote_menu: Pixels,        // 288: the remote quick pick's width
     pub terminal_text: Pixels,      // 13: the terminal dock's monospace
     pub terminal_min: Pixels,       // 280: the terminal dock's narrowest
     pub doc_text: Pixels,           // 15: a document in the side panel
@@ -563,6 +570,7 @@ impl Default for Sizes {
             stagger_ms: 18,
             edge_draw_ms: 140,
             edge_bar: px(3.),
+            remote_menu: px(288.),
             terminal_text: px(13.),
             terminal_min: px(280.),
             doc_text: px(15.),
@@ -688,6 +696,27 @@ pub fn pill(t: &Theme, bg: Hsla, fg: Hsla, label: impl Into<SharedString>) -> Di
         .text_size(t.text.caption)
         .font_weight(FontWeight::MEDIUM)
         .child(label.into())
+}
+
+/// A divider: a hairline with slightly rounded ends, inset from its
+/// container's sides so the ends show. Every straight line uses
+/// `radius.line`; borders around a box are the only square lines.
+pub fn rule(t: &Theme) -> Div {
+    div()
+        .flex_none()
+        .h(t.size.hairline)
+        .mx(t.space.sm)
+        .rounded(t.radius.line)
+        .bg(t.colors.border)
+}
+
+/// The upright divider between controls in a row.
+pub fn vrule(t: &Theme) -> Div {
+    div()
+        .flex_none()
+        .w(t.size.hairline)
+        .rounded(t.radius.line)
+        .bg(t.colors.border)
 }
 
 /// Floating surface: menus, command palette, model picker.

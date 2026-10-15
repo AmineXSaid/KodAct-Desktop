@@ -113,7 +113,7 @@ pub fn render(t: &Theme, state: &Entity<AppState>, id: usize, pinned: bool) -> A
             )
             .on_click(act(|s, id, cx| s.share_chat(id, cx))),
         )
-        .child(div().my(t.space.xs).h(t.size.hairline).bg(t.colors.border))
+        .child(theme::rule(t).my(t.space.xs))
         .child(
             row("delete", "icons/trash.svg", "Delete…", None, true)
                 .on_click(act(|s, id, cx| s.ask_delete(id, cx))),

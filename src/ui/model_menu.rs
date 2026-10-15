@@ -281,7 +281,7 @@ pub fn render(
                                 .top(px(4.))
                                 .bottom(px(4.))
                                 .w(px(2.))
-                                .rounded(px(1.))
+                                .rounded(t.radius.line)
                                 .bg(brand),
                         )
                     })
@@ -365,7 +365,7 @@ pub fn render(
                 .flex()
                 .flex_col()
                 .pb(px(4.))
-                .child(div().h(px(1.)).mx(px(8.)).mb(px(4.)).bg(t.colors.border))
+                .child(crate::theme::rule(t).mb(px(4.)))
                 .child(
                     div()
                         .id("effort-row")

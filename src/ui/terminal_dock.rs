@@ -372,7 +372,7 @@ impl TerminalDock {
                 )
                 .on_click(cx.listener(|this, _, _, cx| this.paste_clipboard(cx))),
             )
-            .child(div().my(t.space.xs).h(t.size.hairline).bg(t.colors.border))
+            .child(crate::theme::rule(&t).my(t.space.xs))
             .child(
                 item("term-clear", "icons/eraser.svg", "Clear", "", true)
                     .on_click(cx.listener(|this, _, _, cx| this.clear(cx))),
@@ -821,9 +821,11 @@ impl TerminalDock {
                 )
                 .into_any_element();
         };
-        let fg = t.colors.text;
-        let bg = t.extra.stage;
-        let sel_bg = t.colors.primary.opacity(0.28);
+        // Forge for VS Code's terminal: ink, its foreground, a purple cursor.
+        let k = t.terminal;
+        let fg = k.foreground;
+        let bg = k.background;
+        let sel_bg = k.prompt.opacity(0.3);
         let mono = t.font_mono.clone();
         let mut rows: Vec<AnyElement> = vec![];
         let (cursor, cursor_char, cursor_row) = {
@@ -939,6 +941,7 @@ impl TerminalDock {
         div()
             .id("terminal-screen")
             .relative()
+            .bg(bg)
             .flex_1()
             .min_h_0()
             .flex()
@@ -984,10 +987,13 @@ impl TerminalDock {
                             .w(cw)
                             .h(ch);
                         match (focused, crate::app_settings::get().cursor_style) {
-                            (false, _) => at.border_1().border_color(t.colors.primary),
+                            (false, _) => {
+                                at.border_1().rounded(t.radius.line).border_color(k.prompt)
+                            }
                             (true, CursorStyle::Block) => at
-                                .bg(t.colors.primary)
-                                .text_color(t.colors.surface)
+                                .rounded(t.radius.line)
+                                .bg(k.prompt)
+                                .text_color(k.background)
                                 .child(cursor_char.to_string()),
                             (true, CursorStyle::Bar) => at.child(
                                 div()
@@ -996,7 +1002,8 @@ impl TerminalDock {
                                     .top_0()
                                     .bottom_0()
                                     .w(px(2.))
-                                    .bg(t.colors.primary),
+                                    .rounded(t.radius.line)
+                                    .bg(k.prompt),
                             ),
                             (true, CursorStyle::Underline) => at.child(
                                 div()
@@ -1005,7 +1012,8 @@ impl TerminalDock {
                                     .right_0()
                                     .bottom_0()
                                     .h(px(2.))
-                                    .bg(t.colors.primary),
+                                    .rounded(t.radius.line)
+                                    .bg(k.prompt),
                             ),
                         }
                     }))
@@ -1302,7 +1310,7 @@ mod tests {
     fn colours_come_from_the_theme() {
         let t = Theme::light();
         let set = alacritty_terminal::term::color::Colors::default();
-        let (fg, bg) = (t.colors.text, t.extra.stage);
+        let (fg, bg) = (t.terminal.foreground, t.terminal.background);
         assert_eq!(
             resolve(Color::Named(NamedColor::Red), &set, &t, fg, bg),
             t.extra.ansi[1]

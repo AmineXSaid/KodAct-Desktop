@@ -364,7 +364,7 @@ pub fn render(
                     ),
             )
             .when(is_open, |d| {
-                d.child(div().h(px(1.)).bg(t.colors.border))
+                d.child(crate::theme::rule(t))
                     .when(!run.prompt.is_empty(), |d| {
                         d.child(section(t, "Asked")).child(
                             div()
@@ -446,6 +446,7 @@ pub fn render(
                             .top(px(16.))
                             .w(px(18.))
                             .h(px(2.))
+                            .rounded(t.radius.line)
                             .bg(t.colors.border),
                     )
                     .child(
@@ -484,6 +485,7 @@ pub fn render(
                             .top_0()
                             .bottom(px(14.))
                             .w(px(2.))
+                            .rounded(t.radius.line)
                             .bg(t.colors.border),
                     )
                     .child(div().flex().flex_col().gap(t.space.md).children(cards)),

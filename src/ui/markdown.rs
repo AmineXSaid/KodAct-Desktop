@@ -636,10 +636,7 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                 .pl(t.space.md)
                 .child(runs(&spans, t, FontWeight::NORMAL, t.colors.text))
                 .into_any_element(),
-            Block::Rule => div()
-                .h(t.size.hairline)
-                .bg(t.colors.border)
-                .into_any_element(),
+            Block::Rule => crate::theme::rule(t).mx_0().into_any_element(),
             Block::Code { lang, code } => {
                 let key = format!("{}-{n}", copy.key);
                 // A diagram (Mermaid, an SVG) is drawn, unless you asked for its source.

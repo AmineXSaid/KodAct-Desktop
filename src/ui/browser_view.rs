@@ -372,6 +372,7 @@ impl Render for BrowserView {
                         .top_0()
                         .h_full()
                         .w(relative(0.3))
+                        .rounded(t.radius.line)
                         .bg(t.colors.primary)
                         .with_animation(
                             "web-loading",

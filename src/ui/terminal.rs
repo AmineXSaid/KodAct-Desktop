@@ -558,7 +558,13 @@ pub fn block(call: &ToolCall, at: &Where, t: &Theme) -> AnyElement {
         .line_height(relative(1.45))
         .text_color(k.foreground)
         .child(input)
-        .child(div().h(px(1.)).bg(k.divider))
+        .child(
+            div()
+                .h(px(1.))
+                .mx(px(10.))
+                .rounded(t.radius.line)
+                .bg(k.divider),
+        )
         .child(out)
         .children(footer)
         .into_any_element()

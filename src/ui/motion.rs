@@ -96,6 +96,7 @@ pub fn edge_draw(
 ) -> gpui::AnyElement {
     use gpui::{div, prelude::*, px, relative, AnimationExt as _};
     let inset = f32::from(t.radius.card);
+    let line = t.radius.line;
     let bar = f32::from(t.size.edge_bar);
     let draw_ms = t.size.edge_draw_ms as f32;
     let ms = t.size.pop_in_ms + t.size.edge_draw_ms;
@@ -125,7 +126,7 @@ pub fn edge_draw(
                             div()
                                 .w_full()
                                 .h(relative(draw))
-                                .rounded_r(px(bar))
+                                .rounded(line)
                                 .bg(accent.opacity(1. - fade)),
                         ),
                 )

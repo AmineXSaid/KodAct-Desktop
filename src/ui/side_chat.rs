@@ -285,7 +285,7 @@ impl Render for SideChat {
             }))
             .child(head)
             .when(!side.minimized, |d| {
-                d.child(div().h(px(1.)).bg(t.colors.border))
+                d.child(crate::theme::rule(&t))
                     .child(thread)
                     .child(input_row)
             });

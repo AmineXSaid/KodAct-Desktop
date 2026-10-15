@@ -68,7 +68,7 @@ fn render() -> String {
     );
     let r = &l.radius;
     let z = &l.size;
-    let _ = writeln!(w, "### Radius\nScale: {}px (small), {}px (buttons, rows), {}px (cards, popovers), {}px (the composer), pill\n", px(r.small), px(r.button), px(r.card), px(z.composer_radius));
+    let _ = writeln!(w, "### Radius\nScale: {}px (a line's ends: every straight line is rounded just slightly), {}px (small), {}px (buttons, rows), {}px (cards, popovers), {}px (the composer), pill\n", px(r.line), px(r.small), px(r.button), px(r.card), px(z.composer_radius));
 
     let _ = writeln!(w, "### Typography");
     let _ = writeln!(
@@ -132,6 +132,11 @@ fn render() -> String {
             "terminal_min",
             z.terminal_min,
             "the terminal dock's narrowest",
+        ),
+        (
+            "remote_menu",
+            z.remote_menu,
+            "the remote quick pick's width",
         ),
         (
             "edge_bar",

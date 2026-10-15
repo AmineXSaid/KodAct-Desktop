@@ -19,7 +19,7 @@ Base: 4px
 Scale: 4, 8, 12, 16, 24, 32
 
 ### Radius
-Scale: 4px (small), 8px (buttons, rows), 12px (cards, popovers), 16px (the composer), pill
+Scale: 1px (a line's ends: every straight line is rounded just slightly), 4px (small), 8px (buttons, rows), 12px (cards, popovers), 16px (the composer), pill
 
 ### Typography
 Interface: Hanken Grotesk (Anthropic Sans when installed or in Forge's `fonts` folder; never bundled)
@@ -45,6 +45,7 @@ Lucide, 2px stroke as drawn. Sizes: 12 / 14 / 16 / 20 only.
 - `doc_measure`: 680px, a document's widest line
 - `terminal_text`: 13px, the terminal dock's monospace
 - `terminal_min`: 280px, the terminal dock's narrowest
+- `remote_menu`: 288px, the remote quick pick's width
 - `edge_bar`: 3px, the jewel edge a window draws as it opens
 
 ### Surfaces
@@ -63,22 +64,22 @@ The dock's 16 colours, on `stage` (`palette_check.rs` holds them to AA).
 
 | # | Light | Dark |
 |---|---|---|
-| 0 | `#2b2a28` | `#3a3936` |
-| 1 | `#b8322a` | `#ff7b72` |
-| 2 | `#2a7a35` | `#7ee08f` |
-| 3 | `#845d00` | `#f2cc60` |
-| 4 | `#1f5fbf` | `#79b8ff` |
-| 5 | `#8a3fa8` | `#d2a8ff` |
-| 6 | `#1d737c` | `#76e3ea` |
-| 7 | `#6d6a65` | `#d6d3ce` |
-| 8 | `#5c5a56` | `#6e6c68` |
-| 9 | `#c23d30` | `#ffa198` |
-| 10 | `#2e7f38` | `#a5eda9` |
-| 11 | `#8d6400` | `#f8e08e` |
-| 12 | `#2f6fd1` | `#a5d0ff` |
-| 13 | `#9c4fbb` | `#e2c5ff` |
-| 14 | `#1e7a84` | `#b3f0ff` |
-| 15 | `#3d3b38` | `#ffffff` |
+| 0 | `#28272d` | `#646163` |
+| 1 | `#c02f12` | `#ec5941` |
+| 2 | `#2f7549` | `#2da160` |
+| 3 | `#995715` | `#d99530` |
+| 4 | `#2f68b4` | `#428fdc` |
+| 5 | `#6a4fb4` | `#9475db` |
+| 6 | `#1f75cb` | `#63a6e9` |
+| 7 | `#747273` | `#c1bfbe` |
+| 8 | `#646163` | `#747273` |
+| 9 | `#dd2b0e` | `#f6806d` |
+| 10 | `#108548` | `#52b87a` |
+| 11 | `#ab6100` | `#e9be74` |
+| 12 | `#1f75cb` | `#63a6e9` |
+| 13 | `#7b58cf` | `#ac93e6` |
+| 14 | `#1f75cb` | `#9dc7f1` |
+| 15 | `#18171d` | `#ecebea` |
 
 ### Colors
 Contrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of white text on a fill.

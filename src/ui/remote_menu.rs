@@ -217,7 +217,7 @@ impl RemotePicker {
                     reopen.caption = Some(if connected {
                         "Open the local folder first".into()
                     } else {
-                        "This folder has no .devcontainer/devcontainer.json".into()
+                        "No devcontainer.json in this folder".into()
                     });
                 }
                 actions.push(reopen);
@@ -562,8 +562,7 @@ impl Render for RemotePicker {
                     .flex()
                     .items_center()
                     .gap(t.space.sm)
-                    .mx(t.space.xs)
-                    .px(t.space.md)
+                    .px(t.space.sm + px(2.))
                     .h(t.size.row)
                     .rounded(t.radius.small)
                     .cursor_pointer()
@@ -588,14 +587,15 @@ impl Render for RemotePicker {
 
         body = body.child(
             div()
-                .px(t.space.md)
-                .py(t.space.xs)
+                .px(t.space.xs)
+                .pt(px(2.))
+                .pb(t.space.xs)
                 .child(Input::new(&self.query)),
         );
 
         let mut list = div()
             .id("remote-list")
-            .max_h(px(340.))
+            .max_h(px(296.))
             .overflow_y_scroll()
             .flex()
             .flex_col();
@@ -607,12 +607,12 @@ impl Render for RemotePicker {
                     section_seen = Some(sec);
                     list = list.child(
                         div()
-                            .px(t.space.md + t.space.xs)
+                            .px(t.space.sm + px(2.))
                             .pt(t.space.sm)
-                            .pb(t.space.xs)
+                            .pb(px(2.))
                             .text_size(t.text.caption)
                             .font_weight(FontWeight::MEDIUM)
-                            .text_color(t.colors.text_muted)
+                            .text_color(t.colors.text_subtle)
                             .child(sec),
                     );
                 }
@@ -627,13 +627,25 @@ impl Render for RemotePicker {
             let act = r.act.clone();
             let row = div()
                 .id(("remote-row", i))
+                .relative()
+                .when(on && enabled_row, |d| {
+                    d.child(
+                        div()
+                            .absolute()
+                            .left_0()
+                            .top(px(7.))
+                            .bottom(px(7.))
+                            .w(px(2.))
+                            .rounded(t.radius.line)
+                            .bg(t.colors.primary),
+                    )
+                })
                 .flex()
                 .items_center()
                 .gap(t.space.sm)
                 .min_h(t.size.row)
-                .px(t.space.md)
-                .py(px(4.))
-                .mx(t.space.xs)
+                .px(t.space.sm + px(2.))
+                .py(px(3.))
                 .rounded(t.radius.small)
                 .when(on, |d| d.bg(t.colors.hover))
                 .when(enabled_row, |d| {
@@ -717,79 +729,79 @@ impl Render for RemotePicker {
             if let Some(r) = s.current_remote() {
                 let close = self.state.clone();
                 let connected = s.remote_connected(&r.target);
+                let danger_tint = t.extra.danger_tint;
+                let failed = s.remote_failed.is_some();
                 body = body.child(
                     div()
                         .mt(t.space.xs)
-                        .mx(t.space.xs)
-                        .mb(t.space.xs)
-                        .px(t.space.md)
-                        .py(t.space.sm)
-                        .rounded(t.radius.button)
-                        .bg(t.extra.inset)
-                        .border_1()
-                        .border_color(t.colors.border)
-                        .flex()
-                        .items_center()
-                        .gap(t.space.sm)
-                        .child(div().size(px(7.)).flex_none().rounded(t.radius.pill).bg(
-                            if connected {
-                                t.extra.success
-                            } else {
-                                t.colors.text_subtle
-                            },
-                        ))
+                        .child(crate::theme::rule(&t).mx_0().mb(t.space.xs))
                         .child(
                             div()
-                                .flex_1()
-                                .min_w_0()
+                                .px(t.space.sm + px(2.))
+                                .py(px(2.))
                                 .flex()
-                                .flex_col()
+                                .items_center()
+                                .gap(t.space.sm)
+                                .child(div().size(px(7.)).flex_none().rounded(t.radius.pill).bg(
+                                    if failed {
+                                        t.extra.danger
+                                    } else if connected {
+                                        t.extra.success
+                                    } else {
+                                        t.colors.text_subtle
+                                    },
+                                ))
                                 .child(
                                     div()
-                                        .text_color(t.colors.text_strong)
-                                        .font_weight(FontWeight::MEDIUM)
-                                        .overflow_hidden()
-                                        .whitespace_nowrap()
-                                        .text_ellipsis()
-                                        .child(r.target.label()),
+                                        .flex_1()
+                                        .min_w_0()
+                                        .flex()
+                                        .flex_col()
+                                        .child(
+                                            div()
+                                                .text_color(t.colors.text_strong)
+                                                .font_weight(FontWeight::MEDIUM)
+                                                .overflow_hidden()
+                                                .whitespace_nowrap()
+                                                .text_ellipsis()
+                                                .child(r.target.label()),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_size(t.text.caption)
+                                                .text_color(t.colors.text_muted)
+                                                .overflow_hidden()
+                                                .whitespace_nowrap()
+                                                .text_ellipsis()
+                                                .child(r.path.clone()),
+                                        ),
                                 )
                                 .child(
                                     div()
-                                        .text_size(t.text.caption)
-                                        .text_color(t.colors.text_muted)
-                                        .overflow_hidden()
-                                        .whitespace_nowrap()
-                                        .text_ellipsis()
-                                        .child(r.path.clone()),
-                                ),
-                        )
-                        .child(
-                            div()
-                                .id("remote-close")
-                                .flex_none()
-                                .flex()
-                                .items_center()
-                                .gap(t.space.xs + px(2.))
-                                .px(t.space.md)
-                                .h(t.size.control + px(4.))
-                                .rounded(t.radius.button)
-                                .bg(t.colors.primary_tint)
-                                .text_color(t.colors.primary)
-                                .text_size(t.text.body_sm)
-                                .font_weight(FontWeight::MEDIUM)
-                                .cursor_pointer()
-                                .hover(|st| st.opacity(0.85))
-                                .child(icon("icons/unplug.svg", t.size.icon_sm, t.colors.primary))
-                                .child("Close connection")
-                                .tooltip(|window, cx| {
-                                    gpui::component::tooltip::Tooltip::new(
+                                        .id("remote-close")
+                                        .flex_none()
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .size(t.size.control)
+                                        .rounded(t.radius.button)
+                                        .cursor_pointer()
+                                        .hover(move |st| st.bg(danger_tint))
+                                        .child(icon(
+                                            "icons/unplug.svg",
+                                            t.size.icon_sm,
+                                            t.colors.text_muted,
+                                        ))
+                                        .tooltip(|window, cx| {
+                                            gpui::component::tooltip::Tooltip::new(
                                         "Close the remote connection and work on this computer",
                                     )
                                     .build(window, cx)
-                                })
-                                .on_click(move |_, _, cx| {
-                                    close.update(cx, |s, cx| s.close_remote(cx))
-                                }),
+                                        })
+                                        .on_click(move |_, _, cx| {
+                                            close.update(cx, |s, cx| s.close_remote(cx))
+                                        }),
+                                ),
                         ),
                 );
             }
@@ -803,7 +815,7 @@ impl Render for RemotePicker {
             .bottom_full()
             .left(t.space.xs)
             .mb(t.space.xs)
-            .w(px(360.))
+            .w(t.size.remote_menu)
             .occlude()
             .text_size(t.text.body_sm)
             .key_context("RemotePicker")

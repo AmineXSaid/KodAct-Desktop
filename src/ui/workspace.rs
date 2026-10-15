@@ -191,9 +191,13 @@ impl Workspace {
             .then(|| gpui::deferred(self.switcher(cx)).with_priority(1));
         let s = self.state.read(cx);
         let hover = t.colors.hover;
-        let button = |id: &'static str, path: &'static str| {
+        // Icon-only: each says what it does, with its key.
+        let button = |id: &'static str, path: &'static str, tip: &'static str| {
             div()
                 .id(id)
+                .tooltip(move |window, cx| {
+                    gpui::component::tooltip::Tooltip::new(tip).build(window, cx)
+                })
                 .size(t.size.control)
                 .flex()
                 .items_center()
@@ -212,9 +216,14 @@ impl Workspace {
                 .w_full()
                 .pr(t.space.sm)
                 .child(
-                    button("toggle-sidebar", "icons/panel-left.svg").on_click(cx.listener(
-                        |_, _, window, cx| window.dispatch_action(Box::new(ToggleSidebar), cx),
-                    )),
+                    button(
+                        "toggle-sidebar",
+                        "icons/panel-left.svg",
+                        "Show or hide the sidebar (Ctrl+B)",
+                    )
+                    .on_click(cx.listener(|_, _, window, cx| {
+                        window.dispatch_action(Box::new(ToggleSidebar), cx)
+                    })),
                 )
                 .child(
                     div()
@@ -278,8 +287,12 @@ impl Workspace {
                 )
                 // The branch, when the folder is a repository.
                 .when(!s.branch.is_empty(), |d| {
+                    let branch = s.branch.clone();
+                    let copier = self.state.clone();
+                    let strong = t.colors.text;
                     d.child(
                         div()
+                            .id("branch")
                             .flex()
                             .items_center()
                             .gap(t.space.xs)
@@ -287,6 +300,20 @@ impl Workspace {
                             .py(px(2.))
                             .rounded(t.radius.pill)
                             .bg(t.colors.hover)
+                            .cursor_pointer()
+                            .hover(move |st| st.text_color(strong))
+                            .tooltip(|window, cx| {
+                                gpui::component::tooltip::Tooltip::new("Copy the branch name")
+                                    .build(window, cx)
+                            })
+                            .on_click(move |_, _, cx| {
+                                cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                                    branch.to_string(),
+                                ));
+                                copier.update(cx, |s, cx| {
+                                    s.show_toast(format!("Copied {branch}"), cx)
+                                });
+                            })
                             .text_size(t.text.caption)
                             .font_family(t.font_mono.clone())
                             .text_color(t.colors.text_muted)
@@ -372,9 +399,14 @@ impl Workspace {
                         }))
                 })
                 .child(
-                    button("toggle-panel", "icons/panel-right.svg").on_click(cx.listener(
-                        |_, _, window, cx| window.dispatch_action(Box::new(TogglePanel), cx),
-                    )),
+                    button(
+                        "toggle-panel",
+                        "icons/panel-right.svg",
+                        "Side panel: plan, files, browser (Ctrl+Shift+E)",
+                    )
+                    .on_click(cx.listener(|_, _, window, cx| {
+                        window.dispatch_action(Box::new(TogglePanel), cx)
+                    })),
                 )
                 .child(
                     button(
@@ -384,15 +416,22 @@ impl Workspace {
                         } else {
                             "icons/moon.svg"
                         },
+                        if t.is_dark {
+                            "Light theme (Ctrl+Shift+L)"
+                        } else {
+                            "Dark theme (Ctrl+Shift+L)"
+                        },
                     )
                     .on_click(cx.listener(|_, _, window, cx| {
                         window.dispatch_action(Box::new(ToggleTheme), cx)
                     })),
                 )
                 .child(
-                    button("settings", "icons/settings.svg").on_click(cx.listener(
-                        |_, _, window, cx| window.dispatch_action(Box::new(OpenSettings), cx),
-                    )),
+                    button("settings", "icons/settings.svg", "Settings (Ctrl+,)").on_click(
+                        cx.listener(|_, _, window, cx| {
+                            window.dispatch_action(Box::new(OpenSettings), cx)
+                        }),
+                    ),
                 ),
         )
     }
@@ -531,7 +570,7 @@ impl Workspace {
             .left_0()
             .w(px(320.))
             .child(list)
-            .child(div().my(t.space.xs).h(t.size.hairline).bg(t.colors.border))
+            .child(theme::rule(&t).my(t.space.xs))
             .child(
                 row("switch-all".into())
                     .child(icon(

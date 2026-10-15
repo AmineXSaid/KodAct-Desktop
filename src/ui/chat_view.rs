@@ -543,7 +543,7 @@ impl Render for ChatView {
                                 .bottom(t.space.md)
                                 .left(-t.space.md)
                                 .w(px(3.))
-                                .rounded(t.radius.pill)
+                                .rounded(t.radius.line)
                                 .bg(c)
                         })),
                 )

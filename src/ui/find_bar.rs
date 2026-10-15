@@ -143,13 +143,7 @@ impl Render for FindBar {
                             })
                             .child(count),
                     )
-                    .child(
-                        div()
-                            .w(t.size.hairline)
-                            .h(t.space.lg)
-                            .mx(t.space.xs)
-                            .bg(t.colors.border),
-                    )
+                    .child(crate::theme::vrule(&t).h(t.space.lg).mx(t.space.xs))
                     .child(
                         button("find-prev", "icons/chevron-up.svg", n > 0).on_click(
                             move |_, _, cx| up.update(cx, |s, cx| s.find_step(false, cx)),

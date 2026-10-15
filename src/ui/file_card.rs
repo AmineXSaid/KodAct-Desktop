@@ -15,7 +15,7 @@ fn page(file: &FileRef, t: &Theme) -> AnyElement {
         div()
             .h(px(2.))
             .w(relative(w))
-            .rounded(t.radius.pill)
+            .rounded(t.radius.line)
             .bg(t.colors.text_subtle.opacity(0.35))
     };
     div()
