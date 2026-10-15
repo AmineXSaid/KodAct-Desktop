@@ -7,8 +7,8 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 // Which shell commands run without asking, per mode (Forge for VS Code's
-// rules). Called when a chat's CLI asks for permission; this UI shell has no
-// CLI yet, so outside its tests nothing calls it.
+// rules). Called when a chat's CLI asks for permission (state.rs); the
+// Edit-automatically hook (`edit_mode_asks`) is ForgeCLI's job now.
 #[cfg_attr(not(test), allow(dead_code))]
 mod approve;
 mod assets;

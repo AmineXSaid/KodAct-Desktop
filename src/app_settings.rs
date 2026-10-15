@@ -12,7 +12,8 @@
 //!   "terminal.defaultShell": "pwsh.exe",
 //!   "terminal.scrollback": 10000,
 //!   "terminal.fontSize": 13,
-//!   "terminal.cursorStyle": "block"
+//!   "terminal.cursorStyle": "block",
+//!   "forge.autoApproveSafeCommands": true
 //! }
 //! ```
 //!
@@ -59,6 +60,10 @@ pub struct Settings {
     pub font_size: f32,
     #[serde(rename = "terminal.cursorStyle")]
     pub cursor_style: CursorStyle,
+    /// Harmless shell commands run without a prompt: reads in every mode,
+    /// edits to project files in Edit automatically. Deletions always ask.
+    #[serde(rename = "forge.autoApproveSafeCommands")]
+    pub auto_approve_safe_commands: bool,
 }
 
 impl Default for Settings {
@@ -72,6 +77,7 @@ impl Default for Settings {
             scrollback: 10_000,
             font_size: 13.,
             cursor_style: CursorStyle::Block,
+            auto_approve_safe_commands: true,
         }
     }
 }

@@ -64,6 +64,20 @@ table in step.
 | Esc | Stop the reply, or close what's open |
 | Enter / Shift Enter | Send / new line |
 
+### Modes
+
+- **Manual** and **Expert** ask before each edit. Commands that only read
+  (`ls`, `git log`, `grep`) run without asking.
+- **Edit automatically** edits files without asking, and runs commands that
+  only read or only write files inside the project (`echo … > notes.txt`,
+  `mkdir`). Deleting (`rm`, `git rm`), moving over a path, raising privileges
+  (`sudo`) and rewriting or pushing history still ask.
+- **Plan** explores and proposes; it edits nothing until you approve.
+- **Bypass permissions** asks for nothing, once allowed in Settings.
+
+`forge.autoApproveSafeCommands: false` in the settings file makes every
+command ask, in every mode.
+
 ## Remote development
 
 As in VS Code, the indicator at the left of the status bar says where the
@@ -145,6 +159,7 @@ settings" in the command palette writes one with every key):
 | `terminal.scrollback` | `10000` | lines kept above the screen |
 | `terminal.fontSize` | `13` | the terminal's text size |
 | `terminal.cursorStyle` | `block` | `block`, `bar` or `underline` |
+| `forge.autoApproveSafeCommands` | `true` | commands that only read (any mode) or only edit project files (Edit automatically) run without asking |
 
 Changes apply the next time they're used; no restart.
 

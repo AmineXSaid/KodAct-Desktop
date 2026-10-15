@@ -1905,6 +1905,49 @@ impl AppState {
         }
     }
 
+    /// The mode a chat's ForgeCLI runs in: the showing chat's, or what
+    /// another chat kept.
+    fn chat_mode(&self, chat: usize) -> ModeId {
+        if self.current == Some(chat) {
+            self.mode
+        } else {
+            self.kept_modes.get(&chat).copied().unwrap_or(self.mode)
+        }
+    }
+
+    /// Whether Forge answers a permission request itself (`approve`): a
+    /// command that only reads, in any mode but Bypass, or that only edits
+    /// project files, in Edit automatically. Deletions always ask.
+    fn auto_approves(&self, chat: usize, tool: &str, input: &serde_json::Value) -> bool {
+        let (working_directory, home_directory) = match self.chat_remote(chat) {
+            // Paths starting `~` there never count as inside the project.
+            Some(r) => (r.path, String::new()),
+            None => {
+                let Some(dir) = self
+                    .chats
+                    .iter()
+                    .find(|c| c.id == chat)
+                    .and_then(|c| self.project(c.project))
+                    .map(|p| p.path.to_string_lossy().into_owned())
+                else {
+                    return false;
+                };
+                let home = crate::rules::home_dir()
+                    .map(|h| h.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                (dir, home)
+            }
+        };
+        crate::approve::auto_approves_command(&crate::approve::AutoApproveInput {
+            tool_name: tool.to_string(),
+            command: input["command"].as_str().map(str::to_string),
+            permission_mode: Some(self.chat_mode(chat).permission().cli_name().to_string()),
+            working_directory,
+            home_directory,
+            enabled: crate::app_settings::get().auto_approve_safe_commands,
+        })
+    }
+
     /// Pick a mode. Bypass, not yet allowed, shows its warning instead.
     pub fn set_mode(&mut self, mode: ModeId, cx: &mut Context<Self>) {
         if mode == ModeId::Bypass && !self.bypass_allowed {
@@ -4452,6 +4495,16 @@ impl AppState {
                 input,
                 suggestions,
             } => {
+                // A harmless command, for the mode the chat is in, runs
+                // without a card: its tool row already shows it.
+                if self.auto_approves(chat, &tool_name, &input) {
+                    if let Some(l) = self.sessions.get(&chat) {
+                        let _ = l
+                            .session
+                            .answer(&request_id, true, false, &input, &suggestions);
+                    }
+                    return;
+                }
                 let (title, detail) = crate::backend::ask_text(&tool_name, &input);
                 if let Some((msg, block)) = self.push_block(
                     chat,
