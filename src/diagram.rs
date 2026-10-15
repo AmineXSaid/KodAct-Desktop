@@ -245,7 +245,7 @@ mod tests {
         ] {
             let t = std::fs::read_to_string(format!("{root}/assets/{template}")).unwrap();
             assert!(
-                t.contains("'Hanken Grotesk'") && t.contains("'JetBrains Mono'"),
+                t.contains("'Inter'") && t.contains("'JetBrains Mono'"),
                 "{template}"
             );
             for old in ["Geist", "Instrument", "#bf4520", "#2d3142", "#f5f5f5"] {

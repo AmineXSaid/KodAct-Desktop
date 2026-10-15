@@ -545,7 +545,7 @@ impl Render for Sidebar {
                             .font_weight(FontWeight::MEDIUM)
                             .hover(move |st| st.bg(hover))
                             .child(icon("icons/plus.svg", t.size.icon, t.colors.text))
-                            .child(div().flex_1().child("New chat"))
+                            .child(nav_label("New chat"))
                             .child(kbd(&t, shortcut("N")))
                             .on_click(|_, window, cx| {
                                 window.dispatch_action(Box::new(NewChat), cx)
@@ -601,7 +601,7 @@ impl Render for Sidebar {
                                     t.colors.text_muted
                                 },
                             ))
-                            .child(div().flex_1().child("Projects"))
+                            .child(nav_label("Projects"))
                             .child(kbd(&t, shortcut("Shift P")))
                             .on_click(|_, window, cx| {
                                 window.dispatch_action(Box::new(OpenProjects), cx)
@@ -638,7 +638,7 @@ impl Render for Sidebar {
                                     t.colors.text_muted
                                 },
                             ))
-                            .child(div().flex_1().child("Rules and memory"))
+                            .child(nav_label("Rules and memory"))
                             .child(kbd(&t, shortcut("Shift R")))
                             .on_click(|_, window, cx| {
                                 window.dispatch_action(Box::new(OpenRules), cx)
@@ -766,4 +766,16 @@ pub fn ago(minutes: u32) -> String {
         60..=1439 => format!("{}h", minutes / 60),
         _ => format!("{}d", minutes / 1440),
     }
+}
+
+/// A nav row's words: they give way (with an ellipsis) to the shortcut
+/// beside them in a narrow sidebar.
+fn nav_label(text: &'static str) -> gpui::Div {
+    div()
+        .flex_1()
+        .min_w_0()
+        .overflow_hidden()
+        .whitespace_nowrap()
+        .text_ellipsis()
+        .child(text)
 }

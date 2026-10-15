@@ -487,13 +487,9 @@ impl Render for Composer {
         });
         let has_attachments = pending.is_some();
         let send_ready = busy || !empty || has_attachments;
-        // The send button takes the mode's colour, as in the extension.
-        let send_bg = match mode {
-            crate::modes::ModeId::Plan | crate::modes::ModeId::Bypass => {
-                tint.unwrap_or(t.extra.fill)
-            }
-            _ => t.extra.fill,
-        };
+        // Send is the screen's one filled action: the system's blue, in every
+        // mode (the mode chip beside it carries the mode's colour).
+        let send_bg = t.extra.fill;
         let send = div()
             .id("send")
             .size(px(26.))

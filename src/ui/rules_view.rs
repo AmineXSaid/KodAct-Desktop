@@ -284,11 +284,19 @@ impl RulesView {
                     .flex()
                     .flex_col()
                     .gap(t.space.xs)
-                    .child(div().text_size(t.text.heading_sm).font_weight(FontWeight::SEMIBOLD).text_color(t.colors.text_strong).child("Rules and memory"))
+                    .child(
+                        div()
+                            .font_family(t.font_display.clone())
+                            .font_weight(FontWeight::BOLD)
+                            .text_size(t.size.greeting)
+                            .text_color(t.colors.text_strong)
+                            .child("Rules and memory"),
+                    )
+                    // The section's subhead, in the editorial serif.
                     .child(
                         div()
                             .font_family(t.font_serif.clone())
-                            .text_size(t.text.body)
+                            .text_size(t.text.subheading)
                             .text_color(t.colors.text_body)
                             .child(format!("What Claude Code reads in {where_}, and when. Files read every session cost context every time; the rest load only when they apply.")),
                     ),
@@ -310,7 +318,8 @@ impl RulesView {
                     .on_click(cx.listener(|this, _, _, cx| this.reload(cx))),
             )
             .child(
-                theme::ghost_button(t, "New rule")
+                theme::primary_button(t, "New rule")
+                    .flex_none()
                     .id("rules-new")
                     .on_click(cx.listener(|this, _, window, cx| this.start_create(window, cx))),
             )

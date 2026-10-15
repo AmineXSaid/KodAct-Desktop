@@ -359,7 +359,14 @@ impl Render for ChatView {
                         versions_open: s.versions_open == Some((chat.id, ix)),
                         sources: s.diagram_code.clone(),
                     };
-                    message::render(m, &ctx, &t)
+                    // A message rises into place as it arrives (and as it
+                    // scrolls back into view), as the reference's sections do.
+                    super::motion::row_in_full(
+                        message::render(m, &ctx, &t),
+                        SharedString::from(format!("msg-in-{}-{ix}", chat.id)),
+                        0,
+                        &t,
+                    )
                 }
                 None => match &step {
                     Some((label, since)) => {

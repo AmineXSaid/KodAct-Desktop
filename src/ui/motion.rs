@@ -82,6 +82,23 @@ pub fn row_in(
         .into_any_element()
 }
 
+/// `row_in` for a row that fills its parent's width (a card in a grid).
+pub fn row_in_full(
+    row: impl gpui::IntoElement + 'static,
+    id: impl Into<gpui::ElementId>,
+    index: usize,
+    t: &crate::theme::Theme,
+) -> gpui::AnyElement {
+    use gpui::{div, prelude::*, px, AnimationExt as _};
+    div()
+        .w_full()
+        .child(row)
+        .with_animation(id, stagger(t, index), |d, k| {
+            d.opacity(k).mt(px(4. * (1. - k))).mb(px(-4. * (1. - k)))
+        })
+        .into_any_element()
+}
+
 /// A window drawing itself as it opens: a jewel bar runs down its left edge
 /// while the window rises a few pixels into place and fades in, then the bar
 /// fades away, leaving the window as it rests. The caller positions `body`

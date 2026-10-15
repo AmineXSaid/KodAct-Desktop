@@ -197,7 +197,7 @@ Changes apply the next time they're used; no restart.
 - `src/browser_mcp.rs`: the browser tools for ForgeCLI's agents, served by this same program
   (`--browser-mcp`): navigate, state (numbered elements), click, type, press, select, hover,
   scroll, text, html, eval, wait, screenshot, console and tabs, on the page the panel shows.
-- `src/assets.rs`: bundled icons (Lucide, ISC) and fonts (Hanken Grotesk, JetBrains Mono, Source Serif 4; OFL).
+- `src/assets.rs`: bundled icons (Lucide, ISC) and fonts (Inter, JetBrains Mono, Source Serif 4; OFL).
 - `src/ui/`: one file per part:
   - the window: `workspace` (title bar, welcome), `sidebar`, `chat_view`,
     `message`, `markdown`, `composer`, `command_palette`, `onboarding`,

@@ -363,6 +363,7 @@ fn heading(t: &Theme, text: &str) -> impl IntoElement {
         .mt(t.space.xl)
         .text_center()
         .font_family(t.font_display.clone())
+        .font_weight(gpui::FontWeight::BOLD)
         .text_size(t.size.greeting)
         .line_height(relative(1.2))
         .text_color(t.colors.text_strong)

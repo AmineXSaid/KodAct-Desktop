@@ -53,7 +53,16 @@ pub fn render(
 ) -> AnyElement {
     let s = state.read(cx);
     let hover = t.colors.hover;
+    // Each starter has its own hue from the system's accent cast, on a
+    // tinted tile, like the feature cards' colour marks.
+    let accents = [
+        t.colors.primary,
+        t.colors.coral,
+        t.extra.success,
+        t.colors.marigold,
+    ];
     let card = |i: usize, st: &Starter| {
+        let accent = accents[i % accents.len()];
         let composer = composer.clone();
         let prompt = st.prompt;
         div()
@@ -61,10 +70,10 @@ pub fn render(
             .flex_1()
             .min_w_0()
             .flex()
-            .items_start()
-            .gap(t.space.sm)
+            .items_center()
+            .gap(t.space.md)
             .px(t.space.md)
-            .py(t.space.sm)
+            .py(t.space.md)
             .rounded(t.radius.card)
             .border_1()
             .border_color(t.colors.border)
@@ -73,8 +82,14 @@ pub fn render(
             .hover(move |d| d.bg(hover))
             .child(
                 div()
-                    .pt(px(2.))
-                    .child(icon(st.icon, t.size.icon_sm, t.colors.text_muted)),
+                    .flex_none()
+                    .size(px(28.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(t.radius.button)
+                    .bg(accent.opacity(0.14))
+                    .child(icon(st.icon, t.size.icon_sm, accent)),
             )
             .child(
                 div()
@@ -102,13 +117,20 @@ pub fn render(
                 composer.update(app, |c, cx| c.fill(prompt, window, cx))
             })
     };
-    let row = |a: usize, b: usize| {
+    // The cards rise into place one after another as the page opens.
+    let rise = |i: usize| {
         div()
+            .flex_1()
+            .min_w_0()
             .flex()
-            .gap(t.space.sm)
-            .child(card(a, &STARTERS[a]))
-            .child(card(b, &STARTERS[b]))
+            .child(super::motion::row_in_full(
+                card(i, &STARTERS[i]).w_full(),
+                SharedString::from(format!("starter-in-{i}")),
+                i + 2,
+                t,
+            ))
     };
+    let row = |a: usize, b: usize| div().flex().gap(t.space.sm).child(rise(a)).child(rise(b));
 
     // The most recent chat in this project, to pick up again.
     let recent = s

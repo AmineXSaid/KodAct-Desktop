@@ -554,7 +554,7 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
             Block::Para(spans) => div()
                 .child(runs(&spans, t, FontWeight::NORMAL, t.colors.text))
                 .into_any_element(),
-            // A document's title is set in the display serif, as the greeting is.
+            // A document's title is set in the display face, bold, as the greeting is.
             Block::Heading(1, spans) if doc => div()
                 .text_size(t.size.doc_title)
                 .line_height(relative(1.2))
@@ -562,7 +562,7 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                     &spans,
                     t,
                     &t.font_display,
-                    FontWeight::NORMAL,
+                    FontWeight::BOLD,
                     t.colors.text_strong,
                 ))
                 .into_any_element(),

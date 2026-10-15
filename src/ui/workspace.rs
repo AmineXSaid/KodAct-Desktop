@@ -480,11 +480,9 @@ impl Workspace {
     fn welcome(&self, _window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let s = self.state.read(cx);
-        let line = crate::greeting::pick(
-            s.user_name.as_deref().unwrap_or_default(),
-            crate::greeting::hour_now(),
-            s.greeting_seed,
-        );
+        let name = s.user_name.clone().unwrap_or_default();
+        let name = name.trim();
+        let line = crate::greeting::pick(name, crate::greeting::hour_now(), s.greeting_seed);
         // A short window scrolls it rather than cutting off the logo or the starters.
         div()
             .id("welcome")
@@ -511,17 +509,19 @@ impl Workspace {
                             .items_center()
                             .gap(t.space.xl)
                             // The Forge logo above the greeting, both centred.
-                            .child(super::logo(84.))
-                            .child(
-                                div()
-                                    .w_full()
-                                    .text_center()
-                                    .font_family(t.font_display.clone())
-                                    .text_size(t.size.greeting)
-                                    .text_color(t.colors.text_strong)
-                                    .line_height(gpui::relative(1.15))
-                                    .child(line),
-                            )
+                            // The page rises in piece by piece as it opens.
+                            .child(super::motion::row_in(
+                                super::logo(84.),
+                                "welcome-logo",
+                                0,
+                                &t,
+                            ))
+                            .child(super::motion::row_in_full(
+                                greeting_line(&line, name, &t),
+                                "welcome-greeting",
+                                1,
+                                &t,
+                            ))
                             .child(div().h(t.space.sm))
                             .child(self.composer.clone())
                             .child(super::starters::render(&t, &self.state, &self.composer, cx)),
@@ -1358,6 +1358,51 @@ fn share_out(
         d -= (over - from_panel).min((d - d_min).max(0.));
     }
     (p, d)
+}
+
+/// The greeting, bold and tight, with your name on a peach pill (the
+/// design system's hero highlight: one word of a headline, marked).
+fn greeting_line(line: &str, name: &str, t: &crate::theme::Theme) -> impl IntoElement {
+    let text = |s: &str| div().child(s.to_string());
+    let row = div()
+        .w_full()
+        .flex()
+        .flex_wrap()
+        .justify_center()
+        .items_center()
+        .gap_x(px(6.))
+        .font_family(t.font_display.clone())
+        .font_weight(gpui::FontWeight::BOLD)
+        .text_size(t.size.greeting)
+        .text_color(t.colors.text_strong)
+        .line_height(gpui::relative(1.15));
+    let Some(at) = (!name.is_empty()).then(|| line.find(name)).flatten() else {
+        return row.child(text(line));
+    };
+    let (before, after) = (&line[..at], &line[at + name.len()..]);
+    row.when(!before.trim().is_empty(), |d| {
+        d.child(text(before.trim_end()))
+    })
+    .child(
+        div()
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .px(px(16.))
+            .py(px(2.))
+            .rounded(t.radius.pill)
+            .bg(t.colors.peach)
+            .child(div().size(px(10.)).rounded_full().bg(t.colors.coral))
+            .child(name.to_string()),
+    )
+    .when(!after.trim().is_empty(), |d| {
+        // "Forge?" keeps its mark beside the pill, not on a line of its own.
+        d.child(text(after.trim_start()).ml(if after.starts_with(' ') {
+            px(0.)
+        } else {
+            px(-4.)
+        }))
+    })
 }
 
 #[cfg(test)]

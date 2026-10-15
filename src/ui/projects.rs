@@ -334,14 +334,17 @@ impl ProjectsView {
                                     .child(
                                         div()
                                             .font_family(t.font_display.clone())
+                                            .font_weight(gpui::FontWeight::BOLD)
                                             .text_size(t.size.greeting)
                                             .text_color(t.colors.text_strong)
                                             .child("Projects"),
                                     )
                                     .child(
+                                        // The section's subhead, in the editorial serif.
                                         div()
-                                            .text_size(t.text.body)
-                                            .text_color(t.colors.text_muted)
+                                            .font_family(t.font_serif.clone())
+                                            .text_size(t.text.subheading)
+                                            .text_color(t.colors.text_body)
                                             .child("A folder with its own chats, rules and memory. Open one to pick up where you left off."),
                                     ),
                             )

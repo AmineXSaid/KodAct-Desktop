@@ -22,8 +22,8 @@ Scale: 4, 8, 12, 16, 24, 32
 Scale: 1px (a line's ends: every straight line is rounded just slightly), 4px (small), 8px (buttons, rows), 12px (cards, popovers), 16px (the composer), pill
 
 ### Typography
-Interface: Hanken Grotesk (Anthropic Sans when installed or in Forge's `fonts` folder; never bundled)
-Display: Source Serif 4 Display (the greeting)
+Interface: Inter (Anthropic Sans when installed or in Forge's `fonts` folder; never bundled)
+Display: Inter Display (the greeting)
 Code: JetBrains Mono
 Scale: 12 caption, 13 UI and chat, 14 input, 18 subheading, 20 heading, 28 greeting
 Weights: 400, 500 (labels, buttons), 600 (headings, the project name)
@@ -34,7 +34,7 @@ Lucide, 2px stroke as drawn. Sizes: 12 / 14 / 16 / 20 only.
 
 ### Sizes
 - `titlebar`: 36px, the title bar's height
-- `sidebar`: 240px, the sidebar's width
+- `sidebar`: 256px, the sidebar's width
 - `column`: 680px, the reading column
 - `composer_width`: 560px, the composer's widest
 - `row`: 30px, sidebar rows, menu items
