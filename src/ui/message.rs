@@ -66,7 +66,7 @@ pub fn render(m: &Message, cx: &ItemContext, t: &Theme) -> AnyElement {
             ..
         } => user(text, *sent, attachments, cx, t),
         Message::Assistant { blocks } => assistant(blocks, cx, t),
-        Message::TurnEnd { seconds, .. } => turn_footer(*seconds, cx, t),
+        Message::TurnEnd { seconds, usage } => turn_footer(*seconds, usage.as_ref(), cx, t),
         Message::Notice { text, error } => notice(text, *error, cx, t),
     }
 }
@@ -95,7 +95,12 @@ fn action_button(
 
 /// Under a finished reply: Copy, Good, Bad, Regenerate, then how long it
 /// took. The newest reply's row is always shown; older ones on hover.
-fn turn_footer(seconds: f32, cx: &ItemContext, t: &Theme) -> AnyElement {
+fn turn_footer(
+    seconds: f32,
+    usage: Option<&crate::context::Usage>,
+    cx: &ItemContext,
+    t: &Theme,
+) -> AnyElement {
     let key = format!("{}-{}", cx.chat, cx.index);
     let group: SharedString = format!("turn-{key}").into();
     let copied = cx.copied.as_deref() == Some(format!("turn-{key}").as_str());
@@ -190,11 +195,55 @@ fn turn_footer(seconds: f32, cx: &ItemContext, t: &Theme) -> AnyElement {
         .child(actions)
         .child(
             div()
+                .id(SharedString::from(format!("turn-took-{key}")))
                 .text_size(t.text.caption)
                 .text_color(t.colors.text_subtle)
-                .child(format!("{seconds:.1}s")),
+                .child(took(seconds, usage))
+                .when_some(usage.map(read_and_wrote), |d, tip| {
+                    d.tooltip(move |w, cx| {
+                        gpui::component::tooltip::Tooltip::new(tip.clone()).build(w, cx)
+                    })
+                }),
         )
         .into_any_element()
+}
+
+/// Under a reply: how long it took and how much it wrote ("Took 4.8s ·
+/// wrote 1.2K tokens"); "about" when the count is estimated.
+fn took(seconds: f32, usage: Option<&crate::context::Usage>) -> String {
+    let time = if seconds >= 60. {
+        format!("Took {}m {:.0}s", (seconds / 60.).floor(), seconds % 60.)
+    } else {
+        format!("Took {seconds:.1}s")
+    };
+    match usage.filter(|u| u.output > 0) {
+        Some(u) => format!(
+            "{time} · wrote {}{} tokens",
+            if u.estimated { "about " } else { "" },
+            crate::context::short(u.output)
+        ),
+        None => time,
+    }
+}
+
+/// The tooltip: what the model read to write it.
+fn read_and_wrote(u: &crate::context::Usage) -> String {
+    let read = u.input + u.cache_creation + u.cache_read;
+    let mut s = format!(
+        "Read {} tokens of conversation, wrote {}",
+        crate::context::short(read),
+        crate::context::short(u.output)
+    );
+    if u.cache_read > 0 {
+        s.push_str(&format!(
+            " · {} of it from the cache",
+            crate::context::short(u.cache_read)
+        ));
+    }
+    if u.estimated {
+        s.push_str(" · counted from the text, no model reported it");
+    }
+    s
 }
 
 /// Something the app says: Stop (with Continue on the last one), or an error
@@ -1031,6 +1080,14 @@ fn answer_meta(verdict: Verdict, info: &PermInfo, blocks: &[Block], cx: &ItemCon
     parts.join(" · ")
 }
 
+/// What the call said it was for ("Clean the build"), from its own row.
+fn call_note(info: &PermInfo, blocks: &[Block]) -> Option<SharedString> {
+    match blocks.get(info.row?)? {
+        Block::Tool(c) => c.note.clone().filter(|n| !n.trim().is_empty()),
+        _ => None,
+    }
+}
+
 /// The call an answer was about, in mono, cut to one line (all of it in
 /// the tooltip).
 fn subject(text: &SharedString, id: SharedString, t: &Theme) -> AnyElement {
@@ -1119,7 +1176,14 @@ fn answered(
                             &what,
                             SharedString::from(format!("perm-what-{}-{}-{b}", cx.chat, cx.index)),
                             t,
-                        )),
+                        ))
+                        .children(call_note(info, blocks).map(|n| {
+                            div()
+                                .flex_none()
+                                .text_size(t.text.caption)
+                                .text_color(t.colors.text_muted)
+                                .child(n)
+                        })),
                 )
                 .child(
                     div()
@@ -1446,6 +1510,29 @@ mod tests {
         // Text and unanswered questions are not answers.
         assert_eq!(same_answers(&blocks, 5), 0);
         assert_eq!(same_answers(&blocks, 6), 0);
+    }
+
+    #[test]
+    fn the_footer_says_how_long_and_how_much() {
+        use crate::context::Usage;
+        assert_eq!(super::took(4.83, None), "Took 4.8s");
+        let u = Usage {
+            output: 1_250,
+            ..Default::default()
+        };
+        assert_eq!(
+            super::took(75., Some(&u)),
+            "Took 1m 15s · wrote 1.2K tokens"
+        );
+        let u = Usage {
+            output: 40,
+            estimated: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            super::took(2., Some(&u)),
+            "Took 2.0s · wrote about 40 tokens"
+        );
     }
 
     #[test]

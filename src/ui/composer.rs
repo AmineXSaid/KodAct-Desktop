@@ -604,11 +604,13 @@ impl Render for Composer {
                     t.colors.border,
                     if f > 0.8 { colour } else { t.colors.primary },
                 ))
-                .child(if f > 0. && f < 0.01 {
-                    "<1%".to_string()
-                } else {
-                    format!("{:.0}%", (f * 100.).round())
-                })
+                // How much of the model's window the chat fills, in tokens.
+                .child(format!(
+                    "{}{} of {}",
+                    if m.estimated { "~" } else { "" },
+                    crate::context::short(m.used),
+                    crate::context::short(m.window)
+                ))
                 .rounded(t.radius.pill)
                 .cursor_pointer()
                 .hover(move |st| st.bg(hover))
