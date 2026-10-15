@@ -583,7 +583,7 @@ impl Chat {
     }
 
     /// Start a new ForgeCLI conversation for this chat (its old one can't
-    /// follow: the transcript was cut back, or the endpoint changed).
+    /// follow: the transcript was cut back).
     pub fn new_conversation(&mut self) {
         self.session = crate::history::new_id();
         self.resumable = false;
@@ -4497,11 +4497,9 @@ impl AppState {
                 if same_endpoint && live.session.set_model(&profile.model).is_ok() {
                     self.sessions.get_mut(&id).expect("checked above").profile = profile.clone();
                 } else {
+                    // Another endpoint: Forge restarts on it and resumes this
+                    // conversation, so the new model reads every message above.
                     self.sessions.remove(&id);
-                    if let Some(c) = self.chat_mut(id) {
-                        c.new_conversation();
-                    }
-                    self.notice(id, format!("Now on {}: a new endpoint starts a new conversation, so Forge doesn't see the messages above.", profile.display()), false);
                 }
             }
         }

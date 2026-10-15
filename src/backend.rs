@@ -148,6 +148,8 @@ fn cli_base_url(profile: &Profile) -> String {
 /// here. Every diagram is drawn with the Diagram Design skill (`plugin.rs`)
 /// unless the user names another format (Mermaid, ASCII, SVG, ...), which
 /// then wins; Mermaid and SVG blocks still render inline (`mermaid.rs`).
+/// An HTML page Forge writes is rendered, critiqued and revised before the
+/// reply ends (up to three rounds).
 pub const SURFACE_PROMPT: &str = "You are running inside Forge Desktop, which renders your replies as Markdown and draws diagrams in the chat. \
 Diagram Design is the default for every diagram. When the user asks for a diagram, chart or graph, or one would explain structure \
 or flow better than prose (architecture, a request's path, data flow, states, a sequence of calls, a data model, a timeline, a \
@@ -156,7 +158,14 @@ SVG in Forge's own style, and Forge shows that file as a diagram in the chat. Sa
 and name it in your reply. When the user asks for a specific format (Mermaid, ASCII art, SVG, PlantUML, Graphviz, a table...), \
 use exactly that format without hesitating. When the diagram-design skill is not available, fall back to a ```mermaid fenced \
 block or an ```svg block with one <svg>; both render inline here (Mermaid: flowchart, sequenceDiagram, stateDiagram-v2, \
-classDiagram, erDiagram, mindmap, pie, gantt, timeline, journey, xychart-beta, quadrantChart, gitGraph). Put ASCII art in a ```text block so it keeps its alignment.";
+classDiagram, erDiagram, mindmap, pie, gantt, timeline, journey, xychart-beta, quadrantChart, gitGraph). Put ASCII art in a ```text block so it keeps its alignment. \
+When you write or change an HTML page (a report, a page, a mockup; diagrams included), review it before you call it done. \
+Look at it rendered: when Forge's browser tools are available (navigate, screenshot), navigate to the file (a file:// URL), \
+take a screenshot, and look at the picture; otherwise read the file back as a reviewer would. Critique it in two passes. Design: hierarchy \
+(one clear title, headings that step down), spacing and alignment, contrast and legibility, nothing overflowing or overlapping, \
+consistent colours and type, and a layout that also holds in a narrow window. Content: accurate, complete, no placeholder or lorem text, no \
+dead links, every section earns its place. Fix what you find and look again; stop when a pass finds nothing worth fixing, or \
+after three rounds. Then tell the user, in a line or two, what the review changed.";
 
 /// Which ForgeCLI conversation a process runs: a new one under the id the
 /// desktop chose, or one already on disk, resumed.
@@ -1144,6 +1153,9 @@ mod tests {
         assert!(surface.contains("Diagram Design is the default"));
         assert!(surface.contains("unless the user names another format"));
         assert!(surface.contains("```mermaid") && surface.contains("ASCII"));
+        // An HTML page is looked at, critiqued and revised, three rounds at most.
+        assert!(surface.contains("When you write or change an HTML page"));
+        assert!(surface.contains("after three rounds"));
         let o: Profile = serde_json::from_value(
             json!({"name":"o","baseUrl":"http://127.0.0.1:11434","wire":"openai","model":"q"}),
         )
