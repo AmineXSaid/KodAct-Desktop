@@ -60,9 +60,9 @@ pub fn open_folder(state: Entity<AppState>, cx: &mut gpui::App) {
     .detach();
 }
 
-/// A project's mark: its initial on a tile in a colour of its own (the
-/// same each time), with a corner badge when the folder is remote (WSL, SSH
-/// or a container). It stands in for a folder icon wherever a project shows.
+/// A project's mark: a folder on a tile in a colour of its own (the same
+/// each time), with a corner badge when the folder is remote (WSL, SSH or a
+/// container).
 pub fn project_tile(t: &Theme, name: &str, path: &std::path::Path, size: Pixels) -> AnyElement {
     let colors = [
         t.colors.primary,
@@ -75,11 +75,15 @@ pub fn project_tile(t: &Theme, name: &str, path: &std::path::Path, size: Pixels)
         .bytes()
         .fold(7usize, |a, b| a.wrapping_mul(31).wrapping_add(b as usize));
     let color = colors[h % colors.len()];
-    let initial: String = name
-        .chars()
-        .find(|c| c.is_alphanumeric())
-        .map(|c| c.to_uppercase().collect())
-        .unwrap_or_else(|| "·".into());
+    // A folder, in the project's own hue: the shape says what it is, the
+    // colour tells projects apart at a glance.
+    let glyph = if size >= px(40.) {
+        t.size.icon_lg
+    } else if size >= px(28.) {
+        t.size.icon
+    } else {
+        t.size.icon_xs
+    };
     let remote = crate::remote::Remote::parse(path);
     div()
         .relative()
@@ -95,10 +99,7 @@ pub fn project_tile(t: &Theme, name: &str, path: &std::path::Path, size: Pixels)
                 .bg(color.opacity(0.16))
                 .border_1()
                 .border_color(color.opacity(0.28))
-                .text_size(size * 0.46)
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(color)
-                .child(initial),
+                .child(icon("icons/folder.svg", glyph, color)),
         )
         // Too small a tile for a badge: the title bar names the remote beside it.
         .children(remote.filter(|_| size >= px(32.)).map(|r| {
@@ -334,7 +335,6 @@ impl ProjectsView {
                                     .child(
                                         div()
                                             .font_family(t.font_display.clone())
-                                            .font_weight(gpui::FontWeight::BOLD)
                                             .text_size(t.size.greeting)
                                             .text_color(t.colors.text_strong)
                                             .child("Projects"),

@@ -1372,7 +1372,6 @@ fn greeting_line(line: &str, name: &str, t: &crate::theme::Theme) -> impl IntoEl
         .items_center()
         .gap_x(px(6.))
         .font_family(t.font_display.clone())
-        .font_weight(gpui::FontWeight::BOLD)
         .text_size(t.size.greeting)
         .text_color(t.colors.text_strong)
         .line_height(gpui::relative(1.15));

@@ -113,7 +113,7 @@ Node names shrink relative to the canvas as it grows — resist that. Scale the 
 | Role | standard | presentation | print |
 |---|---|---|---|
 | Title (Source Serif 4) | 28 | 40 | 32 |
-| Node name (Inter 600) | 12 | 16 | 12 |
+| Node name (Hanken Grotesk 600) | 12 | 16 | 12 |
 | Sublabel (JetBrains Mono) | 9 | 12 | 9 |
 | Arrow label (JetBrains Mono) | 8 | 12 | 8 |
 | Eyebrow / tag (JetBrains Mono) | 8 | 8 | 8 |
@@ -126,12 +126,12 @@ Every `font-size` is one of the role values above for the preset in use, or one 
 
 | Exception | Font | Sizes |
 |---|---|---|
-| Dense annotation: legend keys, axis ticks, chart data labels, source lines, in-box tags | JetBrains Mono or Inter regular | 7 to 11, half steps allowed |
-| Chart series or row name: bar category, line or bump series, gantt row, matrix header | Inter 600 | 10 to 11 |
-| Group or entity heading | Inter 600 | 14 |
+| Dense annotation: legend keys, axis ticks, chart data labels, source lines, in-box tags | JetBrains Mono or Hanken Grotesk regular | 7 to 11, half steps allowed |
+| Chart series or row name: bar category, line or bump series, gantt row, matrix header | Hanken Grotesk 600 | 10 to 11 |
+| Group or entity heading | Hanken Grotesk 600 | 14 |
 | Decorative watermark numerals at or under 0.08 opacity | any | any |
 
-An exception is bound to the font beside it, weight included: Inter at 600 or heavier is the node-name voice, lighter Inter is annotation. So a Inter 600 node name cannot borrow the dense-annotation range down to 7, and a JetBrains Mono tick cannot borrow the 14 reserved for headings. A chart row carries a name in the same Inter 600 voice at a rank the ramp has no row for, which is why it has an exception of its own rather than a licence to shrink: `type-bar.md`, `type-gantt.md` and `type-line.md` all set that name at 10 or 11.
+An exception is bound to the font beside it, weight included: Hanken Grotesk at 600 or heavier is the node-name voice, lighter Hanken Grotesk is annotation. So a Hanken Grotesk 600 node name cannot borrow the dense-annotation range down to 7, and a JetBrains Mono tick cannot borrow the 14 reserved for headings. A chart row carries a name in the same Hanken Grotesk 600 voice at a rank the ramp has no row for, which is why it has an exception of its own rather than a licence to shrink: `type-bar.md`, `type-gantt.md` and `type-line.md` all set that name at 10 or 11.
 
 Anything else is a bug in the diagram, not a new size. The one standing carve-out is the closed inventory below.
 
@@ -149,16 +149,16 @@ Each is registered against the font carrying it, because that is what the sweep 
 | `assets/example-nested.html` | Source Serif 4 14, Source Serif 4 14 | two italic serif asides |
 | `assets/example-nested-dark.html` | Source Serif 4 14, Source Serif 4 14 | two italic serif asides |
 | `assets/example-nested-full.html` | Source Serif 4 14, Source Serif 4 14 | two italic serif asides |
-| `assets/example-paved-road-animated.html` | Inter 600 13 | boundary node name |
+| `assets/example-paved-road-animated.html` | Hanken Grotesk 600 13 | boundary node name |
 | `assets/example-process.html` | JetBrains Mono 6 | role chip |
 | `assets/example-process-dark.html` | JetBrains Mono 6 | role chip |
 | `assets/example-process-full.html` | JetBrains Mono 6 | role chip |
-| `assets/example-quadrant-consultant.html` | Inter 600 13 | inline dot glyph in a `tspan` |
-| `assets/example-queue-animated.html` | Inter 600 13, Inter 600 22, Inter 600 24 | state caption and two fill counters |
-| `assets/example-treemap.html` | Inter 600 7, Inter 600 7, Inter 600 13, Inter 600 13 | two cell index glyphs and two cell names |
-| `assets/example-treemap-dark.html` | Inter 600 7, Inter 600 7, Inter 600 13, Inter 600 13 | two cell index glyphs and two cell names |
-| `assets/example-treemap-full.html` | Inter 600 7, Inter 600 7, Inter 600 13, Inter 600 13 | two cell index glyphs and two cell names |
-| `references/type-treemap.md` | Inter 600 13 | the cell-name line of the documented pattern |
+| `assets/example-quadrant-consultant.html` | Hanken Grotesk 600 13 | inline dot glyph in a `tspan` |
+| `assets/example-queue-animated.html` | Hanken Grotesk 600 13, Hanken Grotesk 600 22, Hanken Grotesk 600 24 | state caption and two fill counters |
+| `assets/example-treemap.html` | Hanken Grotesk 600 7, Hanken Grotesk 600 7, Hanken Grotesk 600 13, Hanken Grotesk 600 13 | two cell index glyphs and two cell names |
+| `assets/example-treemap-dark.html` | Hanken Grotesk 600 7, Hanken Grotesk 600 7, Hanken Grotesk 600 13, Hanken Grotesk 600 13 | two cell index glyphs and two cell names |
+| `assets/example-treemap-full.html` | Hanken Grotesk 600 7, Hanken Grotesk 600 7, Hanken Grotesk 600 13, Hanken Grotesk 600 13 | two cell index glyphs and two cell names |
+| `references/type-treemap.md` | Hanken Grotesk 600 13 | the cell-name line of the documented pattern |
 
 New diagrams get no rows here. Bringing one of these onto the ramp is a visual change to a shipped example and belongs in its own PR.
 
@@ -229,13 +229,13 @@ Two rules that hold at every audience level:
 
 ### Non-Latin labels
 
-Inter has no CJK coverage. When labels contain Japanese, Chinese, or Korean text, extend the family on those `<text>` elements — don't swap the whole skin:
+Hanken Grotesk has no CJK coverage. When labels contain Japanese, Chinese, or Korean text, extend the family on those `<text>` elements — don't swap the whole skin:
 
 ```svg
-<text font-family="'Inter', 'Hiragino Sans', 'Noto Sans JP', 'Yu Gothic', sans-serif">認証サービス</text>
-<text font-family="'Inter', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif">인증 서비스</text>
-<text font-family="'Inter', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif">认证服务</text>
-<text font-family="'Inter', 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif">認證服務</text>
+<text font-family="'Hanken Grotesk', 'Hiragino Sans', 'Noto Sans JP', 'Yu Gothic', sans-serif">認証サービス</text>
+<text font-family="'Hanken Grotesk', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif">인증 서비스</text>
+<text font-family="'Hanken Grotesk', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif">认证服务</text>
+<text font-family="'Hanken Grotesk', 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif">認證服務</text>
 ```
 
 These stacks lead with the default skin's sans. Under a custom skin, lead with the `node-name` family instead and keep the CJK fallbacks after it. The Hiragino/Yu Gothic stack carries no Hangul glyphs, so Korean labels need the Korean stack — don't reuse the Japanese one. Noto Sans KR ships in the skin's font link, so it leads that stack and the local families follow it; the register, floor, and title rules Korean needs beyond the font live in [`style-guide.md`](style-guide.md#korean-labels). Japanese fonts also cover only a subset of the Chinese character set and render Simplified forms with Japanese glyph variants, so Chinese labels need a Chinese stack; Simplified and Traditional are separate stacks for the same reason. Noto Sans TC now ships in the link too, so it leads the Traditional stack and the local families follow; the register, floor, and title rules Traditional Chinese needs beyond the font live in [`style-guide.md`](style-guide.md#traditional-chinese-labels). For mono sublabels use `'JetBrains Mono', 'Noto Sans Mono CJK JP', monospace` (Japanese), `'JetBrains Mono', 'Noto Sans Mono CJK KR', monospace` (Korean), or `'JetBrains Mono', 'Noto Sans Mono CJK SC', monospace` / `'JetBrains Mono', 'Noto Sans Mono CJK TC', monospace` (Chinese). Budget **1em per full-width CJK glyph**, not a small percentage over the average Latin glyph; `verify-treemap.py` uses that conservative contract for Unicode wide/full-width characters and treats combining marks as non-advancing. Prefer 12px names over 8px sublabels for CJK; Hangul and Han go muddy below 12px, so treat 12px as the floor rather than 10px. Actual width still varies by fallback font, so run the relevant geometry verifier after translating labels.

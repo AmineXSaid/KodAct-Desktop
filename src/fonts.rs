@@ -1,11 +1,11 @@
 //! Which faces Forge draws with.
 //!
-//! The app bundles only openly licensed fonts: Inter and Inter Display (the
-//! design system's NotionInter substitute), Source Serif 4 (for Lyon Text)
-//! and JetBrains Mono. When NotionInter itself is on this computer, Forge
-//! uses it instead: installed in the system, or placed as .ttf/.otf files
-//! in Forge's `fonts` folder (next to its settings). They are read from
-//! there at start and never ship inside the app.
+//! The app bundles only openly licensed fonts (Hanken Grotesk, Source Serif
+//! 4, JetBrains Mono). When Anthropic Sans, and a serif to go with it, are
+//! on this computer, Forge uses those instead: installed in the system, or
+//! placed as .ttf/.otf files in Forge's `fonts` folder (next to its
+//! settings). They are read from there at start and never ship inside the
+//! app.
 
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -13,12 +13,11 @@ use std::sync::OnceLock;
 use gpui::{App, SharedString};
 
 /// Interface text: the first of these found, else the bundled face.
-pub const SANS_PREFERRED: &[&str] = &["NotionInter"];
-pub const SANS_BUNDLED: &str = "Inter";
-/// Headings and the greeting, set bold and tight: the first found, else
-/// the bundled face (Inter's cut drawn tighter for large sizes).
-pub const DISPLAY_PREFERRED: &[&str] = &["NotionInter"];
-pub const DISPLAY_BUNDLED: &str = "Inter Display";
+pub const SANS_PREFERRED: &[&str] = &["Anthropic Sans", "Anthropic Sans Text"];
+pub const SANS_BUNDLED: &str = "Hanken Grotesk";
+/// Large serif lines (the greeting): the first found, else the bundled face.
+pub const DISPLAY_PREFERRED: &[&str] = &["Anthropic Serif Display", "Anthropic Serif"];
+pub const DISPLAY_BUNDLED: &str = "Source Serif 4 Display";
 
 /// A user font file larger than this is skipped, and at most this many are read.
 const MAX_FILE: u64 = 16 * 1024 * 1024;
@@ -115,14 +114,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn prefers_notion_inter_when_present() {
-        let none = vec!["Inter".to_string(), "Segoe UI".into()];
-        assert_eq!(pick(&none, SANS_PREFERRED, SANS_BUNDLED), "Inter");
-        let with = vec!["notioninter".to_string(), "Inter".into()];
-        assert_eq!(pick(&with, SANS_PREFERRED, SANS_BUNDLED), "notioninter");
+    fn prefers_anthropic_sans_when_present() {
+        let none = vec!["Hanken Grotesk".to_string(), "Segoe UI".into()];
+        assert_eq!(pick(&none, SANS_PREFERRED, SANS_BUNDLED), "Hanken Grotesk");
+        let with = vec!["anthropic sans".to_string(), "Hanken Grotesk".into()];
+        assert_eq!(pick(&with, SANS_PREFERRED, SANS_BUNDLED), "anthropic sans");
+        let text_cut = vec!["Anthropic Sans Text".to_string()];
+        assert_eq!(
+            pick(&text_cut, SANS_PREFERRED, SANS_BUNDLED),
+            "Anthropic Sans Text"
+        );
         assert_eq!(
             pick(&none, DISPLAY_PREFERRED, DISPLAY_BUNDLED),
-            "Inter Display"
+            "Source Serif 4 Display"
         );
     }
 

@@ -243,7 +243,7 @@ impl AssetSource for Assets {
         match path {
             "fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf" => {
                 return Ok(Some(Cow::Borrowed(include_bytes!(
-                    "../assets/fonts/Inter-Regular.ttf"
+                    "../assets/fonts/HankenGrotesk-Regular.ttf"
                 ))))
             }
             "fonts/lilex/Lilex-Regular.ttf" => {
@@ -277,16 +277,17 @@ impl AssetSource for Assets {
 /// Register the bundled faces, so the app looks the same on every machine.
 pub fn load_fonts(cx: &App) {
     let fonts: Vec<Cow<'static, [u8]>> = vec![
-        Cow::Borrowed(include_bytes!("../assets/fonts/Inter-Regular.ttf")),
-        Cow::Borrowed(include_bytes!("../assets/fonts/Inter-Medium.ttf")),
-        Cow::Borrowed(include_bytes!("../assets/fonts/Inter-SemiBold.ttf")),
-        Cow::Borrowed(include_bytes!("../assets/fonts/Inter-Bold.ttf")),
-        Cow::Borrowed(include_bytes!("../assets/fonts/Inter-Italic.ttf")),
-        Cow::Borrowed(include_bytes!("../assets/fonts/InterDisplay-SemiBold.ttf")),
-        Cow::Borrowed(include_bytes!("../assets/fonts/InterDisplay-Bold.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/HankenGrotesk-Regular.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/HankenGrotesk-Medium.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/HankenGrotesk-SemiBold.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/HankenGrotesk-Bold.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/HankenGrotesk-Italic.ttf")),
         Cow::Borrowed(include_bytes!("../assets/fonts/JetBrainsMono-Regular.ttf")),
         Cow::Borrowed(include_bytes!("../assets/fonts/JetBrainsMono-Bold.ttf")),
         Cow::Borrowed(include_bytes!("../assets/fonts/SourceSerif4-Regular.ttf")),
+        Cow::Borrowed(include_bytes!(
+            "../assets/fonts/SourceSerif4Display-Regular.ttf"
+        )),
     ];
     if let Err(e) = cx.text_system().add_fonts(fonts) {
         eprintln!("could not load the bundled fonts: {e}");

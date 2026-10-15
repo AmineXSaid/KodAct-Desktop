@@ -70,12 +70,12 @@ pub struct Theme {
     pub text: TypeScale,
     pub space: Space,
     pub radius: Radius,
-    pub font_sans: SharedString, // Inter (NotionInter when on this PC, `fonts.rs`)
+    pub font_sans: SharedString, // Anthropic Sans when on this PC, else Hanken Grotesk (`fonts.rs`)
     pub font_serif: SharedString, // Source Serif (substitute for Lyon Text)
     pub motion_ms: u64,          // 200ms ease for hovers/transitions
     // Forge additions (see the section at the end of the tokens).
     pub font_mono: SharedString, // JetBrains Mono: code, paths, commands
-    pub font_display: SharedString, // headings and the greeting, bold and tight: Inter Display
+    pub font_display: SharedString, // large serif lines (the greeting): Anthropic Serif when on this PC, else Source Serif 4 Display
     pub extra: ExtraColors,
     pub terminal: TerminalColors,
     pub code: CodeColors,
@@ -504,7 +504,7 @@ pub struct Sizes {
     pub hairline: Pixels,           // 1
     pub line_height_chat: f32,      // 20px lines at 14px: whole pixels, crisp
     pub chat_text: Pixels,          // 14: replies and your messages, on whole pixels
-    pub greeting: Pixels,           // 28: the new-chat greeting, in the display face, bold
+    pub greeting: Pixels,           // 28: the new-chat greeting, in the display serif
     pub statusbar: Pixels,          // 26: the status bar at the foot of the window
     pub panel_in_ms: u64,           // 280: the side panel sliding in
     pub pop_in_ms: u64,             // 160: a menu or dialog rising into place
@@ -516,7 +516,7 @@ pub struct Sizes {
     pub terminal_min: Pixels,       // 280: the terminal dock's narrowest
     pub chat_min: Pixels,           // 400: the chat's narrowest beside the panel and the dock
     pub doc_text: Pixels,           // 15: a document in the side panel
-    pub doc_title: Pixels,          // 28: its title, in the display face, bold
+    pub doc_title: Pixels,          // 28: its title, in the display serif
     pub line_height_doc: f32,       // 1.65: a document's leading
     pub doc_pane: Pixels,           // 460: the side panel's narrowest
     pub doc_measure: Pixels,        // 680: a document's widest line

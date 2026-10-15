@@ -1210,7 +1210,6 @@ impl Settings {
                                 div()
                                     .text_size(t.text.subheading)
                                     .font_family(t.font_display.clone())
-                                    .font_weight(gpui::FontWeight::SEMIBOLD)
                                     .text_color(t.colors.text_strong)
                                     .child("Forge"),
                             )
@@ -1279,7 +1278,6 @@ impl Render for Settings {
                     .pb(px(8.))
                     .text_size(t.text.subheading)
                     .font_family(t.font_display.clone())
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(t.colors.text_strong)
                     .child("Settings"),
             );

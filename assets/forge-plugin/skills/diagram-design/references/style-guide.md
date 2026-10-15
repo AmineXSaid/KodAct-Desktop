@@ -10,7 +10,7 @@ notes: Forge desktop's own skin, bundled with Forge
 
 **The single source of truth for colors, typography, and tokens.** Every diagram draws from this — not from hex values inlined in other reference files. If you want to change the visual skin of Diagram Design, change this file.
 
-This copy ships with Forge in Forge's own skin: warm paper, graphite ink, one blue accent, Inter, Source Serif 4 and JetBrains Mono, so a diagram reads as part of the app. It is the active `forge` profile; swap these values (or run [`onboarding.md`](onboarding.md)) and every new diagram inherits the new skin without touching any type-specific logic.
+This copy ships with Forge in Forge's own skin: warm paper, graphite ink, one blue accent, Hanken Grotesk, Source Serif 4 and JetBrains Mono, so a diagram reads as part of the app. It is the active `forge` profile; swap these values (or run [`onboarding.md`](onboarding.md)) and every new diagram inherits the new skin without touching any type-specific logic.
 
 To generate your own from a website URL, see [`onboarding.md`](onboarding.md).
 
@@ -99,7 +99,7 @@ A self-contained palette for the terminal-window primitive (see [primitive-termi
 | Role | Family | Size | Weight | Usage |
 |---|---|---|---|---|
 | `title` | Source Serif 4 | 1.75rem | 400 | Page H1 |
-| `node-name` | Inter (sans) | 12px | 600 | Human-readable labels |
+| `node-name` | Hanken Grotesk (sans) | 12px | 600 | Human-readable labels |
 | `sublabel` | JetBrains Mono | 9px | 400 | Port, protocol, URL, field type |
 | `eyebrow` | JetBrains Mono | 7–8px | 500, tracked 0.18em, uppercase | Type tags, axis labels |
 | `arrow-label` | JetBrains Mono | 8px | 400, tracked 0.06em | Arrow annotations |
@@ -108,7 +108,7 @@ A self-contained palette for the terminal-window primitive (see [primitive-termi
 ### Font stack
 
 ```html
-<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;1,8..60,400&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif:ital@0;1&family=Noto+Sans+KR:wght@400;500;600&family=Noto+Serif+KR:wght@400&family=Noto+Sans+TC:wght@400;500;600&family=Noto+Serif+TC:wght@400&display=swap Grotesk:wght@400;500;600&family=Noto+Serif:ital@0;1&family=Noto+Sans+KR:wght@400;500;600&family=Noto+Serif+KR:wght@400&family=Noto+Sans+TC:wght@400;500;600&family=Noto+Serif+TC:wght@400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;1,8..60,400&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif:ital@0;1&family=Noto+Sans+KR:wght@400;500;600&family=Noto+Serif+KR:wght@400&family=Noto+Sans+TC:wght@400;500;600&family=Noto+Serif+TC:wght@400&display=swap Grotesk:wght@400;500;600&family=Noto+Serif:ital@0;1&family=Noto+Sans+KR:wght@400;500;600&family=Noto+Serif+KR:wght@400&family=Noto+Sans+TC:wght@400;500;600&family=Noto+Serif+TC:wght@400&display=swap" rel="stylesheet">
 ```
 
 ### Font source
@@ -119,25 +119,25 @@ Font source: `web`
 
 | Value | What ships | Network |
 |---|---|---|
-| `web` (default) | The Google Fonts `<link>` above; text renders in Source Serif 4, Inter, and JetBrains Mono | One stylesheet request to `fonts.googleapis.com`, plus the font files |
+| `web` (default) | The Google Fonts `<link>` above; text renders in Source Serif 4, Hanken Grotesk, and JetBrains Mono | One stylesheet request to `fonts.googleapis.com`, plus the font files |
 | `system` | No font `<link>`; every family stack falls through to the platform's own serif, sans, and monospace faces | None |
 
 Use `system` when the user asks for offline output, system fonts, or no Google Fonts, or when this line says `system`. In `system` mode:
 
-- Omit the font `<link>` (and the export `@import`) entirely. Keep every `font-family` stack as written: each one already ends in a generic family (`serif`, `system-ui, sans-serif`, `ui-monospace, monospace`), so a viewer who has Inter installed still gets it and everyone else gets their system face.
-- Fallback faces have different metrics from Inter, so keep the 8px label padding intact rather than trimming boxes to the Inter measurement.
+- Omit the font `<link>` (and the export `@import`) entirely. Keep every `font-family` stack as written: each one already ends in a generic family (`serif`, `system-ui, sans-serif`, `ui-monospace, monospace`), so a viewer who has Hanken Grotesk installed still gets it and everyone else gets their system face.
+- Fallback faces have different metrics from Hanken Grotesk, so keep the 8px label padding intact rather than trimming boxes to the Hanken Grotesk measurement.
 - Export with `python3 scripts/export_svg.py <file> --system-fonts`, and verify with `python3 scripts/self_check.py --offline <file>`, which fails if the Google Fonts link is still present.
 
 The render linter's default run (`lint-render.py` with network blocked) measures exactly this fallback rendering, so every shipped template and example is already checked in system-font mode.
 
-To keep the editorial faces with no network at all, install Source Serif 4, Inter, and JetBrains Mono locally (all three are SIL Open Font License) and use `system`: the stacks resolve to the installed faces first.
+To keep the editorial faces with no network at all, install Source Serif 4, Hanken Grotesk, and JetBrains Mono locally (all three are SIL Open Font License) and use `system`: the stacks resolve to the installed faces first.
 
 ### Korean labels
 
-Inter and Source Serif 4 carry no Hangul. A Korean `<text>` element extends its own family — never swap the skin:
+Hanken Grotesk and Source Serif 4 carry no Hangul. A Korean `<text>` element extends its own family — never swap the skin:
 
 ```svg
-<text font-family="'Inter', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif">결제 서비스</text>
+<text font-family="'Hanken Grotesk', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif">결제 서비스</text>
 ```
 
 Both Noto faces ship in the font link above, so the web font resolves before any locally installed one and the same file renders identically on macOS, Windows, and a reviewer's browser. The local families follow it for offline viewing. Page titles need the serif equivalent — `'Source Serif 4 Display', 'Source Serif 4', 'Noto Serif KR', serif` — or a mixed Latin/Korean title resolves Hangul through the platform's generic serif and the two halves disagree. Google's `css2` endpoint slices Korean by unicode-range, so a diagram with a handful of Korean labels downloads only the slices it touches. The four templates carry both faces because a new diagram may contain Hangul; the shipped Latin-only examples keep the shorter link, since a file with no Hangul has nothing to resolve.
@@ -152,14 +152,14 @@ Three rules follow from Hangul metrics:
 - **Floor of 12px.** Hangul goes muddy below 12px. If a Korean name doesn't fit at 12px, cut the name — don't shrink the type.
 - **Arrow labels, eyebrows, and legend text switch register.** Those slots are 7–8px JetBrains Mono, uppercase and tracked, which Hangul has neither a face nor legibility for. A Korean label in one of those slots becomes 12px sans at weight 500 with no tracking and no uppercase transform, and its mask rect grows to match (16px tall, width from the budget above, still rounded to a multiple of 4). Latin labels in the same diagram keep the mono treatment.
 
-**Load-bearing rule:** Mono is for *technical* content (ports, commands, URLs, field types). Names go in Inter sans. Page title is Source Serif 4. Italic Source Serif 4 is reserved for annotation callouts (see [primitive-annotation.md](primitive-annotation.md)). **Never JetBrains Mono** as a blanket "dev" font.
+**Load-bearing rule:** Mono is for *technical* content (ports, commands, URLs, field types). Names go in Hanken Grotesk sans. Page title is Source Serif 4. Italic Source Serif 4 is reserved for annotation callouts (see [primitive-annotation.md](primitive-annotation.md)). **Never JetBrains Mono** as a blanket "dev" font.
 
 ### Traditional Chinese labels
 
-Inter and Source Serif 4 carry no Han. A Traditional Chinese `<text>` element extends its own family — never swap the skin:
+Hanken Grotesk and Source Serif 4 carry no Han. A Traditional Chinese `<text>` element extends its own family — never swap the skin:
 
 ```svg
-<text font-family="'Inter', 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif">請求項比對</text>
+<text font-family="'Hanken Grotesk', 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif">請求項比對</text>
 ```
 
 Both Noto TC faces ship in the font link above, so the web font resolves before any locally installed one and the same file renders identically on macOS, Windows, and a reviewer's browser. The local families follow it for offline viewing. Page titles need the serif equivalent — `'Source Serif 4 Display', 'Source Serif 4', 'Noto Serif TC', serif` — or a mixed Latin/Han title resolves Han through the platform's generic serif and the two halves disagree. Google's `css2` endpoint slices Chinese by unicode-range, so a diagram with a handful of Chinese labels downloads only the slices it touches.
@@ -178,13 +178,13 @@ Simplified Chinese takes the same three rules with the Simplified stack (`'Noto 
 
 ### Cyrillic labels
 
-Inter and JetBrains Mono ship Cyrillic (`cyrillic` and `cyrillic-ext` on Google Fonts), so names, sublabels, arrow labels, eyebrows, and legend text in Bulgarian, Russian, Ukrainian, or Serbian keep the Latin treatment: same faces, sizes, tracking, and uppercase. There is no register switch: Hangul and Han switch register because JetBrains Mono has no face for them, and JetBrains Mono does cover Cyrillic.
+Hanken Grotesk and JetBrains Mono ship Cyrillic (`cyrillic` and `cyrillic-ext` on Google Fonts), so names, sublabels, arrow labels, eyebrows, and legend text in Bulgarian, Russian, Ukrainian, or Serbian keep the Latin treatment: same faces, sizes, tracking, and uppercase. There is no register switch: Hangul and Han switch register because JetBrains Mono has no face for them, and JetBrains Mono does cover Cyrillic.
 
 Source Serif 4 carries no Cyrillic. A page title extends its family — `'Source Serif 4 Display', 'Source Serif 4', 'Noto Serif', serif` — or a mixed Latin/Cyrillic title resolves Cyrillic through whatever face comes next and the two halves disagree. Noto Serif ships in the font link above, upright and italic, so an italic callout in Cyrillic takes the same stack.
 
 **Noto Serif goes ahead of the CJK serifs.** When a stack also lists `'Noto Serif KR'` or `'Noto Serif TC'`, put `'Noto Serif'` ahead of them. Google Fonts slices Cyrillic into those faces as well, so a stack that reaches a CJK face first draws its Cyrillic from it. That is why the templates put `'Noto Serif'` between `'Source Serif 4 Display', 'Source Serif 4'` and `'Noto Serif KR'`; Noto Serif has no Hangul or Han, so Korean and Chinese titles pass straight through it.
 
-**Width budget.** The per-character contract above is unchanged: every character costs its face's Latin advance (0.60em sans, 0.62em mono). It fits JetBrains Mono exactly and Inter sans only on average. JetBrains Mono is monospaced: a Cyrillic glyph advances exactly as far as a Latin one, so sublabels, arrow labels, eyebrows, legend text, and their mask rects are sized as for Latin. Inter sans is not. Its wide Cyrillic letters, capitals and lowercase alike (such as `Ж Ш Щ Ю Ы`, `ж ш щ ы ю`), run well past the 0.60em average: `Шкаф ODF-2` at 12px is budgeted at 72px and draws at about 76. Rounding the box up to a multiple of 4 recovers at most 3px, so it is not the remedy. Leave the overshoot in the box padding and measure a Cyrillic sans name in the browser — `verify-treemap.py` holds the budget, not the drawn width, so it will not catch the overshoot.
+**Width budget.** The per-character contract above is unchanged: every character costs its face's Latin advance (0.60em sans, 0.62em mono). It fits JetBrains Mono exactly and Hanken Grotesk sans only on average. JetBrains Mono is monospaced: a Cyrillic glyph advances exactly as far as a Latin one, so sublabels, arrow labels, eyebrows, legend text, and their mask rects are sized as for Latin. Hanken Grotesk sans is not. Its wide Cyrillic letters, capitals and lowercase alike (such as `Ж Ш Щ Ю Ы`, `ж ш щ ы ю`), run well past the 0.60em average: `Шкаф ODF-2` at 12px is budgeted at 72px and draws at about 76. Rounding the box up to a multiple of 4 recovers at most 3px, so it is not the remedy. Leave the overshoot in the box padding and measure a Cyrillic sans name in the browser — `verify-treemap.py` holds the budget, not the drawn width, so it will not catch the overshoot.
 
 Counting by script is still the trap. `Шкаф ODF-2` is four Cyrillic letters, a space, three Latin letters, a hyphen, and a digit; a formula that tallies Cyrillic letters, Latin letters, and spaces silently drops `-` and `2` and sizes the box for eight of its ten characters.
 

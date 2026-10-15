@@ -61,7 +61,7 @@ impl Palette {
     }
 }
 
-const FONT: &str = "Inter, Segoe UI, Helvetica, Arial, sans-serif";
+const FONT: &str = "Hanken Grotesk, Segoe UI, Helvetica, Arial, sans-serif";
 const SIZE: f32 = 13.;
 /// Past this many nodes or messages, the source is shown instead.
 const LIMIT: usize = 250;
