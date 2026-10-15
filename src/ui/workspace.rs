@@ -1380,6 +1380,20 @@ fn greeting_line(line: &str, name: &str, t: &crate::theme::Theme) -> impl IntoEl
         return row.child(text(line));
     };
     let (before, after) = (&line[..at], &line[at + name.len()..]);
+    let pill = div()
+        .flex()
+        .items_center()
+        .gap(px(8.))
+        .px(px(16.))
+        .py(px(2.))
+        .rounded(t.radius.pill)
+        .bg(t.colors.peach)
+        .child(div().size(px(10.)).rounded_full().bg(t.colors.coral))
+        .child(name.to_string());
+    // What follows the name ("?", ". Fresh start?") stays on its line, set
+    // right against the pill when it is punctuation.
+    let tail = after.trim_start();
+    let tight = !after.starts_with(' ');
     row.when(!before.trim().is_empty(), |d| {
         d.child(text(before.trim_end()))
     })
@@ -1387,22 +1401,10 @@ fn greeting_line(line: &str, name: &str, t: &crate::theme::Theme) -> impl IntoEl
         div()
             .flex()
             .items_center()
-            .gap(px(8.))
-            .px(px(16.))
-            .py(px(2.))
-            .rounded(t.radius.pill)
-            .bg(t.colors.peach)
-            .child(div().size(px(10.)).rounded_full().bg(t.colors.coral))
-            .child(name.to_string()),
+            .gap(if tight { px(2.) } else { px(6.) })
+            .child(pill)
+            .when(!tail.is_empty(), |d| d.child(text(tail))),
     )
-    .when(!after.trim().is_empty(), |d| {
-        // "Forge?" keeps its mark beside the pill, not on a line of its own.
-        d.child(text(after.trim_start()).ml(if after.starts_with(' ') {
-            px(0.)
-        } else {
-            px(-4.)
-        }))
-    })
 }
 
 #[cfg(test)]

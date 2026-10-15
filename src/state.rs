@@ -4410,6 +4410,18 @@ impl AppState {
 
     /// `FORGE_DEMO=1`: replies are the scripted demo, no ForgeCLI needed.
     fn play_script(&mut self, id: usize, text: String, cx: &mut Context<Self>) {
+        // A demo chat is named for what its reply does, as a model would
+        // name it, not by the word that started the script.
+        if let (Some(title), Some(c)) = (demo_title(&text), self.chat_mut(id)) {
+            let asks = c
+                .messages
+                .iter()
+                .filter(|m| matches!(m, Message::User { .. }))
+                .count();
+            if asks == 1 {
+                c.title = title.into();
+            }
+        }
         self.replies.insert(
             id,
             cx.spawn(async move |this, cx| {
@@ -6327,6 +6339,21 @@ fn demo_plan() -> Vec<Step> {
         ),
     ]);
     s
+}
+
+/// The name a scripted reply gives its chat; None keeps the prompt's words.
+fn demo_title(prompt: &str) -> Option<&'static str> {
+    let lower = prompt.to_lowercase();
+    [
+        ("agent", "Chat pipeline review"),
+        ("approv", "Repo survey"),
+        ("plan", "Settings migration plan"),
+        ("chart", "Test times by crate"),
+        ("ascii", "Window layout sketch"),
+    ]
+    .into_iter()
+    .find(|(key, _)| lower.contains(key))
+    .map(|(_, title)| title)
 }
 
 fn script(prompt: &str) -> Vec<Step> {

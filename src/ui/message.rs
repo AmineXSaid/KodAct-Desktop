@@ -208,8 +208,8 @@ fn turn_footer(
         .into_any_element()
 }
 
-/// Under a reply: how long it took and how much it wrote ("Took 4.8s ·
-/// wrote 1.2K tokens"); "about" when the count is estimated.
+/// Under a reply: how long it took and how long the reply is ("Took 4.8s ·
+/// 1.2K-token reply"); "~" when the count is estimated.
 fn took(seconds: f32, usage: Option<&crate::context::Usage>) -> String {
     let time = if seconds >= 60. {
         format!("Took {}m {:.0}s", (seconds / 60.).floor(), seconds % 60.)
@@ -218,8 +218,8 @@ fn took(seconds: f32, usage: Option<&crate::context::Usage>) -> String {
     };
     match usage.filter(|u| u.output > 0) {
         Some(u) => format!(
-            "{time} · wrote {}{} tokens",
-            if u.estimated { "about " } else { "" },
+            "{time} · {}{}-token reply",
+            if u.estimated { "~" } else { "" },
             crate::context::short(u.output)
         ),
         None => time,
@@ -230,9 +230,10 @@ fn took(seconds: f32, usage: Option<&crate::context::Usage>) -> String {
 fn read_and_wrote(u: &crate::context::Usage) -> String {
     let read = u.input + u.cache_creation + u.cache_read;
     let mut s = format!(
-        "Read {} tokens of conversation, wrote {}",
+        "The model read {} tokens of this chat and wrote {} (about {} words)",
         crate::context::short(read),
-        crate::context::short(u.output)
+        crate::context::short(u.output),
+        crate::context::short(u.output * 3 / 4)
     );
     if u.cache_read > 0 {
         s.push_str(&format!(
@@ -511,8 +512,20 @@ fn assistant(blocks: &[Block], cx: &ItemContext, t: &Theme) -> AnyElement {
     let mut b = 0;
     while b < blocks.len() {
         let run = same_answers(blocks, b);
-        if denied_call(blocks, b) {
-            // The call never ran: its denial below says all there is.
+        if denied_call(blocks, b) || folded_answer(blocks, b) {
+            // A denied call never ran: its denial says all there is. An
+            // allowed one shows once, its row carrying the answer.
+            b += 1;
+        } else if let Some(p) = answer_for(blocks, b) {
+            rows.push(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(4.))
+                    .child(self::block(blocks, b, cx, t))
+                    .child(approval_line(&blocks[p], cx, t))
+                    .into_any_element(),
+            );
             b += 1;
         } else if run > 1 {
             rows.push(answer_group(&blocks[b..b + run], blocks, b, cx, t));
@@ -528,6 +541,58 @@ fn assistant(blocks: &[Block], cx: &ItemContext, t: &Theme) -> AnyElement {
         .gap(t.space.sm)
         .when(cx.first_in_turn, |d| d.child(turn_header(cx, t)))
         .children(rows)
+        .into_any_element()
+}
+
+/// The allowed answer about the call at `b`, when it names `b` as its row.
+fn answer_for(blocks: &[Block], b: usize) -> Option<usize> {
+    if !matches!(blocks.get(b), Some(Block::Tool(_))) {
+        return None;
+    }
+    blocks.iter().enumerate().skip(b + 1).find_map(|(i, blk)| {
+        matches!(blk, Block::Permission { verdict: Verdict::Allowed | Verdict::AllowedAlways, info, .. } if info.row == Some(b))
+            .then_some(i)
+    })
+}
+
+/// `b` is an allowed answer shown on its call's own row instead.
+fn folded_answer(blocks: &[Block], b: usize) -> bool {
+    match &blocks[b] {
+        Block::Permission {
+            verdict: Verdict::Allowed | Verdict::AllowedAlways,
+            info,
+            ..
+        } => info
+            .row
+            .is_some_and(|r| r < b && answer_for(blocks, r) == Some(b)),
+        _ => false,
+    }
+}
+
+/// Under a call's row: who allowed it, where and when.
+fn approval_line(answer: &Block, cx: &ItemContext, t: &Theme) -> AnyElement {
+    let Block::Permission { verdict, info, .. } = answer else {
+        return div().into_any_element();
+    };
+    let mut parts = vec![format!("{} {}", verdict_word(*verdict), decider(info))];
+    parts.push(match &cx.place {
+        Some((label, _)) => format!("on {label}"),
+        None => "on this computer".into(),
+    });
+    parts.extend(info.at.map(super::versions::ago));
+    div()
+        .flex()
+        .items_center()
+        .gap(t.space.xs)
+        .pl(t.space.md)
+        .text_size(t.text.caption)
+        .text_color(t.colors.text_muted)
+        .child(icon(
+            "icons/shield-check.svg",
+            t.size.icon_xs,
+            t.extra.success,
+        ))
+        .child(parts.join(" · "))
         .into_any_element()
 }
 
@@ -1141,11 +1206,7 @@ fn answered(
         .rounded(t.radius.button)
         .border_1()
         .border_color(t.colors.border)
-        .bg(if denied {
-            t.extra.danger_tint
-        } else {
-            t.colors.surface
-        })
+        .bg(t.colors.surface)
         .child(div().pt(px(1.)).child(icon(
             if denied {
                 "icons/shield-x.svg"
@@ -1231,6 +1292,14 @@ fn answer_group(
         Block::Permission { info, .. } => info.at,
         _ => None,
     });
+    let first_what = run.iter().find_map(|blk| match blk {
+        Block::Permission { title, detail, .. } => Some(if detail.trim().is_empty() {
+            title.clone()
+        } else {
+            detail.clone()
+        }),
+        _ => None,
+    });
     let mut meta = vec![
         decider(info),
         match &cx.place {
@@ -1269,13 +1338,38 @@ fn answer_group(
                 .text_color(t.colors.text_strong)
                 .child(format!("{} {n} {noun}", verdict_word(verdict))),
         )
+        // Closed, it names the first call and counts the rest.
         .child(
             div()
                 .flex_1()
                 .min_w_0()
-                .overflow_hidden()
-                .whitespace_nowrap()
-                .text_ellipsis()
+                .flex()
+                .items_center()
+                .gap(t.space.xs)
+                .when(!open, |d| {
+                    d.children(first_what.clone().map(|w| {
+                        div()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .font_family(t.font_mono.clone())
+                            .text_size(t.text.caption)
+                            .text_color(t.colors.text)
+                            .child(w.lines().next().unwrap_or_default().to_string())
+                    }))
+                    .child(
+                        div()
+                            .flex_none()
+                            .text_size(t.text.caption)
+                            .text_color(t.colors.text_muted)
+                            .child(format!("+{}", n - 1)),
+                    )
+                }),
+        )
+        .child(
+            div()
+                .flex_none()
                 .text_size(t.text.caption)
                 .text_color(t.colors.text_muted)
                 .child(meta.join(" · ")),
@@ -1287,11 +1381,7 @@ fn answer_group(
         .rounded(t.radius.button)
         .border_1()
         .border_color(t.colors.border)
-        .bg(if denied {
-            t.extra.danger_tint
-        } else {
-            t.colors.surface
-        })
+        .bg(t.colors.surface)
         .overflow_hidden()
         .child(header)
         .when(open, |d| {
@@ -1520,19 +1610,30 @@ mod tests {
             output: 1_250,
             ..Default::default()
         };
-        assert_eq!(
-            super::took(75., Some(&u)),
-            "Took 1m 15s · wrote 1.2K tokens"
-        );
+        assert_eq!(super::took(75., Some(&u)), "Took 1m 15s · 1.2K-token reply");
         let u = Usage {
             output: 40,
             estimated: true,
             ..Default::default()
         };
-        assert_eq!(
-            super::took(2., Some(&u)),
-            "Took 2.0s · wrote about 40 tokens"
-        );
+        assert_eq!(super::took(2., Some(&u)), "Took 2.0s · ~40-token reply");
+    }
+
+    #[test]
+    fn an_allowed_call_shows_once_with_its_answer() {
+        let call = Block::Tool(crate::backend::tool_call(
+            "Edit",
+            &serde_json::json!({ "file_path": "src/main.rs" }),
+        ));
+        let mut ok = ask("Edit a file", Verdict::AllowedAlways);
+        if let Block::Permission { info, .. } = &mut ok {
+            info.row = Some(0);
+        }
+        let blocks = [call, ok, ask("Edit a file", Verdict::Allowed)];
+        assert_eq!(super::answer_for(&blocks, 0), Some(1));
+        assert!(super::folded_answer(&blocks, 1));
+        // An answer with no row of its own stands alone.
+        assert!(!super::folded_answer(&blocks, 2));
     }
 
     #[test]
