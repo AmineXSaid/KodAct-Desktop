@@ -368,6 +368,30 @@ fn step_label(c: &Chat) -> Option<String> {
     Some(label)
 }
 
+/// Files Forge writes for people to read: plans, notes, docs.
+const DOC_EXTENSIONS: &[&str] = &["md", "mdx", "markdown", "txt", "rst", "adoc", "org", "docx"];
+
+/// Forge is writing a plan or a document right now: writing or editing a
+/// document file, presenting its plan, or replying in plan mode (the reply
+/// is the plan).
+fn writing_doc(c: &Chat, mode: crate::modes::ModeId) -> bool {
+    let Some(Message::Assistant { blocks }) = c.messages.last() else {
+        return false;
+    };
+    match blocks.last() {
+        Some(Block::Tool(t)) if t.status == ToolStatus::Running => match t.kind {
+            ToolKind::Write | ToolKind::Edit => std::path::Path::new(t.target.as_ref())
+                .extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|e| DOC_EXTENSIONS.contains(&e.to_ascii_lowercase().as_str())),
+            ToolKind::Other => t.target.to_ascii_lowercase().contains("plan"),
+            _ => false,
+        },
+        Some(Block::Text(_)) => mode == crate::modes::ModeId::Plan,
+        _ => false,
+    }
+}
+
 impl ChatView {
     /// Back to the newest message, following it again.
     pub fn jump_to_latest(&mut self, cx: &mut Context<Self>) {
@@ -486,7 +510,6 @@ impl Render for ChatView {
                             vec![]
                         },
                         versions_open: s.versions_open == Some((chat.id, ix)),
-                        cube: super::forge_cube::tint(s.mode, &t),
                         sources: s.diagram_code.clone(),
                     };
                     message::render(m, &ctx, &t)
@@ -497,7 +520,7 @@ impl Render for ChatView {
                         label,
                         *since,
                         s_turn_seed(chat),
-                        super::forge_cube::tint(s.mode, &t),
+                        writing_doc(chat, s.mode),
                     ),
                     None => div().into_any_element(),
                 },
@@ -592,7 +615,8 @@ fn shimmer(label: &str, sweep: f32, t: &crate::theme::Theme) -> StyledText {
     StyledText::new(label.to_string()).with_runs(runs)
 }
 
-/// Forge's working line: the logo breathing, then what the reply is doing and
+/// Forge's working line: the logo turning (or, while Forge writes a plan or
+/// a document, a hand writing with a quill), then what the reply is doing and
 /// for how long, or, between steps, a verb typing itself in. A light
 /// sweeps across the words.
 fn working_line(
@@ -600,7 +624,7 @@ fn working_line(
     label: &str,
     since: Instant,
     seed: usize,
-    cube: gpui::Hsla,
+    writing: bool,
 ) -> gpui::AnyElement {
     let theme = t.clone();
     let text = label.to_string();
@@ -610,7 +634,11 @@ fn working_line(
         .gap(px(4.))
         .h(px(24.))
         .mt(px(4.))
-        .child(super::forge_cube::working(24., cube, t, "working-cube"))
+        .child(if writing {
+            super::writing_hand::writing(t, "working-writing")
+        } else {
+            super::turning_logo(24., "working-cube")
+        })
         .child(div().font_weight(FontWeight::MEDIUM).with_animation(
             SharedString::from(format!("working-{label}")),
             Animation::new(Duration::from_millis(2200)).repeat(),

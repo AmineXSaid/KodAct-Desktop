@@ -733,7 +733,16 @@ impl Render for Workspace {
                             .and_then(|c| s.agents.get(&c))
                             .map_or(&[][..], |r| r.as_slice()),
                         agents_open: &s.agents_open,
-                        logo: super::cube_image(32., window).into_any_element(),
+                        // The logo turns while an agent runs or the reply is still going.
+                        logo: if s.busy()
+                            || s.current.and_then(|c| s.agents.get(&c)).is_some_and(|r| {
+                                r.iter().any(|run| run.ended.is_none())
+                            })
+                        {
+                            super::turning_logo(32., "agents-logo")
+                        } else {
+                            super::cube_image(32., window).into_any_element()
+                        },
                         working: s.busy(),
                         copied: s.copied.clone(),
                         width: fit.width,

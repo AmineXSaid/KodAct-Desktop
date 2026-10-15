@@ -36,8 +36,6 @@ pub struct ItemContext {
     pub first_in_turn: bool,
     /// This turn is the one still running.
     pub live_turn: bool,
-    /// The colour the cube is painted while this turn runs (the mode's).
-    pub cube: gpui::Hsla,
     /// The file open beside the chat, so its card shows it is open.
     pub open_doc: Option<crate::state::FileRef>,
     /// Device pixels per logical pixel, for diagrams drawn to exact size.
@@ -433,19 +431,17 @@ fn user(
         .into_any_element()
 }
 
-/// The head of a turn: Forge's logo and name. The logo breathes while the
-/// turn runs, and is still after.
+/// The head of a turn: Forge's logo and name. The logo turns while the turn
+/// runs, and is still after.
 fn turn_header(cx: &ItemContext, t: &Theme) -> AnyElement {
     const CUBE: f32 = 20.;
     let mark = if cx.live_turn {
-        super::forge_cube::working(
+        super::turning_logo(
             CUBE,
-            cx.cube,
-            t,
             SharedString::from(format!("turn-cube-{}-{}", cx.chat, cx.index)),
         )
     } else {
-        super::forge_cube::mark(CUBE, t.extra.cube_brand, t)
+        super::logo(CUBE).into_any_element()
     };
     div()
         .flex()

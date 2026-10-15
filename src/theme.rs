@@ -237,11 +237,6 @@ pub struct ExtraColors {
     pub mode_plan: Hsla,   // Plan
     pub mode_bypass: Hsla, // Bypass permissions
     pub mode_expert: Hsla, // Expert
-    // Forge's cube, as Forge for VS Code paints it (forge-tokens.css): the
-    // brand purple, lit with white and shaded with near-black.
-    pub cube_brand: Hsla,
-    pub cube_light: Hsla,
-    pub cube_dark: Hsla,
     // A model's ping chip: answered fast, fair, slow (never red).
     pub ping_fast_bg: Hsla,
     pub ping_fast_fg: Hsla,
@@ -286,9 +281,6 @@ impl ExtraColors {
                 mode_plan: rgb(0x428fdc).into(),
                 mode_bypass: rgb(0xec5941).into(),
                 mode_expert: rgb(0xd99530).into(),
-                cube_brand: rgb(0x9475db).into(), // Pajamas purple 400
-                cube_light: rgb(0xffffff).into(),
-                cube_dark: rgb(0x050408).into(),
                 ping_fast_bg: hsla(148. / 360., 0.78, 0.29, 0.22),
                 ping_fast_fg: rgb(0x91d4a8).into(),
                 ping_fair_bg: hsla(30. / 360., 0.04, 0.92, 0.1),
@@ -339,9 +331,6 @@ impl ExtraColors {
                 mode_plan: rgb(0x1f75cb).into(),
                 mode_bypass: rgb(0xa32c12).into(),
                 mode_expert: rgb(0xc17d10).into(),
-                cube_brand: rgb(0x7759c2).into(), // Pajamas brand purple 02p
-                cube_light: rgb(0xffffff).into(),
-                cube_dark: rgb(0x050408).into(),
                 ping_fast_bg: rgb(0xc3e6cd).into(),
                 ping_fast_fg: rgb(0x306440).into(),
                 ping_fair_bg: rgb(0xdcdbd9).into(),

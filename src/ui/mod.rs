@@ -23,7 +23,6 @@ pub mod file_card;
 pub mod file_icon;
 pub mod file_mark;
 pub mod find_bar;
-pub mod forge_cube;
 pub mod guide;
 pub mod hooks_editor;
 pub mod markdown;
@@ -58,6 +57,7 @@ pub mod terminal;
 pub mod terminal_dock;
 pub mod versions;
 pub mod voxels;
+pub mod writing_hand;
 pub mod workbench;
 pub mod workspace;
 
@@ -160,6 +160,43 @@ pub fn logo(size: f32) -> gpui::Img {
     gpui::img(SharedString::from(format!("images/cube-{file}.png")))
         .size(gpui::px(size))
         .flex_none()
+}
+
+/// The Forge logo turning while Forge works: the cube picture, rendered
+/// turning (`assets/images/turn/`), a quarter turn at a time, easing in and
+/// out with a short rest between, so it reads as the same cube at work.
+/// Reduced motion: the logo at rest.
+pub fn turning_logo(size: f32, id: impl Into<gpui::ElementId>) -> gpui::AnyElement {
+    use gpui::{px, Animation, AnimationExt};
+    /// Frames in one full turn, and how many make a quarter.
+    const FRAMES: usize = 72;
+    const QUARTER: usize = FRAMES / 4;
+    /// A quarter turn, then a rest, in milliseconds.
+    const TURN_MS: f32 = 900.;
+    const REST_MS: f32 = 450.;
+    let frame = move |i: usize| {
+        gpui::img(SharedString::from(format!("images/turn/turn-{:02}.png", i % FRAMES)))
+            .size(px(size))
+            .flex_none()
+    };
+    if motion::reduced_motion() {
+        return logo(size).into_any_element();
+    }
+    let beat = TURN_MS + REST_MS;
+    let lap = std::time::Duration::from_millis((beat * 4.) as u64);
+    div()
+        .size(px(size))
+        .flex_none()
+        .with_animation(id, Animation::new(lap).repeat(), move |d, k| {
+            let ms = k * beat * 4.;
+            let quarter = ((ms / beat) as usize).min(3);
+            let t = ((ms - quarter as f32 * beat) / TURN_MS).clamp(0., 1.);
+            // Ease in and out: slow off the rest, quick through the middle.
+            let eased = t * t * (3. - 2. * t);
+            let step = (eased * QUARTER as f32).round() as usize;
+            d.child(frame(quarter * QUARTER + step))
+        })
+        .into_any_element()
 }
 
 /// Your avatar, drawn `size` px square at this screen's density.
