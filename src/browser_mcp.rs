@@ -30,8 +30,19 @@ fn tools() -> Vec<Value> {
         "index": { "type": "integer", "description": "The element's number from `state`." },
         "selector": { "type": "string", "description": "A CSS selector, instead of an index." }
     });
+    // How to answer a dialog (alert, confirm, prompt) the step makes the
+    // page open: an alert is always closed; a question gets Cancel unless
+    // this says accept.
+    let dialog = json!({ "dialog": { "type": "string", "enum": ["accept", "dismiss"],
+        "description": "If the step makes the page ask something (confirm, prompt): accept (OK) or dismiss (Cancel, the default). The answer says what was asked." } });
+    let plus = |mut p: Value, extra: &Value| {
+        if let (Some(p), Some(e)) = (p.as_object_mut(), extra.as_object()) {
+            p.extend(e.clone());
+        }
+        p
+    };
     let with = |extra: Value| {
-        let mut p = target.clone();
+        let mut p = plus(target.clone(), &dialog);
         if let (Some(p), Some(e)) = (p.as_object_mut(), extra.as_object()) {
             p.extend(e.clone());
         }
@@ -43,7 +54,7 @@ fn tools() -> Vec<Value> {
     };
     vec![
         tool("navigate", "Open a URL in the current tab (or a new one), and wait for it to load. The page shows live in Forge's side panel.",
-            json!({ "url": { "type": "string" }, "new_tab": { "type": "boolean", "description": "Open it in a new tab." } }), &["url"]),
+            plus(json!({ "url": { "type": "string" }, "new_tab": { "type": "boolean", "description": "Open it in a new tab." } }), &dialog), &["url"]),
         tool("state", "The current page: its URL, title, tabs, scroll position, and every visible interactive element, numbered. Use the numbers with click, type, select and hover. Numbers change when the page changes: call state again after it does.",
             json!({}), &[]),
         tool("click", "Click an element (by number or CSS selector), or a point on the page (x, y in CSS pixels). Scrolls it into view first.",
@@ -52,7 +63,7 @@ fn tools() -> Vec<Value> {
         tool("type", "Type text into an element (by number or selector), or into whatever has focus. Optionally clear it first, and press Enter after.",
             with(json!({ "text": { "type": "string" }, "clear": { "type": "boolean" }, "submit": { "type": "boolean" } })), &["text"]),
         tool("press", "Press a key, with modifiers: Enter, Tab, Escape, Backspace, Delete, ArrowUp/Down/Left/Right, Home, End, PageUp, PageDown, F1–F12, or a character (\"a\", \"/\").",
-            json!({ "key": { "type": "string" }, "modifiers": { "type": "array", "items": { "type": "string", "enum": ["ctrl", "shift", "alt", "meta"] } } }), &["key"]),
+            plus(json!({ "key": { "type": "string" }, "modifiers": { "type": "array", "items": { "type": "string", "enum": ["ctrl", "shift", "alt", "meta"] } } }), &dialog), &["key"]),
         tool("select", "Choose an option in a <select>, by its value or its visible text.",
             with(json!({ "value": { "type": "string" } })), &["value"]),
         tool("hover", "Move the mouse over an element (menus, tooltips).", with(json!({})), &[]),
@@ -63,7 +74,7 @@ fn tools() -> Vec<Value> {
         tool("html", "The HTML of the page, or of one element (CSS selector).",
             json!({ "selector": { "type": "string" }, "max_chars": { "type": "integer" } }), &[]),
         tool("eval", "Run JavaScript in the page and return its result (awaited if it is a promise, returned as JSON). Full access to the page: read or change the DOM, call its functions, fetch.",
-            json!({ "expression": { "type": "string" } }), &["expression"]),
+            plus(json!({ "expression": { "type": "string" } }), &dialog), &["expression"]),
         tool("wait", "Wait until a selector is on the page, a text appears, or the URL contains something (default 10 s, at most 60 s).",
             json!({ "selector": { "type": "string" }, "text": { "type": "string" }, "url_contains": { "type": "string" }, "timeout_ms": { "type": "integer" } }), &[]),
         tool("screenshot", "A picture of the page as it looks now (or the whole page, scrolled).",
@@ -74,9 +85,9 @@ fn tools() -> Vec<Value> {
         tool("new_tab", "Open a new tab (optionally at a URL) and make it current.", json!({ "url": { "type": "string" } }), &[]),
         tool("switch_tab", "Make a tab current (its id from `tabs`); the side panel shows it.", json!({ "id": { "type": "string" } }), &["id"]),
         tool("close_tab", "Close a tab (its id from `tabs`).", json!({ "id": { "type": "string" } }), &["id"]),
-        tool("back", "Go back in the current tab's history.", json!({}), &[]),
-        tool("forward", "Go forward in the current tab's history.", json!({}), &[]),
-        tool("reload", "Reload the current page.", json!({}), &[]),
+        tool("back", "Go back in the current tab's history.", dialog.clone(), &[]),
+        tool("forward", "Go forward in the current tab's history.", dialog.clone(), &[]),
+        tool("reload", "Reload the current page.", dialog.clone(), &[]),
     ]
 }
 
@@ -108,7 +119,7 @@ const STATE_JS: &str = r#"(() => {
     if (i >= 400) break;
   }
   return JSON.stringify({ url: location.href, title: document.title,
-    scroll: { x: Math.round(scrollX), y: Math.round(scrollY), page_height: document.documentElement.scrollHeight, viewport_height: vh },
+    scroll: { x: Math.round(scrollX), y: Math.round(scrollY), page_height: (document.documentElement || document.body || {}).scrollHeight || 0, viewport_height: vh },
     elements: out });
 })()"#;
 
@@ -198,6 +209,17 @@ struct Browser {
     current: Option<String>,
     console: HashMap<String, Vec<String>>,
     events: Vec<Value>,
+    /// Lines of the downloads log already reported.
+    downloads_seen: usize,
+}
+
+/// The downloads log's lines (`browser::downloads_log`).
+fn download_lines(focus_file: &Path) -> Vec<String> {
+    std::fs::read_to_string(crate::browser::downloads_log(focus_file))
+        .unwrap_or_default()
+        .lines()
+        .map(str::to_string)
+        .collect()
 }
 
 /// One tool's answer: MCP content blocks, and whether it failed.
@@ -217,6 +239,89 @@ impl Browser {
             current: None,
             console: HashMap::new(),
             events: vec![],
+            downloads_seen: download_lines(focus_file).len(),
+        }
+    }
+
+    /// Run a tool, and add what else happened meanwhile: dialogs the page
+    /// opened, a tab a click opened, downloads started or finished.
+    fn run_step(&mut self, name: &str, a: &Value) -> Answer {
+        let accept = a["dialog"].as_str() == Some("accept");
+        if let Some(c) = self.conn.as_mut() {
+            c.dialogs.clear();
+        }
+        let watch_tabs = !matches!(name, "new_tab" | "tabs" | "switch_tab" | "close_tab")
+            && a["new_tab"].as_bool() != Some(true);
+        let before: Option<Vec<String>> = watch_tabs
+            .then(|| self.tabs().ok())
+            .flatten()
+            .map(|t| t.into_iter().map(|t| t.id).collect());
+        if let Ok(c) = self.conn() {
+            c.answer_dialogs = Some(accept);
+        }
+        let mut r = self.run(name, a);
+        let mut notes: Vec<String> = self
+            .conn
+            .as_mut()
+            .map(|c| std::mem::take(&mut c.dialogs))
+            .unwrap_or_default();
+        // A link that opened a new tab: the panel shows it, so it is current.
+        if let (Some(before), Ok(now)) = (before, self.tabs()) {
+            if let Some(new) = now.iter().rev().find(|t| !before.contains(&t.id)) {
+                let id = new.id.clone();
+                self.focus(&id);
+                self.settle(10);
+                let on = self.now_on();
+                notes.push(format!("It opened a new tab ({id}), now current. {on}"));
+            }
+        }
+        // A click or a key can start a download the panel hears of a moment
+        // later: give it that moment.
+        notes.extend(self.new_downloads(matches!(name, "click" | "press" | "type")));
+        if notes.is_empty() {
+            return r;
+        }
+        let extra = notes.join("\n");
+        match &mut r {
+            Ok(content) => content.push(json!({ "type": "text", "text": extra })),
+            Err(e) => {
+                e.push('\n');
+                e.push_str(&extra);
+            }
+        }
+        r
+    }
+
+    /// Downloads the panel logged since the last step, said for the agent;
+    /// one that started is given a few seconds to finish. `may_start`: the
+    /// step could have started one, so wait a moment for it to show.
+    fn new_downloads(&mut self, may_start: bool) -> Vec<String> {
+        let begun = Instant::now();
+        let until = begun + Duration::from_secs(8);
+        loop {
+            let lines = download_lines(&self.focus_file);
+            let fresh = &lines[self.downloads_seen.min(lines.len())..];
+            let started = fresh.iter().filter(|l| l.starts_with("started\t")).count();
+            let ended = fresh.iter().filter(|l| !l.starts_with("started\t")).count();
+            let quiet =
+                fresh.is_empty() && may_start && begun.elapsed() < Duration::from_millis(600);
+            if (started <= ended && !quiet) || Instant::now() >= until {
+                self.downloads_seen = lines.len();
+                return fresh
+                    .iter()
+                    .filter_map(|l| match l.split_once('\t') {
+                        Some(("saved", path)) => Some(format!("Downloaded a file: {path}")),
+                        Some(("failed", name)) => {
+                            Some(format!("The download of {name} did not finish."))
+                        }
+                        Some(("started", name)) if started > ended => {
+                            Some(format!("A download of {name} started and is still going."))
+                        }
+                        _ => None,
+                    })
+                    .collect();
+            }
+            std::thread::sleep(Duration::from_millis(200));
         }
     }
 
@@ -245,6 +350,9 @@ impl Browser {
                     }
                 };
             let mut c = connect(&ws)?;
+            // A dialog never holds a step: alerts close, questions get Cancel
+            // unless the step says accept (`run_step`).
+            c.answer_dialogs = Some(false);
             c.call(
                 None,
                 "Target.setDiscoverTargets",
@@ -530,6 +638,12 @@ impl Browser {
                 let v = self.eval(STATE_JS)?;
                 let mut state: Value =
                     serde_json::from_str(v.as_str().unwrap_or("{}")).unwrap_or_default();
+                if state["url"]
+                    .as_str()
+                    .is_some_and(|u| u.starts_with("chrome-error:"))
+                {
+                    return Err("The page did not load (the browser shows its error page). Navigate again, or to another address.".into());
+                }
                 let cur = self.current.clone().unwrap_or_default();
                 state["tabs"] = self
                     .tabs()?
@@ -635,7 +749,7 @@ impl Browser {
                     _ => (0., 1.),
                 };
                 let r = self.eval(&format!(
-                    "(() => {{ const a = {amt}; window.scrollBy({{left: {dx} * (a ?? innerWidth * 0.9), top: {dy} * (a ?? innerHeight * 0.9), behavior: 'instant'}}); return [Math.round(scrollX), Math.round(scrollY), document.documentElement.scrollHeight]; }})()",
+                    "(() => {{ const a = {amt}; window.scrollBy({{left: {dx} * (a ?? innerWidth * 0.9), top: {dy} * (a ?? innerHeight * 0.9), behavior: 'instant'}}); return [Math.round(scrollX), Math.round(scrollY), (document.documentElement || {{}}).scrollHeight || 0]; }})()",
                     amt = amount.map_or("null".to_string(), |v| v.to_string())
                 ))?;
                 Ok(text(format!(
@@ -839,7 +953,7 @@ fn handle(b: &mut Browser, msg: &Value) -> Option<Value> {
         "tools/call" => {
             let name = msg["params"]["name"].as_str().unwrap_or_default();
             let args = msg["params"]["arguments"].clone();
-            match b.run(name, &args) {
+            match b.run_step(name, &args) {
                 Ok(content) => reply(json!({ "content": content, "isError": false })),
                 Err(e) => reply(json!({ "content": text(e), "isError": true })),
             }
@@ -1151,6 +1265,85 @@ mod tests {
         assert!(call(&mut b, "click", json!({"index": 999}))
             .unwrap_err()
             .contains("call state again"));
+        drop(view);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// What a step sets off besides its own work, against a real Chromium:
+    /// dialogs answered and reported (none holds the page), a link's new
+    /// tab made current, a download saved and named, a page that did not
+    /// load said in words.
+    #[test]
+    #[ignore]
+    fn reports_dialogs_tabs_and_downloads() {
+        let exe = crate::web_view::find_chromium().expect("no Chromium");
+        let dir = std::env::temp_dir().join(format!("forge-mcp-side-{}", std::process::id()));
+        let (view, _rx) =
+            crate::web_view::start(&exe, &dir.join("profile"), &dir.join("focus")).unwrap();
+        let mut b = Browser::new(&view.cdp_url, &dir.join("focus"));
+        let call = |b: &mut Browser, name: &str, args: Value| -> Result<String, String> {
+            b.run_step(name, &args).map(|c| {
+                c.iter()
+                    .filter_map(|x| x["text"].as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
+        };
+        let name = format!("forge-test-{}.txt", std::process::id());
+        let page = format!("data:text/html,<title>Side</title><button id=a onclick=\"alert('hi there')\">A</button><button id=c onclick=\"out.textContent=confirm('Sure?')\">C</button><p id=out>none</p><a id=t href=about:blank target=_blank>new</a><a id=d download={name} href=\"data:text/plain,hello\">dl</a>");
+        call(&mut b, "navigate", json!({"url": page})).unwrap();
+        let started = Instant::now();
+        let r = call(&mut b, "click", json!({"selector": "#a"})).unwrap();
+        assert!(r.contains("alert: \"hi there\""), "{r}");
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "the alert held the step"
+        );
+        let r = call(&mut b, "click", json!({"selector": "#c"})).unwrap();
+        assert!(r.contains("Answered Cancel"), "{r}");
+        assert_eq!(
+            call(&mut b, "text", json!({"selector": "#out"})).unwrap(),
+            "false"
+        );
+        let r = call(
+            &mut b,
+            "click",
+            json!({"selector": "#c", "dialog": "accept"}),
+        )
+        .unwrap();
+        assert!(r.contains("Answered OK"), "{r}");
+        assert_eq!(
+            call(&mut b, "text", json!({"selector": "#out"})).unwrap(),
+            "true"
+        );
+        let r = call(&mut b, "click", json!({"selector": "#d"})).unwrap();
+        let saved = crate::downloads::dir().unwrap().join(&name);
+        assert!(
+            r.contains(&format!("Downloaded a file: {}", saved.display())),
+            "{r}"
+        );
+        assert_eq!(std::fs::read_to_string(&saved).unwrap(), "hello");
+        let _ = std::fs::remove_file(&saved);
+        let r = call(&mut b, "click", json!({"selector": "#t"})).unwrap();
+        assert!(r.contains("opened a new tab"), "{r}");
+        let focus = std::fs::read_to_string(dir.join("focus")).unwrap();
+        let tabs: Value = serde_json::from_str(&call(&mut b, "tabs", json!({})).unwrap()).unwrap();
+        let cur = tabs
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|t| t["current"] == true)
+            .unwrap();
+        assert_eq!(cur["id"].as_str().unwrap(), focus.trim());
+        assert_eq!(cur["url"], "about:blank");
+        let r = call(
+            &mut b,
+            "navigate",
+            json!({"url": "http://does-not-exist.invalid/"}),
+        );
+        assert!(r.is_err());
+        let r = call(&mut b, "state", json!({})).unwrap_err();
+        assert!(r.contains("did not load"), "{r}");
         drop(view);
         let _ = std::fs::remove_dir_all(dir);
     }

@@ -1,6 +1,8 @@
 //! Markdown for replies: pulldown-cmark events turned into a few block kinds,
 //! each drawn with theme tokens. Inline styles become text runs (bold,
 //! italic, strikethrough, links, and inline code in the mono face on a tint).
+//! Links (`[text](url)`, `<url>` and bare `http(s)://` addresses) open in
+//! the system browser when clicked, and show their address on hover.
 //! Code blocks get a header with the language and a Copy button.
 //!
 //! Partial input is fine: a reply is re-parsed as it streams, and an
@@ -11,8 +13,9 @@
 //! title in the display serif. Both draw tables and task lists.
 
 use gpui::{
-    div, font, prelude::*, px, relative, AnyElement, App, ClipboardItem, Entity, FontStyle,
-    FontWeight, SharedString, StrikethroughStyle, StyledText, TextRun, UnderlineStyle,
+    div, font, prelude::*, px, relative, AnyElement, App, ClipboardItem, ElementId, Entity,
+    FontStyle, FontWeight, InteractiveText, SharedString, StrikethroughStyle, StyledText, TextRun,
+    UnderlineStyle,
 };
 use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
@@ -27,7 +30,8 @@ struct Span {
     italic: bool,
     code: bool,
     strike: bool,
-    link: bool,
+    /// The address, when the text is a link.
+    link: Option<String>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -170,7 +174,8 @@ fn fence_ascii_art(src: &str) -> std::borrow::Cow<'_, str> {
 fn parse(src: &str) -> Vec<Block> {
     let mut out = vec![];
     let mut spans: Vec<Span> = vec![];
-    let (mut bold, mut italic, mut strike, mut link) = (false, false, false, false);
+    let (mut bold, mut italic, mut strike) = (false, false, false);
+    let mut link: Option<String> = None;
     let mut lists: Vec<Option<u64>> = vec![];
     let mut item_number: Option<Option<u64>> = None;
     let mut quote = 0usize;
@@ -213,7 +218,7 @@ fn parse(src: &str) -> Vec<Block> {
             italic,
             code: false,
             strike,
-            link,
+            link: link.clone(),
         };
         match ev {
             Event::Start(Tag::CodeBlock(kind)) => {
@@ -341,8 +346,21 @@ fn parse(src: &str) -> Vec<Block> {
             Event::End(TagEnd::Emphasis) => italic = false,
             Event::Start(Tag::Strikethrough) => strike = true,
             Event::End(TagEnd::Strikethrough) => strike = false,
-            Event::Start(Tag::Link { .. }) => link = true,
-            Event::End(TagEnd::Link) => link = false,
+            Event::Start(Tag::Link { dest_url, .. }) => link = Some(dest_url.to_string()),
+            Event::End(TagEnd::Link) => link = None,
+            // Bare addresses in plain text become links too.
+            Event::Text(t) if link.is_none() => {
+                for (piece, url) in split_urls(&t) {
+                    push(
+                        &mut spans,
+                        piece,
+                        Span {
+                            link: url,
+                            ..style.clone()
+                        },
+                    );
+                }
+            }
             Event::Text(t) => push(&mut spans, &t, style),
             Event::Code(t) => push(
                 &mut spans,
@@ -381,20 +399,122 @@ pub struct CopyContext {
     pub streaming: bool,
 }
 
-fn runs(spans: &[Span], t: &Theme, base_weight: FontWeight, color: gpui::Hsla) -> StyledText {
-    runs_in(spans, t, &t.font_sans, base_weight, color)
+fn runs(
+    id: ElementId,
+    spans: &[Span],
+    t: &Theme,
+    base_weight: FontWeight,
+    color: gpui::Hsla,
+) -> AnyElement {
+    runs_in(id, spans, t, &t.font_sans, base_weight, color)
 }
 
 /// Text runs in `family` (code spans stay in the mono face).
 fn runs_in(
+    id: ElementId,
     spans: &[Span],
     t: &Theme,
     family: &SharedString,
     base_weight: FontWeight,
     color: gpui::Hsla,
-) -> StyledText {
+) -> AnyElement {
     let (text, runs) = run_list(spans, t, family, base_weight, color);
-    StyledText::new(text).with_runs(runs)
+    linked(id, spans, StyledText::new(text).with_runs(runs))
+}
+
+/// The text, with its links clickable (opened in the system browser) and
+/// their address shown on hover; plain text when it has none.
+fn linked(id: ElementId, spans: &[Span], text: StyledText) -> AnyElement {
+    let mut ranges: Vec<std::ops::Range<usize>> = vec![];
+    let mut urls: Vec<String> = vec![];
+    let mut at = 0;
+    for s in spans.iter().filter(|s| !s.text.is_empty()) {
+        if let Some(url) = &s.link {
+            // Neighbouring spans of one link (bold inside it) join up.
+            match (ranges.last_mut(), urls.last()) {
+                (Some(r), Some(u)) if *u == *url && r.end == at => r.end = at + s.text.len(),
+                _ => {
+                    ranges.push(at..at + s.text.len());
+                    urls.push(url.clone());
+                }
+            }
+        }
+        at += s.text.len();
+    }
+    if ranges.is_empty() {
+        return text.into_any_element();
+    }
+    let urls = std::rc::Rc::new(urls);
+    let (open, tip, by_range) = (urls.clone(), urls, ranges.clone());
+    InteractiveText::new(id, text)
+        .on_click(ranges, move |i, _, cx| open_link(&open[i], cx))
+        .tooltip(move |ix, window, cx| {
+            let i = by_range.iter().position(|r| r.contains(&ix))?;
+            Some(gpui::component::tooltip::Tooltip::new(tip[i].clone()).build(window, cx))
+        })
+        .into_any_element()
+}
+
+/// Open a link from a reply: web and mail addresses go to the system's
+/// handler; anything else (a relative path, `javascript:`) is left alone.
+fn open_link(url: &str, cx: &mut App) {
+    if openable(url) {
+        cx.open_url(url);
+    }
+}
+
+fn openable(url: &str) -> bool {
+    let lower = url.trim().to_ascii_lowercase();
+    ["http://", "https://", "mailto:"]
+        .iter()
+        .any(|p| lower.starts_with(p))
+}
+
+/// Text cut into plain pieces and bare `http(s)://` addresses, each address
+/// with itself as its link. Closing punctuation after an address stays text.
+fn split_urls(text: &str) -> Vec<(&str, Option<String>)> {
+    let mut out = vec![];
+    let mut rest = text;
+    loop {
+        let start = ["http://", "https://"]
+            .iter()
+            .filter_map(|p| rest.find(p))
+            .filter(|&i| i == 0 || !rest[..i].ends_with(|c: char| c.is_alphanumeric()))
+            .min();
+        let Some(start) = start else { break };
+        let tail = &rest[start..];
+        let mut end = tail
+            .find(|c: char| c.is_whitespace() || matches!(c, '<' | '>' | '"' | '`'))
+            .unwrap_or(tail.len());
+        // A sentence's full stop, a closing bracket nobody opened.
+        while end > 0 {
+            let c = tail[..end].chars().next_back().unwrap_or(' ');
+            let open = |o: char| tail[..end].matches(o).count();
+            let unbalanced =
+                (c == ')' && open('(') < open(')')) || (c == ']' && open('[') < open(']'));
+            if matches!(c, '.' | ',' | ';' | ':' | '!' | '?' | '\'' | '*') || unbalanced {
+                end -= c.len_utf8();
+            } else {
+                break;
+            }
+        }
+        let url = &tail[..end];
+        if url.len() <= "https://".len() {
+            // "http://" on its own: plain text.
+            out.push((&rest[..start + end.max(1)], None));
+            rest = &rest[start + end.max(1)..];
+            continue;
+        }
+        if start > 0 {
+            out.push((&rest[..start], None));
+        }
+        out.push((url, Some(url.to_string())));
+        rest = &tail[end..];
+    }
+    if !rest.is_empty() {
+        out.push((rest, None));
+    }
+    out
 }
 
 /// The text of `spans` and its styled runs.
@@ -428,9 +548,13 @@ fn run_list(
         runs.push(TextRun {
             len: s.text.len(),
             font: f,
-            color: if s.link { t.colors.primary } else { color },
+            color: if s.link.is_some() {
+                t.colors.primary
+            } else {
+                color
+            },
             background_color: s.code.then_some(t.extra.inset),
-            underline: s.link.then(|| UnderlineStyle {
+            underline: s.link.is_some().then(|| UnderlineStyle {
                 thickness: px(1.),
                 color: Some(t.colors.primary),
                 wavy: false,
@@ -449,10 +573,10 @@ const TAIL_CHARS: usize = 24;
 
 /// A paragraph still arriving: its last few words fade toward the end, so
 /// new text eases in rather than popping onto the line.
-fn runs_streaming(spans: &[Span], t: &Theme, color: gpui::Hsla) -> StyledText {
+fn runs_streaming(id: ElementId, spans: &[Span], t: &Theme, color: gpui::Hsla) -> AnyElement {
     let (text, runs) = run_list(spans, t, &t.font_sans, FontWeight::NORMAL, color);
     let runs = fade_tail(&text, runs, TAIL_CHARS);
-    StyledText::new(text).with_runs(runs)
+    linked(id, spans, StyledText::new(text).with_runs(runs))
 }
 
 /// Splits `runs` so the last `n` characters of `text` step down in opacity
@@ -547,18 +671,20 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
             (_, _, true) => t.space.md,
         };
         prev = Some(kind);
+        let id = ElementId::Name(format!("md-{}-{n}", copy.key).into());
         let el: AnyElement = match b {
             Block::Para(spans) if copy.streaming && n == last => div()
-                .child(runs_streaming(&spans, t, t.colors.text))
+                .child(runs_streaming(id, &spans, t, t.colors.text))
                 .into_any_element(),
             Block::Para(spans) => div()
-                .child(runs(&spans, t, FontWeight::NORMAL, t.colors.text))
+                .child(runs(id, &spans, t, FontWeight::NORMAL, t.colors.text))
                 .into_any_element(),
             // A document's title is set in the display serif, as the greeting is.
             Block::Heading(1, spans) if doc => div()
                 .text_size(t.size.doc_title)
                 .line_height(relative(1.2))
                 .child(runs_in(
+                    id,
                     &spans,
                     t,
                     &t.font_display,
@@ -576,7 +702,13 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                     (_, true) => t.text.body,
                 })
                 .line_height(relative(1.35))
-                .child(runs(&spans, t, FontWeight::SEMIBOLD, t.colors.text_strong))
+                .child(runs(
+                    id,
+                    &spans,
+                    t,
+                    FontWeight::SEMIBOLD,
+                    t.colors.text_strong,
+                ))
                 .into_any_element(),
             Block::Item {
                 number,
@@ -620,6 +752,7 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                         .into_any_element(),
                 })
                 .child(div().flex_1().min_w_0().child(runs(
+                    id,
                     &spans,
                     t,
                     FontWeight::NORMAL,
@@ -634,7 +767,7 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                 .border_l_2()
                 .border_color(t.colors.border)
                 .pl(t.space.md)
-                .child(runs(&spans, t, FontWeight::NORMAL, t.colors.text))
+                .child(runs(id, &spans, t, FontWeight::NORMAL, t.colors.text))
                 .into_any_element(),
             Block::Rule => crate::theme::rule(t).mx_0().into_any_element(),
             Block::Code { lang, code } => {
@@ -646,7 +779,7 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                     None => code_block(&lang, code, &key, t, copy),
                 }
             }
-            Block::Table { align, head, rows } => table(&align, &head, &rows, t),
+            Block::Table { align, head, rows } => table(&id.to_string(), &align, &head, &rows, t),
         };
         col = col.child(div().mt(gap).child(el));
     }
@@ -655,6 +788,7 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
 
 /// A table: equal columns, a tinted header, hairlines between rows.
 fn table(
+    key: &str,
     align: &[Alignment],
     head: &[Vec<Span>],
     rows: &[Vec<Vec<Span>>],
@@ -664,9 +798,10 @@ fn table(
         .len()
         .max(rows.iter().map(|r| r.len()).max().unwrap_or(0))
         .max(1);
-    let row = |cells: &[Vec<Span>], header: bool| {
+    let row = |cells: &[Vec<Span>], header: bool, y: usize| {
         let mut r = div().flex().w_full();
         for i in 0..columns {
+            let id = ElementId::Name(format!("{key}-{y}-{i}").into());
             let spans = cells.get(i).map(|c| c.as_slice()).unwrap_or(&[]);
             // A block, not a flex row, so long cells wrap inside their column.
             let cell = div()
@@ -680,6 +815,7 @@ fn table(
                     _ => d,
                 })
                 .child(runs(
+                    id,
                     spans,
                     t,
                     if header {
@@ -708,10 +844,14 @@ fn table(
         .text_size(t.text.body_sm)
         .line_height(relative(1.45));
     if !head.is_empty() {
-        out = out.child(row(head, true).bg(t.extra.inset));
+        out = out.child(row(head, true, 0).bg(t.extra.inset));
     }
-    for r in rows {
-        out = out.child(row(r, false).border_t_1().border_color(t.colors.border));
+    for (y, r) in rows.iter().enumerate() {
+        out = out.child(
+            row(r, false, y + 1)
+                .border_t_1()
+                .border_color(t.colors.border),
+        );
     }
     out.into_any_element()
 }
@@ -1139,6 +1279,73 @@ mod tests {
                 code: "cargo te".into()
             })
         );
+    }
+
+    #[test]
+    fn links_keep_their_address() {
+        let b = parse("See [the docs](https://example.com/docs), <https://a.test/x> and http://127.0.0.1:8765/p.html.");
+        let Block::Para(p) = &b[0] else {
+            panic!("{:?}", b[0])
+        };
+        let links: Vec<(&str, &str)> = p
+            .iter()
+            .filter_map(|s| s.link.as_deref().map(|l| (s.text.as_str(), l)))
+            .collect();
+        assert_eq!(
+            links,
+            [
+                ("the docs", "https://example.com/docs"),
+                ("https://a.test/x", "https://a.test/x"),
+                (
+                    "http://127.0.0.1:8765/p.html",
+                    "http://127.0.0.1:8765/p.html"
+                ),
+            ]
+        );
+        // The full stop after the bare address stays text.
+        assert_eq!(
+            p.last().map(|s| (s.text.as_str(), s.link.is_none())),
+            Some((".", true))
+        );
+        // Inside code, an address is not a link.
+        let b = parse("`curl https://x.test`");
+        let Block::Para(p) = &b[0] else { panic!() };
+        assert!(p.iter().all(|s| s.link.is_none()));
+    }
+
+    #[test]
+    fn bare_addresses_are_cut_cleanly() {
+        let urls = |t: &str| {
+            split_urls(t)
+                .into_iter()
+                .filter_map(|(_, u)| u)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            urls("(see https://en.wikipedia.org/wiki/Rust_(language))"),
+            ["https://en.wikipedia.org/wiki/Rust_(language)"]
+        );
+        assert_eq!(
+            urls("at https://a.test/b, then http://c.test!"),
+            ["https://a.test/b", "http://c.test"]
+        );
+        assert_eq!(
+            urls("xhttps://no.test and http:// alone"),
+            Vec::<String>::new()
+        );
+        // Every piece put back together is the text.
+        let t = "a https://a.test/b. c http:// d";
+        assert_eq!(split_urls(t).iter().map(|(p, _)| *p).collect::<String>(), t);
+    }
+
+    #[test]
+    fn only_web_and_mail_links_open() {
+        assert!(openable("https://example.com"));
+        assert!(openable("HTTP://x.test"));
+        assert!(openable("mailto:a@b.test"));
+        assert!(!openable("javascript:alert(1)"));
+        assert!(!openable("file:///etc/passwd"));
+        assert!(!openable("docs/readme.md"));
     }
 
     #[test]

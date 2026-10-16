@@ -190,6 +190,7 @@ fn step_label(c: &Chat) -> Option<String> {
                 None => format!("Running {}", clip(&t.target)),
             },
             ToolKind::Search => format!("Searching for {}", clip(&t.target)),
+            ToolKind::WebSearch => format!("Searching the web for {}", clip(&t.target)),
             ToolKind::Web => format!(
                 "Fetching {}",
                 t.target

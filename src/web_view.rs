@@ -34,16 +34,37 @@ pub enum Cmd {
     Back,
     Forward,
     Reload,
-    /// A mouse button, at a point on the page (CSS pixels).
-    Click {
+    /// A mouse button going down, and coming up, at a point on the page
+    /// (CSS pixels): apart, so a drag between
+    /// them selects text or moves a slider.
+    Press {
         x: f64,
         y: f64,
+        button: MouseButton,
         count: u32,
     },
+    Release {
+        x: f64,
+        y: f64,
+        button: MouseButton,
+        count: u32,
+    },
+    /// The mouse moving; `held` is the button held down, for a drag.
     Move {
         x: f64,
         y: f64,
+        held: Option<MouseButton>,
     },
+    /// Answer the dialog the page shows: OK (with the text, for a prompt)
+    /// or Cancel.
+    Dialog {
+        accept: bool,
+        text: Option<String>,
+    },
+    /// Copy the page's selected text (it comes back as `Update::Copied`).
+    Copy,
+    /// Select everything in the focused field, or on the page.
+    SelectAll,
     Wheel {
         x: f64,
         y: f64,
@@ -66,6 +87,43 @@ pub enum Cmd {
         height: u32,
         scale: f64,
     },
+}
+
+/// A mouse button, as the page gets it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MouseButton {
+    Left,
+    Middle,
+    Right,
+}
+
+impl MouseButton {
+    fn name(self) -> &'static str {
+        match self {
+            MouseButton::Left => "left",
+            MouseButton::Middle => "middle",
+            MouseButton::Right => "right",
+        }
+    }
+
+    /// The `buttons` bit DevTools wants while it is held.
+    fn bit(self) -> u32 {
+        match self {
+            MouseButton::Left => 1,
+            MouseButton::Right => 2,
+            MouseButton::Middle => 4,
+        }
+    }
+}
+
+/// A dialog the page opened (`alert`, `confirm`, `prompt`, or the "leave
+/// this page?" of `beforeunload`), waiting for an answer.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PageDialog {
+    pub kind: String,
+    pub message: String,
+    /// A prompt's suggested answer.
+    pub default: String,
 }
 
 /// How the page is laid out and pictured.
@@ -97,6 +155,17 @@ pub enum Update {
         title: String,
     },
     Loading(bool),
+    /// The page opened a dialog (Some), or it was answered (None).
+    Dialog(Option<PageDialog>),
+    /// A download finished: its file in the Downloads folder.
+    Downloaded(PathBuf),
+    /// A download stopped before it finished: its name.
+    DownloadFailed(String),
+    /// The page's selected text, for the clipboard.
+    Copied(String),
+    /// The mouse pointer the page wants where the mouse is (CSS names:
+    /// `pointer`, `text`, `default`…).
+    Cursor(String),
     /// The connection is gone, and why.
     Closed(String),
 }
@@ -377,6 +446,12 @@ type Socket = tungstenite::WebSocket<TcpStream>;
 pub(crate) struct Conn {
     ws: Socket,
     next: u64,
+    /// Answer the page's dialogs while waiting on a call: Some(true) says
+    /// OK to every one, Some(false) OK to an alert and Cancel to a question.
+    /// None (the panel's connection) leaves them to whoever shows them.
+    pub(crate) answer_dialogs: Option<bool>,
+    /// The dialogs answered that way, said in words, for the tool's answer.
+    pub(crate) dialogs: Vec<String>,
 }
 
 /// Connect to a DevTools WebSocket (`ws://127.0.0.1:<port>/devtools/…`).
@@ -390,7 +465,12 @@ pub(crate) fn connect(ws_url: &str) -> Result<Conn, String> {
     ws.get_ref()
         .set_read_timeout(Some(Duration::from_millis(30)))
         .map_err(|e| e.to_string())?;
-    Ok(Conn { ws, next: 0 })
+    Ok(Conn {
+        ws,
+        next: 0,
+        answer_dialogs: None,
+        dialogs: vec![],
+    })
 }
 
 impl Conn {
@@ -449,10 +529,53 @@ impl Conn {
                     }
                     return Ok(m["result"].clone());
                 }
+                // A dialog would hold the call (and the page) until answered.
+                if let (Some(accept), Some("Page.javascriptDialogOpening")) =
+                    (self.answer_dialogs, m["method"].as_str())
+                {
+                    self.answer_dialog(&m, accept)?;
+                    continue;
+                }
                 events.push(m);
             }
         }
-        Err(format!("{method}: no answer"))
+        Err(format!(
+            "{method}: no answer. The page may be stuck in a long script, or showing a dialog."
+        ))
+    }
+
+    /// Answer a dialog the page opened, and note what it said.
+    fn answer_dialog(&mut self, m: &Value, accept_questions: bool) -> Result<(), String> {
+        let p = &m["params"];
+        let kind = p["type"].as_str().unwrap_or("alert");
+        let message = p["message"].as_str().unwrap_or("");
+        let question = matches!(kind, "confirm" | "prompt");
+        let accept = !question || accept_questions;
+        let mut answer = json!({ "accept": accept });
+        if kind == "prompt" && accept {
+            answer["promptText"] = p["defaultPrompt"].clone();
+        }
+        self.send(
+            m["sessionId"].as_str(),
+            "Page.handleJavaScriptDialog",
+            answer,
+        )?;
+        self.dialogs.push(dialog_note(kind, message, accept));
+        Ok(())
+    }
+}
+
+/// A dialog the agent's step met, said for the agent.
+pub(crate) fn dialog_note(kind: &str, message: &str, accepted: bool) -> String {
+    match (kind, accepted) {
+        ("confirm" | "prompt", true) => {
+            format!("The page asked ({kind}): \"{message}\". Answered OK.")
+        }
+        ("confirm" | "prompt", false) => format!(
+            "The page asked ({kind}): \"{message}\". Answered Cancel; to answer OK, do the step again with dialog: \"accept\"."
+        ),
+        ("beforeunload", _) => "The page asked to confirm leaving it. Left it.".to_string(),
+        _ => format!("The page showed an alert: \"{message}\". Closed it."),
     }
 }
 
@@ -592,6 +715,25 @@ fn devtools(
     };
     report(&mut c, &mut events, &tab.target)?;
     write_focus(focus, &tab.target);
+    // Downloads go to your Downloads folder, under a temporary name until
+    // they finish; then they get their own (never overwriting), and the
+    // panel and the agent's tools are told.
+    let downloads = crate::downloads::dir().filter(|d| std::fs::create_dir_all(d).is_ok());
+    if let Some(dir) = &downloads {
+        let _ = c.call(
+            None,
+            "Browser.setDownloadBehavior",
+            json!({ "behavior": "allowAndName", "downloadPath": dir, "eventsEnabled": true }),
+            &mut events,
+        );
+    }
+    let log = crate::browser::downloads_log(focus);
+    let mut pending: std::collections::HashMap<String, String> = Default::default();
+    // Answers awaited without blocking the loop: the pointer under the
+    // mouse, and the selection to copy.
+    let (mut cursor_req, mut copy_req) = (None::<u64>, None::<u64>);
+    let mut cursor_asked = Instant::now();
+    let mut cursor_at: Option<(f64, f64)> = None;
     let mut focus_checked = Instant::now();
     loop {
         // The agent's tools switched tabs: show the one they use.
@@ -633,23 +775,70 @@ fn devtools(
                         )?;
                     }
                 }
-                Cmd::Click { x, y, count } => {
-                    c.send(
-                        s,
-                        "Input.dispatchMouseEvent",
-                        mouse("mousePressed", x, y, "left", count),
-                    )?;
-                    c.send(
-                        s,
-                        "Input.dispatchMouseEvent",
-                        mouse("mouseReleased", x, y, "left", count),
-                    )?;
+                Cmd::Press {
+                    x,
+                    y,
+                    button,
+                    count,
                 }
-                Cmd::Move { x, y } => {
+                | Cmd::Release {
+                    x,
+                    y,
+                    button,
+                    count,
+                } => {
+                    let down = matches!(cmd, Cmd::Press { .. });
+                    let mut e = mouse(
+                        if down {
+                            "mousePressed"
+                        } else {
+                            "mouseReleased"
+                        },
+                        x,
+                        y,
+                        button.name(),
+                        count,
+                    );
+                    e["buttons"] = (if down { button.bit() } else { 0 }).into();
+                    c.send(s, "Input.dispatchMouseEvent", e)?;
+                }
+                Cmd::Move { x, y, held } => {
+                    let mut e = mouse(
+                        "mouseMoved",
+                        x,
+                        y,
+                        held.map_or("none", MouseButton::name),
+                        0,
+                    );
+                    e["buttons"] = held.map_or(0, MouseButton::bit).into();
+                    c.send(s, "Input.dispatchMouseEvent", e)?;
+                    cursor_at = Some((x, y));
+                }
+                Cmd::Dialog { accept, text } => {
+                    let mut p = json!({ "accept": accept });
+                    if let Some(t) = text {
+                        p["promptText"] = t.into();
+                    }
+                    c.send(s, "Page.handleJavaScriptDialog", p)?;
+                }
+                Cmd::Copy => {
+                    copy_req = Some(c.send(
+                        s,
+                        "Runtime.evaluate",
+                        json!({ "expression": SELECTION_JS, "returnByValue": true }),
+                    )?);
+                }
+                Cmd::SelectAll => {
                     c.send(
                         s,
-                        "Input.dispatchMouseEvent",
-                        mouse("mouseMoved", x, y, "none", 0),
+                        "Input.dispatchKeyEvent",
+                        json!({ "type": "rawKeyDown", "key": "a", "code": "KeyA",
+                            "windowsVirtualKeyCode": 65, "commands": ["selectAll"] }),
+                    )?;
+                    c.send(
+                        s,
+                        "Input.dispatchKeyEvent",
+                        json!({ "type": "keyUp", "key": "a", "code": "KeyA", "windowsVirtualKeyCode": 65 }),
                     )?;
                 }
                 Cmd::Wheel { x, y, dx, dy } => {
@@ -722,6 +911,18 @@ fn devtools(
                 }
             }
         }
+        // Ask, now and then, which pointer the page wants under the mouse.
+        if let Some((x, y)) = cursor_at
+            .filter(|_| cursor_req.is_none() && cursor_asked.elapsed() > Duration::from_millis(80))
+        {
+            cursor_at = None;
+            cursor_asked = Instant::now();
+            cursor_req = Some(c.send(
+                Some(&tab.session),
+                "Runtime.evaluate",
+                json!({ "expression": cursor_js(x, y), "returnByValue": true }),
+            )?);
+        }
         // What the browser said.
         let next = if events.is_empty() {
             c.read()?
@@ -729,10 +930,71 @@ fn devtools(
             Some(events.remove(0))
         };
         let Some(m) = next else { continue };
+        if let Some(id) = m["id"].as_u64() {
+            let value = m["result"]["result"]["value"].as_str().map(str::to_string);
+            if Some(id) == cursor_req {
+                cursor_req = None;
+                if let Some(v) = value {
+                    say(Update::Cursor(v))?;
+                }
+            } else if Some(id) == copy_req {
+                copy_req = None;
+                if let Some(v) = value.filter(|v| !v.is_empty()) {
+                    say(Update::Copied(v))?;
+                }
+            }
+            continue;
+        }
         let method = m["method"].as_str().unwrap_or_default();
         let p = &m["params"];
         let on_tab = m["sessionId"].as_str() == Some(tab.session.as_str());
         match method {
+            "Page.javascriptDialogOpening" if on_tab => say(Update::Dialog(Some(PageDialog {
+                kind: p["type"].as_str().unwrap_or("alert").to_string(),
+                message: p["message"].as_str().unwrap_or_default().to_string(),
+                default: p["defaultPrompt"].as_str().unwrap_or_default().to_string(),
+            })))?,
+            "Page.javascriptDialogClosed" if on_tab => {
+                say(Update::Dialog(None))?;
+                // The pictures stop while a dialog is up: start them again.
+                let (id, s) = (tab.target.clone(), tab.session.clone());
+                fit(&mut c, &id, &s, metrics, &mut events)?;
+            }
+            "Browser.downloadWillBegin" => {
+                let guid = p["guid"].as_str().unwrap_or_default().to_string();
+                let name = crate::downloads::clean_name(
+                    p["suggestedFilename"].as_str().unwrap_or("download"),
+                );
+                note_download(&log, &format!("started\t{name}"));
+                pending.insert(guid, name);
+            }
+            "Browser.downloadProgress" => {
+                let guid = p["guid"].as_str().unwrap_or_default();
+                match (p["state"].as_str(), &downloads) {
+                    (Some("completed"), Some(dir)) => {
+                        if let Some(name) = pending.remove(guid) {
+                            let to = crate::downloads::free_path(dir, &name);
+                            match std::fs::rename(dir.join(guid), &to) {
+                                Ok(()) => {
+                                    note_download(&log, &format!("saved\t{}", to.display()));
+                                    say(Update::Downloaded(to))?;
+                                }
+                                Err(_) => {
+                                    note_download(&log, &format!("failed\t{name}"));
+                                    say(Update::DownloadFailed(name))?;
+                                }
+                            }
+                        }
+                    }
+                    (Some("canceled"), _) => {
+                        if let Some(name) = pending.remove(guid) {
+                            note_download(&log, &format!("failed\t{name}"));
+                            say(Update::DownloadFailed(name))?;
+                        }
+                    }
+                    _ => {}
+                }
+            }
             "Page.screencastFrame" if on_tab => {
                 c.send(
                     Some(&tab.session),
@@ -792,6 +1054,29 @@ fn devtools(
             }
             _ => {}
         }
+    }
+}
+
+/// The text selected on the page, in a field or out of one.
+const SELECTION_JS: &str = "(() => { const e = document.activeElement; if (e && typeof e.selectionStart === 'number' && typeof e.value === 'string') return e.value.slice(e.selectionStart, e.selectionEnd); return String(getSelection()); })()";
+
+/// The pointer the page wants at (x, y): its CSS `cursor`, or what a
+/// browser shows by default there (a hand on links, a bar on text fields).
+fn cursor_js(x: f64, y: f64) -> String {
+    format!(
+        "(() => {{ const e = document.elementFromPoint({x}, {y}); if (!e) return 'default'; const c = getComputedStyle(e).cursor; if (c && c !== 'auto') return c; if (e.closest('a[href],button,summary,select,label,[role=button],[role=link],[onclick]')) return 'pointer'; if (e.closest('input,textarea,[contenteditable=\"\"],[contenteditable=true]')) return 'text'; return 'default'; }})()"
+    )
+}
+
+/// One line in the downloads log the agent's tools read.
+fn note_download(log: &Path, line: &str) {
+    use std::io::Write as _;
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log)
+    {
+        let _ = writeln!(f, "{line}");
     }
 }
 

@@ -12,15 +12,46 @@ use std::time::Duration;
 use gpui::component::input::{Input, InputEvent, InputState};
 use gpui::{
     canvas, div, img, percentage, prelude::*, px, relative, Animation, AnimationExt, Bounds,
-    Context, Entity, FocusHandle, Focusable, FontWeight, KeyDownEvent, MouseButton, MouseDownEvent,
-    MouseMoveEvent, ObjectFit, Pixels, Render, ScrollWheelEvent, Subscription, Transformation,
-    Window,
+    Context, CursorStyle, Entity, FocusHandle, Focusable, FontWeight, KeyDownEvent, MouseButton,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ObjectFit, Pixels, Render, ScrollWheelEvent,
+    Subscription, Transformation, Window,
 };
 
 use super::icon;
 use crate::state::AppState;
 use crate::theme::{ActiveTheme, Theme};
-use crate::web_view::Cmd;
+use crate::web_view::{Cmd, PageDialog};
+
+/// A GPUI mouse button as the page gets it.
+fn page_button(b: MouseButton) -> Option<crate::web_view::MouseButton> {
+    use crate::web_view::MouseButton as B;
+    match b {
+        MouseButton::Left => Some(B::Left),
+        MouseButton::Right => Some(B::Right),
+        MouseButton::Middle => Some(B::Middle),
+        _ => None,
+    }
+}
+
+/// The pointer for a CSS `cursor` value.
+fn cursor_for(css: &str) -> CursorStyle {
+    match css {
+        "pointer" => CursorStyle::PointingHand,
+        "text" => CursorStyle::IBeam,
+        "vertical-text" => CursorStyle::IBeamCursorForVerticalLayout,
+        "crosshair" => CursorStyle::Crosshair,
+        "grab" => CursorStyle::OpenHand,
+        "grabbing" | "move" => CursorStyle::ClosedHand,
+        "not-allowed" | "no-drop" => CursorStyle::OperationNotAllowed,
+        "ew-resize" | "e-resize" | "w-resize" => CursorStyle::ResizeLeftRight,
+        "ns-resize" | "n-resize" | "s-resize" => CursorStyle::ResizeUpDown,
+        "col-resize" => CursorStyle::ResizeColumn,
+        "row-resize" => CursorStyle::ResizeRow,
+        "nwse-resize" => CursorStyle::ResizeUpLeftDownRight,
+        "nesw-resize" => CursorStyle::ResizeUpRightDownLeft,
+        _ => CursorStyle::Arrow,
+    }
+}
 
 pub struct BrowserView {
     state: Entity<AppState>,
@@ -115,6 +146,8 @@ impl BrowserView {
                 "l" => {
                     self.address.update(cx, |i, cx| i.focus(window, cx));
                 }
+                "c" => self.send(Cmd::Copy, cx),
+                "a" => self.send(Cmd::SelectAll, cx),
                 "r" => self.send(Cmd::Reload, cx),
                 _ => return,
             }
@@ -180,6 +213,8 @@ fn bar_button(
 impl Render for BrowserView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
+        let dialog = self.state.read(cx).web_page.dialog.clone();
+        let dialog = dialog.map(|d| dialog_card(&d, &t, cx));
         let s = self.state.read(cx);
         let page = &s.web_page;
         let running = s.web.is_some();
@@ -190,6 +225,7 @@ impl Render for BrowserView {
         let secure = page.url.starts_with("https://");
         let (tabs, active) = (page.tabs.clone(), page.active.clone());
         let (frame, loading, error) = (page.frame.clone(), page.loading, page.error.clone());
+        let last_download = page.last_download.clone();
         let url = page.url.clone();
         let hover = t.colors.hover;
 
@@ -438,18 +474,23 @@ impl Render for BrowserView {
                 .left_0()
                 .size_full(),
             )
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(|this, ev: &MouseDownEvent, window, cx| {
-                    window.focus(&this.focus, cx);
-                    if let Some((x, y)) = this.to_page(ev.position) {
-                        this.send(Cmd::Click { x, y, count: ev.click_count.max(1) as u32 }, cx);
-                    }
-                }),
-            )
+            .cursor(cursor_for(&page.cursor))
+            // Down and up apart, so a drag selects text or moves a slider.
+            .on_any_mouse_down(cx.listener(|this, ev: &MouseDownEvent, window, cx| {
+                window.focus(&this.focus, cx);
+                if let (Some((x, y)), Some(button)) = (this.to_page(ev.position), page_button(ev.button)) {
+                    this.send(Cmd::Press { x, y, button, count: ev.click_count.max(1) as u32 }, cx);
+                }
+            }))
+            .capture_any_mouse_up(cx.listener(|this, ev: &MouseUpEvent, _, cx| {
+                if let (Some((x, y)), Some(button)) = (this.to_page(ev.position), page_button(ev.button)) {
+                    this.send(Cmd::Release { x, y, button, count: ev.click_count.max(1) as u32 }, cx);
+                }
+            }))
             .on_mouse_move(cx.listener(|this, ev: &MouseMoveEvent, _, cx| {
                 if let Some((x, y)) = this.to_page(ev.position) {
-                    this.send(Cmd::Move { x, y }, cx);
+                    let held = ev.pressed_button.and_then(page_button);
+                    this.send(Cmd::Move { x, y, held }, cx);
                 }
             }))
             .on_scroll_wheel(cx.listener(|this, ev: &ScrollWheelEvent, _, cx| {
@@ -527,6 +568,8 @@ impl Render for BrowserView {
                             })),
                     )
             }))
+            // The page's dialog (alert, confirm, prompt), answered here.
+            .children(dialog)
             // Forge at the wheel: a badge over the page.
             .when(agent, |d| {
                 d.child(
@@ -578,6 +621,40 @@ impl Render for BrowserView {
                     .border_color(t.colors.border)
                     .text_size(t.text.caption)
                     .text_color(t.colors.text_muted)
+                    .children(last_download.map(|path| {
+                        // The last download, named, and its folder a click away.
+                        let name = path
+                            .file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_default();
+                        let folder = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+                        div()
+                            .id("web-download")
+                            .flex()
+                            .items_center()
+                            .gap(t.space.xs)
+                            .max_w(px(220.))
+                            .cursor_pointer()
+                            .text_color(t.colors.text_muted)
+                            .child(icon(
+                                "icons/download.svg",
+                                t.size.icon_xs,
+                                t.colors.text_subtle,
+                            ))
+                            .child(
+                                div()
+                                    .min_w_0()
+                                    .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .text_ellipsis()
+                                    .child(format!("Downloaded {name}")),
+                            )
+                            .tooltip(move |window, cx| {
+                                gpui::component::tooltip::Tooltip::new("Show in folder")
+                                    .build(window, cx)
+                            })
+                            .on_click(move |_, _, cx| cx.open_with_system(&folder))
+                    }))
                     .child(icon("icons/bot.svg", t.size.icon_xs, t.colors.text_subtle))
                     .child(div().flex_1().child(if s.browser {
                         "Forge can use this browser. Each step asks first."
@@ -600,4 +677,111 @@ impl Render for BrowserView {
             )
             .into_any_element()
     }
+}
+
+/// A dialog the page opened, as a card over the page: what it says, and
+/// OK (with Cancel when it asks something). A prompt is answered with its
+/// suggested text.
+fn dialog_card(d: &PageDialog, t: &Theme, cx: &mut Context<BrowserView>) -> impl IntoElement {
+    let question = matches!(d.kind.as_str(), "confirm" | "prompt" | "beforeunload");
+    let heading = match d.kind.as_str() {
+        "confirm" => "The page asks",
+        "prompt" => "The page asks for an answer",
+        "beforeunload" => "Leave this page?",
+        _ => "The page says",
+    };
+    let message = if d.kind == "beforeunload" && d.message.is_empty() {
+        "Changes you made may not be saved.".to_string()
+    } else {
+        d.message.clone()
+    };
+    let default = (d.kind == "prompt").then(|| d.default.clone());
+    div()
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full()
+        .flex()
+        .items_start()
+        .justify_center()
+        .pt(t.space.xxl)
+        .bg(t.extra.scrim)
+        // The page under the card waits for the answer: no clicks reach it.
+        .occlude()
+        .child(
+            div()
+                .id("web-dialog")
+                .w(px(360.))
+                .flex()
+                .flex_col()
+                .gap(t.space.md)
+                .p(t.space.lg)
+                .bg(t.colors.surface)
+                .border_1()
+                .border_color(t.colors.border)
+                .rounded(t.radius.card)
+                .shadow_lg()
+                .child(
+                    div()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(t.colors.text_strong)
+                        .child(heading),
+                )
+                .child(
+                    div()
+                        .text_size(t.text.body_sm)
+                        .line_height(relative(1.5))
+                        .text_color(t.colors.text)
+                        .child(message),
+                )
+                .children(default.clone().filter(|v| !v.is_empty()).map(|v| {
+                    div()
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_muted)
+                        .child(format!("OK answers \u{201c}{v}\u{201d}."))
+                }))
+                .child(
+                    div()
+                        .flex()
+                        .justify_end()
+                        .gap(t.space.sm)
+                        .when(question, |d| {
+                            d.child(
+                                crate::theme::ghost_button(t, "Cancel")
+                                    .id("web-dialog-cancel")
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.send(
+                                            Cmd::Dialog {
+                                                accept: false,
+                                                text: None,
+                                            },
+                                            cx,
+                                        )
+                                    })),
+                            )
+                        })
+                        .child(
+                            crate::theme::primary_button(
+                                t,
+                                if d.kind == "beforeunload" {
+                                    "Leave"
+                                } else {
+                                    "OK"
+                                },
+                            )
+                            .id("web-dialog-ok")
+                            .on_click(cx.listener(
+                                move |this, _, _, cx| {
+                                    this.send(
+                                        Cmd::Dialog {
+                                            accept: true,
+                                            text: default.clone(),
+                                        },
+                                        cx,
+                                    )
+                                },
+                            )),
+                        ),
+                ),
+        )
 }

@@ -95,3 +95,28 @@ on the Anthropic Messages API (streaming). What it showed:
 | Browser tools reach a remote agent over `ssh -R` (HTTP MCP) | in `real_remotes` | 21 tools offered |
 | The app: Ctrl+Alt+O menu → Connect to Host → trust → folder → chat (Manual asks; commands run on the host); a dropped connection resumes on the next message (`--resume`, same id); two chats on one host at once; a written .md's card read back from the host; attach to a container (Edit automatically: only `rm` asks); Reopen in Container; Close remote connection; light and dark | driven with xdotool, screenshots | pass |
 | WSL | unit tests only (command line, `wsl -l -v` in UTF-16) | not run: no Windows here |
+
+## Browser clarity fixes (links, dialogs, downloads, previews)
+
+Checked on Linux (Xvfb, Playwright's Chromium 141), with the real ForgeCLI and
+the scripted model; not seen on Windows.
+
+- Links in replies (`[text](url)`, `<url>`, bare `http(s)://`) open in the
+  system browser on click and show their address on hover; other schemes
+  (`javascript:`, `file:`, relative paths) do nothing.
+- "Allow Forge to run JavaScript in the browser?" shows the whole script as
+  code (scrolling, with its size said when long); other browser asks show the
+  whole URL or text.
+- A page's `alert`/`confirm`/`prompt` shows as a card over the panel's page
+  (OK / Cancel); the picture carries on after it. The agent's steps answer
+  dialogs themselves (alerts close, questions get Cancel unless the step says
+  `dialog: "accept"`) and say what was asked.
+- Downloads land in Downloads under their own name (never overwriting), the
+  panel's footer names the last one, and the agent's step reports it.
+- A link that opens a new tab makes it current, and the step says so.
+- `state` on a page that didn't load says so instead of a TypeError.
+- A Write/Edit of an .html file gets Preview (opens it in the panel).
+- In the panel: drag to select, Ctrl+C / Ctrl+A, right and middle buttons,
+  and the page's pointer (hand on links, I-beam on text).
+- `cargo test reports_dialogs -- --include-ignored` checks dialogs, the new
+  tab, a download and the failed load against a real Chromium.

@@ -31,6 +31,13 @@ pub fn clean_name(name: &str) -> String {
     }
 }
 
+/// The first free path for `name` in `dir`: `name`, else `name (1)`…
+pub fn free_path(dir: &Path, name: &str) -> PathBuf {
+    let name = clean_name(name);
+    let free = candidates(&name).map(|n| dir.join(n)).find(|p| !p.exists());
+    free.unwrap_or_else(|| dir.join(&name))
+}
+
 /// The names to try, in order: `plan.md`, `plan (1).md`, `plan (2).md`…
 fn candidates(name: &str) -> impl Iterator<Item = String> + '_ {
     let (stem, ext) = match name.rsplit_once('.') {

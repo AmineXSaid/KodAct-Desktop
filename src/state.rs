@@ -33,6 +33,8 @@ pub enum ToolKind {
     Bash,
     Search,
     Web,
+    /// A web search (WebSearch): the query is the target.
+    WebSearch,
     /// Any other tool (a sub-agent, an MCP tool): its name is the target.
     Other,
 }
@@ -57,6 +59,8 @@ impl ToolKind {
             (ToolKind::Search, false) => "Searched",
             (ToolKind::Web, true) => "Fetching",
             (ToolKind::Web, false) => "Fetched",
+            (ToolKind::WebSearch, true) => "Searching the web for",
+            (ToolKind::WebSearch, false) => "Searched the web for",
             (ToolKind::Other, true) => "Using",
             (ToolKind::Other, false) => "Used",
         }
@@ -68,7 +72,7 @@ impl ToolKind {
             ToolKind::Edit | ToolKind::Write => "icons/file-pen.svg",
             ToolKind::Bash => "icons/terminal.svg",
             ToolKind::Search => "icons/search.svg",
-            ToolKind::Web => "icons/globe.svg",
+            ToolKind::Web | ToolKind::WebSearch => "icons/globe.svg",
             ToolKind::Other => "icons/cpu.svg",
         }
     }
@@ -316,6 +320,12 @@ pub struct WebPage {
     pub active: String,
     /// Why there is no browser, when there isn't.
     pub error: Option<String>,
+    /// A dialog the page shows, waiting for your answer.
+    pub dialog: Option<crate::web_view::PageDialog>,
+    /// The pointer the page wants under the mouse (CSS name).
+    pub cursor: String,
+    /// The browser's last finished download, for the panel to show.
+    pub last_download: Option<std::path::PathBuf>,
 }
 
 /// What the side panel shows when no file is open in it.
@@ -2852,6 +2862,28 @@ impl AppState {
                 self.web_page.active = on;
             }
             Update::Loading(l) => self.web_page.loading = l,
+            Update::Dialog(d) => self.web_page.dialog = d,
+            Update::Cursor(c) => {
+                if c == self.web_page.cursor {
+                    return;
+                }
+                self.web_page.cursor = c;
+            }
+            Update::Copied(text) => {
+                cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+                self.show_toast("Copied from the page".to_string(), cx);
+            }
+            Update::Downloaded(path) => {
+                let name = path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                self.show_toast(format!("Downloaded {name} to your Downloads folder"), cx);
+                self.web_page.last_download = Some(path);
+            }
+            Update::DownloadFailed(name) => {
+                self.show_toast(format!("The download of {name} did not finish"), cx);
+            }
             Update::Closed(why) => {
                 self.web = None;
                 if let Some(old) = self.web_page.frame.take() {
@@ -5042,6 +5074,32 @@ impl AppState {
             }
         }
         cx.notify();
+    }
+
+    /// Open a web page Forge wrote in the side panel's browser.
+    pub fn preview_page(&mut self, chat: usize, path: &str, cx: &mut Context<Self>) {
+        let project = self
+            .chats
+            .iter()
+            .find(|c| c.id == chat)
+            .and_then(|c| self.project(c.project))
+            .map(|p| p.path.clone())
+            .unwrap_or_else(|| self.project_dir.clone());
+        let full = {
+            let p = std::path::Path::new(path);
+            if p.is_absolute() {
+                p.to_path_buf()
+            } else {
+                project.join(p)
+            }
+        };
+        match url::Url::from_file_path(&full) {
+            Ok(url) if full.exists() => {
+                self.show_panel(PanelTab::Browser, cx);
+                self.web_send(crate::web_view::Cmd::Navigate(url.to_string()), cx);
+            }
+            _ => self.show_toast(format!("{} is not there any more", full.display()), cx),
+        }
     }
 
     /// A document Forge wrote, read back for its card: Markdown, a diagram,
