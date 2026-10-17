@@ -1,7 +1,7 @@
 # Desktop design pass: warm ivory, softly squared, a living dot field
 
 Forge's UI moved onto a calm desktop palette (ivory paper, warm ink, one
-terracotta accent) with a single button family, a painted dot field on the
+warm-blue accent) with a single button family, a painted dot field on the
 home screen, and a composer built as one unit. All native GPUI; no web view.
 
 Seen on **Linux only (Xvfb 1280×860, Mesa lavapipe), light and dark**.
@@ -20,7 +20,9 @@ Nothing was run on Windows.
 picked up the new palette:
 - Light: ivory `#f9f8f5`, warm ink `#2b2a27`.
 - Dark: charcoal `#262624` / `#30302e`.
-- Accent: terracotta `#d97757` in both themes.
+- Accent: deep warm blue, `#2b4aa0` in light and `#4766c4` (fills) / `#93a9ea` (text)
+  in dark. It was terracotta at first and was changed so Forge doesn't borrow
+  Claude's orange.
 
 New tokens were added for both themes:
 - Colours: `accent`, `accent_soft`, `accent_fg`, `border_strong`, `sunk`,
@@ -39,7 +41,7 @@ Departures from the brief's palette, each forced by `palette_check.rs`:
 | light memory | `#8a6a1f` | `#75591a` | AA on its tint |
 | dark danger | `#e07a68` | `#eb8c7b` | AA on its tint |
 | dark accent_soft | `#6b3d2c` | `#4d3128` | empty Send read as active |
-| links | — | `#a84b2b` / `#e08a6d` | the accent at a text-safe depth |
+| links | — | `#2b4aa0` / `#93a9ea` | the accent blue at a text-safe depth |
 
 The filled (primary) button is ink on paper (paper on charcoal), as in the
 reference; the accent is kept for Send and the new-chat mark.

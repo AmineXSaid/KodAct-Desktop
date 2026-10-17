@@ -1,5 +1,5 @@
 //! Warm-ivory design tokens for GPUI: a calm desktop palette (ivory paper,
-//! warm ink, one terracotta accent), softly squared shapes and a 4px rhythm.
+//! warm ink, one deep warm-blue accent), softly squared shapes and a 4px rhythm.
 //! Pure UI: colors, type, spacing, radius, elevation, motion + a few styled primitives.
 //! Written against GPUI's current API; field/method names may need small tweaks per GPUI version.
 
@@ -168,16 +168,16 @@ impl Theme {
                 text_subtle: rgb(0x8c887e).into(),
                 border: warm_ink(0.13), // #e3e0d8 on white
                 hover: warm_ink(0.055),
-                // Links and selected text: the accent, deep enough to read.
-                primary: rgb(0xa84b2b).into(),
-                primary_hover: rgb(0x8f3f23).into(),
+                // Links and selected text: the accent blue itself (8:1 on white).
+                primary: rgb(0x2b4aa0).into(),
+                primary_hover: rgb(0x213b85).into(),
                 primary_fg: rgb(0xffffff).into(),
-                primary_tint: hsla(15. / 360., 0.62, 0.6, 0.14),
+                primary_tint: hsla(224. / 360., 0.55, 0.45, 0.12),
                 marigold: rgb(0xffb110).into(),
-                coral: rgb(0xd97757).into(),
+                coral: rgb(0xc84b55).into(),
                 sky: rgb(0x62aef0).into(),
                 midnight: rgb(0x02093a).into(),
-                peach: rgb(0xf1c9b8).into(),
+                peach: rgb(0xcdd5ec).into(),
             },
         )
     }
@@ -197,15 +197,15 @@ impl Theme {
                 text_subtle: rgb(0x7d7a72).into(),
                 border: hsla(0., 0., 1., 0.1),
                 hover: hsla(0., 0., 1., 0.05),
-                primary: rgb(0xe08a6d).into(),
-                primary_hover: rgb(0xe89c82).into(),
+                primary: rgb(0x93a9ea).into(),
+                primary_hover: rgb(0xa9bbef).into(),
                 primary_fg: rgb(0xffffff).into(),
-                primary_tint: hsla(15. / 360., 0.62, 0.6, 0.18),
+                primary_tint: hsla(224. / 360., 0.6, 0.6, 0.18),
                 marigold: rgb(0xffb110).into(),
-                coral: rgb(0xd97757).into(),
+                coral: rgb(0xd8646d).into(),
                 sky: rgb(0x62aef0).into(),
                 midnight: rgb(0x02093a).into(),
-                peach: rgb(0x6b3d2c).into(),
+                peach: rgb(0x2c3654).into(),
             },
         )
     }
@@ -262,8 +262,8 @@ pub struct ExtraColors {
     pub fill_hover: Hsla,
     pub fill_danger: Hsla, // a destructive confirm ("Allow bypass")
     pub fill_fg: Hsla,     // text and icons on `fill` (ink in light, paper in dark)
-    // The accent: terracotta, kept for the few places it earns, the send
-    // button, the home screen's mark, a dot in the background field.
+    // The accent: a deep warm blue (blued steel), kept for the few places
+    // it earns: the send button, the mark's core, a dot in the background field.
     pub accent: Hsla,
     pub accent_soft: Hsla, // the send button with nothing to send; a soft wash
     pub accent_fg: Hsla,
@@ -323,13 +323,13 @@ impl ExtraColors {
                 fill_hover: rgb(0xf8f7f3).into(),
                 fill_danger: rgb(0xb7331f).into(), // 6.0:1
                 fill_fg: rgb(0x262624).into(),
-                accent: rgb(0xd97757).into(),
-                accent_soft: rgb(0x4d3128).into(),
+                accent: rgb(0x4766c4).into(),
+                accent_soft: rgb(0x2c3654).into(),
                 accent_fg: rgb(0xffffff).into(),
                 border_strong: rgb(0x55534e).into(),
                 active: hsla(0., 0., 1., 0.075),
                 sunk: rgb(0x1f1e1d).into(),
-                toggle_on: rgb(0x4a9be8).into(),
+                toggle_on: rgb(0x6480d2).into(),
                 memory: rgb(0xe5c77a).into(),
                 memory_tint: rgb(0x3a3220).into(),
                 dot: rgb(0x9a958b).into(),
@@ -385,13 +385,13 @@ impl ExtraColors {
                 fill_hover: rgb(0x403e3a).into(),
                 fill_danger: rgb(0xb4412f).into(), // 5.6:1
                 fill_fg: rgb(0xffffff).into(),
-                accent: rgb(0xd97757).into(),
-                accent_soft: rgb(0xf1c9b8).into(),
+                accent: rgb(0x2b4aa0).into(),
+                accent_soft: rgb(0xcdd5ec).into(),
                 accent_fg: rgb(0xffffff).into(),
                 border_strong: rgb(0xcfcbc0).into(),
                 active: warm_ink(0.075),
                 sunk: rgb(0xf0eee8).into(),
-                toggle_on: rgb(0x2c84db).into(),
+                toggle_on: rgb(0x2b4aa0).into(),
                 memory: rgb(0x75591a).into(),
                 memory_tint: rgb(0xf6ecd2).into(),
                 dot: rgb(0x857e71).into(),
