@@ -21,8 +21,12 @@
 body { margin: 0; background: var(--page); color: var(--text); font: 15px/1.55 var(--sans); }
 .wrap { max-width: 1160px; margin: 0 auto; padding: 40px 16px 80px; }
 h1 { font: 400 36px/1.15 var(--serif); margin: 0 0 6px; }
-.lede { color: var(--muted); margin: 0 0 24px; max-width: 760px; }
-.player { background: #0d0c0b; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
+.lede { color: var(--muted); margin: 0 0 20px; max-width: 780px; }
+.tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.tabs button { font: 600 13.5px var(--sans); color: var(--muted); background: transparent; border: 1px solid var(--border);
+  border-radius: 9999px; padding: 6px 14px; cursor: pointer; }
+.tabs button[aria-selected="true"] { color: var(--text); background: var(--surface); border-color: var(--accent); }
+.player { background: #07090d; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
 canvas.film { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; }
 .controls { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--surface); border-top: 1px solid var(--border); }
 .controls button { font: 600 13px var(--sans); color: var(--text); background: transparent; border: 1px solid var(--border); border-radius: 8px; padding: 5px 12px; cursor: pointer; min-width: 64px; }
@@ -31,7 +35,7 @@ canvas.film { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; }
 h2 { font: 600 18px var(--sans); margin: 36px 0 12px; }
 .frames { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .frames figure { margin: 0; }
-.frames canvas { width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 8px; display: block; background: #0d0c0b; }
+.frames canvas { width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 8px; display: block; background: #07090d; }
 .frames figcaption { font-size: 13px; color: var(--muted); margin-top: 6px; }
 .frames figcaption b { color: var(--text); font-weight: 600; }
 @media (max-width: 760px) { .frames { grid-template-columns: 1fr; } }
@@ -46,325 +50,416 @@ td.t { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; color: 
 .note { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
 .note b { display: block; margin-bottom: 4px; }
 .note p { margin: 0; color: var(--muted); font-size: 14px; }
+[hidden] { display: none !important; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>Forge opener: “Forged”</h1>
-  <p class="lede">A 7.6-second brand teaser that plays as the desktop app opens. Molten sparks spiral in, the ingot is forged white hot, cools through orange, ember and iron while Forge’s loop slams in three lines, settles into the wordmark, then opens onto the app. 16:9, 128 BPM grid, silent by default. Click the film or press Space to play or pause.</p>
+  <p class="lede">A raw star falls from the top left, wrapped in a dark blue aura, lighting the ground as it comes. It lands at the centre, heats, and is forged into the ingot, which cools through orange, ember and iron to the Forge cube. Two cuts: the full film on a first launch, leading into the naming screen, and a short one for every launch after. Click the film or press Space to play or pause.</p>
 
+  <div class="tabs" role="tablist">
+    <button type="button" role="tab" data-mode="first" aria-selected="true">Mock 1 · First launch (9.6 s)</button>
+    <button type="button" role="tab" data-mode="again" aria-selected="false">Mock 2 · Returning user (3.2 s)</button>
+  </div>
   <div class="player">
     <canvas class="film" id="film" width="1920" height="1080" aria-label="Forge opener animation"></canvas>
     <div class="controls">
       <button type="button" id="play">Pause</button>
       <button type="button" id="restart">Restart</button>
-      <input type="range" id="scrub" min="0" max="7.6" step="0.0417" value="0" aria-label="Scrub">
-      <span class="tc" id="tc">0.00 s · bar 1.1</span>
+      <input type="range" id="scrub" min="0" max="9.6" step="0.0417" value="0" aria-label="Scrub">
+      <span class="tc" id="tc">0.00 s</span>
     </div>
   </div>
 
   <h2>Style frames</h2>
-  <div class="frames">
-    <figure><canvas width="1920" height="1080" data-t="1.47"></canvas><figcaption><b>1.47 s, the lock.</b> The sparks have become the cube, white hot; a shockwave of heat rings out.</figcaption></figure>
-    <figure><canvas width="1920" height="1080" data-t="4.25"></canvas><figcaption><b>4.25 s, “You approve.”</b> The cube has cooled to dark iron under the third line; a teal check lands, and the cube turns teal on the next beat.</figcaption></figure>
-    <figure><canvas width="1920" height="1080" data-t="6.4"></canvas><figcaption><b>6.40 s, the lockup.</b> The cooled cube is the o of the wordmark, with the app’s own line beneath.</figcaption></figure>
+  <div class="frames" data-for="first">
+    <figure><canvas width="1920" height="1080" data-t="0.85"></canvas><figcaption><b>0.85 s, the fall.</b> The raw star in its blue aura, its trail behind it, its light pooling on the ground.</figcaption></figure>
+    <figure><canvas width="1920" height="1080" data-t="1.62"></canvas><figcaption><b>1.62 s, the forging.</b> Landed: the rock heats, its cracks glow white and it closes into the cube’s shape.</figcaption></figure>
+    <figure><canvas width="1920" height="1080" data-t="9.3"></canvas><figcaption><b>9.30 s, the naming screen.</b> The cooled cube rises into the hero; the question and the field arrive.</figcaption></figure>
+  </div>
+  <div class="frames" data-for="again" hidden>
+    <figure><canvas width="1920" height="1080" data-t="0.45"></canvas><figcaption><b>0.45 s, the fall.</b> The same star, twice as fast.</figcaption></figure>
+    <figure><canvas width="1920" height="1080" data-t="1.05"></canvas><figcaption><b>1.05 s, the lock.</b> Forged white hot in half a second.</figcaption></figure>
+    <figure><canvas width="1920" height="1080" data-t="2.35"></canvas><figcaption><b>2.35 s, the lockup.</b> Cooled into the wordmark, then straight into the app.</figcaption></figure>
   </div>
 
-  <h2>Beat sheet (128 BPM, a beat is 0.47 s, a bar 1.88 s)</h2>
-  <div class="tablewrap"><table>
+  <h2>Beat sheet</h2>
+  <div class="tablewrap" data-for="first"><table>
     <thead><tr><th>When</th><th>Bar.beat</th><th>Picture</th><th>On screen</th></tr></thead>
     <tbody>
-      <tr><td class="t">0.00</td><td>1.1</td><td>Dark forge. Sparks streak in from the edges in the heat ramp.</td><td>HUD: 01 — HEAT</td></tr>
-      <tr><td class="t">0.47</td><td>1.2</td><td>Sparks spiral, brightening as they near the centre.</td><td></td></tr>
-      <tr><td class="t">0.94</td><td>1.3</td><td>They converge on the cube’s three faces.</td><td></td></tr>
-      <tr><td class="t">1.41</td><td>1.4</td><td><b>Lock:</b> the cube appears white hot, a heat shockwave, a burst of sparks, a small shake.</td><td></td></tr>
-      <tr><td class="t">1.88</td><td>2.1</td><td>Camera reframes: the cube drops low, cooling to orange; embers rise.</td><td><b>DESCRIBE IT.</b> (slam) · HUD: 02 — SHAPE</td></tr>
-      <tr><td class="t">2.81</td><td>2.3</td><td>Cube orange to red.</td><td><b>FORGE BUILDS IT.</b> (slam)</td></tr>
-      <tr><td class="t">3.75</td><td>3.1</td><td>Cube cools from ember red to dark iron.</td><td><b>YOU APPROVE.</b> + teal check (slam) · HUD: 03 — APPROVE</td></tr>
-      <tr><td class="t">4.69</td><td>3.3</td><td><b>Cooled:</b> the top turns teal; a teal ring runs through a dot grid.</td><td></td></tr>
-      <tr><td class="t">5.16</td><td>3.4</td><td>Words clear.</td><td></td></tr>
-      <tr><td class="t">5.63</td><td>4.1</td><td>The cube shrinks into the o; “f” and “rge” slide out of it.</td><td><b>forge</b> (wordmark)</td></tr>
-      <tr><td class="t">6.10</td><td>4.2</td><td>Hold.</td><td>Forge asks before it changes anything.</td></tr>
-      <tr><td class="t">7.00</td><td>4.4 + ½</td><td><b>Exit:</b> an iris opens from the cube onto the app.</td><td></td></tr>
+      <tr><td class="t">0.00</td><td>1.1</td><td>Night. A raw star enters top left in a dark blue aura, its trail shedding light.</td><td>HUD: 01 — STAR</td></tr>
+      <tr><td class="t">0.47–1.17</td><td>1.2–1.3</td><td>It falls, turning; its light sweeps the ground grid and pools beneath it.</td><td></td></tr>
+      <tr><td class="t">1.20</td><td>1.3½</td><td><b>Impact</b> at the centre: a blue-white flash, a ring runs over the ground, shafts of light hit the floor.</td><td></td></tr>
+      <tr><td class="t">1.20–1.88</td><td>1.3½–2.1</td><td><b>Forging:</b> the aura turns from blue to heat, cracks glow, the rock closes into the cube.</td><td></td></tr>
+      <tr><td class="t">1.88</td><td>2.1</td><td><b>Lock:</b> the cube, white hot. Shockwave, sparks, a small shake. The ground pool turns orange.</td><td>HUD: 02 — HEAT</td></tr>
+      <tr><td class="t">2.81</td><td>2.3</td><td>Cube drops low, cooling to orange; embers rise.</td><td><b>DESCRIBE IT.</b></td></tr>
+      <tr><td class="t">3.75</td><td>3.1</td><td>Orange to ember red.</td><td><b>FORGE BUILDS IT.</b> · HUD: 03 — SHAPE</td></tr>
+      <tr><td class="t">4.69</td><td>3.3</td><td>Ember to dark iron.</td><td><b>YOU APPROVE.</b> + teal check · HUD: 04 — APPROVE</td></tr>
+      <tr><td class="t">5.63</td><td>4.1</td><td><b>Cooled:</b> teal top; a teal ring through the dot grid; the ground pool turns teal.</td><td></td></tr>
+      <tr><td class="t">6.56</td><td>4.3</td><td>The cube becomes the o of the wordmark.</td><td><b>forge</b> · Forge asks before it changes anything.</td></tr>
+      <tr><td class="t">8.00–9.20</td><td>5.2–5.4</td><td><b>Into naming:</b> the letters part, the ground and HUD fade to the onboarding stage, the cube rises into the hero.</td><td>Hello. What should we call you? · the field, charged</td></tr>
+    </tbody>
+  </table></div>
+  <div class="tablewrap" data-for="again" hidden><table>
+    <thead><tr><th>When</th><th>Picture</th><th>On screen</th></tr></thead>
+    <tbody>
+      <tr><td class="t">0.00–0.65</td><td>The star falls, top left to centre, lighting the ground.</td><td></td></tr>
+      <tr><td class="t">0.65</td><td><b>Impact:</b> flash, ground ring.</td><td></td></tr>
+      <tr><td class="t">0.65–1.05</td><td>Forged into the cube; <b>lock</b> white hot at 1.05.</td><td></td></tr>
+      <tr><td class="t">1.05–1.95</td><td>Cools fast through orange, ember, iron to teal.</td><td></td></tr>
+      <tr><td class="t">1.75–2.30</td><td>Into the o of the wordmark.</td><td><b>forge</b></td></tr>
+      <tr><td class="t">2.60–3.20</td><td><b>Iris</b> from the cube onto the app.</td><td>The app, ready</td></tr>
     </tbody>
   </table></div>
 
   <h2>How it would work in the app</h2>
   <div class="notes">
-    <div class="note"><b>Native, not a video</b><p>Built in GPUI like the onboarding: the ingot, sparks and rings drawn as paths and quads, words as text. Sharp at any size, tiny, and it follows the theme (the iris opens onto light or dark).</p></div>
-    <div class="note"><b>Never in the way</b><p>Any key or click skips it. Plays on the first launch and after an update, not on every start (an option in Settings). Reduced motion: no opener.</p></div>
-    <div class="note"><b>Silent by default</b><p>An app that plays music each time it opens wears thin. Optional: one anvil strike on the lock, off by default.</p></div>
-    <div class="note"><b>Only what Forge does</b><p>The three lines are its real loop, and the closing line is the app’s own copy. Colours are the theme’s tokens: the heat ramp, the teal, paper and charcoal.</p></div>
+    <div class="note"><b>Which cut plays</b><p>Mock 1 on the first launch (no name saved yet), ending on the naming screen. Mock 2 on every launch after, ending in the app. Any key or click skips either one.</p></div>
+    <div class="note"><b>Native, not a video</b><p>Built in GPUI like the onboarding: the star, trail, ground and cube drawn as paths and quads, words as text. Reduced motion: no opener.</p></div>
+    <div class="note"><b>The blue aura is new</b><p>The star’s blue (#2f63c4 aura, #a9c9ff core) is the one colour not in the theme yet. It would join the heat ramp as tokens, used only by the opener.</p></div>
+    <div class="note"><b>Silent by default</b><p>Optional: a low whoosh as the star falls and one anvil strike on the lock, both off by default.</p></div>
   </div>
 </div>
 
 <script>
-/* One clock: every frame is draw(ctx, t), a pure function of time. */
-const W = 1920, H = 1080, T = 7.6;
+/* One clock: every frame is draw(ctx, t, mode), a pure function of time. */
+const W = 1920, H = 1080;
 const BEAT = 60 / 128, BAR = BEAT * 4;
 const b = (bar, beat) => (bar - 1) * BAR + (beat - 1) * BEAT;
-const LOCK = b(1, 4), W1 = b(2, 1), W2 = b(2, 3), W3 = b(3, 1), COOLED = b(3, 3), CLEAR = b(3, 4),
-      LOCKUP = b(4, 1), TAG = b(4, 2), IRIS = 7.0;
 
-// Tokens (src/theme.rs, dark).
-const C = { bg0: "#1d1c1b", bg1: "#0f0e0d", paper: "#ecebe6", muted: "#a8a59c",
-  top: "#529a9d", left: "#ecebe6", right: "#6f6c64", teal: "#8ecacd", accent: "#216d70",
-  white: "#fff2cc", glow: "#f5892c", ember: "#a3311c", iron: "#3b3633", app: "#262624", chrome: "#141312" };
+// The two cuts.
+const MODES = {
+  first: { T: 9.6, FALL: 1.2, LOCK: b(2, 1), COOLED: b(4, 1), LOW: b(2, 3) - .25, LOCKUP: b(4, 3), TAG: b(4, 4),
+    words: [[b(2, 3), b(3, 1), "DESCRIBE IT."], [b(3, 1), b(3, 3), "FORGE BUILDS IT."], [b(3, 3), b(4, 2), "YOU APPROVE."]],
+    hud: true, end: "name", NAME: 8.0 },
+  again: { T: 3.2, FALL: .65, LOCK: 1.05, COOLED: 1.95, LOW: null, LOCKUP: 1.75, TAG: null, words: [], hud: false, end: "app", IRIS: 2.6 },
+};
+
+// Tokens (src/theme.rs, dark), plus the star's blue.
+const C = { night0: "#11151d", night1: "#07090d", stage: "#262624", chrome: "#141312", pane: "#1d1c1b", surface: "#30302e",
+  paper: "#ecebe6", muted: "#a8a59c", subtle: "#7d7a72", top: "#529a9d", left: "#ecebe6", right: "#6f6c64", teal: "#8ecacd",
+  white: "#fff2cc", glow: "#f5892c", ember: "#a3311c", iron: "#3b3633",
+  aura: "#2f63c4", core: "#a9c9ff", rock0: "#151a24", rock1: "#3a4458", ground: "#6f86b8" };
 
 const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
-const mix = (a, b, k) => { const [x, y] = [hex(a), hex(b)]; return "#" + x.map((v, i) => Math.round(v + (y[i] - v) * k).toString(16).padStart(2, "0")).join(""); };
-const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const mix = (a, b2, k) => { const [x, y] = [hex(a), hex(b2)]; k = Math.min(1, Math.max(0, k));
+  return "#" + x.map((v, i) => Math.round(v + (y[i] - v) * k).toString(16).padStart(2, "0")).join(""); };
+const clamp = (x, a = 0, b2 = 1) => Math.min(b2, Math.max(a, x));
 const smooth = x => { x = clamp(x); return x * x * (3 - 2 * x); };
 const outCubic = x => 1 - Math.pow(1 - clamp(x), 3);
 const inOut = x => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
-const rgba = (h, a) => { const [r, g, bb] = hex(h); return `rgba(${r},${g},${bb},${a})`; };
+const rgba = (h, a) => { const [r, g, bb] = hex(h); return `rgba(${r},${g},${bb},${clamp(a)})`; };
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let x = Math.imul(seed ^ seed >>> 15, 1 | seed);
+  x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x; return ((x ^ x >>> 14) >>> 0) / 4294967296; }; }
 
-// Heat, as the app's ingot.rs: white 1, glow 2/3, ember 1/3, iron 0.12, then the face's colour.
+// Heat, as the app's ingot.rs: white 1, glow 2/3, ember 1/3, iron 0.12, then the face's own colour.
 function glowing(cool, h) {
-  h = clamp(h);
-  const IRON = .12;
+  h = clamp(h); const IRON = .12;
   if (h <= IRON) return mix(cool, C.iron, smooth(h / IRON));
   const stops = [[IRON, C.iron], [1 / 3, C.ember], [2 / 3, C.glow], [1, C.white]];
   let i = stops.findIndex(s => h <= s[0]); if (i < 1) i = 3;
   const [[a, ca], [bb, cb]] = [stops[i - 1], stops[i]];
   return mix(ca, cb, (h - a) / (bb - a));
 }
-const heatAt = t => t < LOCK ? 1 : 1 - smooth((t - LOCK) / (COOLED - LOCK));
+const heatAt = (M, t) => t < M.LOCK ? 1 : 1 - smooth((t - M.LOCK) / (M.COOLED - M.LOCK));
 
-// Seeded random, so every frame is the same every time.
-function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let x = Math.imul(seed ^ seed >>> 15, 1 | seed); x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x; return ((x ^ x >>> 14) >>> 0) / 4294967296; }; }
-
-// The ingot's three faces in its 64-unit box (ingot.rs).
-const FACES = {
-  top: [[32, 5], [55.4, 18.5], [32, 32], [8.6, 18.5]],
-  left: [[8.6, 18.5], [32, 32], [32, 59], [8.6, 45.5]],
-  right: [[55.4, 18.5], [32, 32], [32, 59], [55.4, 45.5]],
-};
+// The ingot's faces in its 64-unit box (ingot.rs), and its silhouette.
+const FACES = { top: [[32, 5], [55.4, 18.5], [32, 32], [8.6, 18.5]], left: [[8.6, 18.5], [32, 32], [32, 59], [8.6, 45.5]],
+  right: [[55.4, 18.5], [32, 32], [32, 59], [55.4, 45.5]] };
+const HEX = [[32, 5], [55.4, 18.5], [55.4, 45.5], [32, 59], [8.6, 45.5], [8.6, 18.5]];
 function facePts(name, cx, cy, S, inset = .035) {
-  const f = FACES[name], k = S / 64;
-  const mx = f.reduce((s, p) => s + p[0], 0) / 4, my = f.reduce((s, p) => s + p[1], 0) / 4;
+  const f = FACES[name], k = S / 64, mx = f.reduce((s, p) => s + p[0], 0) / 4, my = f.reduce((s, p) => s + p[1], 0) / 4;
   return f.map(([x, y]) => [cx + (x - 32 + (mx - x) * inset) * k, cy + (y - 32 + (my - y) * inset) * k]);
 }
+function poly(ctx, p) { ctx.beginPath(); p.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); }
 function drawCube(ctx, cx, cy, S, h) {
   const heat = { top: 1, left: .88, right: .74 }, cool = { top: C.top, left: C.left, right: C.right };
-  for (const name of ["left", "right", "top"]) {
-    const p = facePts(name, cx, cy, S);
-    ctx.beginPath(); p.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath();
-    ctx.fillStyle = glowing(cool[name], h * heat[name]); ctx.fill();
+  for (const name of ["left", "right", "top"]) { poly(ctx, facePts(name, cx, cy, S)); ctx.fillStyle = glowing(cool[name], h * heat[name]); ctx.fill(); }
+}
+
+// The star: a raw rock, 12 jagged points, its facets and cracks, fixed by a seed.
+const ROCK = (() => { const r = rng(42), n = 12, pts = [];
+  for (let i = 0; i < n; i++) { const a = -Math.PI / 2 + i / n * Math.PI * 2 + (r() - .5) * .3; pts.push({ a, r: .72 + r() * .4 }); }
+  const shade = pts.map(() => r());
+  const cracks = Array.from({ length: 5 }, () => { const a = r() * Math.PI * 2; return [[0, 0], [Math.cos(a) * .35, Math.sin(a) * .35],
+    [Math.cos(a + (r() - .5) * .7) * .7, Math.sin(a + (r() - .5) * .7) * .7]]; });
+  return { pts, shade, cracks }; })();
+// Where a ray from the cube's centre at angle `a` meets its outline (in the 64-unit box, centred).
+function hexRay(a) {
+  const dx = Math.cos(a), dy = Math.sin(a); let best = Infinity;
+  for (let i = 0; i < 6; i++) { const [x1, y1] = HEX[i].map(v => v - 32), [x2, y2] = HEX[(i + 1) % 6].map(v => v - 32);
+    const ex = x2 - x1, ey = y2 - y1, den = dx * ey - dy * ex; if (Math.abs(den) < 1e-9) continue;
+    const tt = (x1 * ey - y1 * ex) / den, u = (x1 * dy - y1 * dx) / den;
+    if (tt > 0 && u >= 0 && u <= 1) best = Math.min(best, tt); }
+  return [dx * best, dy * best];
+}
+function drawRock(ctx, cx, cy, R, spin, heat, morph, S) {
+  // Each point of the rock closes straight out (or in) onto the cube's outline, along its own angle.
+  const k = S / 64, pts = ROCK.pts.map(p => {
+    const a = p.a + spin, rx = Math.cos(a) * p.r * R, ry = Math.sin(a) * p.r * R, [hx, hy] = hexRay(a);
+    return [cx + rx + (hx * k - rx) * morph, cy + ry + (hy * k - ry) * morph]; });
+  for (let i = 0; i < 12; i++) {
+    const a = pts[i], c = pts[(i + 1) % 12];
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(...a); ctx.lineTo(...c); ctx.closePath();
+    const cold = mix(C.rock0, C.rock1, ROCK.shade[i]);
+    ctx.fillStyle = heat > 0 ? mix(cold, glowing(C.iron, .45 + .55 * heat), smooth(heat * 1.6)) : cold; ctx.fill();
   }
-}
-// A point on the cube's surface, for the sparks to land on.
-function surfacePoint(r, cx, cy, S) {
-  const name = ["top", "left", "right"][Math.floor(r() * 3)], p = facePts(name, cx, cy, S, 0);
-  const u = r(), v = r();
-  const a = [p[0][0] + (p[1][0] - p[0][0]) * u, p[0][1] + (p[1][1] - p[0][1]) * u];
-  const d = [p[3][0] + (p[2][0] - p[3][0]) * u, p[3][1] + (p[2][1] - p[3][1]) * u];
-  return [a[0] + (d[0] - a[0]) * v, a[1] + (d[1] - a[1]) * v];
+  // Rim light from the aura, and cracks glowing as it heats.
+  poly(ctx, pts); ctx.strokeStyle = rgba(heat > .3 ? C.white : C.core, .55 * (1 - morph)); ctx.lineWidth = 2; ctx.stroke();
+  if (heat > 0 && morph < 1) { ctx.save(); ctx.strokeStyle = rgba(C.white, heat * (1 - morph)); ctx.lineWidth = 3; ctx.shadowColor = C.glow; ctx.shadowBlur = 16;
+    for (const cr of ROCK.cracks) { ctx.beginPath(); cr.forEach(([x, y], i) => { const X = cx + (x * Math.cos(spin) - y * Math.sin(spin)) * R,
+      Y = cy + (x * Math.sin(spin) + y * Math.cos(spin)) * R; i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); ctx.stroke(); }
+    ctx.restore(); }
 }
 
-// Where the cube is: centred and large for the forging, low for the words, the o of the wordmark at the end.
-const LOCK_POS = { x: W / 2, y: H / 2, S: 300 };
-const LOW_POS = { x: W / 2, y: 690, S: 250 };
-let LOCKUP_POS = null, WORD = null;
-function measureWordmark(ctx) {
-  const size = 170; ctx.font = `400 ${size}px "Source Serif 4"`;
-  const wf = ctx.measureText("f").width, wr = ctx.measureText("rge").width, oS = size * .66, gap = size * .02;
-  const total = wf + oS + wr + gap * 2, x0 = W / 2 - total / 2, base = 585;
-  WORD = { size, wf, wr, x0, base, oS, gap };
-  LOCKUP_POS = { x: x0 + wf + gap + oS / 2, y: base - oS * .42, S: oS };
-}
-function cubePos(t) {
-  const lerp = (a, b2, k) => ({ x: a.x + (b2.x - a.x) * k, y: a.y + (b2.y - a.y) * k, S: a.S + (b2.S - a.S) * k });
-  if (t < W1 - .25) return LOCK_POS;
-  if (t < LOCKUP) return lerp(LOCK_POS, LOW_POS, inOut((t - (W1 - .25)) / .45));
-  return lerp(LOW_POS, LOCKUP_POS, inOut((t - LOCKUP) / .42));
+// The fall: from off the top left to the centre, speeding up as it drops.
+const P0 = [-40, -60], P1 = [W / 2, H / 2], PC = [560, 150];
+function starAt(M, t) { const u = clamp(t / M.FALL), e = Math.pow(u, 1.55);
+  const x = (1 - e) * (1 - e) * P0[0] + 2 * (1 - e) * e * PC[0] + e * e * P1[0], y = (1 - e) * (1 - e) * P0[1] + 2 * (1 - e) * e * PC[1] + e * e * P1[1];
+  return { x, y, u, scale: .4 + .6 * e, spin: t * 2.4 }; }
+
+// The ground: a floor in perspective under the landing point.
+const GY = 760, VP = [W / 2, 470];
+function drawGround(ctx, alpha, light, lightColor, lightAt) {
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha = alpha;
+  const fade = ctx.createLinearGradient(0, GY - 120, 0, H); fade.addColorStop(0, rgba(C.ground, 0)); fade.addColorStop(1, rgba(C.ground, .16));
+  ctx.strokeStyle = fade; ctx.lineWidth = 1.5;
+  for (let i = -14; i <= 14; i++) { const x = W / 2 + i * 150; ctx.beginPath(); ctx.moveTo(VP[0] + (x - VP[0]) * .35, GY - 60); ctx.lineTo(VP[0] + (x - VP[0]) * 2.4, H); ctx.stroke(); }
+  for (let j = 0; j < 9; j++) { const y = GY - 60 + Math.pow(j / 8, 1.8) * (H - GY + 60); ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  // The light pool where the star (or the cube) shines down.
+  if (light > 0) { const [lx, ly] = lightAt; ctx.save(); ctx.translate(lx, ly); ctx.scale(1, .28);
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 520); g.addColorStop(0, rgba(lightColor, .55 * light)); g.addColorStop(1, rgba(lightColor, 0));
+    ctx.fillStyle = g; ctx.fillRect(-560, -560, 1120, 1120); ctx.restore(); }
+  ctx.restore();
 }
 
-// Particles and sparks, fixed by their seeds.
-const SPARKS = (() => { const r = rng(7); return Array.from({ length: 280 }, () => ({
-  a: r() * Math.PI * 2, r0: 900 + r() * 500, delay: r() * .45, turn: 1.6 + r() * 1.4, size: 2 + r() * 3.5,
-  target: surfacePoint(r, LOCK_POS.x, LOCK_POS.y, LOCK_POS.S), seed: r() })); })();
-const BURST = (() => { const r = rng(11); return Array.from({ length: 70 }, () => {
-  const a = -Math.PI / 2 + (r() - .5) * 2.6, v = 380 + r() * 820;
+// Sparks, embers and the ground's lights, fixed by their seeds.
+const TRAIL = (() => { const r = rng(5); return Array.from({ length: 120 }, () => ({ at: r(), dx: (r() - .5) * 60, dy: (r() - .5) * 60, life: .35 + r() * .5, size: 1.5 + r() * 3 })); })();
+const BURST = (() => { const r = rng(11); return Array.from({ length: 70 }, () => { const a = -Math.PI / 2 + (r() - .5) * 2.6, v = 380 + r() * 820;
   return { vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: .5 + r() * .7, size: 2 + r() * 3 }; }); })();
-const EMBERS = (() => { const r = rng(23); return Array.from({ length: 90 }, (_, i) => ({
-  birth: LOCK + i * .045, x: (r() - .5) * 220, vx: (r() - .5) * 60, vy: -(120 + r() * 160), life: .9 + r() * .8, size: 1.5 + r() * 2.5 })); })();
-const SHAKES = [LOCK, W1, W2, W3];
-function shake(t) {
-  let x = 0, y = 0;
-  for (const at of SHAKES) { const a = t - at; if (a >= 0 && a < .18) { const k = (1 - a / .18) * (at === LOCK ? 14 : 7);
-    x += Math.sin(a * 140) * k; y += Math.cos(a * 117) * k; } }
-  return [x, y];
-}
-
-// Grain: one noise tile, offset by frame.
+const EMBERS = (() => { const r = rng(23); return Array.from({ length: 90 }, (_, i) => ({ k: i, x: (r() - .5) * 220, vx: (r() - .5) * 60,
+  vy: -(120 + r() * 160), life: .9 + r() * .8, size: 1.5 + r() * 2.5 })); })();
+const SHAFTS = (() => { const r = rng(31); return Array.from({ length: 9 }, () => ({ dx: (r() - .5) * 700, w: 6 + r() * 26, a: .3 + r() * .5 })); })();
+const STARS = (() => { const r = rng(57); return Array.from({ length: 160 }, () => ({ x: r() * W, y: r() * (GY - 120), s: .6 + r() * 1.6, tw: r() * 6 })); })();
 const grain = (() => { const c = document.createElement("canvas"); c.width = c.height = 256; const g = c.getContext("2d"), d = g.createImageData(256, 256), r = rng(3);
   for (let i = 0; i < d.data.length; i += 4) { const v = r() * 255; d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 255; } g.putImageData(d, 0, 0); return c; })();
 
-function draw(ctx, t) {
-  t = clamp(t, 0, T);
+// The wordmark's layout, measured once its font is in.
+let WORD = null;
+function measureWordmark(ctx) { const size = 170; ctx.font = `400 ${size}px "Source Serif 4"`;
+  const wf = ctx.measureText("f").width, wr = ctx.measureText("rge").width, oS = size * .66, gap = size * .02;
+  const total = wf + oS + wr + gap * 2, x0 = W / 2 - total / 2, base = 585;
+  WORD = { size, wf, wr, x0, base, oS, gap, cube: { x: x0 + wf + gap + oS / 2, y: base - oS * .42, S: oS } }; }
+
+const LOCK_POS = { x: W / 2, y: H / 2, S: 300 }, LOW_POS = { x: W / 2, y: 690, S: 250 }, HERO_POS = { x: W / 2, y: 330, S: 132 };
+const lerpPos = (a, c, k) => ({ x: a.x + (c.x - a.x) * k, y: a.y + (c.y - a.y) * k, S: a.S + (c.S - a.S) * k });
+function cubePos(M, t) {
+  let p = LOCK_POS;
+  if (M.LOW != null && t > M.LOW) p = lerpPos(LOCK_POS, LOW_POS, inOut((t - M.LOW) / .45));
+  if (t > M.LOCKUP) p = lerpPos(p, WORD.cube, inOut((t - M.LOCKUP) / .42));
+  if (M.end === "name" && t > M.NAME) p = lerpPos(p, HERO_POS, inOut((t - M.NAME - .15) / .7));
+  return p;
+}
+function shake(M, t) { let x = 0, y = 0;
+  for (const at of [M.FALL, M.LOCK, ...M.words.map(w => w[0])]) { const a = t - at; if (a >= 0 && a < .18) { const k = (1 - a / .18) * (at === M.LOCK ? 14 : 8);
+    x += Math.sin(a * 140) * k; y += Math.cos(a * 117) * k; } }
+  return [x, y]; }
+
+function draw(ctx, t, mode) {
+  const M = MODES[mode]; t = clamp(t, 0, M.T);
   if (!WORD) measureWordmark(ctx);
-  const h = heatAt(t), pos = cubePos(t), [sx, sy] = shake(t);
+  const h = heatAt(M, t), pos = cubePos(M, t), [sx, sy] = shake(M, t), star = starAt(M, t);
+  const landed = t >= M.FALL, forged = t >= M.LOCK;
+  // How far into the naming screen (mock 1) the world has faded.
+  const toName = M.end === "name" ? smooth((t - M.NAME) / .9) : 0;
   ctx.save();
-  // The forge's dark, warming while the cube is hot.
-  const bg = ctx.createRadialGradient(W / 2, H / 2, 80, W / 2, H / 2, 1150);
-  bg.addColorStop(0, mix(C.bg0, "#3a2416", .55 * h * (t > .2 ? 1 : t / .2))); bg.addColorStop(1, C.bg1);
+  // Night, warming once the cube is hot.
+  const bg = ctx.createRadialGradient(W / 2, H / 2, 80, W / 2, H / 2, 1200);
+  bg.addColorStop(0, mix(mix(C.night0, "#3a2416", forged ? .5 * h : 0), C.stage, toName)); bg.addColorStop(1, mix(C.night1, C.stage, toName));
   ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  // A few faint stars in the night, gone by the lock.
+  const skyA = (1 - smooth((t - M.FALL) / .5)) * .7;
+  if (skyA > 0) for (const s of STARS) { ctx.fillStyle = rgba(C.core, skyA * (.35 + .35 * Math.sin(t * 3 + s.tw))); ctx.fillRect(s.x, s.y, s.s, s.s); }
 
   ctx.translate(sx, sy);
-  // The teal ring through the dot grid as the cube cools.
-  const ringAge = t - COOLED;
-  if (ringAge > -.01 && t < IRIS) {
+  // The ground, lit from above: blue by the star, then heat, then teal as the cube cools.
+  const groundA = (1 - smooth((t - M.LOCKUP) / .5)) * (1 - toName);
+  const fallLight = landed ? 1 : Math.pow(star.u, 2);
+  const lightColor = !forged ? C.aura : (h > .05 ? glowing(C.iron, .4 + .6 * h) : C.teal);
+  const lightAt = landed ? [W / 2, GY + 40] : [star.x, GY + 40 - (1 - star.u) * 30];
+  drawGround(ctx, groundA, forged ? (h > .05 ? .9 * h + .1 : .5) : fallLight, lightColor, lightAt);
+  // Shafts of light hitting the ground from the star as it lands.
+  const shaftA = landed ? (1 - smooth((t - M.FALL) / .8)) : smooth((star.u - .55) / .45) * .6;
+  if (shaftA > 0) { ctx.save(); ctx.globalCompositeOperation = "lighter";
+    const ox = landed ? W / 2 : star.x, oy = landed ? H / 2 : star.y;
+    for (const s of SHAFTS) { const gx = ox + s.dx, g = ctx.createLinearGradient(ox, oy, gx, GY + 60);
+      g.addColorStop(0, rgba(C.core, s.a * shaftA)); g.addColorStop(1, rgba(C.aura, 0));
+      ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(ox - s.w / 4, oy); ctx.lineTo(ox + s.w / 4, oy); ctx.lineTo(gx + s.w, GY + 60); ctx.lineTo(gx - s.w, GY + 60); ctx.closePath(); ctx.fill(); }
+    ctx.restore(); }
+  // The impact: a flash and a ring running over the ground.
+  if (landed) { const a = (t - M.FALL) / .9;
+    if (a < 1) { ctx.save(); ctx.translate(W / 2, GY + 40); ctx.scale(1, .28); ctx.strokeStyle = rgba(C.core, .8 * (1 - a)); ctx.lineWidth = 14 * (1 - a) + 2;
+      ctx.beginPath(); ctx.arc(0, 0, 60 + 1300 * outCubic(a), 0, Math.PI * 2); ctx.stroke(); ctx.restore(); } }
+  // The teal ring through a dot grid as the cube cools.
+  const ringAge = t - M.COOLED;
+  if (ringAge > -.01 && toName < 1 && mode === "first") {
     const R = ringAge * 900;
     for (let y = 30; y < H; y += 42) for (let x = 30; x < W; x += 42) {
       const d = Math.hypot(x - pos.x, (y - pos.y) * 1.3), band = Math.max(0, 1 - Math.abs(d - R) / 70);
-      const base = .07 * smooth(ringAge / .6) * Math.max(0, 1 - d / 1200);
-      const a = base + band * .9 * Math.max(0, 1 - R / 1700);
-      if (a > .01) { ctx.fillStyle = rgba(band > .45 ? C.teal : C.muted, a); ctx.fillRect(x - 2, y - 2, 4, 4); }
-    }
+      const a = (.07 * smooth(ringAge / .6) * Math.max(0, 1 - d / 1200) + band * .9 * Math.max(0, 1 - R / 1700)) * (1 - toName);
+      if (a > .01) { ctx.fillStyle = rgba(band > .45 ? C.teal : C.muted, a); ctx.fillRect(x - 2, y - 2, 4, 4); } } }
+
+  if (!landed || t < M.LOCK) {
+    // The star, falling: its trail, its aura, the raw rock.
+    const R = 120 * star.scale, cx = landed ? W / 2 : star.x, cy = landed ? H / 2 : star.y;
+    if (!landed) { ctx.save(); ctx.globalCompositeOperation = "lighter";
+      // The trail: one tapered streak, hot blue-white at the head, fading to the aura.
+      ctx.lineCap = "round";
+      const N = 44; let prev = starAt(M, t);
+      for (let i = 1; i <= N; i++) { const tt = t - i * .012; if (tt < 0) break; const p = starAt(M, tt), k = 1 - i / N;
+        ctx.strokeStyle = rgba(i < 8 ? C.core : C.aura, .5 * k * k); ctx.lineWidth = R * 1.5 * k + 2;
+        ctx.beginPath(); ctx.moveTo(prev.x, prev.y); ctx.lineTo(p.x, p.y); ctx.stroke(); prev = p; }
+      for (const s of TRAIL) { const born = s.at * M.FALL, age = t - born; if (age < 0 || age > s.life) continue; const p = starAt(M, born), k = 1 - age / s.life;
+        ctx.fillStyle = rgba(C.core, .8 * k); ctx.fillRect(p.x + s.dx * (1 + age * 2), p.y + s.dy * (1 + age * 2) + age * 40, s.size, s.size); }
+      ctx.restore(); }
+    // Its aura: dark blue, turning to heat as it's forged.
+    const forge = landed ? smooth((t - M.FALL) / (M.LOCK - M.FALL)) : 0;
+    const auraC = mix(C.aura, C.glow, forge), g = ctx.createRadialGradient(cx, cy, R * .5, cx, cy, R * 3.4);
+    g.addColorStop(0, rgba(auraC, .7)); g.addColorStop(.45, rgba(auraC, .22)); g.addColorStop(1, rgba(auraC, 0));
+    ctx.fillStyle = g; ctx.fillRect(cx - R * 4, cy - R * 4, R * 8, R * 8);
+    drawRock(ctx, cx, cy, R, star.spin, forge, smooth((forge - .35) / .65), LOCK_POS.S);
   }
-  // Sparks spiralling in before the lock.
-  if (t < LOCK + .05) {
-    ctx.save(); ctx.globalCompositeOperation = "lighter";
-    for (const s of SPARKS) {
-      const u = clamp((t - s.delay) / (LOCK - s.delay)), e = u * u;
-      const ang = s.a + (1 - u) * s.turn, rr = s.r0 * (1 - outCubic(u));
-      const px = W / 2 + Math.cos(ang) * rr, py = H / 2 + Math.sin(ang) * rr * .62;
-      const x = px + (s.target[0] - px) * e, y = py + (s.target[1] - py) * e;
-      const col = glowing(C.iron, .45 + .55 * u), a = smooth((t - s.delay) / .25) * (t > LOCK ? 0 : 1);
-      if (a <= 0) continue;
-      ctx.shadowColor = col; ctx.shadowBlur = 14; ctx.fillStyle = rgba(col, a);
-      ctx.beginPath(); ctx.arc(x, y, s.size * (.6 + .6 * u), 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.restore();
-  }
-  if (t >= LOCK) {
-    // Radiance behind the hot cube.
-    if (h > .02) {
-      const g = ctx.createRadialGradient(pos.x, pos.y, pos.S * .2, pos.x, pos.y, pos.S * 1.5);
-      g.addColorStop(0, rgba(C.glow, .55 * h)); g.addColorStop(1, rgba(C.glow, 0));
-      ctx.fillStyle = g; ctx.fillRect(pos.x - pos.S * 2, pos.y - pos.S * 2, pos.S * 4, pos.S * 4);
-    }
-    // The heat shockwave at the lock.
-    const sa = (t - LOCK) / .7;
+  if (forged) {
+    if (h > .02) { const g = ctx.createRadialGradient(pos.x, pos.y, pos.S * .2, pos.x, pos.y, pos.S * 1.5);
+      g.addColorStop(0, rgba(C.glow, .55 * h)); g.addColorStop(1, rgba(C.glow, 0)); ctx.fillStyle = g; ctx.fillRect(pos.x - pos.S * 2, pos.y - pos.S * 2, pos.S * 4, pos.S * 4); }
+    const sa = (t - M.LOCK) / .7;
     if (sa < 1) { ctx.strokeStyle = rgba(sa < .3 ? C.white : C.glow, .7 * (1 - sa)); ctx.lineWidth = 10 * (1 - sa) + 1;
       ctx.beginPath(); ctx.ellipse(LOCK_POS.x, LOCK_POS.y, 60 + 820 * outCubic(sa), (60 + 820 * outCubic(sa)) * .62, 0, 0, Math.PI * 2); ctx.stroke(); }
-    // Sparks thrown off by the lock, then embers rising while it's hot.
     ctx.save(); ctx.globalCompositeOperation = "lighter";
-    for (const s of BURST) { const a = t - LOCK; if (a > s.life) continue;
-      const x = LOCK_POS.x + s.vx * a, y = LOCK_POS.y + s.vy * a + 900 * a * a, k = 1 - a / s.life;
-      const col = glowing(C.iron, .35 + .6 * k); ctx.fillStyle = rgba(col, k); ctx.shadowColor = col; ctx.shadowBlur = 10;
-      ctx.fillRect(x - s.size / 2, y - s.size / 2, s.size, s.size); }
-    for (const e of EMBERS) { const a = t - e.birth; if (a < 0 || a > e.life || t > CLEAR) continue;
-      const k = 1 - a / e.life, hh = heatAt(e.birth);
-      const x = pos.x + e.x + e.vx * a, y = pos.y - pos.S * .3 + e.vy * a;
-      const col = glowing(C.iron, .3 + .6 * hh); ctx.fillStyle = rgba(col, k * hh); ctx.shadowColor = col; ctx.shadowBlur = 8;
-      ctx.fillRect(x, y, e.size, e.size); }
+    for (const s of BURST) { const a = t - M.LOCK; if (a > s.life) continue; const x = LOCK_POS.x + s.vx * a, y = LOCK_POS.y + s.vy * a + 900 * a * a, k = 1 - a / s.life;
+      const col = glowing(C.iron, .35 + .6 * k); ctx.fillStyle = rgba(col, k); ctx.shadowColor = col; ctx.shadowBlur = 10; ctx.fillRect(x - s.size / 2, y - s.size / 2, s.size, s.size); }
+    const emberEnd = M.LOCKUP;
+    for (const e of EMBERS) { const born = M.LOCK + e.k * (M.COOLED - M.LOCK) / 90, a = t - born; if (a < 0 || a > e.life || t > emberEnd) continue;
+      const k = 1 - a / e.life, hh = heatAt(M, born), x = pos.x + e.x + e.vx * a, y = pos.y - pos.S * .3 + e.vy * a;
+      const col = glowing(C.iron, .3 + .6 * hh); ctx.fillStyle = rgba(col, k * hh); ctx.shadowColor = col; ctx.shadowBlur = 8; ctx.fillRect(x, y, e.size, e.size); }
     ctx.restore();
-    // The cube itself.
-    if (t < IRIS + .6) drawCube(ctx, pos.x, pos.y, pos.S, h);
-    // The flash at the lock.
-    const fa = (t - LOCK) / .35;
+    const irisDone = M.IRIS != null && t > M.IRIS + .6;
+    if (!irisDone) drawCube(ctx, pos.x, pos.y, pos.S, h);
+    const fa = (t - M.LOCK) / .35;
     if (fa < 1) { const g = ctx.createRadialGradient(LOCK_POS.x, LOCK_POS.y, 0, LOCK_POS.x, LOCK_POS.y, 420);
       g.addColorStop(0, rgba(C.white, .85 * (1 - fa))); g.addColorStop(1, rgba(C.white, 0)); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
   }
-  // The three lines, slammed on the beat, each cut by the next.
-  const lines = [[W1, W2, "DESCRIBE IT."], [W2, W3, "FORGE BUILDS IT."], [W3, CLEAR, "YOU APPROVE."]];
-  for (const [at, until, text] of lines) {
+  // The impact flash, blue-white.
+  if (landed) { const fa = (t - M.FALL) / .3; if (fa < 1) { const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, 700);
+    g.addColorStop(0, rgba(C.core, .9 * (1 - fa))); g.addColorStop(1, rgba(C.aura, 0)); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); } }
+
+  // The three lines, slammed on the beat (mock 1).
+  for (const [at, until, text] of M.words) {
     if (t < at || t >= until + .2) continue;
-    const a = t - at, e = outCubic(a / .22), out = t > until ? 1 - (t - until) / .2 : 1;
-    const s = 1 + .6 * (1 - e);
-    ctx.save(); ctx.translate(W / 2, 300); ctx.scale(s, s);
-    ctx.filter = `blur(${(10 * (1 - e)).toFixed(1)}px)`;
-    ctx.font = `800 132px "Hanken Grotesk"`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillStyle = rgba(C.paper, clamp(a / .06) * out);
+    const a = t - at, e = outCubic(a / .22), out = t > until ? 1 - (t - until) / .2 : 1, s = 1 + .6 * (1 - e);
+    ctx.save(); ctx.translate(W / 2, 300); ctx.scale(s, s); ctx.filter = `blur(${(10 * (1 - e)).toFixed(1)}px)`;
+    ctx.font = `800 132px "Hanken Grotesk"`; ctx.textBaseline = "middle"; ctx.fillStyle = rgba(C.paper, clamp(a / .06) * out);
     if (text === "YOU APPROVE.") {
-      const tw = ctx.measureText(text).width, cs = 104, gapx = 40, x0 = -(tw + gapx + cs) / 2;
-      ctx.textAlign = "left"; ctx.fillText(text, x0, 0);
-      // The teal check, landing half a beat later.
+      const tw = ctx.measureText(text).width, cs = 104, gapx = 40, x0 = -(tw + gapx + cs) / 2; ctx.textAlign = "left"; ctx.fillText(text, x0, 0);
       const ck = smooth((a - BEAT / 2) / .2);
       if (ck > 0) { ctx.strokeStyle = rgba(C.teal, out); ctx.lineWidth = 16; ctx.lineCap = "round"; ctx.lineJoin = "round";
-        const cx0 = x0 + tw + gapx; ctx.beginPath(); ctx.moveTo(cx0, 0);
-        const p1 = [cx0 + cs * .35, cs * .32], p2 = [cx0 + cs, -cs * .42];
+        const cx0 = x0 + tw + gapx, p1 = [cx0 + cs * .35, cs * .32], p2 = [cx0 + cs, -cs * .42]; ctx.beginPath(); ctx.moveTo(cx0, 0);
         if (ck < .45) { const k = ck / .45; ctx.lineTo(cx0 + (p1[0] - cx0) * k, p1[1] * k); }
         else { const k = (ck - .45) / .55; ctx.lineTo(...p1); ctx.lineTo(p1[0] + (p2[0] - p1[0]) * k, p1[1] + (p2[1] - p1[1]) * k); }
         ctx.stroke(); }
-    } else ctx.fillText(text, 0, 0);
+    } else { ctx.textAlign = "center"; ctx.fillText(text, 0, 0); }
     ctx.restore();
   }
   ctx.translate(-sx, -sy);
-  // The wordmark: "f" and "rge" slide out of the cube; the app's line beneath.
-  if (t >= LOCKUP && t < IRIS + .6) {
-    const k = outCubic((t - LOCKUP - .18) / .5), w = WORD;
+  // The wordmark: "f" and "rge" slide out of the cube; in mock 1 they part again for the naming screen.
+  const irisGone = M.IRIS != null && t > M.IRIS + .6;
+  if (t >= M.LOCKUP && !irisGone) {
+    const w = WORD, k = outCubic((t - M.LOCKUP - .18) / .5) * (1 - smooth(toName * 2.5)), part = 160 * toName;
     ctx.save(); ctx.font = `400 ${w.size}px "Source Serif 4"`; ctx.textBaseline = "alphabetic"; ctx.fillStyle = rgba(C.paper, k);
-    ctx.fillText("f", w.x0 + 60 * (1 - k), w.base);
-    ctx.fillText("rge", w.x0 + w.wf + w.oS + w.gap * 2 - 60 * (1 - k), w.base);
-    const tg = smooth((t - TAG) / .4);
-    ctx.font = `400 34px "Hanken Grotesk"`; ctx.textAlign = "center"; ctx.fillStyle = rgba(C.muted, tg);
-    ctx.fillText("Forge asks before it changes anything.", W / 2, w.base + 92 + 10 * (1 - tg));
+    ctx.fillText("f", w.x0 + 60 * (1 - Math.min(1, k + toName)) - part, w.base);
+    ctx.fillText("rge", w.x0 + w.wf + w.oS + w.gap * 2 - 60 * (1 - Math.min(1, k + toName)) + part, w.base);
+    if (M.TAG != null) { const tg = smooth((t - M.TAG) / .4) * (1 - smooth(toName * 2.5)); ctx.font = `400 34px "Hanken Grotesk"`; ctx.textAlign = "center"; ctx.fillStyle = rgba(C.muted, tg);
+      ctx.fillText("Forge asks before it changes anything.", W / 2, w.base + 92 + 10 * (1 - tg)); }
     ctx.restore();
   }
-  // The viewfinder HUD: corners, chapter, timecode.
-  const hudA = (t < .15 ? t / .15 : 1) * (1 - smooth((t - LOCKUP) / .3));
-  if (hudA > 0) {
-    ctx.save(); ctx.strokeStyle = rgba(C.paper, .32 * hudA); ctx.lineWidth = 2;
-    const m = 56, L = 44;
-    for (const [x, y, dx, dy] of [[m, m, 1, 1], [W - m, m, -1, 1], [m, H - m, 1, -1], [W - m, H - m, -1, -1]]) {
-      ctx.beginPath(); ctx.moveTo(x, y + dy * L); ctx.lineTo(x, y); ctx.lineTo(x + dx * L, y); ctx.stroke(); }
-    const chapter = t < W1 ? "01 — HEAT" : t < W3 ? "02 — SHAPE" : "03 — APPROVE";
-    ctx.font = `500 22px "JetBrains Mono"`; ctx.fillStyle = rgba(C.paper, .55 * hudA); ctx.textBaseline = "middle";
-    ctx.fillText(chapter, m + 30, m + 30);
-    ctx.textAlign = "right"; ctx.fillText("FORGE", W - m - 30, m + 30);
-    const f = Math.floor(t * 24), tc = `00:00:${String(Math.floor(f / 24)).padStart(2, "0")}:${String(f % 24).padStart(2, "0")}`;
-    ctx.fillText(tc, W - m - 30, H - m - 30);
-    ctx.textAlign = "left"; ctx.fillStyle = rgba(h > .05 ? C.glow : C.teal, .8 * hudA);
-    ctx.beginPath(); ctx.arc(m + 38, H - m - 30, 6, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = rgba(C.paper, .55 * hudA); ctx.fillText(h > .05 ? `${Math.round(400 + 1100 * h)}°C` : "COOL", m + 56, H - m - 30);
+  // The naming screen (mock 1): the question word by word, the field rising, its edge charged.
+  if (M.end === "name" && t > M.NAME + .3) {
+    const q = "Hello. What should we call you?".split(" ");
+    ctx.save(); ctx.font = `400 42px "Source Serif 4"`; ctx.textBaseline = "alphabetic";
+    const sp = ctx.measureText(" ").width, widths = q.map(s => ctx.measureText(s).width), total = widths.reduce((a, c) => a + c, 0) + sp * (q.length - 1);
+    let x = W / 2 - total / 2;
+    q.forEach((word, i) => { const e = smooth((t - M.NAME - .55 - i * .07) / .42); ctx.fillStyle = rgba("#ffffff", e); ctx.fillText(word, x, 470 + 12 * (1 - e)); x += widths[i] + sp; });
+    const fe = smooth((t - M.NAME - 1.0) / .6), fy = 520 + 15 * (1 - fe), fw = 630, fh = 78, fx = W / 2 - fw / 2;
+    ctx.globalAlpha = fe; ctx.fillStyle = C.surface; ctx.beginPath(); ctx.roundRect(fx, fy, fw, fh, 18); ctx.fill();
+    const w2 = .5 + .5 * Math.sin((t - M.NAME) / 2.4 * Math.PI * 2);
+    ctx.strokeStyle = rgba(C.teal, .45 + .55 * w2); ctx.lineWidth = 2; ctx.shadowColor = rgba(C.teal, .25); ctx.shadowBlur = 20; ctx.stroke(); ctx.shadowBlur = 0;
+    ctx.font = `400 22px "Hanken Grotesk"`; ctx.fillStyle = C.subtle; ctx.textBaseline = "middle"; ctx.fillText("Your name", fx + 30, fy + fh / 2);
+    if (Math.floor((t - M.NAME) * 2) % 2 === 0) { ctx.fillStyle = C.teal; ctx.fillRect(fx + 28, fy + 24, 2, fh - 48); }
+    ctx.fillStyle = "#3a3a37"; ctx.beginPath(); ctx.roundRect(fx + fw - 66, fy + 12, 54, 54, 12); ctx.fill();
+    ctx.strokeStyle = C.subtle; ctx.lineWidth = 3; ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(fx + fw - 50, fy + 39); ctx.lineTo(fx + fw - 28, fy + 39);
+    ctx.moveTo(fx + fw - 36, fy + 31); ctx.lineTo(fx + fw - 28, fy + 39); ctx.lineTo(fx + fw - 36, fy + 47); ctx.stroke();
+    // The halo and orbit settle under the hero cube.
+    const ha = smooth((t - M.NAME - .6) / .7); ctx.globalAlpha = ha; ctx.strokeStyle = rgba(C.subtle, .9); ctx.setLineDash([3, 8]); ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.ellipse(HERO_POS.x, HERO_POS.y + 58, 117, 34, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    const ang = (t - M.NAME) / 7 * Math.PI * 2; ctx.fillStyle = C.teal; ctx.beginPath(); ctx.arc(HERO_POS.x + 117 * Math.cos(ang), HERO_POS.y + 58 + 34 * Math.sin(ang), 3.3, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
+    // The title bar comes in last, as the window becomes the app.
+    ctx.fillStyle = rgba(C.chrome, smooth((t - M.NAME - .2) / .6)); ctx.fillRect(0, 0, W, 54);
+    drawCube(ctx, HERO_POS.x, HERO_POS.y, HERO_POS.S, 0);
   }
-  // Grain, faint.
-  ctx.save(); ctx.globalAlpha = .045; ctx.globalCompositeOperation = "overlay";
+  // The viewfinder HUD (mock 1).
+  if (M.hud) { const hudA = (t < .15 ? t / .15 : 1) * (1 - smooth((t - M.LOCKUP) / .3));
+    if (hudA > 0) { ctx.save(); ctx.strokeStyle = rgba(C.paper, .32 * hudA); ctx.lineWidth = 2; const m = 56, L = 44;
+      for (const [x, y, dx, dy] of [[m, m, 1, 1], [W - m, m, -1, 1], [m, H - m, 1, -1], [W - m, H - m, -1, -1]]) { ctx.beginPath(); ctx.moveTo(x, y + dy * L); ctx.lineTo(x, y); ctx.lineTo(x + dx * L, y); ctx.stroke(); }
+      const w1 = M.words[0][0], w3 = M.words[2][0];
+      const chapter = t < M.LOCK ? "01 — STAR" : t < w1 ? "02 — HEAT" : t < w3 ? "03 — SHAPE" : "04 — APPROVE";
+      ctx.font = `500 22px "JetBrains Mono"`; ctx.fillStyle = rgba(C.paper, .55 * hudA); ctx.textBaseline = "middle"; ctx.fillText(chapter, m + 30, m + 30);
+      ctx.textAlign = "right"; ctx.fillText("FORGE", W - m - 30, m + 30);
+      const f = Math.floor(t * 24); ctx.fillText(`00:00:${String(Math.floor(f / 24)).padStart(2, "0")}:${String(f % 24).padStart(2, "0")}`, W - m - 30, H - m - 30);
+      ctx.textAlign = "left"; const dot = !forged ? C.core : h > .05 ? C.glow : C.teal; ctx.fillStyle = rgba(dot, .8 * hudA);
+      ctx.beginPath(); ctx.arc(m + 38, H - m - 30, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = rgba(C.paper, .55 * hudA); ctx.fillText(!forged ? "INCOMING" : h > .05 ? `${Math.round(400 + 1100 * h)}°C` : "COOL", m + 56, H - m - 30);
+      ctx.restore(); } }
+  // Grain, faint, gone on the naming screen.
+  ctx.save(); ctx.globalAlpha = .045 * (1 - toName); ctx.globalCompositeOperation = "overlay";
   const fr = Math.floor(t * 24), ox = (fr * 97) % 256, oy = (fr * 61) % 256;
   for (let y = -oy; y < H; y += 256) for (let x = -ox; x < W; x += 256) ctx.drawImage(grain, x, y);
   ctx.restore();
-  // The exit: an iris from the cube onto the app.
-  if (t >= IRIS) {
-    const k = inOut((t - IRIS) / .6), R = 30 + k * 2300;
-    ctx.save(); ctx.beginPath(); ctx.arc(LOCKUP_POS.x, LOCKUP_POS.y, R, 0, Math.PI * 2); ctx.clip();
-    ctx.fillStyle = C.app; ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = C.chrome; ctx.fillRect(0, 0, W, 54);
-    ctx.fillStyle = "#1d1c1b"; ctx.fillRect(0, 54, 384, H - 54);
-    drawCube(ctx, 806, 448, 42, 0);
-    ctx.font = `400 50px "Source Serif 4"`; ctx.fillStyle = C.paper; ctx.textBaseline = "middle"; ctx.fillText("What are we forging?", 846, 452);
-    ctx.strokeStyle = "rgba(255,255,255,.1)"; ctx.lineWidth = 2; ctx.fillStyle = "#30302e";
-    ctx.beginPath(); ctx.roundRect(732, 530, 840, 150, 18); ctx.fill(); ctx.stroke();
+  // The exit for returning users: an iris from the cube onto the app.
+  if (M.IRIS != null && t >= M.IRIS) {
+    const k = inOut((t - M.IRIS) / .6), R = 30 + k * 2300;
+    ctx.save(); ctx.beginPath(); ctx.arc(WORD.cube.x, WORD.cube.y, R, 0, Math.PI * 2); ctx.clip();
+    ctx.fillStyle = C.stage; ctx.fillRect(0, 0, W, H); ctx.fillStyle = C.chrome; ctx.fillRect(0, 0, W, 54); ctx.fillStyle = C.pane; ctx.fillRect(0, 54, 384, H - 54);
+    drawCube(ctx, 806, 448, 42, 0); ctx.font = `400 50px "Source Serif 4"`; ctx.fillStyle = C.paper; ctx.textBaseline = "middle"; ctx.fillText("What are we forging?", 846, 452);
+    ctx.strokeStyle = "rgba(255,255,255,.1)"; ctx.lineWidth = 2; ctx.fillStyle = C.surface; ctx.beginPath(); ctx.roundRect(732, 530, 840, 150, 18); ctx.fill(); ctx.stroke();
     ctx.restore();
   }
   ctx.restore();
 }
 
-/* The player: one loop, scrub, play or pause; the style frames from the same draw(t). */
+/* The player: the tabs pick the cut; one loop; scrub; the style frames from the same draw(t). */
 const film = document.getElementById("film"), fctx = film.getContext("2d");
 const scrub = document.getElementById("scrub"), tc = document.getElementById("tc"), playBtn = document.getElementById("play");
-let playing = !matchMedia("(prefers-reduced-motion: reduce)").matches, t = playing ? 0 : 6.4, last = null;
-function label(t) { const beatsIn = t / BEAT; return `${t.toFixed(2)} s · bar ${Math.floor(beatsIn / 4) + 1}.${Math.floor(beatsIn % 4) + 1}`; }
-function render() { draw(fctx, t); scrub.value = t; tc.textContent = label(t); playBtn.textContent = playing ? "Pause" : "Play"; }
-function loop(now) {
-  if (playing) { if (last != null) t += (now - last) / 1000; if (t > T + .6) t = 0; }
-  last = now; render(); requestAnimationFrame(loop);
-}
-const toggle = () => { playing = !playing; if (playing && t >= T) t = 0; };
-playBtn.addEventListener("click", toggle);
-film.addEventListener("click", toggle);
+let mode = "first", playing = !matchMedia("(prefers-reduced-motion: reduce)").matches, t = playing ? 0 : 9.3, last = null;
+function render() { draw(fctx, t, mode); scrub.value = t; tc.textContent = `${t.toFixed(2)} s / ${MODES[mode].T.toFixed(1)} s`; playBtn.textContent = playing ? "Pause" : "Play"; }
+function loop(now) { if (playing) { if (last != null) t += (now - last) / 1000; if (t > MODES[mode].T + .8) t = 0; } last = now; render(); requestAnimationFrame(loop); }
+const toggle = () => { playing = !playing; if (playing && t >= MODES[mode].T) t = 0; };
+playBtn.addEventListener("click", toggle); film.addEventListener("click", toggle);
 document.getElementById("restart").addEventListener("click", () => { t = 0; playing = true; });
 scrub.addEventListener("input", () => { playing = false; t = +scrub.value; });
 addEventListener("keydown", e => { if (e.code === "Space" && e.target === document.body) { e.preventDefault(); toggle(); } });
-Promise.all([
-  document.fonts.load('800 132px "Hanken Grotesk"'), document.fonts.load('400 170px "Source Serif 4"'),
-  document.fonts.load('500 22px "JetBrains Mono"'), document.fonts.load('400 34px "Hanken Grotesk"'),
-]).catch(() => {}).then(() => {
+function setMode(m) {
+  mode = m; t = 0; playing = true; scrub.max = MODES[m].T;
+  document.querySelectorAll(".tabs button").forEach(btn => btn.setAttribute("aria-selected", String(btn.dataset.mode === m)));
+  document.querySelectorAll("[data-for]").forEach(el => el.hidden = el.dataset.for !== m);
+}
+document.querySelectorAll(".tabs button").forEach(btn => btn.addEventListener("click", () => setMode(btn.dataset.mode)));
+Promise.all([document.fonts.load('800 132px "Hanken Grotesk"'), document.fonts.load('400 170px "Source Serif 4"'),
+  document.fonts.load('500 22px "JetBrains Mono"'), document.fonts.load('400 34px "Hanken Grotesk"')]).catch(() => {}).then(() => {
   measureWordmark(fctx);
-  document.querySelectorAll(".frames canvas").forEach(c => draw(c.getContext("2d"), +c.dataset.t));
+  document.querySelectorAll(".frames").forEach(f => f.querySelectorAll("canvas").forEach(c => draw(c.getContext("2d"), +c.dataset.t, f.dataset.for)));
   requestAnimationFrame(loop);
 });
 </script>
