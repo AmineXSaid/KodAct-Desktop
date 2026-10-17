@@ -51,7 +51,7 @@ fn render() -> String {
 
     let _ = writeln!(w, "## Direction\n");
     let _ = writeln!(w, "**Personality:** Warmth & Approachability, with the Precision & Density of a desktop tool. A calm room to build in with an agent.\n");
-    let _ = writeln!(w, "**Foundation:** warm ivory. Paper surfaces in one warm hue, chroma under 0.01 (OKLCH); warm ink for text; one deep warm-blue accent (blued steel, deliberately not an orange) kept for sending, the mark's core and a few dots; colour otherwise only for meaning: modes, status, a switch that is on.\n");
+    let _ = writeln!(w, "**Foundation:** warm ivory. Paper surfaces in one warm hue, chroma under 0.01 (OKLCH); warm ink for text; one patina-teal accent (forged copper as it weathers, deliberately not an orange), the same colour in both modes, kept for sending, the mark's core and a few dots; colour otherwise only for meaning: modes, status, a switch that is on.\n");
     let _ = writeln!(w, "**Depth:** borders-only for content (1px hairlines); shadows only on popovers, menus and the command palette.\n");
     let _ = writeln!(w, "**Shape:** softly squared. Buttons 7-9px, cards and menus 10px, large inputs 12-14px; pills only for switches, badges and avatars; the round new-chat mark is the one circular control.\n");
 

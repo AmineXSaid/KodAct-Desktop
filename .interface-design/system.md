@@ -8,7 +8,7 @@
 
 **Personality:** Warmth & Approachability, with the Precision & Density of a desktop tool. A calm room to build in with an agent.
 
-**Foundation:** warm ivory. Paper surfaces in one warm hue, chroma under 0.01 (OKLCH); warm ink for text; one deep warm-blue accent (blued steel, deliberately not an orange) kept for sending, the mark's core and a few dots; colour otherwise only for meaning: modes, status, a switch that is on.
+**Foundation:** warm ivory. Paper surfaces in one warm hue, chroma under 0.01 (OKLCH); warm ink for text; one patina-teal accent (forged copper as it weathers, deliberately not an orange), the same colour in both modes, kept for sending, the mark's core and a few dots; colour otherwise only for meaning: modes, status, a switch that is on.
 
 **Depth:** borders-only for content (1px hairlines); shadows only on popovers, menus and the command palette.
 
@@ -104,10 +104,10 @@ Contrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of w
 | `text_subtle` | `#8c887e` | 3.3:1 | `#7d7a72` | 3.5:1 | placeholders and disabled only |
 | `border` | `#2b2a27 @ 13.0%` | 1.3:1 | `#ffffff @ 10.0%` | 1.4:1 | hairlines |
 | `border_strong` | `#cfcbc0` | 1.6:1 | `#55534e` | 1.7:1 | outlined buttons, a switch at rest |
-| `primary` | `#2b4aa0` | 8.1:1 | `#93a9ea` | 5.7:1 | links, selected text, the focus edge |
-| `accent` | `#2b4aa0` | 8.1:1 | `#4766c4` | 5.3:1 | send, the new-chat mark, accent dots (white icon on it) |
+| `primary` | `#216d70` | 6.0:1 | `#8ecacd` | 7.2:1 | links, selected text, the focus edge |
+| `accent` | `#216d70` | 6.0:1 | `#216d70` | 6.0:1 | send, the new-chat mark, accent dots (white icon on it) |
 | `fill` | `#2b2a27` | 14.4:1 | `#ecebe6` | 12.7:1 | filled buttons: ink on paper, paper on charcoal |
-| `toggle_on` | `#2b4aa0` | 8.1:1 | `#6480d2` | 3.5:1 | a switch that is on |
+| `toggle_on` | `#216d70` | 6.0:1 | `#529a9d` | 4.1:1 | a switch that is on |
 | `fill_danger` | `#b4412f` | 5.6:1 | `#b7331f` | 6.0:1 | destructive confirms |
 | `success` | `#276b43` | 6.4:1 | `#8fd3a8` | 7.6:1 | done, passed |
 | `danger` | `#b4412f` | 5.6:1 | `#eb8c7b` | 5.4:1 | failed, errors |
