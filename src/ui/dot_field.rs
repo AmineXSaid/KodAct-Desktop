@@ -266,7 +266,7 @@ fn marks(cache: &RefCell<Cache>, bounds: Bounds<Pixels>, gap: f32) -> Rc<Vec<Mar
 fn alpha(mark: &Mark, phase: f32, glow: f32, peak: f32) -> f32 {
     let tau = std::f32::consts::TAU;
     let breath = 1. + BREATH_DEPTH * ((phase / BREATH_S + mark.seed) * tau).sin();
-    (0.22 + 0.78 * mark.weight) * peak * breath * (1. + 0.14 * glow)
+    (0.32 + 0.68 * mark.weight) * peak * breath * (1. + 0.14 * glow)
 }
 
 fn paint_marks(
@@ -276,9 +276,14 @@ fn paint_marks(
     t: &Theme,
     window: &mut Window,
 ) {
-    let peak = if t.is_dark { 0.55 } else { 0.78 };
+    let peak = if t.is_dark { 0.7 } else { 0.9 };
     let (base, accent) = (t.extra.dot, t.extra.accent);
     let d = f32::from(t.size.dot);
+    // Dots this small are drawn on whole device pixels, square below 3px:
+    // a soft round edge on a 2px dot fades it to almost nothing on a real
+    // GPU at 100% scaling.
+    let scale = window.scale_factor();
+    let snap = |v: Pixels| px((f32::from(v) * scale).round() / scale);
     window.with_content_mask(Some(ContentMask { bounds }), |window| {
         for m in marks {
             // Deeper dots lean further: a hint of depth, nothing more.
@@ -295,14 +300,16 @@ fn paint_marks(
             match m.kind {
                 Kind::Dot | Kind::Accent => {
                     let (c, size_k) = if m.kind == Kind::Accent {
-                        (tint(accent, 0.9), 1.25)
+                        (tint(accent, 1.), 1.3)
                     } else {
-                        (tint(base, 1.), 0.8 + 0.3 * m.weight)
+                        (tint(base, 1.), 0.9 + 0.3 * m.weight)
                     };
-                    let s = px(d * size_k);
+                    let device = (d * size_k * scale).round().max(2.);
+                    let s = px(device / scale);
+                    let round = if device >= 3. { s / 2. } else { px(0.) };
                     window.paint_quad(gpui::quad(
-                        Bounds::new(at - point(s / 2., s / 2.), size(s, s)),
-                        Corners::all(s / 2.),
+                        Bounds::new(point(snap(at.x - s / 2.), snap(at.y - s / 2.)), size(s, s)),
+                        Corners::all(round),
                         c,
                         px(0.),
                         c.opacity(0.),
