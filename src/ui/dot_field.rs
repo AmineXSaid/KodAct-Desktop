@@ -75,38 +75,90 @@ fn smoothstep(a: f32, b: f32, x: f32) -> f32 {
     t * t * (3. - 2. * t)
 }
 
-/// A soft blob: 1 at `(cx, cy)`, falling off over `(sx, sy)`.
-fn blob(u: f32, v: f32, cx: f32, cy: f32, sx: f32, sy: f32) -> f32 {
-    let (du, dv) = ((u - cx) / sx, (v - cy) / sy);
-    (-(du * du + dv * dv)).exp()
+/// A soft blob: 1 at `(cx, cy)`, falling off over `(rx, ry)` pixels.
+fn blob(x: f32, y: f32, cx: f32, cy: f32, rx: f32, ry: f32) -> f32 {
+    let (dx, dy) = ((x - cx) / rx, (y - cy) / ry);
+    (-(dx * dx + dy * dy)).exp()
 }
 
-/// How strongly the field shows at `(x, y)` in a `w`×`h` field: two clouds
-/// (beside the heading, toward the lower right) and a faint band round the
-/// content, cut by a quiet oval behind the heading and the composer and
-/// faded before the field's edges.
-pub fn weight(x: f32, y: f32, w: f32, h: f32) -> f32 {
+/// Smooth value noise, 0..1: stable, low-frequency variation that keeps the
+/// clouds' edges and density from reading as a regular halftone.
+fn noise(x: f32, y: f32, salt: u64) -> f32 {
+    let (i, j) = (x.floor(), y.floor());
+    let (fx, fy) = (x - i, y - y.floor());
+    let (sx, sy) = (fx * fx * (3. - 2. * fx), fy * fy * (3. - 2. * fy));
+    let (i, j) = (i as i64, j as i64);
+    let at = |a: i64, b: i64| hash(a, b, salt);
+    let top = at(i, j) * (1. - sx) + at(i + 1, j) * sx;
+    let bottom = at(i, j + 1) * (1. - sx) + at(i + 1, j + 1) * sx;
+    top * (1. - sy) + bottom * sy
+}
+
+fn fbm(x: f32, y: f32, salt: u64) -> f32 {
+    0.65 * noise(x, y, salt) + 0.35 * noise(x * 2.1, y * 2.1, salt + 1)
+}
+
+/// The distance from `(x, y)` to a rounded rectangle (negative inside).
+fn rect_distance(x: f32, y: f32, r: [f32; 4], radius: f32) -> f32 {
+    let [l, t, rr, b] = r;
+    let (cx, cy) = ((l + rr) / 2., (t + b) / 2.);
+    let (hx, hy) = ((rr - l) / 2. - radius, (b - t) / 2. - radius);
+    let (qx, qy) = ((x - cx).abs() - hx, (y - cy).abs() - hy);
+    qx.max(0.).hypot(qy.max(0.)) + qx.max(qy).min(0.) - radius
+}
+
+/// Where the content sits when it hasn't been measured yet: a column at
+/// the field's centre.
+pub fn default_content(w: f32, h: f32) -> [f32; 4] {
+    let (hw, hh) = ((w * 0.45).min(296.), (h * 0.3).min(150.));
+    [w / 2. - hw, h / 2. - hh, w / 2. + hw, h / 2. + hh]
+}
+
+/// How strongly the field shows at `(x, y)` in a `w`×`h` field around the
+/// content (`[left, top, right, bottom]`, in the field's coordinates).
+///
+/// Two clouds hug the content's outer edges, one beside the heading and one
+/// past the composer's lower right, sized by the room each side has. Their
+/// outlines are warped and their density varied by slow noise, so they
+/// dissolve rather than end; a quiet margin keeps every dot off the content,
+/// and the field fades before the window's edges.
+pub fn weight(x: f32, y: f32, w: f32, h: f32, content: [f32; 4]) -> f32 {
     if w <= 0. || h <= 0. {
         return 0.;
     }
-    let (u, v) = (x / w - 0.5, y / h - 0.45);
-    // The quiet middle: nothing inside the oval, dots arriving past it. Its
-    // size follows the content's (a column at most ~620px wide), not only
-    // the window's.
-    let (qx, qy) = ((280. / w).clamp(0.18, 0.42), (165. / h).clamp(0.16, 0.34));
-    let d = ((u / qx).powi(2) + (v / qy).powi(2)).sqrt();
-    let quiet = smoothstep(0.9, 1.45, d);
-    let clouds = blob(u, v, -0.31, -0.19, 0.19, 0.16).max(blob(u, v, 0.31, 0.29, 0.23, 0.18));
-    let band = 0.16 * smoothstep(1.2, 1.9, d) * (1. - smoothstep(2.4, 3.6, d));
-    // Fade out before every edge, so the field never ends on a line.
-    let edge = (x.min(w - x) / (w * 0.07)).min(y.min(h - y) / (h * 0.09));
+    let [l, t, r, b] = content;
+    let wx = x + (fbm(x / 260., y / 260., 11) - 0.5) * 90.;
+    let wy = y + (fbm(x / 260. + 7., y / 260. + 3., 13) - 0.5) * 90.;
+    let (room_l, room_r) = (l.max(1.), (w - r).max(1.));
+    let beside = blob(
+        wx,
+        wy,
+        l - room_l * 0.18,
+        t + (b - t) * 0.12,
+        (room_l * 0.7).max(170.),
+        (h * 0.25).max(140.),
+    );
+    let below = blob(
+        wx,
+        wy,
+        r + room_r * 0.12,
+        b + (h - b) * 0.3,
+        (room_r * 0.75).max(200.),
+        (h * 0.26).max(150.),
+    );
+    let texture = 0.55 + 0.45 * fbm(x / 140. + 31., y / 140. + 17., 17);
+    // The quiet margin narrows in a small window, so the field shrinks into
+    // the room that's left instead of vanishing.
+    let ramp = (w.min(h) * 0.15).clamp(48., 120.);
+    let quiet = smoothstep(28., 28. + ramp, rect_distance(x, y, content, 24.));
+    let edge = x.min(w - x).min(y).min(h - y) / (w.min(h) * 0.08).max(24.);
     let edge = smoothstep(0., 1., edge);
-    ((clouds + band).min(1.) * quiet * edge).clamp(0., 1.)
+    (beside.max(below) * texture * quiet * edge).clamp(0., 1.)
 }
 
-/// The field's marks for a `w`×`h` field on a `gap` grid. The grid is
-/// anchored at the field's centre, so it stays put as panels open beside it.
-pub fn layout(w: f32, h: f32, gap: f32) -> Vec<Mark> {
+/// The field's marks for a `w`×`h` field on a `gap` grid around `content`.
+/// The grid is anchored at the field's centre.
+pub fn layout(w: f32, h: f32, gap: f32, content: [f32; 4]) -> Vec<Mark> {
     let mut out = Vec::new();
     if w <= 0. || h <= 0. || gap <= 0. {
         return out;
@@ -119,17 +171,18 @@ pub fn layout(w: f32, h: f32, gap: f32) -> Vec<Mark> {
             if x < 0. || y < 0. || x > w || y > h {
                 continue;
             }
-            let wt = weight(x, y, w, h);
-            // Thinned as well as faded: the density itself dissolves.
-            if wt < 0.03 || hash(i, j, 1) > wt * 1.35 {
+            let wt = weight(x, y, w, h, content);
+            // Mostly faded rather than thinned: thinning alone reads as a
+            // halftone, so only the faintest edges lose dots.
+            if wt < 0.02 || hash(i, j, 1) > wt * 2.4 + 0.05 {
                 continue;
             }
             let pick = hash(i, j, 2);
-            let kind = if pick < 0.016 {
+            let kind = if pick < 0.014 {
                 Kind::Accent
-            } else if pick < 0.021 && wt > 0.35 {
+            } else if pick < 0.018 && wt > 0.4 {
                 Kind::Square
-            } else if pick < 0.025 && wt > 0.35 {
+            } else if pick < 0.021 && wt > 0.4 {
                 Kind::Diamond
             } else {
                 Kind::Dot
@@ -161,8 +214,24 @@ type Painted = (Bounds<Pixels>, Instant);
 
 #[derive(Default)]
 struct Cache {
-    size: (u32, u32, u32),
+    key: [i32; 7],
     marks: Rc<Vec<Mark>>,
+}
+
+/// What paint and the ticker share across frames.
+#[derive(Default)]
+struct Shared {
+    /// Where the field was last painted, and when: the ticker leans away
+    /// from the pointer inside it, and rests once it is no longer painted.
+    painted: Cell<Option<Painted>>,
+    /// The content the field arranges itself around, in window coordinates,
+    /// as `content_probe` measured it last frame.
+    content: Cell<Option<Bounds<Pixels>>>,
+    /// Where the content's centre was last painted, and how far the dots
+    /// still trail behind it: when the sidebar opens or the window resizes,
+    /// the field glides to its new place instead of jumping.
+    anchor: Cell<Option<Point<Pixels>>>,
+    slide: Cell<Point<f32>>,
 }
 
 pub struct DotField {
@@ -170,9 +239,7 @@ pub struct DotField {
     /// The keyboard focus that brightens the field (the composer's).
     focus: Option<FocusHandle>,
     cache: Rc<RefCell<Cache>>,
-    /// Where the field was last painted, and when: the ticker leans away
-    /// from the pointer inside it, and rests once it is no longer painted.
-    painted: Rc<Cell<Option<Painted>>>,
+    shared: Rc<Shared>,
 }
 
 impl DotField {
@@ -187,7 +254,7 @@ impl DotField {
             },
             focus,
             cache: Rc::default(),
-            painted: Rc::default(),
+            shared: Rc::default(),
         };
         if !still {
             cx.spawn_in(window, async move |this, cx| {
@@ -214,6 +281,7 @@ impl DotField {
     /// and repaint if the field is on screen. Returns how long to wait.
     fn tick(&mut self, dt: f32, window: &mut Window, cx: &mut Context<Self>) -> Duration {
         let shown = self
+            .shared
             .painted
             .get()
             .filter(|(_, at)| at.elapsed() < Duration::from_millis(REST_MS * 2));
@@ -240,43 +308,91 @@ impl DotField {
             .as_ref()
             .is_some_and(|f| f.contains_focused(window, cx)) as u8 as f32;
         m.glow += (want - m.glow) * (dt * 4.).min(1.);
+        // The glide after a layout change: quick, then settling.
+        let slide = self.shared.slide.get();
+        let decay = (-dt * 9.).exp();
+        let slide = point(slide.x * decay, slide.y * decay);
+        let gliding = slide.x.abs() + slide.y.abs() > 0.3;
+        self.shared
+            .slide
+            .set(if gliding { slide } else { point(0., 0.) });
         let easing = (m.target.x - m.lean.x).abs() + (m.target.y - m.lean.y).abs() > 0.05
-            || (want - m.glow).abs() > 0.01;
+            || (want - m.glow).abs() > 0.01
+            || gliding;
         cx.notify();
         Duration::from_millis(if easing { EASE_MS } else { BREATHE_MS })
     }
 }
 
-/// The marks for a field this size: the cached ones, or laid out afresh
-/// when the size (or the grid) changed.
-fn marks(cache: &RefCell<Cache>, bounds: Bounds<Pixels>, gap: f32) -> Rc<Vec<Mark>> {
+/// The marks for a field this size around this content: the cached ones,
+/// or laid out afresh when either changed (by 4px or more).
+fn marks(
+    cache: &RefCell<Cache>,
+    bounds: Bounds<Pixels>,
+    gap: f32,
+    content: [f32; 4],
+) -> Rc<Vec<Mark>> {
     let (w, h) = (f32::from(bounds.size.width), f32::from(bounds.size.height));
-    let key = (w.round() as u32, h.round() as u32, gap.round() as u32);
+    let q = |v: f32| (v / 4.).round() as i32;
+    let key = [
+        q(w),
+        q(h),
+        gap.round() as i32,
+        q(content[0]),
+        q(content[1]),
+        q(content[2]),
+        q(content[3]),
+    ];
     let mut cache = cache.borrow_mut();
-    if cache.size != key {
+    if cache.key != key || cache.marks.is_empty() {
         *cache = Cache {
-            size: key,
-            marks: Rc::new(layout(w, h, gap)),
+            key,
+            marks: Rc::new(layout(w, h, gap, content)),
         };
     }
     cache.marks.clone()
+}
+
+impl DotField {
+    /// An invisible element to place inside the content the field should
+    /// arrange itself around (the home screen's heading, composer and
+    /// starters): it measures that content every frame.
+    pub fn content_probe(&self) -> impl IntoElement {
+        let shared = self.shared.clone();
+        canvas(
+            move |bounds, _, _| bounds,
+            move |_, bounds, window, _| {
+                if shared.content.get() != Some(bounds) {
+                    shared.content.set(Some(bounds));
+                    // The field painted first, from last frame's content:
+                    // draw once more so it settles around this one.
+                    window.request_animation_frame();
+                }
+            },
+        )
+        .absolute()
+        .inset_0()
+    }
 }
 
 /// A mark's opacity now: its weight, breathing out of step with the others.
 fn alpha(mark: &Mark, phase: f32, glow: f32, peak: f32) -> f32 {
     let tau = std::f32::consts::TAU;
     let breath = 1. + BREATH_DEPTH * ((phase / BREATH_S + mark.seed) * tau).sin();
-    (0.32 + 0.68 * mark.weight) * peak * breath * (1. + 0.14 * glow)
+    // A smooth falloff: faint dots fade further, so dense and sparse
+    // regions shade into each other.
+    mark.weight.powf(1.1) * peak * breath * (1. + 0.14 * glow)
 }
 
 fn paint_marks(
     bounds: Bounds<Pixels>,
     marks: &[Mark],
     motion: Motion,
+    slide: Point<f32>,
     t: &Theme,
     window: &mut Window,
 ) {
-    let peak = if t.is_dark { 0.7 } else { 0.9 };
+    let peak = if t.is_dark { 0.75 } else { 0.95 };
     let (base, accent) = (t.extra.dot, t.extra.accent);
     let d = f32::from(t.size.dot);
     // Dots this small are drawn on whole device pixels, square below 3px:
@@ -289,8 +405,8 @@ fn paint_marks(
             // Deeper dots lean further: a hint of depth, nothing more.
             let depth = 0.55 + 0.45 * m.seed;
             let at = point(
-                bounds.origin.x + px(m.at.x + motion.lean.x * depth),
-                bounds.origin.y + px(m.at.y + motion.lean.y * depth),
+                bounds.origin.x + px(m.at.x + motion.lean.x * depth + slide.x),
+                bounds.origin.y + px(m.at.y + motion.lean.y * depth + slide.y),
             );
             let a = alpha(m, motion.phase, motion.glow, peak).min(1.);
             let tint = |c: Hsla, k: f32| Hsla {
@@ -349,14 +465,50 @@ impl Render for DotField {
         let t = cx.theme().clone();
         let motion = self.motion;
         let gap = f32::from(t.size.dot_gap);
-        let painted = self.painted.clone();
-        let cache = self.cache.clone();
+        let (cache, shared) = (self.cache.clone(), self.shared.clone());
         div().absolute().inset_0().child(
             canvas(
-                move |bounds, _, _| marks(&cache, bounds, gap),
+                {
+                    let shared = shared.clone();
+                    move |bounds, _, _| {
+                        let (w, h) = (f32::from(bounds.size.width), f32::from(bounds.size.height));
+                        // The content, in the field's own coordinates.
+                        let content = shared.content.get().map_or_else(
+                            || default_content(w, h),
+                            |c| {
+                                let o = c.origin - bounds.origin;
+                                let (x, y) = (f32::from(o.x), f32::from(o.y));
+                                [
+                                    x,
+                                    y,
+                                    x + f32::from(c.size.width),
+                                    y + f32::from(c.size.height),
+                                ]
+                            },
+                        );
+                        // The content moved (the sidebar opened, the window
+                        // resized): the dots start where they were and glide.
+                        let centre = bounds.origin
+                            + point(
+                                px((content[0] + content[2]) / 2.),
+                                px((content[1] + content[3]) / 2.),
+                            );
+                        if let Some(old) = shared.anchor.get() {
+                            let d = old - centre;
+                            if f32::from(d.x).abs() + f32::from(d.y).abs() > 1. {
+                                let s = shared.slide.get();
+                                shared
+                                    .slide
+                                    .set(point(s.x + f32::from(d.x), s.y + f32::from(d.y)));
+                            }
+                        }
+                        shared.anchor.set(Some(centre));
+                        marks(&cache, bounds, gap, content)
+                    }
+                },
                 move |bounds, marks, window, _| {
-                    painted.set(Some((bounds, Instant::now())));
-                    paint_marks(bounds, &marks, motion, &t, window);
+                    shared.painted.set(Some((bounds, Instant::now())));
+                    paint_marks(bounds, &marks, motion, shared.slide.get(), &t, window);
                 },
             )
             .size_full(),
@@ -369,23 +521,46 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_middle_stays_quiet_and_the_edges_fade() {
+    fn the_content_stays_quiet_and_the_edges_fade() {
         let (w, h) = (1000., 700.);
-        // Behind the heading and the composer: nothing.
-        assert_eq!(weight(w * 0.5, h * 0.45, w, h), 0.);
-        assert_eq!(weight(w * 0.5, h * 0.55, w, h), 0.);
+        let c = default_content(w, h);
+        // Behind the heading and the composer, and just outside them: nothing.
+        assert_eq!(weight(w * 0.5, h * 0.5, w, h, c), 0.);
+        assert_eq!(weight(c[0] - 6., h * 0.5, w, h, c), 0.);
         // At the window's edge: nothing, so the field never ends on a line.
-        assert_eq!(weight(0., h * 0.3, w, h), 0.);
-        assert_eq!(weight(w * 0.8, h, w, h), 0.);
-        // Beside the heading and toward the lower right: the clouds.
-        assert!(weight(w * 0.21, h * 0.28, w, h) > 0.5);
-        assert!(weight(w * 0.81, h * 0.74, w, h) > 0.5);
+        assert_eq!(weight(0., h * 0.3, w, h, c), 0.);
+        assert_eq!(weight(w * 0.8, h, w, h, c), 0.);
+        // Beside the heading and past the composer's lower right: the clouds.
+        let near = |x0: f32, y0: f32| {
+            (-3..=3)
+                .flat_map(|i| (-3..=3).map(move |j| (i, j)))
+                .map(|(i, j)| weight(x0 + i as f32 * 14., y0 + j as f32 * 14., w, h, c))
+                .fold(0f32, f32::max)
+        };
+        assert!(near(c[0] - 90., c[1] + 40.) > 0.4);
+        assert!(near(c[2] + 60., c[3] + 90.) > 0.4);
+    }
+
+    #[test]
+    fn the_field_follows_the_content() {
+        let (w, h) = (1000., 700.);
+        // Content moved left (a panel opened on the right): the quiet goes with it.
+        let left = [80., 200., 520., 500.];
+        assert_eq!(weight(300., 350., w, h, left), 0.);
+        // However it is laid out, no dot comes within 28px of the content.
+        for content in [left, default_content(w, h), [30., 130., 630., 430.]] {
+            for m in layout(w, h, 14., content) {
+                let d = rect_distance(m.at.x, m.at.y, content, 24.);
+                assert!(d >= 28., "a dot {d:.1}px from the content");
+            }
+        }
     }
 
     #[test]
     fn the_field_is_stable_and_sparse() {
-        let a = layout(1000., 700., 14.);
-        let b = layout(1000., 700., 14.);
+        let c = default_content(1000., 700.);
+        let a = layout(1000., 700., 14., c);
+        let b = layout(1000., 700., 14., c);
         assert_eq!(a.len(), b.len());
         assert!(a
             .iter()

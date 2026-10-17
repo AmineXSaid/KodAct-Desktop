@@ -642,10 +642,12 @@ impl RenderOnce for Segmented {
 }
 
 /// A selector's trigger as a plain row the caller fills (an icon, a label,
-/// a chevron) and clicks: a compact ghost control, washed while its menu is
-/// open or hovered. The composer's project, mode and model use it.
+/// a chevron) and clicks: a compact ghost control, washed on hover and
+/// raised onto the surface while its menu is open. The composer's project,
+/// mode and model use it.
 pub fn selector(t: &Theme, id: impl Into<ElementId>, open: bool) -> gpui::Stateful<gpui::Div> {
     let hover = t.colors.hover;
+    let (raised, edge) = (t.colors.surface, t.colors.border);
     div()
         .id(id)
         .role(accesskit::Role::ComboBox)
@@ -656,18 +658,31 @@ pub fn selector(t: &Theme, id: impl Into<ElementId>, open: bool) -> gpui::Statef
         .h(t.size.button_sm)
         .px(t.space.sm)
         .rounded(t.radius.compact)
+        // A clear edge at rest, so opening it doesn't shift the label.
+        .border_1()
+        .border_color(t.colors.border.opacity(0.))
         .cursor_pointer()
         .text_size(t.text.caption)
         .text_color(t.colors.text)
-        .when(open, |d| d.bg(hover))
-        .hover(move |s| s.bg(hover))
+        .map(|d| {
+            if open {
+                d.bg(raised).border_color(edge)
+            } else {
+                d.hover(move |s| s.bg(hover))
+            }
+        })
         .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
 }
 
-/// The chevron a selector ends with.
-pub fn chevron(t: &Theme) -> gpui::Svg {
+/// The chevron a selector ends with: down, or up while its menu (which
+/// opens above) is showing.
+pub fn chevron(t: &Theme, open: bool) -> gpui::Svg {
     icon(
-        "icons/chevron-down.svg",
+        if open {
+            "icons/chevron-up.svg"
+        } else {
+            "icons/chevron-down.svg"
+        },
         t.size.icon_xs,
         t.colors.text_muted,
     )

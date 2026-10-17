@@ -116,3 +116,25 @@ reference; the accent is kept for Send and the new-chat mark.
 - Some older hand-drawn controls (sidebar rows, menu rows, title-bar
   buttons) are styled from the tokens but aren't `Button`s, so they don't
   take Tab focus.
+
+## Refinement pass
+
+- **Dot field:** it now arranges itself around the measured content
+  (heading, composer, starters) instead of the window.
+  - Two clouds hug the content's outer edges, beside the heading and past
+    the composer's lower right.
+  - Slow value noise warps their outlines and varies the density, so they
+    dissolve instead of reading as a halftone. Dots now mostly fade rather
+    than thin out, on a smooth falloff.
+  - A margin of at least 28px round the content always stays empty.
+  - When the sidebar opens or closes, or the window resizes, the dots glide
+    to their new place. When the composer grows, the field re-balances.
+  - In a small window the quiet margin narrows. Where there is no room, the
+    field steps aside rather than clipping into the text.
+- **Greeting:** the display serif at regular weight with 1.1 leading. The
+  mark is 28px and centred on the capitals rather than the line box. The
+  subtitle sits 10px below in muted text.
+- **Composer:** the project, model and mode selectors share one form: a 14px
+  icon, the label, and a chevron that flips while the menu is open. Hover
+  is a wash; open is raised onto the surface with a hairline. The context
+  meter is the same height.

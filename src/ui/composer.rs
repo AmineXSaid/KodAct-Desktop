@@ -518,6 +518,7 @@ impl Render for Composer {
         let quiet = |id: &'static str, open: bool| super::button::selector(&t, id, open);
         let model_button = quiet("model", picker_open)
             .aria_label("Model")
+            .child(icon("icons/cpu.svg", t.size.icon_sm, t.colors.text_muted))
             .child(
                 div()
                     .max_w(px(220.))
@@ -536,7 +537,7 @@ impl Render for Composer {
                     })
                     .child(label)
             }))
-            .child(super::button::chevron(&t))
+            .child(super::button::chevron(&t, picker_open))
             .on_click(cx.listener(|this, ev: &gpui::ClickEvent, window, cx| {
                 if !this.just_dismissed(ev) {
                     window.dispatch_action(Box::new(ToggleModelPicker), cx);
@@ -565,7 +566,7 @@ impl Render for Composer {
                     .text_ellipsis()
                     .child(project_name),
             )
-            .child(super::button::chevron(&t))
+            .child(super::button::chevron(&t, false))
             .tooltip(|window, cx| {
                 gpui::component::tooltip::Tooltip::new(format!(
                     "Choose the project ({})",
@@ -602,7 +603,7 @@ impl Render for Composer {
                 .flex()
                 .items_center()
                 .gap(px(5.))
-                .h(px(24.))
+                .h(t.size.button_sm)
                 .px(px(6.))
                 .text_size(t.text.caption)
                 .text_color(colour)

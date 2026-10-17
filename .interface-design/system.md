@@ -139,12 +139,12 @@ One family; every control takes keyboard focus (a `primary` edge shows for the k
 - Width: up to 560px, centred
 - One unit: a white box (radius 14px, 1px `border`, `border_strong` while focused, tinted by the mode when one is set) resting in a `sunk` tray
 - Text: 14px; the outlined + bottom left and Send bottom right, 10px from the box's edges
-- The tray: the project, the context ring, the model and the mode as quiet 28px selectors with a chevron
+- The tray: the project, the context ring, the model and the mode as quiet 28px selectors: a 14px icon, the label, a chevron that flips while open; washed on hover, raised onto `surface` with a hairline while open
 
 ### Dot Field (`ui/dot_field.rs`)
-- Behind the home screen: a 14px grid of 2px dots in `dot`, gathered beside the heading and toward the lower right, thinned and faded toward a quiet oval behind the heading and composer and before every edge
+- Behind the home screen: a 14px grid of 2px dots in `dot`, gathered in two clouds hugging the content (beside the heading, past the composer's lower right), their outlines warped and density varied by slow noise, faded with a smooth falloff to a quiet margin round the measured content and before every edge
 - About 1.6% of dots in `accent`; fewer still are 5px outlined squares or accent diamonds
-- Painted on one canvas from cached geometry; breathes over 9s, leans up to 4px from the pointer, brightens while the composer has focus; rests when hidden or inactive; still under reduced motion
+- Painted on one canvas from cached geometry; breathes over 9s, leans up to 4px from the pointer, brightens while the composer has focus; glides to its new place when the layout changes (sidebar, resize, a growing composer); rests when hidden or inactive; still under reduced motion
 
 ### Card Default
 - Border: 1px `border`

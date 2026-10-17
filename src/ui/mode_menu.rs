@@ -78,7 +78,7 @@ pub fn trigger(
     super::button::selector(t, "mode-trigger", open)
         .aria_label("Permission mode")
         .text_color(fg)
-        .child(icon(mode.icon(), t.size.icon_xs, fg))
+        .child(icon(mode.icon(), t.size.icon_sm, fg))
         .child(
             div()
                 .max_w(px(200.))
@@ -87,7 +87,7 @@ pub fn trigger(
                 .text_ellipsis()
                 .child(mode.label()),
         )
-        .child(super::button::chevron(t))
+        .child(super::button::chevron(t, open))
         .tooltip({
             let tip: SharedString = format!(
                 "{}. Click to change, or press Shift+Tab to cycle.",

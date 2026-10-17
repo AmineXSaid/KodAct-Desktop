@@ -529,6 +529,7 @@ impl Workspace {
                                 div()
                                     .w_full()
                                     .max_w(t.size.composer_width + t.space.xxl)
+                                    .relative()
                                     .flex()
                                     .flex_col()
                                     .items_center()
@@ -539,7 +540,7 @@ impl Workspace {
                                             .flex()
                                             .flex_col()
                                             .items_center()
-                                            .gap(t.space.sm)
+                                            .gap(t.space.snug)
                                             .child(greeting_line(&line, &t))
                                             .child(
                                                 div()
@@ -558,7 +559,9 @@ impl Workspace {
                                         &self.state,
                                         &self.composer,
                                         cx,
-                                    )),
+                                    ))
+                                    // The dot field arranges itself around this column.
+                                    .child(self.dots.read(cx).content_probe()),
                             ),
                     ),
             )
@@ -1410,14 +1413,17 @@ fn greeting_line(line: &str, t: &crate::theme::Theme) -> impl IntoElement {
         .justify_center()
         .items_center()
         .gap(t.space.md)
-        .child(super::logo(30.))
+        // Centred on the capitals rather than the line box, whose descender
+        // room would otherwise leave the mark sitting high.
+        .child(div().flex_none().mt(px(3.)).child(super::logo(28.)))
         .child(
             div()
                 .min_w_0()
                 .font_family(t.font_display.clone())
+                .font_weight(FontWeight::NORMAL)
                 .text_size(t.size.home_heading)
                 .text_color(t.colors.text_strong)
-                .line_height(gpui::relative(1.15))
+                .line_height(gpui::relative(1.1))
                 .child(line.to_string()),
         )
 }
