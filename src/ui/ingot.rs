@@ -190,6 +190,10 @@ pub(crate) fn face_svg(path: &str) -> Option<Vec<u8>> {
 pub struct Ingot {
     size: f32,
     frame: usize,
+    /// 0..1: how hot the top is, from the accent to `mark_heat`.
+    heat: f32,
+    /// While the faces are still landing (`forging`): how far along, 0..1.
+    landing: Option<f32>,
 }
 
 impl RenderOnce for Ingot {
@@ -197,17 +201,29 @@ impl RenderOnce for Ingot {
         let x = &cx.theme().extra;
         let mut d = div().relative().size(px(self.size)).flex_none();
         for (face, _) in faces(frame_yaw(self.frame), BOX, GAP) {
-            let (name, color) = match face {
-                Face::Top => ("t".to_string(), x.mark_top),
-                Face::Side(n, k) => (n.to_string(), mix(x.mark_left, x.mark_right, k)),
+            let (name, color, slot) = match face {
+                Face::Top => (
+                    "t".to_string(),
+                    mix(x.mark_top, x.mark_heat, self.heat),
+                    Slot::Top,
+                ),
+                Face::Side(n, k) => (
+                    n.to_string(),
+                    mix(x.mark_left, x.mark_right, k),
+                    if k < 0.5 { Slot::Left } else { Slot::Right },
+                ),
             };
+            let (dx, dy, alpha) = self
+                .landing
+                .map_or((0., 0., 1.), |p| landing(slot, p, self.size));
             d = d.child(
                 svg()
                     .path(format!("ingot/{:02}-{name}.svg", self.frame))
                     .absolute()
-                    .top_0()
-                    .left_0()
+                    .top(px(dy))
+                    .left(px(dx))
                     .size(px(self.size))
+                    .opacity(alpha)
                     .text_color(color),
             );
         }
@@ -215,9 +231,68 @@ impl RenderOnce for Ingot {
     }
 }
 
+/// Which face, as the cube stands at rest.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Slot {
+    Top,
+    Left,
+    Right,
+}
+
+/// Where a face is while the cube forges (`p` 0..1 over the landing): the
+/// top drops in from above, then the left and the right slide in from their
+/// sides, each overshooting a touch and settling, as if struck into place.
+/// Returns its offset in px and its opacity.
+fn landing(slot: Slot, p: f32, size: f32) -> (f32, f32, f32) {
+    let (start, from) = match slot {
+        Slot::Top => (0., (0., -0.5)),
+        Slot::Left => (0.18, (-0.45, 0.25)),
+        Slot::Right => (0.3, (0.45, 0.25)),
+    };
+    let t = ((p - start) / 0.45).clamp(0., 1.);
+    // Ease out with a slight overshoot ("back").
+    let (c1, c3) = (1.701_58, 2.701_58);
+    let e = 1. + c3 * (t - 1.).powi(3) + c1 * (t - 1.).powi(2);
+    let rest = 1. - e;
+    (
+        from.0 * size * rest,
+        from.1 * size * rest,
+        (t * 2.5).min(1.),
+    )
+}
+
 /// The mark at rest, `size` px square.
 pub fn mark(size: f32) -> Ingot {
-    Ingot { size, frame: 0 }
+    Ingot {
+        size,
+        frame: 0,
+        heat: 0.,
+        landing: None,
+    }
+}
+
+/// The cube being forged: its faces `land` (0..1) into place, its top at
+/// `heat` (1 white hot from the forge, 0 cooled to the accent).
+pub fn forging(size: f32, land: f32, heat: f32) -> Ingot {
+    Ingot {
+        size,
+        frame: 0,
+        heat: heat.clamp(0., 1.),
+        landing: (land < 1.).then_some(land.max(0.)),
+    }
+}
+
+/// The cube struck: `k` (0..1) through one quarter turn, its top flaring
+/// hot at the middle of the turn and cooling as it settles.
+pub fn struck(size: f32, k: f32) -> Ingot {
+    let k = k.clamp(0., 1.);
+    let eased = k * k * (3. - 2. * k);
+    Ingot {
+        size,
+        frame: frame_of(REST + eased * FRAC_PI_2),
+        heat: (k * std::f32::consts::PI).sin(),
+        landing: None,
+    }
 }
 
 /// The mark turning while Forge works. Reduced motion: [`mark`].
@@ -232,8 +307,8 @@ pub fn turning(size: f32, id: impl Into<ElementId>) -> AnyElement {
         .flex_none()
         .with_animation(id, Animation::new(lap).repeat(), move |d, k| {
             d.child(Ingot {
-                size,
                 frame: frame_of(yaw_at(k * beat * 4., beat)),
+                ..mark(size)
             })
         })
         .into_any_element()
@@ -368,6 +443,29 @@ mod tests {
         assert_eq!(frame_of(REST + FRAC_PI_2), FRAMES / 4);
         assert_eq!(frame_of(REST + TAU), 0);
         assert_eq!(frame_of(REST - TAU / FRAMES as f32), FRAMES - 1);
+    }
+
+    #[test]
+    fn forging_lands_every_face_and_hides_them_before() {
+        for slot in [Slot::Top, Slot::Left, Slot::Right] {
+            let (dx, dy, a) = landing(slot, 1., 88.);
+            assert!(dx.abs() < 1e-3 && dy.abs() < 1e-3 && a == 1., "{slot:?}");
+        }
+        // Before its turn a face is hidden and away from its place.
+        let (dx, _, a) = landing(Slot::Right, 0.1, 88.);
+        assert!(a == 0. && dx > 30.);
+        // The top lands first, the right last.
+        assert!(landing(Slot::Top, 0.4, 88.).2 > landing(Slot::Right, 0.4, 88.).2);
+        // Landed, the forging cube is the mark itself.
+        assert!(forging(88., 1., 0.).landing.is_none());
+    }
+
+    #[test]
+    fn a_strike_turns_a_quarter_and_flares_hot_on_the_way() {
+        assert_eq!(struck(20., 0.).frame, 0);
+        assert_eq!(struck(20., 1.).frame, FRAMES / 4);
+        assert!(struck(20., 0.5).heat > 0.99);
+        assert!(struck(20., 1.).heat < 1e-3);
     }
 
     #[test]

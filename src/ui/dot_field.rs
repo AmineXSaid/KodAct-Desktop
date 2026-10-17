@@ -34,6 +34,12 @@ const LEAN: f32 = 4.;
 const BREATH_S: f32 = 9.;
 /// How far a breath swings a dot's opacity, as a share of it.
 const BREATH_DEPTH: f32 = 0.22;
+/// A ripple (`DotField::pulse`): how fast its ring runs out, how wide it
+/// is, how far it goes, and how long it lasts.
+const RIPPLE_SPEED: f32 = 420.;
+const RIPPLE_BAND: f32 = 34.;
+const RIPPLE_REACH: f32 = 700.;
+const RIPPLE_S: f32 = 1.8;
 /// Ticks: easing toward the pointer, breathing, and resting (hidden).
 const EASE_MS: u64 = 33;
 const BREATHE_MS: u64 = 220;
@@ -232,6 +238,9 @@ struct Shared {
     /// the field glides to its new place instead of jumping.
     anchor: Cell<Option<Point<Pixels>>>,
     slide: Cell<Point<f32>>,
+    /// Ripples running out from the content's centre: when each began, and
+    /// how strong it is (1 a strike, less a keystroke).
+    ripples: RefCell<Vec<(Instant, f32)>>,
 }
 
 pub struct DotField {
@@ -316,9 +325,15 @@ impl DotField {
         self.shared
             .slide
             .set(if gliding { slide } else { point(0., 0.) });
+        let rippling = {
+            let mut r = self.shared.ripples.borrow_mut();
+            r.retain(|(at, _)| at.elapsed().as_secs_f32() < RIPPLE_S);
+            !r.is_empty()
+        };
         let easing = (m.target.x - m.lean.x).abs() + (m.target.y - m.lean.y).abs() > 0.05
             || (want - m.glow).abs() > 0.01
-            || gliding;
+            || gliding
+            || rippling;
         cx.notify();
         Duration::from_millis(if easing { EASE_MS } else { BREATHE_MS })
     }
@@ -354,6 +369,23 @@ fn marks(
 }
 
 impl DotField {
+    /// A ring of light running out through the dots from the content's
+    /// centre: `strength` 1 for a strike, less for a keystroke. Nothing
+    /// under reduced motion.
+    pub fn pulse(&mut self, strength: f32, cx: &mut Context<Self>) {
+        if super::motion::reduced_motion() || cx.reduce_motion() {
+            return;
+        }
+        let mut r = self.shared.ripples.borrow_mut();
+        // A burst of keystrokes keeps at most a few rings in flight.
+        if r.len() >= 6 {
+            r.remove(0);
+        }
+        r.push((Instant::now(), strength.clamp(0., 1.)));
+        drop(r);
+        cx.notify();
+    }
+
     /// An invisible element to place inside the content the field should
     /// arrange itself around (the home screen's heading, composer and
     /// starters): it measures that content every frame.
@@ -384,11 +416,22 @@ fn alpha(mark: &Mark, phase: f32, glow: f32, peak: f32) -> f32 {
     mark.weight.powf(1.1) * peak * breath * (1. + 0.14 * glow)
 }
 
+/// How much a ripple lights a dot `d` px from its centre, `secs` after it
+/// began: 0..1, highest on its ring, fading as the ring runs out.
+fn ripple_at(d: f32, secs: f32, strength: f32) -> f32 {
+    let r = secs * RIPPLE_SPEED;
+    let band = (1. - (d - r).abs() / RIPPLE_BAND).max(0.);
+    band * strength * (1. - r / RIPPLE_REACH).max(0.)
+}
+
+#[allow(clippy::too_many_arguments)]
 fn paint_marks(
     bounds: Bounds<Pixels>,
     marks: &[Mark],
     motion: Motion,
     slide: Point<f32>,
+    ripples: &[(f32, f32)],
+    origin: Option<Point<Pixels>>,
     t: &Theme,
     window: &mut Window,
 ) {
@@ -408,14 +451,25 @@ fn paint_marks(
                 bounds.origin.x + px(m.at.x + motion.lean.x * depth + slide.x),
                 bounds.origin.y + px(m.at.y + motion.lean.y * depth + slide.y),
             );
-            let a = alpha(m, motion.phase, motion.glow, peak).min(1.);
+            // A ripple brightens the dots on its ring and tints them the accent.
+            let lit = origin.map_or(0., |o| {
+                let (dx, dy) = (f32::from(at.x - o.x), f32::from(at.y - o.y) * 1.35);
+                let d = (dx * dx + dy * dy).sqrt();
+                ripples
+                    .iter()
+                    .map(|(secs, s)| ripple_at(d, *secs, *s))
+                    .fold(0., f32::max)
+            });
+            // Only where the field shows: the quiet zone round the words stays quiet.
+            let lit = lit * m.weight.sqrt();
+            let a = (alpha(m, motion.phase, motion.glow, peak) + 0.55 * lit).min(1.);
             let tint = |c: Hsla, k: f32| Hsla {
                 a: c.a * a * k,
                 ..c
             };
             match m.kind {
                 Kind::Dot | Kind::Accent => {
-                    let (c, size_k) = if m.kind == Kind::Accent {
+                    let (c, size_k) = if m.kind == Kind::Accent || lit > 0.5 {
                         (tint(accent, 1.), 1.3)
                     } else {
                         (tint(base, 1.), 0.9 + 0.3 * m.weight)
@@ -508,11 +562,41 @@ impl Render for DotField {
                 },
                 move |bounds, marks, window, _| {
                     shared.painted.set(Some((bounds, Instant::now())));
-                    paint_marks(bounds, &marks, motion, shared.slide.get(), &t, window);
+                    let ripples: Vec<(f32, f32)> = shared
+                        .ripples
+                        .borrow()
+                        .iter()
+                        .map(|(at, s)| (at.elapsed().as_secs_f32(), *s))
+                        .collect();
+                    paint_marks(
+                        bounds,
+                        &marks,
+                        motion,
+                        shared.slide.get(),
+                        &ripples,
+                        shared.anchor.get(),
+                        &t,
+                        window,
+                    );
                 },
             )
             .size_full(),
         )
+    }
+}
+
+#[cfg(test)]
+mod ripple_tests {
+    use super::*;
+
+    #[test]
+    fn a_ripple_lights_its_ring_and_fades_as_it_runs_out() {
+        // Half a second in, the ring is 210px out.
+        assert!(ripple_at(210., 0.5, 1.) > 0.6);
+        assert_eq!(ripple_at(100., 0.5, 1.), 0.);
+        assert!(ripple_at(210., 0.5, 0.4) < ripple_at(210., 0.5, 1.));
+        // Past its reach it lights nothing.
+        assert_eq!(ripple_at(RIPPLE_REACH, RIPPLE_REACH / RIPPLE_SPEED, 1.), 0.);
     }
 }
 

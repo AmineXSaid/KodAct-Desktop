@@ -3,16 +3,26 @@
 //! the name). The name and avatar are kept (`profile.rs`) and shown in the
 //! sidebar. Reopened from the command palette: "Change your name" starts at
 //! the name, "Change your avatar" at the avatars.
+//!
+//! The name step forges itself in: the ingot's faces land and lock with a
+//! glow, its top cooling from heat to the accent, while a ring runs out
+//! through the dot field behind; a halo and an orbiting spark settle under
+//! the cube, the question arrives word by word and the field rises in. The
+//! field's edge charges with the accent while it has the keyboard, each
+//! keystroke sends a faint ring through the dots, and Enter strikes the
+//! cube (a hot quarter turn) before the avatars slide in. Reduced motion:
+//! all of it at rest.
 
 use gpui::component::input::{Input, InputEvent, InputState};
 use std::time::Duration;
 
 use gpui::{
-    div, prelude::*, px, relative, Animation, AnimationExt, AnyElement, Context, Entity,
-    FocusHandle, FontWeight, IntoElement, Render, SharedString, Subscription, Task, Window,
+    canvas, div, prelude::*, px, relative, Animation, AnimationExt, AnyElement, App, Context,
+    Entity, FocusHandle, FontWeight, IntoElement, Render, SharedString, Subscription, Task, Window,
 };
 
-use super::icon;
+use super::dot_field::DotField;
+use super::{icon, ingot, motion};
 use crate::avatars;
 use crate::state::AppState;
 use crate::theme::{ActiveTheme, Theme};
@@ -30,6 +40,21 @@ const TRAVEL: f32 = 56.;
 /// The avatar picker: each choice, and the one you're looking at.
 const CHOICE: f32 = 56.;
 const PREVIEW: f32 = 104.;
+/// The name step's hero: its box, and the cube in it.
+const HERO: f32 = 132.;
+const CUBE: f32 = 88.;
+/// The forging, in milliseconds from the step opening: the faces land
+/// over `LAND_MS`, lock at `LOCK_MS` (the glow, the ring), the top cools
+/// by `COOL_MS`, the question starts at `HEADING_MS` and the field rises
+/// at `FIELD_MS`; all of it is over by `INTRO_MS`.
+const LAND_MS: f32 = 1000.;
+const LOCK_MS: f32 = 1150.;
+const COOL_MS: f32 = 2400.;
+const HEADING_MS: f32 = 1300.;
+const FIELD_MS: f32 = 1750.;
+const INTRO_MS: f32 = 2600.;
+/// Enter's strike: the hot quarter turn before the avatars come in.
+const STRIKE: Duration = Duration::from_millis(700);
 
 pub struct Onboarding {
     state: Entity<AppState>,
@@ -45,6 +70,17 @@ pub struct Onboarding {
     /// The avatar picked on the second step.
     selected: SharedString,
     focus: FocusHandle,
+    /// The dot field behind both steps (its ripples are the strikes).
+    dots: Entity<DotField>,
+    /// Bumped each time the name step opens, so the forging plays afresh.
+    intro: usize,
+    /// Bumped on each strike (Enter on a good name), and the wait for it.
+    strike: usize,
+    striking: Option<Task<()>>,
+    /// Whether you had a name when the step opened (the question asks for
+    /// it "now"); kept, so the question doesn't change as you strike.
+    returning: bool,
+    lock: Option<Task<()>>,
     _subs: Vec<Subscription>,
 }
 
@@ -59,12 +95,16 @@ impl Onboarding {
                     InputEvent::PressEnter { .. } => this.submit(window, cx),
                     InputEvent::Change => {
                         this.error = None;
+                        // Each keystroke strikes lightly: a faint ring through the dots.
+                        this.dots.update(cx, |d, cx| d.pulse(0.35, cx));
                         cx.notify();
                     }
                     _ => {}
                 },
             )];
         let selected = state.read(cx).avatar.clone();
+        let field_focus = gpui::Focusable::focus_handle(input.read(cx), cx);
+        let dots = cx.new(|cx| DotField::new(Some(field_focus), window, cx));
         Self {
             state,
             input,
@@ -76,13 +116,34 @@ impl Onboarding {
             settle: None,
             selected,
             focus: cx.focus_handle(),
+            dots,
+            intro: 0,
+            strike: 0,
+            striking: None,
+            returning: false,
+            lock: None,
             _subs: subs,
         }
+    }
+
+    /// Play the forging: the ring through the dots goes out as the cube locks.
+    fn forge(&mut self, cx: &mut Context<Self>) {
+        self.intro += 1;
+        self.strike = 0;
+        self.striking = None;
+        let dots = self.dots.clone();
+        self.lock = Some(cx.spawn(async move |_, cx| {
+            cx.background_executor()
+                .timer(Duration::from_millis(LOCK_MS as u64))
+                .await;
+            dots.update(cx, |d, cx| d.pulse(1., cx));
+        }));
     }
 
     /// Show it at the name: the current name filled in, the field focused.
     pub fn open(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let current = self.state.read(cx).user_name.clone().unwrap_or_default();
+        self.returning = self.state.read(cx).user_name.is_some();
         self.error = None;
         self.step = Step::Name;
         self.leaving = None;
@@ -91,6 +152,7 @@ impl Onboarding {
             i.set_value(current, window, cx);
             i.focus(window, cx);
         });
+        self.forge(cx);
     }
 
     /// Show it at the avatars.
@@ -125,9 +187,25 @@ impl Onboarding {
     }
 
     fn submit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.striking.is_some() || self.step != Step::Name {
+            return;
+        }
         let name = self.input.read(cx).value().to_string();
         match self.state.update(cx, |s, cx| s.set_user_name(&name, cx)) {
-            Ok(()) => self.go(Step::Avatar, window, cx),
+            Ok(()) if still(cx) => self.go(Step::Avatar, window, cx),
+            // Strike the cube, a ring through the dots, then on to the avatars.
+            Ok(()) => {
+                self.strike += 1;
+                self.dots.update(cx, |d, cx| d.pulse(1., cx));
+                self.striking = Some(cx.spawn_in(window, async move |this, cx| {
+                    cx.background_executor().timer(STRIKE).await;
+                    let _ = this.update_in(cx, |o, window, cx| {
+                        o.striking = None;
+                        o.go(Step::Avatar, window, cx);
+                    });
+                }));
+                cx.notify();
+            }
             Err(e) => {
                 self.error = Some(e);
                 cx.notify();
@@ -184,9 +262,12 @@ impl Onboarding {
         cx.notify();
     }
 
-    fn name_step(&self, cx: &mut Context<Self>) -> AnyElement {
+    fn name_step(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         let t = cx.theme().clone();
-        let returning = self.state.read(cx).user_name.is_some();
+        let charged = !still(cx)
+            && self.error.is_none()
+            && gpui::Focusable::focus_handle(self.input.read(cx), cx).is_focused(window);
+        let returning = self.returning;
         let empty = self.input.read(cx).value().trim().is_empty();
         let hover = t.extra.fill_hover;
         let field = div()
@@ -235,30 +316,123 @@ impl Onboarding {
                     ))
                     .on_click(cx.listener(|this, _, window, cx| this.submit(window, cx))),
             );
+        // While it has the keyboard, the field's edge charges with the
+        // accent: it brightens and dims, with a faint glow round it.
+        let accent = t.colors.primary;
+        let field = if charged {
+            field
+                .with_animation(
+                    "onboarding-charge",
+                    Animation::new(Duration::from_millis(2400)).repeat(),
+                    move |d, k| {
+                        let w = 0.5 + 0.5 * (k * std::f32::consts::TAU).sin();
+                        d.border_color(accent.opacity(0.45 + 0.55 * w)).shadow(vec![
+                            gpui::BoxShadow {
+                                color: accent.opacity(0.08 + 0.1 * w),
+                                offset: gpui::point(px(0.), px(0.)),
+                                blur_radius: px(14.),
+                                spread_radius: px(0.),
+                                inset: false,
+                            },
+                        ])
+                    },
+                )
+                .into_any_element()
+        } else {
+            field.into_any_element()
+        };
+        let below = div()
+            .w(px(420.))
+            .flex()
+            .flex_col()
+            .child(div().mt(t.space.xl).child(field))
+            .child(
+                div()
+                    .mt(t.space.sm)
+                    .h(t.text.caption * 1.6)
+                    .pl(t.space.lg)
+                    .text_size(t.text.caption)
+                    .text_color(t.extra.danger)
+                    .children(self.error),
+            );
+        // The field rises in once the question has arrived.
+        let below = if still(cx) || self.intro == 0 {
+            below.into_any_element()
+        } else {
+            below
+                .with_animation(
+                    SharedString::from(format!("onboarding-field-{}", self.intro)),
+                    Animation::new(Duration::from_millis(INTRO_MS as u64)),
+                    |d, k| {
+                        let e = smooth((k * INTRO_MS - FIELD_MS) / 600.);
+                        d.opacity(e).mt(px(10. * (1. - e)))
+                    },
+                )
+                .into_any_element()
+        };
         div()
             .w_full()
             .flex()
             .flex_col()
             .items_center()
-            .child(super::logo(96.))
-            .child(heading(
+            .child(self.hero(&t, cx))
+            .child(arriving(
                 &t,
                 if returning {
                     "What should we call you now?"
                 } else {
                     "Hello. What should we call you?"
                 },
+                if still(cx) { 0 } else { self.intro },
             ))
-            .child(div().mt(t.space.xl).w(px(420.)).child(field))
-            .child(
-                div()
-                    .mt(t.space.sm)
-                    .h(t.text.caption * 1.6)
-                    .w(px(420.))
-                    .pl(t.space.lg)
-                    .text_size(t.text.caption)
-                    .text_color(t.extra.danger)
-                    .children(self.error),
+            .child(below)
+            .into_any_element()
+    }
+
+    /// The ingot over its halo and orbit: forging in as the step opens, a
+    /// hot quarter turn when struck, at rest under reduced motion.
+    fn hero(&self, t: &Theme, cx: &App) -> AnyElement {
+        let glow = Glow {
+            halo: t.extra.accent,
+            ring: t.colors.text_subtle,
+            spark: t.colors.primary,
+            heat: t.extra.mark_heat,
+        };
+        let frame = div().relative().size(px(HERO)).flex_none();
+        if still(cx) {
+            return frame
+                .child(halo(glow, 1.))
+                .child(placed(ingot::mark(CUBE)))
+                .into_any_element();
+        }
+        if self.strike > 0 {
+            return frame
+                .child(halo(glow, 1.))
+                .child(orbit(glow, 1.))
+                .child(div().absolute().inset_0().with_animation(
+                    ("onboarding-strike", self.strike),
+                    Animation::new(STRIKE),
+                    move |d, k| {
+                        d.child(flash(glow, (k * 1.4).min(1.)))
+                            .child(placed(ingot::struck(CUBE, k)))
+                    },
+                ))
+                .into_any_element();
+        }
+        frame
+            .with_animation(
+                SharedString::from(format!("onboarding-forge-{}", self.intro)),
+                Animation::new(Duration::from_millis(INTRO_MS as u64)),
+                move |d, k| {
+                    let ms = k * INTRO_MS;
+                    // After the lock: the halo and orbit settle in.
+                    let after = smooth((ms - LOCK_MS) / 700.);
+                    let heat = 1. - smooth((ms - LOCK_MS) / (COOL_MS - LOCK_MS));
+                    d.child(halo(glow, after))
+                        .child(orbit(glow, after))
+                        .child(flash(glow, (ms - LOCK_MS + 60.) / 800.))
+                        .child(placed(ingot::forging(CUBE, ms / LAND_MS, heat)))
+                },
             )
             .into_any_element()
     }
@@ -358,6 +532,165 @@ impl Onboarding {
     }
 }
 
+/// Under reduced motion, nothing moves.
+fn still(cx: &App) -> bool {
+    motion::reduced_motion() || cx.reduce_motion()
+}
+
+fn smooth(x: f32) -> f32 {
+    let x = x.clamp(0., 1.);
+    x * x * (3. - 2. * x)
+}
+
+/// The hero's colours, copied into its animation frames.
+#[derive(Clone, Copy)]
+struct Glow {
+    halo: gpui::Hsla,
+    ring: gpui::Hsla,
+    spark: gpui::Hsla,
+    heat: gpui::Hsla,
+}
+
+/// The cube in the hero's box, a little above centre over its halo.
+fn placed(cube: ingot::Ingot) -> impl IntoElement {
+    div()
+        .absolute()
+        .left(px((HERO - CUBE) / 2.))
+        .top(px((HERO - CUBE) / 2. - 6.))
+        .child(cube)
+}
+
+/// The soft glow the cube floats over, breathing; `a` fades it in.
+fn halo(g: Glow, a: f32) -> impl IntoElement {
+    let (w, h) = (112., 22.);
+    div()
+        .absolute()
+        .left(px((HERO - w) / 2.))
+        .top(px(HERO * 0.66 - h / 2.))
+        .w(px(w))
+        .h(px(h))
+        .with_animation(
+            "onboarding-halo",
+            Animation::new(Duration::from_millis(4200)).repeat(),
+            move |d, k| {
+                let b = a * (0.75 + 0.25 * (k * std::f32::consts::TAU).cos());
+                d.rounded_full()
+                    .bg(g.halo.opacity(0.06 * b))
+                    .shadow(vec![gpui::BoxShadow {
+                        color: g.halo.opacity(0.22 * b),
+                        offset: gpui::point(px(0.), px(0.)),
+                        blur_radius: px(18.),
+                        spread_radius: px(0.),
+                        inset: false,
+                    }])
+            },
+        )
+}
+
+/// A dotted ring round the cube's base with a spark running along it.
+fn orbit(g: Glow, a: f32) -> impl IntoElement {
+    const PAD: f32 = 18.;
+    div()
+        .absolute()
+        .left(px(-PAD))
+        .top(px(-PAD))
+        .size(px(HERO + PAD * 2.))
+        .with_animation(
+            "onboarding-orbit",
+            Animation::new(Duration::from_millis(7000)).repeat(),
+            move |d, k| {
+                d.child(
+                    canvas(
+                        |_, _, _| {},
+                        move |b, _, window, _| {
+                            let (cx, cy) = (HERO / 2. + PAD, HERO * 0.66 + PAD);
+                            let (rx, ry) = (78., 23.);
+                            let at = |th: f32| {
+                                b.origin
+                                    + gpui::point(px(cx + rx * th.cos()), px(cy + ry * th.sin()))
+                            };
+                            let mut ring =
+                                gpui::PathBuilder::stroke(px(1.)).dash_array(&[px(2.), px(5.)]);
+                            ring.move_to(at(0.));
+                            for i in 1..=96 {
+                                ring.line_to(at(i as f32 / 96. * std::f32::consts::TAU));
+                            }
+                            if let Ok(path) = ring.build() {
+                                window.paint_path(path, g.ring.opacity(a));
+                            }
+                            let p = at(k * std::f32::consts::TAU);
+                            let r = px(2.2);
+                            window.paint_quad(
+                                gpui::fill(
+                                    gpui::Bounds::new(
+                                        p - gpui::point(r, r),
+                                        gpui::size(r * 2., r * 2.),
+                                    ),
+                                    g.spark.opacity(a),
+                                )
+                                .corner_radii(r),
+                            );
+                        },
+                    )
+                    .size_full(),
+                )
+            },
+        )
+}
+
+/// The glow as the cube locks or is struck, `f` 0..1 through it: a burst of
+/// heat that spreads out and fades.
+fn flash(g: Glow, f: f32) -> AnyElement {
+    if f <= 0. || f >= 1. {
+        return div().into_any_element();
+    }
+    let size = 24. + 130. * f;
+    div()
+        .absolute()
+        .left(px((HERO - size) / 2.))
+        .top(px((HERO - size) / 2. - 6.))
+        .size(px(size))
+        .rounded_full()
+        .bg(g.heat.opacity(0.28 * (1. - f)))
+        .shadow(vec![gpui::BoxShadow {
+            color: g.heat.opacity(0.35 * (1. - f)),
+            offset: gpui::point(px(0.), px(0.)),
+            blur_radius: px(size * 0.4),
+            spread_radius: px(0.),
+            inset: false,
+        }])
+        .into_any_element()
+}
+
+/// The question, arriving word by word as the cube cools (`intro` 0: at once).
+fn arriving(t: &Theme, text: &str, intro: usize) -> AnyElement {
+    if intro == 0 {
+        return heading(t, text).into_any_element();
+    }
+    div()
+        .mt(t.space.xl)
+        .flex()
+        .flex_wrap()
+        .justify_center()
+        .gap_x(t.size.greeting * 0.26)
+        .font_family(t.font_display.clone())
+        .text_size(t.size.greeting)
+        .line_height(relative(1.2))
+        .text_color(t.colors.text_strong)
+        .font_weight(FontWeight::NORMAL)
+        .children(text.split(' ').enumerate().map(|(i, word)| {
+            div().child(word.to_string()).with_animation(
+                SharedString::from(format!("onboarding-word-{intro}-{i}")),
+                Animation::new(Duration::from_millis(INTRO_MS as u64)),
+                move |d, k| {
+                    let e = smooth((k * INTRO_MS - HEADING_MS - i as f32 * 70.) / 420.);
+                    d.opacity(e).mt(px(8. * (1. - e)))
+                },
+            )
+        }))
+        .into_any_element()
+}
+
 fn heading(t: &Theme, text: &str) -> impl IntoElement {
     div()
         .mt(t.space.xl)
@@ -377,7 +710,7 @@ impl Render for Onboarding {
         // to the other, both fading: forward to the avatars, back to the name.
         let dir = if self.forward { 1. } else { -1. };
         let step = |this: &Self, step: Step, window: &Window, cx: &mut Context<Self>| match step {
-            Step::Name => this.name_step(cx),
+            Step::Name => this.name_step(window, cx),
             Step::Avatar => this.avatar_step(window, cx),
         };
         let first = self.turn == 0;
@@ -417,34 +750,44 @@ impl Render for Onboarding {
                 )
         });
 
+        // The dot field fills the stage behind the steps, arranged round them.
+        let probe = self.dots.read(cx).content_probe();
         div()
-            .id("onboarding")
-            .key_context("Onboarding")
-            .track_focus(&self.focus)
-            .on_key_down(
-                cx.listener(|this, ev: &gpui::KeyDownEvent, window, cx| this.key(ev, window, cx)),
-            )
             .flex_1()
             .min_h_0()
-            // A window shorter than the steps scrolls them, never cuts them.
-            .overflow_y_scroll()
+            .relative()
             .bg(t.extra.stage)
+            .child(self.dots.clone())
             .child(
                 div()
-                    .min_h_full()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .pt(t.space.xl)
-                    .pb(t.space.xxl * 2.)
+                    .id("onboarding")
+                    .key_context("Onboarding")
+                    .track_focus(&self.focus)
+                    .on_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, window, cx| {
+                        this.key(ev, window, cx)
+                    }))
+                    .absolute()
+                    .inset_0()
+                    // A window shorter than the steps scrolls them, never cuts them.
+                    .overflow_y_scroll()
                     .child(
                         div()
-                            .flex_none()
-                            .relative()
-                            .w(px(560.))
-                            .h(px(480.))
-                            .children(leaving)
-                            .child(entering),
+                            .min_h_full()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .pt(t.space.xl)
+                            .pb(t.space.xxl * 2.)
+                            .child(
+                                div()
+                                    .flex_none()
+                                    .relative()
+                                    .w(px(560.))
+                                    .h(px(480.))
+                                    .child(probe)
+                                    .children(leaving)
+                                    .child(entering),
+                            ),
                     ),
             )
     }

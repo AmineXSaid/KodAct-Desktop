@@ -274,6 +274,9 @@ pub struct ExtraColors {
     pub mark_top: Hsla,
     pub mark_left: Hsla,
     pub mark_right: Hsla,
+    // The ingot's top fresh from the forge (onboarding, a strike): a heat
+    // glow it cools from, never a resting colour.
+    pub mark_heat: Hsla,
     pub border_strong: Hsla, // outlined buttons, switch tracks at rest, fields
     pub active: Hsla,        // the wash under the current row in a list (the sidebar's chat)
     pub sunk: Hsla,          // a recessed track: segmented controls, the composer's tray
@@ -336,6 +339,7 @@ impl ExtraColors {
                 mark_top: rgb(0x529a9d).into(),
                 mark_left: rgb(0xecebe6).into(),
                 mark_right: rgb(0x6f6c64).into(),
+                mark_heat: rgb(0xf2a65a).into(),
                 border_strong: rgb(0x55534e).into(),
                 active: hsla(0., 0., 1., 0.075),
                 sunk: rgb(0x1f1e1d).into(),
@@ -401,6 +405,7 @@ impl ExtraColors {
                 mark_top: rgb(0x216d70).into(),
                 mark_left: rgb(0x2b2a27).into(),
                 mark_right: rgb(0x8c887e).into(),
+                mark_heat: rgb(0xd9802e).into(),
                 border_strong: rgb(0xcfcbc0).into(),
                 active: warm_ink(0.075),
                 sunk: rgb(0xf0eee8).into(),
