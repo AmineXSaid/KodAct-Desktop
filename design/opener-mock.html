@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forge Opener Mock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;800&family=JetBrains+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --page: #f9f8f5; --surface: #ffffff; --text: #2b2a27; --muted: #5e5b54; --subtle: #8c887e;
+  --border: rgba(43,42,39,.13); --accent: #216d70; --accent-soft: #d0e6e7;
+  --sans: "Hanken Grotesk", sans-serif; --mono: "JetBrains Mono", monospace; --serif: "Source Serif 4", serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --page: #262624; --surface: #30302e; --text: #ecebe6; --muted: #c2bfb6; --subtle: #7d7a72;
+    --border: rgba(255,255,255,.1); --accent: #8ecacd; --accent-soft: #2f4749; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--text); font: 15px/1.55 var(--sans); }
+.wrap { max-width: 1160px; margin: 0 auto; padding: 40px 16px 80px; }
+h1 { font: 400 36px/1.15 var(--serif); margin: 0 0 6px; }
+.lede { color: var(--muted); margin: 0 0 24px; max-width: 760px; }
+.player { background: #0d0c0b; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
+canvas.film { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; }
+.controls { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--surface); border-top: 1px solid var(--border); }
+.controls button { font: 600 13px var(--sans); color: var(--text); background: transparent; border: 1px solid var(--border); border-radius: 8px; padding: 5px 12px; cursor: pointer; min-width: 64px; }
+.controls input[type=range] { flex: 1; accent-color: var(--accent); min-width: 0; }
+.controls .tc { font: 12px var(--mono); color: var(--muted); min-width: 120px; text-align: right; }
+h2 { font: 600 18px var(--sans); margin: 36px 0 12px; }
+.frames { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.frames figure { margin: 0; }
+.frames canvas { width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 8px; display: block; background: #0d0c0b; }
+.frames figcaption { font-size: 13px; color: var(--muted); margin-top: 6px; }
+.frames figcaption b { color: var(--text); font-weight: 600; }
+@media (max-width: 760px) { .frames { grid-template-columns: 1fr; } }
+.tablewrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; min-width: 640px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+tr:last-child td { border-bottom: 0; }
+td.t { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; color: var(--muted); }
+.notes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 760px) { .notes { grid-template-columns: 1fr; } }
+.note { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.note b { display: block; margin-bottom: 4px; }
+.note p { margin: 0; color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Forge opener: “Forged”</h1>
+  <p class="lede">A 7.6-second brand teaser that plays as the desktop app opens. Molten sparks spiral in, the ingot is forged white hot, cools through orange, ember and iron while Forge’s loop slams in three lines, settles into the wordmark, then opens onto the app. 16:9, 128 BPM grid, silent by default. Click the film or press Space to play or pause.</p>
+
+  <div class="player">
+    <canvas class="film" id="film" width="1920" height="1080" aria-label="Forge opener animation"></canvas>
+    <div class="controls">
+      <button type="button" id="play">Pause</button>
+      <button type="button" id="restart">Restart</button>
+      <input type="range" id="scrub" min="0" max="7.6" step="0.0417" value="0" aria-label="Scrub">
+      <span class="tc" id="tc">0.00 s · bar 1.1</span>
+    </div>
+  </div>
+
+  <h2>Style frames</h2>
+  <div class="frames">
+    <figure><canvas width="1920" height="1080" data-t="1.47"></canvas><figcaption><b>1.47 s, the lock.</b> The sparks have become the cube, white hot; a shockwave of heat rings out.</figcaption></figure>
+    <figure><canvas width="1920" height="1080" data-t="4.25"></canvas><figcaption><b>4.25 s, “You approve.”</b> The cube has cooled to dark iron under the third line; a teal check lands, and the cube turns teal on the next beat.</figcaption></figure>
+    <figure><canvas width="1920" height="1080" data-t="6.4"></canvas><figcaption><b>6.40 s, the lockup.</b> The cooled cube is the o of the wordmark, with the app’s own line beneath.</figcaption></figure>
+  </div>
+
+  <h2>Beat sheet (128 BPM, a beat is 0.47 s, a bar 1.88 s)</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>When</th><th>Bar.beat</th><th>Picture</th><th>On screen</th></tr></thead>
+    <tbody>
+      <tr><td class="t">0.00</td><td>1.1</td><td>Dark forge. Sparks streak in from the edges in the heat ramp.</td><td>HUD: 01 — HEAT</td></tr>
+      <tr><td class="t">0.47</td><td>1.2</td><td>Sparks spiral, brightening as they near the centre.</td><td></td></tr>
+      <tr><td class="t">0.94</td><td>1.3</td><td>They converge on the cube’s three faces.</td><td></td></tr>
+      <tr><td class="t">1.41</td><td>1.4</td><td><b>Lock:</b> the cube appears white hot, a heat shockwave, a burst of sparks, a small shake.</td><td></td></tr>
+      <tr><td class="t">1.88</td><td>2.1</td><td>Camera reframes: the cube drops low, cooling to orange; embers rise.</td><td><b>DESCRIBE IT.</b> (slam) · HUD: 02 — SHAPE</td></tr>
+      <tr><td class="t">2.81</td><td>2.3</td><td>Cube orange to red.</td><td><b>FORGE BUILDS IT.</b> (slam)</td></tr>
+      <tr><td class="t">3.75</td><td>3.1</td><td>Cube cools from ember red to dark iron.</td><td><b>YOU APPROVE.</b> + teal check (slam) · HUD: 03 — APPROVE</td></tr>
+      <tr><td class="t">4.69</td><td>3.3</td><td><b>Cooled:</b> the top turns teal; a teal ring runs through a dot grid.</td><td></td></tr>
+      <tr><td class="t">5.16</td><td>3.4</td><td>Words clear.</td><td></td></tr>
+      <tr><td class="t">5.63</td><td>4.1</td><td>The cube shrinks into the o; “f” and “rge” slide out of it.</td><td><b>forge</b> (wordmark)</td></tr>
+      <tr><td class="t">6.10</td><td>4.2</td><td>Hold.</td><td>Forge asks before it changes anything.</td></tr>
+      <tr><td class="t">7.00</td><td>4.4 + ½</td><td><b>Exit:</b> an iris opens from the cube onto the app.</td><td></td></tr>
+    </tbody>
+  </table></div>
+
+  <h2>How it would work in the app</h2>
+  <div class="notes">
+    <div class="note"><b>Native, not a video</b><p>Built in GPUI like the onboarding: the ingot, sparks and rings drawn as paths and quads, words as text. Sharp at any size, tiny, and it follows the theme (the iris opens onto light or dark).</p></div>
+    <div class="note"><b>Never in the way</b><p>Any key or click skips it. Plays on the first launch and after an update, not on every start (an option in Settings). Reduced motion: no opener.</p></div>
+    <div class="note"><b>Silent by default</b><p>An app that plays music each time it opens wears thin. Optional: one anvil strike on the lock, off by default.</p></div>
+    <div class="note"><b>Only what Forge does</b><p>The three lines are its real loop, and the closing line is the app’s own copy. Colours are the theme’s tokens: the heat ramp, the teal, paper and charcoal.</p></div>
+  </div>
+</div>
+
+<script>
+/* One clock: every frame is draw(ctx, t), a pure function of time. */
+const W = 1920, H = 1080, T = 7.6;
+const BEAT = 60 / 128, BAR = BEAT * 4;
+const b = (bar, beat) => (bar - 1) * BAR + (beat - 1) * BEAT;
+const LOCK = b(1, 4), W1 = b(2, 1), W2 = b(2, 3), W3 = b(3, 1), COOLED = b(3, 3), CLEAR = b(3, 4),
+      LOCKUP = b(4, 1), TAG = b(4, 2), IRIS = 7.0;
+
+// Tokens (src/theme.rs, dark).
+const C = { bg0: "#1d1c1b", bg1: "#0f0e0d", paper: "#ecebe6", muted: "#a8a59c",
+  top: "#529a9d", left: "#ecebe6", right: "#6f6c64", teal: "#8ecacd", accent: "#216d70",
+  white: "#fff2cc", glow: "#f5892c", ember: "#a3311c", iron: "#3b3633", app: "#262624", chrome: "#141312" };
+
+const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const mix = (a, b, k) => { const [x, y] = [hex(a), hex(b)]; return "#" + x.map((v, i) => Math.round(v + (y[i] - v) * k).toString(16).padStart(2, "0")).join(""); };
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const smooth = x => { x = clamp(x); return x * x * (3 - 2 * x); };
+const outCubic = x => 1 - Math.pow(1 - clamp(x), 3);
+const inOut = x => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const rgba = (h, a) => { const [r, g, bb] = hex(h); return `rgba(${r},${g},${bb},${a})`; };
+
+// Heat, as the app's ingot.rs: white 1, glow 2/3, ember 1/3, iron 0.12, then the face's colour.
+function glowing(cool, h) {
+  h = clamp(h);
+  const IRON = .12;
+  if (h <= IRON) return mix(cool, C.iron, smooth(h / IRON));
+  const stops = [[IRON, C.iron], [1 / 3, C.ember], [2 / 3, C.glow], [1, C.white]];
+  let i = stops.findIndex(s => h <= s[0]); if (i < 1) i = 3;
+  const [[a, ca], [bb, cb]] = [stops[i - 1], stops[i]];
+  return mix(ca, cb, (h - a) / (bb - a));
+}
+const heatAt = t => t < LOCK ? 1 : 1 - smooth((t - LOCK) / (COOLED - LOCK));
+
+// Seeded random, so every frame is the same every time.
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let x = Math.imul(seed ^ seed >>> 15, 1 | seed); x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x; return ((x ^ x >>> 14) >>> 0) / 4294967296; }; }
+
+// The ingot's three faces in its 64-unit box (ingot.rs).
+const FACES = {
+  top: [[32, 5], [55.4, 18.5], [32, 32], [8.6, 18.5]],
+  left: [[8.6, 18.5], [32, 32], [32, 59], [8.6, 45.5]],
+  right: [[55.4, 18.5], [32, 32], [32, 59], [55.4, 45.5]],
+};
+function facePts(name, cx, cy, S, inset = .035) {
+  const f = FACES[name], k = S / 64;
+  const mx = f.reduce((s, p) => s + p[0], 0) / 4, my = f.reduce((s, p) => s + p[1], 0) / 4;
+  return f.map(([x, y]) => [cx + (x - 32 + (mx - x) * inset) * k, cy + (y - 32 + (my - y) * inset) * k]);
+}
+function drawCube(ctx, cx, cy, S, h) {
+  const heat = { top: 1, left: .88, right: .74 }, cool = { top: C.top, left: C.left, right: C.right };
+  for (const name of ["left", "right", "top"]) {
+    const p = facePts(name, cx, cy, S);
+    ctx.beginPath(); p.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath();
+    ctx.fillStyle = glowing(cool[name], h * heat[name]); ctx.fill();
+  }
+}
+// A point on the cube's surface, for the sparks to land on.
+function surfacePoint(r, cx, cy, S) {
+  const name = ["top", "left", "right"][Math.floor(r() * 3)], p = facePts(name, cx, cy, S, 0);
+  const u = r(), v = r();
+  const a = [p[0][0] + (p[1][0] - p[0][0]) * u, p[0][1] + (p[1][1] - p[0][1]) * u];
+  const d = [p[3][0] + (p[2][0] - p[3][0]) * u, p[3][1] + (p[2][1] - p[3][1]) * u];
+  return [a[0] + (d[0] - a[0]) * v, a[1] + (d[1] - a[1]) * v];
+}
+
+// Where the cube is: centred and large for the forging, low for the words, the o of the wordmark at the end.
+const LOCK_POS = { x: W / 2, y: H / 2, S: 300 };
+const LOW_POS = { x: W / 2, y: 690, S: 250 };
+let LOCKUP_POS = null, WORD = null;
+function measureWordmark(ctx) {
+  const size = 170; ctx.font = `400 ${size}px "Source Serif 4"`;
+  const wf = ctx.measureText("f").width, wr = ctx.measureText("rge").width, oS = size * .66, gap = size * .02;
+  const total = wf + oS + wr + gap * 2, x0 = W / 2 - total / 2, base = 585;
+  WORD = { size, wf, wr, x0, base, oS, gap };
+  LOCKUP_POS = { x: x0 + wf + gap + oS / 2, y: base - oS * .42, S: oS };
+}
+function cubePos(t) {
+  const lerp = (a, b2, k) => ({ x: a.x + (b2.x - a.x) * k, y: a.y + (b2.y - a.y) * k, S: a.S + (b2.S - a.S) * k });
+  if (t < W1 - .25) return LOCK_POS;
+  if (t < LOCKUP) return lerp(LOCK_POS, LOW_POS, inOut((t - (W1 - .25)) / .45));
+  return lerp(LOW_POS, LOCKUP_POS, inOut((t - LOCKUP) / .42));
+}
+
+// Particles and sparks, fixed by their seeds.
+const SPARKS = (() => { const r = rng(7); return Array.from({ length: 280 }, () => ({
+  a: r() * Math.PI * 2, r0: 900 + r() * 500, delay: r() * .45, turn: 1.6 + r() * 1.4, size: 2 + r() * 3.5,
+  target: surfacePoint(r, LOCK_POS.x, LOCK_POS.y, LOCK_POS.S), seed: r() })); })();
+const BURST = (() => { const r = rng(11); return Array.from({ length: 70 }, () => {
+  const a = -Math.PI / 2 + (r() - .5) * 2.6, v = 380 + r() * 820;
+  return { vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: .5 + r() * .7, size: 2 + r() * 3 }; }); })();
+const EMBERS = (() => { const r = rng(23); return Array.from({ length: 90 }, (_, i) => ({
+  birth: LOCK + i * .045, x: (r() - .5) * 220, vx: (r() - .5) * 60, vy: -(120 + r() * 160), life: .9 + r() * .8, size: 1.5 + r() * 2.5 })); })();
+const SHAKES = [LOCK, W1, W2, W3];
+function shake(t) {
+  let x = 0, y = 0;
+  for (const at of SHAKES) { const a = t - at; if (a >= 0 && a < .18) { const k = (1 - a / .18) * (at === LOCK ? 14 : 7);
+    x += Math.sin(a * 140) * k; y += Math.cos(a * 117) * k; } }
+  return [x, y];
+}
+
+// Grain: one noise tile, offset by frame.
+const grain = (() => { const c = document.createElement("canvas"); c.width = c.height = 256; const g = c.getContext("2d"), d = g.createImageData(256, 256), r = rng(3);
+  for (let i = 0; i < d.data.length; i += 4) { const v = r() * 255; d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 255; } g.putImageData(d, 0, 0); return c; })();
+
+function draw(ctx, t) {
+  t = clamp(t, 0, T);
+  if (!WORD) measureWordmark(ctx);
+  const h = heatAt(t), pos = cubePos(t), [sx, sy] = shake(t);
+  ctx.save();
+  // The forge's dark, warming while the cube is hot.
+  const bg = ctx.createRadialGradient(W / 2, H / 2, 80, W / 2, H / 2, 1150);
+  bg.addColorStop(0, mix(C.bg0, "#3a2416", .55 * h * (t > .2 ? 1 : t / .2))); bg.addColorStop(1, C.bg1);
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+
+  ctx.translate(sx, sy);
+  // The teal ring through the dot grid as the cube cools.
+  const ringAge = t - COOLED;
+  if (ringAge > -.01 && t < IRIS) {
+    const R = ringAge * 900;
+    for (let y = 30; y < H; y += 42) for (let x = 30; x < W; x += 42) {
+      const d = Math.hypot(x - pos.x, (y - pos.y) * 1.3), band = Math.max(0, 1 - Math.abs(d - R) / 70);
+      const base = .07 * smooth(ringAge / .6) * Math.max(0, 1 - d / 1200);
+      const a = base + band * .9 * Math.max(0, 1 - R / 1700);
+      if (a > .01) { ctx.fillStyle = rgba(band > .45 ? C.teal : C.muted, a); ctx.fillRect(x - 2, y - 2, 4, 4); }
+    }
+  }
+  // Sparks spiralling in before the lock.
+  if (t < LOCK + .05) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    for (const s of SPARKS) {
+      const u = clamp((t - s.delay) / (LOCK - s.delay)), e = u * u;
+      const ang = s.a + (1 - u) * s.turn, rr = s.r0 * (1 - outCubic(u));
+      const px = W / 2 + Math.cos(ang) * rr, py = H / 2 + Math.sin(ang) * rr * .62;
+      const x = px + (s.target[0] - px) * e, y = py + (s.target[1] - py) * e;
+      const col = glowing(C.iron, .45 + .55 * u), a = smooth((t - s.delay) / .25) * (t > LOCK ? 0 : 1);
+      if (a <= 0) continue;
+      ctx.shadowColor = col; ctx.shadowBlur = 14; ctx.fillStyle = rgba(col, a);
+      ctx.beginPath(); ctx.arc(x, y, s.size * (.6 + .6 * u), 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+  if (t >= LOCK) {
+    // Radiance behind the hot cube.
+    if (h > .02) {
+      const g = ctx.createRadialGradient(pos.x, pos.y, pos.S * .2, pos.x, pos.y, pos.S * 1.5);
+      g.addColorStop(0, rgba(C.glow, .55 * h)); g.addColorStop(1, rgba(C.glow, 0));
+      ctx.fillStyle = g; ctx.fillRect(pos.x - pos.S * 2, pos.y - pos.S * 2, pos.S * 4, pos.S * 4);
+    }
+    // The heat shockwave at the lock.
+    const sa = (t - LOCK) / .7;
+    if (sa < 1) { ctx.strokeStyle = rgba(sa < .3 ? C.white : C.glow, .7 * (1 - sa)); ctx.lineWidth = 10 * (1 - sa) + 1;
+      ctx.beginPath(); ctx.ellipse(LOCK_POS.x, LOCK_POS.y, 60 + 820 * outCubic(sa), (60 + 820 * outCubic(sa)) * .62, 0, 0, Math.PI * 2); ctx.stroke(); }
+    // Sparks thrown off by the lock, then embers rising while it's hot.
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    for (const s of BURST) { const a = t - LOCK; if (a > s.life) continue;
+      const x = LOCK_POS.x + s.vx * a, y = LOCK_POS.y + s.vy * a + 900 * a * a, k = 1 - a / s.life;
+      const col = glowing(C.iron, .35 + .6 * k); ctx.fillStyle = rgba(col, k); ctx.shadowColor = col; ctx.shadowBlur = 10;
+      ctx.fillRect(x - s.size / 2, y - s.size / 2, s.size, s.size); }
+    for (const e of EMBERS) { const a = t - e.birth; if (a < 0 || a > e.life || t > CLEAR) continue;
+      const k = 1 - a / e.life, hh = heatAt(e.birth);
+      const x = pos.x + e.x + e.vx * a, y = pos.y - pos.S * .3 + e.vy * a;
+      const col = glowing(C.iron, .3 + .6 * hh); ctx.fillStyle = rgba(col, k * hh); ctx.shadowColor = col; ctx.shadowBlur = 8;
+      ctx.fillRect(x, y, e.size, e.size); }
+    ctx.restore();
+    // The cube itself.
+    if (t < IRIS + .6) drawCube(ctx, pos.x, pos.y, pos.S, h);
+    // The flash at the lock.
+    const fa = (t - LOCK) / .35;
+    if (fa < 1) { const g = ctx.createRadialGradient(LOCK_POS.x, LOCK_POS.y, 0, LOCK_POS.x, LOCK_POS.y, 420);
+      g.addColorStop(0, rgba(C.white, .85 * (1 - fa))); g.addColorStop(1, rgba(C.white, 0)); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+  }
+  // The three lines, slammed on the beat, each cut by the next.
+  const lines = [[W1, W2, "DESCRIBE IT."], [W2, W3, "FORGE BUILDS IT."], [W3, CLEAR, "YOU APPROVE."]];
+  for (const [at, until, text] of lines) {
+    if (t < at || t >= until + .2) continue;
+    const a = t - at, e = outCubic(a / .22), out = t > until ? 1 - (t - until) / .2 : 1;
+    const s = 1 + .6 * (1 - e);
+    ctx.save(); ctx.translate(W / 2, 300); ctx.scale(s, s);
+    ctx.filter = `blur(${(10 * (1 - e)).toFixed(1)}px)`;
+    ctx.font = `800 132px "Hanken Grotesk"`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = rgba(C.paper, clamp(a / .06) * out);
+    if (text === "YOU APPROVE.") {
+      const tw = ctx.measureText(text).width, cs = 104, gapx = 40, x0 = -(tw + gapx + cs) / 2;
+      ctx.textAlign = "left"; ctx.fillText(text, x0, 0);
+      // The teal check, landing half a beat later.
+      const ck = smooth((a - BEAT / 2) / .2);
+      if (ck > 0) { ctx.strokeStyle = rgba(C.teal, out); ctx.lineWidth = 16; ctx.lineCap = "round"; ctx.lineJoin = "round";
+        const cx0 = x0 + tw + gapx; ctx.beginPath(); ctx.moveTo(cx0, 0);
+        const p1 = [cx0 + cs * .35, cs * .32], p2 = [cx0 + cs, -cs * .42];
+        if (ck < .45) { const k = ck / .45; ctx.lineTo(cx0 + (p1[0] - cx0) * k, p1[1] * k); }
+        else { const k = (ck - .45) / .55; ctx.lineTo(...p1); ctx.lineTo(p1[0] + (p2[0] - p1[0]) * k, p1[1] + (p2[1] - p1[1]) * k); }
+        ctx.stroke(); }
+    } else ctx.fillText(text, 0, 0);
+    ctx.restore();
+  }
+  ctx.translate(-sx, -sy);
+  // The wordmark: "f" and "rge" slide out of the cube; the app's line beneath.
+  if (t >= LOCKUP && t < IRIS + .6) {
+    const k = outCubic((t - LOCKUP - .18) / .5), w = WORD;
+    ctx.save(); ctx.font = `400 ${w.size}px "Source Serif 4"`; ctx.textBaseline = "alphabetic"; ctx.fillStyle = rgba(C.paper, k);
+    ctx.fillText("f", w.x0 + 60 * (1 - k), w.base);
+    ctx.fillText("rge", w.x0 + w.wf + w.oS + w.gap * 2 - 60 * (1 - k), w.base);
+    const tg = smooth((t - TAG) / .4);
+    ctx.font = `400 34px "Hanken Grotesk"`; ctx.textAlign = "center"; ctx.fillStyle = rgba(C.muted, tg);
+    ctx.fillText("Forge asks before it changes anything.", W / 2, w.base + 92 + 10 * (1 - tg));
+    ctx.restore();
+  }
+  // The viewfinder HUD: corners, chapter, timecode.
+  const hudA = (t < .15 ? t / .15 : 1) * (1 - smooth((t - LOCKUP) / .3));
+  if (hudA > 0) {
+    ctx.save(); ctx.strokeStyle = rgba(C.paper, .32 * hudA); ctx.lineWidth = 2;
+    const m = 56, L = 44;
+    for (const [x, y, dx, dy] of [[m, m, 1, 1], [W - m, m, -1, 1], [m, H - m, 1, -1], [W - m, H - m, -1, -1]]) {
+      ctx.beginPath(); ctx.moveTo(x, y + dy * L); ctx.lineTo(x, y); ctx.lineTo(x + dx * L, y); ctx.stroke(); }
+    const chapter = t < W1 ? "01 — HEAT" : t < W3 ? "02 — SHAPE" : "03 — APPROVE";
+    ctx.font = `500 22px "JetBrains Mono"`; ctx.fillStyle = rgba(C.paper, .55 * hudA); ctx.textBaseline = "middle";
+    ctx.fillText(chapter, m + 30, m + 30);
+    ctx.textAlign = "right"; ctx.fillText("FORGE", W - m - 30, m + 30);
+    const f = Math.floor(t * 24), tc = `00:00:${String(Math.floor(f / 24)).padStart(2, "0")}:${String(f % 24).padStart(2, "0")}`;
+    ctx.fillText(tc, W - m - 30, H - m - 30);
+    ctx.textAlign = "left"; ctx.fillStyle = rgba(h > .05 ? C.glow : C.teal, .8 * hudA);
+    ctx.beginPath(); ctx.arc(m + 38, H - m - 30, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = rgba(C.paper, .55 * hudA); ctx.fillText(h > .05 ? `${Math.round(400 + 1100 * h)}°C` : "COOL", m + 56, H - m - 30);
+    ctx.restore();
+  }
+  // Grain, faint.
+  ctx.save(); ctx.globalAlpha = .045; ctx.globalCompositeOperation = "overlay";
+  const fr = Math.floor(t * 24), ox = (fr * 97) % 256, oy = (fr * 61) % 256;
+  for (let y = -oy; y < H; y += 256) for (let x = -ox; x < W; x += 256) ctx.drawImage(grain, x, y);
+  ctx.restore();
+  // The exit: an iris from the cube onto the app.
+  if (t >= IRIS) {
+    const k = inOut((t - IRIS) / .6), R = 30 + k * 2300;
+    ctx.save(); ctx.beginPath(); ctx.arc(LOCKUP_POS.x, LOCKUP_POS.y, R, 0, Math.PI * 2); ctx.clip();
+    ctx.fillStyle = C.app; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = C.chrome; ctx.fillRect(0, 0, W, 54);
+    ctx.fillStyle = "#1d1c1b"; ctx.fillRect(0, 54, 384, H - 54);
+    drawCube(ctx, 806, 448, 42, 0);
+    ctx.font = `400 50px "Source Serif 4"`; ctx.fillStyle = C.paper; ctx.textBaseline = "middle"; ctx.fillText("What are we forging?", 846, 452);
+    ctx.strokeStyle = "rgba(255,255,255,.1)"; ctx.lineWidth = 2; ctx.fillStyle = "#30302e";
+    ctx.beginPath(); ctx.roundRect(732, 530, 840, 150, 18); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+/* The player: one loop, scrub, play or pause; the style frames from the same draw(t). */
+const film = document.getElementById("film"), fctx = film.getContext("2d");
+const scrub = document.getElementById("scrub"), tc = document.getElementById("tc"), playBtn = document.getElementById("play");
+let playing = !matchMedia("(prefers-reduced-motion: reduce)").matches, t = playing ? 0 : 6.4, last = null;
+function label(t) { const beatsIn = t / BEAT; return `${t.toFixed(2)} s · bar ${Math.floor(beatsIn / 4) + 1}.${Math.floor(beatsIn % 4) + 1}`; }
+function render() { draw(fctx, t); scrub.value = t; tc.textContent = label(t); playBtn.textContent = playing ? "Pause" : "Play"; }
+function loop(now) {
+  if (playing) { if (last != null) t += (now - last) / 1000; if (t > T + .6) t = 0; }
+  last = now; render(); requestAnimationFrame(loop);
+}
+const toggle = () => { playing = !playing; if (playing && t >= T) t = 0; };
+playBtn.addEventListener("click", toggle);
+film.addEventListener("click", toggle);
+document.getElementById("restart").addEventListener("click", () => { t = 0; playing = true; });
+scrub.addEventListener("input", () => { playing = false; t = +scrub.value; });
+addEventListener("keydown", e => { if (e.code === "Space" && e.target === document.body) { e.preventDefault(); toggle(); } });
+Promise.all([
+  document.fonts.load('800 132px "Hanken Grotesk"'), document.fonts.load('400 170px "Source Serif 4"'),
+  document.fonts.load('500 22px "JetBrains Mono"'), document.fonts.load('400 34px "Hanken Grotesk"'),
+]).catch(() => {}).then(() => {
+  measureWordmark(fctx);
+  document.querySelectorAll(".frames canvas").forEach(c => draw(c.getContext("2d"), +c.dataset.t));
+  requestAnimationFrame(loop);
+});
+</script>
+</body>
+</html>
