@@ -111,7 +111,10 @@ Contrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of w
 | `mark_top` | `#216d70` | 5.7:1 | `#529a9d` | 4.7:1 | the ingot mark's top face (`ui/ingot.rs`) |
 | `mark_left` | `#2b2a27` | 13.5:1 | `#ecebe6` | 12.7:1 | the ingot's left face |
 | `mark_right` | `#8c887e` | 3.3:1 | `#6f6c64` | 2.9:1 | the ingot's right face |
-| `mark_heat` | `#d9802e` | 2.8:1 | `#f2a65a` | 7.5:1 | the ingot's top fresh from the forge (onboarding, a strike); never at rest |
+| `mark_heat_white` | `#fff2cc` | 1.1:1 | `#fff2cc` | 13.6:1 | the ingot white hot from the forge (onboarding); never at rest |
+| `mark_heat` | `#f5892c` | 2.3:1 | `#f5892c` | 6.1:1 | the ingot's orange glow as it cools, and a strike's flare |
+| `mark_heat_ember` | `#a3311c` | 6.6:1 | `#a3311c` | 2.2:1 | the ingot's ember red as it cools |
+| `mark_heat_iron` | `#3b3633` | 11.2:1 | `#3b3633` | 1.3:1 | the ingot's dark iron, last before its own colours |
 | `fill_danger` | `#b4412f` | 5.6:1 | `#b7331f` | 6.0:1 | destructive confirms |
 | `success` | `#276b43` | 6.4:1 | `#8fd3a8` | 7.6:1 | done, passed |
 | `danger` | `#b4412f` | 5.6:1 | `#eb8c7b` | 5.4:1 | failed, errors |

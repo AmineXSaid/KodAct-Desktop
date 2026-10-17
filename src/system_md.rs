@@ -231,7 +231,7 @@ fn render() -> String {
     );
     // Each row: the token, then the pair whose contrast is shown.
     type Pick = fn(&Theme) -> Hsla;
-    let rows: [(&str, Pick, Pick, Pick, &str); 22] = [
+    let rows: [(&str, Pick, Pick, Pick, &str); 25] = [
         (
             "text_strong",
             |t| t.colors.text_strong,
@@ -331,11 +331,32 @@ fn render() -> String {
             "the ingot's right face",
         ),
         (
+            "mark_heat_white",
+            |t| t.extra.mark_heat_white,
+            |t| t.extra.mark_heat_white,
+            |t| t.extra.stage,
+            "the ingot white hot from the forge (onboarding); never at rest",
+        ),
+        (
             "mark_heat",
             |t| t.extra.mark_heat,
             |t| t.extra.mark_heat,
             |t| t.extra.stage,
-            "the ingot's top fresh from the forge (onboarding, a strike); never at rest",
+            "the ingot's orange glow as it cools, and a strike's flare",
+        ),
+        (
+            "mark_heat_ember",
+            |t| t.extra.mark_heat_ember,
+            |t| t.extra.mark_heat_ember,
+            |t| t.extra.stage,
+            "the ingot's ember red as it cools",
+        ),
+        (
+            "mark_heat_iron",
+            |t| t.extra.mark_heat_iron,
+            |t| t.extra.mark_heat_iron,
+            |t| t.extra.stage,
+            "the ingot's dark iron, last before its own colours",
         ),
         (
             "fill_danger",

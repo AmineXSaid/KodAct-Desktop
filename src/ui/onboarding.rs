@@ -4,8 +4,9 @@
 //! sidebar. Reopened from the command palette: "Change your name" starts at
 //! the name, "Change your avatar" at the avatars.
 //!
-//! The name step forges itself in: the ingot's faces land and lock with a
-//! glow, its top cooling from heat to the accent, while a ring runs out
+//! The name step forges itself in: the ingot's faces land white hot and
+//! lock with a burst of heat, then the whole cube cools as metal does,
+//! through orange and ember red to its own colours, while a ring runs out
 //! through the dot field behind; a halo and an orbiting spark settle under
 //! the cube, the question arrives word by word and the field rises in. The
 //! field's edge charges with the accent while it has the keyboard, each
@@ -44,15 +45,15 @@ const PREVIEW: f32 = 104.;
 const HERO: f32 = 132.;
 const CUBE: f32 = 88.;
 /// The forging, in milliseconds from the step opening: the faces land
-/// over `LAND_MS`, lock at `LOCK_MS` (the glow, the ring), the top cools
-/// by `COOL_MS`, the question starts at `HEADING_MS` and the field rises
+/// over `LAND_MS`, lock at `LOCK_MS` (the glow, the ring), the cube cools
+/// from white hot to its own colours by `COOL_MS`, the question starts at `HEADING_MS` and the field rises
 /// at `FIELD_MS`; all of it is over by `INTRO_MS`.
 const LAND_MS: f32 = 1000.;
 const LOCK_MS: f32 = 1150.;
-const COOL_MS: f32 = 2400.;
+const COOL_MS: f32 = 3300.;
 const HEADING_MS: f32 = 1300.;
 const FIELD_MS: f32 = 1750.;
-const INTRO_MS: f32 = 2600.;
+const INTRO_MS: f32 = 3400.;
 /// Enter's strike: the hot quarter turn before the avatars come in.
 const STRIKE: Duration = Duration::from_millis(700);
 
@@ -430,6 +431,7 @@ impl Onboarding {
                     let heat = 1. - smooth((ms - LOCK_MS) / (COOL_MS - LOCK_MS));
                     d.child(halo(glow, after))
                         .child(orbit(glow, after))
+                        .child(radiance(glow, heat))
                         .child(flash(glow, (ms - LOCK_MS + 60.) / 800.))
                         .child(placed(ingot::forging(CUBE, ms / LAND_MS, heat)))
                 },
@@ -636,6 +638,29 @@ fn orbit(g: Glow, a: f32) -> impl IntoElement {
                 )
             },
         )
+}
+
+/// The warmth the cube gives off while it's hot, `heat` 0..1: a soft glow
+/// behind it, orange, fading as it cools.
+fn radiance(g: Glow, heat: f32) -> AnyElement {
+    if heat <= 0.02 {
+        return div().into_any_element();
+    }
+    let size = CUBE * 0.8;
+    div()
+        .absolute()
+        .left(px((HERO - size) / 2.))
+        .top(px((HERO - size) / 2. - 6.))
+        .size(px(size))
+        .rounded_full()
+        .shadow(vec![gpui::BoxShadow {
+            color: g.heat.opacity(0.55 * heat),
+            offset: gpui::point(px(0.), px(0.)),
+            blur_radius: px(36.),
+            spread_radius: px(4.),
+            inset: false,
+        }])
+        .into_any_element()
 }
 
 /// The glow as the cube locks or is struck, `f` 0..1 through it: a burst of

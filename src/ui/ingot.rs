@@ -190,7 +190,8 @@ pub(crate) fn face_svg(path: &str) -> Option<Vec<u8>> {
 pub struct Ingot {
     size: f32,
     frame: usize,
-    /// 0..1: how hot the top is, from the accent to `mark_heat`.
+    /// 0..1: how hot the cube is: 1 white hot, through the orange glow and
+    /// ember red, to 0 cooled to its own colours (`glowing`).
     heat: f32,
     /// While the faces are still landing (`forging`): how far along, 0..1.
     landing: Option<f32>,
@@ -199,20 +200,23 @@ pub struct Ingot {
 impl RenderOnce for Ingot {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let x = &cx.theme().extra;
+        let ramp = [
+            x.mark_heat_iron,
+            x.mark_heat_ember,
+            x.mark_heat,
+            x.mark_heat_white,
+        ];
         let mut d = div().relative().size(px(self.size)).flex_none();
         for (face, _) in faces(frame_yaw(self.frame), BOX, GAP) {
-            let (name, color, slot) = match face {
-                Face::Top => (
-                    "t".to_string(),
-                    mix(x.mark_top, x.mark_heat, self.heat),
-                    Slot::Top,
-                ),
+            let (name, cool, slot) = match face {
+                Face::Top => ("t".to_string(), x.mark_top, Slot::Top),
                 Face::Side(n, k) => (
                     n.to_string(),
                     mix(x.mark_left, x.mark_right, k),
                     if k < 0.5 { Slot::Left } else { Slot::Right },
                 ),
             };
+            let color = glowing(cool, self.heat * face_heat(slot), ramp);
             let (dx, dy, alpha) = self
                 .landing
                 .map_or((0., 0., 1.), |p| landing(slot, p, self.size));
@@ -230,6 +234,39 @@ impl RenderOnce for Ingot {
         d
     }
 }
+
+/// How hot a face runs against the cube's heat: the top, facing the
+/// light, brightest; the sides a little cooler, the right the coolest, so
+/// the glow keeps the cube's shading.
+fn face_heat(slot: Slot) -> f32 {
+    match slot {
+        Slot::Top => 1.,
+        Slot::Left => 0.88,
+        Slot::Right => 0.74,
+    }
+}
+
+/// A face at heat `h` (0..1), as metal cools: white hot at 1, the orange
+/// glow at 2/3, ember red at 1/3, dark iron at `IRON`; below that the iron
+/// gives way to the face's own colour `cool`.
+fn glowing(cool: Hsla, h: f32, [iron, ember, glow, white]: [Hsla; 4]) -> Hsla {
+    let h = h.clamp(0., 1.);
+    let stops = [(IRON, iron), (1. / 3., ember), (2. / 3., glow), (1., white)];
+    if h <= IRON {
+        let x = h / IRON;
+        return mix(cool, iron, x * x * (3. - 2. * x));
+    }
+    let i = stops
+        .iter()
+        .position(|(at, _)| h <= *at)
+        .unwrap_or(3)
+        .max(1);
+    let ((a, ca), (b, cb)) = (stops[i - 1], stops[i]);
+    mix(ca, cb, (h - a) / (b - a))
+}
+
+/// Where a cooling face is dark iron, just before its own colour returns.
+const IRON: f32 = 0.12;
 
 /// Which face, as the cube stands at rest.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -261,6 +298,9 @@ fn landing(slot: Slot, p: f32, size: f32) -> (f32, f32, f32) {
     )
 }
 
+/// How hot a strike gets: the orange glow, not white hot.
+const STRIKE_HEAT: f32 = 0.7;
+
 /// The mark at rest, `size` px square.
 pub fn mark(size: f32) -> Ingot {
     Ingot {
@@ -271,8 +311,8 @@ pub fn mark(size: f32) -> Ingot {
     }
 }
 
-/// The cube being forged: its faces `land` (0..1) into place, its top at
-/// `heat` (1 white hot from the forge, 0 cooled to the accent).
+/// The cube being forged: its faces `land` (0..1) into place, the whole
+/// cube at `heat` (1 white hot from the forge, 0 cooled to its colours).
 pub fn forging(size: f32, land: f32, heat: f32) -> Ingot {
     Ingot {
         size,
@@ -282,15 +322,15 @@ pub fn forging(size: f32, land: f32, heat: f32) -> Ingot {
     }
 }
 
-/// The cube struck: `k` (0..1) through one quarter turn, its top flaring
-/// hot at the middle of the turn and cooling as it settles.
+/// The cube struck: `k` (0..1) through one quarter turn, flaring to the
+/// orange glow at the middle of the turn and cooling as it settles.
 pub fn struck(size: f32, k: f32) -> Ingot {
     let k = k.clamp(0., 1.);
     let eased = k * k * (3. - 2. * k);
     Ingot {
         size,
         frame: frame_of(REST + eased * FRAC_PI_2),
-        heat: (k * std::f32::consts::PI).sin(),
+        heat: STRIKE_HEAT * (k * std::f32::consts::PI).sin(),
         landing: None,
     }
 }
@@ -464,8 +504,27 @@ mod tests {
     fn a_strike_turns_a_quarter_and_flares_hot_on_the_way() {
         assert_eq!(struck(20., 0.).frame, 0);
         assert_eq!(struck(20., 1.).frame, FRAMES / 4);
-        assert!(struck(20., 0.5).heat > 0.99);
+        assert!((struck(20., 0.5).heat - STRIKE_HEAT).abs() < 1e-3);
         assert!(struck(20., 1.).heat < 1e-3);
+    }
+
+    #[test]
+    fn heat_runs_white_to_orange_to_ember_to_iron_then_the_face() {
+        let rgb = |c: u32| -> Hsla { gpui::rgb(c).into() };
+        let ramp = [rgb(0x3b3633), rgb(0xa3311c), rgb(0xf5892c), rgb(0xfff2cc)];
+        let teal = rgb(0x216d70);
+        let close = |a: Hsla, b: Hsla| {
+            let (a, b) = (a.to_rgb(), b.to_rgb());
+            (a.r - b.r).abs() + (a.g - b.g).abs() + (a.b - b.b).abs() < 0.02
+        };
+        assert!(close(glowing(teal, 1., ramp), ramp[3]), "white hot");
+        assert!(close(glowing(teal, 2. / 3., ramp), ramp[2]), "the glow");
+        assert!(close(glowing(teal, 1. / 3., ramp), ramp[1]), "ember");
+        assert!(close(glowing(teal, IRON, ramp), ramp[0]), "iron");
+        assert!(close(glowing(teal, 0., ramp), teal), "cooled");
+        // The sides run cooler than the top, the right the coolest.
+        assert!(face_heat(Slot::Top) > face_heat(Slot::Left));
+        assert!(face_heat(Slot::Left) > face_heat(Slot::Right));
     }
 
     #[test]
