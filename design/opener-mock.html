@@ -39,7 +39,7 @@ h2 { font: 600 18px var(--sans); margin: 36px 0 12px; }
 .frames figcaption { font-size: 13px; color: var(--muted); margin-top: 6px; }
 .frames figcaption b { color: var(--text); font-weight: 600; }
 @media (max-width: 760px) { .frames { grid-template-columns: 1fr; } }
-.tablewrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.tablewrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 4px 8px; }
 table { border-collapse: collapse; width: 100%; font-size: 13.5px; min-width: 640px; }
 th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
 th { font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
@@ -56,7 +56,7 @@ td.t { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; color: 
 <body>
 <div class="wrap">
   <h1>Forge opener: “Forged”</h1>
-  <p class="lede">A raw star falls from the top left, wrapped in a dark blue aura, lighting the ground as it comes. It lands at the centre, heats, and is forged into the ingot, which cools through orange, ember and iron to the Forge cube. Two cuts: the full film on a first launch, leading into the naming screen, and a short one for every launch after. Click the film or press Space to play or pause.</p>
+  <p class="lede">A star falls from the top left: a real stone, its leading face melting in the air, a dark blue aura and a glowing train behind it, its light hitting the ground as it comes. It lands at the centre, heats, and is forged into the ingot, which cools through orange, ember and iron to the Forge cube. Two cuts: the full film on a first launch, leading into the naming screen, and a short one for every launch after. Click the film or press Space to play or pause.</p>
 
   <div class="tabs" role="tablist">
     <button type="button" role="tab" data-mode="first" aria-selected="true">Mock 1 · First launch (9.6 s)</button>
@@ -74,7 +74,7 @@ td.t { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; color: 
 
   <h2>Style frames</h2>
   <div class="frames" data-for="first">
-    <figure><canvas width="1920" height="1080" data-t="0.85"></canvas><figcaption><b>0.85 s, the fall.</b> The raw star in its blue aura, its trail behind it, its light pooling on the ground.</figcaption></figure>
+    <figure><canvas width="1920" height="1080" data-t="0.85"></canvas><figcaption><b>0.85 s, the fall.</b> The stone tumbling, its nose white hot, pieces burning off, its wake and train behind it, its light pooling on the ground.</figcaption></figure>
     <figure><canvas width="1920" height="1080" data-t="1.62"></canvas><figcaption><b>1.62 s, the forging.</b> Landed: the rock heats, its cracks glow white and it closes into the cube’s shape.</figcaption></figure>
     <figure><canvas width="1920" height="1080" data-t="9.3"></canvas><figcaption><b>9.30 s, the naming screen.</b> The cooled cube rises into the hero; the question and the field arrive.</figcaption></figure>
   </div>
@@ -88,7 +88,7 @@ td.t { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; color: 
   <div class="tablewrap" data-for="first"><table>
     <thead><tr><th>When</th><th>Bar.beat</th><th>Picture</th><th>On screen</th></tr></thead>
     <tbody>
-      <tr><td class="t">0.00</td><td>1.1</td><td>Night. A raw star enters top left in a dark blue aura, its trail shedding light.</td><td>HUD: 01 — STAR</td></tr>
+      <tr><td class="t">0.00</td><td>1.1</td><td>Night. A stone enters top left in a dark blue aura, its leading face burning, shedding pieces, leaving a train that drifts and fades.</td><td>HUD: 01 — STAR</td></tr>
       <tr><td class="t">0.47–1.17</td><td>1.2–1.3</td><td>It falls, turning; its light sweeps the ground grid and pools beneath it.</td><td></td></tr>
       <tr><td class="t">1.20</td><td>1.3½</td><td><b>Impact</b> at the centre: a blue-white flash, a ring runs over the ground, shafts of light hit the floor.</td><td></td></tr>
       <tr><td class="t">1.20–1.88</td><td>1.3½–2.1</td><td><b>Forging:</b> the aura turns from blue to heat, cracks glow, the rock closes into the cube.</td><td></td></tr>
@@ -117,7 +117,7 @@ td.t { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; color: 
   <div class="notes">
     <div class="note"><b>Which cut plays</b><p>Mock 1 on the first launch (no name saved yet), ending on the naming screen. Mock 2 on every launch after, ending in the app. Any key or click skips either one.</p></div>
     <div class="note"><b>Native, not a video</b><p>Built in GPUI like the onboarding: the star, trail, ground and cube drawn as paths and quads, words as text. Reduced motion: no opener.</p></div>
-    <div class="note"><b>The blue aura is new</b><p>The star’s blue (#2f63c4 aura, #a9c9ff core) is the one colour not in the theme yet. It would join the heat ramp as tokens, used only by the opener.</p></div>
+    <div class="note"><b>The blue aura is new</b><p>The star’s blues (#2f63c4 aura, #a9c9ff core, #16306e train) are the one colour not in the theme yet; the stone’s melt uses the heat ramp. It would join the heat ramp as tokens, used only by the opener.</p></div>
     <div class="note"><b>Silent by default</b><p>Optional: a low whoosh as the star falls and one anvil strike on the lock, both off by default.</p></div>
   </div>
 </div>
@@ -140,7 +140,7 @@ const MODES = {
 const C = { night0: "#11151d", night1: "#07090d", stage: "#262624", chrome: "#141312", pane: "#1d1c1b", surface: "#30302e",
   paper: "#ecebe6", muted: "#a8a59c", subtle: "#7d7a72", top: "#529a9d", left: "#ecebe6", right: "#6f6c64", teal: "#8ecacd",
   white: "#fff2cc", glow: "#f5892c", ember: "#a3311c", iron: "#3b3633",
-  aura: "#2f63c4", core: "#a9c9ff", rock0: "#151a24", rock1: "#3a4458", ground: "#6f86b8" };
+  aura: "#2f63c4", core: "#a9c9ff", deep: "#16306e", ground: "#6f86b8" };
 
 const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
 const mix = (a, b2, k) => { const [x, y] = [hex(a), hex(b2)]; k = Math.min(1, Math.max(0, k));
@@ -178,13 +178,6 @@ function drawCube(ctx, cx, cy, S, h) {
   for (const name of ["left", "right", "top"]) { poly(ctx, facePts(name, cx, cy, S)); ctx.fillStyle = glowing(cool[name], h * heat[name]); ctx.fill(); }
 }
 
-// The star: a raw rock, 12 jagged points, its facets and cracks, fixed by a seed.
-const ROCK = (() => { const r = rng(42), n = 12, pts = [];
-  for (let i = 0; i < n; i++) { const a = -Math.PI / 2 + i / n * Math.PI * 2 + (r() - .5) * .3; pts.push({ a, r: .72 + r() * .4 }); }
-  const shade = pts.map(() => r());
-  const cracks = Array.from({ length: 5 }, () => { const a = r() * Math.PI * 2; return [[0, 0], [Math.cos(a) * .35, Math.sin(a) * .35],
-    [Math.cos(a + (r() - .5) * .7) * .7, Math.sin(a + (r() - .5) * .7) * .7]]; });
-  return { pts, shade, cracks }; })();
 // Where a ray from the cube's centre at angle `a` meets its outline (in the 64-unit box, centred).
 function hexRay(a) {
   const dx = Math.cos(a), dy = Math.sin(a); let best = Infinity;
@@ -194,23 +187,82 @@ function hexRay(a) {
     if (tt > 0 && u >= 0 && u <= 1) best = Math.min(best, tt); }
   return [dx * best, dy * best];
 }
-function drawRock(ctx, cx, cy, R, spin, heat, morph, S) {
-  // Each point of the rock closes straight out (or in) onto the cube's outline, along its own angle.
-  const k = S / 64, pts = ROCK.pts.map(p => {
-    const a = p.a + spin, rx = Math.cos(a) * p.r * R, ry = Math.sin(a) * p.r * R, [hx, hy] = hexRay(a);
-    return [cx + rx + (hx * k - rx) * morph, cy + ry + (hy * k - ry) * morph]; });
-  for (let i = 0; i < 12; i++) {
-    const a = pts[i], c = pts[(i + 1) % 12];
-    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(...a); ctx.lineTo(...c); ctx.closePath();
-    const cold = mix(C.rock0, C.rock1, ROCK.shade[i]);
-    ctx.fillStyle = heat > 0 ? mix(cold, glowing(C.iron, .45 + .55 * heat), smooth(heat * 1.6)) : cold; ctx.fill();
+// Value noise and fbm, fixed by a seed.
+function noise2(seed, G = 64) { const r = rng(seed), L = Float32Array.from({ length: G * G }, r);
+  const at = (i, j) => L[((j % G + G) % G) * G + ((i % G + G) % G)];
+  return (x, y) => { const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
+    const a = at(xi, yi), b2 = at(xi + 1, yi), c = at(xi, yi + 1), d = at(xi + 1, yi + 1);
+    return a + (b2 - a) * u + (c - a) * v + (a - b2 - c + d) * u * v; }; }
+const fbm = (n, x, y, o = 5) => { let s = 0, a = .5, f = 1, w = 0; for (let i = 0; i < o; i++) { s += a * n(x * f, y * f); w += a; a *= .5; f *= 2.03; } return s / w; };
+const sstep = (a, b2, x) => smooth((x - a) / (b2 - a));
+
+// The star: a real meteoroid. A lumpy stone, cratered and veined, drawn once as a height field;
+// each frame lights it: the plasma ahead of it lights and melts its leading face, the aura rims the rest.
+const ROCK = (() => { const r = rng(42), ph = [r(), r(), r()].map(v => v * Math.PI * 2), n1 = noise2(7), K = 720;
+  const cuts = Array.from({ length: 9 }, (_, i) => ({ th: i / 9 * Math.PI * 2 + (r() - .5) * .5, d: .78 + r() * .22 }));
+  const raw = a => Math.min(...cuts.map(c => { const k = Math.cos(a - c.th); return k > .05 ? c.d / k : 9; }))
+    * (1 + .05 * Math.sin(3 * a + ph[0]) + .1 * (fbm(n1, 8 + Math.cos(a) * 3, 8 + Math.sin(a) * 3, 4) - .5));
+  const tab = Float32Array.from({ length: K }, (_, i) => raw(i / K * Math.PI * 2)), mx = Math.max(...tab);
+  for (let i = 0; i < K; i++) tab[i] *= .97 / mx;
+  const rad = a => tab[((Math.round(a / (Math.PI * 2) * K) % K) + K) % K];
+  // Thumbprints (regmaglypts): the shallow pits the air scoops out of a falling stone. And chipped facets.
+  const craters = Array.from({ length: 26 }, () => { const a = r() * Math.PI * 2, d = Math.sqrt(r()) * .8;
+    return { x: Math.cos(a) * d, y: Math.sin(a) * d, r: .06 + r() * .09, depth: .012 + r() * .018 }; });
+  const facets = Array.from({ length: 16 }, () => { const a = r() * Math.PI * 2, d = Math.sqrt(r()) * .85;
+    return { x: Math.cos(a) * d, y: Math.sin(a) * d, tx: (r() - .5) * .9, ty: (r() - .5) * .9 }; });
+  // The height field, on a square texture; one unit is half its side.
+  const N = 320, half = N / 2, Hh = new Float32Array(N * N), alb = new Float32Array(N * N), vein = new Float32Array(N * N),
+    alpha = new Float32Array(N * N), n2 = noise2(13), n3 = noise2(17), n4 = noise2(19);
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const x = (i + .5 - half) / half, y = (j + .5 - half) / half, d = Math.hypot(x, y), rr = rad(Math.atan2(y, x)), q = d / rr, k = j * N + i;
+    alpha[k] = clamp((rr - d) * half / 1.3 + .5);
+    if (q > 1.02) continue;
+    let h = Math.sqrt(Math.max(0, 1 - Math.min(1, q) ** 2)) * .7 + .05 * fbm(n2, x * 5 + 3, y * 5 + 3) + .02 * fbm(n2, x * 23, y * 23, 3);
+    for (const c of craters) { const dc = Math.hypot(x - c.x, y - c.y) / c.r;
+      if (dc < 1) h -= c.depth * (1 - dc * dc) ** 2; }
+    Hh[k] = h; alb[k] = .62 + .7 * fbm(n3, x * 3.4 + 9, y * 3.4 + 9);
+    const v = 1 - Math.abs(2 * fbm(n4, x * 2.6 + 1, y * 2.6 + 1, 4) - 1); vein[k] = sstep(.84, .97, v) * clamp(1.4 - q);
   }
-  // Rim light from the aura, and cracks glowing as it heats.
-  poly(ctx, pts); ctx.strokeStyle = rgba(heat > .3 ? C.white : C.core, .55 * (1 - morph)); ctx.lineWidth = 2; ctx.stroke();
-  if (heat > 0 && morph < 1) { ctx.save(); ctx.strokeStyle = rgba(C.white, heat * (1 - morph)); ctx.lineWidth = 3; ctx.shadowColor = C.glow; ctx.shadowBlur = 16;
-    for (const cr of ROCK.cracks) { ctx.beginPath(); cr.forEach(([x, y], i) => { const X = cx + (x * Math.cos(spin) - y * Math.sin(spin)) * R,
-      Y = cy + (x * Math.sin(spin) + y * Math.cos(spin)) * R; i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); ctx.stroke(); }
-    ctx.restore(); }
+  // Normals from the height field's slope.
+  const nx = new Float32Array(N * N), ny = new Float32Array(N * N), nz = new Float32Array(N * N), px = new Float32Array(N * N), py = new Float32Array(N * N), inside = [];
+  for (let j = 1; j < N - 1; j++) for (let i = 1; i < N - 1; i++) { const k = j * N + i; if (alpha[k] <= 0) continue; inside.push(k);
+    const x = (i + .5 - half) / half, y = (j + .5 - half) / half; let best = 9, f0 = facets[0];
+    for (const f of facets) { const dd = (x - f.x) ** 2 + (y - f.y) ** 2; if (dd < best) { best = dd; f0 = f; } }
+    const gx = (Hh[k + 1] - Hh[k - 1]) * half / 2 - f0.tx, gy = (Hh[k + N] - Hh[k - N]) * half / 2 - f0.ty, l = Math.hypot(gx, gy, 1);
+    nx[k] = -gx / l; ny[k] = -gy / l; nz[k] = 1 / l; px[k] = x; py[k] = y; }
+  const tex = document.createElement("canvas"); tex.width = tex.height = N;
+  const tctx = tex.getContext("2d"), img = tctx.createImageData(N, N);
+  return { rad, N, alb, vein, alpha, nx, ny, nz, px, py, inside: Int32Array.from(inside), tex, tctx, img }; })();
+
+// The heat ramp as a lookup, so each pixel can glow without parsing colours.
+const HEAT_LUT = (() => { const L = new Uint8Array(256 * 3); for (let i = 0; i < 256; i++) hex(glowing(C.iron, i / 255)).forEach((v, c) => L[i * 3 + c] = v); return L; })();
+
+// Light the rock. (dx, dy): its direction of travel in the rock's own frame. ablate: how hard the air melts
+// its leading face. heat: the forge's heat through the whole stone.
+function shadeRock(dx, dy, ablate, heat) {
+  const { nx, ny, nz, px, py, alb, vein, alpha, inside, img } = ROCK, d = img.data;
+  const ll = Math.hypot(dx, dy, .7), Lx = dx / ll, Ly = dy / ll, Lz = .7 / ll, [ar, ag, ab] = hex(C.aura), soak = smooth(heat * 1.4);
+  for (let m = 0; m < inside.length; m++) { const k = inside[m], a = alb[k], X = nx[k], Y = ny[k], Z = nz[k];
+    const lam = Math.max(0, X * Lx + Y * Ly + Z * Lz), fres = (1 - Z) ** 2.5, face = X * dx + Y * dy, lead = px[k] * dx + py[k] * dy;
+    // Cold stone: a dark fusion crust, lit by the plasma ahead and rimmed blue by the aura behind.
+    let r = 14 * a + a * lam * 70 * ablate + fres * ar * .7 + 4,
+      g = 15 * a + a * lam * 80 * ablate + fres * ag * .7 + 6,
+      b2 = 20 * a + a * lam * 105 * ablate + fres * ab * .7 + 12;
+    // The forge's heat soaks through the stone.
+    if (soak > 0) { const hi = Math.round(255 * clamp(heat * (.7 + .3 * a))) * 3;
+      r += (HEAT_LUT[hi] - r) * soak; g += (HEAT_LUT[hi + 1] - g) * soak; b2 += (HEAT_LUT[hi + 2] - b2) * soak; }
+    // The leading half melts: white at the nose, orange, then ember toward the back; facets facing the air burn hottest.
+    const e = sstep(-.35, .75, lead + .35 * face) * ablate * (.7 + .3 * a),
+      v = vein[k] * Math.max(heat, ablate * .7 * sstep(-.6, .3, lead)), em = Math.max(e * e, v);
+    if (em > 0) { const hi = Math.round(255 * clamp(.2 + .8 * em)) * 3, w = Math.min(1, em * 1.3);
+      r += (HEAT_LUT[hi] - r) * w; g += (HEAT_LUT[hi + 1] - g) * w; b2 += (HEAT_LUT[hi + 2] - b2) * w; }
+    const o = k * 4; d[o] = r; d[o + 1] = g; d[o + 2] = b2; d[o + 3] = 255 * alpha[k]; }
+  ROCK.tctx.putImageData(img, 0, 0);
+}
+function rockOutline(cx, cy, R, spin, morph, S, n = 48) {
+  // Each point of the outline closes straight onto the cube's, along its own angle.
+  const k = S / 64; return Array.from({ length: n }, (_, i) => { const a = i / n * Math.PI * 2, rr = ROCK.rad(a) * R, w = a + spin;
+    const rx = Math.cos(w) * rr, ry = Math.sin(w) * rr, [hx, hy] = hexRay(w); return [cx + rx + (hx * k - rx) * morph, cy + ry + (hy * k - ry) * morph]; });
 }
 
 // The fall: from off the top left to the centre, speeding up as it drops.
@@ -235,8 +287,31 @@ function drawGround(ctx, alpha, light, lightColor, lightAt) {
   ctx.restore();
 }
 
+// Its velocity, and a meteor's flicker as pieces burn off.
+function travel(M, t) { const tt = Math.min(t, M.FALL), a = starAt(M, tt), b0 = starAt(M, Math.max(0, tt - .01)); return [a.x - b0.x, a.y - b0.y]; }
+const flicker = t => .9 + .07 * Math.sin(t * 53) * Math.sin(t * 31 + 1) + .03 * Math.sin(t * 97);
+// A ribbon along the path behind the head, filled once so it never beads. width(k, age): k runs head to tail.
+const trainNoise = noise2(29);
+function ribbon(ctx, M, t, len, width, wave, stops) {
+  const n = 48, head = Math.min(t, M.FALL), pts = [];
+  for (let i = 0; i <= n; i++) { const tau = head - len * i / n; if (tau < 0) break; const p = starAt(M, tau); pts.push({ x: p.x, y: p.y, k: i / n, age: t - tau }); }
+  if (pts.length < 3) return;
+  const L = [], Rr = [];
+  pts.forEach((p, i) => { const a = pts[Math.max(0, i - 1)], c = pts[Math.min(pts.length - 1, i + 1)], l = Math.hypot(c.x - a.x, c.y - a.y) || 1;
+    const px = -(c.y - a.y) / l, py = (c.x - a.x) / l, w = width(p.k, p.age) / 2, off = wave * (trainNoise(p.age * 5, 3) - .5) * p.age;
+    L.push([p.x + px * (off + w), p.y + py * (off + w)]); Rr.push([p.x + px * (off - w), p.y + py * (off - w)]); });
+  const end = pts[pts.length - 1], g = ctx.createLinearGradient(pts[0].x, pts[0].y, end.x, end.y), span = end.k || 1;
+  for (const [o, c, a] of stops) g.addColorStop(Math.min(1, o / span), rgba(c, a));
+  ctx.fillStyle = g; ctx.beginPath(); L.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
+  for (let i = Rr.length - 1; i >= 0; i--) ctx.lineTo(...Rr[i]); ctx.closePath(); ctx.fill();
+}
+// Fragments: shed from the stone, slowed by the air, drifting off its line and falling.
+const FRAGS = (() => { const r = rng(5); return Array.from({ length: 34 }, () => ({ at: .12 + r() * .82, drag: .55 + r() * .3,
+  side: (r() - .5) * 2, life: .18 + r() * .4, size: 1.6 + r() * 3.4 })); })();
+function fragAt(M, f, born, age) { const p = starAt(M, born), [vx, vy] = travel(M, born), l = Math.hypot(vx, vy) || 1, v = l * 100;
+  const s = v * f.drag * age * (1 - age * .9); return [p.x + vx / l * s - vy / l * f.side * age * 140, p.y + vy / l * s + vx / l * f.side * age * 140 + 260 * age * age]; }
+
 // Sparks, embers and the ground's lights, fixed by their seeds.
-const TRAIL = (() => { const r = rng(5); return Array.from({ length: 120 }, () => ({ at: r(), dx: (r() - .5) * 60, dy: (r() - .5) * 60, life: .35 + r() * .5, size: 1.5 + r() * 3 })); })();
 const BURST = (() => { const r = rng(11); return Array.from({ length: 70 }, () => { const a = -Math.PI / 2 + (r() - .5) * 2.6, v = 380 + r() * 820;
   return { vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: .5 + r() * .7, size: 2 + r() * 3 }; }); })();
 const EMBERS = (() => { const r = rng(23); return Array.from({ length: 90 }, (_, i) => ({ k: i, x: (r() - .5) * 220, vx: (r() - .5) * 60,
@@ -292,10 +367,10 @@ function draw(ctx, t, mode) {
   drawGround(ctx, groundA, forged ? (h > .05 ? .9 * h + .1 : .5) : fallLight, lightColor, lightAt);
   // Shafts of light hitting the ground from the star as it lands.
   const shaftA = landed ? (1 - smooth((t - M.FALL) / .8)) : smooth((star.u - .55) / .45) * .6;
-  if (shaftA > 0) { ctx.save(); ctx.globalCompositeOperation = "lighter";
+  if (shaftA > 0) { ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.filter = "blur(7px)";
     const ox = landed ? W / 2 : star.x, oy = landed ? H / 2 : star.y;
     for (const s of SHAFTS) { const gx = ox + s.dx, g = ctx.createLinearGradient(ox, oy, gx, GY + 60);
-      g.addColorStop(0, rgba(C.core, s.a * shaftA)); g.addColorStop(1, rgba(C.aura, 0));
+      g.addColorStop(0, rgba(C.core, .7 * s.a * shaftA)); g.addColorStop(1, rgba(C.aura, 0));
       ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(ox - s.w / 4, oy); ctx.lineTo(ox + s.w / 4, oy); ctx.lineTo(gx + s.w, GY + 60); ctx.lineTo(gx - s.w, GY + 60); ctx.closePath(); ctx.fill(); }
     ctx.restore(); }
   // The impact: a flash and a ring running over the ground.
@@ -312,24 +387,51 @@ function draw(ctx, t, mode) {
       if (a > .01) { ctx.fillStyle = rgba(band > .45 ? C.teal : C.muted, a); ctx.fillRect(x - 2, y - 2, 4, 4); } } }
 
   if (!landed || t < M.LOCK) {
-    // The star, falling: its trail, its aura, the raw rock.
-    const R = 120 * star.scale, cx = landed ? W / 2 : star.x, cy = landed ? H / 2 : star.y;
-    if (!landed) { ctx.save(); ctx.globalCompositeOperation = "lighter";
-      // The trail: one tapered streak, hot blue-white at the head, fading to the aura.
-      ctx.lineCap = "round";
-      const N = 44; let prev = starAt(M, t);
-      for (let i = 1; i <= N; i++) { const tt = t - i * .012; if (tt < 0) break; const p = starAt(M, tt), k = 1 - i / N;
-        ctx.strokeStyle = rgba(i < 8 ? C.core : C.aura, .5 * k * k); ctx.lineWidth = R * 1.5 * k + 2;
-        ctx.beginPath(); ctx.moveTo(prev.x, prev.y); ctx.lineTo(p.x, p.y); ctx.stroke(); prev = p; }
-      for (const s of TRAIL) { const born = s.at * M.FALL, age = t - born; if (age < 0 || age > s.life) continue; const p = starAt(M, born), k = 1 - age / s.life;
-        ctx.fillStyle = rgba(C.core, .8 * k); ctx.fillRect(p.x + s.dx * (1 + age * 2), p.y + s.dy * (1 + age * 2) + age * 40, s.size, s.size); }
+    // The star: a stone burning through the air, its plasma, its wake and the train it leaves.
+    const R = 120 * star.scale, cx = landed ? W / 2 : star.x, cy = landed ? H / 2 : star.y, [vx, vy] = travel(M, t);
+    const ang = Math.atan2(vy, vx), flick = flicker(t), forge = landed ? smooth((t - M.FALL) / (M.LOCK - M.FALL)) : 0;
+    const ablate = landed ? 1 - smooth((t - M.FALL) / .22) : (.55 + .45 * star.u) * flick;
+    // The train: ionised air left glowing along the path, spreading and fading; it outlasts the landing.
+    const trainA = landed ? 1 - smooth((t - M.FALL) / .7) : 1;
+    if (trainA > 0) { ctx.save(); ctx.filter = "blur(10px)";
+      ribbon(ctx, M, t, M.FALL * .9, (k, age) => R * .4 + age * 240, 70,
+        [[0, C.core, .3 * trainA], [.12, C.aura, .2 * trainA], [.6, C.deep, .1 * trainA], [1, C.deep, 0]]);
       ctx.restore(); }
-    // Its aura: dark blue, turning to heat as it's forged.
-    const forge = landed ? smooth((t - M.FALL) / (M.LOCK - M.FALL)) : 0;
-    const auraC = mix(C.aura, C.glow, forge), g = ctx.createRadialGradient(cx, cy, R * .5, cx, cy, R * 3.4);
-    g.addColorStop(0, rgba(auraC, .7)); g.addColorStop(.45, rgba(auraC, .22)); g.addColorStop(1, rgba(auraC, 0));
+    if (!landed) { ctx.save(); ctx.globalCompositeOperation = "lighter";
+      // The wake: a hot tapered tail, white at the stone, blue behind it.
+      ctx.filter = "blur(3px)";
+      ribbon(ctx, M, t, M.FALL * .32 + .05, k => R * 1.3 * Math.pow(1 - k, .8), 0,
+        [[0, C.white, .75 * flick], [.18, C.core, .5], [.55, C.aura, .25], [1, C.aura, 0]]);
+      ctx.filter = "blur(2px)";
+      ribbon(ctx, M, t, M.FALL * .16 + .03, k => R * .42 * (1 - k), 0, [[0, C.white, .85], [.5, C.core, .4], [1, C.core, 0]]);
+      // Pieces breaking off: each burns out on its own short streak, white, then orange, then red.
+      for (const f of FRAGS) { const born = f.at * M.FALL, age = t - born; if (age < 0 || age > f.life) continue;
+        const k = age / f.life, a = fragAt(M, f, born, age), b0 = fragAt(M, f, born, Math.max(0, age - .035)), col = glowing(C.iron, 1 - .8 * k);
+        ctx.strokeStyle = rgba(col, 1 - k); ctx.lineWidth = f.size * (1 - .6 * k); ctx.lineCap = "round"; ctx.shadowColor = col; ctx.shadowBlur = 12;
+        ctx.beginPath(); ctx.moveTo(...b0); ctx.lineTo(...a); ctx.stroke(); }
+      ctx.shadowBlur = 0; ctx.filter = "none"; ctx.restore(); }
+    // The aura: dark blue round the head, turning to heat as it's forged.
+    const auraC = mix(C.aura, C.glow, forge), g = ctx.createRadialGradient(cx, cy, R * .4, cx, cy, R * 3.6);
+    g.addColorStop(0, rgba(auraC, .6 * Math.max(flick, forge))); g.addColorStop(.35, rgba(mix(C.deep, C.glow, forge), .25)); g.addColorStop(1, rgba(C.deep, 0));
     ctx.fillStyle = g; ctx.fillRect(cx - R * 4, cy - R * 4, R * 8, R * 8);
-    drawRock(ctx, cx, cy, R, star.spin, forge, smooth((forge - .35) / .65), LOCK_POS.S);
+    // The plasma sheath: swept back from the stone along its path.
+    if (ablate > 0) { ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.translate(cx, cy); ctx.rotate(ang); ctx.scale(2.3, 1);
+      const p = ctx.createRadialGradient(-R * .28, 0, 0, -R * .28, 0, R * 1.3);
+      p.addColorStop(0, rgba(C.core, .55 * ablate)); p.addColorStop(.5, rgba(C.aura, .3 * ablate)); p.addColorStop(1, rgba(C.aura, 0));
+      ctx.fillStyle = p; ctx.fillRect(-R * 2, -R * 1.5, R * 3, R * 3); ctx.restore(); }
+    // The stone, lit in its own frame as it tumbles; once forged it melts into the cube.
+    const spin = star.spin, cs = Math.cos(-spin), sn = Math.sin(-spin), dx = Math.cos(ang), dy = Math.sin(ang);
+    shadeRock(dx * cs - dy * sn, dx * sn + dy * cs, ablate, forge);
+    const melt = smooth((forge - .45) / .3), morph = smooth((forge - .5) / .5);
+    if (melt < 1) { ctx.save(); ctx.translate(cx, cy); ctx.rotate(spin); ctx.globalAlpha = 1 - melt;
+      const s = R * 2 * ROCK.N / (ROCK.N - 2); ctx.drawImage(ROCK.tex, -s / 2, -s / 2, s, s); ctx.restore(); }
+    if (melt > 0) { poly(ctx, rockOutline(cx, cy, R, spin, morph, LOCK_POS.S)); const mg = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.1);
+      mg.addColorStop(0, rgba(C.white, melt)); mg.addColorStop(1, rgba(glowing(C.iron, .55 + .45 * morph), melt)); ctx.fillStyle = mg; ctx.fill(); }
+    // The bow shock: a bright crescent where the air piles up ahead of the stone.
+    if (ablate > 0) { ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.translate(cx, cy); ctx.rotate(ang);
+      const hs = ctx.createRadialGradient(R * .8, 0, 0, R * .8, 0, R * .9);
+      hs.addColorStop(0, rgba(C.white, .4 * ablate)); hs.addColorStop(.5, rgba(C.core, .12 * ablate)); hs.addColorStop(1, rgba(C.core, 0));
+      ctx.fillStyle = hs; ctx.fillRect(-R * .2, -R * 1.2, R * 1.9, R * 2.4); ctx.restore(); }
   }
   if (forged) {
     if (h > .02) { const g = ctx.createRadialGradient(pos.x, pos.y, pos.S * .2, pos.x, pos.y, pos.S * 1.5);
