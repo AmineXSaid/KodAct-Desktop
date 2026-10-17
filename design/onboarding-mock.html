@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forge Onboarding Mock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400&family=Source+Serif+4:opsz,wght@8..60,400&display=swap" rel="stylesheet">
+<style>
+/* Forge tokens (src/theme.rs). Dark is the default here, as in the screenshot. */
+:root {
+  --canvas: #262624; --chrome: #141312; --surface: #30302e; --sunk: #1f1e1d;
+  --text: #ecebe6; --text-strong: #ffffff; --muted: #a8a59c; --subtle: #7d7a72;
+  --border: rgba(255,255,255,.1); --border-strong: #55534e;
+  --accent: #216d70; --accent-lit: #529a9d; --link: #8ecacd;
+  --heat: #f2a65a; --dot: #9a958b;
+  --m-top: #529a9d; --m-left: #ecebe6; --m-right: #6f6c64;
+  --glow: rgba(82,154,157,.32);
+  --sans: "Hanken Grotesk", sans-serif; --serif: "Source Serif 4", serif; --mono: "JetBrains Mono", monospace;
+}
+:root[data-theme="light"] {
+  --canvas: #f9f8f5; --chrome: #eceae4; --surface: #ffffff; --sunk: #f0eee8;
+  --text: #2b2a27; --text-strong: #1f1e1c; --muted: #64615a; --subtle: #8c887e;
+  --border: rgba(43,42,39,.13); --border-strong: #cfcbc0;
+  --accent: #216d70; --accent-lit: #216d70; --link: #216d70;
+  --heat: #d9802e; --dot: #857e71;
+  --m-top: #216d70; --m-left: #2b2a27; --m-right: #8c887e;
+  --glow: rgba(33,109,112,.18);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--chrome); color: var(--text); font: 13px/1.5 var(--sans); overflow: hidden; }
+
+/* The window: a title bar and the stage, as the app draws them. */
+.titlebar { height: 36px; display: flex; align-items: center; gap: 10px; padding: 0 12px; background: var(--chrome);
+  border-bottom: 1px solid var(--border); color: var(--muted); font-size: 12.5px; }
+.titlebar .proj { color: var(--text-strong); font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.titlebar .branch { font: 12px var(--mono); background: var(--surface); border-radius: 9999px; padding: 2px 9px; }
+.titlebar .search { margin: 0 auto; width: 284px; height: 26px; border: 1px solid var(--border); border-radius: 6px; display: flex; align-items: center;
+  gap: 6px; padding: 0 10px; color: var(--subtle); }
+.titlebar .search b { margin-left: auto; font-weight: 600; color: var(--muted); font-size: 11.5px; }
+.titlebar svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tools { display: flex; gap: 14px; }
+.stage { position: relative; height: calc(100% - 36px); background: var(--canvas); overflow: hidden; }
+canvas#field { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* The mock's own controls, outside the design. */
+.mockbar { position: fixed; right: 12px; bottom: 12px; display: flex; gap: 6px; z-index: 10; }
+.mockbar button { font: 500 12px var(--sans); color: var(--text); background: var(--surface); border: 1px solid var(--border);
+  border-radius: 9999px; padding: 5px 12px; cursor: pointer; }
+.note { position: fixed; left: 12px; bottom: 12px; z-index: 10; font: 11.5px var(--mono); color: var(--subtle); max-width: 520px; }
+
+/* The centre column. */
+.center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; padding-bottom: 90px; }
+.mark { position: relative; width: 132px; height: 132px; display: grid; place-items: center; }
+.mark svg.cube { width: 88px; height: 88px; overflow: visible; position: relative; z-index: 2; }
+.face { transition: fill 1.4s ease; }
+.face-gap { stroke: var(--canvas); stroke-width: 1.6; stroke-linejoin: round; }
+/* The halo under the cube, and the orbit ring with its spark. */
+.halo { position: absolute; left: 50%; top: 62%; width: 150px; height: 46px; transform: translate(-50%, -50%); border-radius: 50%;
+  background: radial-gradient(closest-side, var(--glow), transparent); opacity: 0; }
+svg.orbit { position: absolute; inset: -18px; width: calc(100% + 36px); height: calc(100% + 36px); overflow: visible; z-index: 1; opacity: 0; }
+.orbit ellipse { fill: none; stroke: var(--border-strong); stroke-width: 1; stroke-dasharray: 2 5; }
+.orbit circle { fill: var(--link); }
+
+h1 { font: 400 30px/1.2 var(--serif); color: var(--text-strong); margin: 26px 0 6px; letter-spacing: -.005em; min-height: 36px; text-align: center; }
+h1 .ch { display: inline-block; opacity: 0; transform: translateY(8px); }
+.sub { color: var(--muted); font-size: 13.5px; margin: 0 0 22px; opacity: 0; min-height: 20px; text-align: center; }
+.sub .mono { font-family: var(--mono); font-size: 12.5px; color: var(--link); }
+
+/* The field: a hairline that charges with the accent while focused. */
+.field { position: relative; width: 420px; max-width: calc(100vw - 32px); height: 52px; border-radius: 12px; padding: 1px; opacity: 0; transform: translateY(10px);
+  background: var(--border); }
+.field::before { content: ""; position: absolute; inset: 0; border-radius: 12px; padding: 1px; opacity: 0; transition: opacity .3s;
+  background: conic-gradient(from var(--sweep, 0deg), transparent 0 62%, var(--accent-lit) 78%, var(--link) 84%, transparent 92% 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+.field.focus::before { opacity: 1; }
+.field .inner { position: relative; height: 100%; border-radius: 11px; background: var(--surface); display: flex; align-items: center; padding: 0 8px 0 18px; gap: 8px; }
+.field input { flex: 1; min-width: 0; background: none; border: 0; outline: none; color: var(--text-strong); font: 15px var(--sans); caret-color: var(--link); }
+.field input::placeholder { color: var(--subtle); }
+.go { width: 36px; height: 36px; border-radius: 9px; border: 0; display: grid; place-items: center; background: var(--sunk); color: var(--subtle);
+  transition: background .25s, color .25s, transform .25s; cursor: pointer; }
+.go.ready { background: var(--accent); color: #fff; }
+.go svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform .25s; }
+.go.ready:hover svg { transform: translateX(2px); }
+.hint { margin-top: 12px; color: var(--subtle); font-size: 12px; opacity: 0; display: flex; gap: 6px; align-items: center; }
+.kbd { font: 11px var(--mono); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; color: var(--muted); }
+
+/* Step 2: three things Forge sets up, revealed after the name. */
+.steps { display: flex; gap: 10px; margin-top: 22px; opacity: 0; pointer-events: none; }
+.step { width: 168px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); opacity: 0; transform: translateY(8px); }
+.step .k { font: 11px var(--mono); color: var(--subtle); }
+.step .t { font-weight: 600; color: var(--text-strong); margin-top: 2px; }
+.step .d { color: var(--muted); font-size: 12px; }
+.step.on { border-color: var(--accent-lit); }
+.step .bar { height: 2px; background: var(--sunk); border-radius: 2px; margin-top: 10px; overflow: hidden; }
+.step .bar i { display: block; height: 100%; width: 0; background: var(--link); }
+@media (max-width: 640px) { .steps { flex-direction: column; } .titlebar .search, .tools { display: none; } }
+
+/* Motion. Every step has an end state; reduced motion jumps straight to it. */
+.play .halo { animation: in .8s 1.15s ease forwards, breathe 4.2s 2s ease-in-out infinite; }
+.play svg.orbit { animation: in .9s 1.5s ease forwards; }
+.play .orbit .spin { animation: orbit 7s 1.5s linear infinite; transform-origin: 50% 50%; transform-box: view-box; }
+.play .cube { animation: float 5s 2s ease-in-out infinite; }
+.play .f-top { animation: drop .7s .25s cubic-bezier(.2,.9,.25,1.15) both; }
+.play .f-left { animation: fromLeft .7s .45s cubic-bezier(.2,.9,.25,1.15) both; }
+.play .f-right { animation: fromRight .7s .6s cubic-bezier(.2,.9,.25,1.15) both; }
+.play .sub { animation: in .6s 2.1s ease forwards; }
+.play .field { animation: rise .6s 2.3s cubic-bezier(.2,.8,.2,1) forwards; }
+.play .hint { animation: in .6s 2.7s ease forwards; }
+@keyframes in { to { opacity: 1; } }
+@keyframes rise { to { opacity: 1; transform: none; } }
+@keyframes breathe { 0%, 100% { transform: translate(-50%, -50%) scale(1); } 50% { transform: translate(-50%, -50%) scale(1.12); opacity: .75; } }
+@keyframes orbit { to { transform: rotate(360deg); } }
+@keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+@keyframes drop { from { transform: translateY(-46px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes fromLeft { from { transform: translate(-40px, 22px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes fromRight { from { transform: translate(40px, 22px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes turn { 0% { transform: scaleX(1); } 50% { transform: scaleX(.06); } 100% { transform: scaleX(1); } }
+.cube.turning { animation: turn .7s cubic-bezier(.6,0,.4,1) !important; transform-origin: 50% 50%; }
+.flash { position: absolute; left: 50%; top: 46%; width: 180px; height: 180px; margin: -90px; border-radius: 50%; z-index: 1; pointer-events: none;
+  background: radial-gradient(closest-side, var(--heat), transparent); opacity: 0; transform: scale(.2); }
+.flash.go-on { animation: flash .8s ease-out; }
+@keyframes flash { 0% { opacity: .55; transform: scale(.2); } 100% { opacity: 0; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { *, *::before { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="titlebar">
+  <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+  <span class="proj"><svg viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>forge-gpui</span>
+  <span class="branch">claude/happy-dijkstra-rbbwu6</span>
+  <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Search files, chats and commands<b>Ctrl K</b></div>
+  <div class="tools">
+    <svg viewBox="0 0 24 24"><path d="m4 17 6-6-6-6M12 19h8"/></svg>
+    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/></svg>
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg>
+  </div>
+</div>
+
+<main class="stage" id="stage">
+  <canvas id="field" aria-hidden="true"></canvas>
+  <div class="center">
+    <div class="mark">
+      <div class="halo"></div>
+      <svg class="orbit" viewBox="0 0 168 168" aria-hidden="true">
+        <ellipse cx="84" cy="96" rx="78" ry="24"/>
+        <g class="spin"><circle cx="84" cy="72" r="2.2" transform="translate(0 0)"/></g>
+      </svg>
+      <svg class="cube" viewBox="0 0 64 64" role="img" aria-label="Forge">
+        <path class="face f-left face-gap" style="fill:var(--m-left)" d="M8.6 18.5 32 32v27L8.6 45.5Z"/>
+        <path class="face f-right face-gap" style="fill:var(--m-right)" d="M55.4 18.5 32 32v27l23.4-13.5Z"/>
+        <path class="face f-top face-gap" id="top" style="fill:var(--heat)" d="M32 5 55.4 18.5 32 32 8.6 18.5Z"/>
+      </svg>
+      <div class="flash" id="flash"></div>
+    </div>
+    <h1 id="title" aria-live="polite"></h1>
+    <p class="sub" id="sub">Forge works in your projects and asks before it changes anything.</p>
+    <form class="field" id="field-box" autocomplete="off">
+      <div class="inner">
+        <input id="name" placeholder="Your name" aria-label="Your name" maxlength="40">
+        <button class="go" id="go" type="submit" aria-label="Continue">
+          <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+    </form>
+    <div class="hint" id="hint"><span class="kbd">Enter</span> to continue · you can change it later in Settings</div>
+    <div class="steps" id="steps">
+      <div class="step"><div class="k">01</div><div class="t">Your name</div><div class="d">So Forge can greet you.</div><div class="bar"><i></i></div></div>
+      <div class="step"><div class="k">02</div><div class="t">A model</div><div class="d">Connect an endpoint.</div><div class="bar"><i></i></div></div>
+      <div class="step"><div class="k">03</div><div class="t">A project</div><div class="d">Open a folder to work in.</div><div class="bar"><i></i></div></div>
+    </div>
+  </div>
+</main>
+
+<div class="note">Mock of the first-run screen. Type a name and press Enter. Everything here maps to GPUI: paths and quads on a canvas, with_animation, box shadows.</div>
+<div class="mockbar">
+  <button type="button" id="replay">Replay</button>
+  <button type="button" id="theme">Light</button>
+</div>
+
+<script>
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const stage = document.getElementById("stage");
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+/* ---------- The dot field: dots gather into a grid, a pulse rings out when the cube locks, then it breathes. ---------- */
+const cv = document.getElementById("field"), cx = cv.getContext("2d");
+let dots = [], W = 0, H = 0, t0 = performance.now(), pulses = [], centre = { x: 0, y: 0 };
+function layout() {
+  const r = stage.getBoundingClientRect(), dpr = devicePixelRatio || 1;
+  W = r.width; H = r.height; cv.width = W * dpr; cv.height = H * dpr; cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const m = document.querySelector(".mark").getBoundingClientRect(), f = document.getElementById("field-box").getBoundingClientRect();
+  centre = { x: m.left + m.width / 2 - r.left, y: (m.top + f.bottom) / 2 - r.top };
+  const gap = 22; dots = [];
+  for (let y = gap / 2; y < H; y += gap) for (let x = gap / 2; x < W; x += gap) {
+    const a = Math.random() * Math.PI * 2, d = 80 + Math.random() * 260;
+    dots.push({ x, y, sx: x + Math.cos(a) * d, sy: y + Math.sin(a) * d, s: Math.random() });
+  }
+}
+function frame(now) {
+  const t = (now - t0) / 1000, dot = css("--dot"), teal = css("--link");
+  cx.clearRect(0, 0, W, H);
+  const gather = reduce ? 1 : Math.min(1, t / 1.6), ease = 1 - Math.pow(1 - gather, 3);
+  for (const p of dots) {
+    const x = p.sx + (p.x - p.sx) * ease, y = p.sy + (p.y - p.sy) * ease;
+    const dx = p.x - centre.x, dy = (p.y - centre.y) * 1.35, dist = Math.hypot(dx, dy);
+    // A vignette: dots fade out toward the edges, and leave an oval clear
+    // round the column so they never cross the words or the field.
+    const clear = Math.hypot(dx / 300, (p.y - centre.y) / 210);
+    let a = Math.max(0, 1 - dist / 700) * Math.min(1, Math.max(0, (clear - 1) / 0.35));
+    a *= 0.32 + 0.12 * Math.sin(t * 0.9 + p.s * 6.28 - dist / 90);
+    let c = dot, size = 1.6;
+    for (const q of pulses) {
+      const r = (t - q) * 420, band = Math.abs(dist - r);
+      if (band < 34) { const k = 1 - band / 34; a += k * 0.55 * Math.max(0, 1 - r / 700); if (k > .5) c = teal; size += k * .9; }
+    }
+    if (a <= 0.01) continue;
+    cx.globalAlpha = Math.min(1, a * ease); cx.fillStyle = c;
+    cx.fillRect(Math.round(x - size / 2), Math.round(y - size / 2), size, size);
+  }
+  cx.globalAlpha = 1;
+  requestAnimationFrame(frame);
+}
+
+/* ---------- The sequence. ---------- */
+const title = document.getElementById("title"), topFace = document.getElementById("top"), flash = document.getElementById("flash");
+const input = document.getElementById("name"), go = document.getElementById("go"), box = document.getElementById("field-box");
+const sub = document.getElementById("sub"), hint = document.getElementById("hint"), steps = document.getElementById("steps");
+let timers = [];
+const later = (ms, f) => timers.push(setTimeout(f, reduce ? 0 : ms));
+function letters(text, startMs) {
+  title.innerHTML = "";
+  [...text].forEach((ch, i) => {
+    const s = document.createElement("span"); s.className = "ch"; s.textContent = ch === " " ? " " : ch; title.appendChild(s);
+    if (reduce) { s.style.opacity = 1; s.style.transform = "none"; return; }
+    s.animate([{ opacity: 0, transform: "translateY(8px)", filter: "blur(3px)" }, { opacity: 1, transform: "none", filter: "blur(0)" }],
+      { duration: 420, delay: startMs + i * 22, easing: "cubic-bezier(.2,.8,.2,1)", fill: "forwards" });
+  });
+}
+function start() {
+  timers.forEach(clearTimeout); timers = []; pulses = []; t0 = performance.now();
+  document.body.classList.remove("play"); void document.body.offsetWidth; document.body.classList.add("play");
+  topFace.style.fill = "var(--heat)"; input.value = ""; go.classList.remove("ready"); input.disabled = false;
+  sub.textContent = "Forge works in your projects and asks before it changes anything.";
+  box.style.display = hint.style.display = "";
+  [sub, box, hint, title].forEach(e => e.getAnimations().filter(a => !(a instanceof CSSAnimation)).forEach(a => a.cancel()));
+  steps.style.opacity = 0; [...steps.children].forEach(s => { s.style.opacity = 0; s.classList.remove("on"); s.querySelector("i").style.width = 0; });
+  layout();
+  // The faces land; the cube locks with a flash and a ring through the dots; the top cools from heat to the accent.
+  later(1150, () => { flash.classList.remove("go-on"); void flash.offsetWidth; flash.classList.add("go-on"); pulses.push((performance.now() - t0) / 1000); });
+  later(1250, () => { topFace.style.fill = "var(--m-top)"; });
+  letters("Hello. What should we call you?", reduce ? 0 : 1500);
+  later(2700, () => input.focus({ preventScroll: true }));
+}
+
+/* The field charges while focused: a light runs round its edge. */
+let sweep = 0;
+(function spin() { sweep = (sweep + 1.6) % 360; box.style.setProperty("--sweep", sweep + "deg"); requestAnimationFrame(spin); })();
+input.addEventListener("focus", () => box.classList.add("focus"));
+input.addEventListener("blur", () => box.classList.remove("focus"));
+input.addEventListener("input", () => {
+  go.classList.toggle("ready", input.value.trim().length > 0);
+  // Each keystroke strikes the anvil: a small ring through the nearest dots.
+  if (!reduce && pulses.length < 6) pulses.push((performance.now() - t0) / 1000 - 0.25);
+});
+box.addEventListener("submit", e => {
+  e.preventDefault();
+  const name = input.value.trim(); if (!name) { box.animate([{ transform: "translateX(0)" }, { transform: "translateX(-6px)" }, { transform: "translateX(6px)" }, { transform: "none" }], { duration: 280 }); return; }
+  input.disabled = true;
+  const cube = document.querySelector(".cube"); cube.classList.remove("turning"); void cube.offsetWidth; cube.classList.add("turning");
+  topFace.style.fill = "var(--heat)"; later(500, () => { topFace.style.fill = "var(--m-top)"; });
+  pulses.push((performance.now() - t0) / 1000);
+  // The form gives way to the welcome and the three steps, the first already done.
+  [box, hint].forEach(el => el.animate([{ opacity: 1 }, { opacity: 0, transform: "translateY(-6px)" }], { duration: reduce ? 0 : 260, fill: "forwards" }));
+  sub.animate([{ opacity: 1 }, { opacity: 0 }], { duration: reduce ? 0 : 200, fill: "forwards" });
+  later(300, () => {
+    // The field and hint leave the layout, so the steps sit under the words.
+    box.style.display = hint.style.display = "none";
+    letters(`Welcome to Forge, ${name}.`, 0);
+    sub.innerHTML = 'Two more things and you’re at the anvil. <span class="mono">~2 min</span>';
+    sub.animate([{ opacity: 0 }, { opacity: 1 }], { duration: reduce ? 0 : 400, delay: reduce ? 0 : 450, fill: "forwards" });
+    steps.style.opacity = 1;
+    [...steps.children].forEach((s, i) => {
+      s.animate([{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }], { duration: reduce ? 0 : 420, delay: reduce ? 0 : 600 + i * 110, easing: "cubic-bezier(.2,.8,.2,1)", fill: "forwards" });
+    });
+    const first = steps.children[0];
+    later(1100, () => { first.classList.add("on"); first.querySelector("i").animate([{ width: "0%" }, { width: "100%" }], { duration: reduce ? 0 : 600, fill: "forwards" }); });
+    later(1500, () => steps.children[1].classList.add("on"));
+  });
+});
+
+document.getElementById("replay").addEventListener("click", start);
+const themeBtn = document.getElementById("theme");
+themeBtn.addEventListener("click", () => {
+  const light = document.documentElement.dataset.theme !== "light";
+  if (light) document.documentElement.dataset.theme = "light"; else delete document.documentElement.dataset.theme;
+  themeBtn.textContent = light ? "Dark" : "Light";
+});
+addEventListener("resize", layout);
+document.fonts.ready.then(() => { start(); requestAnimationFrame(frame); });
+</script>
+</body>
+</html>
