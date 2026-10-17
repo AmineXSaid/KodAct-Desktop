@@ -1275,29 +1275,18 @@ impl Settings {
             .flex()
             .flex_col()
             .gap(px(14.))
+            // The lockup: the wordmark, its version beneath.
             .child(
                 div()
                     .flex()
-                    .items_center()
-                    .gap(px(12.))
-                    .child(super::logo(40.))
+                    .flex_col()
+                    .gap(t.space.sm)
+                    .child(super::ingot::wordmark(40., t))
                     .child(
                         div()
-                            .flex()
-                            .flex_col()
-                            .child(
-                                div()
-                                    .text_size(t.text.subheading)
-                                    .font_family(t.font_display.clone())
-                                    .text_color(t.colors.text_strong)
-                                    .child("Forge"),
-                            )
-                            .child(
-                                div()
-                                    .text_size(t.text.caption)
-                                    .text_color(t.colors.text_muted)
-                                    .child(format!("Version {}", env!("CARGO_PKG_VERSION"))),
-                            ),
+                            .text_size(t.text.caption)
+                            .text_color(t.colors.text_muted)
+                            .child(format!("Version {}", env!("CARGO_PKG_VERSION"))),
                     ),
             )
             .child(row(

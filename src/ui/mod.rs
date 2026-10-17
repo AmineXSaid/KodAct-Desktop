@@ -27,6 +27,7 @@ pub mod file_mark;
 pub mod find_bar;
 pub mod guide;
 pub mod hooks_editor;
+pub mod ingot;
 pub mod markdown;
 pub mod mcp_editor;
 pub mod memory_view;
@@ -138,71 +139,15 @@ pub fn icon(path: &'static str, size: Pixels, color: Hsla) -> Svg {
     svg().path(path).size(size).flex_none().text_color(color)
 }
 
-/// The Forge cube picture (beside your name, and on the welcome card), at
-/// 32 or 96px. It uses the rendering made for this screen's density, so the
-/// picture is shown pixel for pixel, never squeezed.
-pub fn cube_image(size: f32, window: &gpui::Window) -> gpui::Img {
-    const MADE: [u32; 16] = [
-        32, 40, 48, 56, 60, 64, 72, 80, 84, 96, 120, 144, 168, 192, 240, 288,
-    ];
-    let want = (size * window.scale_factor()).round() as u32;
-    let file = MADE.iter().copied().find(|n| *n >= want).unwrap_or(288);
-    gpui::img(SharedString::from(format!("images/cube-{file}.png")))
-        .size(gpui::px(size))
-        .flex_none()
+/// The Forge logo, the ingot (`ingot.rs`), `size` px square.
+pub fn logo(size: f32) -> ingot::Ingot {
+    ingot::mark(size)
 }
 
-/// The Forge logo (the cube picture) at `size`, from the rendering made for
-/// twice that, so it stays sharp up to a 2x screen without a window to ask.
-pub fn logo(size: f32) -> gpui::Img {
-    const MADE: [u32; 16] = [
-        32, 40, 48, 56, 60, 64, 72, 80, 84, 96, 120, 144, 168, 192, 240, 288,
-    ];
-    let want = (size * 2.).round() as u32;
-    let file = MADE.iter().copied().find(|n| *n >= want).unwrap_or(288);
-    gpui::img(SharedString::from(format!("images/cube-{file}.png")))
-        .size(gpui::px(size))
-        .flex_none()
-}
-
-/// The Forge logo turning while Forge works: the cube picture, rendered
-/// turning (`assets/images/turn/`), a quarter turn at a time, easing in and
-/// out with a short rest between, so it reads as the same cube at work.
+/// The Forge logo turning while Forge works, a quarter turn at a time.
 /// Reduced motion: the logo at rest.
 pub fn turning_logo(size: f32, id: impl Into<gpui::ElementId>) -> gpui::AnyElement {
-    use gpui::{px, Animation, AnimationExt};
-    /// Frames in one full turn, and how many make a quarter.
-    const FRAMES: usize = 72;
-    const QUARTER: usize = FRAMES / 4;
-    /// A quarter turn, then a rest, in milliseconds.
-    const TURN_MS: f32 = 900.;
-    const REST_MS: f32 = 450.;
-    let frame = move |i: usize| {
-        gpui::img(SharedString::from(format!(
-            "images/turn/turn-{:02}.png",
-            i % FRAMES
-        )))
-        .size(px(size))
-        .flex_none()
-    };
-    if motion::reduced_motion() {
-        return logo(size).into_any_element();
-    }
-    let beat = TURN_MS + REST_MS;
-    let lap = std::time::Duration::from_millis((beat * 4.) as u64);
-    div()
-        .size(px(size))
-        .flex_none()
-        .with_animation(id, Animation::new(lap).repeat(), move |d, k| {
-            let ms = k * beat * 4.;
-            let quarter = ((ms / beat) as usize).min(3);
-            let t = ((ms - quarter as f32 * beat) / TURN_MS).clamp(0., 1.);
-            // Ease in and out: slow off the rest, quick through the middle.
-            let eased = t * t * (3. - 2. * t);
-            let step = (eased * QUARTER as f32).round() as usize;
-            d.child(frame(quarter * QUARTER + step))
-        })
-        .into_any_element()
+    ingot::turning(size, id)
 }
 
 /// Your avatar, drawn `size` px square at this screen's density.

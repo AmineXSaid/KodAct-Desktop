@@ -210,7 +210,12 @@ Changes apply the next time they're used; no restart.
     `diagnostics`, `profiles_editor`, `slash_commands`, `agents_editor`,
     `skills_editor`, `hooks_editor`, `mcp_editor`, `permissions_editor`,
     `sandbox_editor`, `env_editor`, `memory_view`, `plugins_editor`,
-    `planned` (Network), `guide`, and `editor_kit`, the pieces they share.
+    `planned` (Network), `guide`, and `editor_kit`, the pieces they share;
+  - the brand: `ingot` (Forge's mark, the ingot cube, still and turning, and
+    the wordmark; its faces are SVGs drawn from its geometry and tinted from
+    the theme).
+- `scripts/make_ico.py`: `assets/forge.ico`, the ingot on an accent tile, each
+  size Windows asks for drawn on its own.
 - `scripts/screenshots.sh`: light and dark screenshots of every screen (see below).
 - `.github/workflows/windows.yml`: fmt, clippy (`-D warnings`) and tests on
   Linux for every push and pull request; the Windows build and tests.

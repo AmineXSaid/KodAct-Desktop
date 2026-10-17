@@ -184,7 +184,7 @@ impl Onboarding {
         cx.notify();
     }
 
-    fn name_step(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
+    fn name_step(&self, cx: &mut Context<Self>) -> AnyElement {
         let t = cx.theme().clone();
         let returning = self.state.read(cx).user_name.is_some();
         let empty = self.input.read(cx).value().trim().is_empty();
@@ -240,7 +240,7 @@ impl Onboarding {
             .flex()
             .flex_col()
             .items_center()
-            .child(super::cube_image(96., window))
+            .child(super::logo(96.))
             .child(heading(
                 &t,
                 if returning {
@@ -377,7 +377,7 @@ impl Render for Onboarding {
         // to the other, both fading: forward to the avatars, back to the name.
         let dir = if self.forward { 1. } else { -1. };
         let step = |this: &Self, step: Step, window: &Window, cx: &mut Context<Self>| match step {
-            Step::Name => this.name_step(window, cx),
+            Step::Name => this.name_step(cx),
             Step::Avatar => this.avatar_step(window, cx),
         };
         let first = self.turn == 0;

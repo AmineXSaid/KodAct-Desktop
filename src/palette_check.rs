@@ -259,3 +259,33 @@ fn terminal_colours_read_on_the_dock() {
         }
     }
 }
+
+#[test]
+fn the_mark_reads_on_every_surface_and_its_faces_read_apart() {
+    for (mode, t) in both() {
+        let x = &t.extra;
+        // The ingot's silhouette: its top and its nearer-to-ground side
+        // hold a UI part's 3:1 on each surface it sits on.
+        for (ground, g) in grounds(&t) {
+            let top = contrast(x.mark_top, g);
+            assert!(
+                top >= AA_UI,
+                "{mode}: the mark's top is {top:.2}:1 on {ground}"
+            );
+            let side = contrast(x.mark_left, g).max(contrast(x.mark_right, g));
+            assert!(
+                side >= AA_UI,
+                "{mode}: the mark's sides are {side:.2}:1 on {ground}"
+            );
+        }
+        // Its two sides, and the top against each, read as separate faces.
+        for (name, a, b) in [
+            ("left and right", x.mark_left, x.mark_right),
+            ("top and left", x.mark_top, x.mark_left),
+            ("top and right", x.mark_top, x.mark_right),
+        ] {
+            let c = contrast(a, b);
+            assert!(c >= 1.5, "{mode}: the mark's {name} faces are {c:.2}:1");
+        }
+    }
+}

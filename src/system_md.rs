@@ -231,7 +231,7 @@ fn render() -> String {
     );
     // Each row: the token, then the pair whose contrast is shown.
     type Pick = fn(&Theme) -> Hsla;
-    let rows: [(&str, Pick, Pick, Pick, &str); 18] = [
+    let rows: [(&str, Pick, Pick, Pick, &str); 21] = [
         (
             "text_strong",
             |t| t.colors.text_strong,
@@ -308,6 +308,27 @@ fn render() -> String {
             |t| t.extra.toggle_on,
             |t| t.colors.surface,
             "a switch that is on",
+        ),
+        (
+            "mark_top",
+            |t| t.extra.mark_top,
+            |t| t.extra.mark_top,
+            |t| t.extra.stage,
+            "the ingot mark's top face (`ui/ingot.rs`)",
+        ),
+        (
+            "mark_left",
+            |t| t.extra.mark_left,
+            |t| t.extra.mark_left,
+            |t| t.extra.stage,
+            "the ingot's left face",
+        ),
+        (
+            "mark_right",
+            |t| t.extra.mark_right,
+            |t| t.extra.mark_right,
+            |t| t.extra.stage,
+            "the ingot's right face",
         ),
         (
             "fill_danger",

@@ -108,6 +108,9 @@ Contrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of w
 | `accent` | `#216d70` | 6.0:1 | `#216d70` | 6.0:1 | send, the new-chat mark, accent dots (white icon on it) |
 | `fill` | `#2b2a27` | 14.4:1 | `#ecebe6` | 12.7:1 | filled buttons: ink on paper, paper on charcoal |
 | `toggle_on` | `#216d70` | 6.0:1 | `#529a9d` | 4.1:1 | a switch that is on |
+| `mark_top` | `#216d70` | 5.7:1 | `#529a9d` | 4.7:1 | the ingot mark's top face (`ui/ingot.rs`) |
+| `mark_left` | `#2b2a27` | 13.5:1 | `#ecebe6` | 12.7:1 | the ingot's left face |
+| `mark_right` | `#8c887e` | 3.3:1 | `#6f6c64` | 2.9:1 | the ingot's right face |
 | `fill_danger` | `#b4412f` | 5.6:1 | `#b7331f` | 6.0:1 | destructive confirms |
 | `success` | `#276b43` | 6.4:1 | `#8fd3a8` | 7.6:1 | done, passed |
 | `danger` | `#b4412f` | 5.6:1 | `#eb8c7b` | 5.4:1 | failed, errors |

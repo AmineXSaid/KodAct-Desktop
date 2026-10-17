@@ -268,6 +268,12 @@ pub struct ExtraColors {
     pub accent: Hsla,
     pub accent_soft: Hsla, // the send button with nothing to send; a soft wash
     pub accent_fg: Hsla,
+    // Forge's mark, the ingot (`ui/ingot.rs`): its top in the accent, its
+    // left side ink (paper in dark), its right a grey a clear step from
+    // both, so the three faces part by lightness and not by hue alone.
+    pub mark_top: Hsla,
+    pub mark_left: Hsla,
+    pub mark_right: Hsla,
     pub border_strong: Hsla, // outlined buttons, switch tracks at rest, fields
     pub active: Hsla,        // the wash under the current row in a list (the sidebar's chat)
     pub sunk: Hsla,          // a recessed track: segmented controls, the composer's tray
@@ -327,6 +333,9 @@ impl ExtraColors {
                 accent: rgb(0x216d70).into(),
                 accent_soft: rgb(0x2f4749).into(),
                 accent_fg: rgb(0xffffff).into(),
+                mark_top: rgb(0x529a9d).into(),
+                mark_left: rgb(0xecebe6).into(),
+                mark_right: rgb(0x6f6c64).into(),
                 border_strong: rgb(0x55534e).into(),
                 active: hsla(0., 0., 1., 0.075),
                 sunk: rgb(0x1f1e1d).into(),
@@ -389,6 +398,9 @@ impl ExtraColors {
                 accent: rgb(0x216d70).into(),
                 accent_soft: rgb(0xd0e6e7).into(),
                 accent_fg: rgb(0xffffff).into(),
+                mark_top: rgb(0x216d70).into(),
+                mark_left: rgb(0x2b2a27).into(),
+                mark_right: rgb(0x8c887e).into(),
                 border_strong: rgb(0xcfcbc0).into(),
                 active: warm_ink(0.075),
                 sunk: rgb(0xf0eee8).into(),

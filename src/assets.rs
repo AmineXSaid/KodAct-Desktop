@@ -130,109 +130,6 @@ icons!(
     "window-restore",
 );
 
-macro_rules! images {
-    ($($name:literal),* $(,)?) => {
-        /// Pictures: the Forge cube, rendered from `assets/images/cube-original.webp`
-        /// at each size the app shows it (32, 48 and 96, at 1x to 3x), so it is never
-        /// scaled at draw time.
-        const IMAGES: &[(&str, &[u8])] = &[
-            $((concat!("images/", $name, ".png"), include_bytes!(concat!("../assets/images/", $name, ".png"))),)*
-        ];
-    };
-}
-
-images!(
-    "cube-32",
-    "cube-40",
-    "cube-48",
-    "cube-56",
-    "cube-60",
-    "cube-64",
-    "cube-72",
-    "cube-80",
-    "cube-84",
-    "cube-96",
-    "cube-120",
-    "cube-144",
-    "cube-168",
-    "cube-192",
-    "cube-240",
-    "cube-288",
-    // The cube turning, one full turn in 5° steps (`scripts/make_turn.py`).
-    "turn/turn-00",
-    "turn/turn-01",
-    "turn/turn-02",
-    "turn/turn-03",
-    "turn/turn-04",
-    "turn/turn-05",
-    "turn/turn-06",
-    "turn/turn-07",
-    "turn/turn-08",
-    "turn/turn-09",
-    "turn/turn-10",
-    "turn/turn-11",
-    "turn/turn-12",
-    "turn/turn-13",
-    "turn/turn-14",
-    "turn/turn-15",
-    "turn/turn-16",
-    "turn/turn-17",
-    "turn/turn-18",
-    "turn/turn-19",
-    "turn/turn-20",
-    "turn/turn-21",
-    "turn/turn-22",
-    "turn/turn-23",
-    "turn/turn-24",
-    "turn/turn-25",
-    "turn/turn-26",
-    "turn/turn-27",
-    "turn/turn-28",
-    "turn/turn-29",
-    "turn/turn-30",
-    "turn/turn-31",
-    "turn/turn-32",
-    "turn/turn-33",
-    "turn/turn-34",
-    "turn/turn-35",
-    "turn/turn-36",
-    "turn/turn-37",
-    "turn/turn-38",
-    "turn/turn-39",
-    "turn/turn-40",
-    "turn/turn-41",
-    "turn/turn-42",
-    "turn/turn-43",
-    "turn/turn-44",
-    "turn/turn-45",
-    "turn/turn-46",
-    "turn/turn-47",
-    "turn/turn-48",
-    "turn/turn-49",
-    "turn/turn-50",
-    "turn/turn-51",
-    "turn/turn-52",
-    "turn/turn-53",
-    "turn/turn-54",
-    "turn/turn-55",
-    "turn/turn-56",
-    "turn/turn-57",
-    "turn/turn-58",
-    "turn/turn-59",
-    "turn/turn-60",
-    "turn/turn-61",
-    "turn/turn-62",
-    "turn/turn-63",
-    "turn/turn-64",
-    "turn/turn-65",
-    "turn/turn-66",
-    "turn/turn-67",
-    "turn/turn-68",
-    "turn/turn-69",
-    "turn/turn-70",
-    "turn/turn-71",
-);
-
 pub struct Assets;
 
 impl AssetSource for Assets {
@@ -253,13 +150,16 @@ impl AssetSource for Assets {
             }
             _ => {}
         }
+        if path.starts_with("ingot/") {
+            // The mark's faces, drawn from its geometry (`ui/ingot.rs`).
+            return Ok(crate::ui::ingot::face_svg(path).map(Cow::Owned));
+        }
         if path.starts_with("avatars/") {
             // Sized to the pixels they're drawn at (`avatars.rs`).
             return Ok(crate::avatars::load(path).map(Cow::Owned));
         }
         Ok(ICONS
             .iter()
-            .chain(IMAGES)
             .find(|(p, _)| *p == path)
             .map(|(_, bytes)| Cow::Borrowed(*bytes)))
     }
@@ -267,7 +167,6 @@ impl AssetSource for Assets {
     fn list(&self, path: &str) -> Result<Vec<SharedString>> {
         Ok(ICONS
             .iter()
-            .chain(IMAGES)
             .filter(|(p, _)| p.starts_with(path))
             .map(|(p, _)| SharedString::from(*p))
             .collect())

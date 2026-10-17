@@ -843,7 +843,7 @@ impl Render for Workspace {
                         {
                             super::turning_logo(32., "agents-logo")
                         } else {
-                            super::cube_image(32., window).into_any_element()
+                            super::logo(32.).into_any_element()
                         },
                         working: s.busy(),
                         copied: s.copied.clone(),
