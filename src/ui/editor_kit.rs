@@ -261,7 +261,7 @@ pub fn chip(
         .gap(px(5.))
         .h(t.size.control)
         .px(px(10.))
-        .rounded(t.radius.pill)
+        .rounded(t.radius.compact)
         .border_1()
         .border_color(if on {
             t.colors.primary
@@ -300,7 +300,7 @@ pub fn icon_button(
         .flex_none()
         .items_center()
         .justify_center()
-        .rounded(t.radius.pill)
+        .rounded(t.radius.button)
         .cursor_pointer()
         .hover(move |s| s.bg(h))
         .child(icon(path, t.size.icon_sm, t.colors.text_muted))

@@ -221,7 +221,7 @@ impl Render for SideChat {
             ));
         }
 
-        let send_bg = t.extra.fill;
+        let send_bg = t.extra.accent;
         let input_row = div()
             .flex()
             .items_center()
@@ -231,7 +231,7 @@ impl Render for SideChat {
             .pl(px(10.))
             .pr(px(4.))
             .h(px(34.))
-            .rounded(px(10.))
+            .rounded(t.radius.card)
             .bg(t.colors.canvas)
             .border_1()
             .border_color(t.colors.border)
@@ -249,14 +249,14 @@ impl Render for SideChat {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .rounded(t.radius.pill)
+                    .rounded(t.radius.control)
                     .bg(send_bg)
                     .cursor_pointer()
                     .hover(|st| st.opacity(0.9))
                     .child(icon(
                         "icons/arrow-up.svg",
                         t.size.icon_sm,
-                        t.colors.primary_fg,
+                        t.extra.accent_fg,
                     ))
                     .tooltip(|window, cx| {
                         gpui::component::tooltip::Tooltip::new("Send side question")

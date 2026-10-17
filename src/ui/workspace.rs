@@ -43,6 +43,8 @@ pub struct Workspace {
     confirm: Entity<ConfirmWindow>,
     /// SSH's password and passphrase prompts.
     askpass: Entity<super::askpass::AskpassDialog>,
+    /// The home screen's field of dots, behind the greeting and the composer.
+    dots: Entity<super::dot_field::DotField>,
     focus: FocusHandle,
 }
 
@@ -71,6 +73,8 @@ impl Workspace {
         let browser = cx.new(|cx| super::browser_view::BrowserView::new(state.clone(), window, cx));
         let confirm = cx.new(|cx| ConfirmWindow::new(state.clone(), window, cx));
         let askpass = cx.new(|cx| super::askpass::AskpassDialog::new(state.clone(), window, cx));
+        let composer_focus = composer.read(cx).focus_handle(cx);
+        let dots = cx.new(|cx| super::dot_field::DotField::new(Some(composer_focus), window, cx));
         let first_run = state.read(cx).onboarding;
         let ws = Self {
             state,
@@ -89,6 +93,7 @@ impl Workspace {
             browser,
             confirm,
             askpass,
+            dots,
             focus: cx.focus_handle(),
         };
         if first_run {
@@ -476,55 +481,85 @@ impl Workspace {
         )
     }
 
-    /// A new chat: one line greeting you, with your cube, and the composer.
+    /// A new chat: the greeting in the display serif beside Forge's mark, a
+    /// quiet line under it, the composer and the starters, over the field of
+    /// dots. The field fills the session behind them and never scrolls.
     fn welcome(&self, _window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let s = self.state.read(cx);
         let name = s.user_name.clone().unwrap_or_default();
         let name = name.trim();
         let line = crate::greeting::pick(name, crate::greeting::hour_now(), s.greeting_seed);
-        // A short window scrolls it rather than cutting off the logo or the starters.
+        let project = s
+            .project(s.current_project)
+            .map(|p| p.name.to_string())
+            .unwrap_or_default();
+        let sub = if project.is_empty() {
+            "Ask, plan or build. Forge works in your project and asks before it changes anything."
+                .to_string()
+        } else {
+            format!("Working in {project}. Forge asks before it changes anything.")
+        };
         div()
-            .id("welcome")
             .flex_1()
             .min_h_0()
-            .overflow_y_scroll()
+            .relative()
+            .flex()
+            .flex_col()
+            .child(self.dots.clone())
             .child(
+                // A short window scrolls it rather than cutting off the starters.
                 div()
-                    .min_h_full()
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .justify_center()
-                    .px(t.space.xl)
-                    .py(t.space.xl)
-                    // A little above the middle, where the eye lands.
-                    .pb(t.space.xxl * 2.)
+                    .id("welcome")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
                     .child(
                         div()
-                            .w_full()
-                            .max_w(t.size.column - t.space.xxl * 2.)
+                            .min_h_full()
                             .flex()
                             .flex_col()
                             .items_center()
-                            .gap(t.space.xl)
-                            // The Forge logo above the greeting, both centred.
-                            // The page rises in piece by piece as it opens.
-                            .child(super::motion::row_in(
-                                super::logo(84.),
-                                "welcome-logo",
-                                0,
-                                &t,
-                            ))
-                            .child(super::motion::row_in_full(
-                                greeting_line(&line, name, &t),
-                                "welcome-greeting",
-                                1,
-                                &t,
-                            ))
-                            .child(div().h(t.space.sm))
-                            .child(self.composer.clone())
-                            .child(super::starters::render(&t, &self.state, &self.composer, cx)),
+                            .justify_center()
+                            .px(t.space.xl)
+                            .py(t.space.xxxl)
+                            // A little above the middle, where the eye lands.
+                            .pb(t.space.xxl * 2.)
+                            .child(
+                                div()
+                                    .w_full()
+                                    .max_w(t.size.composer_width + t.space.xxl)
+                                    .flex()
+                                    .flex_col()
+                                    .items_center()
+                                    .gap(t.space.xl)
+                                    // The page rises in piece by piece as it opens.
+                                    .child(super::motion::row_in_full(
+                                        div()
+                                            .flex()
+                                            .flex_col()
+                                            .items_center()
+                                            .gap(t.space.sm)
+                                            .child(greeting_line(&line, &t))
+                                            .child(
+                                                div()
+                                                    .text_size(t.text.body_sm)
+                                                    .text_color(t.colors.text_muted)
+                                                    .text_center()
+                                                    .child(sub),
+                                            ),
+                                        "welcome-greeting",
+                                        0,
+                                        &t,
+                                    ))
+                                    .child(self.composer.clone())
+                                    .child(super::starters::render(
+                                        &t,
+                                        &self.state,
+                                        &self.composer,
+                                        cx,
+                                    )),
+                            ),
                     ),
             )
     }
@@ -747,7 +782,7 @@ impl Render for Workspace {
             - if sidebar_open {
                 f32::from(t.size.sidebar)
             } else {
-                0.
+                f32::from(t.size.rail)
             };
         let dock_want = self.dock_want(window, cx);
         let wide = s
@@ -1313,7 +1348,13 @@ impl Render for Workspace {
                         .flex_1()
                         .min_h_0()
                         .flex()
-                        .when(sidebar_open, |d| d.child(self.sidebar.clone()))
+                        .map(|d| {
+                            if sidebar_open {
+                                d.child(self.sidebar.clone())
+                            } else {
+                                d.child(super::sidebar::rail(&t, screen))
+                            }
+                        })
                         .child(main)
                         .when(terminal_open, |d| d.child(dock)),
                 )
@@ -1360,50 +1401,25 @@ fn share_out(
     (p, d)
 }
 
-/// The greeting, bold and tight, with your name on a peach pill (the
-/// design system's hero highlight: one word of a headline, marked).
-fn greeting_line(line: &str, name: &str, t: &crate::theme::Theme) -> impl IntoElement {
-    let text = |s: &str| div().child(s.to_string());
-    let row = div()
+/// The greeting, in the display serif, after Forge's mark: an editorial
+/// line, not a banner.
+fn greeting_line(line: &str, t: &crate::theme::Theme) -> impl IntoElement {
+    div()
         .w_full()
         .flex()
-        .flex_wrap()
         .justify_center()
         .items_center()
-        .gap_x(px(6.))
-        .font_family(t.font_display.clone())
-        .text_size(t.size.greeting)
-        .text_color(t.colors.text_strong)
-        .line_height(gpui::relative(1.15));
-    let Some(at) = (!name.is_empty()).then(|| line.find(name)).flatten() else {
-        return row.child(text(line));
-    };
-    let (before, after) = (&line[..at], &line[at + name.len()..]);
-    let pill = div()
-        .flex()
-        .items_center()
-        .gap(px(8.))
-        .px(px(16.))
-        .py(px(2.))
-        .rounded(t.radius.pill)
-        .bg(t.colors.peach)
-        .child(div().size(px(10.)).rounded_full().bg(t.colors.coral))
-        .child(name.to_string());
-    // What follows the name ("?", ". Fresh start?") stays on its line, set
-    // right against the pill when it is punctuation.
-    let tail = after.trim_start();
-    let tight = !after.starts_with(' ');
-    row.when(!before.trim().is_empty(), |d| {
-        d.child(text(before.trim_end()))
-    })
-    .child(
-        div()
-            .flex()
-            .items_center()
-            .gap(if tight { px(2.) } else { px(6.) })
-            .child(pill)
-            .when(!tail.is_empty(), |d| d.child(text(tail))),
-    )
+        .gap(t.space.md)
+        .child(super::logo(30.))
+        .child(
+            div()
+                .min_w_0()
+                .font_family(t.font_display.clone())
+                .text_size(t.size.home_heading)
+                .text_color(t.colors.text_strong)
+                .line_height(gpui::relative(1.15))
+                .child(line.to_string()),
+        )
 }
 
 #[cfg(test)]

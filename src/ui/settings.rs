@@ -714,7 +714,7 @@ impl Settings {
             .gap(px(5.))
             .h(px(26.))
             .px(px(10.))
-            .rounded(t.radius.pill)
+            .rounded(t.radius.compact)
             .border_1()
             .border_color(if on {
                 t.colors.primary
@@ -751,8 +751,8 @@ impl Settings {
                 )),
             )
             .child(
-                theme::ghost_button(t, "Save")
-                    .id("save-name")
+                super::button::Button::secondary("save-name", "Save")
+                    .disabled(self.name.read(cx).value().trim().is_empty())
                     .on_click(cx.listener(|this, _, _, cx| {
                         let n = this.name.read(cx).value().to_string();
                         this.state
@@ -762,23 +762,17 @@ impl Settings {
                             });
                     })),
             );
-        let appearance = div()
-            .flex()
-            .gap(px(6.))
-            .child(
-                Self::chip(t, "light", "Light", !dark).on_click(move |_, window, cx| {
-                    if dark {
-                        window.dispatch_action(Box::new(ToggleTheme), cx)
-                    }
-                }),
-            )
-            .child(
-                Self::chip(t, "dark", "Dark", dark).on_click(move |_, window, cx| {
-                    if !dark {
-                        window.dispatch_action(Box::new(ToggleTheme), cx)
-                    }
-                }),
-            );
+        let appearance = super::button::Segmented::new("appearance", "Appearance")
+            .option("Light", !dark, move |_, window, cx| {
+                if dark {
+                    window.dispatch_action(Box::new(ToggleTheme), cx)
+                }
+            })
+            .option("Dark", dark, move |_, window, cx| {
+                if !dark {
+                    window.dispatch_action(Box::new(ToggleTheme), cx)
+                }
+            });
         let mut modes = div().flex().flex_wrap().gap(px(6.));
         for m in crate::modes::ModeId::ALL {
             if m == crate::modes::ModeId::Bypass && !bypass {
@@ -811,34 +805,18 @@ impl Settings {
             );
         }
         let state = self.state.clone();
-        let bypass_row = div().child(if bypass {
-            Self::chip(t, "bypass", "Allowed · turn off", false).on_click(move |_, _, cx| {
+        let bypass_row = super::button::Switch::new("bypass", bypass, "Bypass permissions")
+            .on_toggle(move |on, _, cx| {
                 state.update(cx, |s, cx| {
-                    s.bypass_allowed = false;
-                    if s.default_mode == crate::modes::ModeId::Bypass {
+                    s.bypass_allowed = on;
+                    if !on && s.default_mode == crate::modes::ModeId::Bypass {
                         s.default_mode = crate::modes::ModeId::Manual;
                     }
                     cx.notify();
                 })
-            })
-        } else {
-            Self::chip(t, "bypass", "Allow", false).on_click(move |_, _, cx| {
-                state.update(cx, |s, cx| {
-                    s.bypass_allowed = true;
-                    cx.notify();
-                })
-            })
-        });
-        let browser_row = div().child(
-            Self::chip(
-                t,
-                "browser",
-                if browser { "On · turn off" } else { "Turn on" },
-                browser,
-            )
-            .flex_none()
-            .on_click(|_, window, cx| window.dispatch_action(Box::new(super::ToggleBrowser), cx)),
-        );
+            });
+        let browser_row = super::button::Switch::new("browser", browser, "Web browser")
+            .on_toggle(|_, window, cx| window.dispatch_action(Box::new(super::ToggleBrowser), cx));
         // Each group is one white card with hairline rows: the setting on
         // the left, its control on the right (or below, when it is a row of
         // choices), and the cards rise in one after another.
@@ -892,11 +870,15 @@ impl Settings {
                 ],
             ),
         ];
-        let mut page = div().flex().flex_col().gap(px(20.)).child(Self::section(
-            t,
-            "General",
-            Some("Who you are, how Forge looks, and how new chats start."),
-        ));
+        let mut page = div()
+            .flex()
+            .flex_col()
+            .gap(t.space.loose)
+            .child(Self::section(
+                t,
+                "General",
+                Some("Who you are, how Forge looks, and how new chats start."),
+            ));
         for (i, (heading, rows)) in groups.into_iter().enumerate() {
             page = page.child(super::motion::row_in_full(
                 Self::card(t, heading, rows),
@@ -1070,7 +1052,7 @@ impl Settings {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .rounded(t.radius.pill)
+                            .rounded(t.radius.button)
                             .cursor_pointer()
                             .hover({
                                 let h = t.extra.danger_tint;
@@ -1261,7 +1243,7 @@ impl Settings {
                         cx.notify();
                     })))
                     .when(self.save_anyway && !working, |d| d.child(theme::ghost_button(t, "Save anyway").id("save-anyway").on_click(cx.listener(|this, _, window, cx| this.check_and_save(true, window, cx)))))
-                    .child(theme::primary_button(t, if working { "Checking…" } else { "Check and save" }).id("check-save").when(!working, |d| d.on_click(cx.listener(|this, _, window, cx| this.check_and_save(false, window, cx))))),
+                    .child(super::button::Button::primary("check-save", if working { "Checking…" } else { "Check and save" }).loading(working).on_click(cx.listener(|this, _, window, cx| this.check_and_save(false, window, cx)))),
             )
             .into_any_element()
     }
@@ -1457,20 +1439,11 @@ impl Render for Settings {
                 SettingsTab::Guide => super::guide::render(&t).into_any_element(),
                 SettingsTab::About => self.about(&t),
             };
-        let close = div()
-            .id("settings-close")
-            .absolute()
-            .top(px(12.))
-            .right(px(12.))
-            .size(px(28.))
-            .flex()
-            .items_center()
-            .justify_center()
-            .rounded(t.radius.pill)
-            .cursor_pointer()
-            .hover(move |s| s.bg(hover))
-            .child(icon("icons/x.svg", t.size.icon, t.colors.text_muted))
-            .on_click(cx.listener(|this, _, _, cx| this.close(cx)));
+        let close = div().absolute().top(px(12.)).right(px(12.)).child(
+            super::button::Button::icon("settings-close", "icons/x.svg", "Close settings (Esc)")
+                .compact()
+                .on_click(cx.listener(|this, _, _, cx| this.close(cx))),
+        );
         let panel = div()
             .id("settings-panel")
             .occlude()

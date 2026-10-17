@@ -905,7 +905,7 @@ pub fn indicator(s: &AppState, state: Entity<AppState>, t: &Theme) -> AnyElement
         ),
         Look::Connected(l, g) => (
             t.extra.fill,
-            gpui::white(),
+            t.extra.fill_fg,
             Some(l.clone().into()),
             g,
             format!("{l}: connected").into(),

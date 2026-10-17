@@ -82,7 +82,9 @@ fn action_button(
     let hover = t.colors.hover;
     div()
         .id(id)
-        .size(t.size.control - px(4.))
+        .role(gpui::accesskit::Role::Button)
+        .aria_label(tip)
+        .size(t.size.hit_sm)
         .flex()
         .items_center()
         .justify_center()
@@ -728,7 +730,7 @@ fn thinking(text: &SharedString, open: bool, b: usize, cx: &ItemContext, t: &The
 
 fn status_icon(status: ToolStatus, t: &Theme) -> AnyElement {
     match status {
-        ToolStatus::Running => icon("icons/loader-circle.svg", t.size.icon_sm, t.colors.sky)
+        ToolStatus::Running => icon("icons/loader-circle.svg", t.size.icon_sm, t.extra.accent)
             .with_animation(
                 "tool-running",
                 Animation::new(Duration::from_millis(900)).repeat(),
@@ -804,13 +806,25 @@ fn tool(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
             "tool-{}-{}-{b}",
             cx.chat, cx.index
         )))
+        .role(gpui::accesskit::Role::Button)
+        .aria_label(SharedString::from(format!(
+            "{} {}{}",
+            call.kind.verb(call.status),
+            call.shown_target(),
+            if !has_body {
+                ""
+            } else if call.open {
+                ", hide details"
+            } else {
+                ", show details"
+            }
+        )))
         .flex()
         .items_center()
         .gap(t.space.sm)
         .px(t.space.md)
         .h(t.size.row + px(4.))
-        .cursor_pointer()
-        .hover(move |s| s.bg(hover))
+        .when(has_body, |d| d.cursor_pointer().hover(move |s| s.bg(hover)))
         .child(icon(call.kind.icon(), t.size.icon_sm, t.colors.text_muted))
         .map(|d| match (&call.note, shell) {
             // A command is headed by its description alone; the command
@@ -944,10 +958,17 @@ fn tool(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
         }
     });
 
+    // The row's edge says how it went, quietly: firmer while it runs, a
+    // danger tint when it failed.
+    let edge = match call.status {
+        ToolStatus::Running => t.extra.border_strong,
+        ToolStatus::Failed => t.extra.danger.opacity(0.45),
+        _ => t.colors.border,
+    };
     div()
         .bg(t.colors.surface)
         .border_1()
-        .border_color(t.colors.border)
+        .border_color(edge)
         .rounded(t.radius.card)
         .overflow_hidden()
         .child(header)
@@ -1543,7 +1564,7 @@ fn permission(
     }
     let id = |name: &str| SharedString::from(format!("perm-{name}-{}-{}-{b}", cx.chat, cx.index));
     let is_plan = title.as_ref() == crate::backend::PLAN_ASK_TITLE;
-    let hover = t.colors.hover;
+    use super::button::Button;
     div()
         .flex()
         .flex_col()
@@ -1619,39 +1640,34 @@ fn permission(
                 // asked), or keep planning; as Forge for VS Code has it.
                 .when(is_plan, |d| {
                     d.child(
-                        theme::text_button(t, "No, keep planning")
-                            .id(id("keep"))
+                        Button::ghost(id("keep"), "No, keep planning")
                             .on_click(answer(Verdict::KeepPlanning)),
                     )
                     .child(div().flex_1())
                     .child(
-                        theme::ghost_button(t, "Yes, ask before edits")
-                            .id(id("plan-manual"))
-                            .hover(move |s| s.bg(hover))
+                        Button::secondary(id("plan-manual"), "Yes, ask before edits")
                             .on_click(answer(Verdict::PlanApprove)),
                     )
                     .child(
-                        theme::primary_button(t, "Yes, edit automatically")
-                            .id(id("plan-auto"))
+                        Button::primary(id("plan-auto"), "Yes, edit automatically")
                             .on_click(answer(Verdict::PlanAutoAccept)),
                     )
                 })
+                // A tool: deny it, allow it this once (the filled action),
+                // or always. The broad grant is never the loudest button.
                 .when(!is_plan, |d| {
                     d.child(
-                        theme::text_button(t, "Deny")
-                            .id(id("deny"))
+                        Button::ghost(id("deny"), "Deny")
+                            .with_icon("icons/x.svg")
                             .on_click(answer(Verdict::Denied)),
                     )
                     .child(div().flex_1())
                     .child(
-                        theme::ghost_button(t, "Always allow")
-                            .id(id("always"))
-                            .hover(move |s| s.bg(hover))
+                        Button::secondary(id("always"), "Always allow")
                             .on_click(answer(Verdict::AllowedAlways)),
                     )
                     .child(
-                        theme::primary_button(t, "Allow")
-                            .id(id("allow"))
+                        Button::primary(id("allow"), "Allow once")
                             .on_click(answer(Verdict::Allowed)),
                     )
                 }),

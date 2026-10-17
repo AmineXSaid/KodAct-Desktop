@@ -1,7 +1,8 @@
-//! The composer: a white card with a multi-line input that grows up to a
-//! limit, and a row of controls: attach (ghost), the model picker (a
-//! popover), the context meter (when it's known), the Modes menu, and Send, the one filled button
-//! (Stop while a reply plays). Enter sends; Shift+Enter adds a line.
+//! The composer, one unit: a white card holding a multi-line input that
+//! grows up to a limit, the outlined + (attach) and Send (Stop while a reply
+//! plays), set in a recessed tray that carries the project, the context
+//! meter, the model picker (a popover) and the Modes menu. Enter sends;
+//! Shift+Enter adds a line.
 
 use gpui::component::input::{Input, InputEvent, InputState, Textarea, TextareaState};
 use gpui::{
@@ -118,6 +119,11 @@ impl Composer {
             ac_anchor: None,
             _subs: subs,
         }
+    }
+
+    /// The text box's focus: the home screen's dot field brightens on it.
+    pub fn focus_handle(&self, cx: &gpui::App) -> gpui::FocusHandle {
+        gpui::Focusable::focus_handle(self.input.read(cx), cx)
     }
 
     pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
@@ -487,67 +493,40 @@ impl Render for Composer {
         });
         let has_attachments = pending.is_some();
         let send_ready = busy || !empty || has_attachments;
-        // Send is the screen's one filled action: the system's blue, in every
-        // mode (the mode chip beside it carries the mode's colour).
-        let send_bg = t.extra.fill;
-        let send = div()
-            .id("send")
-            .size(px(26.))
-            .flex_none()
-            .flex()
-            .items_center()
-            .justify_center()
-            .rounded(t.radius.pill)
-            .when(busy, |d| {
-                d.bg(t.colors.text_strong)
-                    .cursor_pointer()
-                    .child(div().size(px(10.)).rounded(px(2.)).bg(t.colors.surface))
-            })
-            .when(!busy, |d| {
-                d.bg(if send_ready { send_bg } else { t.colors.hover })
-                    .when(send_ready, |d| {
-                        d.cursor_pointer().hover(move |st| st.opacity(0.9))
-                    })
-                    .child(icon(
-                        "icons/arrow-up.svg",
-                        t.size.icon,
-                        if send_ready {
-                            t.colors.primary_fg
-                        } else {
-                            t.colors.text_subtle
-                        },
-                    ))
-            })
-            .on_click(cx.listener(move |this, _, window, cx| {
+        // Send is the accent, pale until there is something to send; Stop
+        // replaces it while a reply plays.
+        let send = super::button::send_button(
+            "send",
+            if busy {
+                super::button::SendState::Busy
+            } else if send_ready {
+                super::button::SendState::Ready
+            } else {
+                super::button::SendState::Empty
+            },
+            &t,
+            cx.listener(move |this, _, window, cx| {
                 if this.state.read(cx).busy() {
                     this.state.update(cx, |s, cx| s.stop(cx));
                 } else {
                     this.submit(window, cx);
                 }
-            }));
+            }),
+        );
 
-        // Under the box: small outlined chips, filled while open or hovered.
-        let (chip_border, chip_bg) = (t.colors.border, t.colors.surface);
-        let quiet = |id: &'static str, open: bool| {
-            div()
-                .id(id)
-                .flex()
-                .items_center()
-                .gap(px(5.))
-                .h(px(24.))
-                .px(px(9.))
-                .rounded(t.radius.pill)
-                .border_1()
-                .border_color(chip_border)
-                .bg(chip_bg)
-                .cursor_pointer()
-                .text_size(t.text.caption)
-                .when(open, |d| d.bg(hover))
-                .hover(move |st| st.bg(hover))
-        };
+        // In the tray: quiet selectors, washed while open or hovered.
+        let quiet = |id: &'static str, open: bool| super::button::selector(&t, id, open);
         let model_button = quiet("model", picker_open)
-            .child(icon("icons/cpu.svg", t.size.icon_xs, t.colors.text_muted))
-            .child(div().text_color(t.colors.text).child(model_name))
+            .aria_label("Model")
+            .child(
+                div()
+                    .max_w(px(220.))
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
+                    .text_color(t.colors.text)
+                    .child(model_name),
+            )
             .children(pill_effort.map(|(label, color)| {
                 div()
                     .text_color(if color == t.colors.text_subtle {
@@ -557,11 +536,45 @@ impl Render for Composer {
                     })
                     .child(label)
             }))
+            .child(super::button::chevron(&t))
             .on_click(cx.listener(|this, ev: &gpui::ClickEvent, window, cx| {
                 if !this.just_dismissed(ev) {
                     window.dispatch_action(Box::new(ToggleModelPicker), cx);
                 }
             }));
+        // The project this chat works in: opens Projects to choose another.
+        let project_name: SharedString = self
+            .state
+            .read(cx)
+            .project(self.state.read(cx).current_project)
+            .map(|p| p.name.clone())
+            .unwrap_or_else(|| "Work in a project".into());
+        let project_button = quiet("project", false)
+            .aria_label("Project")
+            .text_color(t.colors.text_muted)
+            .child(icon(
+                "icons/folder.svg",
+                t.size.icon_sm,
+                t.colors.text_muted,
+            ))
+            .child(
+                div()
+                    .max_w(px(180.))
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
+                    .child(project_name),
+            )
+            .child(super::button::chevron(&t))
+            .tooltip(|window, cx| {
+                gpui::component::tooltip::Tooltip::new(format!(
+                    "Choose the project ({})",
+                    super::shortcut("Shift P")
+                ))
+                .build(window, cx)
+            })
+            .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenProjects), cx));
+        let focused = gpui::Focusable::focus_handle(self.input.read(cx), cx).is_focused(window);
 
         let meter = meter.map(|(m, model)| {
             let f = m.fraction();
@@ -607,7 +620,7 @@ impl Render for Composer {
                     crate::context::short(m.used),
                     crate::context::short(m.window)
                 ))
-                .rounded(t.radius.pill)
+                .rounded(t.radius.compact)
                 .cursor_pointer()
                 .hover(move |st| st.bg(hover))
                 .tooltip(move |window, cx| {
@@ -689,130 +702,108 @@ impl Render for Composer {
             .children(model_menu)
             // Painted last, over the cards under the box on the new-chat screen.
             .children(completion.map(|c| gpui::deferred(c).with_priority(2)))
-            // The box: what you write, attach on the left, send on the right.
+            // One unit: the white box (what you write, + on the left, send on
+            // the right) resting in a recessed tray that holds the selectors.
             .child(
                 div()
                     .flex()
                     .flex_col()
-                    .bg(t.colors.surface)
-                    .border_1()
-                    // The mode tints the box's edge, as it tints the extension's focus ring.
-                    .border_color(tint.map(|c| c.opacity(0.55)).unwrap_or(t.colors.border))
                     .rounded(t.size.composer_radius)
-                    // Files dropped anywhere on the box are attached.
-                    .drag_over::<gpui::ExternalPaths>({
-                        let (edge, wash) = (t.colors.primary, t.colors.primary_tint);
-                        move |d, _, _, _| d.border_color(edge).bg(wash)
-                    })
-                    .on_drop(cx.listener(|this, paths: &gpui::ExternalPaths, _, cx| {
-                        let paths = paths.paths().to_vec();
-                        this.state
-                            .update(cx, |s, cx| s.add_attachment_paths(paths, cx));
-                    }))
-                    .children(pending)
-                    .child(
-                        // The text starts where the + glyph under it starts
-                        // (the textarea adds 10px of its own).
-                        div()
-                            .px(px(8.))
-                            .pt(px(10.))
-                            .pb(px(8.))
-                            .text_size(t.text.body)
-                            .line_height(relative(1.5))
-                            .child(
-                                Textarea::new(&self.input)
-                                    .appearance(false)
-                                    .text_size(t.text.body),
-                            ),
-                    )
-                    // A soft rule between what you write and the tools under it,
-                    // fading out at both ends, with a faint shade beneath.
-                    .child(divider(t.colors.text_subtle.opacity(0.55)))
+                    .bg(t.extra.sunk)
+                    .border_1()
+                    .border_color(t.colors.border)
                     .child(
                         div()
                             .flex()
-                            .items_center()
-                            // Equal insets right and below, so the round send
-                            // button sits square in the box's corner.
-                            .p(px(7.))
+                            .flex_col()
+                            .bg(t.colors.surface)
+                            .border_1()
+                            // The mode tints the box's edge, as it tints the extension's
+                            // focus ring; the keyboard deepens it.
+                            .border_color(tint.map(|c| c.opacity(0.55)).unwrap_or(if focused {
+                                t.extra.border_strong
+                            } else {
+                                t.colors.border
+                            }))
+                            .rounded(t.size.composer_radius)
+                            // The tray's edge meets the box's: no double hairline.
+                            .m(px(-1.))
+                            // Files dropped anywhere on the box are attached.
+                            .drag_over::<gpui::ExternalPaths>({
+                                let (edge, wash) = (t.colors.primary, t.colors.primary_tint);
+                                move |d, _, _, _| d.border_color(edge).bg(wash)
+                            })
+                            .on_drop(cx.listener(|this, paths: &gpui::ExternalPaths, _, cx| {
+                                let paths = paths.paths().to_vec();
+                                this.state
+                                    .update(cx, |s, cx| s.add_attachment_paths(paths, cx));
+                            }))
+                            .children(pending)
+                            .child(
+                                // The text starts where the + under it starts
+                                // (the textarea adds 10px of its own).
+                                div()
+                                    .px(px(4.))
+                                    .pt(t.space.md)
+                                    .pb(t.space.xs)
+                                    .text_size(t.text.body)
+                                    .line_height(relative(1.5))
+                                    .child(
+                                        Textarea::new(&self.input)
+                                            .appearance(false)
+                                            .text_size(t.text.body),
+                                    ),
+                            )
                             .child(
                                 div()
-                                    .id("attach")
-                                    .size(px(26.))
                                     .flex()
                                     .items_center()
-                                    .justify_center()
-                                    .rounded(t.radius.pill)
-                                    .cursor_pointer()
-                                    .hover(move |st| st.bg(hover))
-                                    .child(icon(
-                                        "icons/paperclip.svg",
-                                        t.size.icon,
-                                        t.colors.text_muted,
-                                    ))
-                                    .tooltip(|window, cx| {
-                                        gpui::component::tooltip::Tooltip::new(format!(
-                                            "Attach files and images ({})",
-                                            super::shortcut("U")
-                                        ))
-                                        .build(window, cx)
-                                    })
-                                    .on_click(|_, window, cx| {
-                                        window.dispatch_action(Box::new(super::AttachFiles), cx)
-                                    }),
-                            )
+                                    .gap(t.space.sm)
+                                    // Equal insets right and below, so send sits
+                                    // square in the box's corner.
+                                    .p(t.space.snug)
+                                    .child(
+                                        super::button::Button::outlined_icon(
+                                            "attach",
+                                            "icons/plus.svg",
+                                            format!(
+                                                "Attach files and images ({})",
+                                                super::shortcut("U")
+                                            ),
+                                        )
+                                        .large()
+                                        .on_click(
+                                            |_, window, cx| {
+                                                window.dispatch_action(
+                                                    Box::new(super::AttachFiles),
+                                                    cx,
+                                                )
+                                            },
+                                        ),
+                                    )
+                                    .child(div().flex_1())
+                                    .child(send),
+                            ),
+                    )
+                    // The tray: the project, the context meter, the model, the mode.
+                    .child(
+                        div()
+                            .relative()
+                            .children(context_popover)
+                            .flex()
+                            .items_center()
+                            .gap(t.space.xs)
+                            .px(t.space.tight)
+                            .py(t.space.xs)
+                            .child(project_button)
+                            .children(meter)
                             .child(div().flex_1())
-                            .child(send),
+                            .child(model_button)
+                            // Modes: the button and its menu above it.
+                            .child(div().relative().child(mode_trigger).children(modes_menu)),
                     ),
-            )
-            // Under it: the context meter, the model (and its effort), the mode.
-            .child(
-                div()
-                    .relative()
-                    .children(context_popover)
-                    .flex()
-                    .items_center()
-                    .gap(px(6.))
-                    .px(px(4.))
-                    .children(meter)
-                    .child(div().flex_1())
-                    .child(model_button)
-                    // Modes: the button and its menu above it.
-                    .child(div().relative().child(mode_trigger).children(modes_menu)),
             );
         // Never wider than its own measure, centred wherever it sits.
         div().w_full().flex().justify_center().child(composer)
     }
-}
-
-/// A hairline that fades in from the left and out to the right, over a
-/// fainter one: the composer's rule between text and tools.
-fn divider(color: gpui::Hsla) -> impl IntoElement {
-    use gpui::{linear_color_stop, linear_gradient};
-    let half = |c: gpui::Hsla, out: bool| {
-        let (a, b) = if out {
-            (c, c.opacity(0.))
-        } else {
-            (c.opacity(0.), c)
-        };
-        div().h_full().w(relative(0.5)).bg(linear_gradient(
-            90.,
-            linear_color_stop(a, 0.),
-            linear_color_stop(b, 1.),
-        ))
-    };
-    let line = |c: gpui::Hsla| {
-        div()
-            .h(px(1.))
-            .w_full()
-            .flex()
-            .child(half(c, false))
-            .child(half(c, true))
-    };
-    div()
-        .mx(px(14.))
-        .flex()
-        .flex_col()
-        .child(line(color))
-        .child(line(color.opacity(0.4)))
 }

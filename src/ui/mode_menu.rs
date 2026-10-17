@@ -74,24 +74,10 @@ pub fn trigger(
     let s = state.read(cx);
     let (mode, open) = (s.mode, s.modes_open);
     let fg = tint(t, mode).unwrap_or(t.colors.text);
-    let hover = t.colors.hover;
     let state = state.clone();
-    div()
-        .id("mode-trigger")
-        .flex()
-        .items_center()
-        .gap(px(5.))
-        .h(px(24.))
-        .px(px(9.))
-        .rounded(t.radius.pill)
-        .border_1()
-        .border_color(t.colors.border)
-        .bg(t.colors.surface)
-        .cursor_pointer()
-        .text_size(t.text.caption)
+    super::button::selector(t, "mode-trigger", open)
+        .aria_label("Permission mode")
         .text_color(fg)
-        .when(open, |d| d.bg(hover))
-        .hover(move |st| st.bg(hover))
         .child(icon(mode.icon(), t.size.icon_xs, fg))
         .child(
             div()
@@ -101,6 +87,7 @@ pub fn trigger(
                 .text_ellipsis()
                 .child(mode.label()),
         )
+        .child(super::button::chevron(t))
         .tooltip({
             let tip: SharedString = format!(
                 "{}. Click to change, or press Shift+Tab to cycle.",

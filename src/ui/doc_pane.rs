@@ -21,25 +21,9 @@ const COPY_KEY: &str = "doc-pane-copy";
 /// How much of the height the panel takes when split below the chat.
 const BELOW_SHARE: f32 = 0.45;
 
-fn tool_button(
-    t: &Theme,
-    id: &'static str,
-    path: &'static str,
-    tip: &'static str,
-) -> gpui::Stateful<gpui::Div> {
-    let hover = t.colors.hover;
-    div()
-        .id(id)
-        .flex_none()
-        .size(t.size.control)
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded(t.radius.button)
-        .cursor_pointer()
-        .hover(move |st| st.bg(hover))
-        .child(icon(path, t.size.icon, t.colors.text_muted))
-        .tooltip(move |window, cx| gpui::component::tooltip::Tooltip::new(tip).build(window, cx))
+/// A header button: icon-only, named in its tooltip, keyboard-reachable.
+fn tool_button(id: &'static str, path: &'static str, tip: &'static str) -> super::button::Button {
+    super::button::Button::icon(id, path, tip).compact()
 }
 
 /// What the panel needs from the window: its width and how dense the display is.
@@ -103,7 +87,7 @@ pub fn render(
         .border_color(t.colors.border)
         .when(from_panel, |d| {
             d.child(
-                tool_button(t, "doc-back", "icons/arrow-left.svg", "All files").on_click(
+                tool_button("doc-back", "icons/arrow-left.svg", "All files").on_click(
                     move |_, _, cx| {
                         back.update(cx, |s, cx| s.show_panel(crate::state::PanelTab::Files, cx))
                     },
@@ -144,7 +128,6 @@ pub fn render(
         .when(diagram, |d| {
             d.child(
                 tool_button(
-                    t,
                     "doc-fit",
                     "icons/maximize-2.svg",
                     if fit.fit {
@@ -156,7 +139,7 @@ pub fn render(
                 .on_click(move |_, _, cx| fitter.update(cx, |s, cx| s.toggle_doc_fit(cx))),
             )
             .child(
-                tool_button(t, "doc-browser", "icons/globe.svg", "Open in browser").on_click(
+                tool_button("doc-browser", "icons/globe.svg", "Open in browser").on_click(
                     move |_, _, cx| opener.update(cx, |s, cx| s.open_externally(&to_open, cx)),
                 ),
             )
@@ -164,7 +147,6 @@ pub fn render(
         .when(office.is_some(), |d| {
             d.child(
                 tool_button(
-                    t,
                     "doc-external",
                     "icons/external-link.svg",
                     "Open with default app",
@@ -177,7 +159,6 @@ pub fn render(
         .when(!binary, |d| {
             d.child(
                 tool_button(
-                    t,
                     "doc-copy",
                     if did_copy {
                         "icons/check.svg"
@@ -194,7 +175,6 @@ pub fn render(
         })
         .child(
             tool_button(
-                t,
                 "doc-split",
                 "icons/split.svg",
                 if fit.below {
@@ -206,11 +186,11 @@ pub fn render(
             .on_click(|_, window, cx| window.dispatch_action(Box::new(super::ToggleSplit), cx)),
         )
         .child(
-            tool_button(t, "doc-download", "icons/download.svg", "Download")
+            tool_button("doc-download", "icons/download.svg", "Download")
                 .on_click(move |_, _, cx| saver.update(cx, |s, cx| s.download(&to_save, cx))),
         )
         .child(
-            tool_button(t, "doc-close", "icons/x.svg", "Close")
+            tool_button("doc-close", "icons/x.svg", "Close")
                 .on_click(move |_, _, cx| closer.update(cx, |s, cx| s.close_doc(cx))),
         );
 

@@ -267,7 +267,7 @@ impl ChatView {
                     .gap(t.space.xs)
                     .h(t.size.control + px(4.))
                     .px(t.space.md)
-                    .rounded(t.radius.pill)
+                    .rounded(t.radius.button)
                     .bg(t.colors.surface)
                     .border_1()
                     .border_color(t.colors.border)

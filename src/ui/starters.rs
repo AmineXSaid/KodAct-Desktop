@@ -1,8 +1,8 @@
-//! Under the new-chat composer: four ways to begin, each filling the
+//! Under the new-chat composer: four starter chips, each filling the
 //! composer with a prompt to send or change, and a row to pick up the most
 //! recent chat in this project.
 
-use gpui::{div, prelude::*, px, AnyElement, Entity, FontWeight, SharedString};
+use gpui::{div, prelude::*, AnyElement, Entity, FontWeight, SharedString};
 
 use super::composer::Composer;
 use super::icon;
@@ -44,7 +44,7 @@ pub const STARTERS: [Starter; 4] = [
     },
 ];
 
-/// The starter cards (two by two) and, when there is one, the resume row.
+/// The starter chips and, when there is one, the resume row.
 pub fn render(
     t: &Theme,
     state: &Entity<AppState>,
@@ -53,84 +53,55 @@ pub fn render(
 ) -> AnyElement {
     let s = state.read(cx);
     let hover = t.colors.hover;
-    // Each starter has its own hue from the system's accent cast, on a
-    // tinted tile, like the feature cards' colour marks.
-    let accents = [
-        t.colors.primary,
-        t.colors.coral,
-        t.extra.success,
-        t.colors.marigold,
-    ];
-    let card = |i: usize, st: &Starter| {
-        let accent = accents[i % accents.len()];
+    // Outlined chips, softly squared; each names what it will ask in its
+    // tooltip, and fills the composer when clicked.
+    let chip = |i: usize, st: &Starter| {
         let composer = composer.clone();
-        let prompt = st.prompt;
+        let (prompt, hint) = (st.prompt, st.hint);
+        let wash = super::button::Variant::Outlined.paint(t).hover_bg;
         div()
             .id(("starter", i))
-            .flex_1()
-            .min_w_0()
+            .role(gpui::accesskit::Role::Button)
+            .aria_label(st.title)
+            .aria_description(hint)
             .flex()
+            .flex_none()
             .items_center()
-            .gap(t.space.md)
-            .px(t.space.md)
-            .py(t.space.md)
-            .rounded(t.radius.card)
+            .gap(t.space.tight)
+            .h(t.size.button_sm)
+            .px(t.space.snug)
+            .rounded(t.radius.button)
+            .text_size(t.text.caption)
             .border_1()
-            .border_color(t.colors.border)
+            .border_color(t.extra.border_strong)
             .bg(t.colors.surface)
             .cursor_pointer()
-            .hover(move |d| d.bg(hover))
-            .child(
-                div()
-                    .flex_none()
-                    .size(px(28.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .rounded(t.radius.button)
-                    .bg(accent.opacity(0.14))
-                    .child(icon(st.icon, t.size.icon_sm, accent)),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
-                    .child(
-                        div()
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(t.colors.text_strong)
-                            .child(st.title),
-                    )
-                    .child(
-                        div()
-                            .overflow_hidden()
-                            .whitespace_nowrap()
-                            .text_ellipsis()
-                            .text_size(t.text.caption)
-                            .text_color(t.colors.text_subtle)
-                            .child(st.hint),
-                    ),
-            )
+            .text_color(t.colors.text)
+            .hover(move |d| d.bg(wash))
+            .child(icon(st.icon, t.size.icon_sm, t.colors.text_muted))
+            .child(st.title)
+            .tooltip(move |window, cx| {
+                gpui::component::tooltip::Tooltip::new(hint).build(window, cx)
+            })
             .on_click(move |_, window, app| {
                 composer.update(app, |c, cx| c.fill(prompt, window, cx))
             })
     };
-    // The cards rise into place one after another as the page opens.
-    let rise = |i: usize| {
-        div()
-            .flex_1()
-            .min_w_0()
-            .flex()
-            .child(super::motion::row_in_full(
-                card(i, &STARTERS[i]).w_full(),
-                SharedString::from(format!("starter-in-{i}")),
-                i + 2,
-                t,
-            ))
-    };
-    let row = |a: usize, b: usize| div().flex().gap(t.space.sm).child(rise(a)).child(rise(b));
+    // The chips rise into place one after another as the page opens.
+    let mut chips = div()
+        .w_full()
+        .flex()
+        .flex_wrap()
+        .justify_center()
+        .gap(t.space.sm);
+    for (i, st) in STARTERS.iter().enumerate() {
+        chips = chips.child(super::motion::row_in(
+            chip(i, st),
+            SharedString::from(format!("starter-in-{i}")),
+            i + 2,
+            t,
+        ));
+    }
 
     // The most recent chat in this project, to pick up again.
     let recent = s
@@ -186,12 +157,12 @@ pub fn render(
 
     div()
         .w_full()
-        .max_w(t.size.composer_width)
+        .max_w(t.size.composer_width + t.space.xxl)
         .flex()
         .flex_col()
-        .gap(t.space.sm)
-        .child(row(0, 1))
-        .child(row(2, 3))
+        .items_center()
+        .gap(t.space.md)
+        .child(chips)
         .children(resume)
         .into_any_element()
 }

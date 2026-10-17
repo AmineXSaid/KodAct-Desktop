@@ -201,15 +201,14 @@ impl Render for ConfirmWindow {
                             .gap(t.space.sm)
                             .pt(t.space.sm)
                             .child(
-                                theme::text_button(&t, "Cancel")
-                                    .id("confirm-cancel")
+                                super::button::Button::secondary("confirm-cancel", "Cancel")
                                     .on_click(
                                         cx.listener(|this, _, window, cx| this.cancel(window, cx)),
                                     ),
                             )
                             .child(
-                                theme::danger_button(&t, action)
-                                    .id("confirm-delete")
+                                super::button::Button::danger("confirm-delete", action)
+                                    .with_icon("icons/trash.svg")
                                     .on_click(
                                         cx.listener(|this, _, window, cx| this.confirm(window, cx)),
                                     ),

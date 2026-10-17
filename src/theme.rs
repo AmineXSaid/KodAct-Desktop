@@ -1,4 +1,5 @@
-//! Warm-paper design tokens for GPUI, adapted from DESIGN.md.
+//! Warm-ivory design tokens for GPUI: a calm desktop palette (ivory paper,
+//! warm ink, one terracotta accent), softly squared shapes and a 4px rhythm.
 //! Pure UI: colors, type, spacing, radius, elevation, motion + a few styled primitives.
 //! Written against GPUI's current API; field/method names may need small tweaks per GPUI version.
 
@@ -32,6 +33,7 @@ pub struct Colors {
     #[allow(dead_code)] // in the palette; nothing uses it right now
     pub midnight: Hsla,
     /// The hero highlight pill behind one word of a headline (peach).
+    #[allow(dead_code)] // in the palette; the greeting no longer marks a word
     pub peach: Hsla,
 }
 
@@ -46,21 +48,29 @@ pub struct TypeScale {
 
 #[derive(Clone, Copy)]
 pub struct Space {
-    pub xs: Pixels,  // 4
-    pub sm: Pixels,  // 8
-    pub md: Pixels,  // 12
-    pub lg: Pixels,  // 16
-    pub xl: Pixels,  // 24
-    pub xxl: Pixels, // 32
+    pub xs: Pixels,    // 4
+    pub tight: Pixels, // 6: an icon and its label
+    pub sm: Pixels,    // 8
+    pub snug: Pixels,  // 10: inside compact controls
+    pub md: Pixels,    // 12
+    pub lg: Pixels,    // 16
+    pub loose: Pixels, // 20
+    pub xl: Pixels,    // 24
+    pub xxl: Pixels,   // 32
+    pub xxxl: Pixels,  // 40: around the home screen's heading
 }
 
 #[derive(Clone, Copy)]
 pub struct Radius {
-    pub line: Pixels,   // 1: a line's ends, rounded just slightly
-    pub small: Pixels,  // 4
-    pub button: Pixels, // 8
-    pub card: Pixels,   // 12
-    pub pill: Pixels,   // 9999
+    pub line: Pixels,    // 1: a line's ends, rounded just slightly
+    pub small: Pixels,   // 4: key caps, tiny marks
+    pub segment: Pixels, // 6: the selected segment inside a segmented control
+    pub compact: Pixels, // 7: compact buttons and chips
+    pub button: Pixels,  // 8: icon buttons, standard buttons, rows
+    pub control: Pixels, // 9: outlined icon buttons, the send button
+    pub card: Pixels,    // 10: cards, tool rows, menus
+    pub field: Pixels,   // 12: large input surfaces
+    pub pill: Pixels,    // 9999: switches, badges, avatars only
 }
 
 #[derive(Clone)]
@@ -87,6 +97,10 @@ impl Global for Theme {}
 fn ink(alpha: f32) -> Hsla {
     hsla(0., 0., 0., alpha)
 }
+/// The reference's ink (#2b2a27) at `alpha`: hairlines and washes on paper.
+fn warm_ink(alpha: f32) -> Hsla {
+    hsla(45. / 360., 0.05, 0.16, alpha)
+}
 fn paper(alpha: f32) -> Hsla {
     hsla(30. / 360., 0.1, 0.96, alpha)
 }
@@ -105,17 +119,25 @@ impl Theme {
             },
             space: Space {
                 xs: px(4.),
+                tight: px(6.),
                 sm: px(8.),
+                snug: px(10.),
                 md: px(12.),
                 lg: px(16.),
+                loose: px(20.),
                 xl: px(24.),
                 xxl: px(32.),
+                xxxl: px(40.),
             },
             radius: Radius {
                 line: px(1.),
                 small: px(4.),
+                segment: px(6.),
+                compact: px(7.),
                 button: px(8.),
-                card: px(12.),
+                control: px(9.),
+                card: px(10.),
+                field: px(12.),
                 pill: px(9999.),
             },
             font_sans: crate::fonts::sans(),
@@ -134,53 +156,56 @@ impl Theme {
         Self::base(
             false,
             Colors {
-                canvas: rgb(0xf6f5f4).into(),
+                canvas: rgb(0xf9f8f5).into(),
                 surface: rgb(0xffffff).into(),
-                sidebar: rgb(0xfbfaf9).into(),
-                text: ink(0.95),
-                text_strong: ink(1.0),
-                text_body: rgb(0x615d59).into(),
-                text_muted: ink(0.6),
-                text_subtle: ink(0.4),
-                border: ink(0.08),
-                hover: ink(0.04),
-                primary: rgb(0x0075de).into(),
-                primary_hover: rgb(0x005bab).into(),
+                sidebar: rgb(0xf3f1ec).into(),
+                text: rgb(0x2b2a27).into(),
+                text_strong: rgb(0x1f1e1c).into(),
+                // The reference's secondary (#6f6c64) and muted (#9a968c),
+                // a step deeper so they read on the title bar too.
+                text_body: rgb(0x5e5b54).into(),
+                text_muted: rgb(0x64615a).into(),
+                text_subtle: rgb(0x8c887e).into(),
+                border: warm_ink(0.13), // #e3e0d8 on white
+                hover: warm_ink(0.055),
+                // Links and selected text: the accent, deep enough to read.
+                primary: rgb(0xa84b2b).into(),
+                primary_hover: rgb(0x8f3f23).into(),
                 primary_fg: rgb(0xffffff).into(),
-                primary_tint: rgb(0xe6f3fe).into(),
+                primary_tint: hsla(15. / 360., 0.62, 0.6, 0.14),
                 marigold: rgb(0xffb110).into(),
-                coral: rgb(0xf64932).into(),
+                coral: rgb(0xd97757).into(),
                 sky: rgb(0x62aef0).into(),
                 midnight: rgb(0x02093a).into(),
-                peach: rgb(0xf6d5b8).into(),
+                peach: rgb(0xf1c9b8).into(),
             },
         )
     }
 
-    /// The source doc is light-only; this is an invented warm dark counterpart.
+    /// The same room at night: warm charcoal surfaces, the same accent.
     pub fn dark() -> Self {
         Self::base(
             true,
             Colors {
-                canvas: rgb(0x191918).into(),
-                surface: rgb(0x22211f).into(),
+                canvas: rgb(0x262624).into(),
+                surface: rgb(0x30302e).into(),
                 sidebar: rgb(0x1d1c1b).into(),
-                text: paper(0.92),
+                text: rgb(0xecebe6).into(),
                 text_strong: paper(1.0),
-                text_body: rgb(0xb5b0aa).into(),
-                text_muted: paper(0.6),
-                text_subtle: paper(0.4),
-                border: hsla(0., 0., 1., 0.09),
+                text_body: rgb(0xc2bfb6).into(),
+                text_muted: rgb(0xa8a59c).into(),
+                text_subtle: rgb(0x7d7a72).into(),
+                border: hsla(0., 0., 1., 0.1),
                 hover: hsla(0., 0., 1., 0.05),
-                primary: rgb(0x2b8ff0).into(),
-                primary_hover: rgb(0x4ba1f3).into(),
+                primary: rgb(0xe08a6d).into(),
+                primary_hover: rgb(0xe89c82).into(),
                 primary_fg: rgb(0xffffff).into(),
-                primary_tint: hsla(209. / 360., 0.9, 0.55, 0.16),
+                primary_tint: hsla(15. / 360., 0.62, 0.6, 0.18),
                 marigold: rgb(0xffb110).into(),
-                coral: rgb(0xf64932).into(),
+                coral: rgb(0xd97757).into(),
                 sky: rgb(0x62aef0).into(),
                 midnight: rgb(0x02093a).into(),
-                peach: hsla(28. / 360., 0.75, 0.6, 0.24),
+                peach: rgb(0x6b3d2c).into(),
             },
         )
     }
@@ -236,6 +261,21 @@ pub struct ExtraColors {
     pub fill: Hsla,
     pub fill_hover: Hsla,
     pub fill_danger: Hsla, // a destructive confirm ("Allow bypass")
+    pub fill_fg: Hsla,     // text and icons on `fill` (ink in light, paper in dark)
+    // The accent: terracotta, kept for the few places it earns, the send
+    // button, the home screen's mark, a dot in the background field.
+    pub accent: Hsla,
+    pub accent_soft: Hsla, // the send button with nothing to send; a soft wash
+    pub accent_fg: Hsla,
+    pub border_strong: Hsla, // outlined buttons, switch tracks at rest, fields
+    pub active: Hsla,        // the wash under the current row in a list (the sidebar's chat)
+    pub sunk: Hsla,          // a recessed track: segmented controls, the composer's tray
+    pub toggle_on: Hsla,     // a switch that is on
+    // Memory and rules: the reference's ochre.
+    pub memory: Hsla,
+    pub memory_tint: Hsla,
+    // The home screen's field of dots (`ui/dot_field.rs`).
+    pub dot: Hsla,
     // Permission modes, as Forge for VS Code tints them (forge-tokens.css).
     pub mode_edit: Hsla,   // Edit automatically
     pub mode_plan: Hsla,   // Plan
@@ -263,24 +303,36 @@ impl ExtraColors {
         if is_dark {
             Self {
                 inset: hsla(0., 0., 1., 0.035),
-                success: rgb(0x6fd389).into(),
-                success_tint: hsla(134. / 360., 0.5, 0.5, 0.16),
-                danger: rgb(0xff8a78).into(),
-                danger_tint: hsla(7. / 360., 0.92, 0.58, 0.18),
+                success: rgb(0x8fd3a8).into(),
+                success_tint: rgb(0x20372a).into(),
+                danger: rgb(0xeb8c7b).into(),
+                danger_tint: hsla(7. / 360., 0.7, 0.55, 0.1),
                 warning: rgb(0xffc85a).into(),
                 warning_tint: hsla(40. / 360., 1., 0.53, 0.18),
                 diff_add: hsla(134. / 360., 0.5, 0.5, 0.16),
                 diff_del: hsla(7. / 360., 0.92, 0.58, 0.16),
                 scrim: ink(0.55),
-                selected: rgb(0x2a2927).into(),
-                // OKLab L 0.169 / 0.197 / 0.223, then the card at 0.248:
-                // even steps of 0.026, one warm hue.
-                chrome: rgb(0x100f0e).into(),
-                pane: rgb(0x161514).into(),
-                stage: rgb(0x1c1b19).into(),
-                fill: rgb(0x0069c2).into(),        // 5.5:1 under white
-                fill_hover: rgb(0x0b74cd).into(),  // 4.8:1, a step lighter
+                selected: rgb(0x2a2a28).into(),
+                // OKLab L 0.188 / 0.227 / 0.268, then the card at 0.309:
+                // even steps of 0.041, one warm hue.
+                chrome: rgb(0x141312).into(),
+                pane: rgb(0x1d1c1b).into(),
+                stage: rgb(0x262624).into(),
+                // The filled action is paper on charcoal, as ink on paper in light.
+                fill: rgb(0xecebe6).into(),
+                fill_hover: rgb(0xf8f7f3).into(),
                 fill_danger: rgb(0xb7331f).into(), // 6.0:1
+                fill_fg: rgb(0x262624).into(),
+                accent: rgb(0xd97757).into(),
+                accent_soft: rgb(0x4d3128).into(),
+                accent_fg: rgb(0xffffff).into(),
+                border_strong: rgb(0x55534e).into(),
+                active: hsla(0., 0., 1., 0.075),
+                sunk: rgb(0x1f1e1d).into(),
+                toggle_on: rgb(0x4a9be8).into(),
+                memory: rgb(0xe5c77a).into(),
+                memory_tint: rgb(0x3a3220).into(),
+                dot: rgb(0x8f8a80).into(),
                 mode_edit: rgb(0x2da160).into(),
                 mode_plan: rgb(0x428fdc).into(),
                 mode_bypass: rgb(0xec5941).into(),
@@ -312,25 +364,37 @@ impl ExtraColors {
             }
         } else {
             Self {
-                inset: ink(0.028),
-                success: rgb(0x1f7a35).into(),
-                success_tint: hsla(134. / 360., 0.55, 0.4, 0.12),
-                danger: rgb(0xc42a14).into(),
-                danger_tint: hsla(7. / 360., 0.92, 0.58, 0.12),
+                inset: warm_ink(0.03),
+                success: rgb(0x276b43).into(),
+                success_tint: rgb(0xe2f1e7).into(),
+                danger: rgb(0xb4412f).into(),
+                danger_tint: hsla(9. / 360., 0.6, 0.55, 0.1),
                 warning: rgb(0x8a5600).into(),
                 warning_tint: hsla(40. / 360., 1., 0.53, 0.2),
                 diff_add: hsla(134. / 360., 0.55, 0.4, 0.12),
                 diff_del: hsla(7. / 360., 0.92, 0.58, 0.1),
                 scrim: hsla(30. / 360., 0.1, 0.05, 0.42), // the dialog stands clear of the chat
                 selected: rgb(0xffffff).into(),
-                // OKLab L 0.926 / 0.953 / 0.977, then the white card:
-                // even steps of 0.025, one warm hue, chroma falling to 0.
-                chrome: rgb(0xe9e6e1).into(),
-                pane: rgb(0xf1efeb).into(),
-                stage: rgb(0xf9f7f5).into(),
-                fill: rgb(0x0075de).into(), // `primary`: 4.6:1 under white
-                fill_hover: rgb(0x005bab).into(), // `primary_hover`: 6.8:1
-                fill_danger: rgb(0xa32c12).into(), // 7.2:1
+                // OKLab L 0.937 / 0.958 / 0.979, then the white card:
+                // even steps of 0.021, one warm hue, chroma falling to 0.
+                chrome: rgb(0xeceae4).into(),
+                pane: rgb(0xf3f1ec).into(),
+                stage: rgb(0xf9f8f5).into(),
+                // The filled action is ink: quiet, and never confused with the accent.
+                fill: rgb(0x2b2a27).into(),
+                fill_hover: rgb(0x403e3a).into(),
+                fill_danger: rgb(0xb4412f).into(), // 5.6:1
+                fill_fg: rgb(0xffffff).into(),
+                accent: rgb(0xd97757).into(),
+                accent_soft: rgb(0xf1c9b8).into(),
+                accent_fg: rgb(0xffffff).into(),
+                border_strong: rgb(0xcfcbc0).into(),
+                active: warm_ink(0.075),
+                sunk: rgb(0xf0eee8).into(),
+                toggle_on: rgb(0x2c84db).into(),
+                memory: rgb(0x75591a).into(),
+                memory_tint: rgb(0xf6ecd2).into(),
+                dot: rgb(0x9c9587).into(),
                 mode_edit: rgb(0x108548).into(),
                 mode_plan: rgb(0x1f75cb).into(),
                 mode_bypass: rgb(0xa32c12).into(),
@@ -498,7 +562,7 @@ pub struct Sizes {
     pub icon: Pixels,               // 16
     pub icon_lg: Pixels,            // 20: the composer's +
     pub composer_max: Pixels,       // the composer's tallest input
-    pub composer_radius: Pixels,    // 16: the composer box's corners
+    pub composer_radius: Pixels,    // 14: the composer box's corners
     pub composer_width: Pixels,     // 560: the composer's widest, wherever it sits
     pub palette: Pixels,            // command palette width
     pub hairline: Pixels,           // 1
@@ -530,6 +594,19 @@ pub struct Sizes {
     pub settings_nav: Pixels,       // 200: the Settings window's section list
     pub prompt_box: Pixels,         // 180: a prompt or instructions box in a Settings editor
     pub viewport_margin: Pixels, // 12: the gap a menu or dialog keeps from the window's edge; past it, it scrolls
+    // Controls (`ui/button.rs`): hit areas and the switch's parts.
+    pub hit_sm: Pixels,    // 28: an icon button in a dense row (a reply's actions)
+    pub hit: Pixels,       // 34: an icon button's square
+    pub hit_lg: Pixels,    // 38: the composer's outlined + and send
+    pub button_h: Pixels,  // 32: a labelled button's height
+    pub button_sm: Pixels, // 28: a compact labelled button
+    pub switch_w: Pixels,  // 36
+    pub switch_h: Pixels,  // 20
+    pub switch_thumb: Pixels, // 14
+    pub rail: Pixels,      // 52: the collapsed sidebar
+    pub home_heading: Pixels, // 32: the home screen's heading, in the display serif
+    pub dot_gap: Pixels,   // 14: the background field's grid
+    pub dot: Pixels,       // 2: one dot's diameter
 }
 
 impl Default for Sizes {
@@ -545,7 +622,7 @@ impl Default for Sizes {
             icon: px(16.),
             icon_lg: px(20.),
             composer_max: px(240.),
-            composer_radius: px(16.),
+            composer_radius: px(14.),
             composer_width: px(560.),
             palette: px(560.),
             hairline: px(1.),
@@ -577,6 +654,18 @@ impl Default for Sizes {
             settings_nav: px(200.),
             prompt_box: px(180.),
             viewport_margin: px(12.),
+            hit_sm: px(28.),
+            hit: px(34.),
+            hit_lg: px(38.),
+            button_h: px(32.),
+            button_sm: px(28.),
+            switch_w: px(36.),
+            switch_h: px(20.),
+            switch_thumb: px(14.),
+            rail: px(52.),
+            home_heading: px(32.),
+            dot_gap: px(14.),
+            dot: px(2.),
         }
     }
 }
@@ -617,62 +706,58 @@ pub fn card(t: &Theme) -> Div {
         .p(t.space.xl)
 }
 
-/// The one filled action per screen.
-pub fn primary_button(t: &Theme, label: impl Into<SharedString>) -> Div {
-    let hover = t.extra.fill_hover;
+/// A labelled button as a plain `Div`, for callers that add their own id and
+/// click: the same paint and shape as `ui::button::Button`, so there is one
+/// button system. Prefer `Button` for new code (it also takes keyboard focus).
+fn styled_button(t: &Theme, variant: crate::ui::button::Variant, label: SharedString) -> Div {
+    let p = variant.paint(t);
+    let hover = p.hover_bg;
     div()
-        .px(px(15.))
-        .py(px(6.))
+        .flex()
+        .flex_none()
+        .items_center()
+        .justify_center()
+        .gap(t.space.tight)
+        .h(t.size.button_h)
+        .px(px(14.))
         .rounded(t.radius.button)
-        .bg(t.extra.fill)
-        .text_color(t.colors.primary_fg)
+        .border_1()
+        .border_color(p.border.unwrap_or(t.colors.surface.opacity(0.)))
+        .bg(p.bg)
+        .text_color(p.fg)
         .text_size(t.text.body_sm)
-        .font_weight(FontWeight::MEDIUM)
+        .when(
+            matches!(
+                variant,
+                crate::ui::button::Variant::Primary | crate::ui::button::Variant::Danger
+            ),
+            |d| d.font_weight(FontWeight::MEDIUM),
+        )
+        .whitespace_nowrap()
         .cursor_pointer()
         .hover(move |s| s.bg(hover))
-        .child(label.into())
+        .child(label)
+}
+
+/// The one filled action per surface: ink on paper.
+pub fn primary_button(t: &Theme, label: impl Into<SharedString>) -> Div {
+    styled_button(t, crate::ui::button::Variant::Primary, label.into())
 }
 
 /// A destructive confirm (Delete): the danger fill, a shade deeper on hover.
 pub fn danger_button(t: &Theme, label: impl Into<SharedString>) -> Div {
-    div()
-        .px(px(15.))
-        .py(px(6.))
-        .rounded(t.radius.button)
-        .bg(t.extra.fill_danger)
-        .text_color(t.colors.primary_fg)
-        .text_size(t.text.body_sm)
-        .font_weight(FontWeight::MEDIUM)
-        .cursor_pointer()
-        .hover(|s| s.opacity(0.9))
-        .child(label.into())
+    styled_button(t, crate::ui::button::Variant::Danger, label.into())
 }
 
-/// Secondary action: blue tint background, blue text.
+/// Secondary action: a bordered surface button (Allow once, Save, Cancel).
 pub fn ghost_button(t: &Theme, label: impl Into<SharedString>) -> Div {
-    div()
-        .px(px(15.))
-        .py(px(6.))
-        .rounded(t.radius.button)
-        .bg(t.colors.primary_tint)
-        .text_color(t.colors.primary)
-        .text_size(t.text.body_sm)
-        .font_weight(FontWeight::MEDIUM)
-        .cursor_pointer()
-        .child(label.into())
+    styled_button(t, crate::ui::button::Variant::Secondary, label.into())
 }
 
-/// Tertiary action / sidebar row: no fill until hover.
+/// Tertiary action: no fill until hover.
 pub fn text_button(t: &Theme, label: impl Into<SharedString>) -> Div {
-    let hover = t.colors.hover;
-    div()
-        .px(t.space.md)
-        .py(px(6.))
-        .rounded(t.radius.button)
+    styled_button(t, crate::ui::button::Variant::Ghost, label.into())
         .text_color(t.colors.text_muted)
-        .cursor_pointer()
-        .hover(move |s| s.bg(hover))
-        .child(label.into())
 }
 
 /// Status / tag pill.

@@ -543,7 +543,7 @@ impl RulesView {
         };
         let hover = t.colors.hover;
         let (when_bg, when_fg, when_label) = match &s.when {
-            When::Always => (t.colors.primary_tint, t.colors.primary, "Every session"),
+            When::Always => (t.extra.memory_tint, t.extra.memory, "Every session"),
             When::Paths(_) => (t.extra.success_tint, t.extra.success, "Matching files"),
             When::Folder(_) => (t.extra.success_tint, t.extra.success, "In its folder"),
             When::OnDemand => (t.colors.hover, t.colors.text_muted, "When it fits"),

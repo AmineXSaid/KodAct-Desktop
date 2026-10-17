@@ -51,24 +51,29 @@ fn render() -> String {
 
     let _ = writeln!(w, "## Direction\n");
     let _ = writeln!(w, "**Personality:** Warmth & Approachability, with the Precision & Density of a desktop tool. A calm room to build in with an agent.\n");
-    let _ = writeln!(w, "**Foundation:** warm. Paper surfaces in one warm hue, chroma under 0.01 (OKLCH); colour is kept for meaning: the one blue action, modes, status.\n");
+    let _ = writeln!(w, "**Foundation:** warm ivory. Paper surfaces in one warm hue, chroma under 0.01 (OKLCH); warm ink for text; one terracotta accent kept for sending, the home screen's mark and a few dots; colour otherwise only for meaning: modes, status, a switch that is on.\n");
     let _ = writeln!(w, "**Depth:** borders-only for content (1px hairlines); shadows only on popovers, menus and the command palette.\n");
+    let _ = writeln!(w, "**Shape:** softly squared. Buttons 7-9px, cards and menus 10px, large inputs 12-14px; pills only for switches, badges and avatars; the round new-chat mark is the one circular control.\n");
 
     let _ = writeln!(w, "## Tokens\n");
     let sp = &l.space;
     let _ = writeln!(
         w,
-        "### Spacing\nBase: 4px\nScale: {}, {}, {}, {}, {}, {}\n",
+        "### Spacing\nBase: 4px\nScale: {}, {}, {}, {}, {}, {}, {}, {}, {}, {}\n",
         px(sp.xs),
+        px(sp.tight),
         px(sp.sm),
+        px(sp.snug),
         px(sp.md),
         px(sp.lg),
+        px(sp.loose),
         px(sp.xl),
-        px(sp.xxl)
+        px(sp.xxl),
+        px(sp.xxxl)
     );
     let r = &l.radius;
     let z = &l.size;
-    let _ = writeln!(w, "### Radius\nScale: {}px (a line's ends: every straight line is rounded just slightly), {}px (small), {}px (buttons, rows), {}px (cards, popovers), {}px (the composer), pill\n", px(r.line), px(r.small), px(r.button), px(r.card), px(z.composer_radius));
+    let _ = writeln!(w, "### Radius\nScale: {}px (a line's ends: every straight line is rounded just slightly), {}px (key caps), {}px (a selected segment), {}px (compact buttons, chips), {}px (buttons, icon buttons, rows), {}px (outlined squares, send), {}px (cards, tool rows, menus), {}px (large fields), {}px (the composer), pill (switches, badges, avatars)\n", px(r.line), px(r.small), px(r.segment), px(r.compact), px(r.button), px(r.control), px(r.card), px(r.field), px(z.composer_radius));
 
     let _ = writeln!(w, "### Typography");
     let _ = writeln!(
@@ -84,13 +89,14 @@ fn render() -> String {
     let tx = &l.text;
     let _ = writeln!(
         w,
-        "Scale: {} caption, {} UI and chat, {} input, {} subheading, {} heading, {} greeting",
+        "Scale: {} caption, {} UI and chat, {} input, {} subheading, {} heading, {} greeting, {} home heading",
         px(tx.caption),
         px(tx.body_sm),
         px(tx.body),
         px(tx.subheading),
         px(tx.heading_sm),
-        px(z.greeting)
+        px(z.greeting),
+        px(z.home_heading)
     );
     let _ = writeln!(w, "Weights: 400, 500 (labels, buttons), 600 (headings, the project name)\nProse line height: {}\n", z.line_height_chat);
 
@@ -148,6 +154,18 @@ fn render() -> String {
             z.edge_bar,
             "the jewel edge a window draws as it opens",
         ),
+        ("hit_sm", z.hit_sm, "an icon button in a dense row"),
+        ("hit", z.hit, "an icon button's square"),
+        ("hit_lg", z.hit_lg, "the composer's outlined + and send"),
+        ("button_h", z.button_h, "a labelled button"),
+        ("button_sm", z.button_sm, "a compact button, a selector"),
+        (
+            "switch_w",
+            z.switch_w,
+            "a switch's track (20px tall, 14px thumb)",
+        ),
+        ("rail", z.rail, "the collapsed sidebar"),
+        ("dot_gap", z.dot_gap, "the home screen's dot grid"),
     ] {
         let _ = writeln!(w, "- `{name}`: {}px, {role}", px(v));
     }
@@ -213,7 +231,7 @@ fn render() -> String {
     );
     // Each row: the token, then the pair whose contrast is shown.
     type Pick = fn(&Theme) -> Hsla;
-    let rows: [(&str, Pick, Pick, Pick, &str); 14] = [
+    let rows: [(&str, Pick, Pick, Pick, &str); 18] = [
         (
             "text_strong",
             |t| t.colors.text_strong,
@@ -257,18 +275,39 @@ fn render() -> String {
             "hairlines",
         ),
         (
+            "border_strong",
+            |t| t.extra.border_strong,
+            |t| t.extra.border_strong,
+            |t| t.colors.surface,
+            "outlined buttons, a switch at rest",
+        ),
+        (
             "primary",
             |t| t.colors.primary,
             |t| t.colors.primary,
             |t| t.colors.surface,
-            "links, the one accent",
+            "links, selected text, the focus edge",
+        ),
+        (
+            "accent",
+            |t| t.extra.accent,
+            |t| t.extra.accent_fg,
+            |t| t.extra.accent,
+            "send, the new-chat mark, accent dots (white icon on it)",
         ),
         (
             "fill",
             |t| t.extra.fill,
-            |t| t.colors.primary_fg,
+            |t| t.extra.fill_fg,
             |t| t.extra.fill,
-            "filled buttons (white text on it)",
+            "filled buttons: ink on paper, paper on charcoal",
+        ),
+        (
+            "toggle_on",
+            |t| t.extra.toggle_on,
+            |t| t.extra.toggle_on,
+            |t| t.colors.surface,
+            "a switch that is on",
         ),
         (
             "fill_danger",
@@ -297,6 +336,13 @@ fn render() -> String {
             |t| t.extra.warning,
             |t| t.colors.surface,
             "needs you",
+        ),
+        (
+            "memory",
+            |t| t.extra.memory,
+            |t| t.extra.memory,
+            |t| t.extra.memory_tint,
+            "memory and rules, on its tint",
         ),
         (
             "mode_plan",
@@ -329,14 +375,14 @@ fn render() -> String {
     let _ = writeln!(w, "### Contrast floors\n- Meaningful text: 4.5:1 on every surface and hover wash.\n- Icons, mode edges, the send arrow: 3:1.\n- Placeholders and disabled text (`text_subtle`): 2.5:1, never body copy.\n- Hairlines: 1.15:1 on every surface.\n- Surface steps: at least 0.02 OKLab L apart, each within 0.004 of the mean step.\n");
 
     let _ = writeln!(w, "## Patterns\n");
-    let _ = writeln!(w, "### Button Primary\n- Padding: 6px 15px\n- Radius: {}px\n- Font: {}px, 500 weight\n- Background: `fill`, `fill_hover` on hover; text `primary_fg`\n- Usage: one per surface (Allow, Continue, Save, Create)\n", px(r.button), px(tx.body_sm));
-    let _ = writeln!(w, "### Button Quiet\n- Height: {}px\n- Padding: 0 8px\n- Radius: {}px\n- No fill until hover (`hover` wash)\n- Usage: the model and mode under the composer, title-bar icons\n", px(z.control), px(r.button));
-    let _ = writeln!(w, "### Composer\n- Width: up to {}px, centred\n- Radius: {}px; 1px `border`, tinted by the mode when one is set\n- Text: {}px, inset to start where the + glyph starts\n- A soft rule, fading at both ends, between the text and its tools\n- Tools: + ({}px glyph) left, a 26px round send button right, 7px from both edges of its corner\n- Under it: the context ring (14px, 2px stroke) and its percent, then outlined 24px chips for the model and the mode\n", px(z.composer_width), px(z.composer_radius), px(tx.body), px(z.icon));
+    let _ = writeln!(w, "### Buttons (`ui/button.rs`)\nOne family; every control takes keyboard focus (a `primary` edge shows for the keyboard only), names itself to assistive technology, and swallows clicks while disabled or loading.\n- Primary: {}px tall, padding 0 14px, radius {}px, `fill` with `fill_fg`, 500 weight. One per surface.\n- Secondary and Outlined: `surface`, 1px `border_strong`, `hover` wash.\n- Ghost: clear until hovered. Danger: `fill_danger`, white.\n- Icon: {}px square, radius {}px, a {}px icon in `text_muted`; outlined squares {}px at {}px radius.\n- Send: {}px, radius {}px, `accent` with a white arrow; `accent_soft` with nothing to send; Stop is an ink ring round a square.\n- Switch: {}x{}px pill, {}px thumb sliding over {}ms; `toggle_on` when on, `border_strong` when off.\n- Segmented: a `sunk` track, radius {}px; the chosen segment raised onto `surface` at {}px.\n", px(z.button_h), px(r.button), px(z.hit), px(r.button), px(z.icon), px(z.hit_lg), px(r.control), px(z.hit_lg), px(r.control), px(z.switch_w), px(z.switch_h), px(z.switch_thumb), z.pop_in_ms, px(r.button), px(r.segment));
+    let _ = writeln!(w, "### Composer\n- Width: up to {}px, centred\n- One unit: a white box (radius {}px, 1px `border`, `border_strong` while focused, tinted by the mode when one is set) resting in a `sunk` tray\n- Text: {}px; the outlined + bottom left and Send bottom right, {}px from the box's edges\n- The tray: the project, the context ring, the model and the mode as quiet {}px selectors with a chevron\n", px(z.composer_width), px(z.composer_radius), px(tx.body), px(sp.snug), px(z.button_sm));
+    let _ = writeln!(w, "### Dot Field (`ui/dot_field.rs`)\n- Behind the home screen: a {}px grid of {}px dots in `dot`, gathered beside the heading and toward the lower right, thinned and faded toward a quiet oval behind the heading and composer and before every edge\n- About 1.6% of dots in `accent`; fewer still are 5px outlined squares or accent diamonds\n- Painted on one canvas from cached geometry; breathes over 9s, leans up to 4px from the pointer, brightens while the composer has focus; rests when hidden or inactive; still under reduced motion\n", px(z.dot_gap), px(z.dot));
     let _ = writeln!(w, "### Card Default\n- Border: 1px `border`\n- Padding: {}px\n- Radius: {}px\n- Background: `surface`\n- Usage: tool calls, file cards, code blocks\n", px(sp.xl), px(r.card));
     let _ = writeln!(w, "### Popover\n- Border: 1px `border`, radius {}px, padding {}px\n- Background: `surface`, with the two-layer popover shadow\n- Usage: menus, pickers, the command palette\n", px(r.card), px(sp.xs));
     let _ = writeln!(w, "### File Card\n- A file Forge made, in its reply: up to 440px, `surface`, 1px `border`, radius {}px, padding {}px\n- A 36x44 page tile (radius {}px, concentric with the card) previews it, its type in mono `primary`\n- Title 600 `text_strong`; \"Document · MD\" caption `text_muted`; a bordered Download button\n- Open: the edge turns `primary` at 60%\n", px(r.card), px(sp.sm), px(r.small));
     let _ = writeln!(w, "### Document Pane\n- Beside the conversation, half the session, at least {}px; `surface` with a hairline on its left\n- Header 48px: file icon, title, type; Copy, Download, Close as {}px quiet buttons\n- Text {}px at {} leading, lines up to {}px; the title in the display serif at {}px\n- Enters with a 220ms ease-out, fading in from 16px to the right; Escape closes it\n", px(z.doc_pane), px(z.control), px(z.doc_text), z.line_height_doc, px(z.doc_measure), px(z.doc_title));
-    let _ = writeln!(w, "### Sidebar Row\n- Height: {}px, radius {}px\n- Selected: `selected` with a hairline, 500 weight\n- Group labels: {}px caption\n", px(z.row), px(r.button), px(tx.caption));
+    let _ = writeln!(w, "### Sidebar Row\n- Height: {}px, radius {}px\n- Current: the `active` wash, 500 weight, no border\n- New chat: a round `accent` mark with a white +\n- Collapsed: a {}px rail of icon buttons for the same actions\n- Group labels: {}px caption\n", px(z.row), px(r.button), px(z.rail), px(tx.caption));
 
     let _ = writeln!(w, "## Decisions\n");
     let _ = writeln!(
@@ -346,7 +392,9 @@ fn render() -> String {
     for (what, why, when) in [
         ("Borders-only depth", "A desktop tool read for hours: hairlines separate without adding weight; shadows are kept to show what floats.", "2026-09-28"),
         ("Three surfaces, one step apart", "Title bar, sidebar and session must read as separate areas at a glance; even OKLab steps make the split clear without contrast jumps.", "2026-10-12"),
-        ("A deeper fill for dark buttons", "White on the dark theme's link blue is 3.3:1; the fill is the same hue at 5.5:1 and links keep the brighter blue.", "2026-10-12"),
+        ("Ink, not colour, for the filled button", "The accent is kept for sending; the one filled action per surface is ink on paper (paper on charcoal), so it never competes with Send.", "2026-10-17"),
+        ("Muted text a step deeper than the reference", "The reference's #6f6c64 and #9a968c miss their floors on the title bar; #64615a and #8c887e keep the look and pass.", "2026-10-17"),
+        ("Softly squared controls", "Large uniform radii read as a template; 7-10px keeps the shapes calm and precise.", "2026-10-17"),
         ("Display serif for one line per view", "The greeting, and a document's title: one warm, human line; everything else stays in the interface face.", "2026-10-12"),
         ("Composer at 620px", "A comfortable measure for a prompt, the same in a chat and on the welcome page.", "2026-10-11"),
         ("Icons on a 12/14/16/20 scale", "Desktop density: 14 in rows, 16 in controls, 20 for the composer's +; 12 inside captions.", "2026-10-12"),

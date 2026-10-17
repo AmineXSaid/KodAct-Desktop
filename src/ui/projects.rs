@@ -515,7 +515,6 @@ impl ProjectsView {
                                 d.child(
                                     theme::ghost_button(t, "Save as project")
                                         .id("project-save")
-                                        .hover(move |st| st.bg(hover))
                                         .on_click(move |_, _, cx| {
                                             save_state.update(cx, |s, cx| s.save_project(id, cx))
                                         }),

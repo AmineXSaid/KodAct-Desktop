@@ -275,10 +275,7 @@ impl Render for Sidebar {
                             t.colors.text_muted
                         })
                         .when(active, |d| {
-                            d.bg(t.extra.selected)
-                                .border_1()
-                                .border_color(t.colors.border)
-                                .font_weight(FontWeight::MEDIUM)
+                            d.bg(t.extra.active).font_weight(FontWeight::MEDIUM)
                         })
                         .when(!active, |d| d.hover(move |st| st.bg(hover)))
                         .child(
@@ -342,10 +339,7 @@ impl Render for Sidebar {
                             t.colors.text_muted
                         })
                         .when(selected, |d| {
-                            d.bg(t.extra.selected)
-                                .border_1()
-                                .border_color(t.colors.border)
-                                .font_weight(FontWeight::MEDIUM)
+                            d.bg(t.extra.active).font_weight(FontWeight::MEDIUM)
                         })
                         .when(!selected, |d| d.hover(move |st| st.bg(hover)))
                         .child(status_mark(status, id, &t))
@@ -532,19 +526,34 @@ impl Render for Sidebar {
                     .child(
                         div()
                             .id("new-chat")
+                            .role(gpui::accesskit::Role::Button)
+                            .aria_label("New chat")
                             .flex()
                             .items_center()
                             .gap(t.space.sm)
                             .h(t.size.row + px(4.))
-                            .px(t.space.md)
+                            .px(t.space.sm)
                             .rounded(t.radius.button)
-                            .bg(t.colors.surface)
-                            .border_1()
-                            .border_color(t.colors.border)
                             .cursor_pointer()
                             .font_weight(FontWeight::MEDIUM)
+                            .text_color(t.colors.text_strong)
                             .hover(move |st| st.bg(hover))
-                            .child(icon("icons/plus.svg", t.size.icon, t.colors.text))
+                            // The one round control: the accent's mark for starting afresh.
+                            .child(
+                                div()
+                                    .size(px(22.))
+                                    .flex_none()
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .rounded_full()
+                                    .bg(t.extra.accent)
+                                    .child(icon(
+                                        "icons/plus.svg",
+                                        t.size.icon_sm,
+                                        t.extra.accent_fg,
+                                    )),
+                            )
                             .child(nav_label("New chat"))
                             .child(kbd(&t, shortcut("N")))
                             .on_click(|_, window, cx| {
@@ -586,10 +595,7 @@ impl Render for Sidebar {
                                 t.colors.text_muted
                             })
                             .when(projects_open, |d| {
-                                d.bg(t.extra.selected)
-                                    .border_1()
-                                    .border_color(t.colors.border)
-                                    .font_weight(FontWeight::MEDIUM)
+                                d.bg(t.extra.active).font_weight(FontWeight::MEDIUM)
                             })
                             .when(!projects_open, |d| d.hover(move |st| st.bg(hover)))
                             .child(icon(
@@ -623,10 +629,7 @@ impl Render for Sidebar {
                                 t.colors.text_muted
                             })
                             .when(rules_open, |d| {
-                                d.bg(t.extra.selected)
-                                    .border_1()
-                                    .border_color(t.colors.border)
-                                    .font_weight(FontWeight::MEDIUM)
+                                d.bg(t.extra.active).font_weight(FontWeight::MEDIUM)
                             })
                             .when(!rules_open, |d| d.hover(move |st| st.bg(hover)))
                             .child(icon(
@@ -721,6 +724,110 @@ impl Render for Sidebar {
             )
             .children(menu)
     }
+}
+
+/// The sidebar collapsed (Ctrl+B): a narrow rail of the same actions as
+/// icon buttons, each named in its tooltip, so nothing goes out of reach.
+pub fn rail(t: &crate::theme::Theme, screen: Screen) -> impl IntoElement {
+    use super::button::Button;
+    let nav = |id: &'static str, path: &'static str, tip: String, on: bool| {
+        Button::icon(id, path, tip).selected(on)
+    };
+    let dispatch = |a: Box<dyn gpui::Action>| {
+        move |_: &gpui::ClickEvent, window: &mut Window, cx: &mut gpui::App| {
+            window.dispatch_action(a.boxed_clone(), cx)
+        }
+    };
+    div()
+        .id("sidebar-rail")
+        .w(t.size.rail)
+        .flex_none()
+        .h_full()
+        .flex()
+        .flex_col()
+        .items_center()
+        .gap(t.space.xs)
+        .py(t.space.sm)
+        .bg(t.extra.pane)
+        .border_r_1()
+        .border_color(t.colors.border)
+        .child(
+            nav(
+                "rail-expand",
+                "icons/panel-left.svg",
+                format!("Show the sidebar ({})", shortcut("B")),
+                false,
+            )
+            .on_click(dispatch(Box::new(ToggleSidebar))),
+        )
+        .child(
+            div()
+                .id("rail-new-chat")
+                .role(gpui::accesskit::Role::Button)
+                .aria_label("New chat")
+                .size(t.size.hit)
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(t.radius.button)
+                .cursor_pointer()
+                .hover({
+                    let h = t.colors.hover;
+                    move |st| st.bg(h)
+                })
+                .child(
+                    div()
+                        .size(px(22.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded_full()
+                        .bg(t.extra.accent)
+                        .child(icon("icons/plus.svg", t.size.icon_sm, t.extra.accent_fg)),
+                )
+                .tooltip(|window, cx| {
+                    gpui::component::tooltip::Tooltip::new(format!("New chat ({})", shortcut("N")))
+                        .build(window, cx)
+                })
+                .on_click(dispatch(Box::new(NewChat))),
+        )
+        .child(
+            nav(
+                "rail-search",
+                "icons/search.svg",
+                format!("Search files, chats and commands ({})", shortcut("K")),
+                false,
+            )
+            .on_click(dispatch(Box::new(ToggleCommandPalette))),
+        )
+        .child(
+            nav(
+                "rail-projects",
+                "icons/folder-open.svg",
+                format!("Projects ({})", shortcut("Shift P")),
+                matches!(screen, Screen::Projects | Screen::Project(_)),
+            )
+            .on_click(dispatch(Box::new(OpenProjects))),
+        )
+        .child(
+            nav(
+                "rail-rules",
+                "icons/list-todo.svg",
+                format!("Rules and memory ({})", shortcut("Shift R")),
+                screen == Screen::Rules,
+            )
+            .on_click(dispatch(Box::new(OpenRules))),
+        )
+        .child(div().flex_1())
+        .child(
+            nav(
+                "rail-settings",
+                "icons/settings.svg",
+                format!("Settings ({})", shortcut(",")),
+                false,
+            )
+            .on_click(dispatch(Box::new(OpenSettings))),
+        )
 }
 
 /// A chat's status, in a fixed slot before its title: a voxel stepping

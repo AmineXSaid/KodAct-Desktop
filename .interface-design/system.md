@@ -8,24 +8,26 @@
 
 **Personality:** Warmth & Approachability, with the Precision & Density of a desktop tool. A calm room to build in with an agent.
 
-**Foundation:** warm. Paper surfaces in one warm hue, chroma under 0.01 (OKLCH); colour is kept for meaning: the one blue action, modes, status.
+**Foundation:** warm ivory. Paper surfaces in one warm hue, chroma under 0.01 (OKLCH); warm ink for text; one terracotta accent kept for sending, the home screen's mark and a few dots; colour otherwise only for meaning: modes, status, a switch that is on.
 
 **Depth:** borders-only for content (1px hairlines); shadows only on popovers, menus and the command palette.
+
+**Shape:** softly squared. Buttons 7-9px, cards and menus 10px, large inputs 12-14px; pills only for switches, badges and avatars; the round new-chat mark is the one circular control.
 
 ## Tokens
 
 ### Spacing
 Base: 4px
-Scale: 4, 8, 12, 16, 24, 32
+Scale: 4, 6, 8, 10, 12, 16, 20, 24, 32, 40
 
 ### Radius
-Scale: 1px (a line's ends: every straight line is rounded just slightly), 4px (small), 8px (buttons, rows), 12px (cards, popovers), 16px (the composer), pill
+Scale: 1px (a line's ends: every straight line is rounded just slightly), 4px (key caps), 6px (a selected segment), 7px (compact buttons, chips), 8px (buttons, icon buttons, rows), 9px (outlined squares, send), 10px (cards, tool rows, menus), 12px (large fields), 14px (the composer), pill (switches, badges, avatars)
 
 ### Typography
 Interface: Hanken Grotesk (Anthropic Sans when installed or in Forge's `fonts` folder; never bundled)
 Display: Source Serif 4 Display (the greeting)
 Code: JetBrains Mono
-Scale: 12 caption, 13 UI and chat, 14 input, 18 subheading, 20 heading, 28 greeting
+Scale: 12 caption, 13 UI and chat, 14 input, 18 subheading, 20 heading, 28 greeting, 32 home heading
 Weights: 400, 500 (labels, buttons), 600 (headings, the project name)
 Prose line height: 1.4285715
 
@@ -48,17 +50,25 @@ Lucide, 2px stroke as drawn. Sizes: 12 / 14 / 16 / 20 only.
 - `chat_min`: 400px, the chat's narrowest: the side panel, then the dock, give way to it
 - `remote_menu`: 288px, the remote quick pick's width
 - `edge_bar`: 3px, the jewel edge a window draws as it opens
+- `hit_sm`: 28px, an icon button in a dense row
+- `hit`: 34px, an icon button's square
+- `hit_lg`: 38px, the composer's outlined + and send
+- `button_h`: 32px, a labelled button
+- `button_sm`: 28px, a compact button, a selector
+- `switch_w`: 36px, a switch's track (20px tall, 14px thumb)
+- `rail`: 52px, the collapsed sidebar
+- `dot_gap`: 14px, the home screen's dot grid
 
 ### Surfaces
 One ladder, darkest at the top of the window, even steps in OKLab lightness.
 
 | Token | Light | L | Dark | L | Role |
 |---|---|---|---|---|---|
-| `chrome` | `#e9e6e1` | 0.926 | `#100f0e` | 0.169 | the title bar |
-| `pane` | `#f1efeb` | 0.953 | `#161514` | 0.196 | the sidebar |
-| `stage` | `#f9f7f5` | 0.977 | `#1c1b19` | 0.222 | the session: chat, welcome, Rules, Projects |
-| `surface` | `#ffffff` | 1.000 | `#22211f` | 0.248 | cards, the composer, popovers |
-| `selected` | `#ffffff` | 1.000 | `#2a2927` | 0.281 | the selected sidebar row |
+| `chrome` | `#eceae4` | 0.937 | `#141312` | 0.187 | the title bar |
+| `pane` | `#f3f1ec` | 0.958 | `#1d1c1b` | 0.227 | the sidebar |
+| `stage` | `#f9f8f5` | 0.979 | `#262624` | 0.268 | the session: chat, welcome, Rules, Projects |
+| `surface` | `#ffffff` | 1.000 | `#30302e` | 0.308 | cards, the composer, popovers |
+| `selected` | `#ffffff` | 1.000 | `#2a2a28` | 0.284 | the selected sidebar row |
 
 ### Terminal
 The dock's 16 colours, on `stage` (`palette_check.rs` holds them to AA).
@@ -87,20 +97,24 @@ Contrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of w
 
 | Token | Light | Contrast | Dark | Contrast | Role |
 |---|---|---|---|---|---|
-| `text_strong` | `#000000` | 19.7:1 | `#f6f5f4` | 15.8:1 | headings, names |
-| `text` | `#000000 @ 95.0%` | 18.3:1 | `#f6f5f4 @ 92.0%` | 13.5:1 | body text |
-| `text_body` | `#615d59` | 6.1:1 | `#b5b0aa` | 8.0:1 | secondary prose |
-| `text_muted` | `#000000 @ 60.0%` | 5.6:1 | `#f6f5f4 @ 60.0%` | 6.4:1 | labels, captions, icons |
-| `text_subtle` | `#000000 @ 40.0%` | 2.8:1 | `#f6f5f4 @ 40.0%` | 3.6:1 | placeholders and disabled only |
-| `border` | `#000000 @ 8.0%` | 1.2:1 | `#ffffff @ 9.0%` | 1.3:1 | hairlines |
-| `primary` | `#0075de` | 4.6:1 | `#2b8ff0` | 4.8:1 | links, the one accent |
-| `fill` | `#0075de` | 4.6:1 | `#0069c2` | 5.5:1 | filled buttons (white text on it) |
-| `fill_danger` | `#a32c12` | 7.2:1 | `#b7331f` | 6.0:1 | destructive confirms |
-| `success` | `#1f7a35` | 5.4:1 | `#6fd389` | 8.7:1 | done, passed |
-| `danger` | `#c42a14` | 5.7:1 | `#ff8a78` | 7.0:1 | failed, errors |
-| `warning` | `#8a5600` | 6.2:1 | `#ffc85a` | 10.5:1 | needs you |
-| `mode_plan` | `#1f75cb` | 4.7:1 | `#428fdc` | 4.7:1 | Plan mode |
-| `mode_bypass` | `#a32c12` | 7.2:1 | `#ec5941` | 4.7:1 | Bypass permissions |
+| `text_strong` | `#1f1e1c` | 15.7:1 | `#f6f5f4` | 13.9:1 | headings, names |
+| `text` | `#2b2a27` | 13.5:1 | `#ecebe6` | 12.7:1 | body text |
+| `text_body` | `#5e5b54` | 6.4:1 | `#c2bfb6` | 8.2:1 | secondary prose |
+| `text_muted` | `#64615a` | 5.8:1 | `#a8a59c` | 6.2:1 | labels, captions, icons |
+| `text_subtle` | `#8c887e` | 3.3:1 | `#7d7a72` | 3.5:1 | placeholders and disabled only |
+| `border` | `#2b2a27 @ 13.0%` | 1.3:1 | `#ffffff @ 10.0%` | 1.4:1 | hairlines |
+| `border_strong` | `#cfcbc0` | 1.6:1 | `#55534e` | 1.7:1 | outlined buttons, a switch at rest |
+| `primary` | `#a84b2b` | 5.7:1 | `#e08a6d` | 5.1:1 | links, selected text, the focus edge |
+| `accent` | `#d97757` | 3.1:1 | `#d97757` | 3.1:1 | send, the new-chat mark, accent dots (white icon on it) |
+| `fill` | `#2b2a27` | 14.4:1 | `#ecebe6` | 12.7:1 | filled buttons: ink on paper, paper on charcoal |
+| `toggle_on` | `#2c84db` | 3.9:1 | `#4a9be8` | 4.5:1 | a switch that is on |
+| `fill_danger` | `#b4412f` | 5.6:1 | `#b7331f` | 6.0:1 | destructive confirms |
+| `success` | `#276b43` | 6.4:1 | `#8fd3a8` | 7.6:1 | done, passed |
+| `danger` | `#b4412f` | 5.6:1 | `#eb8c7b` | 5.4:1 | failed, errors |
+| `warning` | `#8a5600` | 6.2:1 | `#ffc85a` | 8.6:1 | needs you |
+| `memory` | `#75591a` | 5.6:1 | `#e5c77a` | 7.7:1 | memory and rules, on its tint |
+| `mode_plan` | `#1f75cb` | 4.7:1 | `#428fdc` | 3.9:1 | Plan mode |
+| `mode_bypass` | `#a32c12` | 7.2:1 | `#ec5941` | 3.8:1 | Bypass permissions |
 
 ### Contrast floors
 - Meaningful text: 4.5:1 on every surface and hover wash.
@@ -111,42 +125,41 @@ Contrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of w
 
 ## Patterns
 
-### Button Primary
-- Padding: 6px 15px
-- Radius: 8px
-- Font: 13px, 500 weight
-- Background: `fill`, `fill_hover` on hover; text `primary_fg`
-- Usage: one per surface (Allow, Continue, Save, Create)
-
-### Button Quiet
-- Height: 26px
-- Padding: 0 8px
-- Radius: 8px
-- No fill until hover (`hover` wash)
-- Usage: the model and mode under the composer, title-bar icons
+### Buttons (`ui/button.rs`)
+One family; every control takes keyboard focus (a `primary` edge shows for the keyboard only), names itself to assistive technology, and swallows clicks while disabled or loading.
+- Primary: 32px tall, padding 0 14px, radius 8px, `fill` with `fill_fg`, 500 weight. One per surface.
+- Secondary and Outlined: `surface`, 1px `border_strong`, `hover` wash.
+- Ghost: clear until hovered. Danger: `fill_danger`, white.
+- Icon: 34px square, radius 8px, a 16px icon in `text_muted`; outlined squares 38px at 9px radius.
+- Send: 38px, radius 9px, `accent` with a white arrow; `accent_soft` with nothing to send; Stop is an ink ring round a square.
+- Switch: 36x20px pill, 14px thumb sliding over 160ms; `toggle_on` when on, `border_strong` when off.
+- Segmented: a `sunk` track, radius 8px; the chosen segment raised onto `surface` at 6px.
 
 ### Composer
 - Width: up to 560px, centred
-- Radius: 16px; 1px `border`, tinted by the mode when one is set
-- Text: 14px, inset to start where the + glyph starts
-- A soft rule, fading at both ends, between the text and its tools
-- Tools: + (16px glyph) left, a 26px round send button right, 7px from both edges of its corner
-- Under it: the context ring (14px, 2px stroke) and its percent, then outlined 24px chips for the model and the mode
+- One unit: a white box (radius 14px, 1px `border`, `border_strong` while focused, tinted by the mode when one is set) resting in a `sunk` tray
+- Text: 14px; the outlined + bottom left and Send bottom right, 10px from the box's edges
+- The tray: the project, the context ring, the model and the mode as quiet 28px selectors with a chevron
+
+### Dot Field (`ui/dot_field.rs`)
+- Behind the home screen: a 14px grid of 2px dots in `dot`, gathered beside the heading and toward the lower right, thinned and faded toward a quiet oval behind the heading and composer and before every edge
+- About 1.6% of dots in `accent`; fewer still are 5px outlined squares or accent diamonds
+- Painted on one canvas from cached geometry; breathes over 9s, leans up to 4px from the pointer, brightens while the composer has focus; rests when hidden or inactive; still under reduced motion
 
 ### Card Default
 - Border: 1px `border`
 - Padding: 24px
-- Radius: 12px
+- Radius: 10px
 - Background: `surface`
 - Usage: tool calls, file cards, code blocks
 
 ### Popover
-- Border: 1px `border`, radius 12px, padding 4px
+- Border: 1px `border`, radius 10px, padding 4px
 - Background: `surface`, with the two-layer popover shadow
 - Usage: menus, pickers, the command palette
 
 ### File Card
-- A file Forge made, in its reply: up to 440px, `surface`, 1px `border`, radius 12px, padding 8px
+- A file Forge made, in its reply: up to 440px, `surface`, 1px `border`, radius 10px, padding 8px
 - A 36x44 page tile (radius 4px, concentric with the card) previews it, its type in mono `primary`
 - Title 600 `text_strong`; "Document · MD" caption `text_muted`; a bordered Download button
 - Open: the edge turns `primary` at 60%
@@ -159,7 +172,9 @@ Contrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of w
 
 ### Sidebar Row
 - Height: 30px, radius 8px
-- Selected: `selected` with a hairline, 500 weight
+- Current: the `active` wash, 500 weight, no border
+- New chat: a round `accent` mark with a white +
+- Collapsed: a 52px rail of icon buttons for the same actions
 - Group labels: 12px caption
 
 ## Decisions
@@ -168,7 +183,9 @@ Contrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of w
 |----------|-----------|------|
 | Borders-only depth | A desktop tool read for hours: hairlines separate without adding weight; shadows are kept to show what floats. | 2026-09-28 |
 | Three surfaces, one step apart | Title bar, sidebar and session must read as separate areas at a glance; even OKLab steps make the split clear without contrast jumps. | 2026-10-12 |
-| A deeper fill for dark buttons | White on the dark theme's link blue is 3.3:1; the fill is the same hue at 5.5:1 and links keep the brighter blue. | 2026-10-12 |
+| Ink, not colour, for the filled button | The accent is kept for sending; the one filled action per surface is ink on paper (paper on charcoal), so it never competes with Send. | 2026-10-17 |
+| Muted text a step deeper than the reference | The reference's #6f6c64 and #9a968c miss their floors on the title bar; #64615a and #8c887e keep the look and pass. | 2026-10-17 |
+| Softly squared controls | Large uniform radii read as a template; 7-10px keeps the shapes calm and precise. | 2026-10-17 |
 | Display serif for one line per view | The greeting, and a document's title: one warm, human line; everything else stays in the interface face. | 2026-10-12 |
 | Composer at 620px | A comfortable measure for a prompt, the same in a chat and on the welcome page. | 2026-10-11 |
 | Icons on a 12/14/16/20 scale | Desktop density: 14 in rows, 16 in controls, 20 for the composer's +; 12 inside captions. | 2026-10-12 |

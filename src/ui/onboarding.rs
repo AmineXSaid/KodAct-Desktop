@@ -197,7 +197,7 @@ impl Onboarding {
             .flex()
             .items_center()
             .gap(t.space.sm)
-            .rounded(t.size.composer_radius)
+            .rounded(t.radius.field)
             .bg(t.colors.surface)
             .border_1()
             .border_color(if self.error.is_some() {
@@ -221,7 +221,7 @@ impl Onboarding {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .rounded(t.radius.pill)
+                    .rounded(t.radius.control)
                     .bg(if empty { t.colors.hover } else { t.extra.fill })
                     .when(!empty, |d| d.cursor_pointer().hover(move |s| s.bg(hover)))
                     .child(icon(
@@ -230,7 +230,7 @@ impl Onboarding {
                         if empty {
                             t.colors.text_subtle
                         } else {
-                            t.colors.primary_fg
+                            t.extra.fill_fg
                         },
                     ))
                     .on_click(cx.listener(|this, _, window, cx| this.submit(window, cx))),

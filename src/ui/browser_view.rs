@@ -354,7 +354,7 @@ impl Render for BrowserView {
                     .items_center()
                     .gap(t.space.sm)
                     .px(t.space.md)
-                    .rounded(t.radius.pill)
+                    .rounded(t.radius.button)
                     .bg(t.extra.inset)
                     .child(icon(
                         if blank {
@@ -582,7 +582,7 @@ impl Render for BrowserView {
                         .gap(t.space.sm)
                         .px(t.space.md)
                         .py(t.space.xs)
-                        .rounded(t.radius.pill)
+                        .rounded(t.radius.card)
                         .bg(t.colors.primary_tint)
                         .border_1()
                         .border_color(t.colors.primary.opacity(0.3))

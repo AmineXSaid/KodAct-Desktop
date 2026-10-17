@@ -83,6 +83,11 @@ fn grounds(t: &Theme) -> Vec<(String, Hsla)> {
         base.iter()
             .map(|(n, c)| (format!("{n}+hover"), Hsla::from(over(t.colors.hover, *c)))),
     );
+    // The current row in the sidebar.
+    out.push((
+        "pane+active".into(),
+        Hsla::from(over(t.extra.active, t.extra.pane)),
+    ));
     out
 }
 
@@ -167,12 +172,13 @@ fn coloured_text_reads_on_its_tint() {
         let x = &t.extra;
         let pairs = [
             ("link", t.colors.primary, card),
-            ("filled button", t.colors.primary_fg, x.fill),
-            ("filled button, hovered", t.colors.primary_fg, x.fill_hover),
+            ("filled button", x.fill_fg, x.fill),
+            ("filled button, hovered", x.fill_fg, x.fill_hover),
             ("danger button", t.colors.primary_fg, x.fill_danger),
             ("success", x.success, Hsla::from(over(x.success_tint, card))),
             ("danger", x.danger, Hsla::from(over(x.danger_tint, card))),
             ("warning", x.warning, Hsla::from(over(x.warning_tint, card))),
+            ("memory", x.memory, Hsla::from(over(x.memory_tint, card))),
             (
                 "ping fast",
                 x.ping_fast_fg,
@@ -203,11 +209,12 @@ fn coloured_text_reads_on_its_tint() {
             let r = contrast(c, card);
             assert!(r >= AA_UI, "{mode}: mode {name} is {r:.2}:1 on a card");
         }
-        // Plan and Bypass also fill the send button, under a white arrow.
+        // Plan and Bypass fill the send button, under a white arrow, and
+        // the accent fills it otherwise.
         for (name, c) in [
             ("plan", x.mode_plan),
             ("bypass", x.mode_bypass),
-            ("default", x.fill),
+            ("default", x.accent),
         ] {
             let arrow = contrast(t.colors.primary_fg, c);
             assert!(
