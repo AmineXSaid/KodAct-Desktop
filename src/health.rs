@@ -459,6 +459,20 @@ fn swap_length_key(body: &mut serde_json::Value, refusal: &str) -> bool {
     }
 }
 
+/// When a refusal still names a length key after the swap, take both out.
+/// True when changed.
+fn drop_length_keys(body: &mut serde_json::Value, refusal: &str) -> bool {
+    let m = refusal.to_ascii_lowercase();
+    if !m.contains("max_tokens") && !m.contains("max_completion_tokens") {
+        return false;
+    }
+    let Some(o) = body.as_object_mut() else {
+        return false;
+    };
+    let had = o.remove("max_tokens").is_some();
+    o.remove("max_completion_tokens").is_some() || had
+}
+
 /// Check one pair: Ok with its verdict (answered or not), or Err when the
 /// request could not be sent at all. Blocking; run it off the UI thread.
 pub fn probe(profile: &Profile, timeout: Duration) -> Result<ModelHealth, String> {
@@ -488,6 +502,13 @@ pub fn probe(profile: &Profile, timeout: Duration) -> Result<ModelHealth, String
     if let Reply::Refused(400 | 422, text) = &reply {
         if swap_length_key(&mut body, text) {
             reply = send(&body);
+            // Refused again: a gateway turns one name into the other (as
+            // OmniRoute does for some providers), so ask with no limit.
+            if let Reply::Refused(400 | 422, text) = &reply {
+                if drop_length_keys(&mut body, text) {
+                    reply = send(&body);
+                }
+            }
         }
     }
     let ms = started.elapsed().as_millis() as u64;
@@ -598,6 +619,12 @@ mod tests {
         // Other refusals are left to read as they are.
         let mut b = probe_body(&openai("auto"));
         assert!(!swap_length_key(&mut b, "The model `auto` does not exist"));
+        assert!(!drop_length_keys(&mut b, "The model `auto` does not exist"));
+        // The swapped name refused again in the same words: no limit at all.
+        let mut b = probe_body(&openai("house-reasoner"));
+        assert!(swap_length_key(&mut b, openai_says));
+        assert!(drop_length_keys(&mut b, openai_says));
+        assert!(b.get("max_tokens").is_none() && b.get("max_completion_tokens").is_none());
     }
 
     fn record(error: Option<&str>, models: Vec<ModelHealth>, syncing: bool) -> EndpointHealth {
