@@ -9,6 +9,11 @@
 //! centre, each dot's weight, seed and kind) and kept until the field is
 //! resized. Nothing in it takes input; it sits behind the content.
 //!
+//! Once a chat begins it stays behind the transcript as a faint trace
+//! (`set_backdrop`), and while Forge is replying a slow wave of light runs
+//! down through it, so the background says the work is going on; it goes
+//! still again when the reply ends.
+//!
 //! It is barely alive: the dots breathe out of step with each other over
 //! nine seconds, the whole field leans a few pixels away from the pointer,
 //! and it brightens a touch while the composer has the keyboard. A ticker
@@ -40,6 +45,13 @@ const RIPPLE_SPEED: f32 = 420.;
 const RIPPLE_BAND: f32 = 34.;
 const RIPPLE_REACH: f32 = 700.;
 const RIPPLE_S: f32 = 1.8;
+/// Behind a chat: how much of its home-screen strength the field keeps,
+/// how far a working wave lifts it at its crest, the wave's speed (radians
+/// a second) and how many crests span the field.
+const CHAT_REST: f32 = 0.22;
+const WORK_LIFT: f32 = 2.2;
+const WORK_SPEED: f32 = 3.4;
+const WORK_WAVES: f32 = 0.65;
 /// Ticks: easing toward the pointer, breathing, and resting (hidden).
 const EASE_MS: u64 = 33;
 const BREATHE_MS: u64 = 220;
@@ -118,6 +130,14 @@ fn rect_distance(x: f32, y: f32, r: [f32; 4], radius: f32) -> f32 {
 pub fn default_content(w: f32, h: f32) -> [f32; 4] {
     let (hw, hh) = ((w * 0.45).min(296.), (h * 0.3).min(150.));
     [w / 2. - hw, h / 2. - hh, w / 2. + hw, h / 2. + hh]
+}
+
+/// Behind a chat, what the field keeps clear: the reading column, centred
+/// and running the field's full height, so the dots stay in the margins
+/// beside the transcript and never lift behind its words.
+pub fn chat_content(w: f32, h: f32, column: f32) -> [f32; 4] {
+    let half = column.min(w) / 2.;
+    [w / 2. - half, 0., w / 2. + half, h]
 }
 
 /// How strongly the field shows at `(x, y)` in a `w`×`h` field around the
@@ -213,6 +233,10 @@ struct Motion {
     target: Point<f32>,
     /// 0..1, toward 1 while the composer has the keyboard.
     glow: f32,
+    /// 0..1, toward 1 behind a chat (`set_backdrop`): the field steps back.
+    quiet: f32,
+    /// 0..1, toward 1 while the chat it sits behind is replying.
+    work: f32,
 }
 
 /// Where the field was painted, and when.
@@ -241,6 +265,10 @@ struct Shared {
     /// Ripples running out from the content's centre: when each began, and
     /// how strong it is (1 a strike, less a keystroke).
     ripples: RefCell<Vec<(Instant, f32)>>,
+    /// Set each frame by the view showing the field: behind a chat, and
+    /// whether that chat is replying.
+    backdrop: Cell<bool>,
+    working: Cell<bool>,
 }
 
 pub struct DotField {
@@ -249,6 +277,8 @@ pub struct DotField {
     focus: Option<FocusHandle>,
     cache: Rc<RefCell<Cache>>,
     shared: Rc<Shared>,
+    /// Reduced motion: no ticker, so render sets the backdrop directly.
+    still: bool,
 }
 
 impl DotField {
@@ -260,10 +290,13 @@ impl DotField {
                 lean: point(0., 0.),
                 target: point(0., 0.),
                 glow: 0.,
+                quiet: 0.,
+                work: 0.,
             },
             focus,
             cache: Rc::default(),
             shared: Rc::default(),
+            still,
         };
         if !still {
             cx.spawn_in(window, async move |this, cx| {
@@ -317,6 +350,17 @@ impl DotField {
             .as_ref()
             .is_some_and(|f| f.contains_focused(window, cx)) as u8 as f32;
         m.glow += (want - m.glow) * (dt * 4.).min(1.);
+        // Stepping back behind a chat takes about half a second; the wave
+        // comes and goes a little slower. Steps are capped to one fast tick,
+        // so the first step after a slow (breathing) tick doesn't jump.
+        let step = dt.min(EASE_MS as f32 / 1000.);
+        let quiet = self.shared.backdrop.get() as u8 as f32;
+        m.quiet += (quiet - m.quiet) * (step * 4.).min(1.);
+        let work = (self.shared.working.get() && self.shared.backdrop.get()) as u8 as f32;
+        m.work += (work - m.work) * (step * 2.5).min(1.);
+        if m.work < 0.002 {
+            m.work = 0.;
+        }
         // The glide after a layout change: quick, then settling.
         let slide = self.shared.slide.get();
         let decay = (-dt * 9.).exp();
@@ -333,7 +377,9 @@ impl DotField {
         let easing = (m.target.x - m.lean.x).abs() + (m.target.y - m.lean.y).abs() > 0.05
             || (want - m.glow).abs() > 0.01
             || gliding
-            || rippling;
+            || rippling
+            || (quiet - m.quiet).abs() > 0.01
+            || m.work > 0.;
         cx.notify();
         Duration::from_millis(if easing { EASE_MS } else { BREATHE_MS })
     }
@@ -369,6 +415,14 @@ fn marks(
 }
 
 impl DotField {
+    /// Where the field is shown: `chat` behind a conversation rather than on
+    /// the home screen, and whether that conversation is `working` (Forge
+    /// replying). The view showing the field calls it as it renders.
+    pub fn set_backdrop(&self, chat: bool, working: bool) {
+        self.shared.backdrop.set(chat);
+        self.shared.working.set(working);
+    }
+
     /// A ring of light running out through the dots from the content's
     /// centre: `strength` 1 for a strike, less for a keystroke. Nothing
     /// under reduced motion.
@@ -414,6 +468,15 @@ fn alpha(mark: &Mark, phase: f32, glow: f32, peak: f32) -> f32 {
     // A smooth falloff: faint dots fade further, so dense and sparse
     // regions shade into each other.
     mark.weight.powf(1.1) * peak * breath * (1. + 0.14 * glow)
+}
+
+/// Behind a chat, a mark's share of its home-screen opacity: a faint rest,
+/// lifted by the working wave as it passes (`y` down a field `h` tall).
+fn backdrop(quiet: f32, work: f32, phase: f32, y: f32, h: f32) -> f32 {
+    let rest = 1. - (1. - CHAT_REST) * quiet;
+    let k = std::f32::consts::TAU * WORK_WAVES / h.max(1.);
+    let wave = 0.5 + 0.5 * (phase * WORK_SPEED - y * k).sin();
+    rest * (1. + WORK_LIFT * work * wave)
 }
 
 /// How much a ripple lights a dot `d` px from its centre, `secs` after it
@@ -462,7 +525,14 @@ fn paint_marks(
             });
             // Only where the field shows: the quiet zone round the words stays quiet.
             let lit = lit * m.weight.sqrt();
-            let a = (alpha(m, motion.phase, motion.glow, peak) + 0.55 * lit).min(1.);
+            let back = backdrop(
+                motion.quiet,
+                motion.work,
+                motion.phase,
+                m.at.y,
+                f32::from(bounds.size.height),
+            );
+            let a = ((alpha(m, motion.phase, motion.glow, peak) + 0.55 * lit) * back).min(1.);
             let tint = |c: Hsla, k: f32| Hsla {
                 a: c.a * a * k,
                 ..c
@@ -517,8 +587,12 @@ fn paint_marks(
 impl Render for DotField {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
-        let motion = self.motion;
+        let mut motion = self.motion;
+        if self.still {
+            motion.quiet = self.shared.backdrop.get() as u8 as f32;
+        }
         let gap = f32::from(t.size.dot_gap);
+        let column = f32::from(t.size.column);
         let (cache, shared) = (self.cache.clone(), self.shared.clone());
         div().absolute().inset_0().child(
             canvas(
@@ -527,8 +601,15 @@ impl Render for DotField {
                     move |bounds, _, _| {
                         let (w, h) = (f32::from(bounds.size.width), f32::from(bounds.size.height));
                         // The content, in the field's own coordinates.
-                        let content = shared.content.get().map_or_else(
-                            || default_content(w, h),
+                        let probed = shared.content.get().filter(|_| !shared.backdrop.get());
+                        let content = probed.map_or_else(
+                            || {
+                                if shared.backdrop.get() {
+                                    chat_content(w, h, column)
+                                } else {
+                                    default_content(w, h)
+                                }
+                            },
                             |c| {
                                 let o = c.origin - bounds.origin;
                                 let (x, y) = (f32::from(o.x), f32::from(o.y));
@@ -590,6 +671,26 @@ mod ripple_tests {
     use super::*;
 
     #[test]
+    fn behind_a_chat_the_field_is_faint_and_the_wave_lifts_it_only_while_working() {
+        // The home screen: untouched.
+        assert_eq!(backdrop(0., 0., 1.3, 200., 700.), 1.);
+        // Behind a chat at rest: a faint trace, the same everywhere and always.
+        let rest: Vec<f32> = (0..40)
+            .map(|i| backdrop(1., 0., i as f32 * 0.1, i as f32 * 17., 700.))
+            .collect();
+        assert!(rest.iter().all(|a| (a - CHAT_REST).abs() < 1e-6));
+        // Working: the wave lifts it, never below the rest, and moves.
+        let at = |phase: f32| backdrop(1., 1., phase, 300., 700.);
+        let samples: Vec<f32> = (0..60).map(|i| at(i as f32 * 0.05)).collect();
+        let (lo, hi) = samples
+            .iter()
+            .fold((f32::MAX, f32::MIN), |(l, h), a| (l.min(*a), h.max(*a)));
+        assert!(lo >= CHAT_REST - 1e-6 && hi > CHAT_REST * 2., "{lo}..{hi}");
+        // At its crest still well under the home screen's strength.
+        assert!(hi < 0.8, "{hi}");
+    }
+
+    #[test]
     fn a_ripple_lights_its_ring_and_fades_as_it_runs_out() {
         // Half a second in, the ring is 210px out.
         assert!(ripple_at(210., 0.5, 1.) > 0.6);
@@ -638,6 +739,17 @@ mod tests {
                 assert!(d >= 28., "a dot {d:.1}px from the content");
             }
         }
+    }
+
+    #[test]
+    fn behind_a_chat_the_reading_column_stays_clear() {
+        let (w, h) = (1180., 810.);
+        let c = chat_content(w, h, 680.);
+        let marks = layout(w, h, 14., c);
+        // Dots in the margins on both sides, none within 28px of the column.
+        assert!(marks.iter().any(|m| m.at.x < c[0]));
+        assert!(marks.iter().any(|m| m.at.x > c[2]));
+        assert!(marks.iter().all(|m| m.at.x < c[0] - 27. || m.at.x > c[2] + 27.));
     }
 
     #[test]

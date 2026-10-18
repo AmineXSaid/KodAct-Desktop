@@ -169,6 +169,7 @@ One family; every control takes keyboard focus (a `primary` edge shows for the k
 - Behind the home screen: a 14px grid of 2px dots in `dot`, gathered in two clouds hugging the content (beside the heading, past the composer's lower right), their outlines warped and density varied by slow noise, faded with a smooth falloff to a quiet margin round the measured content and before every edge
 - About 1.6% of dots in `accent`; fewer still are 5px outlined squares or accent diamonds
 - Painted on one canvas from cached geometry; breathes over 9s, leans up to 4px from the pointer, brightens while the composer has focus; glides to its new place when the layout changes (sidebar, resize, a growing composer); rests when hidden or inactive; still under reduced motion
+- Behind a chat it stays as a faint trace (22% of its home strength); while Forge replies a slow wave runs down through it (crest about 70%), easing in and out with the reply; still and faint under reduced motion
 
 ### Card Default
 - Border: 1px `border`

@@ -822,6 +822,7 @@ impl Render for Workspace {
         );
         let (find_open, shortcuts_open) = (s.find.is_some(), s.shortcuts_open);
         let empty = s.chat().is_none_or(|c| c.messages.is_empty());
+        self.dots.read(cx).set_backdrop(!empty, s.busy());
         let below = s.doc_below;
         let terminal_open = s.terminal_open;
         let side_open = s.doc.is_some() || s.panel.is_some();
@@ -987,6 +988,9 @@ impl Render for Workspace {
                         .flex()
                         .flex_col()
                         .relative()
+                        // The home screen's field stays behind the chat, faint,
+                        // and a slow wave runs through it while Forge replies.
+                        .child(self.dots.clone())
                         .child(self.chat.clone())
                         .children(super::tasks::render(&t, &self.state, cx))
                         .with_animation(
