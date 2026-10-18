@@ -69,7 +69,15 @@ pub fn render(
         })
         .on_click(move |_, _, cx| toggle.update(cx, |s, cx| s.toggle_versions(chat, msg, cx)));
     let list = open.then(|| {
-        let mut list = div().id(SharedString::from(format!("versions-list-{chat}-{msg}"))).flex().flex_col().gap(t.space.sm).max_h(t.size.popover_list).overflow_y_scroll();
+        let mut list = div()
+            .id(SharedString::from(format!("versions-list-{chat}-{msg}")))
+            .flex()
+            .flex_col()
+            .gap(t.space.sm)
+            .max_h(t.size.popover_list)
+            .overflow_y_scroll()
+            // More versions than fit: the list keeps the wheel from the chat behind.
+            .when(rows.len() > 4, super::hold_wheel);
         // Newest first.
         for row in rows.iter().rev() {
             let (st, i) = (state.clone(), row.index);

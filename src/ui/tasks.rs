@@ -172,7 +172,9 @@ pub fn render(t: &Theme, state: &Entity<AppState>, cx: &gpui::App) -> Option<Any
             .flex()
             .flex_col()
             .max_h(t.size.popover_list)
-            .overflow_y_scroll();
+            .overflow_y_scroll()
+            // More tasks than fit: the list keeps the wheel from the chat under it.
+            .when(list.len() > 8, super::hold_wheel);
         for (i, task) in list.iter().enumerate() {
             let (st, msg) = (state.clone(), task.msg);
             rows = rows.child(

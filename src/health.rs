@@ -398,6 +398,67 @@ pub fn listed_context(profile: &Profile, timeout: Duration) -> Option<u64> {
     context_from_listing(&serde_json::from_str(&text).ok()?, &profile.model)
 }
 
+/// A reply, its body read through (so the time covers the answer):
+/// answered, refused with its status and body, or never sent.
+enum Reply {
+    Answered,
+    Refused(u16, String),
+    Unsent(ureq::Transport),
+}
+
+fn read(r: Result<ureq::Response, ureq::Error>) -> Reply {
+    match r {
+        Ok(resp) => {
+            let _ = resp.into_string();
+            Reply::Answered
+        }
+        Err(ureq::Error::Status(code, resp)) => {
+            Reply::Refused(code, resp.into_string().unwrap_or_default())
+        }
+        Err(ureq::Error::Transport(t)) => Reply::Unsent(t),
+    }
+}
+
+/// The check's request: a few tokens of answer to "hi". OpenAI's reasoning
+/// models take `max_completion_tokens`, and need a little room to think.
+fn probe_body(profile: &Profile) -> serde_json::Value {
+    let mut body = serde_json::json!({ "model": profile.model, "messages": [{ "role": "user", "content": "hi" }] });
+    if profile.wire == Wire::Openai && crate::endpoints::is_reasoning_model(&profile.model) {
+        body["max_completion_tokens"] = 16.into();
+    } else {
+        body["max_tokens"] = 4.into();
+    }
+    body
+}
+
+/// When a refusal names the length key the body uses as unsupported (the
+/// one it names first: "'max_tokens' is not supported ... use
+/// 'max_completion_tokens'"), send the other name instead. True when changed.
+fn swap_length_key(body: &mut serde_json::Value, refusal: &str) -> bool {
+    let m = refusal.to_ascii_lowercase();
+    let (old, new) = (m.find("max_tokens"), m.find("max_completion_tokens"));
+    let refused = match (old, new) {
+        (Some(a), Some(b)) if a < b => "max_tokens",
+        (_, Some(_)) => "max_completion_tokens",
+        _ => return false,
+    };
+    let other = if refused == "max_tokens" {
+        "max_completion_tokens"
+    } else {
+        "max_tokens"
+    };
+    let Some(o) = body.as_object_mut() else {
+        return false;
+    };
+    match o.remove(refused) {
+        Some(v) => {
+            o.insert(other.into(), v);
+            true
+        }
+        None => false,
+    }
+}
+
 /// Check one pair: Ok with its verdict (answered or not), or Err when the
 /// request could not be sent at all. Blocking; run it off the UI thread.
 pub fn probe(profile: &Profile, timeout: Duration) -> Result<ModelHealth, String> {
@@ -406,17 +467,29 @@ pub fn probe(profile: &Profile, timeout: Duration) -> Result<ModelHealth, String
         .timeout_connect(CONNECT_TIMEOUT)
         .timeout(timeout)
         .build();
-    let req = request(
-        &agent,
-        "POST",
-        &profile.chat_url(),
-        profile,
-        token.as_deref(),
-    )
-    .set("content-type", "application/json");
-    let body = serde_json::json!({ "model": profile.model, "max_tokens": 4, "messages": [{ "role": "user", "content": "hi" }] });
+    let send = |body: &serde_json::Value| {
+        let sent = request(
+            &agent,
+            "POST",
+            &profile.chat_url(),
+            profile,
+            token.as_deref(),
+        )
+        .set("content-type", "application/json")
+        .send_string(&body.to_string());
+        read(sent)
+    };
+    let mut body = probe_body(profile);
     let started = Instant::now();
-    let result = req.send_string(&body.to_string());
+    let mut reply = send(&body);
+    // A 400 asking for the other name for the answer's length (a reasoning
+    // model under a name not recognised, or a server that only knows
+    // max_tokens): asked once more, as it asks.
+    if let Reply::Refused(400 | 422, text) = &reply {
+        if swap_length_key(&mut body, text) {
+            reply = send(&body);
+        }
+    }
     let ms = started.elapsed().as_millis() as u64;
     let verdict = |servable: bool, detail: Option<String>| {
         Ok(ModelHealth {
@@ -427,14 +500,9 @@ pub fn probe(profile: &Profile, timeout: Duration) -> Result<ModelHealth, String
             checked_at: now_ms(),
         })
     };
-    match result {
-        Ok(resp) => {
-            // Read the reply through, so the time covers the answer.
-            let _ = resp.into_string();
-            verdict(true, None)
-        }
-        Err(ureq::Error::Status(code, resp)) => {
-            let text = resp.into_string().unwrap_or_default();
+    match reply {
+        Reply::Answered => verdict(true, None),
+        Reply::Refused(code, text) => {
             let message = serde_json::from_str::<serde_json::Value>(&text)
                 .ok()
                 .and_then(|v| {
@@ -449,7 +517,7 @@ pub fn probe(profile: &Profile, timeout: Duration) -> Result<ModelHealth, String
                 .collect();
             verdict(false, Some(detail))
         }
-        Err(ureq::Error::Transport(t)) => {
+        Reply::Unsent(t) => {
             let text = t.to_string();
             if matches!(
                 t.kind(),
@@ -477,6 +545,60 @@ pub fn probe(profile: &Profile, timeout: Duration) -> Result<ModelHealth, String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn openai(model: &str) -> Profile {
+        Profile {
+            name: "t".into(),
+            base_url: "http://127.0.0.1:20128/v1".into(),
+            wire: Wire::Openai,
+            model: model.into(),
+            display_name: None,
+            chat_path: None,
+            headers: Default::default(),
+            auth: Auth::None,
+            capabilities: Default::default(),
+        }
+    }
+
+    #[test]
+    fn the_check_asks_reasoning_models_in_their_terms() {
+        let b = probe_body(&openai("cx/gpt-5-codex"));
+        assert!(
+            b.get("max_tokens").is_none() && b["max_completion_tokens"] == 16,
+            "{b}"
+        );
+        let b = probe_body(&openai("auto/best-coding"));
+        assert!(
+            b["max_tokens"] == 4 && b.get("max_completion_tokens").is_none(),
+            "{b}"
+        );
+        // Anthropic's API knows only max_tokens, whatever the model is called.
+        let b = probe_body(&Profile {
+            wire: Wire::Anthropic,
+            ..openai("gpt-5")
+        });
+        assert_eq!(b["max_tokens"], 4);
+    }
+
+    #[test]
+    fn a_refused_length_key_is_swapped_for_the_other() {
+        let mut b = probe_body(&openai("house-reasoner"));
+        let openai_says = r#"{"error":{"message":"Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead."}}"#;
+        assert!(swap_length_key(&mut b, openai_says));
+        assert!(b.get("max_tokens").is_none() && b["max_completion_tokens"] == 4);
+        // Sent again, OpenAI's same words name the key it no longer has: nothing to change.
+        assert!(!swap_length_key(&mut b, openai_says));
+        // A server that knows only max_tokens, refusing the newer name.
+        let mut b = probe_body(&openai("gpt-5"));
+        assert!(swap_length_key(
+            &mut b,
+            "Unrecognized request argument supplied: max_completion_tokens"
+        ));
+        assert_eq!(b["max_tokens"], 16);
+        // Other refusals are left to read as they are.
+        let mut b = probe_body(&openai("auto"));
+        assert!(!swap_length_key(&mut b, "The model `auto` does not exist"));
+    }
 
     fn record(error: Option<&str>, models: Vec<ModelHealth>, syncing: bool) -> EndpointHealth {
         EndpointHealth {

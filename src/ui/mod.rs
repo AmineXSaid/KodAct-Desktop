@@ -241,6 +241,32 @@ pub fn sync_component_theme(cx: &mut App) {
     });
 }
 
+/// A scroll box inside something that scrolls (a list in Settings, a
+/// tool's output in a reply). GPUI hands each wheel tick to every scroll
+/// box under the pointer, so the page behind moved with the list. This one
+/// keeps the wheel while it has more than it shows; one that fits lets the
+/// page scroll as usual. `handle` is the box's own, kept by its view.
+pub fn hold_scroll(
+    d: gpui::Stateful<gpui::Div>,
+    handle: &gpui::ScrollHandle,
+) -> gpui::Stateful<gpui::Div> {
+    let h = handle.clone();
+    d.overflow_y_scroll()
+        .track_scroll(handle)
+        .on_scroll_wheel(move |_, _, cx| {
+            if h.max_offset().y > gpui::px(0.) {
+                cx.stop_propagation();
+            }
+        })
+}
+
+/// Keep the wheel inside a box known to have more than it shows (a
+/// fixed-height prompt box, a long tool output): it scrolls, the page
+/// around it stays.
+pub fn hold_wheel<E: gpui::InteractiveElement>(e: E) -> E {
+    e.on_scroll_wheel(|_, _, cx| cx.stop_propagation())
+}
+
 /// Switch theme and mode: our tokens, then the component layer.
 pub fn set_theme(look: crate::theme::Look, dark: bool, cx: &mut App) {
     cx.set_global(Theme::of(look, dark));

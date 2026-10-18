@@ -398,12 +398,15 @@ pub fn block(call: &ToolCall, at: &Where, t: &Theme) -> AnyElement {
         }
     }
     let out: AnyElement = if call.full && lines.len() > TAIL_LINES {
-        div()
-            .id(SharedString::from(format!("out-{key}")))
-            .max_h(px(360.))
-            .overflow_y_scroll()
-            .child(out)
-            .into_any_element()
+        // Long, so it scrolls: the reply around it stays put.
+        super::hold_wheel(
+            div()
+                .id(SharedString::from(format!("out-{key}")))
+                .max_h(px(360.))
+                .overflow_y_scroll(),
+        )
+        .child(out)
+        .into_any_element()
     } else {
         out.into_any_element()
     };

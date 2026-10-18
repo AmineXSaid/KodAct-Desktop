@@ -862,14 +862,12 @@ impl Render for CommandPalette {
         let selected = self.selected.min(matches.len().saturating_sub(1));
         let count = matches.len();
 
-        let mut list = div()
-            .id("palette-list")
+        // Over the chat: the list keeps the wheel while it has more to show.
+        let mut list = super::hold_scroll(div().id("palette-list"), &self.scroll)
             .flex()
             .flex_col()
             // The palette sits three title bars down, its search above the list.
             .max_h(px(380.).min(theme::fit_height(window, &t, t.size.titlebar * 5.)))
-            .overflow_y_scroll()
-            .track_scroll(&self.scroll)
             .p(t.space.xs);
         let mut last_group = "";
         // The list's children: group labels as well as rows.

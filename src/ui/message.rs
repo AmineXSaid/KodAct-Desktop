@@ -1601,10 +1601,13 @@ fn permission(
         )
         .child(if title.as_ref() == crate::backend::JS_ASK_TITLE {
             // The script, whole and as code: what you allow is what runs.
+            // A long one scrolls, and keeps the wheel from the chat behind.
+            let long = detail.lines().count() > 10 || detail.len() > 600;
             div()
                 .id(id("script"))
                 .max_h(px(240.))
                 .overflow_y_scroll()
+                .when(long, super::hold_wheel)
                 .p(t.space.md)
                 .rounded(t.radius.button)
                 .bg(t.extra.inset)

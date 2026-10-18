@@ -241,7 +241,9 @@ pub fn area(t: &Theme, input: &Entity<TextareaState>, mono: bool) -> AnyElement 
         .p(t.space.sm)
         .text_size(t.text.body_sm)
         .when(mono, |d| d.font_family(t.font_mono.clone()))
-        .child(Textarea::new(input).appearance(false).h(t.size.prompt_box))
+        .child(super::hold_wheel(div().child(
+            Textarea::new(input).appearance(false).h(t.size.prompt_box),
+        )))
         .into_any_element()
 }
 

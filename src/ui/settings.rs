@@ -43,6 +43,9 @@ pub struct Settings {
     ep_model: Entity<InputState>,
     wire: Wire,
     models: Vec<String>,
+    /// Narrows the endpoint's model list as you type (`endpoints::find_models`).
+    model_search: Entity<InputState>,
+    model_scroll: gpui::ScrollHandle,
     status: Status,
     /// The check failed: offer to save anyway.
     save_anyway: bool,
@@ -144,6 +147,7 @@ impl Settings {
                 .masked(true)
         });
         let ep_model = input("Type a model id, or load the list", window, cx);
+        let model_search = input("Search the models: gpt 5, coder, auto…", window, cx);
         let subs = vec![
             cx.observe_in(&state, window, |this, state, window, cx| {
                 let (open, add) = (state.read(cx).settings_open, state.read(cx).settings_add);
@@ -174,11 +178,41 @@ impl Settings {
                     cx.notify();
                 }
             }),
+            // A key typed after "it lists models only with a key": that
+            // message is out of date (Load models again uses the key).
+            cx.subscribe_in(&ep_key, window, |this, _, ev: &InputEvent, _, cx| {
+                if matches!(ev, InputEvent::Change) && matches!(this.status, Status::Failed(_)) {
+                    this.status = Status::Idle;
+                    cx.notify();
+                }
+            }),
             cx.subscribe_in(&ep_model, window, |_, _, ev: &InputEvent, _, cx| {
                 if matches!(ev, InputEvent::Change) {
                     cx.notify();
                 }
             }),
+            // Typing narrows the list (back to its top); Enter picks the best match.
+            cx.subscribe_in(
+                &model_search,
+                window,
+                |this, _, ev: &InputEvent, window, cx| match ev {
+                    InputEvent::Change => {
+                        this.model_scroll.set_offset(gpui::point(px(0.), px(0.)));
+                        cx.notify();
+                    }
+                    InputEvent::PressEnter { .. } => {
+                        let q = Self::val(&this.model_search, cx);
+                        let best = crate::endpoints::find_models(&this.models, &q)
+                            .first()
+                            .map(|m| m.to_string());
+                        if let Some(m) = best {
+                            Self::set(&this.ep_model, &m, window, cx);
+                            cx.notify();
+                        }
+                    }
+                    _ => {}
+                },
+            ),
         ];
         let commands =
             cx.new(|cx| super::slash_commands::SlashCommands::new(state.clone(), window, cx));
@@ -208,6 +242,8 @@ impl Settings {
             ep_url,
             ep_key,
             ep_model,
+            model_search,
+            model_scroll: gpui::ScrollHandle::new(),
             wire: Wire::Openai,
             models: vec![],
             status: Status::Idle,
@@ -1312,28 +1348,88 @@ impl Settings {
                     .id("load-models")
                     .on_click(cx.listener(|this, _, _, cx| this.load_models(cx))),
             );
-        let mut list = div()
-            .id("model-list")
-            .flex()
-            .flex_wrap()
-            .gap(px(6.))
-            .max_h(px(132.))
-            .overflow_y_scroll();
-        for m in self.models.iter().take(300) {
-            let id = m.clone();
-            list = list.child(
-                Self::chip(
-                    t,
-                    SharedString::from(format!("m-{m}")),
-                    m.clone(),
-                    picked == *m,
-                )
-                .on_click(cx.listener(move |this, _, window, cx| {
-                    Self::set(&this.ep_model, &id, window, cx);
-                    cx.notify();
-                })),
+        // The endpoint's models, narrowed by what you type: one row each,
+        // in a box that keeps the wheel (the page behind stays put).
+        let query = Self::val(&self.model_search, cx);
+        let found = crate::endpoints::find_models(&self.models, &query);
+        const SHOWN: usize = 200;
+        let hover = t.colors.hover;
+        let mut rows = div().flex().flex_col().p(px(4.));
+        for m in found.iter().take(SHOWN) {
+            let (id, on) = (m.to_string(), picked == **m);
+            rows = rows.child(
+                div()
+                    .id(SharedString::from(format!("m-{m}")))
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .h(px(28.))
+                    .px(px(8.))
+                    .rounded(t.radius.button)
+                    .font_family(t.font_mono.clone())
+                    .text_size(t.text.caption)
+                    .text_color(if on {
+                        t.colors.text_strong
+                    } else {
+                        t.colors.text
+                    })
+                    .when(on, |d| d.bg(t.colors.primary_tint))
+                    .when(!on, |d| d.hover(move |st| st.bg(hover)))
+                    .cursor_pointer()
+                    .child(div().flex_1().min_w_0().truncate().child(id.clone()))
+                    .when(on, |d| {
+                        d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.primary))
+                    })
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        Self::set(&this.ep_model, &id, window, cx);
+                        cx.notify();
+                    })),
             );
         }
+        let count = match (query.trim().is_empty(), found.len()) {
+            (true, n) => format!("{n} {}", if n == 1 { "model" } else { "models" }),
+            (false, 0) => "No model matches: you can still type the id above.".to_string(),
+            (false, n) => format!("{n} of {} match", self.models.len()),
+        };
+        let more = found.len().saturating_sub(SHOWN);
+        let list = (!self.models.is_empty()).then(|| {
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(6.))
+                .child(Self::boxed(
+                    t,
+                    Input::new(&self.model_search)
+                        .appearance(false)
+                        .text_size(t.text.body_sm)
+                        .into_any_element(),
+                ))
+                .child(
+                    div()
+                        .flex()
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_muted)
+                        .child(div().flex_1().child(count))
+                        .when(more > 0, |d| {
+                            d.child(format!("{more} more: type to narrow"))
+                        }),
+                )
+                .when(!found.is_empty(), |d| {
+                    d.child(
+                        super::hold_scroll(
+                            div()
+                                .id("model-list")
+                                .max_h(px(220.))
+                                .rounded(t.radius.field)
+                                .border_1()
+                                .border_color(t.colors.border)
+                                .bg(t.colors.surface),
+                            &self.model_scroll,
+                        )
+                        .child(rows),
+                    )
+                })
+        });
         let status = match &self.status {
             Status::Idle => None,
             Status::Working(s) => Some((t.colors.text_muted, "icons/loader-circle.svg", s.clone())),
@@ -1366,7 +1462,7 @@ impl Settings {
                     .child(Self::field(t, "API key", &self.ep_key))
                     .child(div().text_size(t.text.caption).text_color(t.colors.text_muted).child(if cfg!(windows) { "Kept in Windows Credential Manager, never in a file. Local servers need none." } else { "Kept in a private file in Forge's config folder, never in endpoints.json. Local servers need none." })),
             )
-            .child(div().flex().flex_col().gap(px(8.)).child(model_row).when(!self.models.is_empty(), |d| d.child(list)))
+            .child(div().flex().flex_col().gap(px(8.)).child(model_row).children(list))
             .children(status.map(|(c, i, s)| div().flex().items_start().gap(px(6.)).text_size(t.text.caption).text_color(c).line_height(relative(1.4)).child(div().pt(px(1.)).child(icon(i, t.size.icon_xs, c))).child(div().flex_1().child(s))))
             .child(
                 div()

@@ -293,6 +293,67 @@ pub fn validate_url(url: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// The models matching what you typed, best first. Every word must appear
+/// in the id, in any order and any case (`codex gpt`, `best coding`):
+/// an exact id first, then ids (or their last segment, past a gateway's
+/// `provider/`) starting with the query, then the rest by where the words
+/// sit; letters in order but apart (`gpt5cx`) come last. An empty query
+/// is the whole list, in its order.
+pub fn find_models<'a>(models: &'a [String], query: &str) -> Vec<&'a String> {
+    let q = query.trim().to_ascii_lowercase();
+    if q.is_empty() {
+        return models.iter().collect();
+    }
+    let words: Vec<&str> = q.split_whitespace().collect();
+    let in_order = |hay: &str, needle: &str| {
+        let mut chars = hay.chars();
+        needle
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .all(|c| chars.any(|h| h == c))
+    };
+    let mut scored: Vec<(u8, usize, &String)> = models
+        .iter()
+        .filter_map(|m| {
+            let id = m.to_ascii_lowercase();
+            let last = id.rsplit('/').next().unwrap_or(&id);
+            let rank = if id == q || last == q {
+                0
+            } else if id.starts_with(&q) || last.starts_with(&q) {
+                1
+            } else if words.iter().all(|w| id.contains(w)) {
+                2
+            } else if in_order(&id, &q) {
+                3
+            } else {
+                return None;
+            };
+            let at = words.iter().filter_map(|w| id.find(w)).min().unwrap_or(0);
+            Some((rank, at * 1000 + id.len(), m))
+        })
+        .collect();
+    scored.sort_by(|a, b| (a.0, a.1, a.2).cmp(&(b.0, b.1, b.2)));
+    scored.into_iter().map(|(_, _, m)| m).collect()
+}
+
+/// OpenAI's reasoning models: the o-series, GPT-5 and Codex. They take
+/// `max_completion_tokens`, not `max_tokens`. A gateway (OmniRoute,
+/// OpenRouter, LiteLLM) puts a provider before the id (`cx/gpt-5-codex`,
+/// `openai/o3`), so only the last segment is read. ForgeCLI decides the
+/// same way (`forge-api`, `openai::is_reasoning_model`).
+pub fn is_reasoning_model(model: &str) -> bool {
+    let id = model
+        .rsplit('/')
+        .next()
+        .unwrap_or(model)
+        .to_ascii_lowercase();
+    id.contains("codex")
+        || id.starts_with("gpt-5")
+        || ["o1", "o3", "o4"]
+            .iter()
+            .any(|p| id == *p || id.starts_with(&format!("{p}-")))
+}
+
 /// A starting point for a new endpoint: the URL and wire are known.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Preset {
@@ -305,7 +366,7 @@ pub struct Preset {
 }
 
 /// Cloud presets, then local runtimes on their documented default ports.
-pub const PRESETS: [Preset; 8] = [
+pub const PRESETS: [Preset; 9] = [
     Preset {
         id: "anthropic",
         label: "Anthropic",
@@ -326,6 +387,16 @@ pub const PRESETS: [Preset; 8] = [
         base_url: "https://openrouter.ai/api/v1",
         wire: Wire::Openai,
         key: true,
+    },
+    // OmniRoute: an OpenAI-compatible gateway on this PC, in front of many
+    // providers (`auto`, `auto/best-coding` and provider-prefixed ids). Chat
+    // works without a key; listing its models takes one of its endpoint keys.
+    Preset {
+        id: "omniroute",
+        label: "OmniRoute",
+        base_url: "http://127.0.0.1:20128/v1",
+        wire: Wire::Openai,
+        key: false,
     },
     Preset {
         id: "ollama",
@@ -378,11 +449,13 @@ pub fn detect_local() -> Vec<&'static str> {
             .map(|p| {
                 let agent = agent.clone();
                 scope.spawn(move || {
-                    agent
-                        .get(&format!("{}/models", p.base_url))
-                        .call()
-                        .is_ok()
-                        .then_some(p.id)
+                    // Any HTTP answer is a server running there: a gateway
+                    // (OmniRoute) lists its models only with a key, so 401.
+                    let up = match agent.get(&format!("{}/models", p.base_url)).call() {
+                        Ok(_) | Err(ureq::Error::Status(..)) => true,
+                        Err(ureq::Error::Transport(_)) => false,
+                    };
+                    up.then_some(p.id)
                 })
             })
             .collect();
@@ -444,7 +517,11 @@ pub fn list_models(
                         .and_then(|m| m.as_str())
                         .map(str::to_string)
                 });
+            let keyless = key.is_none_or(|k| k.is_empty());
             return Err(match (code, msg) {
+                (401 | 403, _) if keyless => {
+                    "it lists models only with a key (HTTP 401): paste one".to_string()
+                }
                 (401 | 403, _) => "the endpoint refused the key (HTTP 401/403)".to_string(),
                 (_, Some(m)) => m,
                 (c, None) => format!("HTTP {c}"),
@@ -653,6 +730,98 @@ pub fn is_loopback(base_url: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn ids(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn finds_models_by_any_part_of_their_name() {
+        let list = ids(&[
+            "auto",
+            "auto/best-coding",
+            "cx/gpt-5-codex",
+            "cx/gpt-5",
+            "oc/big-pickle",
+            "openai/gpt-4o",
+            "qwen3-coder:30b",
+        ]);
+        let got = |q: &str| {
+            find_models(&list, q)
+                .into_iter()
+                .cloned()
+                .collect::<Vec<_>>()
+        };
+        // Empty: everything, as listed.
+        assert_eq!(got("").len(), list.len());
+        // An exact id first, then what starts with it, past the provider too.
+        assert_eq!(got("auto")[0], "auto");
+        assert_eq!(
+            got("gpt-5")[..2],
+            ["cx/gpt-5".to_string(), "cx/gpt-5-codex".to_string()]
+        );
+        // Words in any order, any case.
+        assert_eq!(got("Codex GPT"), ["cx/gpt-5-codex"]);
+        assert_eq!(got("best coding"), ["auto/best-coding"]);
+        // Letters in order but apart, last.
+        assert_eq!(got("bgpckl"), ["oc/big-pickle"]);
+        assert!(got("claude").is_empty());
+    }
+
+    #[test]
+    fn knows_openai_reasoning_models_behind_a_gateway() {
+        for id in [
+            "gpt-5",
+            "cx/gpt-5-codex",
+            "o3",
+            "openai/o4-mini",
+            "codex-mini-latest",
+        ] {
+            assert!(is_reasoning_model(id), "{id}");
+        }
+        for id in [
+            "gpt-4o",
+            "auto/best-coding",
+            "qwen3-coder:30b",
+            "oc/big-pickle",
+            "omni-moderation",
+        ] {
+            assert!(!is_reasoning_model(id), "{id}");
+        }
+    }
+
+    #[test]
+    fn omniroute_is_a_local_preset_on_its_port() {
+        let p = PRESETS.iter().find(|p| p.id == "omniroute").unwrap();
+        assert_eq!(
+            (p.base_url, p.wire, p.key),
+            ("http://127.0.0.1:20128/v1", Wire::Openai, false)
+        );
+        let prof = Profile {
+            base_url: p.base_url.into(),
+            wire: p.wire,
+            ..test_profile()
+        };
+        assert_eq!(
+            prof.chat_url(),
+            "http://127.0.0.1:20128/v1/chat/completions"
+        );
+        assert_eq!(prof.models_url(), "http://127.0.0.1:20128/v1/models");
+    }
+
+    fn test_profile() -> Profile {
+        Profile {
+            name: "t".into(),
+            base_url: String::new(),
+            wire: Wire::Openai,
+            model: "auto".into(),
+            display_name: None,
+            chat_path: None,
+            headers: Default::default(),
+            auth: Auth::None,
+            capabilities: Default::default(),
+        }
+    }
 
     fn profile(base: &str, wire: Wire) -> Profile {
         Profile {
