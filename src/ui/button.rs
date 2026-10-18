@@ -704,7 +704,10 @@ mod tests {
     /// light and dark: AA for text.
     #[test]
     fn every_variant_reads_on_its_fill() {
-        for t in [Theme::light(), Theme::dark()] {
+        for t in crate::theme::Look::ALL
+            .into_iter()
+            .flat_map(|l| [Theme::of(l, false), Theme::of(l, true)])
+        {
             for v in [
                 Variant::Primary,
                 Variant::Secondary,
@@ -739,7 +742,10 @@ mod tests {
     /// Two shapes: what you press is a pill, what holds content is 4px.
     #[test]
     fn pills_to_press_four_pixels_to_hold() {
-        for t in [Theme::light(), Theme::dark()] {
+        for t in crate::theme::Look::ALL
+            .into_iter()
+            .flat_map(|l| [Theme::of(l, false), Theme::of(l, true)])
+        {
             let r = t.radius;
             for v in [r.compact, r.control, r.segment, r.pill] {
                 assert!(f32::from(v) >= 999., "{}px", f32::from(v));

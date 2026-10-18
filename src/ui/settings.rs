@@ -692,11 +692,138 @@ impl Settings {
             .px(px(2.))
             .flex()
             .items_center()
-            .rounded(px(8.))
+            .rounded(t.radius.field)
             .bg(t.colors.canvas)
             .border_1()
             .border_color(t.colors.border)
             .child(div().flex_1().min_w_0().child(child))
+    }
+
+    /// The themes, as swatch cards: each previews its canvas, session,
+    /// card and accent in the mode you're in. Picking one applies it at
+    /// once and keeps it for the next launch.
+    fn theme_picker(&self, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
+        let (current, dark) = {
+            let s = self.state.read(cx);
+            (s.look, s.dark)
+        };
+        let mut grid = div().flex().flex_wrap().gap(t.space.sm);
+        for look in theme::Look::ALL {
+            let p = Theme::of(look, dark);
+            let on = look == current;
+            let state = self.state.clone();
+            let hover = t.extra.border_strong;
+            let preview = div()
+                .h(px(64.))
+                .rounded(t.radius.small)
+                .bg(p.extra.pane)
+                .pt(px(8.))
+                .pl(px(8.))
+                .overflow_hidden()
+                .child(
+                    // The session sheet, a card on it, and the one colour.
+                    div()
+                        .size_full()
+                        .rounded_tl(t.radius.small)
+                        .bg(p.extra.stage)
+                        .shadow(p.elevation_grain())
+                        .p(px(8.))
+                        .flex()
+                        .flex_col()
+                        .gap(px(6.))
+                        .child(
+                            div()
+                                .w(px(64.))
+                                .h(px(14.))
+                                .rounded(t.radius.small)
+                                .bg(p.colors.surface)
+                                .border_1()
+                                .border_color(p.colors.border),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(6.))
+                                .child(
+                                    div()
+                                        .w(px(34.))
+                                        .h(px(12.))
+                                        .rounded_full()
+                                        .bg(p.extra.accent),
+                                )
+                                .child(div().w(px(24.)).h(px(12.)).rounded_full().bg(p.extra.fill))
+                                .child(super::ingot::mark(14.).marks([
+                                    p.extra.mark_top,
+                                    p.extra.mark_left,
+                                    p.extra.mark_right,
+                                ])),
+                        ),
+                );
+            grid = grid.child(
+                div()
+                    .id(SharedString::from(format!("theme-{}", look.id())))
+                    .role(gpui::accesskit::Role::RadioButton)
+                    .aria_label(look.name())
+                    .w(px(152.))
+                    .p(px(6.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .rounded(t.radius.card)
+                    .bg(t.colors.surface)
+                    .border_1()
+                    .border_color(if on {
+                        t.colors.text_strong
+                    } else {
+                        t.colors.border
+                    })
+                    .when(on, |d| d.shadow(t.elevation_grain()))
+                    .cursor_pointer()
+                    .when(!on, |d| d.hover(move |st| st.border_color(hover)))
+                    .child(preview)
+                    .child(
+                        div()
+                            .px(px(2.))
+                            .flex()
+                            .items_center()
+                            .gap(px(6.))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .text_size(t.text.body_sm)
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(t.colors.text_strong)
+                                    .child(look.name()),
+                            )
+                            .when(on, |d| {
+                                d.child(icon(
+                                    "icons/check.svg",
+                                    t.size.icon_sm,
+                                    t.colors.text_strong,
+                                ))
+                            }),
+                    )
+                    .child(
+                        div()
+                            .px(px(2.))
+                            .pb(px(2.))
+                            .text_size(t.text.caption)
+                            .text_color(t.colors.text_muted)
+                            .child(look.blurb()),
+                    )
+                    .on_click(move |_, _, cx| {
+                        state.update(cx, |s, cx| {
+                            s.look = look;
+                            s.save_window();
+                            cx.notify();
+                        });
+                        super::set_theme(look, dark, cx);
+                    }),
+            );
+        }
+        grid.into_any_element()
     }
 
     fn chip(
@@ -762,6 +889,7 @@ impl Settings {
                             });
                     })),
             );
+        let theme_picker = self.theme_picker(t, cx);
         let appearance = super::button::Segmented::new("appearance", "Appearance")
             .option("Light", !dark, move |_, window, cx| {
                 if dark {
@@ -837,6 +965,13 @@ impl Settings {
                         Some("Light or dark, for the whole app."),
                         appearance.into_any_element(),
                         false,
+                    ),
+                    Self::row(
+                        t,
+                        "Theme",
+                        Some("The surfaces and the one colour; every theme comes in light and dark."),
+                        theme_picker,
+                        true,
                     ),
                 ],
             ),

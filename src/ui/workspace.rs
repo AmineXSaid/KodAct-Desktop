@@ -59,6 +59,12 @@ impl Workspace {
             s
         });
         cx.observe(&state, |_, _, cx| cx.notify()).detach();
+        // The theme and mode you left it in.
+        {
+            let s = state.read(cx);
+            let (look, dark) = (s.look, s.dark);
+            set_theme(look, dark, cx);
+        }
         let sidebar = cx.new(|cx| Sidebar::new(state.clone(), window, cx));
         let chat = cx.new(|cx| ChatView::new(state.clone(), cx));
         let composer = cx.new(|cx| Composer::new(state.clone(), window, cx));
@@ -1104,12 +1110,13 @@ impl Render for Workspace {
                 this.state.update(cx, |s, cx| s.close_remote(cx))
             }))
             .on_action(cx.listener(|this, _: &ToggleTheme, _, cx| {
-                let dark = !this.state.read(cx).dark;
+                let (dark, look) = (!this.state.read(cx).dark, this.state.read(cx).look);
                 this.state.update(cx, |s, cx| {
                     s.dark = dark;
+                    s.save_window();
                     cx.notify();
                 });
-                set_dark(dark, cx);
+                set_theme(look, dark, cx);
             }))
             .on_action(
                 cx.listener(|this, _: &FocusComposer, window, cx| this.focus_composer(window, cx)),

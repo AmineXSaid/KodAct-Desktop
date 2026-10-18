@@ -216,6 +216,25 @@ fn render() -> String {
     }
     let _ = writeln!(w);
 
+    let _ = writeln!(w, "### Themes\nPicked in Settings > General > Theme and kept in `window.json`. Each lays its surfaces and its one colour over the system; type, shape, spacing and ink stay the same, and every theme passes `palette_check.rs` in both modes.\n");
+    let _ = writeln!(w, "| Theme | Light canvas / session / accent | Dark canvas / session / accent |\n|---|---|---|");
+    for look in crate::theme::Look::ALL {
+        let (a, b) = (Theme::of(look, false), Theme::of(look, true));
+        let _ = writeln!(
+            w,
+            "| {} ({}) | `{}` / `{}` / `{}` | `{}` / `{}` / `{}` |",
+            look.name(),
+            look.blurb(),
+            hex(a.extra.pane),
+            hex(a.extra.stage),
+            hex(a.extra.accent),
+            hex(b.extra.pane),
+            hex(b.extra.stage),
+            hex(b.extra.accent)
+        );
+    }
+    let _ = writeln!(w);
+
     let _ = writeln!(
         w,
         "### Terminal\nThe dock's 16 colours, on `stage` (`palette_check.rs` holds them to AA).\n"

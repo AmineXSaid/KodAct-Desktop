@@ -468,7 +468,8 @@ impl Opener {
             start: Instant::now(),
             held,
             focus,
-            palette: Palette::new(&Theme::dark()),
+            // The film is the chosen theme at night, in either mode.
+            palette: Palette::new(&Theme::of(gpui_theme(cx).look, true)),
             sparks: sparks(),
             embers: embers(),
             handed_off: false,

@@ -176,11 +176,14 @@ pub fn ensure_file() -> Option<PathBuf> {
 }
 
 /// The dock as it was left: open or not, and its share of the width.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct WindowState {
     pub terminal_open: bool,
     pub terminal_share: f32,
+    /// Light or dark, and which theme (`theme::Look::id`), from Settings.
+    pub dark: bool,
+    pub theme: String,
 }
 
 impl Default for WindowState {
@@ -188,6 +191,8 @@ impl Default for WindowState {
         Self {
             terminal_open: false,
             terminal_share: 0.35,
+            dark: false,
+            theme: crate::theme::Look::default().id().into(),
         }
     }
 }

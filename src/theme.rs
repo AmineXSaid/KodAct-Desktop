@@ -75,9 +75,171 @@ pub struct Radius {
     pub pill: Pixels,    // 9999: buttons, badges, avatars
 }
 
+/// A theme you can pick in Settings: the surfaces and the one colour,
+/// each in light and dark. Type, shape, spacing and ink stay the system's.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Look {
+    /// Sun-bleached cream and moss: the system's own.
+    #[default]
+    Calm,
+    /// The same cream with the reference's terracotta.
+    Terracotta,
+    /// Ivory paper and patina teal: Forge's first look.
+    Patina,
+    /// Plain greys and ink: no colour at all.
+    Ink,
+    /// Cool slate and a deep blue.
+    Slate,
+    /// Soft heather and plum.
+    Plum,
+}
+
+impl Look {
+    pub const ALL: [Look; 6] = [
+        Look::Calm,
+        Look::Terracotta,
+        Look::Patina,
+        Look::Ink,
+        Look::Slate,
+        Look::Plum,
+    ];
+
+    /// How it is saved (`window.json`).
+    pub fn id(self) -> &'static str {
+        match self {
+            Look::Calm => "calm",
+            Look::Terracotta => "terracotta",
+            Look::Patina => "patina",
+            Look::Ink => "ink",
+            Look::Slate => "slate",
+            Look::Plum => "plum",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Look> {
+        Look::ALL.into_iter().find(|l| l.id() == id)
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Look::Calm => "Calmly smooth",
+            Look::Terracotta => "Terracotta",
+            Look::Patina => "Patina",
+            Look::Ink => "Ink",
+            Look::Slate => "Slate",
+            Look::Plum => "Plum",
+        }
+    }
+
+    pub fn blurb(self) -> &'static str {
+        match self {
+            Look::Calm => "Cream and moss",
+            Look::Terracotta => "Cream and warm orange",
+            Look::Patina => "Ivory and teal",
+            Look::Ink => "Greys, no colour",
+            Look::Slate => "Cool grey and blue",
+            Look::Plum => "Heather and plum",
+        }
+    }
+
+    /// Its surfaces and colour in one mode.
+    fn tint(self, dark: bool) -> Tint {
+        let t = |canvas,
+                 stage,
+                 card,
+                 sunk,
+                 accent,
+                 accent_fg,
+                 accent_soft,
+                 link,
+                 link_hover,
+                 mark_top| Tint {
+            canvas,
+            stage,
+            card,
+            sunk,
+            accent,
+            accent_fg,
+            accent_soft,
+            link,
+            link_hover,
+            mark_top,
+        };
+        match (self, dark) {
+            (Look::Calm, false) => t(
+                0xe3d7cd, 0xf0e9e5, 0xffffff, 0xf5f2f0, 0x3f6b4b, 0xffffff, 0xdfe6dc, 0x3f6b4b,
+                0x31553b, 0x3f6b4b,
+            ),
+            (Look::Calm, true) => t(
+                0x171513, 0x1e1c1a, 0x2b2825, 0x262321, 0x8fbf9b, 0x171513, 0x2c3a30, 0x8fbf9b,
+                0xa9d0b3, 0x8fbf9b,
+            ),
+            (Look::Terracotta, false) => t(
+                0xe3d7cd, 0xf0e9e5, 0xffffff, 0xf5f2f0, 0xb85a2a, 0xffffff, 0xf6dccb, 0xa8492a,
+                0x8c3a20, 0x8f3f1e,
+            ),
+            (Look::Terracotta, true) => t(
+                0x171513, 0x1e1c1a, 0x2b2825, 0x262321, 0xee884f, 0x171513, 0x3d2a20, 0xf0a77d,
+                0xf5bd9a, 0xee884f,
+            ),
+            (Look::Patina, false) => t(
+                0xe9e6df, 0xf9f8f5, 0xffffff, 0xf0eee8, 0x216d70, 0xffffff, 0xd0e6e7, 0x216d70,
+                0x10585b, 0x216d70,
+            ),
+            (Look::Patina, true) => t(
+                0x141312, 0x232321, 0x2c2c2a, 0x1f1e1d, 0x529a9d, 0x141312, 0x2f4749, 0x8ecacd,
+                0xabdbde, 0x6fb3b6,
+            ),
+            (Look::Ink, false) => t(
+                0xe2e2df, 0xf1f1ef, 0xffffff, 0xf6f6f4, 0x1e1e1e, 0xffffff, 0xdededb, 0x1e1e1e,
+                0x3a3a3a, 0x52524e,
+            ),
+            (Look::Ink, true) => t(
+                0x121212, 0x1b1b1a, 0x272726, 0x222221, 0xf0f0ee, 0x121212, 0x333331, 0xf0f0ee,
+                0xffffff, 0x9e9e99,
+            ),
+            (Look::Slate, false) => t(
+                0xd8dde3, 0xedf0f3, 0xffffff, 0xf4f6f8, 0x3b5b8c, 0xffffff, 0xd9e2ef, 0x3b5b8c,
+                0x2e4870, 0x3b5b8c,
+            ),
+            (Look::Slate, true) => t(
+                0x111418, 0x181c21, 0x242a32, 0x1e232a, 0x9db7e0, 0x111418, 0x26303e, 0x9db7e0,
+                0xb8cbea, 0x9db7e0,
+            ),
+            (Look::Plum, false) => t(
+                0xe5d9e0, 0xf2ebef, 0xffffff, 0xf7f2f5, 0x7a3e65, 0xffffff, 0xeddbe6, 0x7a3e65,
+                0x62304f, 0x7a3e65,
+            ),
+            (Look::Plum, true) => t(
+                0x171217, 0x1f1a1f, 0x2c252c, 0x262026, 0xd3a3c6, 0x171217, 0x3a2a36, 0xd3a3c6,
+                0xe2bfd8, 0xd3a3c6,
+            ),
+        }
+    }
+}
+
+/// One mode of a theme, as hex: the canvas (title bar and sidebar), the
+/// session, cards, a recessed well; the accent fill, its label, its pale
+/// form; links and their hover; the mark's top.
+#[derive(Clone, Copy)]
+struct Tint {
+    canvas: u32,
+    stage: u32,
+    card: u32,
+    sunk: u32,
+    accent: u32,
+    accent_fg: u32,
+    accent_soft: u32,
+    link: u32,
+    link_hover: u32,
+    mark_top: u32,
+}
+
 #[derive(Clone)]
 pub struct Theme {
     pub is_dark: bool,
+    /// Which theme this is (Settings > Theme).
+    pub look: Look,
     pub colors: Colors,
     pub text: TypeScale,
     pub space: Space,
@@ -109,6 +271,7 @@ impl Theme {
     fn base(is_dark: bool, colors: Colors) -> Self {
         Self {
             is_dark,
+            look: Look::Calm,
             colors,
             text: TypeScale {
                 caption: px(12.),
@@ -153,6 +316,33 @@ impl Theme {
             code: CodeColors::for_mode(is_dark),
             size: Sizes::default(),
         }
+    }
+
+    /// A theme in one mode: the system's neutrals and type, its surfaces and colour.
+    pub fn of(look: Look, dark: bool) -> Self {
+        let mut t = if dark { Self::dark() } else { Self::light() };
+        t.apply(look);
+        t
+    }
+
+    fn apply(&mut self, look: Look) {
+        let k = look.tint(self.is_dark);
+        let c = |v: u32| -> Hsla { rgb(v).into() };
+        self.look = look;
+        (self.extra.chrome, self.extra.pane, self.colors.sidebar) =
+            (c(k.canvas), c(k.canvas), c(k.canvas));
+        (self.extra.stage, self.colors.canvas, self.extra.selected) =
+            (c(k.stage), c(k.stage), c(k.stage));
+        self.colors.surface = c(k.card);
+        self.extra.sunk = c(k.sunk);
+        self.extra.accent = c(k.accent);
+        self.extra.accent_fg = c(k.accent_fg);
+        self.extra.accent_soft = c(k.accent_soft);
+        self.extra.toggle_on = c(k.link);
+        self.extra.mark_top = c(k.mark_top);
+        self.colors.primary = c(k.link);
+        self.colors.primary_hover = c(k.link_hover);
+        self.colors.primary_tint = c(k.link).opacity(if self.is_dark { 0.16 } else { 0.12 });
     }
 
     pub fn light() -> Self {
@@ -889,4 +1079,48 @@ pub fn popover(t: &Theme) -> Div {
         .rounded(t.radius.card)
         .p(t.space.xs)
         .shadow(t.elevation_popover())
+}
+
+#[cfg(test)]
+mod look_tests {
+    use super::*;
+
+    #[test]
+    fn every_look_round_trips_by_its_id_and_calm_is_the_default() {
+        for l in Look::ALL {
+            assert_eq!(Look::from_id(l.id()), Some(l));
+        }
+        assert_eq!(Look::from_id("neon"), None);
+        assert_eq!(Look::default(), Look::Calm);
+        // Calm laid over the base changes nothing: one source of its values.
+        for dark in [false, true] {
+            let (a, b) = (
+                Theme::of(Look::Calm, dark),
+                if dark { Theme::dark() } else { Theme::light() },
+            );
+            for (x, y) in [
+                (a.extra.stage, b.extra.stage),
+                (a.extra.accent, b.extra.accent),
+                (a.colors.primary, b.colors.primary),
+                (a.extra.mark_top, b.extra.mark_top),
+                (a.colors.surface, b.colors.surface),
+            ] {
+                assert_eq!(x.to_rgb(), y.to_rgb());
+            }
+        }
+    }
+
+    #[test]
+    fn looks_differ_from_each_other() {
+        for dark in [false, true] {
+            let accents: Vec<_> = Look::ALL
+                .iter()
+                .map(|l| format!("{:?}", Theme::of(*l, dark).extra.accent.to_rgb()))
+                .collect();
+            let mut unique = accents.clone();
+            unique.sort();
+            unique.dedup();
+            assert_eq!(unique.len(), accents.len(), "{accents:?}");
+        }
+    }
 }

@@ -75,6 +75,18 @@ The cream stack: the title bar and the sidebar share the canvas, the session ste
 | `surface` | `#ffffff` | 1.000 | `#2b2825` | 0.279 | cards, the composer, popovers |
 | `selected` | `#f0e9e5` | 0.938 | `#262321` | 0.259 | the selected sidebar row |
 
+### Themes
+Picked in Settings > General > Theme and kept in `window.json`. Each lays its surfaces and its one colour over the system; type, shape, spacing and ink stay the same, and every theme passes `palette_check.rs` in both modes.
+
+| Theme | Light canvas / session / accent | Dark canvas / session / accent |
+|---|---|---|
+| Calmly smooth (Cream and moss) | `#e3d7cd` / `#f0e9e5` / `#3f6b4b` | `#171513` / `#1e1c1a` / `#8fbf9b` |
+| Terracotta (Cream and warm orange) | `#e3d7cd` / `#f0e9e5` / `#b85a2a` | `#171513` / `#1e1c1a` / `#ee884f` |
+| Patina (Ivory and teal) | `#e9e6df` / `#f9f8f5` / `#216d70` | `#141312` / `#232321` / `#529a9d` |
+| Ink (Greys, no colour) | `#e2e2df` / `#f1f1ef` / `#1e1e1e` | `#121212` / `#1b1b1a` / `#f0f0ee` |
+| Slate (Cool grey and blue) | `#d8dde3` / `#edf0f3` / `#3b5b8c` | `#111418` / `#181c21` / `#9db7e0` |
+| Plum (Heather and plum) | `#e5d9e0` / `#f2ebef` / `#7a3e65` | `#171217` / `#1f1a1f` / `#d3a3c6` |
+
 ### Terminal
 The dock's 16 colours, on `stage` (`palette_check.rs` holds them to AA).
 

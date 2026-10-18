@@ -241,9 +241,9 @@ pub fn sync_component_theme(cx: &mut App) {
     });
 }
 
-/// Switch light/dark: our tokens, then the component layer.
-pub fn set_dark(dark: bool, cx: &mut App) {
-    cx.set_global(if dark { Theme::dark() } else { Theme::light() });
+/// Switch theme and mode: our tokens, then the component layer.
+pub fn set_theme(look: crate::theme::Look, dark: bool, cx: &mut App) {
+    cx.set_global(Theme::of(look, dark));
     sync_component_theme(cx);
     cx.refresh_windows();
 }

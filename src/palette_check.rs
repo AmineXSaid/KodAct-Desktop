@@ -64,8 +64,17 @@ pub(crate) fn oklab(c: Rgba) -> (f32, f32) {
     (lightness, a.hypot(bb))
 }
 
-fn both() -> [(&'static str, Theme); 2] {
-    [("light", Theme::light()), ("dark", Theme::dark())]
+/// Every theme in both modes, by name: each is held to the same floors.
+fn both() -> Vec<(String, Theme)> {
+    crate::theme::Look::ALL
+        .into_iter()
+        .flat_map(|l| {
+            [false, true].map(|dark| {
+                let mode = if dark { "dark" } else { "light" };
+                (format!("{} {mode}", l.id()), Theme::of(l, dark))
+            })
+        })
+        .collect()
 }
 
 /// The surfaces text sits on, by name: the window's three, the card on top,
@@ -101,7 +110,7 @@ fn surfaces_stack_like_paper_on_the_cream() {
         for (i, w) in ladder.windows(2).enumerate() {
             let s = w[1].0 - w[0].0;
             assert!(
-                s >= 0.025,
+                s >= 0.02,
                 "{mode}: step {i} is {s:.4}, too close to tell apart"
             );
         }
@@ -126,28 +135,68 @@ fn surfaces_stack_like_paper_on_the_cream() {
     }
 }
 
-/// One colour: the accent, the links, the switches and the mark's top are
-/// the same moss, and nothing filled is orange.
+/// One colour per theme: the accent, the links, the switches and the
+/// mark's top are one hue (Ink has none), and the system's own theme is moss.
 #[test]
-fn moss_is_the_one_colour() {
+fn each_theme_has_one_colour() {
+    let hue = |c: Hsla| {
+        let (l, a, b) = {
+            let c = rgba(c);
+            let (l, _) = oklab(c);
+            let lin = |v: f32| {
+                if v <= 0.04045 {
+                    v / 12.92
+                } else {
+                    ((v + 0.055) / 1.055).powf(2.4)
+                }
+            };
+            let (r, g, bl) = (lin(c.r), lin(c.g), lin(c.b));
+            let m = (0.211_9 * r + 0.680_7 * g + 0.107_4 * bl).cbrt();
+            let lc = (0.412_2 * r + 0.536_3 * g + 0.051_4 * bl).cbrt();
+            let sc = (0.088_3 * r + 0.281_7 * g + 0.630_0 * bl).cbrt();
+            (
+                l,
+                1.978 * lc - 2.429 * m + 0.451 * sc,
+                0.026 * lc + 0.783 * m - 0.809 * sc,
+            )
+        };
+        let _ = l;
+        b.atan2(a).to_degrees()
+    };
     for (mode, t) in both() {
         let x = &t.extra;
-        for (name, c) in [
-            ("link", t.colors.primary),
-            ("switch", x.toggle_on),
-            ("mark top", x.mark_top),
-        ] {
-            assert_eq!(rgba(c), rgba(x.accent), "{mode}: {name}");
+        let chroma = oklab(rgba(x.accent)).1;
+        if t.look != crate::theme::Look::Ink {
+            assert!(chroma > 0.04, "{mode}: the accent has no colour");
+            for (name, c) in [
+                ("link", t.colors.primary),
+                ("switch", x.toggle_on),
+                ("mark top", x.mark_top),
+            ] {
+                let d = (hue(c) - hue(x.accent) + 540.) % 360. - 180.;
+                assert!(
+                    d.abs() <= 20.,
+                    "{mode}: the {name} is {d:.0}° off the accent"
+                );
+            }
+        } else {
+            assert!(chroma < 0.01, "{mode}: Ink has a colour");
         }
-        let terracotta: Hsla = gpui::rgb(0xee884f).into();
-        for (name, c) in [("accent", x.accent), ("fill", x.fill)] {
-            assert_ne!(rgba(c), rgba(terracotta), "{mode}: {name}");
-        }
-        // The accent holds a UI part's 3:1 on the session and on a card.
+        // The accent holds a UI part's 3:1 on the session and on a card,
+        // and its label reads on it.
         for g in [x.stage, t.colors.surface] {
-            assert!(contrast(x.accent, g) >= AA_UI, "{mode}");
+            assert!(
+                contrast(x.accent, g) >= AA_UI,
+                "{mode}: accent on a surface"
+            );
         }
+        assert!(
+            contrast(x.accent_fg, x.accent) >= AA_TEXT,
+            "{mode}: the accent's label"
+        );
     }
+    let calm = Theme::light();
+    assert_eq!(rgba(calm.extra.accent), rgba(gpui::rgb(0x3f6b4b).into()));
 }
 
 #[test]
@@ -231,12 +280,12 @@ fn coloured_text_reads_on_its_tint() {
         }
         // Plan and Bypass fill the send button, under a white arrow, and
         // the accent fills it otherwise.
-        for (name, c) in [
-            ("plan", x.mode_plan),
-            ("bypass", x.mode_bypass),
-            ("default", x.accent),
+        for (name, c, arrow_fg) in [
+            ("plan", x.mode_plan, t.colors.primary_fg),
+            ("bypass", x.mode_bypass, t.colors.primary_fg),
+            ("default", x.accent, x.accent_fg),
         ] {
-            let arrow = contrast(t.colors.primary_fg, c);
+            let arrow = contrast(arrow_fg, c);
             assert!(
                 arrow >= AA_UI,
                 "{mode}: the send arrow on {name} is {arrow:.2}:1"

@@ -1091,6 +1091,8 @@ pub struct AppState {
     pub modes_open: bool,
     pub bypass_warning: bool,
     pub dark: bool,
+    /// The theme picked in Settings (light or dark is `dark`).
+    pub look: crate::theme::Look,
     pub palette_open: bool,
     pub picker_open: bool,
     /// The code block whose Copy was just pressed (shows "Copied" briefly).
@@ -1313,7 +1315,9 @@ impl AppState {
             browser: crate::browser::enabled(),
             modes_open: false,
             bypass_warning: false,
-            dark: false,
+            dark: crate::app_settings::load_window().dark,
+            look: crate::theme::Look::from_id(&crate::app_settings::load_window().theme)
+                .unwrap_or_default(),
             palette_open: false,
             picker_open: false,
             copied: None,
@@ -5213,6 +5217,8 @@ impl AppState {
         crate::app_settings::save_window(crate::app_settings::WindowState {
             terminal_open: self.terminal_open,
             terminal_share: self.terminal_share,
+            dark: self.dark,
+            theme: self.look.id().into(),
         });
     }
 
