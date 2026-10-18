@@ -45,6 +45,9 @@ pub struct Workspace {
     askpass: Entity<super::askpass::AskpassDialog>,
     /// The home screen's field of dots, behind the greeting and the composer.
     dots: Entity<super::dot_field::DotField>,
+    /// The film as Forge opens, while it plays (`opener.rs`).
+    opener: Option<Entity<super::opener::Opener>>,
+    _opener_sub: Option<gpui::Subscription>,
     focus: FocusHandle,
 }
 
@@ -76,6 +79,35 @@ impl Workspace {
         let composer_focus = composer.read(cx).focus_handle(cx);
         let dots = cx.new(|cx| super::dot_field::DotField::new(Some(composer_focus), window, cx));
         let first_run = state.read(cx).onboarding;
+        // The opener: the full film on a first run, ending on the naming
+        // screen; a short one after, ending in the app.
+        let (opener, opener_sub) = if super::opener::Opener::plays() {
+            use super::opener::{Cut, Opener, OpenerEvent};
+            let cut = if first_run { Cut::First } else { Cut::Again };
+            let o = cx.new(|cx| Opener::new(cut, window, cx));
+            let sub = cx.subscribe_in(
+                &o,
+                window,
+                move |ws: &mut Self, _, ev, window, cx| match ev {
+                    OpenerEvent::Handoff if cut == Cut::First => {
+                        ws.onboarding.update(cx, |o, cx| o.open_forged(window, cx))
+                    }
+                    OpenerEvent::Handoff => {}
+                    OpenerEvent::Done => {
+                        ws.opener = None;
+                        ws._opener_sub = None;
+                        if cut == Cut::Again {
+                            ws.composer.update(cx, |c, cx| c.focus(window, cx));
+                        }
+                        cx.notify();
+                    }
+                },
+            );
+            (Some(o), Some(sub))
+        } else {
+            (None, None)
+        };
+        let playing = opener.is_some();
         let ws = Self {
             state,
             sidebar,
@@ -94,9 +126,13 @@ impl Workspace {
             confirm,
             askpass,
             dots,
+            opener,
+            _opener_sub: opener_sub,
             focus: cx.focus_handle(),
         };
-        if first_run {
+        if playing {
+            // The opener has the keyboard; it hands over when it's done.
+        } else if first_run {
             ws.onboarding.update(cx, |o, cx| o.open(window, cx));
         } else {
             ws.composer.update(cx, |c, cx| c.focus(window, cx));
@@ -105,7 +141,11 @@ impl Workspace {
         // keyboard stays with the composer.
         if !first_run && ws.state.read(cx).terminal_open {
             ws.terminal.update(cx, |d, cx| d.open(None, window, cx));
-            ws.composer.update(cx, |c, cx| c.focus(window, cx));
+            match &ws.opener {
+                // The opener keeps the keyboard, so any key skips it.
+                Some(o) => o.update(cx, |o, cx| o.take_focus(window, cx)),
+                None => ws.composer.update(cx, |c, cx| c.focus(window, cx)),
+            }
         }
         ws
     }
@@ -1380,6 +1420,7 @@ impl Render for Workspace {
             .child(self.confirm.clone())
             .child(self.askpass.clone())
             .children(self.toast(cx))
+            .children(self.opener.clone())
     }
 }
 

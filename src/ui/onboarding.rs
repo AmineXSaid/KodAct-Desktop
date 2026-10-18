@@ -82,6 +82,9 @@ pub struct Onboarding {
     /// it "now"); kept, so the question doesn't change as you strike.
     returning: bool,
     lock: Option<Task<()>>,
+    /// Opened by the opener, which has already forged the cube: the hero
+    /// rests while the question and the field arrive.
+    forged: bool,
     _subs: Vec<Subscription>,
 }
 
@@ -123,6 +126,7 @@ impl Onboarding {
             striking: None,
             returning: false,
             lock: None,
+            forged: false,
             _subs: subs,
         }
     }
@@ -153,7 +157,16 @@ impl Onboarding {
             i.set_value(current, window, cx);
             i.focus(window, cx);
         });
+        self.forged = false;
         self.forge(cx);
+    }
+
+    /// Show it at the name as the opener hands over: the cube it forged
+    /// rests in the hero; the question and the field arrive as usual.
+    pub fn open_forged(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.open(window, cx);
+        self.forged = true;
+        self.lock = None;
     }
 
     /// Show it at the avatars.
@@ -403,6 +416,13 @@ impl Onboarding {
         if still(cx) {
             return frame
                 .child(halo(glow, 1.))
+                .child(placed(ingot::mark(CUBE)))
+                .into_any_element();
+        }
+        if self.forged && self.strike == 0 {
+            return frame
+                .child(halo(glow, 1.))
+                .child(orbit(glow, 1.))
                 .child(placed(ingot::mark(CUBE)))
                 .into_any_element();
         }

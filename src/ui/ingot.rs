@@ -195,6 +195,17 @@ pub struct Ingot {
     heat: f32,
     /// While the faces are still landing (`forging`): how far along, 0..1.
     landing: Option<f32>,
+    /// The faces' own colours (top, left, right) when not the theme's: the
+    /// opener draws the dark mark in either theme.
+    marks: Option<[Hsla; 3]>,
+}
+
+impl Ingot {
+    /// Draw the faces in these colours (top, left, right) instead of the theme's.
+    pub fn marks(mut self, marks: [Hsla; 3]) -> Self {
+        self.marks = Some(marks);
+        self
+    }
 }
 
 impl RenderOnce for Ingot {
@@ -206,13 +217,16 @@ impl RenderOnce for Ingot {
             x.mark_heat,
             x.mark_heat_white,
         ];
+        let [top, left, right] = self
+            .marks
+            .unwrap_or([x.mark_top, x.mark_left, x.mark_right]);
         let mut d = div().relative().size(px(self.size)).flex_none();
         for (face, _) in faces(frame_yaw(self.frame), BOX, GAP) {
             let (name, cool, slot) = match face {
-                Face::Top => ("t".to_string(), x.mark_top, Slot::Top),
+                Face::Top => ("t".to_string(), top, Slot::Top),
                 Face::Side(n, k) => (
                     n.to_string(),
-                    mix(x.mark_left, x.mark_right, k),
+                    mix(left, right, k),
                     if k < 0.5 { Slot::Left } else { Slot::Right },
                 ),
             };
@@ -308,6 +322,7 @@ pub fn mark(size: f32) -> Ingot {
         frame: 0,
         heat: 0.,
         landing: None,
+        marks: None,
     }
 }
 
@@ -319,6 +334,7 @@ pub fn forging(size: f32, land: f32, heat: f32) -> Ingot {
         frame: 0,
         heat: heat.clamp(0., 1.),
         landing: (land < 1.).then_some(land.max(0.)),
+        marks: None,
     }
 }
 
@@ -332,6 +348,7 @@ pub fn struck(size: f32, k: f32) -> Ingot {
         frame: frame_of(REST + eased * FRAC_PI_2),
         heat: STRIKE_HEAT * (k * std::f32::consts::PI).sin(),
         landing: None,
+        marks: None,
     }
 }
 
