@@ -6,13 +6,15 @@
 
 ## Direction
 
-**Personality:** Warmth & Approachability, with the Precision & Density of a desktop tool. A calm room to build in with an agent.
+**Personality:** calmly smooth: a warm editorial workspace, confident and unhurried, closer to a printed quarterly than a dashboard (after the Anchor style reference).
 
-**Foundation:** warm ivory. Paper surfaces in one warm hue, chroma under 0.01 (OKLCH); warm ink for text; one patina-teal accent (forged copper as it weathers, deliberately not an orange), the same colour in both modes, kept for sending, the mark's core and a few dots; colour otherwise only for meaning: modes, status, a switch that is on.
+**Foundation:** sun-bleached cream. The window is Cream Canvas (#e3d7cd), the session a sheet of Warm White (#f0e9e5) on it, cards white on that: paper on paper. One ink (#1e1e1e) carries the type. One colour, moss (#3f6b4b; #8fbf9b at night), where the reference has terracotta: the decisive action, links, a switch that is on, the mark's top, a waiting dot. Everything else is neutral; colour otherwise only for meaning (modes, status).
 
-**Depth:** borders-only for content (1px hairlines); shadows only on popovers, menus and the command palette.
+**Depth:** nearly flat. Hairlines inside cards; the session and the user's message lift on paper grain (three 1px shadows at 6/4/1% ink); popovers and the permission card a touch more.
 
-**Shape:** softly squared. Buttons 7-9px, cards and menus 10px, large inputs 12-14px; pills only for switches, badges and avatars; the round new-chat mark is the one circular control.
+**Shape:** two shapes. Everything you press is a pill (buttons, chips, icon buttons, the new-chat and needs-you pills); everything that holds content is 4px (cards, rows, menus, fields, the composer, the session).
+
+**Type:** Archivo only, in two cuts: 400 for text, 600 for headings, buttons and labels. Small uppercase kickers in 600 at 11px ("Needs you"). Code in JetBrains Mono.
 
 ## Tokens
 
@@ -21,15 +23,16 @@ Base: 4px
 Scale: 4, 6, 8, 10, 12, 16, 20, 24, 32, 40
 
 ### Radius
-Scale: 1px (a line's ends: every straight line is rounded just slightly), 4px (key caps), 6px (a selected segment), 7px (compact buttons, chips), 8px (buttons, icon buttons, rows), 9px (outlined squares, send), 10px (cards, tool rows, menus), 12px (large fields), 14px (the composer), pill (switches, badges, avatars)
+Two shapes: 4px for everything that holds content, pill for everything you press.
+Scale: 1px (a line's ends), 4px (key caps), 4px (rows and squarer buttons), 4px (cards, tool rows, menus), 4px (fields), 4px (the composer), pill (buttons, chips, icon buttons, segments, the send button, switches, badges, avatars)
 
 ### Typography
-Interface: Hanken Grotesk (Anthropic Sans when installed or in Forge's `fonts` folder; never bundled)
-Display: Source Serif 4 Display (the greeting)
+Interface: Archivo in 400 and 600 only, bundled (OFL); headings in 600
+Display: Archivo 600 (the greeting, headings)
 Code: JetBrains Mono
-Scale: 12 caption, 13 UI and chat, 14 input, 18 subheading, 20 heading, 28 greeting, 32 home heading
+Scale: 12 caption, 13 UI and chat, 14 input, 18 subheading, 20 heading, 32 greeting, 36 home heading
 Weights: 400, 500 (labels, buttons), 600 (headings, the project name)
-Prose line height: 1.4285715
+Prose line height: 1.5333333
 
 ### Icons
 Lucide, 2px stroke as drawn. Sizes: 12 / 14 / 16 / 20 only.
@@ -58,17 +61,19 @@ Lucide, 2px stroke as drawn. Sizes: 12 / 14 / 16 / 20 only.
 - `switch_w`: 36px, a switch's track (20px tall, 14px thumb)
 - `rail`: 52px, the collapsed sidebar
 - `dot_gap`: 14px, the home screen's dot grid
+- `mark_turn`: 28px, Forge's mark heading each reply
+- `mark_home`: 44px, the mark beside the home greeting
 
 ### Surfaces
-One ladder, darkest at the top of the window, even steps in OKLab lightness.
+The cream stack: the title bar and the sidebar share the canvas, the session steps up from it, cards step up again (`palette_check.rs`).
 
 | Token | Light | L | Dark | L | Role |
 |---|---|---|---|---|---|
-| `chrome` | `#eceae4` | 0.937 | `#141312` | 0.187 | the title bar |
-| `pane` | `#f3f1ec` | 0.958 | `#1d1c1b` | 0.227 | the sidebar |
-| `stage` | `#f9f8f5` | 0.979 | `#262624` | 0.268 | the session: chat, welcome, Rules, Projects |
-| `surface` | `#ffffff` | 1.000 | `#30302e` | 0.308 | cards, the composer, popovers |
-| `selected` | `#ffffff` | 1.000 | `#2a2a28` | 0.284 | the selected sidebar row |
+| `chrome` | `#e3d7cd` | 0.886 | `#171513` | 0.197 | the title bar |
+| `pane` | `#e3d7cd` | 0.886 | `#171513` | 0.197 | the sidebar |
+| `stage` | `#f0e9e5` | 0.938 | `#1e1c1a` | 0.228 | the session: chat, welcome, Rules, Projects |
+| `surface` | `#ffffff` | 1.000 | `#2b2825` | 0.279 | cards, the composer, popovers |
+| `selected` | `#f0e9e5` | 0.938 | `#262321` | 0.259 | the selected sidebar row |
 
 ### Terminal
 The dock's 16 colours, on `stage` (`palette_check.rs` holds them to AA).
@@ -97,31 +102,31 @@ Contrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of w
 
 | Token | Light | Contrast | Dark | Contrast | Role |
 |---|---|---|---|---|---|
-| `text_strong` | `#1f1e1c` | 15.7:1 | `#f6f5f4` | 13.9:1 | headings, names |
-| `text` | `#2b2a27` | 13.5:1 | `#ecebe6` | 12.7:1 | body text |
-| `text_body` | `#5e5b54` | 6.4:1 | `#c2bfb6` | 8.2:1 | secondary prose |
-| `text_muted` | `#64615a` | 5.8:1 | `#a8a59c` | 6.2:1 | labels, captions, icons |
-| `text_subtle` | `#8c887e` | 3.3:1 | `#7d7a72` | 3.5:1 | placeholders and disabled only |
-| `border` | `#2b2a27 @ 13.0%` | 1.3:1 | `#ffffff @ 10.0%` | 1.4:1 | hairlines |
-| `border_strong` | `#cfcbc0` | 1.6:1 | `#55534e` | 1.7:1 | outlined buttons, a switch at rest |
-| `primary` | `#216d70` | 6.0:1 | `#8ecacd` | 7.2:1 | links, selected text, the focus edge |
-| `accent` | `#216d70` | 6.0:1 | `#216d70` | 6.0:1 | send, the new-chat mark, accent dots (white icon on it) |
-| `fill` | `#2b2a27` | 14.4:1 | `#ecebe6` | 12.7:1 | filled buttons: ink on paper, paper on charcoal |
-| `toggle_on` | `#216d70` | 6.0:1 | `#529a9d` | 4.1:1 | a switch that is on |
-| `mark_top` | `#216d70` | 5.7:1 | `#529a9d` | 4.7:1 | the ingot mark's top face (`ui/ingot.rs`) |
-| `mark_left` | `#2b2a27` | 13.5:1 | `#ecebe6` | 12.7:1 | the ingot's left face |
-| `mark_right` | `#8c887e` | 3.3:1 | `#6f6c64` | 2.9:1 | the ingot's right face |
-| `mark_heat_white` | `#fff2cc` | 1.1:1 | `#fff2cc` | 13.6:1 | the ingot white hot from the forge (onboarding); never at rest |
-| `mark_heat` | `#f5892c` | 2.3:1 | `#f5892c` | 6.1:1 | the ingot's orange glow as it cools, and a strike's flare |
-| `mark_heat_ember` | `#a3311c` | 6.6:1 | `#a3311c` | 2.2:1 | the ingot's ember red as it cools |
-| `mark_heat_iron` | `#3b3633` | 11.2:1 | `#3b3633` | 1.3:1 | the ingot's dark iron, last before its own colours |
-| `fill_danger` | `#b4412f` | 5.6:1 | `#b7331f` | 6.0:1 | destructive confirms |
-| `success` | `#276b43` | 6.4:1 | `#8fd3a8` | 7.6:1 | done, passed |
-| `danger` | `#b4412f` | 5.6:1 | `#eb8c7b` | 5.4:1 | failed, errors |
-| `warning` | `#8a5600` | 6.2:1 | `#ffc85a` | 8.6:1 | needs you |
+| `text_strong` | `#1e1e1e` | 13.9:1 | `#f5f2f0` | 15.2:1 | headings, names |
+| `text` | `#1e1e1e` | 13.9:1 | `#f0e9e5` | 14.1:1 | body text |
+| `text_body` | `#2b2825` | 12.2:1 | `#d9d1cb` | 11.3:1 | secondary prose |
+| `text_muted` | `#5a554f` | 6.1:1 | `#a8a29b` | 6.7:1 | labels, captions, icons |
+| `text_subtle` | `#7d776f` | 3.7:1 | `#857f77` | 4.3:1 | placeholders and disabled only |
+| `border` | `#1e1e1e @ 13.0%` | 1.3:1 | `#f2e9e3 @ 12.0%` | 1.4:1 | hairlines |
+| `border_strong` | `#c9c9c7` | 1.7:1 | `#4a4540` | 1.5:1 | outlined buttons, a switch at rest |
+| `primary` | `#3f6b4b` | 6.1:1 | `#8fbf9b` | 7.0:1 | links, selected text, the focus edge |
+| `accent` | `#3f6b4b` | 6.1:1 | `#8fbf9b` | 8.8:1 | send, the new-chat mark, accent dots (white icon on it) |
+| `fill` | `#1e1e1e` | 13.9:1 | `#f0e9e5` | 15.2:1 | filled buttons: ink on paper, paper on charcoal |
+| `toggle_on` | `#3f6b4b` | 6.1:1 | `#8fbf9b` | 7.0:1 | a switch that is on |
+| `mark_top` | `#3f6b4b` | 5.1:1 | `#8fbf9b` | 8.2:1 | the ingot mark's top face (`ui/ingot.rs`) |
+| `mark_left` | `#1e1e1e` | 13.9:1 | `#f0e9e5` | 14.1:1 | the ingot's left face |
+| `mark_right` | `#8b857e` | 3.0:1 | `#7d776f` | 3.8:1 | the ingot's right face |
+| `mark_heat_white` | `#fff2cc` | 1.1:1 | `#fff2cc` | 15.2:1 | the ingot white hot from the forge (onboarding); never at rest |
+| `mark_heat` | `#f5892c` | 2.1:1 | `#f5892c` | 6.9:1 | the ingot's orange glow as it cools, and a strike's flare |
+| `mark_heat_ember` | `#a3311c` | 5.8:1 | `#a3311c` | 2.4:1 | the ingot's ember red as it cools |
+| `mark_heat_iron` | `#3b3633` | 9.9:1 | `#3b3633` | 1.4:1 | the ingot's dark iron, last before its own colours |
+| `fill_danger` | `#a3402c` | 6.3:1 | `#e98a72` | 7.2:1 | destructive confirms |
+| `success` | `#3f6b4b` | 6.1:1 | `#8fbf9b` | 7.0:1 | done, passed |
+| `danger` | `#a3402c` | 6.3:1 | `#e98a72` | 5.8:1 | failed, errors |
+| `warning` | `#8a5600` | 6.2:1 | `#ffc85a` | 9.5:1 | needs you |
 | `memory` | `#75591a` | 5.6:1 | `#e5c77a` | 7.7:1 | memory and rules, on its tint |
-| `mode_plan` | `#1f75cb` | 4.7:1 | `#428fdc` | 3.9:1 | Plan mode |
-| `mode_bypass` | `#a32c12` | 7.2:1 | `#ec5941` | 3.8:1 | Bypass permissions |
+| `mode_plan` | `#1f75cb` | 4.7:1 | `#428fdc` | 4.3:1 | Plan mode |
+| `mode_bypass` | `#a32c12` | 7.2:1 | `#ec5941` | 4.2:1 | Bypass permissions |
 
 ### Contrast floors
 - Meaningful text: 4.5:1 on every surface and hover wash.
@@ -134,17 +139,17 @@ Contrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of w
 
 ### Buttons (`ui/button.rs`)
 One family; every control takes keyboard focus (a `primary` edge shows for the keyboard only), names itself to assistive technology, and swallows clicks while disabled or loading.
-- Primary: 32px tall, padding 0 14px, radius 8px, `fill` with `fill_fg`, 500 weight. One per surface.
+- Primary: 32px tall, padding 0 14px, radius 4px, `fill` with `fill_fg`, 500 weight. One per surface.
 - Secondary and Outlined: `surface`, 1px `border_strong`, `hover` wash.
 - Ghost: clear until hovered. Danger: `fill_danger`, white.
-- Icon: 34px square, radius 8px, a 16px icon in `text_muted`; outlined squares 38px at 9px radius.
-- Send: 38px, radius 9px, `accent` with a white arrow; `accent_soft` with nothing to send; Stop is an ink ring round a square.
+- Icon: 34px square, radius 4px, a 16px icon in `text_muted`; outlined squares 38px at 9999px radius.
+- Send: 38px, radius 9999px, `accent` with a white arrow; `accent_soft` with nothing to send; Stop is an ink ring round a square.
 - Switch: 36x20px pill, 14px thumb sliding over 160ms; `toggle_on` when on, `border_strong` when off.
-- Segmented: a `sunk` track, radius 8px; the chosen segment raised onto `surface` at 6px.
+- Segmented: a `sunk` track, radius 4px; the chosen segment raised onto `surface` at 9999px.
 
 ### Composer
 - Width: up to 560px, centred
-- One unit: a white box (radius 14px, 1px `border`, `border_strong` while focused, tinted by the mode when one is set) resting in a `sunk` tray
+- One unit: a white box (radius 4px, 1px `border`, `border_strong` while focused, tinted by the mode when one is set) resting in a `sunk` tray
 - Text: 14px; the outlined + bottom left and Send bottom right, 10px from the box's edges
 - The tray: the project, the context ring, the model and the mode as quiet 28px selectors: a 14px icon, the label, a chevron that flips while open; washed on hover, raised onto `surface` with a hairline while open
 
@@ -156,17 +161,17 @@ One family; every control takes keyboard focus (a `primary` edge shows for the k
 ### Card Default
 - Border: 1px `border`
 - Padding: 24px
-- Radius: 10px
+- Radius: 4px
 - Background: `surface`
 - Usage: tool calls, file cards, code blocks
 
 ### Popover
-- Border: 1px `border`, radius 10px, padding 4px
+- Border: 1px `border`, radius 4px, padding 4px
 - Background: `surface`, with the two-layer popover shadow
 - Usage: menus, pickers, the command palette
 
 ### File Card
-- A file Forge made, in its reply: up to 440px, `surface`, 1px `border`, radius 10px, padding 8px
+- A file Forge made, in its reply: up to 440px, `surface`, 1px `border`, radius 4px, padding 8px
 - A 36x44 page tile (radius 4px, concentric with the card) previews it, its type in mono `primary`
 - Title 600 `text_strong`; "Document · MD" caption `text_muted`; a bordered Download button
 - Open: the edge turns `primary` at 60%
@@ -178,7 +183,7 @@ One family; every control takes keyboard focus (a `primary` edge shows for the k
 - Enters with a 220ms ease-out, fading in from 16px to the right; Escape closes it
 
 ### Sidebar Row
-- Height: 30px, radius 8px
+- Height: 30px, radius 4px
 - Current: the `active` wash, 500 weight, no border
 - New chat: a round `accent` mark with a white +
 - Collapsed: a 52px rail of icon buttons for the same actions
@@ -188,11 +193,10 @@ One family; every control takes keyboard focus (a `primary` edge shows for the k
 
 | Decision | Rationale | Date |
 |----------|-----------|------|
-| Borders-only depth | A desktop tool read for hours: hairlines separate without adding weight; shadows are kept to show what floats. | 2026-09-28 |
-| Three surfaces, one step apart | Title bar, sidebar and session must read as separate areas at a glance; even OKLab steps make the split clear without contrast jumps. | 2026-10-12 |
-| Ink, not colour, for the filled button | The accent is kept for sending; the one filled action per surface is ink on paper (paper on charcoal), so it never competes with Send. | 2026-10-17 |
-| Muted text a step deeper than the reference | The reference's #6f6c64 and #9a968c miss their floors on the title bar; #64615a and #8c887e keep the look and pass. | 2026-10-17 |
-| Softly squared controls | Large uniform radii read as a template; 7-10px keeps the shapes calm and precise. | 2026-10-17 |
-| Display serif for one line per view | The greeting, and a document's title: one warm, human line; everything else stays in the interface face. | 2026-10-12 |
+| One colour, moss, not terracotta | The reference rations one warm orange to the primary action; Forge keeps the rationing and takes the reference's own moss, calmer on cream and kin to the mark. | 2026-10-18 |
+| Paper on paper | The session is a 4px sheet on the cream canvas with paper grain; the title bar and sidebar have no dividers, the sheet's edge is the split. | 2026-10-18 |
+| Pills to press, 4px to hold | The contrast between the two shapes is the system: it says at a glance what acts and what holds. | 2026-10-18 |
+| Ink pills for the loud neutrals | New chat and needs-you are ink pills; the moss is kept for the one decision in front of you (Allow once, Send). | 2026-10-18 |
+| Archivo for everything | A single face set in two weights reads as set type; headings in 600 replace the display serif. | 2026-10-18 |
 | Composer at 620px | A comfortable measure for a prompt, the same in a chat and on the welcome page. | 2026-10-11 |
 | Icons on a 12/14/16/20 scale | Desktop density: 14 in rows, 16 in controls, 20 for the composer's +; 12 inside captions. | 2026-10-12 |

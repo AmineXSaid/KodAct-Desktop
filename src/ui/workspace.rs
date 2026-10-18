@@ -255,7 +255,7 @@ impl Workspace {
                 .flex()
                 .items_center()
                 .justify_center()
-                .rounded(t.radius.button)
+                .rounded(t.radius.pill)
                 .cursor_pointer()
                 .hover(move |st| st.bg(hover))
                 .child(icon(path, t.size.icon, t.colors.text_muted))
@@ -298,7 +298,7 @@ impl Workspace {
                                 .gap(t.space.xs)
                                 .px(t.space.sm)
                                 .h(t.size.control)
-                                .rounded(t.radius.button)
+                                .rounded(t.radius.pill)
                                 .cursor_pointer()
                                 .hover(move |st| st.bg(hover))
                                 .when(s.switcher_open, |d| d.bg(hover))
@@ -397,7 +397,7 @@ impl Workspace {
                         .h(t.size.control)
                         .px(t.space.md)
                         .min_w(px(240.))
-                        .rounded(t.radius.button)
+                        .rounded(t.radius.pill)
                         .bg(t.colors.hover)
                         .border_1()
                         .border_color(t.colors.hover)
@@ -447,7 +447,7 @@ impl Workspace {
                         .flex()
                         .items_center()
                         .justify_center()
-                        .rounded(t.radius.button)
+                        .rounded(t.radius.pill)
                         .cursor_pointer()
                         .when(open, |d| d.bg(t.colors.primary_tint))
                         .when(!open, |d| d.hover(move |st| st.bg(hover)))
@@ -846,7 +846,19 @@ impl Render for Workspace {
         );
         let dock = self.dock(dock_w, cx);
 
-        let main = div().flex_1().min_w_0().flex().flex_col().bg(t.extra.stage);
+        // The session is a sheet on the cream: 4px corners, paper grain,
+        // a gutter to its right and below.
+        let main = div()
+            .flex_1()
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .mr(t.space.sm)
+            .mb(t.space.xs)
+            .rounded(t.radius.card)
+            .shadow(t.elevation_grain())
+            .overflow_hidden()
+            .bg(t.extra.stage);
         // A file opened from a reply, or the setup guide, sits beside the session.
         let pane = {
             let s = self.state.read(cx);
@@ -1391,6 +1403,7 @@ impl Render for Workspace {
                         .flex_1()
                         .min_h_0()
                         .flex()
+                        .bg(t.extra.pane)
                         .map(|d| {
                             if sidebar_open {
                                 d.child(self.sidebar.clone())
@@ -1456,12 +1469,17 @@ fn greeting_line(line: &str, t: &crate::theme::Theme) -> impl IntoElement {
         .gap(t.space.md)
         // Centred on the capitals rather than the line box, whose descender
         // room would otherwise leave the mark sitting high.
-        .child(div().flex_none().mt(px(3.)).child(super::logo(28.)))
+        .child(
+            div()
+                .flex_none()
+                .mt(px(3.))
+                .child(super::logo(f32::from(t.size.mark_home))),
+        )
         .child(
             div()
                 .min_w_0()
                 .font_family(t.font_display.clone())
-                .font_weight(FontWeight::NORMAL)
+                .font_weight(t.display_weight)
                 .text_size(t.size.home_heading)
                 .text_color(t.colors.text_strong)
                 .line_height(gpui::relative(1.1))

@@ -1,5 +1,7 @@
-//! Warm-ivory design tokens for GPUI: a calm desktop palette (ivory paper,
-//! warm ink, one patina-teal accent), softly squared shapes and a 4px rhythm.
+//! Design tokens for GPUI in the "calmly smooth" system (after the Anchor
+//! style reference): sun-bleached cream surfaces stacked like paper on paper,
+//! one ink, one moss accent rationed to the decisive action, Archivo set in
+//! two weights, 4px cards against pill buttons, and shadows thin as grain.
 //! Pure UI: colors, type, spacing, radius, elevation, motion + a few styled primitives.
 //! Written against GPUI's current API; field/method names may need small tweaks per GPUI version.
 
@@ -64,13 +66,13 @@ pub struct Space {
 pub struct Radius {
     pub line: Pixels,    // 1: a line's ends, rounded just slightly
     pub small: Pixels,   // 4: key caps, tiny marks
-    pub segment: Pixels, // 6: the selected segment inside a segmented control
-    pub compact: Pixels, // 7: compact buttons and chips
-    pub button: Pixels,  // 8: icon buttons, standard buttons, rows
-    pub control: Pixels, // 9: outlined icon buttons, the send button
-    pub card: Pixels,    // 10: cards, tool rows, menus
-    pub field: Pixels,   // 12: large input surfaces
-    pub pill: Pixels,    // 9999: switches, badges, avatars only
+    pub segment: Pixels, // pill: the selected segment inside a segmented control
+    pub compact: Pixels, // pill: compact buttons and chips
+    pub button: Pixels,  // 4: rows and the squarer buttons
+    pub control: Pixels, // pill: outlined icon buttons, the send button
+    pub card: Pixels,    // 4: cards, tool rows, menus
+    pub field: Pixels,   // 4: large input surfaces
+    pub pill: Pixels,    // 9999: buttons, badges, avatars
 }
 
 #[derive(Clone)]
@@ -80,12 +82,13 @@ pub struct Theme {
     pub text: TypeScale,
     pub space: Space,
     pub radius: Radius,
-    pub font_sans: SharedString, // Anthropic Sans when on this PC, else Hanken Grotesk (`fonts.rs`)
+    pub font_sans: SharedString, // Archivo, bundled in 400 and 600 (`fonts.rs`)
     pub font_serif: SharedString, // Source Serif (substitute for Lyon Text)
     pub motion_ms: u64,          // 200ms ease for hovers/transitions
     // Forge additions (see the section at the end of the tokens).
     pub font_mono: SharedString, // JetBrains Mono: code, paths, commands
-    pub font_display: SharedString, // large serif lines (the greeting): Anthropic Serif when on this PC, else Source Serif 4 Display
+    pub font_display: SharedString, // large lines (the greeting, headings): Archivo, as everything is
+    pub display_weight: FontWeight, // 600: headings are set in the heavier of the two cuts
     pub extra: ExtraColors,
     pub terminal: TerminalColors,
     pub code: CodeColors,
@@ -100,9 +103,6 @@ fn ink(alpha: f32) -> Hsla {
 /// The reference's ink (#2b2a27) at `alpha`: hairlines and washes on paper.
 fn warm_ink(alpha: f32) -> Hsla {
     hsla(45. / 360., 0.05, 0.16, alpha)
-}
-fn paper(alpha: f32) -> Hsla {
-    hsla(30. / 360., 0.1, 0.96, alpha)
 }
 
 impl Theme {
@@ -132,12 +132,14 @@ impl Theme {
             radius: Radius {
                 line: px(1.),
                 small: px(4.),
-                segment: px(6.),
-                compact: px(7.),
-                button: px(8.),
-                control: px(9.),
-                card: px(10.),
-                field: px(12.),
+                // Buttons, chips and icon buttons are pills; cards, rows,
+                // menus and fields are 4px: the contrast is the system.
+                segment: px(9999.),
+                compact: px(9999.),
+                button: px(4.),
+                control: px(9999.),
+                card: px(4.),
+                field: px(4.),
                 pill: px(9999.),
             },
             font_sans: crate::fonts::sans(),
@@ -145,6 +147,7 @@ impl Theme {
             motion_ms: 200,
             font_mono: "JetBrains Mono".into(),
             font_display: crate::fonts::display(),
+            display_weight: FontWeight::SEMIBOLD,
             extra: ExtraColors::for_mode(is_dark),
             terminal: TerminalColors::for_mode(is_dark),
             code: CodeColors::for_mode(is_dark),
@@ -156,23 +159,23 @@ impl Theme {
         Self::base(
             false,
             Colors {
-                canvas: rgb(0xf9f8f5).into(),
+                // Warm White: the session, and the window behind cards.
+                canvas: rgb(0xf0e9e5).into(),
                 surface: rgb(0xffffff).into(),
-                sidebar: rgb(0xf3f1ec).into(),
-                text: rgb(0x2b2a27).into(),
-                text_strong: rgb(0x1f1e1c).into(),
-                // The reference's secondary (#6f6c64) and muted (#9a968c),
-                // a step deeper so they read on the title bar too.
-                text_body: rgb(0x5e5b54).into(),
-                text_muted: rgb(0x64615a).into(),
-                text_subtle: rgb(0x8c887e).into(),
-                border: warm_ink(0.13), // #e3e0d8 on white
-                hover: warm_ink(0.055),
-                // Links and selected text: the accent teal itself (6:1 on white).
-                primary: rgb(0x216d70).into(),
-                primary_hover: rgb(0x10585b).into(),
+                sidebar: rgb(0xe3d7cd).into(),
+                // One ink, #1e1e1e, carries the type; Stone for what is secondary.
+                text: rgb(0x1e1e1e).into(),
+                text_strong: rgb(0x1e1e1e).into(),
+                text_body: rgb(0x2b2825).into(),
+                text_muted: rgb(0x5a554f).into(),
+                text_subtle: rgb(0x7d776f).into(),
+                border: hsla(0., 0., 0.118, 0.13),
+                hover: hsla(0., 0., 0.118, 0.05),
+                // Links and selected text: moss, the one colour (6.3:1 on white).
+                primary: rgb(0x3f6b4b).into(),
+                primary_hover: rgb(0x31553b).into(),
                 primary_fg: rgb(0xffffff).into(),
-                primary_tint: hsla(183. / 360., 0.55, 0.3, 0.12),
+                primary_tint: hsla(137. / 360., 0.26, 0.33, 0.12),
                 marigold: rgb(0xffb110).into(),
                 coral: rgb(0xc84b55).into(),
                 sky: rgb(0x62aef0).into(),
@@ -182,25 +185,25 @@ impl Theme {
         )
     }
 
-    /// The same room at night: warm charcoal surfaces, the same accent.
+    /// The same room at night: warm umber surfaces, moss lifted to read on them.
     pub fn dark() -> Self {
         Self::base(
             true,
             Colors {
-                canvas: rgb(0x262624).into(),
-                surface: rgb(0x30302e).into(),
-                sidebar: rgb(0x1d1c1b).into(),
-                text: rgb(0xecebe6).into(),
-                text_strong: paper(1.0),
-                text_body: rgb(0xc2bfb6).into(),
-                text_muted: rgb(0xa8a59c).into(),
-                text_subtle: rgb(0x7d7a72).into(),
-                border: hsla(0., 0., 1., 0.1),
-                hover: hsla(0., 0., 1., 0.05),
-                primary: rgb(0x8ecacd).into(),
-                primary_hover: rgb(0xabdbde).into(),
-                primary_fg: rgb(0xffffff).into(),
-                primary_tint: hsla(183. / 360., 0.4, 0.55, 0.18),
+                canvas: rgb(0x1e1c1a).into(),
+                surface: rgb(0x2b2825).into(),
+                sidebar: rgb(0x171513).into(),
+                text: rgb(0xf0e9e5).into(),
+                text_strong: rgb(0xf5f2f0).into(),
+                text_body: rgb(0xd9d1cb).into(),
+                text_muted: rgb(0xa8a29b).into(),
+                text_subtle: rgb(0x857f77).into(),
+                border: hsla(22. / 360., 0.37, 0.92, 0.12),
+                hover: hsla(22. / 360., 0.37, 0.92, 0.06),
+                primary: rgb(0x8fbf9b).into(),
+                primary_hover: rgb(0xa9d0b3).into(),
+                primary_fg: rgb(0x171513).into(),
+                primary_tint: hsla(135. / 360., 0.27, 0.65, 0.16),
                 marigold: rgb(0xffb110).into(),
                 coral: rgb(0xd8646d).into(),
                 sky: rgb(0x62aef0).into(),
@@ -214,20 +217,36 @@ impl Theme {
     pub fn elevation_popover(&self) -> Vec<BoxShadow> {
         vec![
             BoxShadow {
-                color: ink(if self.is_dark { 0.4 } else { 0.03 }),
-                offset: point(px(0.), px(3.)),
-                blur_radius: px(9.),
+                color: ink(if self.is_dark { 0.4 } else { 0.06 }),
+                offset: point(px(0.), px(1.)),
+                blur_radius: px(1.),
                 spread_radius: px(0.),
                 inset: false,
             },
             BoxShadow {
-                color: ink(if self.is_dark { 0.3 } else { 0.1 }),
-                offset: point(px(0.), px(4.)),
-                blur_radius: px(12.),
+                color: ink(if self.is_dark { 0.35 } else { 0.06 }),
+                offset: point(px(0.), px(6.)),
+                blur_radius: px(16.),
                 spread_radius: px(0.),
                 inset: false,
             },
         ]
+    }
+
+    /// Paper grain: the three hairline shadows that lift a card or the
+    /// session off the cream, under 4px of blur and 6% ink.
+    pub fn elevation_grain(&self) -> Vec<BoxShadow> {
+        let d = self.is_dark;
+        [(1., 0.06, 0.35), (2., 0.04, 0.2), (4., 0.01, 0.1)]
+            .into_iter()
+            .map(|(y, light, dark)| BoxShadow {
+                color: ink(if d { dark } else { light }),
+                offset: point(px(0.), px(y)),
+                blur_radius: px(1.),
+                spread_radius: px(0.),
+                inset: false,
+            })
+            .collect()
     }
 }
 
@@ -318,43 +337,44 @@ impl ExtraColors {
         if is_dark {
             Self {
                 inset: hsla(0., 0., 1., 0.035),
-                success: rgb(0x8fd3a8).into(),
-                success_tint: rgb(0x20372a).into(),
-                danger: rgb(0xeb8c7b).into(),
+                success: rgb(0x8fbf9b).into(),
+                success_tint: rgb(0x26302a).into(),
+                danger: rgb(0xe98a72).into(),
                 danger_tint: hsla(7. / 360., 0.7, 0.55, 0.1),
                 warning: rgb(0xffc85a).into(),
                 warning_tint: hsla(40. / 360., 1., 0.53, 0.18),
-                diff_add: hsla(134. / 360., 0.5, 0.5, 0.16),
-                diff_del: hsla(7. / 360., 0.92, 0.58, 0.16),
+                diff_add: hsla(135. / 360., 0.27, 0.65, 0.12),
+                diff_del: hsla(12. / 360., 0.73, 0.68, 0.12),
                 scrim: ink(0.55),
-                selected: rgb(0x2a2a28).into(),
-                // OKLab L 0.188 / 0.227 / 0.268, then the card at 0.309:
-                // even steps of 0.041, one warm hue.
-                chrome: rgb(0x141312).into(),
-                pane: rgb(0x1d1c1b).into(),
-                stage: rgb(0x262624).into(),
-                // The filled action is paper on charcoal, as ink on paper in light.
-                fill: rgb(0xecebe6).into(),
-                fill_hover: rgb(0xf8f7f3).into(),
-                fill_danger: rgb(0xb7331f).into(), // 6.0:1
-                fill_fg: rgb(0x262624).into(),
-                accent: rgb(0x216d70).into(),
-                accent_soft: rgb(0x2f4749).into(),
-                accent_fg: rgb(0xffffff).into(),
-                mark_top: rgb(0x529a9d).into(),
-                mark_left: rgb(0xecebe6).into(),
-                mark_right: rgb(0x6f6c64).into(),
+                selected: rgb(0x262321).into(),
+                // The cream stack at night: the canvas under the title bar
+                // and the sidebar, the session a step up, cards above it.
+                chrome: rgb(0x171513).into(),
+                pane: rgb(0x171513).into(),
+                stage: rgb(0x1e1c1a).into(),
+                // The filled action is cream on umber, as ink on cream in light.
+                fill: rgb(0xf0e9e5).into(),
+                fill_hover: rgb(0xf5f2f0).into(),
+                // Brick, lifted for the night, under the dark label.
+                fill_danger: rgb(0xe98a72).into(),
+                fill_fg: rgb(0x171513).into(),
+                accent: rgb(0x8fbf9b).into(),
+                accent_soft: rgb(0x2c3a30).into(),
+                accent_fg: rgb(0x171513).into(),
+                mark_top: rgb(0x8fbf9b).into(),
+                mark_left: rgb(0xf0e9e5).into(),
+                mark_right: rgb(0x7d776f).into(),
                 mark_heat_white: rgb(0xfff2cc).into(),
                 mark_heat: rgb(0xf5892c).into(),
                 mark_heat_ember: rgb(0xa3311c).into(),
                 mark_heat_iron: rgb(0x3b3633).into(),
-                border_strong: rgb(0x55534e).into(),
-                active: hsla(0., 0., 1., 0.075),
-                sunk: rgb(0x1f1e1d).into(),
-                toggle_on: rgb(0x529a9d).into(),
+                border_strong: rgb(0x4a4540).into(),
+                active: hsla(22. / 360., 0.37, 0.92, 0.07),
+                sunk: rgb(0x262321).into(),
+                toggle_on: rgb(0x8fbf9b).into(),
                 memory: rgb(0xe5c77a).into(),
                 memory_tint: rgb(0x3a3220).into(),
-                dot: rgb(0x9a958b).into(),
+                dot: rgb(0x8b857e).into(),
                 mode_edit: rgb(0x2da160).into(),
                 mode_plan: rgb(0x428fdc).into(),
                 mode_bypass: rgb(0xec5941).into(),
@@ -387,43 +407,44 @@ impl ExtraColors {
         } else {
             Self {
                 inset: warm_ink(0.03),
-                success: rgb(0x276b43).into(),
-                success_tint: rgb(0xe2f1e7).into(),
-                danger: rgb(0xb4412f).into(),
+                success: rgb(0x3f6b4b).into(),
+                success_tint: rgb(0xe3ebe3).into(),
+                danger: rgb(0xa3402c).into(),
                 danger_tint: hsla(9. / 360., 0.6, 0.55, 0.1),
                 warning: rgb(0x8a5600).into(),
                 warning_tint: hsla(40. / 360., 1., 0.53, 0.2),
-                diff_add: hsla(134. / 360., 0.55, 0.4, 0.12),
-                diff_del: hsla(7. / 360., 0.92, 0.58, 0.1),
-                scrim: hsla(30. / 360., 0.1, 0.05, 0.42), // the dialog stands clear of the chat
-                selected: rgb(0xffffff).into(),
-                // OKLab L 0.937 / 0.958 / 0.979, then the white card:
-                // even steps of 0.021, one warm hue, chroma falling to 0.
-                chrome: rgb(0xeceae4).into(),
-                pane: rgb(0xf3f1ec).into(),
-                stage: rgb(0xf9f8f5).into(),
-                // The filled action is ink: quiet, and never confused with the accent.
-                fill: rgb(0x2b2a27).into(),
-                fill_hover: rgb(0x403e3a).into(),
-                fill_danger: rgb(0xb4412f).into(), // 5.6:1
-                fill_fg: rgb(0xffffff).into(),
-                accent: rgb(0x216d70).into(),
-                accent_soft: rgb(0xd0e6e7).into(),
+                diff_add: hsla(137. / 360., 0.26, 0.33, 0.10),
+                diff_del: hsla(10. / 360., 0.57, 0.41, 0.09),
+                scrim: hsla(25. / 360., 0.2, 0.08, 0.38), // the dialog stands clear of the chat
+                selected: rgb(0xf0e9e5).into(),
+                // Cream Canvas under the title bar and the sidebar, Warm
+                // White for the session, white for the cards on it.
+                chrome: rgb(0xe3d7cd).into(),
+                pane: rgb(0xe3d7cd).into(),
+                stage: rgb(0xf0e9e5).into(),
+                // The filled action is the ink pill: quiet, never the accent.
+                fill: rgb(0x1e1e1e).into(),
+                fill_hover: rgb(0x34322f).into(),
+                fill_danger: rgb(0xa3402c).into(),
+                fill_fg: rgb(0xf0e9e5).into(),
+                // Moss, where the reference has terracotta: the one colour.
+                accent: rgb(0x3f6b4b).into(),
+                accent_soft: rgb(0xdfe6dc).into(),
                 accent_fg: rgb(0xffffff).into(),
-                mark_top: rgb(0x216d70).into(),
-                mark_left: rgb(0x2b2a27).into(),
-                mark_right: rgb(0x8c887e).into(),
+                mark_top: rgb(0x3f6b4b).into(),
+                mark_left: rgb(0x1e1e1e).into(),
+                mark_right: rgb(0x8b857e).into(),
                 mark_heat_white: rgb(0xfff2cc).into(),
                 mark_heat: rgb(0xf5892c).into(),
                 mark_heat_ember: rgb(0xa3311c).into(),
                 mark_heat_iron: rgb(0x3b3633).into(),
-                border_strong: rgb(0xcfcbc0).into(),
-                active: warm_ink(0.075),
-                sunk: rgb(0xf0eee8).into(),
-                toggle_on: rgb(0x216d70).into(),
+                border_strong: rgb(0xc9c9c7).into(),
+                active: hsla(0., 0., 0.118, 0.06),
+                sunk: rgb(0xf5f2f0).into(),
+                toggle_on: rgb(0x3f6b4b).into(),
                 memory: rgb(0x75591a).into(),
                 memory_tint: rgb(0xf6ecd2).into(),
-                dot: rgb(0x857e71).into(),
+                dot: rgb(0x8b857e).into(),
                 mode_edit: rgb(0x108548).into(),
                 mode_plan: rgb(0x1f75cb).into(),
                 mode_bypass: rgb(0xa32c12).into(),
@@ -591,13 +612,13 @@ pub struct Sizes {
     pub icon: Pixels,               // 16
     pub icon_lg: Pixels,            // 20: the composer's +
     pub composer_max: Pixels,       // the composer's tallest input
-    pub composer_radius: Pixels,    // 14: the composer box's corners
+    pub composer_radius: Pixels,    // 4: the composer box's corners, a card's
     pub composer_width: Pixels,     // 560: the composer's widest, wherever it sits
     pub palette: Pixels,            // command palette width
     pub hairline: Pixels,           // 1
-    pub line_height_chat: f32,      // 20px lines at 14px: whole pixels, crisp
-    pub chat_text: Pixels,          // 14: replies and your messages, on whole pixels
-    pub greeting: Pixels,           // 28: the new-chat greeting, in the display serif
+    pub line_height_chat: f32,      // 23px lines at 15px: whole pixels, crisp
+    pub chat_text: Pixels,          // 15: replies and your messages, Archivo's body size
+    pub greeting: Pixels,           // 32: the new-chat greeting, Archivo 600
     pub statusbar: Pixels,          // 26: the status bar at the foot of the window
     pub panel_in_ms: u64,           // 280: the side panel sliding in
     pub pop_in_ms: u64,             // 160: a menu or dialog rising into place
@@ -633,7 +654,9 @@ pub struct Sizes {
     pub switch_h: Pixels,  // 20
     pub switch_thumb: Pixels, // 14
     pub rail: Pixels,      // 52: the collapsed sidebar
-    pub home_heading: Pixels, // 32: the home screen's heading, in the display serif
+    pub home_heading: Pixels, // 36: the home screen's heading, Archivo 600
+    pub mark_turn: Pixels, // 28: Forge's mark heading each reply, and while it works
+    pub mark_home: Pixels, // 44: the mark beside the home screen's greeting
     pub dot_gap: Pixels,   // 14: the background field's grid
     pub dot: Pixels,       // 2: one dot's diameter
 }
@@ -651,13 +674,13 @@ impl Default for Sizes {
             icon: px(16.),
             icon_lg: px(20.),
             composer_max: px(240.),
-            composer_radius: px(14.),
+            composer_radius: px(4.),
             composer_width: px(560.),
             palette: px(560.),
             hairline: px(1.),
-            line_height_chat: 20. / 14.,
-            chat_text: px(14.),
-            greeting: px(28.),
+            line_height_chat: 23. / 15.,
+            chat_text: px(15.),
+            greeting: px(32.),
             statusbar: px(26.),
             panel_in_ms: 280,
             pop_in_ms: 160,
@@ -692,7 +715,9 @@ impl Default for Sizes {
             switch_h: px(20.),
             switch_thumb: px(14.),
             rail: px(52.),
-            home_heading: px(32.),
+            home_heading: px(36.),
+            mark_turn: px(28.),
+            mark_home: px(44.),
             dot_gap: px(14.),
             dot: px(2.),
         }
@@ -748,8 +773,8 @@ fn styled_button(t: &Theme, variant: crate::ui::button::Variant, label: SharedSt
         .justify_center()
         .gap(t.space.tight)
         .h(t.size.button_h)
-        .px(px(14.))
-        .rounded(t.radius.button)
+        .px(px(16.))
+        .rounded(t.radius.pill)
         .border_1()
         .border_color(p.border.unwrap_or(t.colors.surface.opacity(0.)))
         .bg(p.bg)
@@ -760,7 +785,7 @@ fn styled_button(t: &Theme, variant: crate::ui::button::Variant, label: SharedSt
                 variant,
                 crate::ui::button::Variant::Primary | crate::ui::button::Variant::Danger
             ),
-            |d| d.font_weight(FontWeight::MEDIUM),
+            |d| d.font_weight(FontWeight::SEMIBOLD),
         )
         .whitespace_nowrap()
         .cursor_pointer()
@@ -768,7 +793,17 @@ fn styled_button(t: &Theme, variant: crate::ui::button::Variant, label: SharedSt
         .child(label)
 }
 
-/// The one filled action per surface: ink on paper.
+/// The small uppercase label above a heading or a card's title, as a
+/// printed kicker: 11px, the heavier cut, muted.
+pub fn eyebrow(t: &Theme, text: &str) -> Div {
+    div()
+        .text_size(px(11.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(t.colors.text_muted)
+        .child(text.to_uppercase())
+}
+
+/// The one filled action per surface: the ink pill.
 pub fn primary_button(t: &Theme, label: impl Into<SharedString>) -> Div {
     styled_button(t, crate::ui::button::Variant::Primary, label.into())
 }

@@ -50,10 +50,11 @@ fn render() -> String {
     );
 
     let _ = writeln!(w, "## Direction\n");
-    let _ = writeln!(w, "**Personality:** Warmth & Approachability, with the Precision & Density of a desktop tool. A calm room to build in with an agent.\n");
-    let _ = writeln!(w, "**Foundation:** warm ivory. Paper surfaces in one warm hue, chroma under 0.01 (OKLCH); warm ink for text; one patina-teal accent (forged copper as it weathers, deliberately not an orange), the same colour in both modes, kept for sending, the mark's core and a few dots; colour otherwise only for meaning: modes, status, a switch that is on.\n");
-    let _ = writeln!(w, "**Depth:** borders-only for content (1px hairlines); shadows only on popovers, menus and the command palette.\n");
-    let _ = writeln!(w, "**Shape:** softly squared. Buttons 7-9px, cards and menus 10px, large inputs 12-14px; pills only for switches, badges and avatars; the round new-chat mark is the one circular control.\n");
+    let _ = writeln!(w, "**Personality:** calmly smooth: a warm editorial workspace, confident and unhurried, closer to a printed quarterly than a dashboard (after the Anchor style reference).\n");
+    let _ = writeln!(w, "**Foundation:** sun-bleached cream. The window is Cream Canvas (#e3d7cd), the session a sheet of Warm White (#f0e9e5) on it, cards white on that: paper on paper. One ink (#1e1e1e) carries the type. One colour, moss (#3f6b4b; #8fbf9b at night), where the reference has terracotta: the decisive action, links, a switch that is on, the mark's top, a waiting dot. Everything else is neutral; colour otherwise only for meaning (modes, status).\n");
+    let _ = writeln!(w, "**Depth:** nearly flat. Hairlines inside cards; the session and the user's message lift on paper grain (three 1px shadows at 6/4/1% ink); popovers and the permission card a touch more.\n");
+    let _ = writeln!(w, "**Shape:** two shapes. Everything you press is a pill (buttons, chips, icon buttons, the new-chat and needs-you pills); everything that holds content is 4px (cards, rows, menus, fields, the composer, the session).\n");
+    let _ = writeln!(w, "**Type:** Archivo only, in two cuts: 400 for text, 600 for headings, buttons and labels. Small uppercase kickers in 600 at 11px (\"Needs you\"). Code in JetBrains Mono.\n");
 
     let _ = writeln!(w, "## Tokens\n");
     let sp = &l.space;
@@ -73,17 +74,17 @@ fn render() -> String {
     );
     let r = &l.radius;
     let z = &l.size;
-    let _ = writeln!(w, "### Radius\nScale: {}px (a line's ends: every straight line is rounded just slightly), {}px (key caps), {}px (a selected segment), {}px (compact buttons, chips), {}px (buttons, icon buttons, rows), {}px (outlined squares, send), {}px (cards, tool rows, menus), {}px (large fields), {}px (the composer), pill (switches, badges, avatars)\n", px(r.line), px(r.small), px(r.segment), px(r.compact), px(r.button), px(r.control), px(r.card), px(r.field), px(z.composer_radius));
+    let _ = writeln!(w, "### Radius\nTwo shapes: 4px for everything that holds content, pill for everything you press.\nScale: {}px (a line's ends), {}px (key caps), {}px (rows and squarer buttons), {}px (cards, tool rows, menus), {}px (fields), {}px (the composer), pill (buttons, chips, icon buttons, segments, the send button, switches, badges, avatars)\n", px(r.line), px(r.small), px(r.button), px(r.card), px(r.field), px(z.composer_radius));
 
     let _ = writeln!(w, "### Typography");
     let _ = writeln!(
         w,
-        "Interface: {} (Anthropic Sans when installed or in Forge's `fonts` folder; never bundled)",
+        "Interface: {} in 400 and 600 only, bundled (OFL); headings in 600",
         l.font_sans
     );
     let _ = writeln!(
         w,
-        "Display: {} (the greeting)\nCode: {}",
+        "Display: {} 600 (the greeting, headings)\nCode: {}",
         l.font_display, l.font_mono
     );
     let tx = &l.text;
@@ -166,12 +167,18 @@ fn render() -> String {
         ),
         ("rail", z.rail, "the collapsed sidebar"),
         ("dot_gap", z.dot_gap, "the home screen's dot grid"),
+        ("mark_turn", z.mark_turn, "Forge's mark heading each reply"),
+        (
+            "mark_home",
+            z.mark_home,
+            "the mark beside the home greeting",
+        ),
     ] {
         let _ = writeln!(w, "- `{name}`: {}px, {role}", px(v));
     }
     let _ = writeln!(w);
 
-    let _ = writeln!(w, "### Surfaces\nOne ladder, darkest at the top of the window, even steps in OKLab lightness.\n");
+    let _ = writeln!(w, "### Surfaces\nThe cream stack: the title bar and the sidebar share the canvas, the session steps up from it, cards step up again (`palette_check.rs`).\n");
     let _ = writeln!(
         w,
         "| Token | Light | L | Dark | L | Role |\n|---|---|---|---|---|---|"
@@ -439,12 +446,11 @@ fn render() -> String {
         "| Decision | Rationale | Date |\n|----------|-----------|------|"
     );
     for (what, why, when) in [
-        ("Borders-only depth", "A desktop tool read for hours: hairlines separate without adding weight; shadows are kept to show what floats.", "2026-09-28"),
-        ("Three surfaces, one step apart", "Title bar, sidebar and session must read as separate areas at a glance; even OKLab steps make the split clear without contrast jumps.", "2026-10-12"),
-        ("Ink, not colour, for the filled button", "The accent is kept for sending; the one filled action per surface is ink on paper (paper on charcoal), so it never competes with Send.", "2026-10-17"),
-        ("Muted text a step deeper than the reference", "The reference's #6f6c64 and #9a968c miss their floors on the title bar; #64615a and #8c887e keep the look and pass.", "2026-10-17"),
-        ("Softly squared controls", "Large uniform radii read as a template; 7-10px keeps the shapes calm and precise.", "2026-10-17"),
-        ("Display serif for one line per view", "The greeting, and a document's title: one warm, human line; everything else stays in the interface face.", "2026-10-12"),
+        ("One colour, moss, not terracotta", "The reference rations one warm orange to the primary action; Forge keeps the rationing and takes the reference's own moss, calmer on cream and kin to the mark.", "2026-10-18"),
+        ("Paper on paper", "The session is a 4px sheet on the cream canvas with paper grain; the title bar and sidebar have no dividers, the sheet's edge is the split.", "2026-10-18"),
+        ("Pills to press, 4px to hold", "The contrast between the two shapes is the system: it says at a glance what acts and what holds.", "2026-10-18"),
+        ("Ink pills for the loud neutrals", "New chat and needs-you are ink pills; the moss is kept for the one decision in front of you (Allow once, Send).", "2026-10-18"),
+        ("Archivo for everything", "A single face set in two weights reads as set type; headings in 600 replace the display serif.", "2026-10-18"),
         ("Composer at 620px", "A comfortable measure for a prompt, the same in a chat and on the welcome page.", "2026-10-11"),
         ("Icons on a 12/14/16/20 scale", "Desktop density: 14 in rows, 16 in controls, 20 for the composer's +; 12 inside captions.", "2026-10-12"),
     ] {

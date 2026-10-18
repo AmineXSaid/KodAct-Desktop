@@ -14,8 +14,7 @@ use std::f32::consts::{FRAC_1_SQRT_2, FRAC_PI_2, FRAC_PI_4, SQRT_2, TAU};
 use std::time::Duration;
 
 use gpui::{
-    div, prelude::*, px, svg, Animation, AnimationExt, AnyElement, App, ElementId, FontWeight,
-    Hsla, Window,
+    div, prelude::*, px, svg, Animation, AnimationExt, AnyElement, App, ElementId, Hsla, Window,
 };
 
 use super::motion;
@@ -391,7 +390,7 @@ pub fn wordmark(height: f32, t: &Theme) -> AnyElement {
     let letters = |s: &'static str| {
         div()
             .font_family(t.font_display.clone())
-            .font_weight(FontWeight::NORMAL)
+            .font_weight(t.display_weight)
             .text_size(px(height))
             .line_height(px(height * 1.1))
             .text_color(t.colors.text_strong)

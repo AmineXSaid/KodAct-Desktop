@@ -1,23 +1,24 @@
 //! Which faces Forge draws with.
 //!
-//! The app bundles only openly licensed fonts (Hanken Grotesk, Source Serif
-//! 4, JetBrains Mono). When Anthropic Sans, and a serif to go with it, are
-//! on this computer, Forge uses those instead: installed in the system, or
-//! placed as .ttf/.otf files in Forge's `fonts` folder (next to its
-//! settings). They are read from there at start and never ship inside the
-//! app.
+//! The app bundles only openly licensed fonts. Its one interface face is
+//! Archivo, in 400 and 600, for text and headings alike; code is JetBrains
+//! Mono. Hanken Grotesk and Source Serif 4 stay bundled for older content
+//! that names them. Fonts placed as .ttf/.otf files in Forge's `fonts`
+//! folder (next to its settings) are still read at start, so a document can
+//! use them, but they never replace Archivo.
 
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use gpui::{App, SharedString};
 
-/// Interface text: the first of these found, else the bundled face.
-pub const SANS_PREFERRED: &[&str] = &["Anthropic Sans", "Anthropic Sans Text"];
-pub const SANS_BUNDLED: &str = "Hanken Grotesk";
-/// Large serif lines (the greeting): the first found, else the bundled face.
-pub const DISPLAY_PREFERRED: &[&str] = &["Anthropic Serif Display", "Anthropic Serif"];
-pub const DISPLAY_BUNDLED: &str = "Source Serif 4 Display";
+/// Interface text: the first of these found, else the bundled face. None
+/// is preferred over Archivo: the system is set in it.
+pub const SANS_PREFERRED: &[&str] = &[];
+pub const SANS_BUNDLED: &str = "Archivo";
+/// Large lines (the greeting, headings): Archivo too, in its heavier cut.
+pub const DISPLAY_PREFERRED: &[&str] = &[];
+pub const DISPLAY_BUNDLED: &str = "Archivo";
 
 /// A user font file larger than this is skipped, and at most this many are read.
 const MAX_FILE: u64 = 16 * 1024 * 1024;
@@ -114,20 +115,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn prefers_anthropic_sans_when_present() {
-        let none = vec!["Hanken Grotesk".to_string(), "Segoe UI".into()];
-        assert_eq!(pick(&none, SANS_PREFERRED, SANS_BUNDLED), "Hanken Grotesk");
-        let with = vec!["anthropic sans".to_string(), "Hanken Grotesk".into()];
-        assert_eq!(pick(&with, SANS_PREFERRED, SANS_BUNDLED), "anthropic sans");
-        let text_cut = vec!["Anthropic Sans Text".to_string()];
+    fn archivo_sets_everything_whatever_is_installed() {
+        let installed = vec![
+            "Anthropic Sans".to_string(),
+            "Hanken Grotesk".into(),
+            "Segoe UI".into(),
+        ];
+        assert_eq!(pick(&installed, SANS_PREFERRED, SANS_BUNDLED), "Archivo");
         assert_eq!(
-            pick(&text_cut, SANS_PREFERRED, SANS_BUNDLED),
-            "Anthropic Sans Text"
+            pick(&installed, DISPLAY_PREFERRED, DISPLAY_BUNDLED),
+            "Archivo"
         );
-        assert_eq!(
-            pick(&none, DISPLAY_PREFERRED, DISPLAY_BUNDLED),
-            "Source Serif 4 Display"
-        );
+        // The picking itself still prefers, in order and in any case.
+        let want = ["B Face", "A Face"];
+        let have = vec!["a face".to_string(), "b face".into()];
+        assert_eq!(pick(&have, &want, "x"), "b face");
+        assert_eq!(pick(&[], &want, "x"), "x");
     }
 
     #[test]

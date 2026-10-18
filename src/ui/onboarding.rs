@@ -19,7 +19,7 @@ use std::time::Duration;
 
 use gpui::{
     canvas, div, prelude::*, px, relative, Animation, AnimationExt, AnyElement, App, Context,
-    Entity, FocusHandle, FontWeight, IntoElement, Render, SharedString, Subscription, Task, Window,
+    Entity, FocusHandle, IntoElement, Render, SharedString, Subscription, Task, Window,
 };
 
 use super::dot_field::DotField;
@@ -719,10 +719,10 @@ fn arriving(t: &Theme, text: &str, intro: usize) -> AnyElement {
         .justify_center()
         .gap_x(t.size.greeting * 0.26)
         .font_family(t.font_display.clone())
+        .font_weight(t.display_weight)
         .text_size(t.size.greeting)
         .line_height(relative(1.2))
         .text_color(t.colors.text_strong)
-        .font_weight(FontWeight::NORMAL)
         .children(text.split(' ').enumerate().map(|(i, word)| {
             div().child(word.to_string()).with_animation(
                 SharedString::from(format!("onboarding-word-{intro}-{i}")),
@@ -741,10 +741,10 @@ fn heading(t: &Theme, text: &str) -> impl IntoElement {
         .mt(t.space.xl)
         .text_center()
         .font_family(t.font_display.clone())
+        .font_weight(t.display_weight)
         .text_size(t.size.greeting)
         .line_height(relative(1.2))
         .text_color(t.colors.text_strong)
-        .font_weight(FontWeight::NORMAL)
         .child(text.to_string())
 }
 

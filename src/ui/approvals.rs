@@ -24,7 +24,7 @@ pub fn render(
     let open = s.approvals_open;
     let n = pending.len();
     let toggle = state.clone();
-    let tint = t.extra.warning_tint;
+    let fill_hover = t.extra.fill_hover;
     let badge = div()
         .id("approvals")
         // Occludes the title bar's drag area (see workspace.rs).
@@ -35,13 +35,14 @@ pub fn render(
         .h(t.size.control)
         .px(t.space.sm)
         .rounded(t.radius.pill)
-        .bg(t.extra.warning_tint)
-        .text_color(t.extra.warning)
-        .text_size(t.text.caption)
+        // The ink pill, its dot the accent: the one thing waiting on you.
+        .bg(t.extra.fill)
+        .text_color(t.extra.fill_fg)
+        .text_size(t.text.body_sm)
         .font_weight(FontWeight::SEMIBOLD)
         .cursor_pointer()
-        .hover(move |d| d.bg(tint.opacity(0.9)))
-        .child(icon("icons/hand.svg", t.size.icon_sm, t.extra.warning))
+        .hover(move |d| d.bg(fill_hover))
+        .child(div().size(px(7.)).rounded_full().bg(t.extra.accent))
         .child(format!("{n} {} you", if n == 1 { "needs" } else { "need" }))
         .tooltip(|window, cx| {
             gpui::component::tooltip::Tooltip::new("Chats waiting on your answer").build(window, cx)

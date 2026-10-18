@@ -92,41 +92,61 @@ fn grounds(t: &Theme) -> Vec<(String, Hsla)> {
 }
 
 #[test]
-fn surfaces_step_evenly_from_the_title_bar_down() {
+fn surfaces_stack_like_paper_on_the_cream() {
     for (mode, t) in both() {
-        // Title bar, sidebar, session, card: each a step lighter.
-        let ladder = [
-            t.extra.chrome,
-            t.extra.pane,
-            t.extra.stage,
-            t.colors.surface,
-        ]
-        .map(|c| oklab(rgba(c)));
-        let steps: Vec<f32> = ladder.windows(2).map(|w| w[1].0 - w[0].0).collect();
-        let mean = steps.iter().sum::<f32>() / steps.len() as f32;
-        for (i, s) in steps.iter().enumerate() {
+        // The title bar and the sidebar share the canvas; the session is
+        // a sheet a step up from it, and cards a step up again.
+        assert_eq!(rgba(t.extra.chrome), rgba(t.extra.pane), "{mode}");
+        let ladder = [t.extra.pane, t.extra.stage, t.colors.surface].map(|c| oklab(rgba(c)));
+        for (i, w) in ladder.windows(2).enumerate() {
+            let s = w[1].0 - w[0].0;
             assert!(
-                *s >= 0.02,
+                s >= 0.025,
                 "{mode}: step {i} is {s:.4}, too close to tell apart"
             );
-            assert!(
-                (s - mean).abs() <= 0.004,
-                "{mode}: step {i} is {s:.4}, the mean is {mean:.4}; the ladder is uneven"
-            );
         }
+        // Warm, never coloured: cream, not tan.
         for (i, (_, chroma)) in ladder.iter().enumerate() {
             assert!(
-                *chroma <= 0.01,
-                "{mode}: surface {i} has chroma {chroma:.4}; paper, not colour"
+                *chroma <= 0.03,
+                "{mode}: surface {i} has chroma {chroma:.4}; cream, not colour"
             );
         }
-        // The selected row lifts off the sidebar at least as far as one step.
-        let (pane, sel) = (oklab(rgba(t.extra.pane)).0, oklab(rgba(t.extra.selected)).0);
+        // The selected row lifts off the sidebar as the session does.
+        let (pane, sel, stage) = (
+            oklab(rgba(t.extra.pane)).0,
+            oklab(rgba(t.extra.selected)).0,
+            oklab(rgba(t.extra.stage)).0,
+        );
         assert!(
-            sel - pane >= mean,
+            sel - pane >= (stage - pane) * 0.9,
             "{mode}: the selected row sits {:.4} above the sidebar",
             sel - pane
         );
+    }
+}
+
+/// One colour: the accent, the links, the switches and the mark's top are
+/// the same moss, and nothing filled is orange.
+#[test]
+fn moss_is_the_one_colour() {
+    for (mode, t) in both() {
+        let x = &t.extra;
+        for (name, c) in [
+            ("link", t.colors.primary),
+            ("switch", x.toggle_on),
+            ("mark top", x.mark_top),
+        ] {
+            assert_eq!(rgba(c), rgba(x.accent), "{mode}: {name}");
+        }
+        let terracotta: Hsla = gpui::rgb(0xee884f).into();
+        for (name, c) in [("accent", x.accent), ("fill", x.fill)] {
+            assert_ne!(rgba(c), rgba(terracotta), "{mode}: {name}");
+        }
+        // The accent holds a UI part's 3:1 on the session and on a card.
+        for g in [x.stage, t.colors.surface] {
+            assert!(contrast(x.accent, g) >= AA_UI, "{mode}");
+        }
     }
 }
 

@@ -177,6 +177,11 @@ impl Button {
         Self::new(id, Variant::Danger).label(label)
     }
 
+    /// The one decisive action, in the accent: Allow once, Send.
+    pub fn accent(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Self {
+        Self::new(id, Variant::Accent).label(label)
+    }
+
     /// An icon-only button: transparent at rest, washed on hover, its name
     /// in a tooltip and to assistive technology.
     pub fn icon(
@@ -278,10 +283,11 @@ impl RenderOnce for Button {
             (Size::Regular, false) => (t.size.button_h, px(14.), t.size.icon, t.text.body_sm),
             (Size::Large, false) => (t.size.hit_lg, t.space.lg, t.size.icon, t.text.body),
         };
-        let radius = match (self.variant, icon_only, self.size) {
-            (Variant::Outlined, true, _) | (_, true, Size::Large) => t.radius.control,
-            (_, _, Size::Compact) => t.radius.compact,
-            _ => t.radius.button,
+        // Everything you press is a pill.
+        let radius = match (icon_only, self.size) {
+            (true, _) => t.radius.control,
+            (_, Size::Compact) => t.radius.compact,
+            _ => t.radius.pill,
         };
         let fg = if self.disabled {
             t.colors.text_subtle
@@ -332,12 +338,13 @@ impl RenderOnce for Button {
             .bg(bg)
             .text_size(text)
             .text_color(fg)
+            // Labels on buttons are set in Archivo's heavier cut.
             .when(
                 matches!(
                     self.variant,
-                    Variant::Primary | Variant::Danger | Variant::Accent
-                ),
-                |d| d.font_weight(gpui::FontWeight::MEDIUM),
+                    Variant::Primary | Variant::Danger | Variant::Accent | Variant::Secondary
+                ) || (self.variant == Variant::Ghost && self.size != Size::Compact),
+                |d| d.font_weight(gpui::FontWeight::SEMIBOLD),
             )
             .focus_visible({
                 let edge = focus_edge(&t);
@@ -585,7 +592,7 @@ impl RenderOnce for Segmented {
             .items_center()
             .p(px(3.))
             .gap(px(2.))
-            .rounded(t.radius.button)
+            .rounded(t.radius.pill)
             .bg(t.extra.sunk)
             .border_1()
             .border_color(t.colors.border);
@@ -729,15 +736,17 @@ mod tests {
         }
     }
 
-    /// The control shapes stay softly squared: nothing but the switch and
-    /// badges is a pill, and buttons sit between 7 and 10px.
+    /// Two shapes: what you press is a pill, what holds content is 4px.
     #[test]
-    fn controls_are_softly_squared() {
-        let r = Theme::light().radius;
-        for v in [r.compact, r.button, r.control, r.card] {
-            let v = f32::from(v);
-            assert!((7. ..=10.).contains(&v), "{v}px");
+    fn pills_to_press_four_pixels_to_hold() {
+        for t in [Theme::light(), Theme::dark()] {
+            let r = t.radius;
+            for v in [r.compact, r.control, r.segment, r.pill] {
+                assert!(f32::from(v) >= 999., "{}px", f32::from(v));
+            }
+            for v in [r.button, r.card, r.field, t.size.composer_radius] {
+                assert_eq!(f32::from(v), 4.);
+            }
         }
-        assert!(f32::from(r.segment) < f32::from(r.button));
     }
 }

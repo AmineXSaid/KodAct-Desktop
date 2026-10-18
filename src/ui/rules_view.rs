@@ -287,6 +287,7 @@ impl RulesView {
                     .child(
                         div()
                             .font_family(t.font_display.clone())
+                            .font_weight(t.display_weight)
                             .text_size(t.size.greeting)
                             .text_color(t.colors.text_strong)
                             .child("Rules and memory"),

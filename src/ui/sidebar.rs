@@ -508,6 +508,7 @@ impl Render for Sidebar {
                 .with_priority(2)
             });
 
+        let fill_hover = t.extra.fill_hover;
         div()
             .w(t.size.sidebar)
             .flex_none()
@@ -515,8 +516,6 @@ impl Render for Sidebar {
             .flex()
             .flex_col()
             .bg(t.extra.pane)
-            .border_r_1()
-            .border_color(t.colors.border)
             .child(
                 div()
                     .flex()
@@ -531,31 +530,26 @@ impl Render for Sidebar {
                             .flex()
                             .items_center()
                             .gap(t.space.sm)
-                            .h(t.size.row + px(4.))
-                            .px(t.space.sm)
-                            .rounded(t.radius.button)
+                            .h(t.size.hit_lg)
+                            .px(px(14.))
+                            .mb(t.space.sm)
+                            .rounded(t.radius.pill)
                             .cursor_pointer()
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(t.colors.text_strong)
-                            .hover(move |st| st.bg(hover))
-                            // The one round control: the accent's mark for starting afresh.
+                            .font_weight(FontWeight::SEMIBOLD)
+                            // The sidebar's one filled control: the ink pill.
+                            .bg(t.extra.fill)
+                            .text_color(t.extra.fill_fg)
+                            .hover(move |st| st.bg(fill_hover))
+                            .child(icon("icons/plus.svg", t.size.icon, t.extra.fill_fg))
+                            .child(nav_label("New chat"))
                             .child(
                                 div()
-                                    .size(px(22.))
-                                    .flex_none()
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .rounded_full()
-                                    .bg(t.extra.accent)
-                                    .child(icon(
-                                        "icons/plus.svg",
-                                        t.size.icon_sm,
-                                        t.extra.accent_fg,
-                                    )),
+                                    .font_family(t.font_mono.clone())
+                                    .text_size(px(11.))
+                                    .font_weight(FontWeight::NORMAL)
+                                    .text_color(t.extra.fill_fg.opacity(0.62))
+                                    .child(shortcut("N")),
                             )
-                            .child(nav_label("New chat"))
-                            .child(kbd(&t, shortcut("N")))
                             .on_click(|_, window, cx| {
                                 window.dispatch_action(Box::new(NewChat), cx)
                             }),
@@ -838,7 +832,7 @@ pub fn status_mark(status: ChatStatus, id: usize, t: &crate::theme::Theme) -> gp
     let inner: gpui::AnyElement = match status {
         ChatStatus::Working => super::voxels::running(t.colors.sky, ("chat-working", id)),
         ChatStatus::NeedsYou => dot()
-            .bg(t.colors.marigold)
+            .bg(t.extra.accent)
             .with_animation(
                 ("chat-needs", id),
                 Animation::new(Duration::from_millis(1600))

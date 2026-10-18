@@ -23,8 +23,6 @@ pub fn render(
         .items_center()
         .gap(t.space.md)
         .bg(t.extra.chrome)
-        .border_t_1()
-        .border_color(t.colors.border)
         .text_size(t.text.caption)
         .text_color(t.colors.text_muted)
         .child(super::remote_menu::indicator(s, state, t))

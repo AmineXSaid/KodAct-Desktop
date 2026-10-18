@@ -176,6 +176,7 @@ pub fn render(t: &Theme, state: &Entity<AppState>) -> impl IntoElement {
                                 .flex_1()
                                 .text_size(t.text.subheading)
                                 .font_family(t.font_display.clone())
+                                .font_weight(t.display_weight)
                                 .text_color(t.colors.text_strong)
                                 .child(title),
                         )

@@ -487,22 +487,22 @@ fn user(
 /// The head of a turn: Forge's logo and name. The logo turns while the turn
 /// runs, and is still after.
 fn turn_header(cx: &ItemContext, t: &Theme) -> AnyElement {
-    const CUBE: f32 = 20.;
+    let cube = f32::from(t.size.mark_turn);
     let mark = if cx.live_turn {
         super::turning_logo(
-            CUBE,
+            cube,
             SharedString::from(format!("turn-cube-{}-{}", cx.chat, cx.index)),
         )
     } else {
-        super::logo(CUBE).into_any_element()
+        super::logo(cube).into_any_element()
     };
     div()
         .flex()
         .items_center()
-        .gap(t.space.sm)
-        .text_size(t.text.caption + px(1.))
+        .gap(t.space.snug)
+        .text_size(t.size.chat_text)
         .font_weight(FontWeight::SEMIBOLD)
-        .text_color(t.colors.text_muted)
+        .text_color(t.colors.text_strong)
         .child(mark)
         .child("Forge")
         .into_any_element()
@@ -1571,27 +1571,32 @@ fn permission(
         .gap(t.space.md)
         .p(t.space.lg)
         .bg(t.colors.surface)
+        // Ink, not a warning colour: it waits on you, and nothing is wrong.
         .border_1()
-        .border_color(t.colors.marigold.opacity(0.55))
+        .border_color(t.colors.text_strong)
         .rounded(t.radius.card)
+        .shadow(t.elevation_popover())
         .child(
             div()
                 .flex()
-                .items_center()
-                .gap(t.space.sm)
-                .child(theme::pill(
-                    t,
-                    t.extra.warning_tint,
-                    t.extra.warning,
-                    "Needs you",
-                ))
+                .items_start()
+                .gap(t.space.md)
                 .child(
                     div()
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(t.colors.text_strong)
-                        .child(title.clone()),
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .gap(px(3.))
+                        .child(theme::eyebrow(t, "Needs you"))
+                        .child(
+                            div()
+                                .text_size(t.text.body + px(2.))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(t.colors.text_strong)
+                                .child(title.clone()),
+                        ),
                 )
-                .child(div().flex_1())
                 .when(!is_plan, |d| d.child(env_badge(&cx.place, t))),
         )
         .child(if title.as_ref() == crate::backend::JS_ASK_TITLE {
@@ -1667,7 +1672,7 @@ fn permission(
                             .on_click(answer(Verdict::AllowedAlways)),
                     )
                     .child(
-                        Button::primary(id("allow"), "Allow once")
+                        Button::accent(id("allow"), "Allow once")
                             .on_click(answer(Verdict::Allowed)),
                     )
                 }),

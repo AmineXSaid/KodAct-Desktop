@@ -140,7 +140,7 @@ impl AssetSource for Assets {
         match path {
             "fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf" => {
                 return Ok(Some(Cow::Borrowed(include_bytes!(
-                    "../assets/fonts/HankenGrotesk-Regular.ttf"
+                    "../assets/fonts/Archivo-Regular.ttf"
                 ))))
             }
             "fonts/lilex/Lilex-Regular.ttf" => {
@@ -176,6 +176,8 @@ impl AssetSource for Assets {
 /// Register the bundled faces, so the app looks the same on every machine.
 pub fn load_fonts(cx: &App) {
     let fonts: Vec<Cow<'static, [u8]>> = vec![
+        Cow::Borrowed(include_bytes!("../assets/fonts/Archivo-Regular.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/Archivo-SemiBold.ttf")),
         Cow::Borrowed(include_bytes!("../assets/fonts/HankenGrotesk-Regular.ttf")),
         Cow::Borrowed(include_bytes!("../assets/fonts/HankenGrotesk-Medium.ttf")),
         Cow::Borrowed(include_bytes!("../assets/fonts/HankenGrotesk-SemiBold.ttf")),

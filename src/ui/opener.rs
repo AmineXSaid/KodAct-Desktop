@@ -924,7 +924,10 @@ impl Render for Opener {
                 weight: FontWeight::BOLD,
                 ..gpui::font(t.font_sans.clone())
             },
-            display: gpui::font(t.font_display.clone()),
+            display: Font {
+                weight: t.display_weight,
+                ..gpui::font(t.font_display.clone())
+            },
             sans: gpui::font(t.font_sans.clone()),
             mono: gpui::font(t.font_mono.clone()),
         };

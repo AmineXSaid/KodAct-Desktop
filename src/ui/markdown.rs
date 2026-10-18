@@ -688,7 +688,7 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                     &spans,
                     t,
                     &t.font_display,
-                    FontWeight::NORMAL,
+                    t.display_weight,
                     t.colors.text_strong,
                 ))
                 .into_any_element(),

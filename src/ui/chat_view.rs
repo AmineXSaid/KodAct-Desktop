@@ -486,7 +486,7 @@ fn working_line(
         .child(if writing {
             super::writing_hand::writing(t, "working-writing")
         } else {
-            super::turning_logo(24., "working-cube")
+            super::turning_logo(f32::from(t.size.mark_turn), "working-cube")
         })
         .child(div().font_weight(FontWeight::MEDIUM).with_animation(
             SharedString::from(format!("working-{label}")),
