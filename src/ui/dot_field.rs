@@ -45,11 +45,13 @@ const RIPPLE_SPEED: f32 = 420.;
 const RIPPLE_BAND: f32 = 34.;
 const RIPPLE_REACH: f32 = 700.;
 const RIPPLE_S: f32 = 1.8;
-/// Behind a chat: how much of its home-screen strength the field keeps,
-/// how far a working wave lifts it at its crest, the wave's speed (radians
-/// a second) and how many crests span the field.
-const CHAT_REST: f32 = 0.22;
-const WORK_LIFT: f32 = 2.2;
+/// Behind a chat: how much of its home-screen strength the field keeps (a
+/// little more at night, where faint dots vanish), what a working wave
+/// lifts it to at its crest, the wave's speed (radians a second) and how
+/// many crests span the field.
+const CHAT_REST: f32 = 0.3;
+const CHAT_REST_DARK: f32 = 0.4;
+const WORK_CREST: f32 = 0.8;
 const WORK_SPEED: f32 = 3.4;
 const WORK_WAVES: f32 = 0.65;
 /// Ticks: easing toward the pointer, breathing, and resting (hidden).
@@ -140,6 +142,29 @@ pub fn chat_content(w: f32, h: f32, column: f32) -> [f32; 4] {
     [w / 2. - half, 0., w / 2. + half, h]
 }
 
+/// Behind a chat, how strongly the field shows at `(x, y)`: both margins
+/// beside the reading column `col`, textured by slow noise and a little
+/// heavier toward the bottom, kept 18px clear of the column (so a narrow
+/// margin still holds a few dots) and faded before the window's edges.
+pub fn chat_weight(x: f32, y: f32, w: f32, h: f32, col: [f32; 4]) -> f32 {
+    if w <= 0. || h <= 0. {
+        return 0.;
+    }
+    let [l, _, r, _] = col;
+    let out = if x < l {
+        l - x
+    } else if x > r {
+        x - r
+    } else {
+        return 0.;
+    };
+    let quiet = smoothstep(18., 64., out);
+    let texture = 0.4 + 0.6 * fbm(x / 150. + 5., y / 150. + 9., 19);
+    let lower = 0.6 + 0.4 * smoothstep(0., h, y);
+    let edge = x.min(w - x).min(y).min(h - y) / (w.min(h) * 0.06).max(20.);
+    (quiet * texture * lower * smoothstep(0., 1., edge)).clamp(0., 1.)
+}
+
 /// How strongly the field shows at `(x, y)` in a `w`×`h` field around the
 /// content (`[left, top, right, bottom]`, in the field's coordinates).
 ///
@@ -185,6 +210,17 @@ pub fn weight(x: f32, y: f32, w: f32, h: f32, content: [f32; 4]) -> f32 {
 /// The field's marks for a `w`×`h` field on a `gap` grid around `content`.
 /// The grid is anchored at the field's centre.
 pub fn layout(w: f32, h: f32, gap: f32, content: [f32; 4]) -> Vec<Mark> {
+    layout_by(w, h, gap, |x, y| weight(x, y, w, h, content))
+}
+
+/// The field's marks behind a chat, in the margins beside the column.
+pub fn chat_layout(w: f32, h: f32, gap: f32, col: [f32; 4]) -> Vec<Mark> {
+    layout_by(w, h, gap, |x, y| chat_weight(x, y, w, h, col))
+}
+
+/// The marks on a `gap` grid anchored at the field's centre, each weighted
+/// by `weight`.
+fn layout_by(w: f32, h: f32, gap: f32, weight: impl Fn(f32, f32) -> f32) -> Vec<Mark> {
     let mut out = Vec::new();
     if w <= 0. || h <= 0. || gap <= 0. {
         return out;
@@ -197,7 +233,7 @@ pub fn layout(w: f32, h: f32, gap: f32, content: [f32; 4]) -> Vec<Mark> {
             if x < 0. || y < 0. || x > w || y > h {
                 continue;
             }
-            let wt = weight(x, y, w, h, content);
+            let wt = weight(x, y);
             // Mostly faded rather than thinned: thinning alone reads as a
             // halftone, so only the faintest edges lose dots.
             if wt < 0.02 || hash(i, j, 1) > wt * 2.4 + 0.05 {
@@ -244,7 +280,7 @@ type Painted = (Bounds<Pixels>, Instant);
 
 #[derive(Default)]
 struct Cache {
-    key: [i32; 7],
+    key: [i32; 8],
     marks: Rc<Vec<Mark>>,
 }
 
@@ -392,6 +428,7 @@ fn marks(
     bounds: Bounds<Pixels>,
     gap: f32,
     content: [f32; 4],
+    chat: bool,
 ) -> Rc<Vec<Mark>> {
     let (w, h) = (f32::from(bounds.size.width), f32::from(bounds.size.height));
     let q = |v: f32| (v / 4.).round() as i32;
@@ -403,12 +440,17 @@ fn marks(
         q(content[1]),
         q(content[2]),
         q(content[3]),
+        chat as i32,
     ];
     let mut cache = cache.borrow_mut();
     if cache.key != key || cache.marks.is_empty() {
         *cache = Cache {
             key,
-            marks: Rc::new(layout(w, h, gap, content)),
+            marks: Rc::new(if chat {
+                chat_layout(w, h, gap, content)
+            } else {
+                layout(w, h, gap, content)
+            }),
         };
     }
     cache.marks.clone()
@@ -470,13 +512,14 @@ fn alpha(mark: &Mark, phase: f32, glow: f32, peak: f32) -> f32 {
     mark.weight.powf(1.1) * peak * breath * (1. + 0.14 * glow)
 }
 
-/// Behind a chat, a mark's share of its home-screen opacity: a faint rest,
-/// lifted by the working wave as it passes (`y` down a field `h` tall).
-fn backdrop(quiet: f32, work: f32, phase: f32, y: f32, h: f32) -> f32 {
-    let rest = 1. - (1. - CHAT_REST) * quiet;
+/// Behind a chat, a mark's share of its home-screen opacity: a faint
+/// `rest`, lifted toward the crest by the working wave as it passes (`y`
+/// down a field `h` tall).
+fn backdrop(quiet: f32, work: f32, phase: f32, y: f32, h: f32, rest: f32) -> f32 {
+    let base = 1. - (1. - rest) * quiet;
     let k = std::f32::consts::TAU * WORK_WAVES / h.max(1.);
     let wave = 0.5 + 0.5 * (phase * WORK_SPEED - y * k).sin();
-    rest * (1. + WORK_LIFT * work * wave)
+    base + (WORK_CREST - base).max(0.) * work * wave
 }
 
 /// How much a ripple lights a dot `d` px from its centre, `secs` after it
@@ -531,6 +574,7 @@ fn paint_marks(
                 motion.phase,
                 m.at.y,
                 f32::from(bounds.size.height),
+                if t.is_dark { CHAT_REST_DARK } else { CHAT_REST },
             );
             let a = ((alpha(m, motion.phase, motion.glow, peak) + 0.55 * lit) * back).min(1.);
             let tint = |c: Hsla, k: f32| Hsla {
@@ -638,7 +682,7 @@ impl Render for DotField {
                             }
                         }
                         shared.anchor.set(Some(centre));
-                        marks(&cache, bounds, gap, content)
+                        marks(&cache, bounds, gap, content, shared.backdrop.get())
                     }
                 },
                 move |bounds, marks, window, _| {
@@ -673,21 +717,21 @@ mod ripple_tests {
     #[test]
     fn behind_a_chat_the_field_is_faint_and_the_wave_lifts_it_only_while_working() {
         // The home screen: untouched.
-        assert_eq!(backdrop(0., 0., 1.3, 200., 700.), 1.);
+        assert_eq!(backdrop(0., 0., 1.3, 200., 700., CHAT_REST), 1.);
         // Behind a chat at rest: a faint trace, the same everywhere and always.
         let rest: Vec<f32> = (0..40)
-            .map(|i| backdrop(1., 0., i as f32 * 0.1, i as f32 * 17., 700.))
+            .map(|i| backdrop(1., 0., i as f32 * 0.1, i as f32 * 17., 700., CHAT_REST))
             .collect();
         assert!(rest.iter().all(|a| (a - CHAT_REST).abs() < 1e-6));
         // Working: the wave lifts it, never below the rest, and moves.
-        let at = |phase: f32| backdrop(1., 1., phase, 300., 700.);
+        let at = |phase: f32| backdrop(1., 1., phase, 300., 700., CHAT_REST);
         let samples: Vec<f32> = (0..60).map(|i| at(i as f32 * 0.05)).collect();
         let (lo, hi) = samples
             .iter()
             .fold((f32::MAX, f32::MIN), |(l, h), a| (l.min(*a), h.max(*a)));
-        assert!(lo >= CHAT_REST - 1e-6 && hi > CHAT_REST * 2., "{lo}..{hi}");
-        // At its crest still well under the home screen's strength.
-        assert!(hi < 0.8, "{hi}");
+        assert!(lo >= CHAT_REST - 1e-6 && hi > CHAT_REST * 2.4, "{lo}..{hi}");
+        // At its crest still under the home screen's strength.
+        assert!(hi <= WORK_CREST + 1e-6, "{hi}");
     }
 
     #[test]
@@ -745,11 +789,21 @@ mod tests {
     fn behind_a_chat_the_reading_column_stays_clear() {
         let (w, h) = (1180., 810.);
         let c = chat_content(w, h, 680.);
-        let marks = layout(w, h, 14., c);
-        // Dots in the margins on both sides, none within 28px of the column.
-        assert!(marks.iter().any(|m| m.at.x < c[0]));
-        assert!(marks.iter().any(|m| m.at.x > c[2]));
-        assert!(marks.iter().all(|m| m.at.x < c[0] - 27. || m.at.x > c[2] + 27.));
+        let marks = chat_layout(w, h, 14., c);
+        // Dots down both margins, top to bottom, none within 18px of the column.
+        for side in [|x: f32, c: [f32; 4]| x < c[0], |x: f32, c: [f32; 4]| x > c[2]] {
+            for band in [0.2, 0.5, 0.8] {
+                let y = h * band;
+                assert!(
+                    marks.iter().any(|m| side(m.at.x, c) && (m.at.y - y).abs() < 60.),
+                    "no dots at {band} down"
+                );
+            }
+        }
+        assert!(marks.iter().all(|m| m.at.x < c[0] - 17. || m.at.x > c[2] + 17.));
+        // A narrow window, 60px margins: still a few dots in them.
+        let c = chat_content(800., h, 680.);
+        assert!(chat_layout(800., h, 14., c).len() > 10);
     }
 
     #[test]
