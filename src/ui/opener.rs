@@ -1169,11 +1169,45 @@ mod tests {
 
     #[test]
     fn it_fits_the_stage_to_any_window() {
-        let f = Fit::new(1280., 824.);
-        assert!((STAGE_W * f.s - 1280.).abs() < 1e-3);
-        assert!(f.oy > 0. && f.ox.abs() < 1e-3);
+        // Wider than 16:9: the height decides, and the stage is centred across.
+        let wide = Fit::new(2000., 600.);
+        assert!((STAGE_H * wide.s - 600.).abs() < 1e-3);
+        assert!(wide.oy.abs() < 1e-3 && (wide.ox * 2. + STAGE_W * wide.s - 2000.).abs() < 1e-3);
+        // Taller: the width decides, and it is centred down.
         let tall = Fit::new(800., 1200.);
-        assert!((STAGE_H * tall.s - 1200.).abs() > 1. && tall.ox.abs() < 1e-3);
+        assert!((STAGE_W * tall.s - 800.).abs() < 1e-3);
+        assert!(tall.ox.abs() < 1e-3 && (tall.oy * 2. + STAGE_H * tall.s - 1200.).abs() < 1e-3);
+        // Either way the whole stage is inside the window.
+        for f in [wide, tall, Fit::new(1280., 860.)] {
+            assert!(f.x(0.) >= -1e-3 && f.y(0.) >= -1e-3);
+        }
+    }
+
+    #[test]
+    fn it_shakes_only_on_the_lock_and_the_lines() {
+        let m = Cut::First.timing();
+        let at = |t: f32| scene(Cut::First, t, word(), HERO).shake;
+        let moved = |(x, y): (f32, f32)| x.abs() + y.abs() > 0.5;
+        assert!(moved(at(m.lock + 0.02)));
+        assert!(moved(at(WORDS[1].0 + 0.02)));
+        // Still before the lock and between the hits.
+        assert_eq!(at(m.lock - 0.1), (0., 0.));
+        assert_eq!(at(m.lock + 0.3), (0., 0.));
+        assert_eq!(at(m.cooled), (0., 0.));
+        // The lock hits harder than a line.
+        let size = |(x, y): (f32, f32)| x.hypot(y);
+        assert!(size(at(m.lock + 0.005)) > size(at(WORDS[0].0 + 0.005)));
+    }
+
+    #[test]
+    fn the_generator_matches_the_mock() {
+        // The first draws of the mock's mulberry32 (design/opener-mock.html),
+        // so the sparks and embers fly exactly as they do there.
+        let mut r = rng(11);
+        for want in [0.511_587, 0.529_946_4, 0.608_118_6] {
+            assert!((r() - want).abs() < 1e-6);
+        }
+        assert!((rng(23)() - 0.092_722_67).abs() < 1e-6);
     }
 
     #[test]
