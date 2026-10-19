@@ -239,11 +239,15 @@ impl Workspace {
     fn title_bar(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         // Deferred so it paints above the page under the title bar.
-        let switcher = self
-            .state
-            .read(cx)
-            .switcher_open
-            .then(|| gpui::deferred(self.switcher(window, cx)).with_priority(1));
+        let switcher = self.state.read(cx).switcher_open.then(|| {
+            gpui::deferred(project_switcher(
+                &self.state,
+                window,
+                cx,
+                t.size.control + t.space.xs,
+            ))
+            .with_priority(1)
+        });
         let s = self.state.read(cx);
         let hover = t.colors.hover;
         // Icon-only: each says what it does, with its key.
@@ -284,75 +288,79 @@ impl Workspace {
                         window.dispatch_action(Box::new(ToggleSidebar), cx)
                     })),
                 )
-                .child(
-                    div()
-                        .relative()
-                        .on_mouse_down_out(cx.listener(|this, _, _, cx| {
-                            if this.state.read(cx).switcher_open {
-                                this.state.update(cx, |s, cx| {
-                                    s.switcher_open = false;
-                                    cx.notify();
-                                });
-                            }
-                        }))
-                        .child(
-                            div()
-                                .id("project")
-                                .occlude()
-                                .flex()
-                                .items_center()
-                                .gap(t.space.xs)
-                                .px(t.space.sm)
-                                .h(t.size.control)
-                                .rounded(t.radius.pill)
-                                .cursor_pointer()
-                                .hover(move |st| st.bg(hover))
-                                .when(s.switcher_open, |d| d.bg(hover))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(t.colors.text_strong)
-                                .child(super::projects::project_tile(
-                                    &t,
-                                    &s.project,
-                                    &s.project_dir,
-                                    px(18.),
-                                ))
-                                .child(s.project.clone())
-                                // A remote project says where it lives.
-                                .children(s.current_remote().map(|r| {
-                                    div()
-                                        .flex()
-                                        .items_center()
-                                        .gap(px(4.))
-                                        .font_weight(FontWeight::NORMAL)
-                                        .text_size(t.text.caption)
-                                        .text_color(t.colors.text_muted)
-                                        .child(icon(
-                                            r.target.icon(),
-                                            t.size.icon_xs,
-                                            t.colors.text_muted,
-                                        ))
-                                        .child(r.target.label())
-                                }))
-                                .child(icon(
-                                    if s.switcher_open {
-                                        "icons/chevron-up.svg"
-                                    } else {
-                                        "icons/chevron-down.svg"
-                                    },
-                                    t.size.icon_sm,
-                                    t.colors.text_subtle,
-                                ))
-                                .on_click(cx.listener(|this, _, _, cx| {
+                // The project and its branch: here while the sidebar is
+                // hidden, at the top of the sidebar's sheet while it shows.
+                .when(!s.sidebar_open, |d| {
+                    d.child(
+                        div()
+                            .relative()
+                            .on_mouse_down_out(cx.listener(|this, _, _, cx| {
+                                if this.state.read(cx).switcher_open {
                                     this.state.update(cx, |s, cx| {
-                                        s.switcher_open = !s.switcher_open;
+                                        s.switcher_open = false;
                                         cx.notify();
-                                    })
-                                })),
-                        )
-                        .children(switcher),
-                )
+                                    });
+                                }
+                            }))
+                            .child(
+                                div()
+                                    .id("project")
+                                    .occlude()
+                                    .flex()
+                                    .items_center()
+                                    .gap(t.space.xs)
+                                    .px(t.space.sm)
+                                    .h(t.size.control)
+                                    .rounded(t.radius.pill)
+                                    .cursor_pointer()
+                                    .hover(move |st| st.bg(hover))
+                                    .when(s.switcher_open, |d| d.bg(hover))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(t.colors.text_strong)
+                                    .child(super::projects::project_tile(
+                                        &t,
+                                        &s.project,
+                                        &s.project_dir,
+                                        px(22.),
+                                    ))
+                                    .child(s.project.clone())
+                                    // A remote project says where it lives.
+                                    .children(s.current_remote().map(|r| {
+                                        div()
+                                            .flex()
+                                            .items_center()
+                                            .gap(px(4.))
+                                            .font_weight(FontWeight::NORMAL)
+                                            .text_size(t.text.caption)
+                                            .text_color(t.colors.text_muted)
+                                            .child(icon(
+                                                r.target.icon(),
+                                                t.size.icon_xs,
+                                                t.colors.text_muted,
+                                            ))
+                                            .child(r.target.label())
+                                    }))
+                                    .child(icon(
+                                        if s.switcher_open {
+                                            "icons/chevron-up.svg"
+                                        } else {
+                                            "icons/chevron-down.svg"
+                                        },
+                                        t.size.icon_sm,
+                                        t.colors.text_subtle,
+                                    ))
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.state.update(cx, |s, cx| {
+                                            s.switcher_open = !s.switcher_open;
+                                            cx.notify();
+                                        })
+                                    })),
+                            )
+                            .children(switcher),
+                    )
+                })
                 // The branch, when the folder is a repository.
-                .when(!s.branch.is_empty(), |d| {
+                .when(!s.branch.is_empty() && !s.sidebar_open, |d| {
                     let branch = s.branch.clone();
                     let copier = self.state.clone();
                     let strong = t.colors.text;
@@ -621,169 +629,6 @@ impl Workspace {
 
     /// The title bar's project switcher: every project, then All projects
     /// and Open folder….
-    fn switcher(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
-        let t = cx.theme().clone();
-        let s = self.state.read(cx);
-        let home = crate::rules::home_dir();
-        let hover = t.colors.hover;
-        let mut projects: Vec<_> = s.projects.iter().filter(|p| p.saved).cloned().collect();
-        projects.sort_by_key(|p| (p.id != s.current_project, !p.pinned, p.opened_minutes_ago));
-        let connected: Vec<_> = s.projects.iter().filter(|p| !p.saved).cloned().collect();
-        let row = |id: SharedString, current: bool| {
-            div()
-                .id(id)
-                .flex()
-                .items_center()
-                .gap(t.space.md)
-                .px(t.space.sm)
-                .py(t.space.xs + px(2.))
-                .rounded(t.radius.button)
-                .cursor_pointer()
-                .when(current, |d| d.bg(t.extra.selected))
-                .hover(move |st| st.bg(hover))
-        };
-        let label = |text: &'static str| {
-            div()
-                .px(t.space.sm)
-                .pt(t.space.sm)
-                .pb(t.space.xs)
-                .text_size(t.text.caption)
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(t.colors.text_subtle)
-                .child(text)
-        };
-        let entry = |p: &crate::state::Project, meta: String, current: bool| {
-            let (state, id) = (self.state.clone(), p.id);
-            let tip: SharedString = crate::rules::display_path(&p.path, home.as_deref()).into();
-            row(format!("switch-{}", p.id).into(), current)
-                .tooltip(move |w, cx| {
-                    gpui::component::tooltip::Tooltip::new(tip.clone()).build(w, cx)
-                })
-                .child(super::projects::project_tile(&t, &p.name, &p.path, px(28.)))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .child(
-                            div()
-                                .overflow_hidden()
-                                .whitespace_nowrap()
-                                .text_ellipsis()
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(t.colors.text_strong)
-                                .child(p.name.clone()),
-                        )
-                        .child(
-                            div()
-                                .overflow_hidden()
-                                .whitespace_nowrap()
-                                .text_ellipsis()
-                                .text_size(t.text.caption)
-                                .text_color(t.colors.text_subtle)
-                                .child(meta),
-                        ),
-                )
-                .child(div().w(t.size.icon).when(current, |d| {
-                    d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.primary))
-                }))
-                .on_click(move |_, _, cx| {
-                    state.update(cx, |s, cx| {
-                        s.select_project(id, cx);
-                        if !matches!(s.screen, Screen::Rules) {
-                            s.screen = Screen::Chat;
-                        }
-                    })
-                })
-        };
-        let mut list = div().flex().flex_col().gap(px(2.)).child(label("Projects"));
-        // Rows rise in one after another as the menu opens.
-        let mut i = 0;
-        for p in &projects {
-            let chats = s.chats.iter().filter(|c| c.project == p.id).count();
-            let current = p.id == s.current_project;
-            let e = entry(
-                p,
-                super::projects::project_meta(chats, current, p.opened_minutes_ago),
-                current,
-            );
-            list = list.child(super::motion::row_in(e, ("switch-in", i), i, &t));
-            i += 1;
-        }
-        // Folders you're connected to that aren't projects: here to come back to.
-        if !connected.is_empty() {
-            list = list.child(label("Connected"));
-            for p in &connected {
-                let place = crate::remote::Remote::parse(&p.path)
-                    .map(|r| r.target.label())
-                    .unwrap_or_default();
-                let current = p.id == s.current_project;
-                let e = entry(p, place, current);
-                list = list.child(super::motion::row_in(e, ("switch-in", i), i, &t));
-                i += 1;
-            }
-        }
-        let (all, open) = (self.state.clone(), self.state.clone());
-        let menu = theme::fit_window(
-            theme::popover(&t).id("switcher"),
-            window,
-            &t,
-            t.size.titlebar,
-            None,
-        )
-        .absolute()
-        .top(t.size.control + t.space.xs)
-        .left_0()
-        .w(px(340.))
-        .p(t.space.xs)
-        .child(list)
-        .child(theme::rule(&t).my(t.space.xs))
-        .child(
-            row("switch-all".into(), false)
-                .child(
-                    div()
-                        .size(px(28.))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child(icon(
-                            "icons/layout-grid.svg",
-                            t.size.icon_sm,
-                            t.colors.text_muted,
-                        )),
-                )
-                .child(div().text_color(t.colors.text).child("All projects"))
-                .on_click(move |_, _, cx| {
-                    all.update(cx, |s, cx| {
-                        s.switcher_open = false;
-                        s.screen = Screen::Projects;
-                        cx.notify();
-                    })
-                }),
-        )
-        .child(
-            row("switch-open".into(), false)
-                .child(
-                    div()
-                        .size(px(28.))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child(icon("icons/plus.svg", t.size.icon_sm, t.colors.text_muted)),
-                )
-                .child(div().text_color(t.colors.text).child("New project…"))
-                .on_click(move |_, _, cx| {
-                    open.update(cx, |s, cx| {
-                        s.switcher_open = false;
-                        cx.notify();
-                    });
-                    super::projects::open_folder(open.clone(), cx);
-                }),
-        );
-        super::motion::edge_draw(menu, "switcher-in", t.colors.primary, 0., &t)
-    }
-
     fn toast(&self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         let t = cx.theme().clone();
         let text: SharedString = self.state.read(cx).toast.clone()?;
@@ -1496,6 +1341,175 @@ fn greeting_line(line: &str, t: &crate::theme::Theme) -> impl IntoElement {
                 .line_height(gpui::relative(1.1))
                 .child(line.to_string()),
         )
+}
+
+/// The project switcher's menu: every project, then All projects and New
+/// project…; placed `top` below its opener's container. The title bar opens
+/// it, or the sidebar's project header when the sidebar shows.
+pub fn project_switcher(
+    state: &Entity<AppState>,
+    window: &Window,
+    cx: &App,
+    top: Pixels,
+) -> impl IntoElement + use<> {
+    let t = cx.theme().clone();
+    let s = state.read(cx);
+    let home = crate::rules::home_dir();
+    let hover = t.colors.hover;
+    let mut projects: Vec<_> = s.projects.iter().filter(|p| p.saved).cloned().collect();
+    projects.sort_by_key(|p| (p.id != s.current_project, !p.pinned, p.opened_minutes_ago));
+    let connected: Vec<_> = s.projects.iter().filter(|p| !p.saved).cloned().collect();
+    let row = |id: SharedString, current: bool| {
+        div()
+            .id(id)
+            .flex()
+            .items_center()
+            .gap(t.space.md)
+            .px(t.space.sm)
+            .py(t.space.xs + px(2.))
+            .rounded(t.radius.button)
+            .cursor_pointer()
+            .when(current, |d| d.bg(t.extra.selected))
+            .hover(move |st| st.bg(hover))
+    };
+    let label = |text: &'static str| {
+        div()
+            .px(t.space.sm)
+            .pt(t.space.sm)
+            .pb(t.space.xs)
+            .text_size(t.text.caption)
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(t.colors.text_subtle)
+            .child(text)
+    };
+    let entry = |p: &crate::state::Project, meta: String, current: bool| {
+        let (state, id) = (state.clone(), p.id);
+        let tip: SharedString = crate::rules::display_path(&p.path, home.as_deref()).into();
+        row(format!("switch-{}", p.id).into(), current)
+            .tooltip(move |w, cx| gpui::component::tooltip::Tooltip::new(tip.clone()).build(w, cx))
+            .child(super::projects::project_tile(&t, &p.name, &p.path, px(28.)))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .child(
+                        div()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(t.colors.text_strong)
+                            .child(p.name.clone()),
+                    )
+                    .child(
+                        div()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .text_size(t.text.caption)
+                            .text_color(t.colors.text_subtle)
+                            .child(meta),
+                    ),
+            )
+            .child(div().w(t.size.icon).when(current, |d| {
+                d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.primary))
+            }))
+            .on_click(move |_, _, cx| {
+                state.update(cx, |s, cx| {
+                    s.select_project(id, cx);
+                    if !matches!(s.screen, Screen::Rules) {
+                        s.screen = Screen::Chat;
+                    }
+                })
+            })
+    };
+    let mut list = div().flex().flex_col().gap(px(2.)).child(label("Projects"));
+    // Rows rise in one after another as the menu opens.
+    let mut i = 0;
+    for p in &projects {
+        let chats = s.chats.iter().filter(|c| c.project == p.id).count();
+        let current = p.id == s.current_project;
+        let e = entry(
+            p,
+            super::projects::project_meta(chats, current, p.opened_minutes_ago),
+            current,
+        );
+        list = list.child(super::motion::row_in(e, ("switch-in", i), i, &t));
+        i += 1;
+    }
+    // Folders you're connected to that aren't projects: here to come back to.
+    if !connected.is_empty() {
+        list = list.child(label("Connected"));
+        for p in &connected {
+            let place = crate::remote::Remote::parse(&p.path)
+                .map(|r| r.target.label())
+                .unwrap_or_default();
+            let current = p.id == s.current_project;
+            let e = entry(p, place, current);
+            list = list.child(super::motion::row_in(e, ("switch-in", i), i, &t));
+            i += 1;
+        }
+    }
+    let (all, open) = (state.clone(), state.clone());
+    let menu = theme::fit_window(
+        theme::popover(&t).id("switcher"),
+        window,
+        &t,
+        t.size.titlebar,
+        None,
+    )
+    .absolute()
+    .top(top)
+    .left_0()
+    .w(px(340.))
+    .p(t.space.xs)
+    .child(list)
+    .child(theme::rule(&t).my(t.space.xs))
+    .child(
+        row("switch-all".into(), false)
+            .child(
+                div()
+                    .size(px(28.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(icon(
+                        "icons/layout-grid.svg",
+                        t.size.icon_sm,
+                        t.colors.text_muted,
+                    )),
+            )
+            .child(div().text_color(t.colors.text).child("All projects"))
+            .on_click(move |_, _, cx| {
+                all.update(cx, |s, cx| {
+                    s.switcher_open = false;
+                    s.screen = Screen::Projects;
+                    cx.notify();
+                })
+            }),
+    )
+    .child(
+        row("switch-open".into(), false)
+            .child(
+                div()
+                    .size(px(28.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(icon("icons/plus.svg", t.size.icon_sm, t.colors.text_muted)),
+            )
+            .child(div().text_color(t.colors.text).child("New project…"))
+            .on_click(move |_, _, cx| {
+                open.update(cx, |s, cx| {
+                    s.switcher_open = false;
+                    cx.notify();
+                });
+                super::projects::open_folder(open.clone(), cx);
+            }),
+    );
+    super::motion::edge_draw(menu, "switcher-in", t.colors.primary, 0., &t)
 }
 
 #[cfg(test)]

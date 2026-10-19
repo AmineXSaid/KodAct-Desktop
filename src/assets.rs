@@ -30,6 +30,7 @@ icons!(
     "chevron-down",
     "chevron-right",
     "chevron-up",
+    "chevrons-up-down",
     "circle-check",
     "circle-pause",
     "code-xml",

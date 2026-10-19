@@ -791,16 +791,23 @@ mod tests {
         let c = chat_content(w, h, 680.);
         let marks = chat_layout(w, h, 14., c);
         // Dots down both margins, top to bottom, none within 18px of the column.
-        for side in [|x: f32, c: [f32; 4]| x < c[0], |x: f32, c: [f32; 4]| x > c[2]] {
+        for side in [
+            |x: f32, c: [f32; 4]| x < c[0],
+            |x: f32, c: [f32; 4]| x > c[2],
+        ] {
             for band in [0.2, 0.5, 0.8] {
                 let y = h * band;
                 assert!(
-                    marks.iter().any(|m| side(m.at.x, c) && (m.at.y - y).abs() < 60.),
+                    marks
+                        .iter()
+                        .any(|m| side(m.at.x, c) && (m.at.y - y).abs() < 60.),
                     "no dots at {band} down"
                 );
             }
         }
-        assert!(marks.iter().all(|m| m.at.x < c[0] - 17. || m.at.x > c[2] + 17.));
+        assert!(marks
+            .iter()
+            .all(|m| m.at.x < c[0] - 17. || m.at.x > c[2] + 17.));
         // A narrow window, 60px margins: still a few dots in them.
         let c = chat_content(800., h, 680.);
         assert!(chat_layout(800., h, 14., c).len() > 10);

@@ -92,10 +92,10 @@ fn grounds(t: &Theme) -> Vec<(String, Hsla)> {
         base.iter()
             .map(|(n, c)| (format!("{n}+hover"), Hsla::from(over(t.colors.hover, *c)))),
     );
-    // The current row in the sidebar.
+    // The current row in the sidebar's sheet: the accent's wash, softened.
     out.push((
-        "pane+active".into(),
-        Hsla::from(over(t.extra.active, t.extra.pane)),
+        "stage+accent_soft".into(),
+        Hsla::from(over(t.extra.accent_soft.opacity(0.6), t.extra.stage)),
     ));
     out
 }

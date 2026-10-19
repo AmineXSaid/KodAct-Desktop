@@ -75,14 +75,15 @@ pub fn project_tile(t: &Theme, name: &str, path: &std::path::Path, size: Pixels)
         .bytes()
         .fold(7usize, |a, b| a.wrapping_mul(31).wrapping_add(b as usize));
     let color = colors[h % colors.len()];
-    // A folder, in the project's own hue: the shape says what it is, the
-    // colour tells projects apart at a glance.
+    // A folder, in the project's own hue, on a soft wash of it: the shape
+    // says what it is, the colour tells projects apart at a glance. No
+    // outline, so a small tile reads as a mark rather than a checkbox.
     let glyph = if size >= px(40.) {
         t.size.icon_lg
     } else if size >= px(28.) {
         t.size.icon
     } else {
-        t.size.icon_xs
+        t.size.icon_sm
     };
     let remote = crate::remote::Remote::parse(path);
     div()
@@ -96,9 +97,7 @@ pub fn project_tile(t: &Theme, name: &str, path: &std::path::Path, size: Pixels)
                 .items_center()
                 .justify_center()
                 .rounded(t.radius.button)
-                .bg(color.opacity(0.16))
-                .border_1()
-                .border_color(color.opacity(0.28))
+                .bg(color.opacity(if t.is_dark { 0.22 } else { 0.15 }))
                 .child(icon("icons/folder.svg", glyph, color)),
         )
         // Too small a tile for a badge: the title bar names the remote beside it.

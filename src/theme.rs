@@ -492,7 +492,6 @@ pub struct ExtraColors {
     pub mark_heat_ember: Hsla,
     pub mark_heat_iron: Hsla,
     pub border_strong: Hsla, // outlined buttons, switch tracks at rest, fields
-    pub active: Hsla,        // the wash under the current row in a list (the sidebar's chat)
     pub sunk: Hsla,          // a recessed track: segmented controls, the composer's tray
     pub toggle_on: Hsla,     // a switch that is on
     // Memory and rules: the reference's ochre.
@@ -559,7 +558,6 @@ impl ExtraColors {
                 mark_heat_ember: rgb(0xa3311c).into(),
                 mark_heat_iron: rgb(0x3b3633).into(),
                 border_strong: rgb(0x4a4540).into(),
-                active: hsla(22. / 360., 0.37, 0.92, 0.07),
                 sunk: rgb(0x262321).into(),
                 toggle_on: rgb(0x8fbf9b).into(),
                 memory: rgb(0xe5c77a).into(),
@@ -629,7 +627,6 @@ impl ExtraColors {
                 mark_heat_ember: rgb(0xa3311c).into(),
                 mark_heat_iron: rgb(0x3b3633).into(),
                 border_strong: rgb(0xc9c9c7).into(),
-                active: hsla(0., 0., 0.118, 0.06),
                 sunk: rgb(0xf5f2f0).into(),
                 toggle_on: rgb(0x3f6b4b).into(),
                 memory: rgb(0x75591a).into(),

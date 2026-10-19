@@ -1,5 +1,7 @@
-//! The left sidebar: New chat, search, the chats grouped by date (Pinned
-//! first), and settings at the bottom. Collapses with Ctrl/⌘B.
+//! The left sidebar, a sheet on the window's cream like the session beside
+//! it: the project (opening the switcher), New chat, search, the chats
+//! grouped by date (Pinned first), and you with settings at the bottom.
+//! Collapses with Ctrl/⌘B.
 
 use gpui::component::input::{Input, InputEvent, InputState};
 use std::time::Duration;
@@ -253,7 +255,8 @@ impl Render for Sidebar {
                     .text_size(t.text.caption)
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(t.colors.text_muted)
-                    .child(div().flex_1().child(group))
+                    .child(div().flex_none().child(group))
+                    .child(div().flex_1().h(px(1.)).mx(t.space.sm).bg(t.colors.border))
                     .when(first, |d| d.children(filter.take())),
             );
             for p in projects_here {
@@ -275,7 +278,8 @@ impl Render for Sidebar {
                             t.colors.text_muted
                         })
                         .when(active, |d| {
-                            d.bg(t.extra.active).font_weight(FontWeight::MEDIUM)
+                            d.bg(t.extra.accent_soft.opacity(0.6))
+                                .font_weight(FontWeight::MEDIUM)
                         })
                         .when(!active, |d| d.hover(move |st| st.bg(hover)))
                         .child(
@@ -339,7 +343,8 @@ impl Render for Sidebar {
                             t.colors.text_muted
                         })
                         .when(selected, |d| {
-                            d.bg(t.extra.active).font_weight(FontWeight::MEDIUM)
+                            d.bg(t.extra.accent_soft.opacity(0.6))
+                                .font_weight(FontWeight::MEDIUM)
                         })
                         .when(!selected, |d| d.hover(move |st| st.bg(hover)))
                         .child(status_mark(status, id, &t))
@@ -508,180 +513,282 @@ impl Render for Sidebar {
                 .with_priority(2)
             });
 
-        let fill_hover = t.extra.fill_hover;
-        div()
-            .w(t.size.sidebar)
+        // The project, at the top of the sheet: its tile, its name and where
+        // it stands (the branch, or where a remote one lives); a click opens
+        // the switcher under it.
+        let switcher_open = s.switcher_open;
+        let switcher = switcher_open.then(|| {
+            gpui::deferred(super::workspace::project_switcher(
+                &self.state,
+                window,
+                cx,
+                px(34.) + t.space.md * 2. + t.space.xs,
+            ))
+            .with_priority(1)
+        });
+        let place = s
+            .current_remote()
+            .map(|r| (r.target.icon(), SharedString::from(r.target.label()), false))
+            .or_else(|| {
+                (!s.branch.is_empty()).then(|| ("icons/git-branch.svg", s.branch.clone(), true))
+            });
+        let (closer, opener) = (self.state.clone(), self.state.clone());
+        let header = div()
+            .relative()
             .flex_none()
-            .h_full()
-            .flex()
-            .flex_col()
-            .bg(t.extra.pane)
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(t.space.xs)
-                    .p(t.space.sm)
-                    .child(
-                        div()
-                            .id("new-chat")
-                            .role(gpui::accesskit::Role::Button)
-                            .aria_label("New chat")
-                            .flex()
-                            .items_center()
-                            .gap(t.space.sm)
-                            .h(t.size.hit_lg)
-                            .px(px(14.))
-                            .mb(t.space.sm)
-                            .rounded(t.radius.pill)
-                            .cursor_pointer()
-                            .font_weight(FontWeight::SEMIBOLD)
-                            // The sidebar's one filled control: the ink pill.
-                            .bg(t.extra.fill)
-                            .text_color(t.extra.fill_fg)
-                            .hover(move |st| st.bg(fill_hover))
-                            .child(icon("icons/plus.svg", t.size.icon, t.extra.fill_fg))
-                            .child(nav_label("New chat"))
-                            .child(
-                                div()
-                                    .font_family(t.font_mono.clone())
-                                    .text_size(px(11.))
-                                    .font_weight(FontWeight::NORMAL)
-                                    .text_color(t.extra.fill_fg.opacity(0.62))
-                                    .child(shortcut("N")),
-                            )
-                            .on_click(|_, window, cx| {
-                                window.dispatch_action(Box::new(NewChat), cx)
-                            }),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(t.space.xs)
-                            .h(t.size.row)
-                            .pl(t.space.md)
-                            .rounded(t.radius.button)
-                            .child(icon(
-                                "icons/search.svg",
-                                t.size.icon_sm,
-                                t.colors.text_muted,
-                            ))
-                            .child(
-                                div().flex_1().child(
-                                    Input::new(&self.search).appearance(false).cleanable(true),
-                                ),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .id("nav-projects")
-                            .flex()
-                            .items_center()
-                            .gap(t.space.sm)
-                            .h(t.size.row)
-                            .px(t.space.md)
-                            .rounded(t.radius.button)
-                            .cursor_pointer()
-                            .text_color(if projects_open {
-                                t.colors.text_strong
-                            } else {
-                                t.colors.text_muted
-                            })
-                            .when(projects_open, |d| {
-                                d.bg(t.extra.active).font_weight(FontWeight::MEDIUM)
-                            })
-                            .when(!projects_open, |d| d.hover(move |st| st.bg(hover)))
-                            .child(icon(
-                                "icons/folder-open.svg",
-                                t.size.icon_sm,
-                                if projects_open {
-                                    t.colors.text_strong
-                                } else {
-                                    t.colors.text_muted
-                                },
-                            ))
-                            .child(nav_label("Projects"))
-                            .child(kbd(&t, shortcut("Shift P")))
-                            .on_click(|_, window, cx| {
-                                window.dispatch_action(Box::new(OpenProjects), cx)
-                            }),
-                    )
-                    .child(
-                        div()
-                            .id("nav-rules")
-                            .flex()
-                            .items_center()
-                            .gap(t.space.sm)
-                            .h(t.size.row)
-                            .px(t.space.md)
-                            .rounded(t.radius.button)
-                            .cursor_pointer()
-                            .text_color(if rules_open {
-                                t.colors.text_strong
-                            } else {
-                                t.colors.text_muted
-                            })
-                            .when(rules_open, |d| {
-                                d.bg(t.extra.active).font_weight(FontWeight::MEDIUM)
-                            })
-                            .when(!rules_open, |d| d.hover(move |st| st.bg(hover)))
-                            .child(icon(
-                                "icons/list-todo.svg",
-                                t.size.icon_sm,
-                                if rules_open {
-                                    t.colors.text_strong
-                                } else {
-                                    t.colors.text_muted
-                                },
-                            ))
-                            .child(nav_label("Rules and memory"))
-                            .child(kbd(&t, shortcut("Shift R")))
-                            .on_click(|_, window, cx| {
-                                window.dispatch_action(Box::new(OpenRules), cx)
-                            }),
-                    ),
-            )
-            .map(|d| {
-                if loading {
-                    d.child(
-                        div()
-                            .flex_1()
-                            .min_h_0()
-                            .child(super::skeleton::chat_list(&t)),
-                    )
-                } else {
-                    d.child(
-                        div()
-                            .flex_1()
-                            .min_h_0()
-                            .flex()
-                            .flex_col()
-                            .child(list)
-                            .with_animation(
-                                "chats-in",
-                                Animation::new(Duration::from_millis(t.motion_ms)),
-                                |d, delta| d.opacity(delta),
-                            ),
-                    )
+            .on_mouse_down_out(move |_, _, cx| {
+                if closer.read(cx).switcher_open {
+                    closer.update(cx, |s, cx| {
+                        s.switcher_open = false;
+                        cx.notify();
+                    })
                 }
             })
             .child(
                 div()
-                    .relative()
-                    .border_t_1()
+                    .id("sidebar-project")
+                    .flex()
+                    .items_center()
+                    .gap(t.space.md)
+                    .p(t.space.md)
+                    .border_b_1()
                     .border_color(t.colors.border)
-                    .p(t.space.sm)
+                    .cursor_pointer()
+                    .hover(move |st| st.bg(hover))
+                    .when(switcher_open, |d| d.bg(hover))
+                    .child(super::projects::project_tile(
+                        &t,
+                        &s.project,
+                        &s.project_dir,
+                        px(34.),
+                    ))
                     .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .gap(px(1.))
+                            .child(
+                                div()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(t.colors.text_strong)
+                                    .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .text_ellipsis()
+                                    .child(s.project.clone()),
+                            )
+                            .children(place.map(|(glyph, label, mono)| {
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(t.space.xs)
+                                    .min_w_0()
+                                    .text_size(t.text.caption)
+                                    .text_color(t.colors.text_muted)
+                                    .when(mono, |d| d.font_family(t.font_mono.clone()))
+                                    .child(icon(glyph, t.size.icon_xs, t.colors.text_muted))
+                                    .child(
+                                        div()
+                                            .overflow_hidden()
+                                            .whitespace_nowrap()
+                                            .text_ellipsis()
+                                            .child(label),
+                                    )
+                            })),
+                    )
+                    .child(icon(
+                        "icons/chevrons-up-down.svg",
+                        t.size.icon_sm,
+                        t.colors.text_subtle,
+                    ))
+                    .on_click(move |_, _, cx| {
+                        opener.update(cx, |s, cx| {
+                            s.switcher_open = !s.switcher_open;
+                            cx.notify();
+                        })
+                    }),
+            )
+            .children(switcher);
+
+        let sheet =
+            div()
+                .size_full()
+                .flex()
+                .flex_col()
+                .rounded(t.radius.card)
+                .shadow(t.elevation_grain())
+                .overflow_hidden()
+                .bg(t.extra.stage)
+                .child(header)
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(t.space.xs)
+                        .p(t.space.sm)
+                        .child(
+                            div()
+                                .id("new-chat")
+                                .role(gpui::accesskit::Role::Button)
+                                .aria_label("New chat")
+                                .flex()
+                                .items_center()
+                                .gap(t.space.sm)
+                                .h(t.size.row)
+                                .px(t.space.sm)
+                                .rounded(t.radius.button)
+                                .cursor_pointer()
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(t.colors.text_strong)
+                                .hover(move |st| st.bg(hover))
+                                // The sidebar's one filled mark: the accent disc.
+                                .child(
+                                    div()
+                                        .size(t.size.icon_lg)
+                                        .flex_none()
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .rounded(t.radius.pill)
+                                        .bg(t.extra.accent)
+                                        .child(icon(
+                                            "icons/plus.svg",
+                                            t.size.icon_xs,
+                                            t.extra.accent_fg,
+                                        )),
+                                )
+                                .child(nav_label("New chat"))
+                                .child(kbd(&t, shortcut("N")))
+                                .on_click(|_, window, cx| {
+                                    window.dispatch_action(Box::new(NewChat), cx)
+                                }),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(t.space.xs)
+                                .h(t.size.row)
+                                .pl(t.space.md)
+                                .rounded(t.radius.button)
+                                .child(icon(
+                                    "icons/search.svg",
+                                    t.size.icon_sm,
+                                    t.colors.text_muted,
+                                ))
+                                .child(div().flex_1().child(
+                                    Input::new(&self.search).appearance(false).cleanable(true),
+                                )),
+                        )
+                        .child(
+                            div()
+                                .id("nav-projects")
+                                .flex()
+                                .items_center()
+                                .gap(t.space.sm)
+                                .h(t.size.row)
+                                .px(t.space.md)
+                                .rounded(t.radius.button)
+                                .cursor_pointer()
+                                .text_color(if projects_open {
+                                    t.colors.text_strong
+                                } else {
+                                    t.colors.text_muted
+                                })
+                                .when(projects_open, |d| {
+                                    d.bg(t.extra.accent_soft.opacity(0.6))
+                                        .font_weight(FontWeight::MEDIUM)
+                                })
+                                .when(!projects_open, |d| d.hover(move |st| st.bg(hover)))
+                                .child(icon(
+                                    "icons/folder-open.svg",
+                                    t.size.icon_sm,
+                                    if projects_open {
+                                        t.colors.text_strong
+                                    } else {
+                                        t.colors.text_muted
+                                    },
+                                ))
+                                .child(nav_label("Projects"))
+                                .child(kbd(&t, shortcut("Shift P")))
+                                .on_click(|_, window, cx| {
+                                    window.dispatch_action(Box::new(OpenProjects), cx)
+                                }),
+                        )
+                        .child(
+                            div()
+                                .id("nav-rules")
+                                .flex()
+                                .items_center()
+                                .gap(t.space.sm)
+                                .h(t.size.row)
+                                .px(t.space.md)
+                                .rounded(t.radius.button)
+                                .cursor_pointer()
+                                .text_color(if rules_open {
+                                    t.colors.text_strong
+                                } else {
+                                    t.colors.text_muted
+                                })
+                                .when(rules_open, |d| {
+                                    d.bg(t.extra.accent_soft.opacity(0.6))
+                                        .font_weight(FontWeight::MEDIUM)
+                                })
+                                .when(!rules_open, |d| d.hover(move |st| st.bg(hover)))
+                                .child(icon(
+                                    "icons/list-todo.svg",
+                                    t.size.icon_sm,
+                                    if rules_open {
+                                        t.colors.text_strong
+                                    } else {
+                                        t.colors.text_muted
+                                    },
+                                ))
+                                .child(nav_label("Rules and memory"))
+                                .child(kbd(&t, shortcut("Shift R")))
+                                .on_click(|_, window, cx| {
+                                    window.dispatch_action(Box::new(OpenRules), cx)
+                                }),
+                        ),
+                )
+                .map(|d| {
+                    if loading {
+                        d.child(
+                            div()
+                                .flex_1()
+                                .min_h_0()
+                                .child(super::skeleton::chat_list(&t)),
+                        )
+                    } else {
+                        d.child(
+                            div()
+                                .flex_1()
+                                .min_h_0()
+                                .flex()
+                                .flex_col()
+                                .child(list)
+                                .with_animation(
+                                    "chats-in",
+                                    Animation::new(Duration::from_millis(t.motion_ms)),
+                                    |d, delta| d.opacity(delta),
+                                ),
+                        )
+                    }
+                })
+                .child(
+                    div().relative().p(t.space.sm).child(
                         div()
                             .id("sidebar-settings")
                             .flex()
                             .items_center()
                             .gap(t.space.sm)
-                            .h(t.size.row + px(8.))
-                            .px(t.space.md)
+                            .h(t.size.row + px(14.))
+                            .px(t.space.sm)
                             .rounded(t.radius.button)
                             .cursor_pointer()
+                            // You, in a recessed well at the foot of the sheet.
+                            .bg(t.extra.sunk)
                             .hover(move |st| st.bg(hover))
                             .child(super::avatar_image(&avatar, 32., window))
                             .child(
@@ -715,7 +822,15 @@ impl Render for Sidebar {
                                 window.dispatch_action(Box::new(OpenSettings), cx)
                             }),
                     ),
-            )
+                );
+        div()
+            .w(t.size.sidebar)
+            .flex_none()
+            .h_full()
+            .pl(t.space.sm)
+            .pr(t.space.sm)
+            .pb(t.space.xs)
+            .child(sheet)
             .children(menu)
     }
 }
