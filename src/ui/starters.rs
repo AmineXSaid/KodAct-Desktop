@@ -1,6 +1,7 @@
 //! Under the new-chat composer: four starter chips, each filling the
 //! composer with a prompt to send or change, and a row to pick up the most
-//! recent chat in this project.
+//! recent chat in this project. A plain chat (no folder) gets everyday
+//! starters; a project's, starters about its code.
 
 use gpui::{div, prelude::*, AnyElement, Entity, FontWeight, SharedString};
 
@@ -41,6 +42,35 @@ pub const STARTERS: [Starter; 4] = [
         title: "Suggest improvements",
         hint: "Three refactors, smallest first",
         prompt: "Suggest the three most valuable refactors in this project, smallest first, with what each one changes. Then make the first one.",
+    },
+];
+
+/// A plain chat's starters: no folder to read, so nothing about code you
+/// have not shown it.
+pub const CHAT_STARTERS: [Starter; 4] = [
+    Starter {
+        icon: "icons/graduation-cap.svg",
+        title: "Teach me something",
+        hint: "Step by step, checking as we go",
+        prompt: "Teach me how a topic I pick works, step by step. Start by asking what I already know, then explain one idea at a time and check that I follow before going on. The topic: ",
+    },
+    Starter {
+        icon: "icons/pencil.svg",
+        title: "Help me write",
+        hint: "A draft in your voice, then edits",
+        prompt: "Help me write something. Ask me who it is for and what it should do, then give me a first draft I can react to. It is: ",
+    },
+    Starter {
+        icon: "icons/code-xml.svg",
+        title: "Explain some code",
+        hint: "Paste it, get it line by line",
+        prompt: "Explain what this code does, line by line where it matters, and point out anything risky:\n\n",
+    },
+    Starter {
+        icon: "icons/list-todo.svg",
+        title: "Make a plan",
+        hint: "From a goal to the first steps",
+        prompt: "Help me turn a goal into a plan: the steps in order, what each needs, and what to do first today. The goal: ",
     },
 ];
 
@@ -94,7 +124,12 @@ pub fn render(
         .flex_wrap()
         .justify_center()
         .gap(t.space.sm);
-    for (i, st) in STARTERS.iter().enumerate() {
+    let starters = if s.in_folder() {
+        &STARTERS
+    } else {
+        &CHAT_STARTERS
+    };
+    for (i, st) in starters.iter().enumerate() {
         chips = chips.child(super::motion::row_in(
             chip(i, st),
             SharedString::from(format!("starter-in-{i}")),

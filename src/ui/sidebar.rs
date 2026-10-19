@@ -312,6 +312,7 @@ impl Render for Sidebar {
                 let ago: SharedString = match (s.all_chats && c.project != s.current_project)
                     .then(|| s.project(c.project))
                     .flatten()
+                    .filter(|p| !p.scratch)
                 {
                     Some(p) => format!("{} · {}", p.name, ago(c.minutes_ago)).into(),
                     None => ago(c.minutes_ago).into(),
@@ -604,6 +605,22 @@ impl Render for Sidebar {
                     }),
             )
             .children(switcher);
+        // A plain chat has no folder: the head is Forge's own, as a chat
+        // app's is. Working in a folder, it is that project.
+        let header = if s.in_folder() {
+            header.into_any_element()
+        } else {
+            div()
+                .flex_none()
+                .flex()
+                .items_center()
+                .h(px(34.) + t.space.md * 2.)
+                .px(t.space.md)
+                .border_b_1()
+                .border_color(t.colors.border)
+                .child(super::ingot::wordmark(22., &t))
+                .into_any_element()
+        };
 
         let sheet =
             div()

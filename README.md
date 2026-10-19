@@ -28,6 +28,12 @@ Forge needs two things to answer:
 On first launch Forge asks what to call you and keeps the name in its config
 folder (`%APPDATA%\Forge` on Windows; `FORGE_CONFIG_DIR` overrides it).
 
+Forge opens on plain chats, as a chat app does: no folder, so a question or
+a lesson never runs in a folder of yours (they run in `workspace` inside the
+config folder). Pick a folder from the chip under the message box, or from
+Projects, to work on code there. Started on a folder (`cargo run -- .`,
+`forge-gpui C:\code\app`, or `FORGE_PROJECT_DIR`), it opens on that project.
+
 ## Keys
 
 The same list is the shortcuts sheet (F1) and the Guide (Settings → Guide);

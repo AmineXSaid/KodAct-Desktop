@@ -762,6 +762,9 @@ pub struct Project {
     /// You made it a project (Open folder…, Save as project). A remote
     /// folder you connected to is worked in without becoming one.
     pub saved: bool,
+    /// Plain chats' place: no folder of yours, Forge's own (`scratch_dir`).
+    /// Never listed as a project, never shown in the sidebar's head.
+    pub scratch: bool,
 }
 
 // ---------------------------------------------------------------- the engine's bookkeeping
@@ -1035,8 +1038,10 @@ pub struct AppState {
     pub filter_open: bool,
     /// The current project's name, shown in the title bar.
     pub project: SharedString,
-    /// The project's folder: `FORGE_PROJECT_DIR`, else where Forge started.
+    /// The current project's folder; plain chats' place when it is none.
     pub project_dir: std::path::PathBuf,
+    /// The folder Forge was started on, if any (`launch_dir`).
+    pub launch_dir: Option<std::path::PathBuf>,
     /// Remote targets ForgeCLI was put on this run (`remote.rs`).
     remote_ready: std::collections::HashMap<crate::remote::Target, crate::remote::Provisioned>,
     /// A connection being made: the target and what it is doing now.
@@ -1254,11 +1259,18 @@ impl AppState {
         let next_id = chats.len() + 1;
         let user_name: Option<SharedString> = crate::profile::load_name().map(Into::into);
         let saved_avatar = crate::profile::load_avatar();
-        let project_dir = std::env::var_os("FORGE_PROJECT_DIR")
-            .map(std::path::PathBuf::from)
-            .or_else(|| std::env::current_dir().ok())
-            .unwrap_or_default();
-        let projects = initial_projects(&project_dir);
+        let launch = launch_dir();
+        let scratch = scratch_dir();
+        // Made at start, so ForgeCLI has a folder to run in; a failure shows
+        // when a chat starts.
+        let _ = std::fs::create_dir_all(&scratch);
+        let projects = initial_projects(launch.as_deref(), &scratch);
+        let first = projects
+            .iter()
+            .find(|p| launch.is_some() != p.scratch)
+            .cloned()
+            .unwrap_or_else(|| projects[0].clone());
+        let project_dir = first.path.clone();
         Self {
             onboarding: user_name.is_none(),
             first_run: user_name.is_none(),
@@ -1275,8 +1287,9 @@ impl AppState {
                     .to_string()
                 })
                 .into(),
-            project: projects[0].name.clone(),
+            project: first.name.clone(),
             project_dir,
+            launch_dir: launch,
             remote_ready: Default::default(),
             remote_busy: None,
             remote_failed: None,
@@ -1285,10 +1298,10 @@ impl AppState {
             trusted_hosts: Default::default(),
             remote_menu: None,
             browser_http: None,
-            branch: projects[0].branch.clone(),
-            current_project: projects[0].id,
+            branch: first.branch.clone(),
+            current_project: first.id,
             projects,
-            all_chats: false,
+            all_chats: true,
             switcher_open: false,
             filter_open: false,
             screen: Screen::Chat,
@@ -1696,6 +1709,7 @@ impl AppState {
                         pinned: false,
                         opened_minutes_ago: 60,
                         saved,
+                        scratch: false,
                     });
                     added_project |= saved;
                     id
@@ -1911,6 +1925,7 @@ impl AppState {
             pinned: false,
             opened_minutes_ago: 0,
             saved: save,
+            scratch: false,
         });
         id
     }
@@ -1927,7 +1942,10 @@ impl AppState {
     /// Remove from projects: the folder leaves your list (its chats stay,
     /// under All projects). The folder Forge started in always stays.
     pub fn forget_project(&mut self, id: usize, cx: &mut Context<Self>) {
-        if self.projects.first().is_some_and(|p| p.id == id) {
+        if self
+            .project(id)
+            .is_some_and(|p| p.scratch || Some(&p.path) == self.launch_dir.as_ref())
+        {
             return;
         }
         let has_chats = self.chats.iter().any(|c| c.project == id);
@@ -1946,13 +1964,13 @@ impl AppState {
         cx.notify();
     }
 
-    /// Write your projects (all but the folder Forge started in) to disk.
+    /// Write your projects (all but the folder Forge started on, and plain
+    /// chats' place) to disk.
     fn save_projects(&self, cx: &mut Context<Self>) {
         let paths: Vec<std::path::PathBuf> = self
             .projects
             .iter()
-            .skip(1)
-            .filter(|p| p.saved)
+            .filter(|p| p.saved && !p.scratch && Some(&p.path) != self.launch_dir.as_ref())
             .map(|p| p.path.clone())
             .collect();
         cx.background_spawn(async move { save_projects(paths) })
@@ -1983,6 +2001,26 @@ impl AppState {
             c.unread = false;
         }
         cx.notify();
+    }
+
+    /// Plain chats' place.
+    pub fn scratch_project(&self) -> Option<usize> {
+        self.projects.iter().find(|p| p.scratch).map(|p| p.id)
+    }
+
+    /// The current project is a folder of yours, not plain chats' place.
+    pub fn in_folder(&self) -> bool {
+        self.project(self.current_project)
+            .is_some_and(|p| !p.scratch)
+    }
+
+    /// New chat, as a chat app does it: a plain chat with no folder. A
+    /// project's page starts one in that project (`new_chat`).
+    pub fn new_plain_chat(&mut self, cx: &mut Context<Self>) {
+        if let Some(id) = self.scratch_project() {
+            self.select_project(id, cx);
+        }
+        self.new_chat(cx);
     }
 
     pub fn new_chat(&mut self, cx: &mut Context<Self>) {
@@ -6502,10 +6540,10 @@ fn script(prompt: &str) -> Vec<Step> {
 
 // ---------------------------------------------------------------- mock chats
 
-/// The folder Forge started in, and a few others to switch between.
-/// The projects: the folder Forge started in, then the ones you opened
-/// before (`projects.txt` in the config folder).
-fn initial_projects(here: &std::path::Path) -> Vec<Project> {
+/// The projects: the folder Forge was started on (if it was), then the
+/// ones you opened before (`projects.txt` in the config folder), then plain
+/// chats' place, which is no project of yours.
+fn initial_projects(launch: Option<&std::path::Path>, scratch: &std::path::Path) -> Vec<Project> {
     let project = |id, path: std::path::PathBuf, opened| Project {
         id,
         name: project_name(&path).into(),
@@ -6514,15 +6552,49 @@ fn initial_projects(here: &std::path::Path) -> Vec<Project> {
         pinned: false,
         opened_minutes_ago: opened,
         saved: true,
+        scratch: false,
     };
-    let mut out = vec![project(1, here.to_path_buf(), 0)];
+    let mut out: Vec<Project> = launch
+        .map(|here| project(1, here.to_path_buf(), 0))
+        .into_iter()
+        .collect();
     for path in saved_projects() {
         let remote = crate::remote::Remote::parse(&path).is_some();
         if (remote || path.is_dir()) && !out.iter().any(|p| p.path == path) {
             out.push(project(out.len() + 1, path, 60));
         }
     }
+    out.push(Project {
+        id: out.len() + 1,
+        name: "Chats".into(),
+        branch: "".into(),
+        path: scratch.to_path_buf(),
+        pinned: false,
+        opened_minutes_ago: 0,
+        saved: false,
+        scratch: true,
+    });
     out
+}
+
+/// Where a chat with no folder works: Forge's own folder, so a question or
+/// a lesson never runs in (or reads) a folder of yours. Files it writes
+/// there still come back as cards in the reply.
+pub fn scratch_dir() -> std::path::PathBuf {
+    crate::profile::dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join("workspace")
+}
+
+/// The folder Forge was started on: `FORGE_PROJECT_DIR`, or a folder given
+/// as its argument (`forge .`). Opened from the Start menu or a shortcut, it
+/// was started on none, and opens on plain chats, as a chat app does.
+fn launch_dir() -> Option<std::path::PathBuf> {
+    std::env::var_os("FORGE_PROJECT_DIR")
+        .map(std::path::PathBuf::from)
+        .or_else(|| std::env::args_os().nth(1).map(std::path::PathBuf::from))
+        .filter(|p| p.is_dir())
+        .map(|p| std::fs::canonicalize(&p).unwrap_or(p))
 }
 
 /// A project's name: its folder's (a remote one's too).
@@ -6894,6 +6966,23 @@ fn mock_chats() -> Vec<Chat> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn plain_chats_have_their_own_place_and_no_folder_of_yours() {
+        let scratch = std::env::temp_dir().join("forge-scratch-test");
+        let none = super::initial_projects(None, &scratch);
+        let place: Vec<_> = none.iter().filter(|p| p.scratch).collect();
+        assert_eq!(place.len(), 1);
+        assert_eq!(place[0].path, scratch);
+        assert!(!place[0].saved && place[0].branch.is_empty());
+        // Started on a folder, that folder comes first and is a project.
+        let here = std::env::temp_dir();
+        let on = super::initial_projects(Some(&here), &scratch);
+        assert_eq!(on[0].path, here);
+        assert!(on[0].saved && !on[0].scratch);
+        assert!(on.last().is_some_and(|p| p.scratch));
+        let ids: std::collections::HashSet<_> = on.iter().map(|p| p.id).collect();
+        assert_eq!(ids.len(), on.len());
+    }
 
     #[test]
     fn always_allow_names_the_rule_it_adds() {

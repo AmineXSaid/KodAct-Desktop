@@ -303,7 +303,8 @@ impl Workspace {
                 )
                 // The project and its branch: here while the sidebar is
                 // hidden, at the top of the sidebar's sheet while it shows.
-                .when(!s.sidebar_open, |d| {
+                // A plain chat has no folder to show.
+                .when(!s.sidebar_open && s.in_folder(), |d| {
                     d.child(
                         div()
                             .relative()
@@ -561,7 +562,10 @@ impl Workspace {
             .project(s.current_project)
             .map(|p| p.name.to_string())
             .unwrap_or_default();
-        let sub = if project.is_empty() {
+        let sub = if !s.in_folder() {
+            "Ask anything, or pick a folder below to work on code. Forge asks before it changes anything."
+                .to_string()
+        } else if project.is_empty() {
             "Ask, plan or build. Forge works in your project and asks before it changes anything."
                 .to_string()
         } else {
@@ -889,7 +893,7 @@ impl Render for Workspace {
             .flex()
             .flex_col()
             .on_action(cx.listener(|this, _: &NewChat, window, cx| {
-                this.state.update(cx, |s, cx| s.new_chat(cx));
+                this.state.update(cx, |s, cx| s.new_plain_chat(cx));
                 this.focus_composer(window, cx);
             }))
             .on_action(cx.listener(|this, _: &ShowProjectMap, _, cx| {
@@ -1381,7 +1385,12 @@ pub fn project_switcher(
     let hover = t.colors.hover;
     let mut projects: Vec<_> = s.projects.iter().filter(|p| p.saved).cloned().collect();
     projects.sort_by_key(|p| (p.id != s.current_project, !p.pinned, p.opened_minutes_ago));
-    let connected: Vec<_> = s.projects.iter().filter(|p| !p.saved).cloned().collect();
+    let connected: Vec<_> = s
+        .projects
+        .iter()
+        .filter(|p| !p.saved && !p.scratch)
+        .cloned()
+        .collect();
     let row = |id: SharedString, current: bool| {
         div()
             .id(id)

@@ -14,6 +14,15 @@ use super::*;
 use crate::state::AppState;
 use crate::theme::ActiveTheme;
 
+/// The empty box's line: a project's, or a plain chat's.
+fn placeholder(in_folder: bool) -> &'static str {
+    if in_folder {
+        "What should we build today?"
+    } else {
+        "Ask Forge anything"
+    }
+}
+
 pub struct Composer {
     state: Entity<AppState>,
     input: Entity<TextareaState>,
@@ -37,6 +46,8 @@ pub struct Composer {
     /// Where the autocomplete's word starts (its byte offset), and the
     /// caret's place and line height there, in the window.
     ac_anchor: Option<(usize, gpui::Point<gpui::Pixels>, gpui::Pixels)>,
+    /// The placeholder shown is a project's (true) or a plain chat's.
+    placeholder_in_folder: bool,
     _subs: Vec<Subscription>,
 }
 
@@ -47,10 +58,11 @@ impl Composer {
         let max_rows = (f32::from(t.size.composer_max) / (f32::from(t.text.body) * 1.5))
             .floor()
             .max(2.) as usize;
+        let in_folder = state.read(cx).in_folder();
         let input = cx.new(|cx| {
             TextareaState::new(window, cx)
                 .auto_grow(1, max_rows)
-                .placeholder("What should we build today?")
+                .placeholder(placeholder(in_folder))
                 .submit_on_enter(true)
         });
         let filter = cx.new(|cx| InputState::new(window, cx).placeholder("Search models…"));
@@ -59,6 +71,14 @@ impl Composer {
                 // An edited message comes back here to be changed and sent.
                 if let Some(text) = state.update(cx, |s, _| s.draft.take()) {
                     this.fill(&text, window, cx);
+                }
+                // A plain chat asks for anything; a project's, for work on it.
+                let in_folder = state.read(cx).in_folder();
+                if in_folder != this.placeholder_in_folder {
+                    this.placeholder_in_folder = in_folder;
+                    this.input.update(cx, |i, cx| {
+                        i.set_placeholder(placeholder(in_folder), window, cx)
+                    });
                 }
                 // The model window opening: an empty search, the current row active.
                 let s = state.read(cx);
@@ -117,6 +137,7 @@ impl Composer {
             ac_closed_for: None,
             ac_took_enter: false,
             ac_anchor: None,
+            placeholder_in_folder: in_folder,
             _subs: subs,
         }
     }
@@ -548,8 +569,9 @@ impl Render for Composer {
             .state
             .read(cx)
             .project(self.state.read(cx).current_project)
+            .filter(|p| !p.scratch)
             .map(|p| p.name.clone())
-            .unwrap_or_else(|| "Work in a project".into());
+            .unwrap_or_else(|| "Work in a folder".into());
         let project_button = quiet("project", false)
             .aria_label("Project")
             .text_color(t.colors.text_muted)

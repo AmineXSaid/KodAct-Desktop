@@ -168,7 +168,12 @@ impl ProjectsView {
         let (hover_border, hover_bg) = (t.colors.text_subtle, t.colors.hover);
         let mut projects: Vec<_> = s.projects.iter().filter(|p| p.saved).cloned().collect();
         projects.sort_by_key(|p| (!p.pinned, p.opened_minutes_ago));
-        let connected: Vec<_> = s.projects.iter().filter(|p| !p.saved).cloned().collect();
+        let connected: Vec<_> = s
+            .projects
+            .iter()
+            .filter(|p| !p.saved && !p.scratch)
+            .cloned()
+            .collect();
         let cards = projects.into_iter().enumerate().map(|(i, p)| {
             let chats = s.chats.iter().filter(|c| c.project == p.id).count();
             let current = p.id == s.current_project;
@@ -300,7 +305,7 @@ impl ProjectsView {
                     })
                 })
         });
-        let has_connected = s.projects.iter().any(|p| !p.saved);
+        let has_connected = s.projects.iter().any(|p| !p.saved && !p.scratch);
         let state = self.state.clone();
         div()
             .id("projects-page")
@@ -429,7 +434,7 @@ impl ProjectsView {
         let (save_state, forget_state) = (self.state.clone(), self.state.clone());
         let pinned = p.pinned;
         // The folder Forge started in is always here; others can leave the list.
-        let (saved, removable) = (p.saved, s.projects.first().is_some_and(|f| f.id != id));
+        let (saved, removable) = (p.saved, Some(&p.path) != s.launch_dir.as_ref());
         div()
             .id("project-page")
             .flex_1()
