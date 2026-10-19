@@ -1,6 +1,6 @@
 //! Design tokens for GPUI in the "calmly smooth" system (after the Anchor
 //! style reference): sun-bleached cream surfaces stacked like paper on paper,
-//! one ink, one moss accent rationed to the decisive action, Archivo set in
+//! one ink, one dusty-blue accent rationed to the decisive action, Archivo set in
 //! two weights, 4px cards against pill buttons, and shadows thin as grain.
 //! Pure UI: colors, type, spacing, radius, elevation, motion + a few styled primitives.
 //! Written against GPUI's current API; field/method names may need small tweaks per GPUI version.
@@ -79,7 +79,7 @@ pub struct Radius {
 /// each in light and dark. Type, shape, spacing and ink stay the system's.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Look {
-    /// Sun-bleached cream and moss: the system's own.
+    /// Sun-bleached cream and dusty blue: the system's own.
     #[default]
     Calm,
     /// The same cream with the reference's terracotta.
@@ -133,7 +133,7 @@ impl Look {
 
     pub fn blurb(self) -> &'static str {
         match self {
-            Look::Calm => "Cream and moss",
+            Look::Calm => "Cream and dusty blue",
             Look::Terracotta => "Cream and warm orange",
             Look::Patina => "Ivory and teal",
             Look::Ink => "Greys, no colour",
@@ -167,12 +167,12 @@ impl Look {
         };
         match (self, dark) {
             (Look::Calm, false) => t(
-                0xe3d7cd, 0xf0e9e5, 0xffffff, 0xf5f2f0, 0x3f6b4b, 0xffffff, 0xdfe6dc, 0x3f6b4b,
-                0x31553b, 0x3f6b4b,
+                0xe3d7cd, 0xf0e9e5, 0xffffff, 0xf5f2f0, 0x41608a, 0xffffff, 0xdde3ec, 0x41608a,
+                0x334d70, 0x41608a,
             ),
             (Look::Calm, true) => t(
-                0x171513, 0x1e1c1a, 0x2b2825, 0x262321, 0x8fbf9b, 0x171513, 0x2c3a30, 0x8fbf9b,
-                0xa9d0b3, 0x8fbf9b,
+                0x171513, 0x1e1c1a, 0x2b2825, 0x262321, 0x9db7d9, 0x171513, 0x27303c, 0x9db7d9,
+                0xb9cce6, 0x9db7d9,
             ),
             (Look::Terracotta, false) => t(
                 0xe3d7cd, 0xf0e9e5, 0xffffff, 0xf5f2f0, 0xb85a2a, 0xffffff, 0xf6dccb, 0xa8492a,
@@ -361,11 +361,11 @@ impl Theme {
                 text_subtle: rgb(0x7d776f).into(),
                 border: hsla(0., 0., 0.118, 0.13),
                 hover: hsla(0., 0., 0.118, 0.05),
-                // Links and selected text: moss, the one colour (6.3:1 on white).
-                primary: rgb(0x3f6b4b).into(),
-                primary_hover: rgb(0x31553b).into(),
+                // Links and selected text: dusty blue, the one colour (6.4:1 on white).
+                primary: rgb(0x41608a).into(),
+                primary_hover: rgb(0x334d70).into(),
                 primary_fg: rgb(0xffffff).into(),
-                primary_tint: hsla(137. / 360., 0.26, 0.33, 0.12),
+                primary_tint: hsla(215. / 360., 0.36, 0.40, 0.12),
                 marigold: rgb(0xffb110).into(),
                 coral: rgb(0xc84b55).into(),
                 sky: rgb(0x62aef0).into(),
@@ -375,7 +375,7 @@ impl Theme {
         )
     }
 
-    /// The same room at night: warm umber surfaces, moss lifted to read on them.
+    /// The same room at night: warm umber surfaces, the blue lifted to read on them.
     pub fn dark() -> Self {
         Self::base(
             true,
@@ -390,10 +390,10 @@ impl Theme {
                 text_subtle: rgb(0x857f77).into(),
                 border: hsla(22. / 360., 0.37, 0.92, 0.12),
                 hover: hsla(22. / 360., 0.37, 0.92, 0.06),
-                primary: rgb(0x8fbf9b).into(),
-                primary_hover: rgb(0xa9d0b3).into(),
+                primary: rgb(0x9db7d9).into(),
+                primary_hover: rgb(0xb9cce6).into(),
                 primary_fg: rgb(0x171513).into(),
-                primary_tint: hsla(135. / 360., 0.27, 0.65, 0.16),
+                primary_tint: hsla(214. / 360., 0.45, 0.73, 0.16),
                 marigold: rgb(0xffb110).into(),
                 coral: rgb(0xd8646d).into(),
                 sky: rgb(0x62aef0).into(),
@@ -547,10 +547,10 @@ impl ExtraColors {
                 // Brick, lifted for the night, under the dark label.
                 fill_danger: rgb(0xe98a72).into(),
                 fill_fg: rgb(0x171513).into(),
-                accent: rgb(0x8fbf9b).into(),
-                accent_soft: rgb(0x2c3a30).into(),
+                accent: rgb(0x9db7d9).into(),
+                accent_soft: rgb(0x27303c).into(),
                 accent_fg: rgb(0x171513).into(),
-                mark_top: rgb(0x8fbf9b).into(),
+                mark_top: rgb(0x9db7d9).into(),
                 mark_left: rgb(0xf0e9e5).into(),
                 mark_right: rgb(0x7d776f).into(),
                 mark_heat_white: rgb(0xfff2cc).into(),
@@ -559,7 +559,7 @@ impl ExtraColors {
                 mark_heat_iron: rgb(0x3b3633).into(),
                 border_strong: rgb(0x4a4540).into(),
                 sunk: rgb(0x262321).into(),
-                toggle_on: rgb(0x8fbf9b).into(),
+                toggle_on: rgb(0x9db7d9).into(),
                 memory: rgb(0xe5c77a).into(),
                 memory_tint: rgb(0x3a3220).into(),
                 dot: rgb(0x8b857e).into(),
@@ -615,11 +615,11 @@ impl ExtraColors {
                 fill_hover: rgb(0x34322f).into(),
                 fill_danger: rgb(0xa3402c).into(),
                 fill_fg: rgb(0xf0e9e5).into(),
-                // Moss, where the reference has terracotta: the one colour.
-                accent: rgb(0x3f6b4b).into(),
-                accent_soft: rgb(0xdfe6dc).into(),
+                // Dusty blue, where the reference has terracotta: the one colour.
+                accent: rgb(0x41608a).into(),
+                accent_soft: rgb(0xdde3ec).into(),
                 accent_fg: rgb(0xffffff).into(),
-                mark_top: rgb(0x3f6b4b).into(),
+                mark_top: rgb(0x41608a).into(),
                 mark_left: rgb(0x1e1e1e).into(),
                 mark_right: rgb(0x8b857e).into(),
                 mark_heat_white: rgb(0xfff2cc).into(),
@@ -628,7 +628,7 @@ impl ExtraColors {
                 mark_heat_iron: rgb(0x3b3633).into(),
                 border_strong: rgb(0xc9c9c7).into(),
                 sunk: rgb(0xf5f2f0).into(),
-                toggle_on: rgb(0x3f6b4b).into(),
+                toggle_on: rgb(0x41608a).into(),
                 memory: rgb(0x75591a).into(),
                 memory_tint: rgb(0xf6ecd2).into(),
                 dot: rgb(0x8b857e).into(),
