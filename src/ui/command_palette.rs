@@ -183,6 +183,30 @@ impl CommandPalette {
                 Some(shortcut("Shift L")),
                 Box::new(ToggleTheme),
             ),
+        ];
+        // One row per theme; the current one is ticked.
+        let current = cx.theme().look;
+        for look in crate::theme::Look::ALL {
+            let action: Box<dyn Action> = match look {
+                crate::theme::Look::Calm => Box::new(ThemeCalm),
+                crate::theme::Look::Terracotta => Box::new(ThemeTerracotta),
+                crate::theme::Look::Patina => Box::new(ThemePatina),
+                crate::theme::Look::Ink => Box::new(ThemeInk),
+                crate::theme::Look::Slate => Box::new(ThemeSlate),
+                crate::theme::Look::Plum => Box::new(ThemePlum),
+            };
+            out.push(act(
+                &format!("Theme: {} · {}", look.name(), look.blurb()),
+                if look == current {
+                    "icons/check.svg"
+                } else {
+                    "icons/sparkles.svg"
+                },
+                None,
+                action,
+            ));
+        }
+        out.extend([
             act(
                 if s.browser {
                     "Turn the web browser off"
@@ -331,7 +355,7 @@ impl CommandPalette {
                 Box::new(ChangeAvatar),
             ),
             act("Quit", "icons/x.svg", Some(shortcut("Q")), Box::new(Quit)),
-        ];
+        ]);
         // Remote development: the same as the remote indicator's menu.
         out.extend([
             act(

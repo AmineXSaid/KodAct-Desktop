@@ -190,6 +190,32 @@ pub fn load_fonts(cx: &App) {
         Cow::Borrowed(include_bytes!(
             "../assets/fonts/SourceSerif4Display-Regular.ttf"
         )),
+        // The themes' own faces (`theme::Look::form`), all under the SIL Open Font License.
+        Cow::Borrowed(include_bytes!("../assets/fonts/IBMPlexSans-Regular.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/IBMPlexSans-Medium.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/IBMPlexSans-SemiBold.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/IBMPlexSans-Bold.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/IBMPlexMono-Regular.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/IBMPlexMono-Bold.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/Geist-Regular.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/Geist-Medium.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/Geist-SemiBold.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/Geist-Bold.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/GeistMono-Regular.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/GeistMono-Bold.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/Inter-Regular.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/Inter-Medium.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/Inter-SemiBold.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/Inter-Bold.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/InstrumentSans-Regular.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/InstrumentSans-Medium.ttf")),
+        Cow::Borrowed(include_bytes!(
+            "../assets/fonts/InstrumentSans-SemiBold.ttf"
+        )),
+        Cow::Borrowed(include_bytes!("../assets/fonts/InstrumentSans-Bold.ttf")),
+        Cow::Borrowed(include_bytes!(
+            "../assets/fonts/InstrumentSerif-Regular.ttf"
+        )),
     ];
     if let Err(e) = cx.text_system().add_fonts(fonts) {
         eprintln!("could not load the bundled fonts: {e}");

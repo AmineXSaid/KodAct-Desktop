@@ -75,8 +75,10 @@ pub struct Radius {
     pub pill: Pixels,    // 9999: buttons, badges, avatars
 }
 
-/// A theme you can pick in Settings: the surfaces and the one colour,
-/// each in light and dark. Type, shape, spacing and ink stay the system's.
+/// A theme you can pick in Settings: a whole look, not only a palette. Its
+/// surfaces and one colour, light and dark (`tint`), and its form: faces,
+/// corners, density, depth and how a selected row shows (`form`). Calmly
+/// smooth is the system's own form; the others each set their own.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Look {
     /// Sun-bleached cream and dusty blue: the system's own.
@@ -133,12 +135,111 @@ impl Look {
 
     pub fn blurb(self) -> &'static str {
         match self {
-            Look::Calm => "Cream and dusty blue",
-            Look::Terracotta => "Cream and warm orange",
-            Look::Patina => "Ivory and teal",
-            Look::Ink => "Greys, no colour",
-            Look::Slate => "Cool grey and blue",
-            Look::Plum => "Heather and plum",
+            Look::Calm => "Cream and dusty blue, Archivo",
+            Look::Terracotta => "Warm paper, replies in a serif",
+            Look::Patina => "Ivory and teal, Inter, flat",
+            Look::Ink => "Greys and Geist, nothing else",
+            Look::Slate => "Cool grey, Plex, compact",
+            Look::Plum => "Heather, an editorial serif",
+        }
+    }
+
+    /// Everything but colour: faces, corners, density, depth, selection.
+    fn form(self) -> Form {
+        let base = Form {
+            sans: None,
+            display: None,
+            mono: "JetBrains Mono",
+            reading: None,
+            display_weight: FontWeight::SEMIBOLD,
+            // (button, card, field, composer, pressed: buttons and chips)
+            corners: (4., 4., 4., 4., 9999.),
+            row: 30.,
+            titlebar: 36.,
+            chat: (15., 23.),
+            heading: (32., 36.),
+            depth: Depth::Grain,
+            selection: Selection::Soft,
+            motion_ms: 200,
+        };
+        match self {
+            Look::Calm => base,
+            // Claude's school: a warm grotesk, replies set like a letter in
+            // Source Serif, soft corners, room to breathe, a soft lift.
+            Look::Terracotta => Form {
+                sans: Some("Hanken Grotesk"),
+                display: Some("Source Serif 4 Display"),
+                reading: Some("Source Serif 4"),
+                display_weight: FontWeight::NORMAL,
+                corners: (8., 12., 10., 16., 9999.),
+                row: 32.,
+                titlebar: 40.,
+                chat: (16., 26.),
+                heading: (34., 38.),
+                depth: Depth::Lift,
+                selection: Selection::Card,
+                motion_ms: 220,
+                ..base
+            },
+            // Calm and exact: Inter, small radii throughout, no shadows,
+            // a hairline edge, the accent's tint on the selected row.
+            Look::Patina => Form {
+                sans: Some("Inter"),
+                display: Some("Inter"),
+                corners: (6., 8., 6., 12., 6.),
+                chat: (14., 22.),
+                heading: (28., 32.),
+                depth: Depth::Flat,
+                selection: Selection::Tint,
+                motion_ms: 180,
+                ..base
+            },
+            // Cursor's school: Geist and Geist Mono, neutral and quiet, the
+            // filled action in ink, a grey wash for what is selected.
+            Look::Ink => Form {
+                sans: Some("Geist"),
+                display: Some("Geist"),
+                mono: "Geist Mono",
+                corners: (6., 8., 8., 12., 8.),
+                chat: (14., 22.),
+                heading: (28., 32.),
+                depth: Depth::Flat,
+                selection: Selection::Wash,
+                motion_ms: 140,
+                ..base
+            },
+            // Zed's school: IBM Plex, square corners, dense rows, a low
+            // title bar, the tint on the selected row, no shadows.
+            Look::Slate => Form {
+                sans: Some("IBM Plex Sans"),
+                display: Some("IBM Plex Sans"),
+                mono: "IBM Plex Mono",
+                corners: (3., 4., 3., 6., 4.),
+                row: 26.,
+                titlebar: 32.,
+                chat: (13., 20.),
+                heading: (24., 28.),
+                depth: Depth::Flat,
+                selection: Selection::Tint,
+                motion_ms: 120,
+                ..base
+            },
+            // Editorial: Instrument Sans, the greeting in Instrument Serif,
+            // round everything, a soft lift.
+            Look::Plum => Form {
+                sans: Some("Instrument Sans"),
+                display: Some("Instrument Serif"),
+                display_weight: FontWeight::NORMAL,
+                corners: (12., 16., 14., 22., 9999.),
+                row: 32.,
+                titlebar: 38.,
+                chat: (15., 24.),
+                heading: (40., 44.),
+                depth: Depth::Lift,
+                selection: Selection::Soft,
+                motion_ms: 220,
+                ..base
+            },
         }
     }
 
@@ -218,6 +319,51 @@ impl Look {
     }
 }
 
+/// A theme's form. `None` faces keep the system's (`fonts.rs`).
+#[derive(Clone, Copy)]
+struct Form {
+    sans: Option<&'static str>,
+    display: Option<&'static str>,
+    mono: &'static str,
+    /// A reply's prose, when it is not the interface face.
+    reading: Option<&'static str>,
+    display_weight: FontWeight,
+    corners: (f32, f32, f32, f32, f32),
+    row: f32,
+    titlebar: f32,
+    /// Chat text and its line, in pixels.
+    chat: (f32, f32),
+    /// The greeting and the home screen's heading.
+    heading: (f32, f32),
+    depth: Depth,
+    selection: Selection,
+    motion_ms: u64,
+}
+
+/// How surfaces lift off the canvas.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Depth {
+    /// Three hairline shadows, thin as paper grain (the system's).
+    Grain,
+    /// A soft shadow, as a card resting on a desk.
+    Lift,
+    /// No shadow: a 1px edge in the border colour.
+    Flat,
+}
+
+/// How a selected row (a chat, a section) stands out.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Selection {
+    /// The accent's pale form (the system's).
+    Soft,
+    /// A sticky note: the card colour with a hairline.
+    Card,
+    /// The accent's tint, the label in the accent.
+    Tint,
+    /// A quiet grey wash.
+    Wash,
+}
+
 /// One mode of a theme, as hex: the canvas (title bar and sidebar), the
 /// session, cards, a recessed well; the accent fill, its label, its pale
 /// form; links and their hover; the mark's top.
@@ -251,6 +397,9 @@ pub struct Theme {
     pub font_mono: SharedString, // JetBrains Mono: code, paths, commands
     pub font_display: SharedString, // large lines (the greeting, headings): Archivo, as everything is
     pub display_weight: FontWeight, // 600: headings are set in the heavier of the two cuts
+    pub font_reading: SharedString, // a reply's prose: the interface face, or a serif (Terracotta)
+    pub depth: Depth,               // how surfaces lift: grain, a soft lift, or flat
+    pub selection: Selection,       // how a selected row shows
     pub extra: ExtraColors,
     pub terminal: TerminalColors,
     pub code: CodeColors,
@@ -311,6 +460,9 @@ impl Theme {
             font_mono: "JetBrains Mono".into(),
             font_display: crate::fonts::display(),
             display_weight: FontWeight::SEMIBOLD,
+            font_reading: crate::fonts::sans(),
+            depth: Depth::Grain,
+            selection: Selection::Soft,
             extra: ExtraColors::for_mode(is_dark),
             terminal: TerminalColors::for_mode(is_dark),
             code: CodeColors::for_mode(is_dark),
@@ -343,6 +495,29 @@ impl Theme {
         self.colors.primary = c(k.link);
         self.colors.primary_hover = c(k.link_hover);
         self.colors.primary_tint = c(k.link).opacity(if self.is_dark { 0.16 } else { 0.12 });
+
+        let f = look.form();
+        let face = |name: Option<&str>, or: SharedString| -> SharedString {
+            name.map_or(or, |n| n.to_string().into())
+        };
+        self.font_sans = face(f.sans, crate::fonts::sans());
+        self.font_display = face(f.display, crate::fonts::display());
+        self.font_mono = f.mono.into();
+        self.font_reading = face(f.reading, self.font_sans.clone());
+        self.display_weight = f.display_weight;
+        let (button, card, field, composer, pressed) = f.corners;
+        let r = &mut self.radius;
+        (r.button, r.card, r.field) = (px(button), px(card), px(field));
+        (r.segment, r.compact, r.control) = (px(pressed), px(pressed), px(pressed));
+        let z = &mut self.size;
+        z.composer_radius = px(composer);
+        (z.row, z.titlebar) = (px(f.row), px(f.titlebar));
+        z.chat_text = px(f.chat.0);
+        z.line_height_chat = f.chat.1 / f.chat.0;
+        (z.greeting, z.home_heading) = (px(f.heading.0), px(f.heading.1));
+        self.depth = f.depth;
+        self.selection = f.selection;
+        self.motion_ms = f.motion_ms;
     }
 
     pub fn light() -> Self {
@@ -423,10 +598,35 @@ impl Theme {
         ]
     }
 
-    /// Paper grain: the three hairline shadows that lift a card or the
-    /// session off the cream, under 4px of blur and 6% ink.
+    /// What lifts a card or the session off the canvas, in this theme's
+    /// depth: paper grain (three hairline shadows under 4px of blur and 6%
+    /// ink), a soft lift, or flat (a 1px edge drawn as a ring).
     pub fn elevation_grain(&self) -> Vec<BoxShadow> {
         let d = self.is_dark;
+        match self.depth {
+            Depth::Grain => {}
+            Depth::Flat => {
+                return vec![BoxShadow {
+                    color: self.colors.border,
+                    offset: point(px(0.), px(0.)),
+                    blur_radius: px(0.),
+                    spread_radius: px(1.),
+                    inset: false,
+                }]
+            }
+            Depth::Lift => {
+                return [(1., 2., 0.04, 0.3), (8., 24., 0.07, 0.35)]
+                    .into_iter()
+                    .map(|(y, blur, light, dark)| BoxShadow {
+                        color: ink(if d { dark } else { light }),
+                        offset: point(px(0.), px(y)),
+                        blur_radius: px(blur),
+                        spread_radius: px(if y > 2. { -6. } else { 0. }),
+                        inset: false,
+                    })
+                    .collect()
+            }
+        }
         [(1., 0.06, 0.35), (2., 0.04, 0.2), (4., 0.01, 0.1)]
             .into_iter()
             .map(|(y, light, dark)| BoxShadow {
@@ -938,6 +1138,20 @@ pub fn app_root(t: &Theme) -> Div {
 }
 
 /// White card on canvas: hairline border, 12px radius, no shadow.
+/// A selected row (a chat, a section, a project), in the theme's style.
+pub fn selected<E: Styled>(t: &Theme, e: E) -> E {
+    let e = e.font_weight(FontWeight::MEDIUM);
+    match t.selection {
+        Selection::Soft => e.bg(t.extra.accent_soft.opacity(0.6)),
+        Selection::Card => e
+            .bg(t.colors.surface)
+            .border_1()
+            .border_color(t.colors.border),
+        Selection::Tint => e.bg(t.colors.primary_tint).text_color(t.colors.primary),
+        Selection::Wash => e.bg(t.colors.border.opacity(0.7)),
+    }
+}
+
 pub fn card(t: &Theme) -> Div {
     div()
         .bg(t.colors.surface)

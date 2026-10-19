@@ -216,7 +216,7 @@ fn render() -> String {
     }
     let _ = writeln!(w);
 
-    let _ = writeln!(w, "### Themes\nPicked in Settings > General > Theme and kept in `window.json`. Each lays its surfaces and its one colour over the system; type, shape, spacing and ink stay the same, and every theme passes `palette_check.rs` in both modes.\n");
+    let _ = writeln!(w, "### Themes\nPicked in Settings > General > Theme and kept in `window.json`. Each is a whole look: its surfaces and one colour, and its form (faces, corners, density, depth, how a selected row shows). Calmly smooth is the system's own form; every theme passes `palette_check.rs` in both modes.\n");
     let _ = writeln!(w, "| Theme | Light canvas / session / accent | Dark canvas / session / accent |\n|---|---|---|");
     for look in crate::theme::Look::ALL {
         let (a, b) = (Theme::of(look, false), Theme::of(look, true));
@@ -231,6 +231,35 @@ fn render() -> String {
             hex(b.extra.pane),
             hex(b.extra.stage),
             hex(b.extra.accent)
+        );
+    }
+    let _ = writeln!(w);
+    let _ = writeln!(w, "| Theme | Faces (UI / display / code / replies) | Corners button · card · field · composer · pressed | Row · title bar · chat | Depth | Selected row |\n|---|---|---|---|---|---|");
+    for look in crate::theme::Look::ALL {
+        let a = Theme::of(look, false);
+        let (r, z) = (&a.radius, &a.size);
+        let _ = writeln!(
+            w,
+            "| {} | {} / {} / {} / {} | {} · {} · {} · {} · {} | {} · {} · {} | {:?} | {:?} |",
+            look.name(),
+            a.font_sans,
+            a.font_display,
+            a.font_mono,
+            a.font_reading,
+            px(r.button),
+            px(r.card),
+            px(r.field),
+            px(z.composer_radius),
+            if f32::from(r.compact) >= 999. {
+                "pill".to_string()
+            } else {
+                px(r.compact)
+            },
+            px(z.row),
+            px(z.titlebar),
+            px(z.chat_text),
+            a.depth,
+            a.selection,
         );
     }
     let _ = writeln!(w);

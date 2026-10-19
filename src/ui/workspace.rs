@@ -21,6 +21,7 @@ use super::side_chat::SideChat;
 use super::sidebar::Sidebar;
 use super::*;
 use crate::state::{AppState, Screen};
+use crate::theme::Look;
 use crate::theme::{self, ActiveTheme};
 
 pub struct Workspace {
@@ -52,6 +53,18 @@ pub struct Workspace {
 }
 
 impl Workspace {
+    /// Switch to `look` (the command palette's "Theme: …"), keeping light
+    /// or dark, and keep it for the next launch.
+    fn pick_look(&mut self, look: Look, cx: &mut Context<Self>) {
+        let dark = self.state.read(cx).dark;
+        self.state.update(cx, |s, cx| {
+            s.look = look;
+            s.save_window();
+            cx.notify();
+        });
+        set_theme(look, dark, cx);
+    }
+
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let state = cx.new(|cx| {
             let mut s = AppState::new();
@@ -967,6 +980,16 @@ impl Render for Workspace {
                 });
                 set_theme(look, dark, cx);
             }))
+            .on_action(cx.listener(|this, _: &ThemeCalm, _, cx| this.pick_look(Look::Calm, cx)))
+            .on_action(
+                cx.listener(|this, _: &ThemeTerracotta, _, cx| {
+                    this.pick_look(Look::Terracotta, cx)
+                }),
+            )
+            .on_action(cx.listener(|this, _: &ThemePatina, _, cx| this.pick_look(Look::Patina, cx)))
+            .on_action(cx.listener(|this, _: &ThemeInk, _, cx| this.pick_look(Look::Ink, cx)))
+            .on_action(cx.listener(|this, _: &ThemeSlate, _, cx| this.pick_look(Look::Slate, cx)))
+            .on_action(cx.listener(|this, _: &ThemePlum, _, cx| this.pick_look(Look::Plum, cx)))
             .on_action(
                 cx.listener(|this, _: &FocusComposer, window, cx| this.focus_composer(window, cx)),
             )

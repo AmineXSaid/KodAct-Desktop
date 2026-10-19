@@ -76,16 +76,25 @@ The cream stack: the title bar and the sidebar share the canvas, the session ste
 | `selected` | `#f0e9e5` | 0.938 | `#262321` | 0.259 | the selected sidebar row |
 
 ### Themes
-Picked in Settings > General > Theme and kept in `window.json`. Each lays its surfaces and its one colour over the system; type, shape, spacing and ink stay the same, and every theme passes `palette_check.rs` in both modes.
+Picked in Settings > General > Theme and kept in `window.json`. Each is a whole look: its surfaces and one colour, and its form (faces, corners, density, depth, how a selected row shows). Calmly smooth is the system's own form; every theme passes `palette_check.rs` in both modes.
 
 | Theme | Light canvas / session / accent | Dark canvas / session / accent |
 |---|---|---|
-| Calmly smooth (Cream and dusty blue) | `#e3d7cd` / `#f0e9e5` / `#41608a` | `#171513` / `#1e1c1a` / `#9db7d9` |
-| Terracotta (Cream and warm orange) | `#e3d7cd` / `#f0e9e5` / `#b85a2a` | `#171513` / `#1e1c1a` / `#ee884f` |
-| Patina (Ivory and teal) | `#e9e6df` / `#f9f8f5` / `#216d70` | `#141312` / `#232321` / `#529a9d` |
-| Ink (Greys, no colour) | `#e2e2df` / `#f1f1ef` / `#1e1e1e` | `#121212` / `#1b1b1a` / `#f0f0ee` |
-| Slate (Cool grey and blue) | `#d8dde3` / `#edf0f3` / `#3b5b8c` | `#111418` / `#181c21` / `#9db7e0` |
-| Plum (Heather and plum) | `#e5d9e0` / `#f2ebef` / `#7a3e65` | `#171217` / `#1f1a1f` / `#d3a3c6` |
+| Calmly smooth (Cream and dusty blue, Archivo) | `#e3d7cd` / `#f0e9e5` / `#41608a` | `#171513` / `#1e1c1a` / `#9db7d9` |
+| Terracotta (Warm paper, replies in a serif) | `#e3d7cd` / `#f0e9e5` / `#b85a2a` | `#171513` / `#1e1c1a` / `#ee884f` |
+| Patina (Ivory and teal, Inter, flat) | `#e9e6df` / `#f9f8f5` / `#216d70` | `#141312` / `#232321` / `#529a9d` |
+| Ink (Greys and Geist, nothing else) | `#e2e2df` / `#f1f1ef` / `#1e1e1e` | `#121212` / `#1b1b1a` / `#f0f0ee` |
+| Slate (Cool grey, Plex, compact) | `#d8dde3` / `#edf0f3` / `#3b5b8c` | `#111418` / `#181c21` / `#9db7e0` |
+| Plum (Heather, an editorial serif) | `#e5d9e0` / `#f2ebef` / `#7a3e65` | `#171217` / `#1f1a1f` / `#d3a3c6` |
+
+| Theme | Faces (UI / display / code / replies) | Corners button · card · field · composer · pressed | Row · title bar · chat | Depth | Selected row |
+|---|---|---|---|---|---|
+| Calmly smooth | Archivo / Archivo / JetBrains Mono / Archivo | 4 · 4 · 4 · 4 · pill | 30 · 36 · 15 | Grain | Soft |
+| Terracotta | Hanken Grotesk / Source Serif 4 Display / JetBrains Mono / Source Serif 4 | 8 · 12 · 10 · 16 · pill | 32 · 40 · 16 | Lift | Card |
+| Patina | Inter / Inter / JetBrains Mono / Inter | 6 · 8 · 6 · 12 · 6 | 30 · 36 · 14 | Flat | Tint |
+| Ink | Geist / Geist / Geist Mono / Geist | 6 · 8 · 8 · 12 · 8 | 30 · 36 · 14 | Flat | Wash |
+| Slate | IBM Plex Sans / IBM Plex Sans / IBM Plex Mono / IBM Plex Sans | 3 · 4 · 3 · 6 · 4 | 26 · 32 · 13 | Flat | Tint |
+| Plum | Instrument Sans / Instrument Serif / JetBrains Mono / Instrument Sans | 12 · 16 · 14 · 22 · pill | 32 · 38 · 15 | Lift | Soft |
 
 ### Terminal
 The dock's 16 colours, on `stage` (`palette_check.rs` holds them to AA).

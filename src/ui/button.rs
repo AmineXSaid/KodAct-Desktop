@@ -739,20 +739,29 @@ mod tests {
         }
     }
 
-    /// Two shapes: what you press is a pill, what holds content is 4px.
+    /// Calmly smooth has two shapes: what you press is a pill, what holds
+    /// content is 4px. Every theme keeps the order: what you press is at
+    /// least as round as a row, and the composer at least as round as a card.
     #[test]
     fn pills_to_press_four_pixels_to_hold() {
+        for dark in [false, true] {
+            let r = Theme::of(crate::theme::Look::Calm, dark).radius;
+            let z = Theme::of(crate::theme::Look::Calm, dark).size;
+            for v in [r.compact, r.control, r.segment, r.pill] {
+                assert!(f32::from(v) >= 999., "{}px", f32::from(v));
+            }
+            for v in [r.button, r.card, r.field, z.composer_radius] {
+                assert_eq!(f32::from(v), 4.);
+            }
+        }
         for t in crate::theme::Look::ALL
             .into_iter()
             .flat_map(|l| [Theme::of(l, false), Theme::of(l, true)])
         {
-            let r = t.radius;
-            for v in [r.compact, r.control, r.segment, r.pill] {
-                assert!(f32::from(v) >= 999., "{}px", f32::from(v));
-            }
-            for v in [r.button, r.card, r.field, t.size.composer_radius] {
-                assert_eq!(f32::from(v), 4.);
-            }
+            let (r, name) = (t.radius, t.look.name());
+            assert!(r.compact >= r.button && r.control >= r.button, "{name}");
+            assert!(t.size.composer_radius >= r.card, "{name}");
+            assert!(f32::from(r.pill) >= 999., "{name}");
         }
     }
 }

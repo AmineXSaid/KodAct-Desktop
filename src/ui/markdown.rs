@@ -406,7 +406,7 @@ fn runs(
     base_weight: FontWeight,
     color: gpui::Hsla,
 ) -> AnyElement {
-    runs_in(id, spans, t, &t.font_sans, base_weight, color)
+    runs_in(id, spans, t, &t.font_reading, base_weight, color)
 }
 
 /// Text runs in `family` (code spans stay in the mono face).
@@ -574,7 +574,7 @@ const TAIL_CHARS: usize = 24;
 /// A paragraph still arriving: its last few words fade toward the end, so
 /// new text eases in rather than popping onto the line.
 fn runs_streaming(id: ElementId, spans: &[Span], t: &Theme, color: gpui::Hsla) -> AnyElement {
-    let (text, runs) = run_list(spans, t, &t.font_sans, FontWeight::NORMAL, color);
+    let (text, runs) = run_list(spans, t, &t.font_reading, FontWeight::NORMAL, color);
     let runs = fade_tail(&text, runs, TAIL_CHARS);
     linked(id, spans, StyledText::new(text).with_runs(runs))
 }

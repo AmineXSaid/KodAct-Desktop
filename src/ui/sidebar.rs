@@ -277,10 +277,7 @@ impl Render for Sidebar {
                         } else {
                             t.colors.text_muted
                         })
-                        .when(active, |d| {
-                            d.bg(t.extra.accent_soft.opacity(0.6))
-                                .font_weight(FontWeight::MEDIUM)
-                        })
+                        .when(active, |d| crate::theme::selected(&t, d))
                         .when(!active, |d| d.hover(move |st| st.bg(hover)))
                         .child(
                             div()
@@ -342,10 +339,7 @@ impl Render for Sidebar {
                         } else {
                             t.colors.text_muted
                         })
-                        .when(selected, |d| {
-                            d.bg(t.extra.accent_soft.opacity(0.6))
-                                .font_weight(FontWeight::MEDIUM)
-                        })
+                        .when(selected, |d| crate::theme::selected(&t, d))
                         .when(!selected, |d| d.hover(move |st| st.bg(hover)))
                         .child(status_mark(status, id, &t))
                         .map(|d| {
@@ -696,10 +690,7 @@ impl Render for Sidebar {
                                 } else {
                                     t.colors.text_muted
                                 })
-                                .when(projects_open, |d| {
-                                    d.bg(t.extra.accent_soft.opacity(0.6))
-                                        .font_weight(FontWeight::MEDIUM)
-                                })
+                                .when(projects_open, |d| crate::theme::selected(&t, d))
                                 .when(!projects_open, |d| d.hover(move |st| st.bg(hover)))
                                 .child(icon(
                                     "icons/folder-open.svg",
@@ -731,10 +722,7 @@ impl Render for Sidebar {
                                 } else {
                                     t.colors.text_muted
                                 })
-                                .when(rules_open, |d| {
-                                    d.bg(t.extra.accent_soft.opacity(0.6))
-                                        .font_weight(FontWeight::MEDIUM)
-                                })
+                                .when(rules_open, |d| crate::theme::selected(&t, d))
                                 .when(!rules_open, |d| d.hover(move |st| st.bg(hover)))
                                 .child(icon(
                                     "icons/list-todo.svg",

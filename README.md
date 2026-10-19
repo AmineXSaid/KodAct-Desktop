@@ -181,7 +181,7 @@ Changes apply the next time they're used; no restart.
 
 ## Layout
 
-- `src/theme.rs`: every colour, size, radius and font. Nothing else hardcodes them.
+- `src/theme.rs`: every colour, size, radius and font, and the six themes that set them (each with its own faces, corners, density and depth). Nothing else hardcodes them. Pick one in Settings > General or the command palette ("Theme:").
 - `src/state.rs`: the app state, the transcript model, demo chats and the scripted reply.
 - `src/backend.rs`: each chat's `forge` process: launch, the stream-json events, permission answers.
 - `src/forge_files.rs`: ForgeCLI's own files (commands, agents, skills, hooks,
@@ -197,7 +197,7 @@ Changes apply the next time they're used; no restart.
 - `src/browser_mcp.rs`: the browser tools for ForgeCLI's agents, served by this same program
   (`--browser-mcp`): navigate, state (numbered elements), click, type, press, select, hover,
   scroll, text, html, eval, wait, screenshot, console and tabs, on the page the panel shows.
-- `src/assets.rs`: bundled icons (Lucide, ISC) and fonts (Inter, JetBrains Mono, Source Serif 4; OFL).
+- `src/assets.rs`: bundled icons (Lucide, ISC) and fonts (Archivo, Hanken Grotesk, Source Serif 4, JetBrains Mono, and the themes' Inter, Geist and Geist Mono, IBM Plex Sans and Mono, Instrument Sans and Serif; all OFL).
 - `src/ui/`: one file per part:
   - the window: `workspace` (title bar, welcome), `sidebar`, `chat_view`,
     `message`, `markdown`, `composer`, `command_palette`, `onboarding`,

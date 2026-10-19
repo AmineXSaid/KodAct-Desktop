@@ -760,7 +760,7 @@ impl Settings {
                     // The session sheet, a card on it, and the one colour.
                     div()
                         .size_full()
-                        .rounded_tl(t.radius.small)
+                        .rounded_tl(p.radius.card)
                         .bg(p.extra.stage)
                         .shadow(p.elevation_grain())
                         .p(px(8.))
@@ -771,7 +771,7 @@ impl Settings {
                             div()
                                 .w(px(64.))
                                 .h(px(14.))
-                                .rounded(t.radius.small)
+                                .rounded(p.radius.card.min(px(7.)))
                                 .bg(p.colors.surface)
                                 .border_1()
                                 .border_color(p.colors.border),
@@ -785,10 +785,16 @@ impl Settings {
                                     div()
                                         .w(px(34.))
                                         .h(px(12.))
-                                        .rounded_full()
+                                        .rounded(p.radius.compact.min(px(6.)))
                                         .bg(p.extra.accent),
                                 )
-                                .child(div().w(px(24.)).h(px(12.)).rounded_full().bg(p.extra.fill))
+                                .child(
+                                    div()
+                                        .w(px(24.))
+                                        .h(px(12.))
+                                        .rounded(p.radius.compact.min(px(6.)))
+                                        .bg(p.extra.fill),
+                                )
                                 .child(super::ingot::mark(14.).marks([
                                     p.extra.mark_top,
                                     p.extra.mark_left,
@@ -828,6 +834,7 @@ impl Settings {
                                 div()
                                     .flex_1()
                                     .min_w_0()
+                                    .font_family(p.font_sans.clone())
                                     .text_size(t.text.body_sm)
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(t.colors.text_strong)
