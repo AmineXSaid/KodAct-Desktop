@@ -16,7 +16,7 @@ cargo test
 Forge needs two things to answer:
 
 - **ForgeCLI**: `forge.exe` (`forge` elsewhere) beside the app, on PATH, or
-  named by `FORGE_CLI`. Build it from ForgeCLI's `ULTRA01` branch with
+  named by `FORGE_CLI`. Build it from ForgeCLI's `ULTRA02` branch with
   `cargo build --release -p forge-cli`.
 - **An endpoint**: a profile in `endpoints.json` (the model menu opens it).
   Its URL, model and key reach `forge` as `FORGE_*` variables
