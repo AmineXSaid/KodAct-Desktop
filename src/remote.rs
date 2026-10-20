@@ -33,8 +33,14 @@ pub enum Target {
     Wsl(String),
     /// An SSH host: a `Host` from `~/.ssh/config`, or `[user@]host[:port]`.
     Ssh(String),
-    /// A running container, by name, and the user to run as.
-    Container { name: String, user: Option<String> },
+    /// A running container, by name, and the user to run as; `wsl`: the
+    /// distro whose Docker runs it (a dev container started from a folder
+    /// in WSL), else this computer's `docker`.
+    Container {
+        name: String,
+        user: Option<String>,
+        wsl: Option<String>,
+    },
 }
 
 impl Target {
@@ -50,11 +56,17 @@ impl Target {
         match self {
             Target::Wsl(d) => d.clone(),
             Target::Ssh(h) => h.clone(),
-            Target::Container {
-                name,
-                user: Some(u),
-            } => format!("{u}@{name}"),
-            Target::Container { name, user: None } => name.clone(),
+            Target::Container { name, user, wsl } => {
+                let mut a = match user {
+                    Some(u) => format!("{u}@{name}"),
+                    None => name.clone(),
+                };
+                if let Some(d) = wsl {
+                    a.push_str(WSL_HOST);
+                    a.push_str(d);
+                }
+                a
+            }
         }
     }
 
@@ -78,6 +90,30 @@ impl Target {
             Target::Container { .. } => "icons/box.svg",
         }
     }
+}
+
+/// In a container's project path, what names the WSL distro whose Docker
+/// runs it: `container://vscode@forge-dc-x;wsl=Ubuntu/workspaces/x`.
+const WSL_HOST: &str = ";wsl=";
+
+/// The `docker` that reaches containers on `wsl` (a distro's own, through
+/// `wsl.exe`), or this computer's.
+pub fn docker_command(wsl: Option<&str>) -> Command {
+    #[cfg_attr(not(windows), allow(unused_mut))]
+    let mut c = match wsl {
+        Some(d) => {
+            let mut c = Command::new("wsl.exe");
+            c.args(["-d", d, "--exec", "docker"]);
+            c
+        }
+        None => Command::new("docker"),
+    };
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        c.creation_flags(0x0800_0000);
+    }
+    c
 }
 
 /// The folder name in a dev container Forge started (`forge-dc-<slug>-<hash>`).
@@ -110,16 +146,24 @@ impl Remote {
         let target = match scheme {
             "wsl" => Target::Wsl(authority.into()),
             "ssh" => Target::Ssh(authority.into()),
-            "container" => match authority.split_once('@') {
-                Some((u, n)) => Target::Container {
-                    name: n.into(),
-                    user: Some(u.into()),
-                },
-                None => Target::Container {
-                    name: authority.into(),
-                    user: None,
-                },
-            },
+            "container" => {
+                let (authority, wsl) = match authority.split_once(WSL_HOST) {
+                    Some((a, d)) => (a, Some(d.to_string())),
+                    None => (authority, None),
+                };
+                match authority.split_once('@') {
+                    Some((u, n)) => Target::Container {
+                        name: n.into(),
+                        user: Some(u.into()),
+                        wsl,
+                    },
+                    None => Target::Container {
+                        name: authority.into(),
+                        user: None,
+                        wsl,
+                    },
+                }
+            }
             _ => return None,
         };
         // "/~/x" is "~/x" (the remote home); anything else is absolute.
@@ -218,8 +262,8 @@ pub fn command(target: &Target, script: &str, args: &[String], extra: &Extra) ->
             c.args([host.as_str(), "--", &remote]);
             c
         }
-        Target::Container { name, user } => {
-            let mut c = Command::new("docker");
+        Target::Container { name, user, wsl } => {
+            let mut c = docker_command(wsl.as_deref());
             c.args(["exec", "-i"]);
             if let Some(u) = user {
                 c.args(["-u", u]);
@@ -790,16 +834,12 @@ pub fn parse_docker_ps(text: &str) -> Vec<Container> {
 
 /// The running containers.
 pub fn containers() -> Result<Vec<Container>, Error> {
-    let mut c = Command::new("docker");
+    let mut c = docker_command(None);
     c.args(["ps", "--format", "{{.Names}}\t{{.Image}}\t{{.Status}}"]);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        c.creation_flags(0x0800_0000);
-    }
     let target = Target::Container {
         name: String::new(),
         user: None,
+        wsl: None,
     };
     let o = c.output().map_err(|e| Error::spawn(&target, e))?;
     if !o.status.success() {
@@ -938,18 +978,14 @@ pub fn find_devcontainer(dir: &Path) -> Option<(PathBuf, DevContainer)> {
     None
 }
 
-fn docker(args: &[&str]) -> Result<String, Error> {
+fn docker(wsl: Option<&str>, args: &[&str]) -> Result<String, Error> {
     let target = Target::Container {
         name: String::new(),
         user: None,
+        wsl: wsl.map(str::to_string),
     };
-    let mut c = Command::new("docker");
+    let mut c = docker_command(wsl);
     c.args(args);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        c.creation_flags(0x0800_0000);
-    }
     let o = c.output().map_err(|e| Error::spawn(&target, e))?;
     if o.status.success() {
         Ok(String::from_utf8_lossy(&o.stdout).trim().to_string())
@@ -970,37 +1006,151 @@ pub fn is_devcontainer(target: &Target) -> bool {
     matches!(target, Target::Container { name, .. } if name.starts_with("forge-dc-"))
 }
 
-/// The folder on this computer a dev container was started from (its
-/// `forge.devcontainer` label).
-pub fn devcontainer_source(name: &str) -> Result<PathBuf, Error> {
-    let dir = docker(&[
-        "inspect",
-        "--format",
-        "{{index .Config.Labels \"forge.devcontainer\"}}",
-        name,
-    ])?;
+/// Where a dev container's folder is: on this computer, or in a WSL distro
+/// (whose Docker then runs the container).
+#[derive(Clone, Debug, PartialEq)]
+pub enum DevSource {
+    Local(PathBuf),
+    Wsl { distro: String, path: String },
+}
+
+impl DevSource {
+    fn wsl(&self) -> Option<&str> {
+        match self {
+            DevSource::Wsl { distro, .. } => Some(distro),
+            DevSource::Local(_) => None,
+        }
+    }
+
+    /// As its `forge.devcontainer` label keeps it: the local path, or the
+    /// WSL folder's project path (`wsl://Ubuntu/home/me/x`).
+    fn label(&self) -> String {
+        match self {
+            DevSource::Local(p) => p.to_string_lossy().into_owned(),
+            DevSource::Wsl { distro, path } => Remote {
+                target: Target::Wsl(distro.clone()),
+                path: path.clone(),
+            }
+            .to_path()
+            .to_string_lossy()
+            .replace('\\', "/"),
+        }
+    }
+
+    fn from_label(label: &str) -> DevSource {
+        match Remote::parse(Path::new(label)) {
+            Some(Remote {
+                target: Target::Wsl(distro),
+                path,
+            }) => DevSource::Wsl { distro, path },
+            _ => DevSource::Local(PathBuf::from(label)),
+        }
+    }
+
+    /// The folder's last name.
+    fn base(&self) -> String {
+        let s = match self {
+            DevSource::Local(p) => p.to_string_lossy().replace('\\', "/"),
+            DevSource::Wsl { path, .. } => path.clone(),
+        };
+        s.trim_end_matches('/')
+            .rsplit('/')
+            .next()
+            .filter(|n| !n.is_empty() && *n != "~")
+            .unwrap_or("workspace")
+            .to_string()
+    }
+}
+
+/// The folder a dev container was started from (its `forge.devcontainer`
+/// label), on the Docker of `wsl` or this computer.
+pub fn devcontainer_source(name: &str, wsl: Option<&str>) -> Result<DevSource, Error> {
+    let dir = docker(
+        wsl,
+        &[
+            "inspect",
+            "--format",
+            "{{index .Config.Labels \"forge.devcontainer\"}}",
+            name,
+        ],
+    )?;
     let dir = dir.trim();
     if dir.is_empty() || dir == "<no value>" {
         return Err(Error::Other(format!(
             "{name} doesn't say which folder it came from."
         )));
     }
-    Ok(PathBuf::from(dir))
+    Ok(DevSource::from_label(dir))
 }
 
-/// Start (or reuse) the dev container for `dir`. `fresh` rebuilds it: the
-/// old container goes, a Dockerfile is built again without cache, and the
-/// image is pulled again; postCreateCommand runs again.
-pub fn devcontainer_up(dir: &Path, fresh: bool, progress: &dyn Fn(&str)) -> Result<Remote, Error> {
-    let (file, dc) = find_devcontainer(dir).ok_or_else(|| {
-        Error::Other("This folder has no .devcontainer/devcontainer.json.".into())
-    })?;
-    let base = dir
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "workspace".into());
+/// A WSL folder's dev container definition: (its file's folder, the
+/// definition), the path made absolute (`~` resolved).
+fn find_wsl_devcontainer(distro: &str, path: &str) -> Result<(String, String, DevContainer), Error> {
+    let target = Target::Wsl(distro.to_string());
+    let script = format!(
+        r#"{TILDE}
+d=$(x "$1"); cd "$d" || exit 3; pwd
+for f in .devcontainer/devcontainer.json .devcontainer.json; do
+  [ -f "$f" ] && {{ echo "$f"; cat "$f"; exit 0; }}
+done
+exit 4"#
+    );
+    let out = run(
+        &target,
+        &script,
+        &[path.to_string()],
+        b"",
+        Duration::from_secs(30),
+        &Extra::default(),
+    )
+    .map_err(|_| Error::Other("This folder has no .devcontainer/devcontainer.json.".into()))?;
+    let text = String::from_utf8_lossy(&out);
+    let mut lines = text.splitn(3, '\n');
+    let (dir, file, json) = (
+        lines.next().unwrap_or_default().trim().to_string(),
+        lines.next().unwrap_or_default().trim().to_string(),
+        lines.next().unwrap_or_default(),
+    );
+    let dc = parse_devcontainer(json).map_err(Error::Other)?;
+    let folder = match file.rsplit_once('/') {
+        Some((f, _)) => format!("{dir}/{f}"),
+        None => dir.clone(),
+    };
+    Ok((dir, folder, dc))
+}
+
+/// Whether a WSL folder has a dev container definition (blocking).
+pub fn wsl_has_devcontainer(distro: &str, path: &str) -> bool {
+    find_wsl_devcontainer(distro, path).is_ok()
+}
+
+/// Start (or reuse) the dev container for a folder, on this computer or in
+/// WSL (its Docker builds and runs it, the folder mounted from there).
+/// `fresh` rebuilds it: the old container goes, a Dockerfile is built again
+/// without cache, and the image is pulled again; postCreateCommand runs again.
+pub fn devcontainer_up(src: &DevSource, fresh: bool, progress: &dyn Fn(&str)) -> Result<Remote, Error> {
+    // The folder (absolute), the definition's folder, and the definition.
+    let (dir, folder, dc) = match src {
+        DevSource::Local(dir) => {
+            let (file, dc) = find_devcontainer(dir).ok_or_else(|| {
+                Error::Other("This folder has no .devcontainer/devcontainer.json.".into())
+            })?;
+            let folder = file.parent().unwrap_or(dir).to_string_lossy().into_owned();
+            (dir.to_string_lossy().into_owned(), folder, dc)
+        }
+        DevSource::Wsl { distro, path } => {
+            progress("Reading devcontainer.json in WSL…");
+            find_wsl_devcontainer(distro, path)?
+        }
+    };
+    let wsl = src.wsl();
+    let join = |a: &str, b: &str| match src {
+        DevSource::Local(_) => Path::new(a).join(b).to_string_lossy().into_owned(),
+        DevSource::Wsl { .. } => format!("{}/{}", a.trim_end_matches('/'), b.trim_start_matches("./")),
+    };
+    let base = src.base();
     let mut h = DefaultHasher::new();
-    dir.hash(&mut h);
+    src.label().hash(&mut h);
     let key = format!("{:08x}", h.finish() as u32);
     let slug: String = base
         .chars()
@@ -1020,6 +1170,7 @@ pub fn devcontainer_up(dir: &Path, fresh: bool, progress: &dyn Fn(&str)) -> Resu
     let target = Target::Container {
         name: name.clone(),
         user: dc.remote_user.clone(),
+        wsl: wsl.map(str::to_string),
     };
     let remote = Remote {
         target,
@@ -1028,21 +1179,24 @@ pub fn devcontainer_up(dir: &Path, fresh: bool, progress: &dyn Fn(&str)) -> Resu
 
     if fresh {
         progress("Removing the old container…");
-        let _ = docker(&["rm", "-f", &name]);
+        let _ = docker(wsl, &["rm", "-f", &name]);
     }
     // Already there: start it if stopped.
-    let existing = docker(&[
-        "ps",
-        "-a",
-        "--filter",
-        &format!("name=^{name}$"),
-        "--format",
-        "{{.State}}",
-    ])?;
+    let existing = docker(
+        wsl,
+        &[
+            "ps",
+            "-a",
+            "--filter",
+            &format!("name=^{name}$"),
+            "--format",
+            "{{.State}}",
+        ],
+    )?;
     if !existing.is_empty() {
         if existing != "running" {
             progress("Starting the dev container…");
-            docker(&["start", &name])?;
+            docker(wsl, &["start", &name])?;
         }
         return Ok(remote);
     }
@@ -1051,22 +1205,20 @@ pub fn devcontainer_up(dir: &Path, fresh: bool, progress: &dyn Fn(&str)) -> Resu
         (Some(i), _) => {
             progress(&format!("Pulling {i}…"));
             // A local image needs no pull; a failed pull shows when it runs.
-            let _ = docker(&["pull", i]);
+            let _ = docker(wsl, &["pull", i]);
             i.clone()
         }
         (None, Some(df)) => {
-            let folder = file.parent().unwrap_or(dir);
-            let ctx = folder.join(dc.context.as_deref().unwrap_or("."));
+            let ctx = join(&folder, dc.context.as_deref().unwrap_or("."));
             let tag = format!("forge-dc-{slug}-{key}:latest");
             progress("Building the dev container image…");
-            let file = folder.join(df).to_string_lossy().into_owned();
-            let ctx = ctx.to_string_lossy().into_owned();
+            let file = join(&folder, df);
             let mut args = vec!["build", "-t", &tag, "-f", &file];
             if fresh {
                 args.push("--no-cache");
             }
             args.push(&ctx);
-            docker(&args)?;
+            docker(wsl, &args)?;
             tag
         }
         (None, None) => {
@@ -1076,8 +1228,8 @@ pub fn devcontainer_up(dir: &Path, fresh: bool, progress: &dyn Fn(&str)) -> Resu
         }
     };
     progress("Starting the dev container…");
-    let mount = format!("{}:{workspace}", dir.to_string_lossy());
-    let label = format!("forge.devcontainer={}", dir.to_string_lossy());
+    let mount = format!("{dir}:{workspace}");
+    let label = format!("forge.devcontainer={}", src.label());
     let mut args: Vec<String> = [
         "run", "-d", "--name", &name, "--label", &label, "-v", &mount, "-w", &workspace,
     ]
@@ -1086,7 +1238,7 @@ pub fn devcontainer_up(dir: &Path, fresh: bool, progress: &dyn Fn(&str)) -> Resu
     .collect();
     args.extend(dc.run_args.iter().cloned());
     args.extend([image, "sleep".into(), "infinity".into()]);
-    docker(&args.iter().map(String::as_str).collect::<Vec<_>>())?;
+    docker(wsl, &args.iter().map(String::as_str).collect::<Vec<_>>())?;
     if let Some(cmd) = &dc.post_create {
         progress("Running postCreateCommand…");
         run(
@@ -1381,6 +1533,7 @@ mod tests {
                 Target::Container {
                     name: "api".into(),
                     user: Some("vscode".into()),
+                    wsl: None,
                 },
                 "/workspaces/api",
             ),
@@ -1410,11 +1563,13 @@ mod tests {
         let dc = Target::Container {
             name: "forge-dc-api-0a1b2c3d".into(),
             user: None,
+            wsl: None,
         };
         assert_eq!(dc.label(), "Dev Container: api");
         let plain = Target::Container {
             name: "web".into(),
             user: None,
+            wsl: None,
         };
         assert_eq!(plain.label(), "Container: web");
     }
@@ -1484,6 +1639,7 @@ mod tests {
             &Target::Container {
                 name: "api".into(),
                 user: Some("vscode".into()),
+                wsl: None,
             },
             "s",
             &[],
@@ -1641,6 +1797,7 @@ mod tests {
         let dc = Target::Container {
             name: "api".into(),
             user: None,
+            wsl: None,
         };
         assert!(Error::classify(
             &dc,
@@ -1903,6 +2060,7 @@ mod tests {
                 Target::Container {
                     name: c,
                     user: None,
+                    wsl: None,
                 },
                 Extra::default(),
             ));
@@ -1992,7 +2150,7 @@ mod tests {
             std::fs::write(dir.join("hello.txt"), "from the host\n").unwrap();
             let said = std::sync::Mutex::new(vec![]);
             let remote =
-                devcontainer_up(&dir, false, &|m| said.lock().unwrap().push(m.to_string()))
+                devcontainer_up(&DevSource::Local(dir.clone()), false, &|m| said.lock().unwrap().push(m.to_string()))
                     .unwrap();
             assert_eq!(
                 remote.path,
@@ -2019,7 +2177,7 @@ mod tests {
                 assert_eq!(String::from_utf8_lossy(&out).trim(), "made");
             }
             // Reopening finds the same container.
-            let again = devcontainer_up(&dir, false, &|_| {}).unwrap();
+            let again = devcontainer_up(&DevSource::Local(dir.clone()), false, &|_| {}).unwrap();
             assert_eq!(again, remote);
             let (asks, _) = modetest(&remote.target, "acceptEdits", &model, &Extra::default());
             assert_eq!(
@@ -2027,7 +2185,7 @@ mod tests {
                 ["Bash:rm a.txt", "Bash:curl -s http://127.0.0.1:1 || true"]
             );
             if let Target::Container { name, .. } = &remote.target {
-                let _ = docker(&["rm", "-f", name]);
+                let _ = docker(None, &["rm", "-f", name]);
             }
             std::fs::remove_dir_all(&dir).ok();
             eprintln!("dev container ({case}) ok: {}", remote.target.label());
@@ -2067,16 +2225,16 @@ mod tests {
             .unwrap();
             String::from_utf8_lossy(&out).trim().to_string()
         };
-        let first = devcontainer_up(&dir, false, &|_| {}).unwrap();
+        let first = devcontainer_up(&DevSource::Local(dir.clone()), false, &|_| {}).unwrap();
         assert!(is_devcontainer(&first.target));
         let Target::Container { name, .. } = &first.target else {
             unreachable!()
         };
-        assert_eq!(devcontainer_source(name).unwrap(), dir);
+        assert_eq!(devcontainer_source(name, None).unwrap(), DevSource::Local(dir.clone()));
         sh(&first, "touch /tmp/changed-inside");
         let said = std::sync::Mutex::new(vec![]);
         let again =
-            devcontainer_up(&dir, true, &|m| said.lock().unwrap().push(m.to_string())).unwrap();
+            devcontainer_up(&DevSource::Local(dir.clone()), true, &|m| said.lock().unwrap().push(m.to_string())).unwrap();
         assert_eq!(again, first, "same name and folder");
         let said = said.lock().unwrap().clone();
         assert!(said.iter().any(|m| m.contains("Removing")), "{said:?}");
@@ -2097,7 +2255,7 @@ mod tests {
             sh(&again, &format!("cat {}/hello.txt", again.path)),
             "from the host"
         );
-        let _ = docker(&["rm", "-f", name]);
+        let _ = docker(None, &["rm", "-f", name]);
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -2223,5 +2381,58 @@ mod tests {
         )
         .unwrap();
         assert_eq!(String::from_utf8_lossy(&gone).trim(), "gone");
+    }
+}
+
+#[cfg(test)]
+mod wsl_devcontainer_tests {
+    use super::*;
+
+    #[test]
+    fn a_container_on_wsl_docker_round_trips_as_a_project_path() {
+        let r = Remote {
+            target: Target::Container {
+                name: "forge-dc-app-0123abcd".into(),
+                user: Some("vscode".into()),
+                wsl: Some("CentOSStream9".into()),
+            },
+            path: "/workspaces/app".into(),
+        };
+        let p = r.to_path();
+        assert_eq!(
+            p.to_string_lossy().replace('\\', "/"),
+            "container://vscode@forge-dc-app-0123abcd;wsl=CentOSStream9/workspaces/app"
+        );
+        assert_eq!(Remote::parse(&p), Some(r));
+        // One on this computer's Docker is as before.
+        let plain = Remote::parse(Path::new("container://web/srv")).unwrap();
+        assert_eq!(
+            plain.target,
+            Target::Container { name: "web".into(), user: None, wsl: None }
+        );
+    }
+
+    #[test]
+    fn a_wsl_folder_is_kept_as_its_project_path_on_the_container() {
+        let src = DevSource::Wsl {
+            distro: "Ubuntu".into(),
+            path: "/home/me/ta_testhouse_main".into(),
+        };
+        assert_eq!(src.label(), "wsl://Ubuntu/home/me/ta_testhouse_main");
+        assert_eq!(DevSource::from_label(&src.label()), src);
+        assert_eq!(src.base(), "ta_testhouse_main");
+        assert_eq!(src.wsl(), Some("Ubuntu"));
+        let local = DevSource::from_label("/home/me/app");
+        assert_eq!(local, DevSource::Local(PathBuf::from("/home/me/app")));
+        assert_eq!(local.wsl(), None);
+    }
+
+    #[test]
+    fn docker_on_wsl_goes_through_wsl_exe() {
+        let c = docker_command(Some("Ubuntu"));
+        assert_eq!(c.get_program(), "wsl.exe");
+        let args: Vec<_> = c.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        assert_eq!(args, ["-d", "Ubuntu", "--exec", "docker"]);
+        assert_eq!(docker_command(None).get_program(), "docker");
     }
 }

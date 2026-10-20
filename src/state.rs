@@ -1295,6 +1295,9 @@ pub struct AppState {
     trusted_hosts: std::collections::HashSet<String>,
     /// The remote indicator's menu, while it's open.
     pub remote_menu: Option<RemoteMenu>,
+    /// WSL folders found to have a dev container definition, or not
+    /// (checked in the background when one opens, or the menu does).
+    wsl_devcontainers: std::collections::HashMap<std::path::PathBuf, bool>,
     /// The browser's tool server over HTTP, for remote agents: (port, token).
     browser_http: Option<(u16, String)>,
     pub screen: Screen,
@@ -1585,6 +1588,7 @@ impl AppState {
             remote_heartbeat: None,
             trusted_hosts: Default::default(),
             remote_menu: None,
+            wsl_devcontainers: Default::default(),
             browser_http: None,
             branch: first.branch.clone(),
             current_project: first.id,
@@ -7037,6 +7041,7 @@ impl AppState {
             return cx.notify();
         }
         self.remote_menu = Some(RemoteMenu::default());
+        self.check_devcontainer(cx);
         let task = cx.background_spawn(async move {
             (
                 crate::remote::wsl_distros().map_err(|e| e.to_string()),
@@ -7167,18 +7172,56 @@ impl AppState {
         if !self.remote_ready.contains_key(&target) {
             self.connect(target, None, cx);
         }
+        self.check_devcontainer(cx);
     }
 
-    /// Reopen the current (local) folder in its dev container.
-    pub fn reopen_in_container(&mut self, cx: &mut Context<Self>) {
-        let dir = self.project_dir.clone();
-        if crate::remote::Remote::parse(&dir).is_some() || !dir.is_dir() {
-            return self.show_toast(
-                "Open the local folder first: its dev container starts from it.",
-                cx,
-            );
+    /// The current folder as a dev container's source: a local folder, or a
+    /// folder in WSL (whose Docker then runs it). None elsewhere (SSH, a
+    /// container, a plain chat).
+    fn devcontainer_folder(&self) -> Option<crate::remote::DevSource> {
+        use crate::remote::{DevSource, Target};
+        match crate::remote::Remote::parse(&self.project_dir) {
+            None => self.project_dir.is_dir().then(|| DevSource::Local(self.project_dir.clone())),
+            Some(r) => match r.target {
+                Target::Wsl(distro) => Some(DevSource::Wsl { distro, path: r.path }),
+                _ => None,
+            },
         }
-        self.start_devcontainer(dir, false, cx);
+    }
+
+    /// In a WSL folder: find out, off the UI thread, whether it has a dev
+    /// container definition, for the menu's Reopen in container.
+    fn check_devcontainer(&mut self, cx: &mut Context<Self>) {
+        let Some(crate::remote::DevSource::Wsl { distro, path }) = self.devcontainer_folder() else {
+            return;
+        };
+        let key = self.project_dir.clone();
+        if self.wsl_devcontainers.contains_key(&key) {
+            return;
+        }
+        cx.spawn(async move |this, cx| {
+            let has = cx
+                .background_spawn(async move { crate::remote::wsl_has_devcontainer(&distro, &path) })
+                .await;
+            let _ = this.update(cx, |s, cx| {
+                s.wsl_devcontainers.insert(key, has);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Reopen the current folder (on this computer, or in WSL) in its dev
+    /// container.
+    pub fn reopen_in_container(&mut self, cx: &mut Context<Self>) {
+        match self.devcontainer_folder() {
+            Some(src) if self.has_devcontainer() => self.start_devcontainer(src, false, cx),
+            Some(_) => self.show_toast("This folder has no .devcontainer/devcontainer.json.", cx),
+            None => self.show_toast(
+                "Dev containers start from a folder on this computer or in WSL.",
+                cx,
+            ),
+        }
     }
 
     /// The current remote is a dev container Forge started from a folder.
@@ -7191,10 +7234,10 @@ impl AppState {
     /// thread, then `then` with it (or a toast saying why not).
     fn with_devcontainer_source(
         &mut self,
-        then: impl FnOnce(&mut Self, std::path::PathBuf, &mut Context<Self>) + 'static,
+        then: impl FnOnce(&mut Self, crate::remote::DevSource, &mut Context<Self>) + 'static,
         cx: &mut Context<Self>,
     ) {
-        let Some(crate::remote::Target::Container { name, .. }) =
+        let Some(crate::remote::Target::Container { name, wsl, .. }) =
             self.current_remote().map(|r| r.target)
         else {
             return self.show_toast("This project isn't in a dev container.", cx);
@@ -7202,14 +7245,16 @@ impl AppState {
         self.remote_menu = None;
         cx.spawn(async move |this, cx| {
             let found = cx
-                .background_spawn(async move { crate::remote::devcontainer_source(&name) })
+                .background_spawn(async move {
+                    crate::remote::devcontainer_source(&name, wsl.as_deref())
+                })
                 .await;
             let _ = this.update(cx, |s, cx| match found {
-                Ok(dir) if dir.is_dir() => then(s, dir, cx),
-                Ok(dir) => s.show_toast(
+                Ok(crate::remote::DevSource::Local(dir)) if !dir.is_dir() => s.show_toast(
                     format!("The folder it came from is gone: {}", dir.display()),
                     cx,
                 ),
+                Ok(src) => then(s, src, cx),
                 Err(e) => s.show_toast(e.to_string(), cx),
             });
         })
@@ -7223,9 +7268,8 @@ impl AppState {
     pub fn rebuild_container(&mut self, cx: &mut Context<Self>) {
         if self.in_devcontainer() {
             self.with_devcontainer_source(|s, dir, cx| s.start_devcontainer(dir, true, cx), cx);
-        } else if self.has_devcontainer() {
-            let dir = self.project_dir.clone();
-            self.start_devcontainer(dir, true, cx);
+        } else if let Some(src) = self.devcontainer_folder().filter(|_| self.has_devcontainer()) {
+            self.start_devcontainer(src, true, cx);
         } else {
             self.show_toast("There's no dev container here to rebuild.", cx);
         }
@@ -7238,11 +7282,20 @@ impl AppState {
             return self.show_toast("This project isn't in a dev container.", cx);
         }
         self.with_devcontainer_source(
-            |s, dir, cx| {
+            |s, src, cx| {
                 s.remote_failed = None;
                 s.remote_lost = None;
                 // The folder, as you were in it: a project only if it was one.
-                s.work_in_folder(dir, cx);
+                match src {
+                    crate::remote::DevSource::Local(dir) => s.work_in_folder(dir, cx),
+                    crate::remote::DevSource::Wsl { distro, path } => s.open_remote_folder(
+                        crate::remote::Remote {
+                            target: crate::remote::Target::Wsl(distro),
+                            path,
+                        },
+                        cx,
+                    ),
+                }
             },
             cx,
         );
@@ -7250,11 +7303,12 @@ impl AppState {
 
     /// Start (or with `fresh`, rebuild) the dev container for `dir` and open
     /// its folder there, saying each step in the status bar.
-    fn start_devcontainer(&mut self, dir: std::path::PathBuf, fresh: bool, cx: &mut Context<Self>) {
+    fn start_devcontainer(&mut self, src: crate::remote::DevSource, fresh: bool, cx: &mut Context<Self>) {
         self.remote_menu = None;
         let placeholder = crate::remote::Target::Container {
             name: "dev container".into(),
             user: None,
+            wsl: None,
         };
         let first = if fresh {
             "Rebuilding the dev container…"
@@ -7264,7 +7318,7 @@ impl AppState {
         self.remote_busy = Some((placeholder, first.into()));
         let (tx, rx) = async_channel::unbounded::<String>();
         let task = cx.background_spawn(async move {
-            crate::remote::devcontainer_up(&dir, fresh, &|m: &str| {
+            crate::remote::devcontainer_up(&src, fresh, &|m: &str| {
                 let _ = tx.send_blocking(m.to_string());
             })
         });
@@ -7298,15 +7352,21 @@ impl AppState {
         cx.notify();
     }
 
-    /// The current folder has a dev container definition.
+    /// The current folder has a dev container definition: a local one
+    /// looked at now, a WSL one as last checked (`check_devcontainer`).
     pub fn has_devcontainer(&self) -> bool {
-        crate::remote::Remote::parse(&self.project_dir).is_none()
-            && (self
-                .project_dir
-                .join(".devcontainer")
-                .join("devcontainer.json")
-                .is_file()
-                || self.project_dir.join(".devcontainer.json").is_file())
+        match self.devcontainer_folder() {
+            Some(crate::remote::DevSource::Local(dir)) => {
+                dir.join(".devcontainer").join("devcontainer.json").is_file()
+                    || dir.join(".devcontainer.json").is_file()
+            }
+            Some(crate::remote::DevSource::Wsl { .. }) => self
+                .wsl_devcontainers
+                .get(&self.project_dir)
+                .copied()
+                .unwrap_or(false),
+            None => false,
+        }
     }
 
     /// Back to this machine, where Forge started: the folder it was

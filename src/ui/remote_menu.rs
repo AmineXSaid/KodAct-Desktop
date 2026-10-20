@@ -230,8 +230,9 @@ impl RemotePicker {
                     reopen.caption = Some("You're in it".into());
                 } else if !s.has_devcontainer() {
                     reopen.act = None;
-                    reopen.caption = Some(if connected {
-                        "Open the local folder first".into()
+                    let wsl = matches!(s.current_remote().map(|r| r.target), Some(Target::Wsl(_)));
+                    reopen.caption = Some(if connected && !wsl {
+                        "Starts from a folder here or in WSL".into()
                     } else {
                         "No devcontainer.json in this folder".into()
                     });
@@ -330,6 +331,7 @@ impl RemotePicker {
                                     Target::Container {
                                         name: c.name.clone(),
                                         user: None,
+                                        wsl: None,
                                     },
                                     "/".into(),
                                 ),

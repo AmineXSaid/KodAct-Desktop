@@ -163,8 +163,13 @@ pub fn remote_shell(r: &Remote, shell: &str, trust_new_key: bool) -> Shell {
                 .map(|s| s.to_string())
                 .collect(),
         ),
-        Target::Container { name, user } => {
-            let mut a = vec!["exec".to_string(), "-it".into()];
+        Target::Container { name, user, wsl } => {
+            // On a WSL distro's Docker: through wsl.exe, as every call to it.
+            let mut a = match wsl {
+                Some(d) => vec!["-d".to_string(), d.clone(), "--exec".into(), "docker".into()],
+                None => vec![],
+            };
+            a.extend(["exec".to_string(), "-it".into()]);
             if let Some(u) = user {
                 a.extend(["-u".into(), u.clone()]);
             }
@@ -176,7 +181,7 @@ pub fn remote_shell(r: &Remote, shell: &str, trust_new_key: bool) -> Shell {
                 "sh".into(),
                 r.path.clone(),
             ]);
-            ("docker", a)
+            (if wsl.is_some() { "wsl.exe" } else { "docker" }, a)
         }
     };
     Shell {
@@ -539,6 +544,7 @@ mod tests {
                 target: Target::Container {
                     name: "api".into(),
                     user: Some("dev".into()),
+                    wsl: None,
                 },
                 path: "/w".into(),
             },
@@ -567,6 +573,7 @@ mod tests {
                 target: Target::Container {
                     name: c,
                     user: None,
+                    wsl: None,
                 },
                 path: "/tmp".into(),
             });
