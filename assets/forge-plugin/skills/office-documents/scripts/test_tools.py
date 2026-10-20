@@ -18,12 +18,14 @@ from openpyxl.styles import Font
 from pptx import Presentation
 from pypdf import PdfReader
 
+import check_tool
 import docx_tool
 import pdf_tool
 import pptx_tool
 import xlsx_tool
 
 HAS_OFFICE = bool(shutil.which("soffice") or shutil.which("libreoffice"))
+HAS_RENDER = HAS_OFFICE and bool(shutil.which("pdftoppm"))
 
 
 class Tmp(unittest.TestCase):
@@ -138,6 +140,26 @@ class Excel(Tmp):
         self.assertEqual(openpyxl.load_workbook(done)["Data"]["A1"].font.name, "Calibri", "LibreOffice keeps the named font")
 
 
+class ExcelChecks(Excel):
+    def test_a_range_reads_values_and_formulas(self):
+        src = self.make_input()
+        text = xlsx_tool.read_range(src, "Budget!C2:D3")
+        self.assertIn("| C2 | 1350 |  |", text)
+        self.assertIn("| D3 |  | =C3-B3 |", text, "openpyxl's own file has no computed values yet")
+        self.assertIn("| C2 |", xlsx_tool.read_range(src, "C2"), "one cell, on the active sheet")
+
+    @unittest.skipUnless(HAS_OFFICE, "LibreOffice is not installed")
+    def test_recalc_fails_on_formula_errors(self):
+        src = self.make_input()
+        bad = self.path("bad.xlsx")
+        xlsx_tool.set_cells(src, bad, ["E2==B2/0", "E3==NOSUCH(1)"])
+        with self.assertRaises(SystemExit) as e:
+            xlsx_tool.recalc(bad, self.path("bad-2.xlsx"))
+        self.assertIn("Budget!E2: #DIV/0!", str(e.exception.code))
+        self.assertIn("Budget!E3: #NAME?", str(e.exception.code))
+        self.assertEqual(xlsx_tool.errors(self.path("bad-2.xlsx"))[0], "Budget!E2: #DIV/0!")
+
+
 class Word(Tmp):
     MD = "# Release notes\n\nForge now draws **diagrams** and reads *documents*.\n\n## Changes\n\n- Diagrams in replies\n- A document viewer\n\n| Area | Status |\n|---|---|\n| Viewer | Done |\n| **Total** | **2** |\n"
 
@@ -202,6 +224,45 @@ class Word(Tmp):
         self.assertEqual(docx.Document(out).paragraphs[0].text, "Q3")
 
 
+    MEMO = "# Q3 memo\n\nLicences fall to 700 EUR after the renewal.\n\nTravel rises to 520 EUR.\n"
+
+    def test_comments_anchor_on_the_quoted_words(self):
+        src = self.path("memo.docx")
+        docx_tool.create(src, self.MEMO)
+        out = self.path("memo-2.docx")
+        missing = docx_tool.comment(src, out, [("fall to 700", "Say why."), ("not in the memo", "x")])
+        self.assertEqual(missing, ["not in the memo"])
+        d = docx.Document(out)
+        self.assertEqual([c.text for c in d.comments], ["Say why."])
+        self.assertEqual(next(iter(d.comments)).author, "Forge")
+        with zipfile.ZipFile(out) as z:
+            body = z.read("word/document.xml").decode()
+        self.assertIn("commentRangeStart", body)
+        self.assertEqual(d.paragraphs[1].text, "Licences fall to 700 EUR after the renewal.", "the text is untouched")
+        self.assertIn("Say why.", docx_tool.read(out), "read lists the comments")
+        self.assertEqual(check_tool.validate(out), [])
+
+    def test_tracked_changes_and_accepting_them(self):
+        src = self.path("memo.docx")
+        docx_tool.create(src, self.MEMO)
+        out = self.path("memo-tracked.docx")
+        self.assertEqual(docx_tool.track(src, out, [("700", "690"), ("Travel rises", "Travel climbs")]), [])
+        with zipfile.ZipFile(out) as z:
+            body = z.read("word/document.xml").decode()
+        self.assertIn('w:author="Forge"', body)
+        self.assertIn("<w:delText", body)
+        self.assertEqual(body.count("<w:ins "), 2)
+        read = docx_tool.read(out)
+        self.assertIn("700", read)
+        self.assertIn("690", read)
+        self.assertEqual(check_tool.validate(out), [])
+        done = self.path("memo-accepted.docx")
+        self.assertEqual(docx_tool.accept(out, done), 4)
+        d = docx.Document(done)
+        self.assertEqual(d.paragraphs[1].text, "Licences fall to 690 EUR after the renewal.")
+        self.assertEqual(d.paragraphs[2].text, "Travel climbs to 520 EUR.")
+
+
 class Slides(Tmp):
     OUTLINE = "# Forge 1.0\nA desktop app for Claude Code\n\n# What's new\n- Diagrams\n  - drawn natively\n- Documents\n\n# Next\n- Browser use\n"
 
@@ -225,6 +286,33 @@ class Slides(Tmp):
         out2 = self.path("deck-2.pptx")
         self.assertEqual(pptx_tool.replace(out, out2, [("Browser use", "Browser use, built in")]), 1)
         self.assertIn("Browser use, built in", pptx_tool.read(out2))
+
+    def test_one_shape_notes_and_slide_moves(self):
+        deck = self.path("deck.pptx")
+        pptx_tool.create(deck, self.OUTLINE)
+        shapes = pptx_tool.read(deck, shapes=True)
+        self.assertIn("- #0 ", shapes)
+        self.assertIn(": Diagrams / drawn natively / Documents", shapes)
+        one = self.path("one.pptx")
+        pptx_tool.set_text(deck, one, 2, "#1", "Diagrams, drawn natively\nDocuments, previewed")
+        body = Presentation(one).slides[1].shapes[1].text_frame
+        self.assertEqual([p.text for p in body.paragraphs], ["Diagrams, drawn natively", "Documents, previewed"])
+        self.assertEqual([p.level for p in body.paragraphs], [0, 1], "each line keeps the level of the line it replaces")
+        noted = self.path("noted.pptx")
+        pptx_tool.notes(one, noted, 2, "Show the panel.")
+        self.assertIn("> Notes: Show the panel.", pptx_tool.read(noted))
+        twice = self.path("twice.pptx")
+        pptx_tool.duplicate(noted, twice, 2)
+        prs = Presentation(twice)
+        self.assertEqual([s.shapes.title.text for s in prs.slides], ["Forge 1.0", "What's new", "What's new", "Next"])
+        self.assertEqual(prs.slides[2].notes_slide.notes_text_frame.text, "Show the panel.")
+        moved = self.path("moved.pptx")
+        self.assertEqual(pptx_tool.reorder(twice, moved, [1, 4, 2]), 3)
+        self.assertEqual([s.shapes.title.text for s in Presentation(moved).slides], ["Forge 1.0", "Next", "What's new"])
+        for f in (one, noted, twice, moved):
+            self.assertEqual(check_tool.validate(f), [], f)
+        with self.assertRaises(SystemExit):
+            pptx_tool.reorder(twice, moved, [1, 1])
 
     def _outline(self):
         p = self.path("outline.md")
@@ -275,3 +363,30 @@ class Pdf(Tmp):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Checks(Tmp):
+    def test_validate_names_what_is_broken(self):
+        good = self.path("ok.docx")
+        docx_tool.create(good, "# Fine\n")
+        self.assertEqual(check_tool.validate(good), [])
+        broken = self.path("broken.docx")
+        with zipfile.ZipFile(good) as src, zipfile.ZipFile(broken, "w") as dst:
+            for item in src.infolist():
+                data = src.read(item.filename)
+                dst.writestr(item, b"<w:document" if item.filename == "word/document.xml" else data)
+        self.assertIn("word/document.xml is not well-formed XML", check_tool.validate(broken)[0])
+        not_zip = self.path("plain.xlsx")
+        with open(not_zip, "w") as f:
+            f.write("a,b\n")
+        self.assertEqual(check_tool.validate(not_zip), ["it is not a zip, so not an Office file"])
+        self.assertEqual(check_tool.validate(self.path("gone.pptx")), ["there is no such file"])
+
+    @unittest.skipUnless(HAS_RENDER, "LibreOffice or pdftoppm is not installed")
+    def test_render_draws_every_slide(self):
+        deck = self.path("deck.pptx")
+        pptx_tool.create(deck, Slides.OUTLINE)
+        images = check_tool.render(deck, self.path("pages"), dpi=30)
+        self.assertEqual([os.path.basename(p) for p in images], ["deck-1.png", "deck-2.png", "deck-3.png"])
+        with open(images[0], "rb") as f:
+            self.assertEqual(f.read(8), b"\x89PNG\r\n\x1a\n")

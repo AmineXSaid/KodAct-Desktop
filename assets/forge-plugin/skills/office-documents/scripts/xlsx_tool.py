@@ -1,6 +1,7 @@
 """Excel workbooks: read, set cells, append rows, create from CSV, recalculate.
 
     python xlsx_tool.py read FILE [--sheet NAME] [--formulas]
+    python xlsx_tool.py read FILE --range "Sheet1!B2:D9"   (each cell's value and formula)
     python xlsx_tool.py set FILE OUT.xlsx --cell "Sheet1!B3=42" [--cell "C3==B3*2" ...]
     python xlsx_tool.py append-rows FILE OUT.xlsx --csv ROWS.csv [--sheet NAME]
     python xlsx_tool.py create OUT.xlsx --csv DATA.csv [--sheet NAME]
@@ -10,6 +11,8 @@ A value starting with "=" is a formula ("C3==B3*2" sets C3 to =B3*2).
 Edits keep every sheet, style, number format, width and formula they don't
 touch. openpyxl stores formulas without computing them: run `recalc`
 (LibreOffice, headless) so the saved file carries computed values too.
+`recalc` fails, naming the cells, when any formula computes to an error
+(#DIV/0!, #REF!, #NAME?, #VALUE!, #N/A, #NUM!, #NULL!): fix them first.
 Fonts are always named (a nameless one becomes whatever font the opening
 app picks), and every file carries real properties: author Forge, dates.
 """
@@ -90,6 +93,44 @@ def read(path, sheet=None, formulas=False):
     return "\n".join(out)
 
 
+def read_range(path, ref):
+    """Each cell of a range: its address, value (as last computed) and formula."""
+    sheet, _, cells = ref.rpartition("!")
+    shown = openpyxl.load_workbook(path, data_only=True)
+    raw = openpyxl.load_workbook(path)
+    name = sheet.strip("'") or raw.active.title
+    if name not in raw.sheetnames:
+        raise SystemExit(f"no sheet {name!r}; the sheets are {', '.join(raw.sheetnames)}")
+    values, formulas = shown[name], raw[name]
+    out = [f"## {name}!{cells.upper()}\n", "| Cell | Value | Formula |", "|---|---|---|"]
+    rows = formulas[cells.upper()]
+    if not isinstance(rows, tuple):
+        rows = ((rows,),)
+    elif rows and not isinstance(rows[0], tuple):
+        rows = (rows,)
+    for row in rows:
+        for cell in row:
+            value = values[cell.coordinate].value
+            f = cell.value if isinstance(cell.value, str) and cell.value.startswith("=") else ""
+            out.append(f"| {cell.coordinate} | {'' if value is None else value} | {f} |")
+    return "\n".join(out) + "\n"
+
+
+ERRORS = ("#DIV/0!", "#REF!", "#NAME?", "#VALUE!", "#N/A", "#NUM!", "#NULL!")
+
+
+def errors(path):
+    """The cells whose computed value is a formula error, as `Sheet!A1: #REF!`."""
+    wb = openpyxl.load_workbook(path, data_only=True)
+    found = []
+    for ws in wb.worksheets:
+        for row in ws.iter_rows():
+            for cell in row:
+                if isinstance(cell.value, str) and cell.value.strip() in ERRORS:
+                    found.append(f"{ws.title}!{cell.coordinate}: {cell.value.strip()}")
+    return found
+
+
 CELL = re.compile(r"^(?:(?P<sheet>[^!]+)!)?(?P<ref>[A-Za-z]{1,3}\d{1,7})=(?P<value>.*)$", re.S)
 
 
@@ -153,6 +194,9 @@ def recalc(path, out):
         subprocess.run([soffice, f"-env:UserInstallation={profile}", "--headless", "--calc", "--convert-to", "xlsx:Calc MS Excel 2007 XML", "--outdir", os.path.join(tmp, "out"), src],
                        check=True, capture_output=True, timeout=120)
         _keep_properties(src, os.path.join(tmp, "out", "in.xlsx"), out)
+    bad = errors(out)
+    if bad:
+        raise SystemExit("recalculated, but these formulas give errors (the file was still written):\n  " + "\n  ".join(bad))
 
 
 def _keep_properties(original, recalculated, out):
@@ -174,14 +218,14 @@ def _csv(path):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    r = sub.add_parser("read"); r.add_argument("file"); r.add_argument("--sheet"); r.add_argument("--formulas", action="store_true")
+    r = sub.add_parser("read"); r.add_argument("file"); r.add_argument("--sheet"); r.add_argument("--formulas", action="store_true"); r.add_argument("--range")
     s = sub.add_parser("set"); s.add_argument("file"); s.add_argument("out"); s.add_argument("--cell", action="append", required=True)
     a = sub.add_parser("append-rows"); a.add_argument("file"); a.add_argument("out"); a.add_argument("--csv", required=True); a.add_argument("--sheet")
     c = sub.add_parser("create"); c.add_argument("out"); c.add_argument("--csv", required=True); c.add_argument("--sheet")
     x = sub.add_parser("recalc"); x.add_argument("file"); x.add_argument("out")
     args = ap.parse_args(argv)
     if args.cmd == "read":
-        sys.stdout.write(read(args.file, args.sheet, args.formulas))
+        sys.stdout.write(read_range(args.file, args.range) if args.range else read(args.file, args.sheet, args.formulas))
     elif args.cmd == "set":
         n = set_cells(args.file, args.out, args.cell)
         print(f"set {n} cell(s); wrote {args.out}")
