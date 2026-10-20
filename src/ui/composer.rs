@@ -193,10 +193,15 @@ impl Composer {
             return;
         }
         self.input.update(cx, |i, cx| {
+            // Replacing a range leaves the caret at its end, before the space
+            // just typed; the text is unchanged, so put the caret back.
+            let caret = i.cursor();
             // From the end, so the earlier ranges still hold.
             for (range, token) in fresh.into_iter().rev() {
                 let _ = i.replace_range_with_token(range, token, window, cx);
             }
+            let at = gpui::component::RopeExt::offset_to_position(i.text(), caret);
+            i.set_cursor_position(at, window, cx);
         });
     }
 

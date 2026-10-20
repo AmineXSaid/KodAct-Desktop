@@ -428,8 +428,39 @@ pub fn project_files(dir: &Path, cap: usize) -> Vec<String> {
 
 /// The project's files and their folders, for the @ list: a folder ends
 /// in `/`; shallow entries first, a folder before the files beside it.
+/// As the VS Code extension lists them (`rg --files --hidden --follow`):
+/// hidden files too, minus what it always leaves out.
 pub fn project_entries(dir: &Path, cap: usize) -> Vec<String> {
-    entries_of(project_files(dir, cap))
+    if !dir.is_dir() {
+        return vec![];
+    }
+    let files = ignore::WalkBuilder::new(dir)
+        .max_depth(Some(16))
+        .hidden(false)
+        .follow_links(true)
+        .require_git(false)
+        .filter_entry(|e| !left_out(&e.file_name().to_string_lossy()))
+        .build()
+        .flatten()
+        .filter(|e| e.file_type().is_some_and(|t| t.is_file()))
+        .filter_map(|e| {
+            e.path()
+                .strip_prefix(dir)
+                .ok()
+                .map(|r| r.to_string_lossy().replace('\\', "/"))
+        })
+        .take(cap)
+        .collect();
+    entries_of(files)
+}
+
+/// What the extension never lists, whatever `.gitignore` says.
+fn left_out(name: &str) -> bool {
+    matches!(
+        name,
+        ".git" | "node_modules" | "dist" | "build" | ".next" | ".nuxt" | ".DS_Store" | "Thumbs.db" | ".env"
+    ) || name.starts_with(".env.")
+        || name.ends_with(".log")
 }
 
 /// Files (project-relative, `/`-separated) and the folders they're in, in
@@ -722,6 +753,34 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn the_at_list_lists_hidden_files_as_the_extension_does() {
+        let dir = tmp("entries");
+        for f in [
+            ".claude/settings.json",
+            ".gitignore",
+            ".mcp.json",
+            "src/a.rs",
+            "node_modules/x/i.js",
+            "dist/out.js",
+            ".env",
+            ".env.local",
+            "run.log",
+            "ignored/b.txt",
+        ] {
+            write(dir.join(f), "x");
+        }
+        std::fs::write(dir.join(".gitignore"), "ignored/\n").unwrap();
+        let got = project_entries(&dir, 100);
+        for want in [".claude/", ".claude/settings.json", ".gitignore", ".mcp.json", "src/a.rs"] {
+            assert!(got.iter().any(|e| e == want), "missing {want}: {got:?}");
+        }
+        for gone in ["node_modules", "dist", ".env", "run.log", "ignored"] {
+            assert!(!got.iter().any(|e| e.starts_with(gone)), "listed {gone}: {got:?}");
+        }
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     fn write(path: PathBuf, text: &str) {

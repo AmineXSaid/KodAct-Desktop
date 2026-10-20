@@ -245,7 +245,7 @@ fn split(entry: &str) -> (&str, &str) {
 const MAX_FILE_ROWS: usize = 100;
 
 /// The @ list, as the VS Code extension has it: one flat list, ranked.
-/// Nothing typed: the project's top level, A to Z. Otherwise every file and
+/// Nothing typed: the project's top level, sorted by name. Otherwise every file and
 /// folder whose name or path matches, a match in the name counting double;
 /// a `/` in the query first keeps to the paths under its folder part, so
 /// `src/ui/comp` and a pasted `src/ui/composer.rs` both find their file.
@@ -271,7 +271,9 @@ pub fn file_items(q: &str, entries: &[String]) -> Vec<Item> {
             .iter()
             .filter(|e| !e.trim_end_matches('/').contains('/'))
             .collect();
-        top.sort_by_key(|e| e.to_lowercase());
+        // As the extension sorts them: by name, byte order, folders and
+        // files together.
+        top.sort_by(|a, b| a.trim_end_matches('/').cmp(b.trim_end_matches('/')));
         return top
             .into_iter()
             .take(MAX_FILE_ROWS)
@@ -375,7 +377,7 @@ pub fn render(
                     .pb(t.space.xs)
                     .text_size(t.text.caption)
                     .font_weight(FontWeight::MEDIUM)
-                    .text_color(t.colors.text_subtle)
+                    .text_color(t.colors.text_muted)
                     .child(item.group),
             );
         }
@@ -421,8 +423,13 @@ pub fn render(
                         .whitespace_nowrap()
                         .text_ellipsis()
                         .text_size(t.text.caption)
-                        .text_color(t.colors.text_subtle)
-                        .child(tail(&item.detail, 56)),
+                        .text_color(t.colors.text_muted)
+                        // Cut from the left only: the rest of the row is
+                        // the name's, so the path gets what is left.
+                        .child(tail(
+                            &item.detail,
+                            60usize.saturating_sub(item.label.chars().count()),
+                        )),
                 )
         } else {
             row.gap(t.space.md)
@@ -463,7 +470,7 @@ pub fn render(
                         .whitespace_nowrap()
                         .text_ellipsis()
                         .text_size(t.text.caption)
-                        .text_color(t.colors.text_subtle)
+                        .text_color(t.colors.text_muted)
                         .child(item.detail.clone()),
                 )
                 .when(ranked, |d| {
@@ -471,7 +478,7 @@ pub fn render(
                         div()
                             .flex_none()
                             .text_size(t.text.caption)
-                            .text_color(t.colors.text_subtle)
+                            .text_color(t.colors.text_muted)
                             .child(item.group),
                     )
                 })
@@ -483,7 +490,7 @@ pub fn render(
             div()
                 .px(t.space.md)
                 .py(t.space.md)
-                .text_color(t.colors.text_subtle)
+                .text_color(t.colors.text_muted)
                 .child(if loading {
                     "Looking through the project…"
                 } else {
@@ -504,7 +511,7 @@ pub fn render(
         .border_t_1()
         .border_color(t.colors.border)
         .text_size(t.text.caption)
-        .text_color(t.colors.text_subtle);
+        .text_color(t.colors.text_muted);
     for h in hints {
         footer = footer.child(*h);
     }
@@ -586,8 +593,8 @@ mod tests {
 
     #[test]
     fn the_at_list_is_one_ranked_list_like_the_extension() {
-        // Nothing typed: the top level, A to Z.
-        assert_eq!(labels(""), ["Cargo.toml", "docs", "README.md", "src"]);
+        // Nothing typed: the top level, sorted as the extension sorts it.
+        assert_eq!(labels(""), ["Cargo.toml", "README.md", "docs", "src"]);
         // A name anywhere in the project, without its folders typed.
         assert_eq!(labels("comp")[0], "composer.rs");
         // A folder part keeps to what is under it; its own entries first.
@@ -606,6 +613,14 @@ mod tests {
         // A folder is added like a file.
         let ui = file_items("src/u", &entries());
         assert!(matches!(&ui[0].pick, Pick::Text(t) if t == "@src/ui/ "));
+        // A folder deep down, from its name or its path.
+        let deep: Vec<String> = ["a/", "a/b/", "a/b/tls_assistant/", "a/b/tls_assistant/x.py"]
+            .map(String::from)
+            .to_vec();
+        assert_eq!(file_items("tls", &deep)[0].detail.as_ref(), "a/b/tls_assistant");
+        assert_eq!(file_items("a/b/tl", &deep)[0].detail.as_ref(), "a/b/tls_assistant");
+        // Typing on after a mention inserted mid-sentence completes the new word.
+        assert_eq!(trigger("/simplify @comp").map(|t| t.query), Some("comp".into()));
         // A space in a path is quoted, as ForgeCLI reads it.
         assert_eq!(mention("docs/a b.md"), "@\"docs/a b.md\"");
     }
