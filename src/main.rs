@@ -33,6 +33,7 @@ mod history;
 mod mermaid;
 mod modes;
 mod office;
+mod office_render;
 #[cfg(test)]
 mod palette_check;
 mod plugin;
@@ -51,6 +52,7 @@ mod term_session;
 mod theme;
 mod ui;
 mod web_view;
+mod xlsx_style;
 
 // Forge's own settings file, and SSH passwords asked in the app.
 mod app_settings;

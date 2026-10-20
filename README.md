@@ -25,6 +25,12 @@ Forge needs two things to answer:
 
 `FORGE_DEMO=1` plays the scripted demo reply instead, with no CLI or model.
 
+Word, PowerPoint and Excel files Forge writes open beside the chat as they
+print when [LibreOffice](https://www.libreoffice.org/) is installed (Forge
+finds it on PATH or where its installer puts it; `FORGE_SOFFICE` names it).
+Without it the panel shows their text. Workbooks show their own number
+formats, bold, fills and widths, with a formula bar.
+
 On first launch Forge asks what to call you and keeps the name in its config
 folder (`%APPDATA%\Forge` on Windows; `FORGE_CONFIG_DIR` overrides it).
 

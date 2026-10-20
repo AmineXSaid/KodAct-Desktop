@@ -6,7 +6,9 @@
 //!   carries, which is why the skill recalculates after editing formulas);
 //! - Word and PowerPoint become Markdown (their XML, read with quick-xml),
 //!   shown in the document view: headings, lists, bold, tables, slides;
-//! - a PDF becomes its text, page by page (lopdf).
+//! - a PDF becomes its text, page by page (lopdf), and its pages as
+//!   pictures (hayro); a Word or PowerPoint file's pages are drawn the same
+//!   way once LibreOffice has printed it to PDF (`office_render.rs`).
 //!
 //! Everything is capped, so a huge file can't stall the panel. Parsing is
 //! blocking: run it off the UI thread.
@@ -60,20 +62,43 @@ pub struct Sheet {
     /// The sheet's real size, which may be more than is shown.
     pub total_rows: usize,
     pub total_cols: usize,
+    /// Column widths the workbook sets, in Excel's units, by column.
+    pub widths: Vec<Option<f32>>,
+    /// Rows frozen at the top.
+    pub frozen_rows: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct CellText {
+    /// As the workbook shows it: its number format applied.
     pub text: String,
     pub numeric: bool,
+    /// How it looks and what it computes (`xlsx_style.rs`).
+    pub look: crate::xlsx_style::Look,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Preview {
     Sheets(Vec<Sheet>),
-    Markdown(String),
-    /// A PDF's pages, drawn as they print.
-    Pages(Vec<Page>),
+    /// Word, PowerPoint or a PDF: its text (Markdown) at once, and its pages
+    /// as they print once drawn (`draw`), which can take seconds.
+    Doc(Doc),
+}
+
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct Doc {
+    pub text: String,
+    /// The pages as they print, when they could be drawn: a PDF's own, or
+    /// a Word or PowerPoint file's through LibreOffice (`office_render.rs`).
+    pub pages: Vec<Page>,
+    /// How many pages it has in all (more than are drawn past `MAX_PAGES`).
+    pub total: usize,
+    /// A deck: the pages are slides.
+    pub slides: bool,
+    /// A deck's speaker notes, slide by slide.
+    pub notes: Vec<String>,
+    /// Its pages are being drawn (LibreOffice is at work).
+    pub drawing: bool,
 }
 
 /// One PDF page as a picture, and its size in pixels.
@@ -102,10 +127,11 @@ pub const MAX_PAGES: usize = 40;
 /// A PDF's pages as PNGs, drawn by hayro at 1.5 pixels per point (sharp
 /// on a 1x screen, fair on 2x). `Err` when it can't draw them; the panel
 /// then shows the text.
-fn pages(bytes: &[u8]) -> Result<Vec<Page>, String> {
+fn pages(bytes: &[u8]) -> Result<(Vec<Page>, usize), String> {
     use hayro::hayro_interpret::InterpreterSettings;
     use hayro::hayro_syntax::Pdf;
     let pdf = Pdf::new(bytes.to_vec()).map_err(|e| format!("not a PDF Forge can draw: {e:?}"))?;
+    let total = pdf.pages().len();
     let cache = hayro::RenderCache::new();
     let settings = InterpreterSettings::default();
     let mut out = vec![];
@@ -137,20 +163,113 @@ fn pages(bytes: &[u8]) -> Result<Vec<Page>, String> {
     if out.is_empty() {
         return Err("the PDF has no pages".into());
     }
-    Ok(out)
+    Ok((out, total))
 }
 
+/// What the panel shows at once: a workbook's sheets, or a document's text
+/// (a PDF's pages too, which draw quickly). `draw` adds the pages of a Word
+/// or PowerPoint file after.
 pub fn preview(name: &str, bytes: &[u8]) -> Result<Preview, String> {
-    match Kind::of(name).ok_or("not an Office file or a PDF")? {
-        Kind::Xlsx => sheets(bytes).map(Preview::Sheets),
-        Kind::Docx => docx(bytes).map(Preview::Markdown),
-        Kind::Pptx => pptx(bytes).map(Preview::Markdown),
-        // Drawn when hayro can (a panic in it is caught), else its text.
-        Kind::Pdf => std::panic::catch_unwind(|| pages(bytes))
-            .unwrap_or_else(|_| Err("the PDF could not be drawn".into()))
-            .map(Preview::Pages)
-            .or_else(|_| pdf(bytes).map(Preview::Markdown)),
+    let kind = Kind::of(name).ok_or("not an Office file or a PDF")?;
+    if kind == Kind::Xlsx {
+        return sheets(bytes).map(Preview::Sheets);
     }
+    let mut doc = Doc {
+        slides: kind == Kind::Pptx,
+        notes: if kind == Kind::Pptx {
+            notes(bytes)
+        } else {
+            vec![]
+        },
+        ..Default::default()
+    };
+    if kind == Kind::Pdf {
+        // Drawn when hayro can (a panic in it is caught), else its text alone.
+        if let Ok(Ok((pages, total))) = std::panic::catch_unwind(|| pages(bytes)) {
+            (doc.pages, doc.total) = (pages, total);
+        }
+    }
+    doc.text = text(kind, bytes)?;
+    doc.drawing = kind != Kind::Pdf && crate::office_render::soffice().is_some();
+    Ok(Preview::Doc(doc))
+}
+
+/// A Word or PowerPoint file's pages as they print, through LibreOffice;
+/// `Err` when it is not installed or could not render the file.
+pub fn draw(name: &str, bytes: &[u8]) -> Result<(Vec<Page>, usize), String> {
+    let pdf = crate::office_render::to_pdf(name, bytes)?;
+    std::panic::catch_unwind(|| pages(&pdf))
+        .unwrap_or_else(|_| Err("the pages could not be drawn".into()))
+}
+
+/// A deck's speaker notes, slide by slide (empty where a slide has none).
+fn notes(bytes: &[u8]) -> Vec<String> {
+    let Ok(mut zip) = open_zip(bytes) else {
+        return vec![];
+    };
+    let mut slides: Vec<usize> = zip
+        .file_names()
+        .filter_map(|n| {
+            n.strip_prefix("ppt/slides/slide")?
+                .strip_suffix(".xml")?
+                .parse()
+                .ok()
+        })
+        .collect();
+    slides.sort();
+    slides
+        .into_iter()
+        .take(MAX_PARTS)
+        .map(|n| {
+            let rels =
+                part(&mut zip, &format!("ppt/slides/_rels/slide{n}.xml.rels")).unwrap_or_default();
+            let target = rels
+                .split("Target=\"")
+                .skip(1)
+                .filter_map(|r| r.split('"').next())
+                .find(|t| t.contains("notesSlide"))
+                .map(|t| format!("ppt/notesSlides/{}", t.rsplit('/').next().unwrap_or(t)));
+            target
+                .and_then(|t| part(&mut zip, &t))
+                .map(|xml| notes_text(&xml))
+                .unwrap_or_default()
+        })
+        .collect()
+}
+
+/// A notes page's words: its body placeholder's paragraphs, not the slide
+/// number field.
+fn notes_text(xml: &str) -> String {
+    let mut reader = Reader::from_str(xml);
+    let (mut body, mut in_text, mut in_field) = (false, false, false);
+    let (mut para, mut out) = (String::new(), Vec::new());
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(e)) | Ok(Event::Empty(e)) => match e.name().as_ref() {
+                b"p:sp" => body = false,
+                b"p:ph" => body = attr(&e, b"type").as_deref() == Some("body"),
+                b"a:fld" => in_field = true,
+                b"a:t" => in_text = true,
+                b"a:p" => para.clear(),
+                _ => {}
+            },
+            Ok(Event::Text(t)) if in_text && body && !in_field => {
+                para.push_str(&t.decode().unwrap_or_default())
+            }
+            Ok(Event::GeneralRef(r)) if in_text && body && !in_field => {
+                para.push_str(&entity(&r.decode().unwrap_or_default()))
+            }
+            Ok(Event::End(e)) => match e.name().as_ref() {
+                b"a:t" => in_text = false,
+                b"a:fld" => in_field = false,
+                b"a:p" if body && !para.trim().is_empty() => out.push(para.trim().to_string()),
+                _ => {}
+            },
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+    }
+    out.join("\n")
 }
 
 /// A Word or PowerPoint file, or a PDF, as text (Markdown for the first
@@ -240,9 +359,11 @@ fn sheets(bytes: &[u8]) -> Result<Vec<Sheet>, String> {
     use calamine::{Data, Reader as _};
     let mut book = calamine::open_workbook_auto_from_rs(Cursor::new(bytes.to_vec()))
         .map_err(|e| format!("not a workbook Forge can read: {e}"))?;
+    let looks = crate::xlsx_style::read(bytes);
     let mut out = vec![];
     for name in book.sheet_names().to_vec() {
         let range = book.worksheet_range(&name).map_err(|e| e.to_string())?;
+        let look = looks.get(&name).cloned().unwrap_or_default();
         let (h, w) = range.get_size();
         // Cells start at the range's origin; show them from A1 so the
         // letters and numbers match the workbook's.
@@ -256,25 +377,40 @@ fn sheets(bytes: &[u8]) -> Result<Vec<Sheet>, String> {
             vec![vec![CellText::default(); total_cols.min(MAX_COLS)]; total_rows.min(MAX_ROWS)];
         for (r, row) in range.rows().enumerate().take(MAX_ROWS.saturating_sub(r0)) {
             for (c, cell) in row.iter().enumerate().take(MAX_COLS.saturating_sub(c0)) {
-                let (text, numeric) = match cell {
-                    Data::Empty => (String::new(), false),
-                    Data::Int(i) => (i.to_string(), true),
-                    Data::Float(f) => (number(*f), true),
-                    Data::Bool(b) => (if *b { "TRUE" } else { "FALSE" }.to_string(), false),
-                    Data::String(s) => (s.clone(), false),
-                    // A date's serial number: the panel shows the stored value.
-                    Data::DateTime(d) => (number(d.as_f64()), true),
-                    Data::DateTimeIso(s) | Data::DurationIso(s) => (s.clone(), false),
-                    Data::Error(e) => (format!("#{e:?}").to_uppercase(), false),
+                let (text, value) = match cell {
+                    Data::Empty => (String::new(), None),
+                    Data::Int(i) => (i.to_string(), Some(*i as f64)),
+                    Data::Float(f) => (number(*f), Some(*f)),
+                    Data::Bool(b) => (if *b { "TRUE" } else { "FALSE" }.to_string(), None),
+                    Data::String(s) => (s.clone(), None),
+                    Data::DateTime(d) => (number(d.as_f64()), Some(d.as_f64())),
+                    Data::DateTimeIso(s) | Data::DurationIso(s) => (s.clone(), None),
+                    Data::Error(e) => (format!("#{e:?}").to_uppercase(), None),
                 };
-                rows[r0 + r][c0 + c] = CellText { text, numeric };
+                let at = (r0 + r, c0 + c);
+                let style = look.cells.get(&at).cloned().unwrap_or_default();
+                // Numbers as the workbook formats them: 5,500, 6.8%, a date.
+                let text = match (value, &style.format) {
+                    (Some(v), Some(code)) => crate::xlsx_style::format(v, code),
+                    _ => text,
+                };
+                rows[at.0][at.1] = CellText {
+                    text,
+                    numeric: value.is_some(),
+                    look: style,
+                };
             }
         }
+        let widths = (0..total_cols.min(MAX_COLS))
+            .map(|c| look.widths.get(&c).copied())
+            .collect();
         out.push(Sheet {
             name,
             rows,
             total_rows,
             total_cols,
+            widths,
+            frozen_rows: look.frozen_rows,
         });
     }
     Ok(out)
@@ -730,10 +866,14 @@ mod tests {
         assert_eq!(cell(b, "A1"), "Item");
         assert_eq!(cell(b, "C3"), "700", "the edited cell");
         assert_eq!(cell(b, "C6"), "520", "the other edited cell");
-        assert_eq!(cell(b, "D6"), "70", "a formula's value, from the recalc");
-        assert_eq!(cell(b, "B7"), "5150");
-        assert_eq!(cell(b, "C7"), "5500");
-        assert_eq!(cell(b, "D7"), "350");
+        assert_eq!(
+            cell(b, "D6"),
+            "+70",
+            "a formula's value, from the recalc, in its format"
+        );
+        assert_eq!(cell(b, "B7"), "5,150");
+        assert_eq!(cell(b, "C7"), "5,500");
+        assert_eq!(cell(b, "D7"), "+350");
         assert!(b.rows[2][2].numeric && !b.rows[2][0].numeric);
         assert_eq!(
             cell(&sheets[1], "A1"),
@@ -743,7 +883,8 @@ mod tests {
 
     #[test]
     fn reads_the_memo_as_markdown() {
-        let Preview::Markdown(md) = preview("q3-budget-memo.docx", DOCX).unwrap() else {
+        let Preview::Doc(Doc { text: md, .. }) = preview("q3-budget-memo.docx", DOCX).unwrap()
+        else {
             panic!()
         };
         assert!(md.starts_with("# Q3 budget update\n"), "{md}");
@@ -766,7 +907,12 @@ mod tests {
 
     #[test]
     fn reads_the_deck_slide_by_slide() {
-        let Preview::Markdown(md) = preview("q3-budget.pptx", PPTX).unwrap() else {
+        let Preview::Doc(Doc {
+            text: md,
+            slides: true,
+            ..
+        }) = preview("q3-budget.pptx", PPTX).unwrap()
+        else {
             panic!()
         };
         assert!(md.contains("## Slide 1: Q3 budget"), "{md}");
@@ -779,11 +925,40 @@ mod tests {
     }
 
     #[test]
+    fn reads_speaker_notes_without_the_slide_number() {
+        let xml = r#"<p:notes><p:cSld><p:spTree>
+            <p:sp><p:nvSpPr><p:nvPr><p:ph type="sldImg"/></p:nvPr></p:nvSpPr></p:sp>
+            <p:sp><p:nvSpPr><p:nvPr><p:ph type="body"/></p:nvPr></p:nvSpPr><p:txBody>
+              <a:p><a:r><a:t>Open with the 5,500 total.</a:t></a:r></a:p>
+              <a:p><a:r><a:t>Then the licences &amp; travel.</a:t></a:r></a:p>
+            </p:txBody></p:sp>
+            <p:sp><p:nvSpPr><p:nvPr><p:ph type="sldNum"/></p:nvPr></p:nvSpPr><p:txBody>
+              <a:p><a:fld><a:t>3</a:t></a:fld></a:p></p:txBody></p:sp>
+        </p:spTree></p:cSld></p:notes>"#;
+        assert_eq!(
+            notes_text(xml),
+            "Open with the 5,500 total.\nThen the licences & travel."
+        );
+    }
+
+    /// With LibreOffice here, the deck's slides are drawn as they show.
+    #[test]
+    fn draws_the_deck_when_libreoffice_is_here() {
+        if crate::office_render::soffice().is_none() {
+            return;
+        }
+        let (slides, total) = draw("q3-budget.pptx", PPTX).unwrap();
+        assert_eq!(total, 4);
+        // Wider than tall: a slide, not a page.
+        assert!(slides[0].width > slides[0].height);
+    }
+
+    #[test]
     fn draws_the_pdf_as_pages() {
-        let Preview::Pages(pages) = preview("q3-budget.pdf", PDF).unwrap() else {
-            panic!("not drawn")
+        let Preview::Doc(Doc { pages, total, .. }) = preview("q3-budget.pdf", PDF).unwrap() else {
+            panic!("not a document")
         };
-        assert!(!pages.is_empty());
+        assert!(!pages.is_empty() && total == pages.len());
         // A4 or Letter at 1.5 px per point, taller than wide.
         assert!(pages[0].width > 800 && pages[0].height > pages[0].width);
     }

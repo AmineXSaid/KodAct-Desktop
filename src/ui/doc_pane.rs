@@ -38,6 +38,8 @@ pub struct Fit {
     pub below: bool,
     /// Opened from the panel's Files tab: the header leads back to it.
     pub from_panel: bool,
+    /// A document shows its text instead of its pages.
+    pub text: bool,
 }
 
 /// How wide the panel is when the session area is `main` wide: half for a
@@ -56,6 +58,7 @@ pub fn render(
     fit: Fit,
     read: Read,
     sheet: usize,
+    pick: super::sheet_view::Pick,
     t: &Theme,
 ) -> AnyElement {
     let did_copy = copied.as_deref() == Some(COPY_KEY);
@@ -74,6 +77,9 @@ pub fn render(
     let launcher = state.clone();
 
     let from_panel = fit.from_panel;
+    let text_view = fit.text;
+    let has_pages = matches!(read, Some(Ok(p)) if matches!(p.as_ref(), crate::office::Preview::Doc(d) if !d.pages.is_empty()));
+    let viewer = state.clone();
     let back = state.clone();
     let header = div()
         .flex_none()
@@ -142,6 +148,24 @@ pub fn render(
                 tool_button("doc-browser", "icons/globe.svg", "Open in browser").on_click(
                     move |_, _, cx| opener.update(cx, |s, cx| s.open_externally(&to_open, cx)),
                 ),
+            )
+        })
+        .when(has_pages, |d| {
+            d.child(
+                tool_button(
+                    "doc-view",
+                    if text_view {
+                        "icons/layers.svg"
+                    } else {
+                        "icons/file-text.svg"
+                    },
+                    if text_view {
+                        "Show the pages"
+                    } else {
+                        "Show the text"
+                    },
+                )
+                .on_click(move |_, _, cx| viewer.update(cx, |s, cx| s.toggle_doc_text(cx))),
             )
         })
         .when(office.is_some(), |d| {
@@ -256,80 +280,59 @@ pub fn render(
                         body.child(
                             div()
                                 .p(t.space.xl)
-                                .child(super::sheet_view::render(sheets, sheet, state, t)),
+                                .child(super::sheet_view::render(sheets, sheet, pick, state, t)),
                         ),
                         fit.width,
                         t,
                     )
                 }
-                crate::office::Preview::Pages(pages) => {
-                    // Each page as it prints, as wide as the panel allows,
-                    // on the quiet inset with a hairline round it.
-                    let room = fit.width - 2. * f32::from(t.space.xl) - 2.;
-                    let count = pages.len();
-                    return finish_at(
-                        fit.below,
-                        file,
-                        header,
-                        body.bg(t.extra.inset).child(
+                crate::office::Preview::Doc(d) => {
+                    let text_view = text_view || d.pages.is_empty();
+                    if !text_view {
+                        return finish_at(
+                            fit.below,
+                            file,
+                            header,
+                            body.bg(t.extra.inset).child(pages_view(d, &fit, t)),
+                            fit.width,
+                            t,
+                        );
+                    }
+                    let note = if d.drawing {
+                        Some("Laying out the pages as they print…")
+                    } else if d.pages.is_empty()
+                        && office != Some(crate::office::Kind::Pdf)
+                        && crate::office_render::soffice().is_none()
+                    {
+                        Some("Install LibreOffice to see the pages as they print. Its text is below.")
+                    } else {
+                        None
+                    };
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(t.space.lg)
+                        .children(note.map(|n| {
                             div()
-                                .flex()
-                                .flex_col()
-                                .items_center()
-                                .gap(t.space.lg)
-                                .p(t.space.xl)
-                                .children(pages.iter().enumerate().map(|(i, page)| {
-                                    let w = room.min(page.width as f32 / fit.scale.max(1.) * 1.2);
-                                    div()
-                                        .flex()
-                                        .flex_col()
-                                        .items_center()
-                                        .gap(t.space.xs)
-                                        .child(
-                                            div()
-                                                .w(px(w))
-                                                .h(px(w * page.height as f32 / page.width as f32))
-                                                .border_1()
-                                                .border_color(t.colors.border)
-                                                .child(
-                                                    gpui::img(page.image.clone())
-                                                        .size_full()
-                                                        .object_fit(gpui::ObjectFit::Contain),
-                                                ),
-                                        )
-                                        .child(
-                                            div()
-                                                .text_size(t.text.caption)
-                                                .text_color(t.colors.text_muted)
-                                                .child(format!("Page {} of {count}", i + 1)),
-                                        )
-                                }))
-                                .when(count == crate::office::MAX_PAGES, |d| {
-                                    d.child(
-                                        div()
-                                            .text_size(t.text.body_sm)
-                                            .text_color(t.colors.text_muted)
-                                            .child("Only the first pages are shown here. Open it with its app for the rest."),
-                                    )
-                                }),
-                        ),
-                        fit.width,
-                        t,
-                    );
+                                .text_size(t.text.caption)
+                                .text_color(t.colors.text_muted)
+                                .child(n)
+                        }))
+                        .child(markdown::render_as(
+                            &d.text,
+                            t,
+                            &CopyContext {
+                                streaming: false,
+                                state,
+                                key: "doc".into(),
+                                copied,
+                                scale: fit.scale,
+                                sources: Default::default(),
+                            },
+                            Look::Document,
+                        ))
+                        .into_any_element()
                 }
-                crate::office::Preview::Markdown(md) => markdown::render_as(
-                    md,
-                    t,
-                    &CopyContext {
-                        streaming: false,
-                        state,
-                        key: "doc".into(),
-                        copied,
-                        scale: fit.scale,
-                        sources: Default::default(),
-                    },
-                    Look::Document,
-                ),
             },
         };
         body.child(
@@ -377,6 +380,82 @@ pub fn render(
     };
 
     finish_at(fit.below, file, header, body, fit.width, t)
+}
+
+/// A document's pages as they print, each as wide as the panel allows on
+/// the quiet inset with a hairline round it; a deck's slides with their
+/// speaker notes under each.
+fn pages_view(d: &crate::office::Doc, fit: &Fit, t: &Theme) -> gpui::Div {
+    let room = fit.width - 2. * f32::from(t.space.xl) - 2.;
+    let shown = d.pages.len();
+    let noun = if d.slides { "Slide" } else { "Page" };
+    div()
+        .flex()
+        .flex_col()
+        .items_center()
+        .gap(t.space.lg)
+        .p(t.space.xl)
+        .children(d.pages.iter().enumerate().map(|(i, page)| {
+            let w = if d.slides {
+                room
+            } else {
+                room.min(page.width as f32 / fit.scale.max(1.) * 1.2)
+            };
+            let note = d.notes.get(i).filter(|n| !n.trim().is_empty()).cloned();
+            div()
+                .w(px(w))
+                .flex()
+                .flex_col()
+                .gap(t.space.xs)
+                .child(
+                    div()
+                        .w(px(w))
+                        .h(px(w * page.height as f32 / page.width as f32))
+                        .border_1()
+                        .border_color(t.colors.border)
+                        .when(d.slides, |d| d.rounded(t.radius.small).overflow_hidden())
+                        .child(
+                            gpui::img(page.image.clone())
+                                .size_full()
+                                .object_fit(gpui::ObjectFit::Contain),
+                        ),
+                )
+                .child(
+                    div()
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_muted)
+                        .text_center()
+                        .child(format!("{noun} {} of {}", i + 1, d.total.max(shown))),
+                )
+                .children(note.map(|n| {
+                    div()
+                        .p(t.space.sm)
+                        .rounded(t.radius.small)
+                        .bg(t.colors.surface)
+                        .border_1()
+                        .border_color(t.colors.border)
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_body)
+                        .child(
+                            div()
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(t.colors.text_muted)
+                                .child("Speaker notes"),
+                        )
+                        .child(n)
+                }))
+        }))
+        .when(d.total > shown, |el| {
+            el.child(
+                div()
+                    .text_size(t.text.body_sm)
+                    .text_color(t.colors.text_muted)
+                    .child(format!(
+                        "The first {shown} of {} are shown here. Open it with its app for the rest.",
+                        d.total
+                    )),
+            )
+        })
 }
 
 /// The panel around its header and body: beside the chat, a fixed width

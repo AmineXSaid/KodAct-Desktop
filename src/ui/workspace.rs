@@ -738,12 +738,17 @@ impl Render for Workspace {
                 fit: s.doc_fit,
                 below: s.doc_below,
                 from_panel: s.panel.is_some(),
+                text: s.doc_text,
             };
             let (pane_width, pane_below) = (fit.width, fit.below);
             let read = s
                 .doc_preview
                 .as_ref()
-                .filter(|(n, _)| s.doc.as_ref().is_some_and(|f| f.name == *n))
+                .filter(|(k, _)| {
+                    s.doc
+                        .as_ref()
+                        .is_some_and(|f| k.split_once('#').map(|(n, _)| n) == Some(f.name.as_ref()))
+                })
                 .map(|(_, r)| r);
             let panel = s.panel.map(|tab| {
                 super::workbench::render(
@@ -786,6 +791,7 @@ impl Render for Workspace {
                         fit,
                         read,
                         s.doc_sheet,
+                        s.doc_pick,
                         &t,
                     )
                 })

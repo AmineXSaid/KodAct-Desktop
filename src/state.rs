@@ -1119,14 +1119,19 @@ pub struct AppState {
     pub doc_fit: bool,
     /// The side panel sits below the chat instead of beside it.
     pub doc_below: bool,
-    /// An Office file or PDF in the panel, read: by file name, the preview
-    /// or why it couldn't be read. None while it is being read.
+    /// An Office file or PDF in the panel, read: by file name and content
+    /// (`name#key`), the preview or why it couldn't be read. None while it
+    /// is being read.
     pub doc_preview: Option<(
         SharedString,
         Result<std::sync::Arc<crate::office::Preview>, String>,
     )>,
     /// The sheet shown, for a workbook.
     pub doc_sheet: usize,
+    /// A document in the panel shows its text, not its pages.
+    pub doc_text: bool,
+    /// The cells picked in a workbook in the panel (anchor, other end).
+    pub doc_pick: crate::ui::sheet_view::Pick,
     copied_reset: Option<Task<()>>,
     /// A short message at the bottom of the window (stubs say what they would do).
     pub toast: Option<SharedString>,
@@ -1343,6 +1348,8 @@ impl AppState {
             doc_fit: true,
             doc_below: false,
             doc_preview: None,
+            doc_text: false,
+            doc_pick: None,
             doc_sheet: 0,
             copied_reset: None,
             toast: None,
@@ -2625,24 +2632,45 @@ impl AppState {
             return;
         }
         self.doc_sheet = 0;
+        self.doc_pick = None;
         if let (Some(_), Some(bytes)) = (file.office(), file.bytes.clone()) {
-            let ready = self
-                .doc_preview
-                .as_ref()
-                .is_some_and(|(n, _)| *n == file.name);
+            let key: SharedString =
+                format!("{}#{:x}", file.name, crate::office_render::key(&bytes)).into();
+            let ready = self.doc_preview.as_ref().is_some_and(|(k, _)| *k == key);
             if !ready {
                 self.doc_preview = None;
                 let name = file.name.clone();
                 cx.spawn(async move |this, cx| {
-                    let n = name.to_string();
+                    let (n, b) = (name.to_string(), bytes.clone());
                     let read = cx
-                        .background_spawn(async move {
-                            crate::office::preview(&n, &bytes).map(std::sync::Arc::new)
-                        })
+                        .background_spawn(async move { crate::office::preview(&n, &b) })
+                        .await;
+                    let drawing = matches!(&read, Ok(crate::office::Preview::Doc(d)) if d.drawing);
+                    let _ = this.update(cx, |s, cx| {
+                        s.doc_preview = Some((key.clone(), read.map(std::sync::Arc::new)));
+                        cx.notify();
+                    });
+                    if !drawing {
+                        return;
+                    }
+                    // Then its pages as they print, once LibreOffice has drawn them.
+                    let n = name.to_string();
+                    let drawn = cx
+                        .background_spawn(async move { crate::office::draw(&n, &bytes) })
                         .await;
                     let _ = this.update(cx, |s, cx| {
-                        s.doc_preview = Some((name, read));
-                        cx.notify();
+                        if let Some((k, Ok(p))) = &mut s.doc_preview {
+                            if *k != key {
+                                return;
+                            }
+                            if let crate::office::Preview::Doc(d) = std::sync::Arc::make_mut(p) {
+                                d.drawing = false;
+                                if let Ok((pages, total)) = drawn {
+                                    (d.pages, d.total) = (pages, total);
+                                }
+                            }
+                            cx.notify();
+                        }
                     });
                 })
                 .detach();
@@ -2652,7 +2680,24 @@ impl AppState {
         cx.notify();
     }
 
+    /// Pages as they print, or the text: the panel's view of a document.
+    pub fn toggle_doc_text(&mut self, cx: &mut Context<Self>) {
+        self.doc_text = !self.doc_text;
+        cx.notify();
+    }
+
+    /// Pick a cell in the workbook in the panel; `extend` (Shift) stretches
+    /// the pick from its anchor to here.
+    pub fn pick_cell(&mut self, at: (usize, usize), extend: bool, cx: &mut Context<Self>) {
+        self.doc_pick = match (self.doc_pick, extend) {
+            (Some((anchor, _)), true) => Some((anchor, at)),
+            _ => Some((at, at)),
+        };
+        cx.notify();
+    }
+
     pub fn select_sheet(&mut self, i: usize, cx: &mut Context<Self>) {
+        self.doc_pick = None;
         self.doc_sheet = i;
         cx.notify();
     }
@@ -6430,6 +6475,18 @@ fn demo_plan() -> Vec<Step> {
             "finance/q3-budget.pdf",
             "",
             Some(include_bytes!("../assets/docs/samples/q3-budget.pdf")),
+        ),
+        file(
+            "q3-budget-memo.docx",
+            "finance/q3-budget-memo.docx",
+            "",
+            Some(include_bytes!("../assets/docs/samples/q3-budget-memo.docx")),
+        ),
+        file(
+            "q3-budget.pptx",
+            "finance/q3-budget.pptx",
+            "",
+            Some(include_bytes!("../assets/docs/samples/q3-budget.pptx")),
         ),
         file(
             "forge-chat-path.html",
