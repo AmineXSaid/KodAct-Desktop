@@ -129,6 +129,10 @@ icons!(
     "server",
     "circle-dashed",
     "stethoscope",
+    // The command palette's scope tabs and the share row.
+    "hash",
+    "text-quote",
+    "share-2",
     // The title bar's minimize / maximize / restore / close (gpui-kit-assets, Apache-2.0).
     "window-close",
     "window-maximize",

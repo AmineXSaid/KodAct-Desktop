@@ -86,6 +86,8 @@ impl Workspace {
         let chat = cx.new(|cx| ChatView::new(state.clone(), cx));
         let composer = cx.new(|cx| Composer::new(state.clone(), window, cx));
         let palette = cx.new(|cx| CommandPalette::new(state.clone(), window, cx));
+        // The palette draws its field in the title bar, which this view renders.
+        cx.observe(&palette, |_, _, cx| cx.notify()).detach();
         let remote_picker =
             cx.new(|cx| super::remote_menu::RemotePicker::new(state.clone(), window, cx));
         let terminal =
@@ -270,6 +272,8 @@ impl Workspace {
             ))
             .with_priority(1)
         });
+        // The search field: you type in it, the palette drops below.
+        let field = self.palette.update(cx, |p, cx| p.field(window, cx));
         let s = self.state.read(cx);
         let hover = t.colors.hover;
         // Icon-only: each says what it does, with its key.
@@ -424,53 +428,7 @@ impl Workspace {
                     )
                 })
                 .child(div().flex_1())
-                .child(
-                    div()
-                        .id("palette-button")
-                        .occlude()
-                        .flex()
-                        .items_center()
-                        .gap(t.space.sm)
-                        .h(t.size.control)
-                        .px(t.space.md)
-                        .min_w(px(240.))
-                        .rounded(t.radius.pill)
-                        .bg(t.colors.hover)
-                        .border_1()
-                        .border_color(t.colors.hover)
-                        .cursor_pointer()
-                        .text_color(t.colors.text_subtle)
-                        .hover({
-                            let (edge, ink, fill) =
-                                (t.colors.border, t.colors.text_muted, t.colors.surface);
-                            move |st| st.bg(fill).border_color(edge).text_color(ink)
-                        })
-                        .when(s.palette_open, |d| {
-                            d.border_color(t.colors.primary)
-                                .text_color(t.colors.text_muted)
-                        })
-                        .tooltip(|window, cx| {
-                            gpui::component::tooltip::Tooltip::new(
-                                "Files, chats, commands, models. Start with > # or @ to narrow it",
-                            )
-                            .build(window, cx)
-                        })
-                        .child(icon(
-                            "icons/search.svg",
-                            t.size.icon_sm,
-                            t.colors.text_subtle,
-                        ))
-                        .child(
-                            div()
-                                .flex_1()
-                                .whitespace_nowrap()
-                                .child("Search files, chats and commands"),
-                        )
-                        .child(kbd(&t, shortcut("K")))
-                        .on_click(cx.listener(|_, _, window, cx| {
-                            window.dispatch_action(Box::new(ToggleCommandPalette), cx)
-                        })),
-                )
+                .child(field)
                 .child(div().flex_1())
                 .children(super::approvals::render(&t, &self.state, window, cx))
                 .child({
