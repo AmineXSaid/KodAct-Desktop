@@ -1,3 +1,4 @@
 target/
 __pycache__/
 /screenshots/
+/installer/private-fonts/

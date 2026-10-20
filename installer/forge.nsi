@@ -69,6 +69,11 @@ Section "Forge desktop app" SecApp
   SetOutPath "$INSTDIR"
   File "/oname=Forge.exe" "${APP_EXE}"
   File "/oname=forge.ico" "..\assets\forge.ico"
+!ifdef FONTS_DIR
+  ; A personal build's fonts (installer/private-fonts), read at start.
+  SetOutPath "$INSTDIR\fonts"
+  File "${FONTS_DIR}/*.*"
+!endif
 
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   WriteRegStr HKCU "Software\Forge" "InstallDir" "$INSTDIR"
@@ -263,6 +268,7 @@ Section "Uninstall"
   RMDir "$INSTDIR\bin"
   Delete "$INSTDIR\Forge.exe"
   Delete "$INSTDIR\forge.ico"
+  RMDir /r "$INSTDIR\fonts"
   Delete "$INSTDIR\Uninstall.exe"
   RMDir "$INSTDIR"
 

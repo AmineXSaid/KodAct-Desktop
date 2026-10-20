@@ -24,12 +24,27 @@ pub struct Sidebar {
     renaming: Option<usize>,
     /// Where the open chat menu sits: under the ⋯ button, or at the click.
     menu_at: gpui::Point<gpui::Pixels>,
+    /// The nav row under the pointer: only it shows its shortcut, so the
+    /// labels keep their width (the tooltips name the shortcuts too).
+    nav_hover: Option<&'static str>,
     _subs: Vec<Subscription>,
 }
 
 const GROUPS: [&str; 5] = ["Pinned", "Today", "Yesterday", "Previous 7 days", "Older"];
 
 impl Sidebar {
+    fn hover_nav(&mut self, row: &'static str, on: bool, cx: &mut Context<Self>) {
+        let next = match (on, self.nav_hover) {
+            (true, _) => Some(row),
+            (false, Some(r)) if r == row => None,
+            (false, other) => other,
+        };
+        if next != self.nav_hover {
+            self.nav_hover = next;
+            cx.notify();
+        }
+    }
+
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search chats"));
         let rename = cx.new(|cx| InputState::new(window, cx).placeholder("Chat title"));
@@ -89,6 +104,7 @@ impl Sidebar {
             rename,
             renaming: None,
             menu_at: Default::default(),
+            nav_hover: None,
             _subs: subs,
         }
     }
@@ -199,6 +215,7 @@ impl Sidebar {
 
 impl Render for Sidebar {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let nav_hover = self.nav_hover;
         let t = cx.theme().clone();
         let mut filter = Some(self.filter(&t, cx).into_any_element());
         let s = self.state.read(cx);
@@ -673,7 +690,8 @@ impl Render for Sidebar {
                                         )),
                                 )
                                 .child(nav_label("New chat"))
-                                .child(kbd(&t, shortcut("N")))
+                                .when(nav_hover == Some("New chat"), |d| d.child(kbd(&t, shortcut("N"))))
+                                .on_hover(cx.listener(|this, on: &bool, _, cx| this.hover_nav("New chat", *on, cx)))
                                 .on_click(|_, window, cx| {
                                     window.dispatch_action(Box::new(NewChat), cx)
                                 }),
@@ -722,7 +740,8 @@ impl Render for Sidebar {
                                     },
                                 ))
                                 .child(nav_label("Projects"))
-                                .child(kbd(&t, shortcut("Shift P")))
+                                .when(nav_hover == Some("Projects"), |d| d.child(kbd(&t, shortcut("Shift P"))))
+                                .on_hover(cx.listener(|this, on: &bool, _, cx| this.hover_nav("Projects", *on, cx)))
                                 .on_click(|_, window, cx| {
                                     window.dispatch_action(Box::new(OpenProjects), cx)
                                 }),
@@ -754,7 +773,8 @@ impl Render for Sidebar {
                                     },
                                 ))
                                 .child(nav_label("Rules and memory"))
-                                .child(kbd(&t, shortcut("Shift R")))
+                                .when(nav_hover == Some("Rules and memory"), |d| d.child(kbd(&t, shortcut("Shift R"))))
+                                .on_hover(cx.listener(|this, on: &bool, _, cx| this.hover_nav("Rules and memory", *on, cx)))
                                 .on_click(|_, window, cx| {
                                     window.dispatch_action(Box::new(OpenRules), cx)
                                 }),

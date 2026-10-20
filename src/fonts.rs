@@ -3,10 +3,13 @@
 //! The app bundles only openly licensed fonts: each theme sets its own
 //! (Archivo for Calmly smooth, Inter, Geist, IBM Plex…), code in a mono.
 //!
-//! Anthropic Sans, when this computer has it (installed, or its .ttf/.otf
-//! files placed in Forge's `fonts` folder next to its settings), sets every
-//! theme's interface, headings and replies. It is Anthropic's own typeface
-//! and is never shipped with the app; without it, the themes keep theirs.
+//! Anthropic Sans, when this computer has it, sets every theme's interface,
+//! replies and headings (its Text cut, and its Display cut for headings).
+//! Fonts are read from Forge's `fonts` folder next to its settings and from
+//! the `fonts` folder beside the app, where a personal build's installer
+//! puts them (`installer/private-fonts`), as well as from the system. It is
+//! Anthropic's own typeface: never in this repository; without it, the
+//! themes keep theirs.
 
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -25,14 +28,21 @@ pub const DISPLAY_BUNDLED: &str = "Archivo";
 const MAX_FILE: u64 = 16 * 1024 * 1024;
 const MAX_FILES: usize = 64;
 
-/// The face that, when present, sets all the text but code.
-pub const BRAND: &str = "Anthropic Sans";
+/// The faces that, when present, set all the text but code: the first
+/// found of each, for text and for headings.
+pub const BRAND_TEXT: &[&str] = &["Anthropic Sans Text", "Anthropic Sans"];
+pub const BRAND_DISPLAY: &[&str] = &[
+    "Anthropic Sans Display",
+    "Anthropic Sans Text",
+    "Anthropic Sans",
+];
 
 struct Faces {
     sans: SharedString,
     display: SharedString,
-    /// Anthropic Sans, as the text system names it, when it is available.
-    brand: Option<SharedString>,
+    /// Anthropic Sans, as the text system names it, when it is available:
+    /// (text, headings).
+    brand: Option<(SharedString, SharedString)>,
 }
 
 static FACES: OnceLock<Faces> = OnceLock::new();
@@ -44,8 +54,8 @@ pub fn sans() -> SharedString {
         .map_or_else(|| SANS_BUNDLED.into(), |f| f.sans.clone())
 }
 
-/// Anthropic Sans, when this computer has it.
-pub fn brand() -> Option<SharedString> {
+/// Anthropic Sans, when this computer has it: (text, headings).
+pub fn brand() -> Option<(SharedString, SharedString)> {
     FACES.get().and_then(|f| f.brand.clone())
 }
 
@@ -100,10 +110,18 @@ pub fn read_dir_fonts(dir: &Path) -> Vec<Vec<u8>> {
         .collect()
 }
 
-/// At start, before the theme: load the fonts folder, then settle the faces
-/// from everything the text system can see.
+/// The `fonts` folder beside the app's executable.
+pub fn app_dir() -> Option<PathBuf> {
+    std::env::current_exe()
+        .ok()?
+        .parent()
+        .map(|d| d.join("fonts"))
+}
+
+/// At start, before the theme: load the fonts folders, then settle the
+/// faces from everything the text system can see.
 pub fn choose(cx: &App) {
-    if let Some(dir) = user_dir() {
+    for dir in [app_dir(), user_dir()].into_iter().flatten() {
         let files = read_dir_fonts(&dir);
         if !files.is_empty() {
             if let Err(e) = cx
@@ -118,16 +136,25 @@ pub fn choose(cx: &App) {
     let _ = FACES.set(Faces {
         sans: pick(&available, SANS_PREFERRED, SANS_BUNDLED),
         display: pick(&available, DISPLAY_PREFERRED, DISPLAY_BUNDLED),
-        brand: find(&available, BRAND),
+        brand: brand_faces(&available),
     });
 }
 
-/// `family` as the text system names it (any case), when it has it.
-pub fn find(available: &[String], family: &str) -> Option<SharedString> {
-    available
-        .iter()
-        .find(|n| n.eq_ignore_ascii_case(family))
-        .map(|n| SharedString::from(n.clone()))
+/// The first of `families` the text system has, as it names it (any case).
+pub fn find(available: &[String], families: &[&str]) -> Option<SharedString> {
+    families.iter().find_map(|want| {
+        available
+            .iter()
+            .find(|n| n.eq_ignore_ascii_case(want))
+            .map(|n| SharedString::from(n.clone()))
+    })
+}
+
+/// Anthropic Sans's text and heading faces, when there is a text face.
+pub fn brand_faces(available: &[String]) -> Option<(SharedString, SharedString)> {
+    let text = find(available, BRAND_TEXT)?;
+    let display = find(available, BRAND_DISPLAY).unwrap_or_else(|| text.clone());
+    Some((text, display))
 }
 
 #[cfg(test)]
@@ -155,9 +182,19 @@ mod tests {
 
     #[test]
     fn anthropic_sans_is_found_only_when_there() {
-        let installed = vec!["anthropic sans".to_string(), "Segoe UI".into()];
-        assert_eq!(find(&installed, BRAND).as_deref(), Some("anthropic sans"));
-        assert_eq!(find(&["Segoe UI".to_string()], BRAND), None);
+        let cuts = vec![
+            "Anthropic Sans Display".to_string(),
+            "Anthropic Sans Text".into(),
+            "Segoe UI".into(),
+        ];
+        let (text, display) = brand_faces(&cuts).unwrap();
+        assert_eq!((text.as_ref(), display.as_ref()), ("Anthropic Sans Text", "Anthropic Sans Display"));
+        // One family for both, in any case.
+        let one = vec!["anthropic sans".to_string()];
+        assert_eq!(brand_faces(&one).map(|b| b.1).as_deref(), Some("anthropic sans"));
+        // A Display cut alone isn't enough for body text.
+        assert_eq!(brand_faces(&["Anthropic Sans Display".to_string()]), None);
+        assert_eq!(brand_faces(&["Segoe UI".to_string()]), None);
         // Never bundled: the app's own fonts don't include it.
         let bundled = std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/fonts")).unwrap();
         assert!(bundled

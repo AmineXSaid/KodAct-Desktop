@@ -506,11 +506,11 @@ impl Theme {
         self.font_reading = face(f.reading, self.font_sans.clone());
         // Anthropic Sans, when installed, sets all the text but code, in
         // every theme.
-        if let Some(brand) = crate::fonts::brand() {
-            self.font_sans = brand.clone();
-            self.font_display = brand.clone();
-            self.font_serif = brand.clone();
-            self.font_reading = brand;
+        if let Some((text, display)) = crate::fonts::brand() {
+            self.font_sans = text.clone();
+            self.font_display = display;
+            self.font_serif = text.clone();
+            self.font_reading = text;
         }
         self.display_weight = f.display_weight;
         let (button, card, field, composer, pressed) = f.corners;
