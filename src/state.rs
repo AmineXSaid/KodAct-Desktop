@@ -5009,6 +5009,39 @@ impl AppState {
     }
 
     /// Give a chat a new title; an empty one keeps the old.
+    /// Ask the model for chat `id`'s title (off the UI thread). It replaces
+    /// the first-words name `provisional`, unless the chat was renamed.
+    fn name_chat(
+        &mut self,
+        id: usize,
+        profile: crate::endpoints::Profile,
+        first: String,
+        provisional: String,
+        cx: &mut Context<Self>,
+    ) {
+        cx.spawn(async move |this, cx| {
+            let named = cx
+                .background_spawn(async move { crate::title::ask(&profile, &first) })
+                .await;
+            let Ok(title) = named else { return };
+            let _ = this.update(cx, |s, cx| {
+                let still = s
+                    .chats
+                    .iter()
+                    .any(|c| c.id == id && c.title.as_ref() == provisional);
+                if still {
+                    if let Some(c) = s.chat_mut(id) {
+                        c.title = title.into();
+                        c.version += 1;
+                    }
+                    s.touch(id, cx);
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
     pub fn rename_chat(&mut self, id: usize, title: &str, cx: &mut Context<Self>) {
         self.renaming = None;
         let title: String = title
@@ -5591,11 +5624,22 @@ impl AppState {
                 } else {
                     first.to_string()
                 };
-                let title: String = first.chars().take(48).collect();
+                // Named after its first words for now; the model then names
+                // it (`title.rs`). With no model, it is Untitled N.
+                let profile = self.active_profile().cloned();
+                let title: String = match &profile {
+                    None if !demo_mode() => crate::title::untitled(
+                        self.chats.iter().map(|c| c.title.as_ref()),
+                    ),
+                    _ => first.chars().take(48).collect(),
+                };
                 self.chats
-                    .insert(0, Chat::new(id, self.current_project, title.into()));
+                    .insert(0, Chat::new(id, self.current_project, title.clone().into()));
                 self.current = Some(id);
                 self.keep_mode();
+                if let Some(profile) = profile.filter(|_| !demo_mode() && !text.trim().is_empty()) {
+                    self.name_chat(id, profile, text.clone(), title, cx);
+                }
                 id
             }
         };

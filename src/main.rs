@@ -58,6 +58,7 @@ mod templates;
 mod term_session;
 mod text_diff;
 mod theme;
+mod title;
 mod ui;
 mod web_view;
 mod xlsx_style;

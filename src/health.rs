@@ -329,7 +329,7 @@ fn reg_value(hive: &str, name: &str) -> Option<String> {
 }
 
 /// A request to the endpoint with its headers and key.
-fn request(
+pub(crate) fn request(
     agent: &ureq::Agent,
     method: &str,
     url: &str,
