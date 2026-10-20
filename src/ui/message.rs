@@ -35,8 +35,6 @@ pub struct ItemContext {
     pub last: bool,
     /// The first reply after your message: it carries the turn's header.
     pub first_in_turn: bool,
-    /// This turn is the one still running.
-    pub live_turn: bool,
     /// The file open beside the chat, so its card shows it is open.
     pub open_doc: Option<crate::state::FileRef>,
     /// Device pixels per logical pixel, for diagrams drawn to exact size.
@@ -484,18 +482,11 @@ fn user(
         .into_any_element()
 }
 
-/// The head of a turn: Forge's logo and name. The logo turns while the turn
-/// runs, and is still after.
-fn turn_header(cx: &ItemContext, t: &Theme) -> AnyElement {
-    let cube = f32::from(t.size.mark_turn);
-    let mark = if cx.live_turn {
-        super::turning_logo(
-            cube,
-            SharedString::from(format!("turn-cube-{}-{}", cx.chat, cx.index)),
-        )
-    } else {
-        super::logo(cube).into_any_element()
-    };
+/// The head of a turn: Forge's logo and name. The logo stays still: the
+/// working line under the reply carries the motion (`activity.rs`), so only
+/// one mark moves at a time.
+fn turn_header(_cx: &ItemContext, t: &Theme) -> AnyElement {
+    let mark = super::logo(f32::from(t.size.mark_turn)).into_any_element();
     div()
         .flex()
         .items_center()

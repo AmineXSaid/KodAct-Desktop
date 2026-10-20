@@ -12,6 +12,7 @@ use gpui::{
     TextRun, Window,
 };
 
+use super::activity::Activity;
 use super::message::{self, ItemContext};
 use crate::state::{AppState, Block, Chat, Message, ToolKind, ToolStatus, Verdict};
 use crate::theme::ActiveTheme;
@@ -26,7 +27,7 @@ pub struct ChatView {
     ticker: Option<Task<()>>,
     /// The working line's step, and when it started (its timer restarts
     /// when the step changes).
-    step: Option<(String, Instant)>,
+    step: Option<(Activity, String, Instant)>,
     /// You scrolled up from the newest message: "Jump to latest" shows.
     away: bool,
     /// The find move last scrolled to.
@@ -140,31 +141,35 @@ impl ChatView {
 
         // Follow the step, restarting its timer when it changes.
         let step = if busy {
-            self.state.read(cx).chat().and_then(step_label)
+            let s = self.state.read(cx);
+            s.chat().and_then(|c| step_of(c, s.mode))
         } else {
             None
         };
-        match (&step, &self.step) {
-            (Some(label), Some((shown, _))) if label == shown => {}
-            (Some(label), _) => self.step = Some((label.clone(), Instant::now())),
+        match (step, &self.step) {
+            (Some((_, label)), Some((_, shown, _))) if label == *shown => {}
+            (Some((activity, label)), _) => self.step = Some((activity, label, Instant::now())),
             (None, _) => self.step = None,
         }
     }
 }
 
-/// What the reply is doing right now, as the working line says it; `None`
-/// while it waits on you (the permission card says that).
-fn step_label(c: &Chat) -> Option<String> {
-    let blocks = match c.messages.last() {
-        Some(Message::Assistant { blocks }) => blocks.as_slice(),
-        _ => &[],
-    };
+/// What the reply is doing right now, as the working line shows it: the
+/// kind of work (its mark) and the step in words.
+fn step_of(c: &Chat, mode: crate::modes::ModeId) -> Option<(Activity, String)> {
     let clip = |s: &str| {
         if s.chars().count() > 48 {
             format!("{}…", s.chars().take(47).collect::<String>())
         } else {
             s.to_string()
         }
+    };
+    let blocks = match c.messages.last() {
+        Some(Message::Assistant { blocks }) => blocks.as_slice(),
+        Some(Message::Notice { text, .. }) if text.as_ref() == crate::state::COMPACTING => {
+            return Some((Activity::Compacting, "Compacting the conversation".into()));
+        }
+        _ => &[],
     };
     let agents = blocks
         .iter()
@@ -174,46 +179,84 @@ fn step_label(c: &Chat) -> Option<String> {
         })
         .count();
     if agents > 1 {
-        return Some(format!("{agents} agents working"));
+        return Some((
+            Activity::Agents,
+            format!("{agents} agents working side by side"),
+        ));
     }
-    let label = match blocks.last() {
+    let doc = writing_doc(c, mode);
+    Some(match blocks.last() {
         Some(Block::Permission {
             verdict: Verdict::Pending,
             ..
-        }) => return None,
-        Some(Block::Tool(t)) if t.status == ToolStatus::Running => match t.kind {
-            ToolKind::Read => format!("Reading {}", clip(&t.target)),
-            ToolKind::Edit => format!("Editing {}", clip(&t.target)),
-            ToolKind::Write => format!("Writing {}", clip(&t.target)),
-            ToolKind::Bash => match &t.note {
-                Some(note) => clip(note),
-                None => format!("Running {}", clip(&t.target)),
-            },
-            ToolKind::Search => format!("Searching for {}", clip(&t.target)),
-            ToolKind::WebSearch => format!("Searching the web for {}", clip(&t.target)),
-            ToolKind::Web => format!(
-                "Fetching {}",
-                t.target
-                    .split("://")
-                    .nth(1)
-                    .unwrap_or(&t.target)
-                    .split('/')
-                    .next()
-                    .unwrap_or_default()
-            ),
-            ToolKind::Other => match &t.note {
-                Some(note) => clip(note),
-                None => format!("Using {}", clip(&t.target)),
-            },
-        },
-        Some(Block::Thinking { .. }) => "Thinking".into(),
-        Some(Block::Text(_)) => "Writing".into(),
+        }) => (Activity::AwaitingYou, "Waiting for your answer".into()),
+        Some(Block::Tool(t)) if t.status == ToolStatus::Running => {
+            let target = clip(&t.target);
+            match t.kind {
+                ToolKind::Read => (Activity::Reading, format!("Reading {target}")),
+                ToolKind::Edit if doc => (Activity::WritingDoc, format!("Writing {target}")),
+                ToolKind::Edit => (Activity::Editing, format!("Editing {target}")),
+                ToolKind::Write if doc => (Activity::WritingDoc, format!("Writing {target}")),
+                ToolKind::Write => (Activity::WritingCode, format!("Writing {target}")),
+                ToolKind::Bash => match &t.note {
+                    Some(note) => (Activity::Running, clip(note)),
+                    None => (Activity::Running, format!("Running {target}")),
+                },
+                ToolKind::Search => (
+                    Activity::Searching,
+                    format!("Searching the project for {target}"),
+                ),
+                ToolKind::WebSearch => (
+                    Activity::SearchingWeb,
+                    format!("Searching the web for {target}"),
+                ),
+                ToolKind::Web => (
+                    Activity::Fetching,
+                    format!(
+                        "Fetching {}",
+                        t.target
+                            .split("://")
+                            .nth(1)
+                            .unwrap_or(&t.target)
+                            .split('/')
+                            .next()
+                            .unwrap_or_default()
+                    ),
+                ),
+                ToolKind::Other if crate::state::is_agent_tool(&t.target) => (
+                    Activity::Agent,
+                    match &t.note {
+                        Some(note) => format!("An agent is working: {}", clip(note)),
+                        None => "An agent is working".into(),
+                    },
+                ),
+                ToolKind::Other if doc => (Activity::WritingDoc, "Writing the plan".into()),
+                ToolKind::Other => match &t.note {
+                    Some(note) => (Activity::Tool, clip(note)),
+                    None => (Activity::Tool, format!("Using {}", tool_name(&t.target))),
+                },
+            }
+        }
+        Some(Block::Thinking { .. }) => (Activity::Thinking, "Thinking it through".into()),
+        Some(Block::Text(_)) if doc => (Activity::WritingDoc, "Writing the plan".into()),
+        Some(Block::Text(_)) => (Activity::Replying, "Writing the reply".into()),
         // A step just ended, or a question was answered: the model reads
         // the result and picks what comes next.
-        Some(_) => "Reading the result".into(),
-        None => "Waiting for the model".into(),
-    };
-    Some(label)
+        Some(_) => (Activity::Digesting, "Reading the result".into()),
+        None => (Activity::Waiting, "Waiting for the model to answer".into()),
+    })
+}
+
+/// A tool's name as people say it: an MCP tool (`mcp__github__create_issue`)
+/// as "create issue (github)".
+fn tool_name(target: &str) -> String {
+    match target
+        .strip_prefix("mcp__")
+        .and_then(|r| r.split_once("__"))
+    {
+        Some((server, tool)) => format!("{} ({server})", tool.replace('_', " ")),
+        None => target.to_string(),
+    }
 }
 
 /// Files Forge writes for people to read: plans, notes, docs.
@@ -315,10 +358,6 @@ impl Render for ChatView {
                 Some(m) => {
                     let after_user =
                         ix == 0 || matches!(chat.messages.get(ix - 1), Some(Message::User { .. }));
-                    let last_user = chat
-                        .messages
-                        .iter()
-                        .rposition(|m| matches!(m, Message::User { .. }));
                     let ctx = ItemContext {
                         state: state.clone(),
                         place: s
@@ -330,7 +369,6 @@ impl Render for ChatView {
                         busy: s.busy(),
                         last: ix + 1 == chat.messages.len(),
                         first_in_turn: after_user && matches!(m, Message::Assistant { .. }),
-                        live_turn: s.busy() && last_user.is_none_or(|u| ix > u),
                         open_doc: s.doc.clone(),
                         scale: window.scale_factor(),
                         rating: s.ratings.get(&(chat.id, ix)).copied(),
@@ -370,9 +408,7 @@ impl Render for ChatView {
                     )
                 }
                 None => match &step {
-                    Some((label, since)) => {
-                        working_line(&t, label, *since, writing_doc(chat, s.mode))
-                    }
+                    Some((activity, label, since)) => working_line(&t, *activity, label, *since),
                     None => div().into_any_element(),
                 },
             };
@@ -466,28 +502,28 @@ fn shimmer(label: &str, sweep: f32, t: &crate::theme::Theme) -> StyledText {
     StyledText::new(label.to_string()).with_runs(runs)
 }
 
-/// Forge's working line: the logo turning (or, while Forge writes a plan or
-/// a document, a hand writing with a quill), then what the reply is doing and
-/// for how long. A light sweeps across the words.
+/// Forge's working line: the mark for the kind of work (`activity.rs`: a
+/// page being read, a prompt's cursor, the quill for a plan), then the step
+/// in words and for how long. A light sweeps across the words.
 fn working_line(
     t: &crate::theme::Theme,
+    activity: Activity,
     label: &str,
     since: Instant,
-    writing: bool,
 ) -> gpui::AnyElement {
     let theme = t.clone();
     let text = label.to_string();
     div()
         .flex()
         .items_center()
-        .gap(px(4.))
+        .gap(t.space.tight)
         .h(px(24.))
         .mt(px(4.))
-        .child(if writing {
-            super::writing_hand::writing(t, "working-writing")
-        } else {
-            super::turning_logo(f32::from(t.size.mark_turn), "working-cube")
-        })
+        .child(super::activity::mark(
+            activity,
+            t,
+            SharedString::from(format!("working-mark-{activity:?}")),
+        ))
         .child(div().font_weight(FontWeight::MEDIUM).with_animation(
             SharedString::from(format!("working-{label}")),
             Animation::new(Duration::from_millis(2200)).repeat(),
@@ -505,6 +541,15 @@ fn working_line(
 #[cfg(test)]
 mod tests {
     use super::elapsed;
+
+    #[test]
+    fn mcp_tools_read_as_people_say_them() {
+        assert_eq!(
+            super::tool_name("mcp__github__create_issue"),
+            "create issue (github)"
+        );
+        assert_eq!(super::tool_name("TodoWrite"), "TodoWrite");
+    }
 
     #[test]
     fn elapsed_reads_short() {

@@ -1,5 +1,6 @@
 //! The window's views. `workspace` composes them; each file is one component.
 
+pub mod activity;
 pub mod agents_editor;
 pub mod agents_view;
 pub mod approvals;
