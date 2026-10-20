@@ -655,6 +655,16 @@ impl Theme {
 }
 
 // ---------- Forge additions ----------
+
+impl Theme {
+    /// The sidebar's shadow where it meets the session: its colour at the
+    /// edge, fading out over `Sizes::side_shade`, so the sidebar reads as a
+    /// layer over the window. None in a flat theme, whose session has its
+    /// 1px edge instead.
+    pub fn side_shade(&self) -> Option<Hsla> {
+        (self.depth != Depth::Flat).then(|| ink(if self.is_dark { 0.45 } else { 0.10 }))
+    }
+}
 // Tokens the app shell needs that DESIGN.md implies but the base set above
 // does not name: status, diffs, the code well, the hero highlight, and the
 // app's fixed sizes. Components read these, never literals.
@@ -1063,6 +1073,7 @@ pub struct Sizes {
     pub switch_h: Pixels,  // 20
     pub switch_thumb: Pixels, // 14
     pub rail: Pixels,      // 52: the collapsed sidebar
+    pub side_shade: Pixels, // 18: the sidebar's shadow across the session's left edge
     pub home_heading: Pixels, // 36: the home screen's heading, Archivo 600
     pub mark_turn: Pixels, // 28: Forge's mark heading each reply, and while it works
     pub mark_home: Pixels, // 44: the mark beside the home screen's greeting
@@ -1125,6 +1136,7 @@ impl Default for Sizes {
             switch_h: px(20.),
             switch_thumb: px(14.),
             rail: px(52.),
+            side_shade: px(18.),
             home_heading: px(36.),
             mark_turn: px(28.),
             mark_home: px(44.),

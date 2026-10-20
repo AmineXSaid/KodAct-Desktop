@@ -306,3 +306,25 @@ pub fn quarter_turn(
     })
     .into_any_element()
 }
+
+/// The sidebar's shadow falling across the session's left edge (put it last
+/// in the session, which is `relative` and clips to its corners). Nothing in
+/// a flat theme.
+pub fn side_shade(t: &crate::theme::Theme) -> Option<gpui::AnyElement> {
+    use gpui::{div, prelude::*};
+    let edge = t.side_shade()?;
+    Some(
+        div()
+            .absolute()
+            .top_0()
+            .bottom_0()
+            .left_0()
+            .w(t.size.side_shade)
+            .bg(gpui::linear_gradient(
+                90.,
+                gpui::linear_color_stop(edge, 0.),
+                gpui::linear_color_stop(edge.opacity(0.), 1.),
+            ))
+            .into_any_element(),
+    )
+}

@@ -718,10 +718,9 @@ impl Render for Sidebar {
                 .size_full()
                 .flex()
                 .flex_col()
-                .rounded(t.radius.card)
-                .shadow(t.elevation_grain())
+                // Part of the window, not a card on it: the window's own
+                // colour, flush to its edges; the chat is the raised sheet.
                 .overflow_hidden()
-                .bg(t.extra.stage)
                 .child(header)
                 .child(
                     div()
@@ -954,9 +953,6 @@ impl Render for Sidebar {
             .w(t.size.sidebar)
             .flex_none()
             .h_full()
-            .pl(t.space.sm)
-            .pr(t.space.sm)
-            .pb(t.space.xs)
             .child(sheet)
             .children(menu)
     }
@@ -985,8 +981,6 @@ pub fn rail(t: &crate::theme::Theme, screen: Screen) -> impl IntoElement {
         .gap(t.space.xs)
         .py(t.space.sm)
         .bg(t.extra.pane)
-        .border_r_1()
-        .border_color(t.colors.border)
         .child(
             nav(
                 "rail-expand",

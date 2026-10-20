@@ -1343,7 +1343,8 @@ impl Render for Workspace {
                                 ))
                             }
                         })
-                        .child(main)
+                        // The sidebar's shadow falls across the session's edge.
+                        .child(main.relative().children(super::motion::side_shade(&t)))
                         .when(terminal_open, |d| d.child(dock)),
                 )
                 .child(super::status_bar::render(
