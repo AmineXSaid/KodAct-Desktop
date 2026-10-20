@@ -22,7 +22,8 @@ pub struct ChatView {
     list: ListState,
     shown_chat: Option<usize>,
     shown_count: usize,
-    shown_version: u64,
+    /// The chat's version, and how many messages are queued.
+    shown_version: (u64, usize),
     /// Re-renders the working line's timer every second while a reply plays.
     ticker: Option<Task<()>>,
     /// The working line: the step's mark, what the work is about (its
@@ -63,7 +64,7 @@ impl ChatView {
             list,
             shown_chat: None,
             shown_count: 0,
-            shown_version: 0,
+            shown_version: (0, 0),
             ticker: None,
             step: None,
             away: false,
@@ -79,10 +80,13 @@ impl ChatView {
     /// the last item; opening a tool row grows another).
     fn sync(&mut self, cx: &mut Context<Self>) {
         let s = self.state.read(cx);
+        // The last row holds the working line and what you queued.
         let busy = s.busy();
+        let queued = s.chat().and_then(|c| s.queued.get(&c.id)).map_or(0, Vec::len);
+        let tail = busy || queued > 0;
         let (id, count, version) = match s.chat() {
-            Some(c) => (Some(c.id), c.messages.len() + busy as usize, c.version),
-            None => (None, 0, 0),
+            Some(c) => (Some(c.id), c.messages.len() + tail as usize, (c.version, queued)),
+            None => (None, 0, (0, 0)),
         };
         if id != self.shown_chat {
             self.list.reset(count);
@@ -478,14 +482,23 @@ impl Render for ChatView {
                         &t,
                     )
                 }
-                None => match &step {
-                    // The card says it waits on you: no second line.
-                    Some((Activity::AwaitingYou, ..)) => div().into_any_element(),
-                    Some((activity, label, detail, since)) => {
-                        working_line(&t, *activity, label, detail.clone(), *since)
-                    }
-                    None => div().into_any_element(),
-                },
+                None => {
+                    let line = match &step {
+                        // The card says it waits on you: no second line.
+                        Some((Activity::AwaitingYou, ..)) => div().into_any_element(),
+                        Some((activity, label, detail, since)) => {
+                            working_line(&t, *activity, label, detail.clone(), *since)
+                        }
+                        None => div().into_any_element(),
+                    };
+                    let queued = s.queued.get(&chat.id).map(Vec::as_slice).unwrap_or_default();
+                    div()
+                        .flex()
+                        .flex_col()
+                        .child(line)
+                        .child(super::queued::render(&t, &state, chat.id, queued))
+                        .into_any_element()
+                }
             };
             // Find: every match gets a faint bar at its left, the one shown a strong one.
             let mark = s

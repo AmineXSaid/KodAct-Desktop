@@ -1072,6 +1072,13 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &StopAgents, _, cx| {
                 this.state.update(cx, |s, cx| s.stop_agents(cx))
             }))
+            .on_action(cx.listener(|this, _: &EditQueued, window, cx| {
+                this.state.update(cx, |s, cx| s.edit_last_queued(cx));
+                window.dispatch_action(Box::new(FocusComposer), cx);
+            }))
+            .on_action(cx.listener(|this, _: &RemoveQueued, _, cx| {
+                this.state.update(cx, |s, cx| s.remove_all_queued(cx))
+            }))
             .on_action(cx.listener(|this, _: &StopReply, window, cx| {
                 let (palette, picker) = {
                     let s = this.state.read(cx);

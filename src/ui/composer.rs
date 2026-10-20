@@ -14,11 +14,13 @@ use super::*;
 use crate::state::AppState;
 use crate::theme::ActiveTheme;
 
-/// The empty box's line: while a question waits, what typing does then;
-/// else a project's, or a plain chat's.
-fn placeholder(in_folder: bool, asking: bool) -> &'static str {
+/// The empty box's line: while a question waits, or a reply runs, what
+/// typing does then; else a project's, or a plain chat's.
+fn placeholder(in_folder: bool, asking: bool, busy: bool) -> &'static str {
     if asking {
         "Or tell Forge what to do instead…"
+    } else if busy {
+        "Add to the task, or steer Forge…"
     } else if in_folder {
         "What should we build today?"
     } else {
@@ -49,8 +51,8 @@ pub struct Composer {
     /// Where the autocomplete's word starts (its byte offset), and the
     /// caret's place and line height there, in the window.
     ac_anchor: Option<(usize, gpui::Point<gpui::Pixels>, gpui::Pixels)>,
-    /// The placeholder shown: (a project's, a question waits).
-    placeholder_now: (bool, bool),
+    /// The placeholder shown: (a project's, a question waits, a reply runs).
+    placeholder_now: (bool, bool, bool),
     _subs: Vec<Subscription>,
 }
 
@@ -65,7 +67,7 @@ impl Composer {
         let input = cx.new(|cx| {
             TextareaState::new(window, cx)
                 .auto_grow(1, max_rows)
-                .placeholder(placeholder(in_folder, false))
+                .placeholder(placeholder(in_folder, false, false))
                 .submit_on_enter(true)
         });
         let filter = cx.new(|cx| InputState::new(window, cx).placeholder("Search models…"));
@@ -77,11 +79,12 @@ impl Composer {
                 }
                 // A plain chat asks for anything; a project's, for work on it.
                 // While a question waits, what you type answers it.
-                let now = (state.read(cx).in_folder(), state.read(cx).asking());
+                let s = state.read(cx);
+                let now = (s.in_folder(), s.asking(), s.busy());
                 if now != this.placeholder_now {
                     this.placeholder_now = now;
                     this.input.update(cx, |i, cx| {
-                        i.set_placeholder(placeholder(now.0, now.1), window, cx)
+                        i.set_placeholder(placeholder(now.0, now.1, now.2), window, cx)
                     });
                 }
                 // The model window opening: an empty search, the current row active.
@@ -141,7 +144,7 @@ impl Composer {
             ac_closed_for: None,
             ac_took_enter: false,
             ac_anchor: None,
-            placeholder_now: (in_folder, false),
+            placeholder_now: (in_folder, false, false),
             _subs: subs,
         }
     }
@@ -182,8 +185,13 @@ impl Composer {
             self.input.update(cx, |i, cx| i.set_value("", window, cx));
             return;
         }
-        // Only `/btw` goes through while a reply runs.
+        // While a reply runs, a message is queued for Forge's next step
+        // (`/btw` keeps its side card).
         if self.state.read(cx).busy() && crate::state::parse_btw(&text).is_none() {
+            if !text.trim().is_empty() {
+                self.state.update(cx, |s, cx| s.queue_message(text.trim().to_string(), cx));
+                self.input.update(cx, |i, cx| i.set_value("", window, cx));
+            }
             return;
         }
         if text.trim().is_empty() && self.state.read(cx).attachments.is_empty() {
@@ -525,8 +533,9 @@ impl Render for Composer {
         });
         let has_attachments = pending.is_some();
         let send_ready = busy || !empty || has_attachments;
-        // A question waits and you typed: the button sends it as the answer.
-        let busy = busy && !(s.asking() && !empty);
+        // While a reply runs and you typed: the button sends it (queued, or
+        // as the answer to a waiting question); Stop when the box is empty.
+        let busy = busy && empty;
         // Send is the accent, pale until there is something to send; Stop
         // replaces it while a reply plays.
         let send = super::button::send_button(
@@ -541,7 +550,7 @@ impl Render for Composer {
             &t,
             cx.listener(move |this, _, window, cx| {
                 let typed = !this.text(cx).trim().is_empty();
-                if this.state.read(cx).busy() && !(typed && this.state.read(cx).asking()) {
+                if this.state.read(cx).busy() && !typed {
                     this.state.update(cx, |s, cx| s.stop(cx));
                 } else {
                     this.submit(window, cx);

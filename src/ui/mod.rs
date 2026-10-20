@@ -54,6 +54,7 @@ pub mod plugins_editor;
 pub mod profiles_editor;
 pub mod project_map;
 pub mod projects;
+pub mod queued;
 pub mod remote_menu;
 pub mod rules_view;
 pub mod sandbox_editor;
@@ -114,6 +115,8 @@ gpui::actions!(
         CycleMode,
         StopReply,
         StopAgents,
+        EditQueued,
+        RemoveQueued,
         OpenSettings,
         OpenSlashCommands,
         OpenAgents,

@@ -85,7 +85,9 @@ pub enum Event {
     /// The process is gone; `detail` is the end of what it wrote on stderr.
     Exited { code: Option<i32>, detail: String },
     /// ForgeCLI took your message as a turn, under this id (`rewind_files` names turns by it).
-    UserAccepted { uuid: String },
+    /// Also the words, so a queued message that ran as a turn of its own
+    /// (its id is then ForgeCLI's) is still recognised.
+    UserAccepted { uuid: String, text: String },
     /// The answer to a control request this app sent (`Session::request`).
     ControlReply {
         request_id: String,
@@ -381,6 +383,23 @@ impl Session {
         self.write(user_line(text))
     }
 
+    /// A message sent while a reply runs, for its next step (`priority:
+    /// "next"`): ForgeCLI gives it to the model between tool calls, or
+    /// runs it next when the turn ends first; either way it is echoed back
+    /// under `uuid` when it lands (`Event::UserAccepted`).
+    pub fn queue(&self, text: &str, uuid: &str) -> Result<(), String> {
+        let mut line = user_line(text);
+        line["priority"] = "next".into();
+        line["uuid"] = uuid.into();
+        self.write(line)
+    }
+
+    /// Take back a queued message that hasn't reached the model; the answer
+    /// (`{"cancelled": bool}`) arrives as `Event::ControlReply`.
+    pub fn cancel_queued(&self, uuid: &str) -> Result<String, String> {
+        self.control(json!({ "subtype": "cancel_queued", "uuid": uuid }))
+    }
+
     /// Your message with its attachments (`attach::content_blocks`).
     pub fn send_content(&self, content: Value) -> Result<(), String> {
         self.write(json!({ "type": "user", "message": { "role": "user", "content": content }, "parent_tool_use_id": null, "session_id": "" }))
@@ -663,8 +682,16 @@ impl Parser {
             // Your message, echoed back with the id ForgeCLI gave its turn.
             Some("user") if !nested && v["isReplay"] == true => {
                 if let Some(uuid) = v["uuid"].as_str() {
+                    let text = v["message"]["content"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|b| b["text"].as_str())
+                        .collect::<Vec<_>>()
+                        .join("");
                     out.push(Event::UserAccepted {
                         uuid: uuid.to_string(),
+                        text,
                     });
                 }
             }

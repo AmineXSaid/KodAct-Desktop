@@ -1194,6 +1194,29 @@ pub enum Request {
     Revert { chat: usize, msg: usize },
     /// Stop these sub-agents (every running one when you chose "Stop all").
     StopAgents { chat: usize, ids: Vec<String> },
+    /// Take back a queued message; `edit` puts it back in the box.
+    CancelQueued { chat: usize, uuid: String, edit: bool },
+}
+
+/// The queued messages a replayed message of yours carries, taken out of
+/// `list`: the one with its id (delivered mid-turn), else those its words
+/// hold (they ran as a turn of their own, alone or joined, under ForgeCLI's id).
+pub fn take_landed(list: &mut Vec<Queued>, uuid: &str, text: &str) -> Vec<Queued> {
+    if let Some(i) = list.iter().position(|q| q.uuid == uuid) {
+        return vec![list.remove(i)];
+    }
+    let (hit, keep) = std::mem::take(list)
+        .into_iter()
+        .partition(|q| !q.text.trim().is_empty() && text.contains(q.text.trim()));
+    *list = keep;
+    hit
+}
+
+/// A message you sent while a reply ran, waiting for Forge's next step.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Queued {
+    pub uuid: String,
+    pub text: SharedString,
 }
 
 // ---------------------------------------------------------------- the state
@@ -1372,6 +1395,9 @@ pub struct AppState {
     /// What Forge is doing about your latest message in each chat, in a few
     /// words the model wrote (`title::headline`), for the working line.
     pub headlines: std::collections::HashMap<usize, String>,
+    /// Messages sent while each chat's reply runs, oldest first, until they
+    /// reach Forge (`Event::UserAccepted`).
+    pub queued: std::collections::HashMap<usize, Vec<Queued>>,
     /// When each running turn started.
     turn_started: std::collections::HashMap<usize, std::time::Instant>,
     /// Chats whose next text starts a new block rather than running on.
@@ -1599,6 +1625,7 @@ impl AppState {
             tool_rows: Default::default(),
             asks: Default::default(),
             headlines: Default::default(),
+            queued: Default::default(),
             turn_started: Default::default(),
             fresh_block: Default::default(),
             settings_open: false,
@@ -4911,6 +4938,14 @@ impl AppState {
         if let Request::StopAgents { chat, ids } = req {
             return self.on_stop_reply(chat, &ids, result, cx);
         }
+        if let Request::CancelQueued { chat, uuid, edit } = req {
+            match result {
+                Ok(v) if v["cancelled"] == true => self.unqueue(chat, &uuid, edit, cx),
+                Ok(_) => self.show_toast("Already with Forge: it reached the model before it could be taken back.", cx),
+                Err(e) => self.show_toast(format!("Couldn't take it back: {e}"), cx),
+            }
+            return;
+        }
         let files = |v: &serde_json::Value| -> Result<Vec<String>, String> {
             if v["canRewind"] == false {
                 return Err(v["error"]
@@ -4964,7 +4999,7 @@ impl AppState {
                 );
                 self.touch(chat, cx);
             }
-            (Request::StopAgents { .. }, _) => {}
+            (Request::StopAgents { .. } | Request::CancelQueued { .. }, _) => {}
             (_, Err(e)) => self.show_toast(format!("Couldn't revert: {e}"), cx),
         }
         cx.notify();
@@ -5473,6 +5508,138 @@ impl AppState {
         }
     }
 
+    // ------------------------------------------------------------ messages sent while Forge works
+
+    /// Send `text` while the reply runs: shown as queued, and given to the
+    /// model at its next step (between tool calls), or run next when the
+    /// reply ends first (`backend::Session::queue`).
+    pub fn queue_message(&mut self, text: String, cx: &mut Context<Self>) {
+        let Some(chat) = self.current else { return };
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        let uuid = format!(
+            "forge-queued-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        );
+        if !demo_mode() {
+            let sent = self
+                .sessions
+                .get(&chat)
+                .ok_or_else(|| "Forge isn't running".to_string())
+                .and_then(|l| l.session.queue(&text, &uuid));
+            if let Err(e) = sent {
+                return self.show_toast(format!("Couldn't send it: {e}"), cx);
+            }
+        }
+        self.queued.entry(chat).or_default().push(Queued {
+            uuid,
+            text: text.into(),
+        });
+        cx.notify();
+    }
+
+    /// Take a queued message back (`edit`: into the box, to change it).
+    /// Only once ForgeCLI confirms it hadn't reached the model yet.
+    pub fn remove_queued(&mut self, chat: usize, uuid: String, edit: bool, cx: &mut Context<Self>) {
+        if demo_mode() || !self.sessions.contains_key(&chat) {
+            return self.unqueue(chat, &uuid, edit, cx);
+        }
+        let sent = self
+            .sessions
+            .get(&chat)
+            .map(|l| l.session.cancel_queued(&uuid));
+        match sent {
+            Some(Ok(id)) => {
+                self.requests.insert(id, Request::CancelQueued { chat, uuid, edit });
+            }
+            Some(Err(e)) => self.show_toast(format!("Couldn't take it back: {e}"), cx),
+            None => {}
+        }
+    }
+
+    /// The newest queued message of the chat you're looking at, back in the box.
+    pub fn edit_last_queued(&mut self, cx: &mut Context<Self>) {
+        let Some(chat) = self.current else { return };
+        if let Some(q) = self.queued.get(&chat).and_then(|q| q.last()).cloned() {
+            self.remove_queued(chat, q.uuid, true, cx);
+        }
+    }
+
+    /// Every queued message of the chat you're looking at, taken back.
+    pub fn remove_all_queued(&mut self, cx: &mut Context<Self>) {
+        let Some(chat) = self.current else { return };
+        for q in self.queued.get(&chat).cloned().unwrap_or_default() {
+            self.remove_queued(chat, q.uuid, false, cx);
+        }
+    }
+
+    fn unqueue(&mut self, chat: usize, uuid: &str, edit: bool, cx: &mut Context<Self>) {
+        let Some(list) = self.queued.get_mut(&chat) else { return };
+        let Some(i) = list.iter().position(|q| q.uuid == uuid) else { return };
+        let q = list.remove(i);
+        if edit {
+            self.draft = Some(q.text.to_string());
+        }
+        cx.notify();
+    }
+
+    /// Stopped, or Forge ended: what was still queued goes back in the box,
+    /// in order, so nothing you wrote is lost.
+    fn restore_queued(&mut self, chat: usize, cx: &mut Context<Self>) {
+        let Some(list) = self.queued.remove(&chat).filter(|l| !l.is_empty()) else {
+            return;
+        };
+        if let Some(l) = self.sessions.get(&chat) {
+            for q in &list {
+                let _ = l.session.cancel_queued(&q.uuid);
+            }
+        }
+        if self.current == Some(chat) {
+            let joined = list.iter().map(|q| q.text.to_string()).collect::<Vec<_>>().join("\n\n");
+            self.draft = Some(joined);
+        }
+        cx.notify();
+    }
+
+    /// A replayed message of yours: the queued ones it carries reach the
+    /// transcript here, as your messages, where the model read them. Returns
+    /// whether it was one of them.
+    fn land_queued(&mut self, chat: usize, uuid: &str, text: &str, cx: &mut Context<Self>) -> bool {
+        let Some(list) = self.queued.get_mut(&chat) else { return false };
+        let landed = take_landed(list, uuid, text);
+        if landed.is_empty() {
+            return false;
+        }
+        // A turn of its own: the chat is replying again.
+        if !self.replies.contains_key(&chat) {
+            self.replies.insert(chat, Task::ready(()));
+            self.turn_started.insert(chat, std::time::Instant::now());
+        }
+        if let Some(c) = self.chat_mut(chat) {
+            for q in landed {
+                c.messages.push(Message::User {
+                    text: q.text,
+                    sent: SystemTime::now(),
+                    attachments: vec![],
+                    turn: Some(uuid.to_string().into()),
+                });
+            }
+            c.version += 1;
+        }
+        self.mark_dirty(chat, cx);
+        cx.notify();
+        true
+    }
+
+    /// The demo's next step: its queued messages land, as ForgeCLI's would.
+    fn land_queued_demo(&mut self, chat: usize, cx: &mut Context<Self>) -> bool {
+        let Some(list) = self.queued.get(&chat).filter(|l| !l.is_empty()) else {
+            return false;
+        };
+        let text = list.iter().map(|q| q.text.to_string()).collect::<Vec<_>>().join("\n\n");
+        self.land_queued(chat, "demo", &text, cx)
+    }
+
     /// The question `chat` waits on: (message, block).
     pub fn pending_question(&self, chat: usize) -> Option<(usize, usize)> {
         if let Some(a) = self.asks.get(&chat) {
@@ -5730,6 +5897,8 @@ impl AppState {
             self.answer(id, ask.msg, ask.block, Verdict::Denied, cx);
             self.set_decider(id, ask.msg, ask.block, Decider::Stopped);
         }
+        // What you queued goes back in the box, as Claude does on Esc.
+        self.restore_queued(id, cx);
         {
             if let Some(c) = self.chat_mut(id) {
                 for m in c.messages.iter_mut() {
@@ -5874,6 +6043,15 @@ impl AppState {
                         cx.background_executor()
                             .timer(Duration::from_millis(120))
                             .await;
+                    }
+                    // What you sent meanwhile lands at the next step, as with
+                    // ForgeCLI, and the demo says it heard you.
+                    if matches!(step, Step::ToolStart(..) | Step::End { .. }) {
+                        let _ = this.update(cx, |s, cx| {
+                            if s.land_queued_demo(id, cx) {
+                                s.apply(id, Step::Say("Noted, I'll take that into account. ".into()), cx);
+                            }
+                        });
                     }
                     let denied = asked
                         && this
@@ -6421,7 +6599,10 @@ impl AppState {
                     self.answer_side(chat, text, is_error);
                 }
             }
-            Event::UserAccepted { uuid } => {
+            Event::UserAccepted { uuid, text } => {
+                if self.land_queued(chat, &uuid, &text, cx) {
+                    return;
+                }
                 // The newest of your messages without an id is the one just accepted.
                 if let Some(c) = self.chat_mut(chat) {
                     if let Some(Message::User { turn, .. }) = c
@@ -6484,6 +6665,7 @@ impl AppState {
                 }
                 self.asks.remove(&chat);
                 self.stale_turns.remove(&chat);
+                self.restore_queued(chat, cx);
                 let remote = self.chat_remote(chat);
                 if self.replies.contains_key(&chat) {
                     let why = match (&remote, code) {
@@ -8713,6 +8895,24 @@ mod tests {
             super::rule_name(&serde_json::json!([{"type": "setMode"}])),
             None
         );
+    }
+
+    #[test]
+    fn a_replayed_message_lands_the_queued_ones_it_carries() {
+        use super::{take_landed, Queued};
+        let q = |u: &str, t: &str| Queued { uuid: u.into(), text: t.to_string().into() };
+        // Delivered mid-turn: by its own id.
+        let mut list = vec![q("a", "Keep it short."), q("b", "Use lib.rs.")];
+        assert_eq!(take_landed(&mut list, "b", "Use lib.rs."), vec![q("b", "Use lib.rs.")]);
+        assert_eq!(list, vec![q("a", "Keep it short.")]);
+        // Run as a turn of its own, joined, under ForgeCLI's id: by its words.
+        let mut list = vec![q("a", "one"), q("b", "two"), q("c", "later")];
+        let got = take_landed(&mut list, "cli-uuid", "one\n\ntwo");
+        assert_eq!(got.len(), 2);
+        assert_eq!(list, vec![q("c", "later")]);
+        // Someone else's message: nothing of the queue.
+        assert!(take_landed(&mut list, "x", "unrelated").is_empty());
+        assert_eq!(list.len(), 1);
     }
 
     #[test]

@@ -625,6 +625,27 @@ impl CommandPalette {
                     ),
                 );
             }
+            // Messages sent while Forge works, not yet with it.
+            if s.current.and_then(|c| s.queued.get(&c)).is_some_and(|q| !q.is_empty()) {
+                chat.insert(
+                    0,
+                    act(
+                        "Remove the queued messages",
+                        "icons/x.svg",
+                        None,
+                        Box::new(RemoveQueued),
+                    ),
+                );
+                chat.insert(
+                    0,
+                    act(
+                        "Edit the last queued message",
+                        "icons/pencil.svg",
+                        None,
+                        Box::new(EditQueued),
+                    ),
+                );
+            }
             if s.busy() {
                 chat.insert(
                     0,
