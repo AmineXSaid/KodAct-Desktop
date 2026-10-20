@@ -1,11 +1,12 @@
 //! Which faces Forge draws with.
 //!
-//! The app bundles only openly licensed fonts. Its one interface face is
-//! Archivo, in 400 and 600, for text and headings alike; code is JetBrains
-//! Mono. Hanken Grotesk and Source Serif 4 stay bundled for older content
-//! that names them. Fonts placed as .ttf/.otf files in Forge's `fonts`
-//! folder (next to its settings) are still read at start, so a document can
-//! use them, but they never replace Archivo.
+//! The app bundles only openly licensed fonts: each theme sets its own
+//! (Archivo for Calmly smooth, Inter, Geist, IBM Plex…), code in a mono.
+//!
+//! Anthropic Sans, when this computer has it (installed, or its .ttf/.otf
+//! files placed in Forge's `fonts` folder next to its settings), sets every
+//! theme's interface, headings and replies. It is Anthropic's own typeface
+//! and is never shipped with the app; without it, the themes keep theirs.
 
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -24,9 +25,14 @@ pub const DISPLAY_BUNDLED: &str = "Archivo";
 const MAX_FILE: u64 = 16 * 1024 * 1024;
 const MAX_FILES: usize = 64;
 
+/// The face that, when present, sets all the text but code.
+pub const BRAND: &str = "Anthropic Sans";
+
 struct Faces {
     sans: SharedString,
     display: SharedString,
+    /// Anthropic Sans, as the text system names it, when it is available.
+    brand: Option<SharedString>,
 }
 
 static FACES: OnceLock<Faces> = OnceLock::new();
@@ -36,6 +42,11 @@ pub fn sans() -> SharedString {
     FACES
         .get()
         .map_or_else(|| SANS_BUNDLED.into(), |f| f.sans.clone())
+}
+
+/// Anthropic Sans, when this computer has it.
+pub fn brand() -> Option<SharedString> {
+    FACES.get().and_then(|f| f.brand.clone())
 }
 
 /// The display serif.
@@ -107,7 +118,16 @@ pub fn choose(cx: &App) {
     let _ = FACES.set(Faces {
         sans: pick(&available, SANS_PREFERRED, SANS_BUNDLED),
         display: pick(&available, DISPLAY_PREFERRED, DISPLAY_BUNDLED),
+        brand: find(&available, BRAND),
     });
+}
+
+/// `family` as the text system names it (any case), when it has it.
+pub fn find(available: &[String], family: &str) -> Option<SharedString> {
+    available
+        .iter()
+        .find(|n| n.eq_ignore_ascii_case(family))
+        .map(|n| SharedString::from(n.clone()))
 }
 
 #[cfg(test)]
@@ -131,6 +151,19 @@ mod tests {
         let have = vec!["a face".to_string(), "b face".into()];
         assert_eq!(pick(&have, &want, "x"), "b face");
         assert_eq!(pick(&[], &want, "x"), "x");
+    }
+
+    #[test]
+    fn anthropic_sans_is_found_only_when_there() {
+        let installed = vec!["anthropic sans".to_string(), "Segoe UI".into()];
+        assert_eq!(find(&installed, BRAND).as_deref(), Some("anthropic sans"));
+        assert_eq!(find(&["Segoe UI".to_string()], BRAND), None);
+        // Never bundled: the app's own fonts don't include it.
+        let bundled = std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/fonts")).unwrap();
+        assert!(bundled
+            .filter_map(|e| e.ok())
+            .all(|e| !e.file_name().to_string_lossy().to_lowercase().contains("anthropic")));
+        assert!(!include_str!("assets.rs").to_lowercase().contains("anthropic"));
     }
 
     #[test]
