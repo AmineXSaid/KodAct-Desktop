@@ -39,7 +39,7 @@ Lucide, 2px stroke as drawn. Sizes: 12 / 14 / 16 / 20 only.
 
 ### Sizes
 - `titlebar`: 36px, the title bar's height
-- `sidebar`: 256px, the sidebar's width
+- `sidebar`: 288px, the sidebar's width
 - `column`: 760px, the reading column
 - `composer_width`: 560px, the composer's widest
 - `row`: 30px, sidebar rows, menu items

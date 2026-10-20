@@ -662,7 +662,7 @@ impl Theme {
     /// layer over the window. None in a flat theme, whose session has its
     /// 1px edge instead.
     pub fn side_shade(&self) -> Option<Hsla> {
-        (self.depth != Depth::Flat).then(|| ink(if self.is_dark { 0.45 } else { 0.10 }))
+        (self.depth != Depth::Flat).then(|| ink(if self.is_dark { 0.30 } else { 0.06 }))
     }
 }
 // Tokens the app shell needs that DESIGN.md implies but the base set above
@@ -1020,7 +1020,7 @@ const BRAND_STEP: f32 = 1.;
 #[derive(Clone, Copy)]
 pub struct Sizes {
     pub titlebar: Pixels, // 36
-    pub sidebar: Pixels,  // 256
+    pub sidebar: Pixels,  // 288
     pub column: Pixels,   // 760: the reading column
     pub row: Pixels,      // 30: sidebar rows, menu items
     pub control: Pixels,  // 26: pills, small buttons
@@ -1073,7 +1073,7 @@ pub struct Sizes {
     pub switch_h: Pixels,  // 20
     pub switch_thumb: Pixels, // 14
     pub rail: Pixels,      // 52: the collapsed sidebar
-    pub side_shade: Pixels, // 18: the sidebar's shadow across the session's left edge
+    pub side_shade: Pixels, // 12: the sidebar's shadow across the session's left edge
     pub home_heading: Pixels, // 36: the home screen's heading, Archivo 600
     pub mark_turn: Pixels, // 28: Forge's mark heading each reply, and while it works
     pub mark_home: Pixels, // 44: the mark beside the home screen's greeting
@@ -1085,7 +1085,7 @@ impl Default for Sizes {
     fn default() -> Self {
         Self {
             titlebar: px(36.),
-            sidebar: px(256.),
+            sidebar: px(288.),
             column: px(760.),
             row: px(30.),
             control: px(26.),
@@ -1136,7 +1136,7 @@ impl Default for Sizes {
             switch_h: px(20.),
             switch_thumb: px(14.),
             rail: px(52.),
-            side_shade: px(18.),
+            side_shade: px(12.),
             home_heading: px(36.),
             mark_turn: px(28.),
             mark_home: px(44.),
