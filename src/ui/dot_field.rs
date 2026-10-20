@@ -9,14 +9,17 @@
 //! centre, each dot's weight, seed and kind) and kept until the field is
 //! resized. Nothing in it takes input; it sits behind the content.
 //!
-//! Once a chat begins it stays behind the transcript as a faint trace
-//! (`set_backdrop`), and while Forge is replying a slow wave of light runs
-//! down through it, so the background says the work is going on; it goes
-//! still again when the reply ends.
+//! Once a chat begins it covers the whole chat as a faint trace
+//! (`set_backdrop`), fainter still behind the reading column, and a soft
+//! wave of light runs through it diagonally, top left to bottom right: slow
+//! and barely there at rest, a little brighter and quicker while Forge is
+//! replying, so the background says the work is going on.
 //!
 //! It is barely alive: the dots breathe out of step with each other over
 //! nine seconds, the whole field leans a few pixels away from the pointer,
-//! and it brightens a touch while the composer has the keyboard. A ticker
+//! and it brightens a touch while the composer has the keyboard. Round the
+//! pointer it swells like a lens: the near dots grow, brighten and part a
+//! little, easing after the pointer as it moves (half as much behind a chat). A ticker
 //! drives that at a few frames a second (faster only while it eases toward
 //! the pointer), and rests whenever the window is inactive or the field
 //! isn't on screen. Reduced motion (`FORGE_REDUCED_MOTION=1`, or the
@@ -35,6 +38,12 @@ use crate::theme::{ActiveTheme, Theme};
 
 /// The furthest the field leans from the pointer, in pixels.
 const LEAN: f32 = 4.;
+/// The lens round the pointer: how far it reaches, how much a dot under it
+/// grows, how far the dots part, and how much it lights them.
+const LENS_RADIUS: f32 = 160.;
+const LENS_SCALE: f32 = 1.8;
+const LENS_PUSH: f32 = 6.;
+const LENS_LIGHT: f32 = 0.6;
 /// One breath, in seconds.
 const BREATH_S: f32 = 9.;
 /// How far a breath swings a dot's opacity, as a share of it.
@@ -51,9 +60,15 @@ const RIPPLE_S: f32 = 1.8;
 /// many crests span the field.
 const CHAT_REST: f32 = 0.3;
 const CHAT_REST_DARK: f32 = 0.4;
-const WORK_CREST: f32 = 0.8;
-const WORK_SPEED: f32 = 3.4;
-const WORK_WAVES: f32 = 0.65;
+const WORK_CREST: f32 = 0.62;
+const WORK_SPEED: f32 = 2.2;
+const WORK_WAVES: f32 = 0.8;
+/// The diagonal wave at rest: its speed, and its height as a share of a
+/// working wave's.
+const REST_SPEED: f32 = 0.9;
+const REST_SWELL: f32 = 0.35;
+/// The tick behind a chat at rest: enough for the slow wave to glide.
+const DRIFT_MS: u64 = 66;
 /// Ticks: easing toward the pointer, breathing, and resting (hidden).
 const EASE_MS: u64 = 33;
 const BREATHE_MS: u64 = 220;
@@ -134,36 +149,32 @@ pub fn default_content(w: f32, h: f32) -> [f32; 4] {
     [w / 2. - hw, h / 2. - hh, w / 2. + hw, h / 2. + hh]
 }
 
-/// Behind a chat, what the field keeps clear: the reading column, centred
-/// and running the field's full height, so the dots stay in the margins
-/// beside the transcript and never lift behind its words.
+/// Behind a chat, the reading column, centred and running the field's full
+/// height: the dots behind it are kept fainter, so the words stay clear.
 pub fn chat_content(w: f32, h: f32, column: f32) -> [f32; 4] {
     let half = column.min(w) / 2.;
     [w / 2. - half, 0., w / 2. + half, h]
 }
 
-/// Behind a chat, how strongly the field shows at `(x, y)`: both margins
-/// beside the reading column `col`, textured by slow noise and a little
-/// heavier toward the bottom, kept 18px clear of the column (so a narrow
-/// margin still holds a few dots) and faded before the window's edges.
+/// Behind a chat, how strongly the field shows at `(x, y)`: everywhere,
+/// corners and all, textured by slow noise; behind the reading column `col`
+/// at `COLUMN_SHARE` of the margins' strength, easing between them, and
+/// faded only in the last few pixels at the window's edges.
 pub fn chat_weight(x: f32, y: f32, w: f32, h: f32, col: [f32; 4]) -> f32 {
     if w <= 0. || h <= 0. {
         return 0.;
     }
     let [l, _, r, _] = col;
-    let out = if x < l {
-        l - x
-    } else if x > r {
-        x - r
-    } else {
-        return 0.;
-    };
-    let quiet = smoothstep(18., 64., out);
-    let texture = 0.4 + 0.6 * fbm(x / 150. + 5., y / 150. + 9., 19);
-    let lower = 0.6 + 0.4 * smoothstep(0., h, y);
-    let edge = x.min(w - x).min(y).min(h - y) / (w.min(h) * 0.06).max(20.);
-    (quiet * texture * lower * smoothstep(0., 1., edge)).clamp(0., 1.)
+    let out = (l - x).max(x - r).max(0.);
+    let beside = COLUMN_SHARE + (1. - COLUMN_SHARE) * smoothstep(0., 64., out);
+    let texture = 0.45 + 0.55 * fbm(x / 150. + 5., y / 150. + 9., 19);
+    let edge = smoothstep(0., 1., x.min(w - x).min(y).min(h - y) / 12.);
+    (beside * texture * edge).clamp(0., 1.)
 }
+
+/// Behind a chat, how strong the field is behind the reading column, as a
+/// share of its strength in the margins.
+const COLUMN_SHARE: f32 = 0.45;
 
 /// How strongly the field shows at `(x, y)` in a `w`×`h` field around the
 /// content (`[left, top, right, bottom]`, in the field's coordinates).
@@ -273,6 +284,12 @@ struct Motion {
     quiet: f32,
     /// 0..1, toward 1 while the chat it sits behind is replying.
     work: f32,
+    /// How far the diagonal wave has run (radians), at its own speed.
+    wave: f32,
+    /// The lens: where it is in the field (easing after the pointer), and
+    /// how strong (0..1, toward 1 while the pointer is over the field).
+    lens: Point<f32>,
+    lens_on: f32,
 }
 
 /// Where the field was painted, and when.
@@ -328,6 +345,9 @@ impl DotField {
                 glow: 0.,
                 quiet: 0.,
                 work: 0.,
+                lens: point(0., 0.),
+                lens_on: 0.,
+                wave: 0.,
             },
             focus,
             cache: Rc::default(),
@@ -376,6 +396,23 @@ impl DotField {
             let v = (f32::from(mouse.y - bounds.origin.y) / h - 0.5).clamp(-0.5, 0.5);
             m.target = point(-u * 2. * LEAN, -v * 2. * LEAN);
         }
+        // The lens follows the pointer while it is over the field.
+        let rel = point(f32::from(mouse.x - bounds.origin.x), f32::from(mouse.y - bounds.origin.y));
+        let inside = rel.x >= 0. && rel.y >= 0. && rel.x <= w && rel.y <= h;
+        let fast = dt.min(EASE_MS as f32 / 1000.);
+        if inside {
+            if m.lens_on < 0.01 {
+                m.lens = rel;
+            }
+            let k = (fast * 14.).min(1.);
+            m.lens = point(m.lens.x + (rel.x - m.lens.x) * k, m.lens.y + (rel.y - m.lens.y) * k);
+        }
+        let lens_want = inside as u8 as f32;
+        m.lens_on += (lens_want - m.lens_on) * (fast * 5.).min(1.);
+        if m.lens_on < 0.005 {
+            m.lens_on = 0.;
+        }
+        let lens_moving = inside && (rel.x - m.lens.x).abs() + (rel.y - m.lens.y).abs() > 0.5;
         let k = (dt * 6.).min(1.);
         m.lean = point(
             m.lean.x + (m.target.x - m.lean.x) * k,
@@ -397,6 +434,8 @@ impl DotField {
         if m.work < 0.002 {
             m.work = 0.;
         }
+        m.wave = (m.wave + dt * (REST_SPEED + (WORK_SPEED - REST_SPEED) * m.work))
+            % (std::f32::consts::TAU * 1000.);
         // The glide after a layout change: quick, then settling.
         let slide = self.shared.slide.get();
         let decay = (-dt * 9.).exp();
@@ -415,9 +454,17 @@ impl DotField {
             || gliding
             || rippling
             || (quiet - m.quiet).abs() > 0.01
-            || m.work > 0.;
+            || m.work > 0.
+            || lens_moving
+            || (lens_want - m.lens_on).abs() > 0.01;
         cx.notify();
-        Duration::from_millis(if easing { EASE_MS } else { BREATHE_MS })
+        Duration::from_millis(if easing {
+            EASE_MS
+        } else if m.quiet > 0.5 {
+            DRIFT_MS
+        } else {
+            BREATHE_MS
+        })
     }
 }
 
@@ -515,11 +562,14 @@ fn alpha(mark: &Mark, phase: f32, glow: f32, peak: f32) -> f32 {
 /// Behind a chat, a mark's share of its home-screen opacity: a faint
 /// `rest`, lifted toward the crest by the working wave as it passes (`y`
 /// down a field `h` tall).
-fn backdrop(quiet: f32, work: f32, phase: f32, y: f32, h: f32, rest: f32) -> f32 {
+#[allow(clippy::too_many_arguments)]
+fn backdrop(quiet: f32, work: f32, wave: f32, x: f32, y: f32, w: f32, h: f32, rest: f32) -> f32 {
     let base = 1. - (1. - rest) * quiet;
-    let k = std::f32::consts::TAU * WORK_WAVES / h.max(1.);
-    let wave = 0.5 + 0.5 * (phase * WORK_SPEED - y * k).sin();
-    base + (WORK_CREST - base).max(0.) * work * wave
+    // Crests run along the diagonal, top left to bottom right.
+    let k = std::f32::consts::TAU * WORK_WAVES / (w + h).max(1.);
+    let crest = 0.5 + 0.5 * (wave - (x + y) * k).sin();
+    let swell = quiet * (REST_SWELL + (1. - REST_SWELL) * work);
+    base + (WORK_CREST - base).max(0.) * swell * crest * crest
 }
 
 /// How much a ripple lights a dot `d` px from its centre, `secs` after it
@@ -528,6 +578,17 @@ fn ripple_at(d: f32, secs: f32, strength: f32) -> f32 {
     let r = secs * RIPPLE_SPEED;
     let band = (1. - (d - r).abs() / RIPPLE_BAND).max(0.);
     band * strength * (1. - r / RIPPLE_REACH).max(0.)
+}
+
+/// How much the lens at `centre` (strength `on`) touches a dot at (x, y):
+/// 1 under it, easing to 0 at its edge.
+fn lens(x: f32, y: f32, centre: Point<f32>, on: f32) -> f32 {
+    if on <= 0. {
+        return 0.;
+    }
+    let d = ((x - centre.x).powi(2) + (y - centre.y).powi(2)).sqrt();
+    let k = (1. - d / LENS_RADIUS).clamp(0., 1.);
+    on * k * k * (3. - 2. * k)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -553,9 +614,18 @@ fn paint_marks(
         for m in marks {
             // Deeper dots lean further: a hint of depth, nothing more.
             let depth = 0.55 + 0.45 * m.seed;
+            let (x, y) = (
+                m.at.x + motion.lean.x * depth + slide.x,
+                m.at.y + motion.lean.y * depth + slide.y,
+            );
+            // The lens: near the pointer a dot grows, lights and parts.
+            let near = lens(x, y, motion.lens, motion.lens_on * (1. - 0.5 * motion.quiet));
+            let (dx, dy) = (x - motion.lens.x, y - motion.lens.y);
+            let dist = (dx * dx + dy * dy).sqrt().max(1.);
+            let push = near * LENS_PUSH;
             let at = point(
-                bounds.origin.x + px(m.at.x + motion.lean.x * depth + slide.x),
-                bounds.origin.y + px(m.at.y + motion.lean.y * depth + slide.y),
+                bounds.origin.x + px(x + dx / dist * push),
+                bounds.origin.y + px(y + dy / dist * push),
             );
             // A ripple brightens the dots on its ring and tints them the accent.
             let lit = origin.map_or(0., |o| {
@@ -571,12 +641,19 @@ fn paint_marks(
             let back = backdrop(
                 motion.quiet,
                 motion.work,
-                motion.phase,
+                motion.wave,
+                m.at.x,
                 m.at.y,
+                f32::from(bounds.size.width),
                 f32::from(bounds.size.height),
                 if t.is_dark { CHAT_REST_DARK } else { CHAT_REST },
             );
-            let a = ((alpha(m, motion.phase, motion.glow, peak) + 0.55 * lit) * back).min(1.);
+            let a = ((alpha(m, motion.phase, motion.glow, peak)
+                + 0.55 * lit
+                + LENS_LIGHT * near * m.weight.sqrt())
+                * back)
+                .min(1.);
+            let grow = 1. + (LENS_SCALE - 1.) * near;
             let tint = |c: Hsla, k: f32| Hsla {
                 a: c.a * a * k,
                 ..c
@@ -584,9 +661,9 @@ fn paint_marks(
             match m.kind {
                 Kind::Dot | Kind::Accent => {
                     let (c, size_k) = if m.kind == Kind::Accent || lit > 0.5 {
-                        (tint(accent, 1.), 1.3)
+                        (tint(accent, 1.), 1.3 * grow)
                     } else {
-                        (tint(base, 1.), 0.9 + 0.3 * m.weight)
+                        (tint(base, 1.), (0.9 + 0.3 * m.weight) * grow)
                     };
                     let device = (d * size_k * scale).round().max(2.);
                     let s = px(device / scale);
@@ -715,23 +792,35 @@ mod ripple_tests {
     use super::*;
 
     #[test]
-    fn behind_a_chat_the_field_is_faint_and_the_wave_lifts_it_only_while_working() {
+    fn the_lens_swells_under_the_pointer_and_fades_to_its_edge() {
+        let c = point(100., 100.);
+        assert_eq!(lens(100., 100., c, 1.), 1.);
+        assert!(lens(100. + LENS_RADIUS / 2., 100., c, 1.) > 0.3);
+        assert_eq!(lens(100. + LENS_RADIUS, 100., c, 1.), 0.);
+        assert_eq!(lens(100., 100., c, 0.), 0.);
+        assert!((lens(100., 100., c, 0.5) - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn behind_a_chat_a_soft_diagonal_wave_runs_through_the_field() {
+        let (w, h) = (1000., 700.);
         // The home screen: untouched.
-        assert_eq!(backdrop(0., 0., 1.3, 200., 700., CHAT_REST), 1.);
-        // Behind a chat at rest: a faint trace, the same everywhere and always.
-        let rest: Vec<f32> = (0..40)
-            .map(|i| backdrop(1., 0., i as f32 * 0.1, i as f32 * 17., 700., CHAT_REST))
-            .collect();
-        assert!(rest.iter().all(|a| (a - CHAT_REST).abs() < 1e-6));
-        // Working: the wave lifts it, never below the rest, and moves.
-        let at = |phase: f32| backdrop(1., 1., phase, 300., 700., CHAT_REST);
-        let samples: Vec<f32> = (0..60).map(|i| at(i as f32 * 0.05)).collect();
-        let (lo, hi) = samples
-            .iter()
-            .fold((f32::MAX, f32::MIN), |(l, h), a| (l.min(*a), h.max(*a)));
-        assert!(lo >= CHAT_REST - 1e-6 && hi > CHAT_REST * 2.4, "{lo}..{hi}");
-        // At its crest still under the home screen's strength.
-        assert!(hi <= WORK_CREST + 1e-6, "{hi}");
+        assert_eq!(backdrop(0., 0., 1.3, 200., 200., w, h, CHAT_REST), 1.);
+        let range = |work: f32| {
+            (0..80)
+                .map(|i| backdrop(1., work, i as f32 * 0.1, 300., 300., w, h, CHAT_REST))
+                .fold((f32::MAX, f32::MIN), |(l, hi), a| (l.min(a), hi.max(a)))
+        };
+        // At rest: faint, never below the rest, a gentle swell.
+        let (lo, hi) = range(0.);
+        assert!(lo >= CHAT_REST - 1e-6 && hi > CHAT_REST + 0.05 && hi < CHAT_REST + 0.15, "{lo}..{hi}");
+        // Working: a taller swell, still under the home screen's strength.
+        let (_, hi_work) = range(1.);
+        assert!(hi_work > hi && hi_work <= WORK_CREST + 1e-6, "{hi_work}");
+        // Diagonal: the same along a line from bottom left to top right.
+        let a = backdrop(1., 1., 0.7, 100., 400., w, h, CHAT_REST);
+        let b = backdrop(1., 1., 0.7, 400., 100., w, h, CHAT_REST);
+        assert!((a - b).abs() < 1e-5);
     }
 
     #[test]
@@ -786,31 +875,25 @@ mod tests {
     }
 
     #[test]
-    fn behind_a_chat_the_reading_column_stays_clear() {
+    fn behind_a_chat_the_field_covers_it_all_fainter_behind_the_column() {
         let (w, h) = (1180., 810.);
-        let c = chat_content(w, h, 680.);
+        let c = chat_content(w, h, 760.);
         let marks = chat_layout(w, h, 14., c);
-        // Dots down both margins, top to bottom, none within 18px of the column.
-        for side in [
-            |x: f32, c: [f32; 4]| x < c[0],
-            |x: f32, c: [f32; 4]| x > c[2],
-        ] {
-            for band in [0.2, 0.5, 0.8] {
-                let y = h * band;
-                assert!(
-                    marks
-                        .iter()
-                        .any(|m| side(m.at.x, c) && (m.at.y - y).abs() < 60.),
-                    "no dots at {band} down"
-                );
-            }
+        // Dots everywhere: the margins, behind the column, and every corner.
+        for (x, y) in [(60., 60.), (w - 60., 60.), (60., h - 60.), (w - 60., h - 60.), (w / 2., h / 2.), (w / 2., h - 40.)] {
+            assert!(
+                marks.iter().any(|m| (m.at.x - x).abs() < 40. && (m.at.y - y).abs() < 40.),
+                "no dots near ({x}, {y})"
+            );
         }
-        assert!(marks
-            .iter()
-            .all(|m| m.at.x < c[0] - 17. || m.at.x > c[2] + 17.));
-        // A narrow window, 60px margins: still a few dots in them.
-        let c = chat_content(800., h, 680.);
-        assert!(chat_layout(800., h, 14., c).len() > 10);
+        // Fainter behind the column than in the margins.
+        let mean = |f: &dyn Fn(f32) -> bool| {
+            let v: Vec<f32> = marks.iter().filter(|m| f(m.at.x)).map(|m| m.weight).collect();
+            v.iter().sum::<f32>() / v.len().max(1) as f32
+        };
+        let inside = mean(&|x| x > c[0] + 40. && x < c[2] - 40.);
+        let outside = mean(&|x| x < c[0] - 80. || x > c[2] + 80.);
+        assert!(inside < outside * 0.7, "{inside} vs {outside}");
     }
 
     #[test]

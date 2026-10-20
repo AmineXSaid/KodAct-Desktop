@@ -886,6 +886,10 @@ impl Render for Workspace {
                 .min_h_0()
                 .flex()
                 .flex_col()
+                .relative()
+                // The home screen's field stays behind the whole chat, the
+                // composer's corners too, faint, with a soft wave through it.
+                .child(self.dots.clone())
                 .when(find_open, |d| d.child(self.find.clone()))
                 .child(
                     div()
@@ -894,9 +898,6 @@ impl Render for Workspace {
                         .flex()
                         .flex_col()
                         .relative()
-                        // The home screen's field stays behind the chat, faint,
-                        // and a slow wave runs through it while Forge replies.
-                        .child(self.dots.clone())
                         .child(self.chat.clone())
                         .children(super::tasks::render(&t, &self.state, cx))
                         .with_animation(
