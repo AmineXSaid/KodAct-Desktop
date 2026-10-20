@@ -148,20 +148,32 @@ impl ChatView {
                 // The step itself shows in its own row above (Reading a
                 // file, Running the tests): the line says what the work is
                 // about instead, and keeps the step for its tooltip. States
-                // with no row of their own keep their words.
-                Some(match activity {
-                    Activity::AwaitingYou | Activity::Compacting | Activity::Agents => {
+                // with no row of their own, and a turn with no headline yet,
+                // keep their words. Never your own message read back.
+                let about = headline(c, s.headlines.get(&c.id).map(String::as_str));
+                // A step with a row of its own, before the headline comes:
+                // just "Working", not the row's words again.
+                let own_row = !matches!(
+                    activity,
+                    Activity::Waiting | Activity::Thinking | Activity::Replying
+                );
+                Some(match (activity, about) {
+                    (Activity::AwaitingYou | Activity::Compacting | Activity::Agents, _) => {
                         (activity, words, None)
                     }
-                    _ => (activity, headline(c), Some(words)),
+                    (_, Some(about)) => (activity, about, Some(words)),
+                    (_, None) if own_row => (activity, "Working".into(), Some(words)),
+                    (_, None) => (activity, words, None),
                 })
             })
         } else {
             None
         };
+        // One timer for the turn, whatever the line says meanwhile.
         match (step, &mut self.step) {
-            (Some((activity, label, detail)), Some((a, shown, d, _))) if label == *shown => {
+            (Some((activity, label, detail)), Some((a, shown, d, _))) => {
                 *a = activity;
+                *shown = label;
                 *d = detail;
             }
             (Some((activity, label, detail)), _) => {
@@ -258,17 +270,18 @@ fn step_of(c: &Chat, mode: crate::modes::ModeId) -> Option<(Activity, String)> {
         Some(Block::Thinking { .. }) => (Activity::Thinking, "Thinking it through".into()),
         Some(Block::Text(_)) if doc => (Activity::WritingDoc, "Writing the plan".into()),
         Some(Block::Text(_)) => (Activity::Replying, "Writing the reply".into()),
-        // A step just ended, or a question was answered: the model reads
-        // the result and picks what comes next.
-        Some(_) => (Activity::Digesting, "Reading the result".into()),
+        // A step just ended, or a question was answered: the model thinks
+        // about the result and picks what comes next.
+        Some(_) => (Activity::Thinking, "Thinking about the result".into()),
         None => (Activity::Waiting, "Waiting for the model to answer".into()),
     })
 }
 
 /// What the work is about, for the working line: the task the model marked
-/// in progress in its task list; else, on a chat's first turn, the chat's
-/// name (the model's title for it); else your latest message.
-fn headline(c: &Chat) -> String {
+/// in progress in its task list; else what the model said, in a few words,
+/// it is doing about your latest message (`title::headline`). None until
+/// then: the line shows the step, never your own message read back.
+fn headline(c: &Chat, about: Option<&str>) -> Option<String> {
     let clip = |s: &str| {
         let s = s.trim();
         if s.chars().count() > 60 {
@@ -277,6 +290,7 @@ fn headline(c: &Chat) -> String {
             s.to_string()
         }
     };
+    // The task in progress, from the reply's own list.
     let task = c.messages.iter().rev().find_map(|m| match m {
         Message::Assistant { blocks } => blocks.iter().rev().find_map(|b| match b {
             // Its rows (`backend::tool_call`): `[~]` marks the one in progress.
@@ -289,21 +303,10 @@ fn headline(c: &Chat) -> String {
         }),
         _ => None,
     });
-    if let Some(Some(task)) = task {
-        return clip(&task);
-    }
-    let asks: Vec<&str> = c
-        .messages
-        .iter()
-        .filter_map(|m| match m {
-            Message::User { text, .. } => Some(text.as_ref()),
-            _ => None,
-        })
-        .collect();
-    match asks.as_slice() {
-        [_] if !c.title.trim().is_empty() => clip(&c.title),
-        [.., last] => clip(last.lines().next().unwrap_or_default()),
-        [] => clip(&c.title),
+    match (task, about) {
+        (Some(Some(task)), _) => Some(clip(&task)),
+        (_, Some(about)) if !about.trim().is_empty() => Some(clip(about)),
+        _ => None,
     }
 }
 

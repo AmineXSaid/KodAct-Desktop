@@ -520,8 +520,14 @@ impl Theme {
         let z = &mut self.size;
         z.composer_radius = px(composer);
         (z.row, z.titlebar) = (px(f.row), px(f.titlebar));
-        z.chat_text = px(f.chat.0);
-        z.line_height_chat = f.chat.1 / f.chat.0;
+        // Anthropic Sans runs large (a tall x-height): a step smaller, so a
+        // reply reads at the size the theme meant.
+        let (size, line) = match crate::fonts::brand() {
+            Some(_) => ((f.chat.0 - BRAND_STEP).max(13.), f.chat.1 - BRAND_STEP),
+            None => f.chat,
+        };
+        z.chat_text = px(size);
+        z.line_height_chat = line / size;
         (z.greeting, z.home_heading) = (px(f.heading.0), px(f.heading.1));
         self.depth = f.depth;
         self.selection = f.selection;
@@ -993,12 +999,15 @@ impl CodeColors {
     }
 }
 
+/// How much smaller a reply is set when Anthropic Sans draws it.
+const BRAND_STEP: f32 = 1.;
+
 /// The app's fixed dimensions.
 #[derive(Clone, Copy)]
 pub struct Sizes {
     pub titlebar: Pixels, // 36
     pub sidebar: Pixels,  // 256
-    pub column: Pixels,   // 680: the reading column
+    pub column: Pixels,   // 760: the reading column
     pub row: Pixels,      // 30: sidebar rows, menu items
     pub control: Pixels,  // 26: pills, small buttons
     // Icons: one scale, 12 / 14 / 16 / 20, and Lucide's own 2px stroke.
@@ -1062,7 +1071,7 @@ impl Default for Sizes {
         Self {
             titlebar: px(36.),
             sidebar: px(256.),
-            column: px(680.),
+            column: px(760.),
             row: px(30.),
             control: px(26.),
             icon_xs: px(12.),

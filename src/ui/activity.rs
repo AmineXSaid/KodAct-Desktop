@@ -21,7 +21,6 @@
 //! | One agent | a bot nodding as it works |
 //! | Several agents | three cubes lighting in turn |
 //! | Another tool (MCP) | a plug sliding into its socket |
-//! | Reading a result | an eye looking along a line |
 //! | Writing the reply | a bubble with typing dots |
 //! | Waiting for you | a hand raised, gently waving |
 //! | Compacting | layers pressing together |
@@ -56,7 +55,6 @@ pub enum Activity {
     Agent,
     Agents,
     Tool,
-    Digesting,
     Replying,
     AwaitingYou,
     Compacting,
@@ -278,13 +276,6 @@ fn frame(activity: Activity, t: &Theme, k: f32) -> Div {
                     7.5,
                     dot(2.5, accent).opacity(if p > 0.85 { 1. } else { 0. }),
                 ))
-        }
-        Activity::Digesting => {
-            // The eye looking along a line, left to right and back.
-            let x = 6. + 3. * (k * TAU).sin();
-            layer
-                .child(at(1., 1., glyph("icons/eye.svg", 16., ink)))
-                .child(at(x, 7.5, dot(3., accent)))
         }
         Activity::Replying => {
             // Typing dots in a bubble, each rising in turn.

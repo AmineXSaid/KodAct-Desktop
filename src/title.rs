@@ -4,7 +4,14 @@
 //! chat meanwhile. With no model to ask, a chat is "Untitled N", numbered
 //! after the Untitled chats already in your history.
 //!
-//! [`ask`] blocks: run it off the UI thread.
+//! Each message you send also gets its headline: what Forge is doing about
+//! it, in a few words ("Checking which branch the folder is on"), for the
+//! working line ([`headline`]).
+//!
+//! Thinking models answer after their reasoning, which some put in the
+//! reply between `<think>` tags: they get room for it, and it is dropped.
+//!
+//! [`ask`] and [`headline`] block: run them off the UI thread.
 
 use std::time::Duration;
 
@@ -30,7 +37,7 @@ pub fn untitled<'a>(titles: impl IntoIterator<Item = &'a str>) -> String {
     format!("Untitled {}", highest + 1)
 }
 
-/// What the model is asked.
+/// What the model is asked for a title.
 fn prompt(first: &str) -> String {
     let first: String = first.chars().take(2000).collect();
     format!(
@@ -40,9 +47,38 @@ in the message's language, sentence case, no quotes, no final period, no emoji. 
     )
 }
 
-/// The model's reply made into a title: its first line, without quotes,
-/// Markdown marks or a final period; None when nothing usable is left.
+/// What the model is asked for a message's headline.
+fn headline_prompt(message: &str) -> String {
+    let message: String = message.chars().take(2000).collect();
+    format!(
+        "Someone sent an assistant the message below. In 3 to 7 words, say what the assistant is doing about it, \
+as a phrase starting with a verb in -ing form, in the message's language, sentence case, no quotes, no final period \
+(for example: Checking which branch the folder is on). Reply with the phrase only.\n\n\
+<message>\n{message}\n</message>"
+    )
+}
+
+/// A reply without its reasoning: what is between `<think>` tags, and all
+/// of it when the tag never closes (the budget ran out mid-thought).
+pub fn without_thinking(reply: &str) -> String {
+    let mut out = String::new();
+    let mut rest = reply;
+    while let Some(start) = rest.find("<think>") {
+        out.push_str(&rest[..start]);
+        match rest[start..].find("</think>") {
+            Some(end) => rest = &rest[start + end + "</think>".len()..],
+            None => return out,
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// The model's reply made into a title: its first line, without its
+/// reasoning, quotes, Markdown marks or a final period; None when nothing
+/// usable is left.
 pub fn clean(reply: &str) -> Option<String> {
+    let reply = without_thinking(reply);
     let line = reply
         .lines()
         .map(str::trim)
@@ -59,20 +95,30 @@ pub fn clean(reply: &str) -> Option<String> {
 
 /// Ask the model for a title for a chat that starts with `first`.
 pub fn ask(profile: &Profile, first: &str) -> Result<String, String> {
+    request(profile, &prompt(first))
+}
+
+/// Ask the model what Forge is doing about `message`, for the working line.
+pub fn headline(profile: &Profile, message: &str) -> Result<String, String> {
+    request(profile, &headline_prompt(message))
+}
+
+fn request(profile: &Profile, prompt: &str) -> Result<String, String> {
     let token = crate::health::token(&profile.auth)?;
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(crate::health::CONNECT_TIMEOUT)
-        .timeout(Duration::from_secs(30))
+        .timeout(Duration::from_secs(60))
         .build();
     let mut body = serde_json::json!({
         "model": profile.model,
-        "messages": [{ "role": "user", "content": prompt(first) }],
+        "messages": [{ "role": "user", "content": prompt }],
     });
-    // Reasoning models think first: leave them room.
+    // Any model may think first (a local model's name doesn't say): leave
+    // room for it. One that doesn't stops after the few words asked.
     if profile.wire == Wire::Openai && crate::endpoints::is_reasoning_model(&profile.model) {
-        body["max_completion_tokens"] = 400.into();
+        body["max_completion_tokens"] = 1024.into();
     } else {
-        body["max_tokens"] = 30.into();
+        body["max_tokens"] = 1024.into();
     }
     let reply: serde_json::Value = crate::health::request(
         &agent,
@@ -98,7 +144,7 @@ pub fn ask(profile: &Profile, first: &str) -> Result<String, String> {
             .unwrap_or_default()
             .to_string(),
     };
-    clean(&text).ok_or_else(|| "the model gave no title".into())
+    clean(&text).ok_or_else(|| "the model gave no answer".into())
 }
 
 #[cfg(test)]
@@ -119,5 +165,11 @@ mod tests {
         assert_eq!(clean("  \n**Dark mode palette**").as_deref(), Some("Dark mode palette"));
         assert_eq!(clean(" \n  "), None);
         assert_eq!(clean(&"word ".repeat(40)).unwrap().chars().count(), MAX);
+        // A thinking model's reasoning is dropped, closed or cut off.
+        assert_eq!(
+            clean("<think>The user wants a title…</think>\n\nSecurity folder branch").as_deref(),
+            Some("Security folder branch")
+        );
+        assert_eq!(clean("<think>Let me consider the request and"), None);
     }
 }

@@ -24,6 +24,9 @@ const VERSION: u32 = 1;
 /// are read again from where they were written.
 const INLINE_BYTES: usize = 4 * 1024 * 1024;
 
+
+/// A saved answer's `rule` naming the mode that answered it, not a rule.
+const MODE_PREFIX: &str = "mode:";
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct SavedChat {
     pub version: u32,
@@ -313,6 +316,7 @@ fn save_messages(chat: &Chat, project: &Path) -> SavedChat {
             kind: info.kind.map(|k| kind_name(k).to_string()),
             rule: match &info.by {
                 Decider::Rule(r) => Some(r.to_string()),
+                Decider::Mode(m) => Some(format!("{MODE_PREFIX}{m}")),
                 _ => None,
             },
             stopped: (info.by == Decider::Stopped).then_some(true),
@@ -464,7 +468,10 @@ pub fn messages_of(saved: &SavedChat) -> Vec<Message> {
             info: PermInfo {
                 kind: kind.as_deref().map(kind_of),
                 by: match (rule, stopped) {
-                    (Some(r), _) => Decider::Rule(r.clone().into()),
+                    (Some(r), _) => match r.strip_prefix(MODE_PREFIX) {
+                        Some(m) => Decider::Mode(m.to_string().into()),
+                        None => Decider::Rule(r.clone().into()),
+                    },
                     (None, Some(true)) => Decider::Stopped,
                     _ => Decider::You,
                 },

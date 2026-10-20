@@ -653,7 +653,16 @@ fn approval_line(answer: &Block, cx: &ItemContext, t: &Theme) -> AnyElement {
             t.size.icon_xs,
             t.extra.success,
         ))
-        .child(parts.join(" · "))
+        // One line, within the column: a long rule ends in an ellipsis.
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .child(parts.join(" · ")),
+        )
         .into_any_element()
 }
 
@@ -1266,7 +1275,12 @@ fn outcome(info: &PermInfo, blocks: &[Block]) -> Option<String> {
 fn decider(info: &PermInfo) -> String {
     match &info.by {
         Decider::Stopped => "the reply was stopped".into(),
+        // A long rule (a whole command) is cut: the row stays one line.
+        Decider::Rule(r) if r.chars().count() > 48 => {
+            format!("by the rule {}…", r.chars().take(47).collect::<String>().trim_end())
+        }
         Decider::Rule(r) => format!("by the rule {r}"),
+        Decider::Mode(m) => format!("by switching to {m}"),
         Decider::You => "by you".into(),
     }
 }

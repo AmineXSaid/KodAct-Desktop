@@ -213,6 +213,8 @@ pub enum Decider {
     Rule(SharedString),
     /// Nobody: the reply was stopped while it waited, so it was denied.
     Stopped,
+    /// The mode you switched to while it waited (Edit automatically).
+    Mode(SharedString),
 }
 
 /// What a permission card keeps besides its words, for the row it becomes
@@ -966,6 +968,7 @@ struct Live {
 struct Ask {
     request_id: String,
     tool_use_id: String,
+    tool_name: String,
     input: serde_json::Value,
     suggestions: serde_json::Value,
     msg: usize,
@@ -1366,6 +1369,9 @@ pub struct AppState {
     tool_rows: std::collections::HashMap<(usize, String), (usize, usize)>,
     /// The permission question each chat is waiting on.
     asks: std::collections::HashMap<usize, Ask>,
+    /// What Forge is doing about your latest message in each chat, in a few
+    /// words the model wrote (`title::headline`), for the working line.
+    pub headlines: std::collections::HashMap<usize, String>,
     /// When each running turn started.
     turn_started: std::collections::HashMap<usize, std::time::Instant>,
     /// Chats whose next text starts a new block rather than running on.
@@ -1592,6 +1598,7 @@ impl AppState {
             stale_turns: Default::default(),
             tool_rows: Default::default(),
             asks: Default::default(),
+            headlines: Default::default(),
             turn_started: Default::default(),
             fresh_block: Default::default(),
             settings_open: false,
@@ -2899,8 +2906,34 @@ impl AppState {
             if let Some(live) = self.current.and_then(|id| self.sessions.get(&id)) {
                 let _ = live.session.set_mode(mode);
             }
+            // A question already waiting that the new mode allows is
+            // answered by it, as if it had been asked now.
+            if let Some(chat) = self.current {
+                if let Some((msg, block)) = self.allowed_by_mode(chat) {
+                    self.answer(chat, msg, block, Verdict::Allowed, cx);
+                    self.set_decider(chat, msg, block, Decider::Mode(mode.label().into()));
+                }
+            }
         }
         cx.notify();
+    }
+
+    /// The question `chat` waits on, when its mode now allows it without
+    /// asking: an edit in Edit automatically, anything with permissions
+    /// bypassed, a command the mode lets run (`auto_approves`).
+    fn allowed_by_mode(&self, chat: usize) -> Option<(usize, usize)> {
+        let ask = self.asks.get(&chat)?;
+        let mode = self.chat_mode(chat);
+        let edit = matches!(
+            ask.tool_name.as_str(),
+            "Edit" | "MultiEdit" | "Write" | "NotebookEdit"
+        );
+        let allowed = match mode.permission().cli_name() {
+            "bypassPermissions" => ask.tool_name != "ExitPlanMode",
+            "acceptEdits" if edit => true,
+            _ => self.auto_approves(chat, &ask.tool_name, &ask.input),
+        };
+        allowed.then_some((ask.msg, ask.block))
     }
 
     /// Shift+Tab.
@@ -5074,7 +5107,10 @@ impl AppState {
             let named = cx
                 .background_spawn(async move { crate::title::ask(&profile, &first) })
                 .await;
-            let Ok(title) = named else { return };
+            let title = match named {
+                Ok(t) => t,
+                Err(e) => return eprintln!("forge: chat {id} keeps its name: {e}"),
+            };
             let _ = this.update(cx, |s, cx| {
                 let still = s
                     .chats
@@ -5088,6 +5124,31 @@ impl AppState {
                     s.touch(id, cx);
                     cx.notify();
                 }
+            });
+        })
+        .detach();
+    }
+
+    /// Ask the model, apart from the chat, what Forge is doing about
+    /// `message`; kept while that reply still runs.
+    fn ask_headline(
+        &mut self,
+        id: usize,
+        profile: crate::endpoints::Profile,
+        message: String,
+        cx: &mut Context<Self>,
+    ) {
+        cx.spawn(async move |this, cx| {
+            let said = cx
+                .background_spawn(async move { crate::title::headline(&profile, &message) })
+                .await;
+            let _ = this.update(cx, |s, cx| match said {
+                Ok(h) if s.replies.contains_key(&id) && !s.headlines.contains_key(&id) => {
+                    s.headlines.insert(id, h);
+                    cx.notify();
+                }
+                Ok(_) => {}
+                Err(e) => eprintln!("forge: no headline for chat {id}: {e}"),
             });
         })
         .detach();
@@ -5728,14 +5789,14 @@ impl AppState {
                 } else {
                     first.to_string()
                 };
-                // Named after its first words for now; the model then names
-                // it (`title.rs`). With no model, it is Untitled N.
+                // Untitled N until the model names it (`title.rs`), and for
+                // good with no model: never your first words. The demo is
+                // named after them, as it plays without a model.
                 let profile = self.active_profile().cloned();
-                let title: String = match &profile {
-                    None if !demo_mode() => crate::title::untitled(
-                        self.chats.iter().map(|c| c.title.as_ref()),
-                    ),
-                    _ => first.chars().take(48).collect(),
+                let title: String = if demo_mode() {
+                    first.chars().take(48).collect()
+                } else {
+                    crate::title::untitled(self.chats.iter().map(|c| c.title.as_ref()))
                 };
                 self.chats
                     .insert(0, Chat::new(id, self.current_project, title.clone().into()));
@@ -5748,6 +5809,16 @@ impl AppState {
             }
         };
         self.screen = Screen::Chat;
+        // The working line says what Forge is doing about this message once
+        // the model has said it in a few words; until then, the step.
+        self.headlines.remove(&id);
+        if let Some(profile) = self
+            .active_profile()
+            .cloned()
+            .filter(|_| !demo_mode() && !text.trim().is_empty())
+        {
+            self.ask_headline(id, profile, text.clone(), cx);
+        }
         if let Some(c) = self.chat_mut(id) {
             c.messages.push(Message::User {
                 text: text.clone().into(),
@@ -6308,6 +6379,7 @@ impl AppState {
                         Ask {
                             request_id,
                             tool_use_id,
+                            tool_name,
                             input,
                             suggestions,
                             msg,

@@ -384,7 +384,7 @@ pub fn block(call: &ToolCall, at: &Where, t: &Theme) -> AnyElement {
     } else {
         let shown = lines[hidden..]
             .iter()
-            .map(|l| div().whitespace_nowrap().child(output_text(l, t)));
+            .map(|l| div().child(output_text(l, t)));
         out = out.children(shown);
         if hidden > 0 {
             // The cut-off top fades out, as in Forge.
