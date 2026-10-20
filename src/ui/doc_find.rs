@@ -120,7 +120,9 @@ fn snippet(hit: &Hit, t: &Theme) -> StyledText {
         } else {
             t.colors.text_body
         },
-        background_color: strong.then_some(t.colors.primary_tint),
+        // A highlighter's wash, as find-in-page marks a match: it stays
+        // visible on a selected row, whatever the theme selects with.
+        background_color: strong.then_some(t.extra.warning_tint),
         underline: None,
         strikethrough: None,
     };
@@ -175,7 +177,7 @@ impl Render for DocFind {
                     .px(t.space.md)
                     .py(t.space.xs + px(2.))
                     .cursor_pointer()
-                    .when(on, |d| d.bg(t.colors.primary_tint))
+                    .when(on, |d| crate::theme::selected(&t, d))
                     .when(!on, |d| d.hover(move |d| d.bg(hover)))
                     .child(
                         div()
