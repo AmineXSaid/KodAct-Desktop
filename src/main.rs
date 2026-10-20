@@ -31,6 +31,7 @@ mod greeting;
 mod health;
 mod highlight;
 mod history;
+mod knowledge;
 mod mermaid;
 mod modes;
 mod office;

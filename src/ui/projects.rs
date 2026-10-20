@@ -945,13 +945,15 @@ impl ProjectsView {
                             .children(rows),
                     ),
             );
-        // The page, and its rail on the right.
+        // The page, and its rail on the right; a file opened from the rail
+        // takes the rail's place in the side panel until it is closed.
+        let doc_open = self.state.read(cx).doc.is_some();
         div()
             .flex_1()
             .min_h_0()
             .flex()
             .child(page)
-            .child(self.rail.clone())
+            .when(!doc_open, |d| d.child(self.rail.clone()))
             .into_any_element()
     }
 }

@@ -9,6 +9,8 @@
 //!   the folder) or Only me (`FORGE.local.md`), read and edited in place.
 //!   Rules (CLAUDE.md and `.claude/rules`) stay on their own screen, a click
 //!   away.
+//! - **Knowledge** (`project_knowledge.rs`): reference files, Always or On
+//!   demand.
 
 use gpui::component::input::TextareaState;
 use gpui::{
@@ -29,6 +31,8 @@ pub struct ProjectRail {
     mine: bool,
     /// The instructions are being edited (the editor holds them).
     editing: bool,
+    /// The Knowledge card (`project_knowledge.rs`).
+    knowledge: Entity<super::project_knowledge::ProjectKnowledge>,
     _subs: Vec<Subscription>,
 }
 
@@ -39,10 +43,13 @@ impl ProjectRail {
                 "How Forge should work here: what the project is, its conventions, what to avoid…",
             )
         });
+        let knowledge =
+            cx.new(|cx| super::project_knowledge::ProjectKnowledge::new(state.clone(), window, cx));
         Self {
             _subs: vec![cx.observe(&state, |_, _, cx| cx.notify())],
             state,
             editor,
+            knowledge,
             mine: false,
             editing: false,
         }
@@ -94,6 +101,7 @@ fn part_color(kind: &str, t: &Theme) -> Hsla {
     match kind {
         "You" => t.colors.sky,
         "Local" => t.colors.marigold,
+        "Knowledge" => t.extra.success,
         _ => t.colors.primary,
     }
 }
@@ -129,6 +137,7 @@ fn budget(t: &Theme, brief: &Brief, project: &std::path::Path, window: Option<u6
         let what = match p.kind {
             "You" => "Yours, in every project",
             "Local" => "Only you, this computer",
+            "Knowledge" => "Knowledge set to Always",
             _ => "The project's",
         };
         div()
@@ -416,6 +425,7 @@ impl Render for ProjectRail {
             );
         rail.child(budget(&t, &brief, &project.path, window))
             .child(instructions)
+            .child(self.knowledge.clone())
             .into_any_element()
     }
 }

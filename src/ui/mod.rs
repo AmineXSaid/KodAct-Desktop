@@ -21,6 +21,7 @@ pub mod diagram_view;
 pub mod doc_changes;
 pub mod doc_comments;
 pub mod doc_find;
+pub mod project_knowledge;
 pub mod project_rail;
 pub mod doc_pane;
 pub mod dot_field;

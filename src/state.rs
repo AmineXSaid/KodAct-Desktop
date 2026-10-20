@@ -2038,6 +2038,14 @@ impl AppState {
         cx.notify();
     }
 
+    /// The local folder chat `id` works in (None for a remote one).
+    fn chat_project_dir(&self, id: usize) -> Option<std::path::PathBuf> {
+        let project = self.chats.iter().find(|c| c.id == id)?.project;
+        self.project(project)
+            .filter(|p| crate::remote::Remote::parse(&p.path).is_none())
+            .map(|p| p.path.clone())
+    }
+
     /// Read what every chat in project `id` gets (off the UI thread).
     pub fn load_project_brief(&mut self, id: usize, cx: &mut Context<Self>) {
         let Some(path) = self
@@ -2051,9 +2059,10 @@ impl AppState {
         if self.project_brief.as_ref().is_some_and(|(b, _)| *b != id) {
             self.project_brief = None;
         }
+        let budget = self.knowledge_budget();
         cx.spawn(async move |this, cx| {
             let brief = cx
-                .background_spawn(async move { crate::project_ctx::read(&path) })
+                .background_spawn(async move { crate::project_ctx::read(&path, budget) })
                 .await;
             let _ = this.update(cx, |s, cx| {
                 s.project_brief = Some((id, std::sync::Arc::new(brief)));
@@ -2061,6 +2070,85 @@ impl AppState {
             });
         })
         .detach();
+    }
+
+    /// What a project's Always knowledge may spend: a share of the window
+    /// of the model picked now.
+    fn knowledge_budget(&self) -> u64 {
+        self.active_profile()
+            .and_then(|p| p.context_window(self.health.get(&p.name)))
+            .map_or(crate::knowledge::DEFAULT_BUDGET, |w| {
+                (w as f32 * crate::knowledge::SHARE) as u64
+            })
+    }
+
+    /// Change project `id`'s knowledge off the UI thread (`knowledge.rs`),
+    /// then read the brief again; a failure says why.
+    fn knowledge_change(
+        &mut self,
+        id: usize,
+        change: impl FnOnce(&std::path::Path) -> Result<String, String> + Send + 'static,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(path) = self
+            .project(id)
+            .filter(|p| crate::remote::Remote::parse(&p.path).is_none())
+            .map(|p| p.path.clone())
+        else {
+            return self.show_toast("Knowledge is for projects on this computer, for now.", cx);
+        };
+        cx.spawn(async move |this, cx| {
+            let done = cx.background_spawn(async move { change(&path) }).await;
+            let _ = this.update(cx, |s, cx| {
+                match done {
+                    Ok(note) if !note.is_empty() => s.show_toast(note, cx),
+                    Ok(_) => {}
+                    Err(e) => s.show_toast(format!("Couldn't change the knowledge: {e}"), cx),
+                }
+                s.load_project_brief(id, cx);
+            });
+        })
+        .detach();
+    }
+
+    /// Add files to project `id`'s knowledge.
+    pub fn knowledge_add(&mut self, id: usize, paths: Vec<std::path::PathBuf>, cx: &mut Context<Self>) {
+        self.knowledge_change(
+            id,
+            move |p| {
+                crate::knowledge::add(p, &paths).map(|n| match n {
+                    0 => "Those files are in the knowledge already.".into(),
+                    1 => "Added to the knowledge, On demand: Forge reads it when it matters.".into(),
+                    n => format!("Added {n} files to the knowledge, On demand."),
+                })
+            },
+            cx,
+        );
+    }
+
+    /// Add a note you wrote to project `id`'s knowledge.
+    pub fn knowledge_add_text(&mut self, id: usize, title: String, text: String, cx: &mut Context<Self>) {
+        self.knowledge_change(
+            id,
+            move |p| crate::knowledge::add_text(p, &title, &text).map(|_| String::new()),
+            cx,
+        );
+    }
+
+    pub fn knowledge_set_always(&mut self, id: usize, rel: String, always: bool, cx: &mut Context<Self>) {
+        self.knowledge_change(
+            id,
+            move |p| crate::knowledge::set_always(p, &rel, always).map(|_| String::new()),
+            cx,
+        );
+    }
+
+    pub fn knowledge_remove(&mut self, id: usize, rel: String, cx: &mut Context<Self>) {
+        self.knowledge_change(
+            id,
+            move |p| crate::knowledge::remove(p, &rel).map(|_| String::new()),
+            cx,
+        );
     }
 
     /// Save project `id`'s instructions: shared (its FORGE.md) or yours
@@ -5246,11 +5334,27 @@ impl AppState {
                 return self.notice(id, e, true);
             }
         }
+        // A new conversation's first message carries the project's knowledge
+        // ahead of your words (`knowledge.rs`); a command doesn't.
+        let knowledge = (!resumable && !text.trim_start().starts_with('/'))
+            .then(|| self.chat_project_dir(id))
+            .flatten()
+            .and_then(|dir| crate::knowledge::block(&dir));
         let sent = self
             .sessions
             .get(&id)
             .map(|l| {
-                if attachments.is_empty() {
+                if let Some(k) = &knowledge {
+                    let mut content = crate::attach::content_blocks(
+                        &text,
+                        &attachments,
+                        l.profile.wire == crate::endpoints::Wire::Anthropic,
+                    );
+                    if let Some(blocks) = content.as_array_mut() {
+                        blocks.insert(0, serde_json::json!({ "type": "text", "text": k }));
+                    }
+                    l.session.send_content(content)
+                } else if attachments.is_empty() {
                     l.session.send(&text)
                 } else {
                     l.session.send_content(crate::attach::content_blocks(

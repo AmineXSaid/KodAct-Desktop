@@ -829,7 +829,17 @@ impl Render for Workspace {
         let main = if screen == Screen::Rules {
             main.child(self.rules.clone())
         } else if matches!(screen, Screen::Projects | Screen::Project(_)) {
-            main.child(self.projects.clone())
+            // A project page opens its knowledge files in the side panel too.
+            let doc_open = matches!(screen, Screen::Project(_)) && self.state.read(cx).doc.is_some();
+            main.child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .flex()
+                    .when(below, |d| d.flex_col())
+                    .child(div().flex_1().min_w_0().min_h_0().flex().child(self.projects.clone()))
+                    .when(doc_open, |d| d.children(pane)),
+            )
         } else if empty {
             main.child(
                 div()
