@@ -395,6 +395,12 @@ impl CommandPalette {
                 Box::new(OpenHooks),
             ),
             act(
+                "Open Plugins…",
+                "icons/puzzle.svg",
+                None,
+                Box::new(OpenPlugins),
+            ),
+            act(
                 "Open MCP servers…",
                 "icons/plug.svg",
                 None,

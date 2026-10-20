@@ -40,6 +40,8 @@ pub struct Composer {
     /// Where the press that just closed a menu happened: the click it ends
     /// in, on that menu's own button, must not open it again.
     dismissed_at: Option<gpui::Point<gpui::Pixels>>,
+    /// The "+" menu is open.
+    add_open: bool,
     /// Holds the keyboard while the model window is open (no search box),
     /// so the arrows move through it instead of the text.
     menu_focus: gpui::FocusHandle,
@@ -142,6 +144,7 @@ impl Composer {
             active: None,
             picker_was_open: false,
             dismissed_at: None,
+            add_open: false,
             menu_focus: cx.focus_handle(),
             ac_selected: 0,
             ac_closed_for: None,
@@ -449,6 +452,28 @@ impl Render for Composer {
             super::mode_menu::menu(&t, &state, window, cx, move |pos, cx| {
                 dismiss_modes(pos, false, cx)
             })
+        });
+        let me = cx.entity().downgrade();
+        let add_menu = self.add_open.then(|| {
+            let (close, out) = (me.clone(), me.clone());
+            super::add_menu::menu(
+                &t,
+                &state,
+                cx,
+                move |cx| {
+                    let _ = close.update(cx, |c, cx| {
+                        c.add_open = false;
+                        cx.notify();
+                    });
+                },
+                move |pos, cx| {
+                    let _ = out.update(cx, |c, cx| {
+                        c.dismissed_at = Some(pos);
+                        c.add_open = false;
+                        cx.notify();
+                    });
+                },
+            )
         });
         let query = self.filter.read(cx).value().to_string();
         let search = div()
@@ -851,24 +876,26 @@ impl Render for Composer {
                                     // Equal insets right and below, so send sits
                                     // square in the box's corner.
                                     .p(t.space.snug)
+                                    // "+": what to add, and the tools a reply may use.
                                     .child(
-                                        super::button::Button::outlined_icon(
-                                            "attach",
-                                            "icons/plus.svg",
-                                            format!(
-                                                "Attach files and images ({})",
-                                                super::shortcut("U")
-                                            ),
-                                        )
-                                        .large()
-                                        .on_click(
-                                            |_, window, cx| {
-                                                window.dispatch_action(
-                                                    Box::new(super::AttachFiles),
-                                                    cx,
+                                        div()
+                                            .relative()
+                                            .child(
+                                                super::button::Button::outlined_icon(
+                                                    "attach",
+                                                    "icons/plus.svg",
+                                                    "Add files, connectors and more",
                                                 )
-                                            },
-                                        ),
+                                                .large()
+                                                .on_click(cx.listener(|this, ev, _, cx| {
+                                                    if this.just_dismissed(ev) {
+                                                        return;
+                                                    }
+                                                    this.add_open = !this.add_open;
+                                                    cx.notify();
+                                                })),
+                                            )
+                                            .children(add_menu),
                                     )
                                     .child(div().flex_1())
                                     .child(send),

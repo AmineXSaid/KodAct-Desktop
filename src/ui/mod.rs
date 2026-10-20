@@ -33,6 +33,7 @@ pub mod dot_field;
 pub mod editor_kit;
 pub mod env_editor;
 pub mod file_card;
+pub mod add_menu;
 pub mod file_icon;
 pub mod file_icon_map;
 pub mod file_mark;
@@ -123,6 +124,7 @@ gpui::actions!(
         OpenAgents,
         OpenSkills,
         OpenHooks,
+        OpenPlugins,
         OpenMcpServers,
         OpenPermissions,
         OpenProfiles,

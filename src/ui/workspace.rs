@@ -1107,6 +1107,11 @@ impl Render for Workspace {
                     s.open_settings(crate::state::SettingsTab::Hooks, cx)
                 })
             }))
+            .on_action(cx.listener(|this, _: &OpenPlugins, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.open_settings(crate::state::SettingsTab::Plugins, cx)
+                })
+            }))
             .on_action(cx.listener(|this, _: &OpenMcpServers, _, cx| {
                 this.state.update(cx, |s, cx| {
                     s.open_settings(crate::state::SettingsTab::Mcp, cx)
