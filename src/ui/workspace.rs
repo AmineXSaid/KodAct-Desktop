@@ -1324,10 +1324,23 @@ impl Render for Workspace {
                         .flex()
                         .bg(t.extra.pane)
                         .map(|d| {
+                            // It slides out of its rail, and folds back into it.
                             if sidebar_open {
-                                d.child(self.sidebar.clone())
+                                d.child(super::motion::sidebar_slide(
+                                    self.sidebar.clone().into_any_element(),
+                                    t.size.rail,
+                                    t.size.sidebar,
+                                    "sidebar-open",
+                                    &t,
+                                ))
                             } else {
-                                d.child(super::sidebar::rail(&t, screen))
+                                d.child(super::motion::sidebar_slide(
+                                    super::sidebar::rail(&t, screen).into_any_element(),
+                                    t.size.sidebar,
+                                    t.size.rail,
+                                    "sidebar-close",
+                                    &t,
+                                ))
                             }
                         })
                         .child(main)

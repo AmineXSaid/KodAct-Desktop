@@ -27,6 +27,8 @@ pub struct Sidebar {
     /// The nav row under the pointer: only it shows its shortcut, so the
     /// labels keep their width (the tooltips name the shortcuts too).
     nav_hover: Option<&'static str>,
+    /// The chat row under the pointer: its wash eases in (`motion::hover_wash`).
+    row_hover: Option<usize>,
     _subs: Vec<Subscription>,
 }
 
@@ -105,6 +107,7 @@ impl Sidebar {
             renaming: None,
             menu_at: Default::default(),
             nav_hover: None,
+            row_hover: None,
             _subs: subs,
         }
     }
@@ -216,6 +219,7 @@ impl Sidebar {
 impl Render for Sidebar {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let nav_hover = self.nav_hover;
+        let row_hover = self.row_hover;
         let t = cx.theme().clone();
         let mut filter = Some(self.filter(&t, cx).into_any_element());
         let s = self.state.read(cx);
@@ -357,8 +361,29 @@ impl Render for Sidebar {
                         } else {
                             t.colors.text_muted
                         })
-                        .when(selected, |d| crate::theme::selected(&t, d))
-                        .when(!selected, |d| d.hover(move |st| st.bg(hover)))
+                        .relative()
+                        .when(selected, |d| {
+                            crate::theme::selected(&t, d).child(super::motion::active_bar(
+                                ("chat-bar", id),
+                                t.extra.accent,
+                                t.size.icon,
+                                &t,
+                            ))
+                        })
+                        .when(!selected && row_hover == Some(id), |d| {
+                            d.child(super::motion::hover_wash(("chat-wash", id), hover, &t))
+                        })
+                        .on_hover(cx.listener(move |this, on: &bool, _, cx| {
+                            let next = match (*on, this.row_hover) {
+                                (true, _) => Some(id),
+                                (false, Some(r)) if r == id => None,
+                                (false, other) => other,
+                            };
+                            if next != this.row_hover {
+                                this.row_hover = next;
+                                cx.notify();
+                            }
+                        }))
                         .child(status_mark(status, id, &t))
                         .map(|d| {
                             if editing {
@@ -718,7 +743,10 @@ impl Render for Sidebar {
                                 .cursor_pointer()
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(t.colors.text_strong)
-                                .hover(move |st| st.bg(hover))
+                                .relative()
+                                .when(nav_hover == Some("New chat"), |d| {
+                                    d.child(super::motion::hover_wash("nav-wash-new", hover, &t))
+                                })
                                 // The sidebar's one filled mark: the accent disc.
                                 .child(
                                     div()
@@ -729,11 +757,24 @@ impl Render for Sidebar {
                                         .justify_center()
                                         .rounded(t.radius.pill)
                                         .bg(t.extra.accent)
-                                        .child(icon(
-                                            "icons/plus.svg",
-                                            t.size.icon_xs,
-                                            t.extra.accent_fg,
-                                        )),
+                                        // Lifts on hover, and its plus turns a quarter.
+                                        .when(nav_hover == Some("New chat"), |d| {
+                                            d.shadow(t.elevation_popover())
+                                        })
+                                        .map(|d| {
+                                            let plus = icon(
+                                                "icons/plus.svg",
+                                                t.size.icon_xs,
+                                                t.extra.accent_fg,
+                                            );
+                                            if nav_hover == Some("New chat") {
+                                                d.child(super::motion::quarter_turn(
+                                                    plus, "new-chat-turn", &t,
+                                                ))
+                                            } else {
+                                                d.child(plus)
+                                            }
+                                        }),
                                 )
                                 .child(nav_label("New chat"))
                                 .when(nav_hover == Some("New chat"), |d| d.child(kbd(&t, shortcut("N"))))
@@ -781,7 +822,10 @@ impl Render for Sidebar {
                                     t.colors.text_muted
                                 })
                                 .when(projects_open, |d| crate::theme::selected(&t, d))
-                                .when(!projects_open, |d| d.hover(move |st| st.bg(hover)))
+                                .relative()
+                                .when(!projects_open && nav_hover == Some("Projects"), |d| {
+                                    d.child(super::motion::hover_wash("nav-wash-projects", hover, &t))
+                                })
                                 .child(icon(
                                     "icons/folder-open.svg",
                                     t.size.icon_sm,
@@ -814,7 +858,10 @@ impl Render for Sidebar {
                                     t.colors.text_muted
                                 })
                                 .when(rules_open, |d| crate::theme::selected(&t, d))
-                                .when(!rules_open, |d| d.hover(move |st| st.bg(hover)))
+                                .relative()
+                                .when(!rules_open && nav_hover == Some("Rules and memory"), |d| {
+                                    d.child(super::motion::hover_wash("nav-wash-rules", hover, &t))
+                                })
                                 .child(icon(
                                     "icons/list-todo.svg",
                                     t.size.icon_sm,

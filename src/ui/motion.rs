@@ -215,3 +215,94 @@ pub fn scrim<E: gpui::Styled + gpui::IntoElement + 'static>(
     })
     .into_any_element()
 }
+
+/// The sidebar opening out of its rail, or folding back into it: the width
+/// eases from `from` to `to` while what's inside keeps its own width, pinned
+/// to the left, so it slides out with the edge rather than being squeezed.
+/// Keyed by `id`: each open (or close) plays it again.
+pub fn sidebar_slide(
+    pane: gpui::AnyElement,
+    from: gpui::Pixels,
+    to: gpui::Pixels,
+    id: &'static str,
+    t: &crate::theme::Theme,
+) -> gpui::AnyElement {
+    use gpui::{div, prelude::*, AnimationExt as _};
+    let full = if from > to { from } else { to };
+    let opening = to > from;
+    div()
+        .relative()
+        .flex_none()
+        .h_full()
+        .overflow_hidden()
+        .child(div().absolute().top_0().bottom_0().left_0().w(full).flex().child(pane))
+        .with_animation(id, once(t.size.panel_in_ms), move |d, k| {
+            let d = d.w(from + (to - from) * k);
+            if opening {
+                d.opacity((0.4 + k).min(1.))
+            } else {
+                d
+            }
+        })
+        .into_any_element()
+}
+
+/// A row's hover wash easing in under its content, where `.hover()` would
+/// snap. Make it the row's first child; the row is `relative`.
+pub fn hover_wash(
+    id: impl Into<gpui::ElementId>,
+    color: gpui::Hsla,
+    t: &crate::theme::Theme,
+) -> gpui::AnyElement {
+    use gpui::{div, prelude::*, AnimationExt as _};
+    div()
+        .absolute()
+        .top_0()
+        .bottom_0()
+        .left_0()
+        .right_0()
+        .rounded(t.radius.button)
+        .bg(color)
+        .with_animation(id, once(t.motion_ms), |d, k| d.opacity(k))
+        .into_any_element()
+}
+
+/// The open chat's mark: an accent bar at the row's left edge that grows
+/// from its middle each time another chat is opened (keyed by `id`).
+pub fn active_bar(
+    id: impl Into<gpui::ElementId>,
+    color: gpui::Hsla,
+    height: gpui::Pixels,
+    t: &crate::theme::Theme,
+) -> gpui::AnyElement {
+    use gpui::{div, prelude::*, px, AnimationExt as _};
+    div()
+        .absolute()
+        .top_0()
+        .bottom_0()
+        .left(px(2.))
+        .flex()
+        .items_center()
+        .child(
+            div()
+                .w(px(3.))
+                .h(height)
+                .rounded_full()
+                .bg(color)
+                .with_animation(id, once(t.size.panel_in_ms), move |d, k| d.h(height * k)),
+        )
+        .into_any_element()
+}
+
+/// An icon turning a quarter as the pointer arrives (New chat's plus).
+pub fn quarter_turn(
+    icon: gpui::Svg,
+    id: impl Into<gpui::ElementId>,
+    t: &crate::theme::Theme,
+) -> gpui::AnyElement {
+    use gpui::{prelude::*, AnimationExt as _};
+    icon.with_animation(id, once(t.size.panel_in_ms), |s, k| {
+        s.with_transformation(gpui::Transformation::rotate(gpui::percentage(0.25 * k)))
+    })
+    .into_any_element()
+}
