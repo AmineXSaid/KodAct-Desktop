@@ -1132,6 +1132,11 @@ pub struct AppState {
     pub doc_text: bool,
     /// The cells picked in a workbook in the panel (anchor, other end).
     pub doc_pick: crate::ui::sheet_view::Pick,
+    /// The panel shows what its version changed from the one before.
+    pub doc_show_changes: bool,
+    /// Those changes, for the version they belong to (`doc_version_key`);
+    /// None inside while they could not be worked out.
+    pub doc_changes: Option<(SharedString, Option<crate::doc_versions::Changes>)>,
     copied_reset: Option<Task<()>>,
     /// A short message at the bottom of the window (stubs say what they would do).
     pub toast: Option<SharedString>,
@@ -1350,6 +1355,8 @@ impl AppState {
             doc_preview: None,
             doc_text: false,
             doc_pick: None,
+            doc_show_changes: false,
+            doc_changes: None,
             doc_sheet: 0,
             copied_reset: None,
             toast: None,
@@ -2631,6 +2638,71 @@ impl AppState {
             cx.notify();
             return;
         }
+        self.show_doc(file, cx);
+    }
+
+    /// The panel's file's versions in this chat (oldest first) and which
+    /// one it shows.
+    pub fn doc_versions(&self) -> (Vec<FileRef>, usize) {
+        let (Some(file), Some(chat)) = (&self.doc, self.chat()) else {
+            return (vec![], 0);
+        };
+        let all = crate::doc_versions::versions(chat, file);
+        let at = all
+            .iter()
+            .position(|v| v == file)
+            .unwrap_or(all.len().saturating_sub(1));
+        (all, at)
+    }
+
+    /// Step to the version `by` away (-1 the one before, +1 the one after).
+    pub fn step_doc_version(&mut self, by: isize, cx: &mut Context<Self>) {
+        let (all, at) = self.doc_versions();
+        let to = at as isize + by;
+        if let Some(v) = (to >= 0).then(|| all.get(to as usize)).flatten() {
+            self.show_doc(v.clone(), cx);
+        }
+    }
+
+    /// Show what this version changed, or the version itself.
+    pub fn toggle_doc_changes(&mut self, cx: &mut Context<Self>) {
+        self.doc_show_changes = !self.doc_show_changes;
+        if self.doc_show_changes {
+            self.load_doc_changes(cx);
+        }
+        cx.notify();
+    }
+
+    /// Work out what the panel's version changed from the one before, off
+    /// the UI thread.
+    fn load_doc_changes(&mut self, cx: &mut Context<Self>) {
+        let (all, at) = self.doc_versions();
+        let (Some(new), Some(old)) = (
+            all.get(at).cloned(),
+            at.checked_sub(1).and_then(|i| all.get(i).cloned()),
+        ) else {
+            self.doc_changes = None;
+            return;
+        };
+        let key = doc_version_key(&new);
+        if self.doc_changes.as_ref().is_some_and(|(k, _)| *k == key) {
+            return;
+        }
+        self.doc_changes = None;
+        cx.spawn(async move |this, cx| {
+            let found = cx
+                .background_spawn(async move { crate::doc_versions::changes(&old, &new) })
+                .await;
+            let _ = this.update(cx, |s, cx| {
+                s.doc_changes = Some((key, found));
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Open `file` in the panel, as it is (a version, or a file anew).
+    fn show_doc(&mut self, file: FileRef, cx: &mut Context<Self>) {
         self.doc_sheet = 0;
         self.doc_pick = None;
         if let (Some(_), Some(bytes)) = (file.office(), file.bytes.clone()) {
@@ -2677,6 +2749,9 @@ impl AppState {
             }
         }
         self.doc = Some(file);
+        if self.doc_show_changes {
+            self.load_doc_changes(cx);
+        }
         cx.notify();
     }
 
@@ -5832,6 +5907,15 @@ impl AppState {
     }
 }
 
+/// Which version of a file a card holds: its name and a key of its content.
+pub fn doc_version_key(f: &FileRef) -> SharedString {
+    let key = match &f.bytes {
+        Some(b) => crate::office_render::key(b),
+        None => crate::office_render::key(f.content.as_bytes()),
+    };
+    format!("{}#{key:x}", f.name).into()
+}
+
 /// A written document's card: Markdown, a diagram, an Office file or a PDF.
 fn file_card(name: String, ext: String, full: String, bytes: Vec<u8>) -> Option<FileRef> {
     {
@@ -6409,6 +6493,19 @@ fn demo_agents() -> Vec<Step> {
 
 /// The demo's planned task: a plan, its task list, a look in the browser
 /// and the files it made, which the side panel's tabs show.
+/// The demo plan, reworked: a sentence reworded, a step changed, one added.
+fn reworked_plan() -> String {
+    include_str!("../assets/docs/settings-migration-plan.md")
+        .replace(
+            "reads the old file once, writes the new one beside it, and keeps a backup.",
+            "reads the old file once, writes the new one beside it, and keeps a dated backup.",
+        )
+        .replace(
+            "4. Keep the old file as `settings.v1.backup.json` for a release.",
+            "4. Keep the old file as `settings.v1.backup.json` for two releases.\n5. Tell the person once, in a toast, that their settings moved.",
+        )
+}
+
 fn demo_plan() -> Vec<Step> {
     use serde_json::json;
     let file = |name: &str, path: &str, content: &str, bytes: Option<&'static [u8]>| {
@@ -6528,6 +6625,22 @@ fn script(prompt: &str) -> Vec<Step> {
     }
     if lower.contains("approv") {
         s.extend(demo_approvals());
+        s.push(Step::End { seconds: 4.8 });
+        return s;
+    }
+    // Asked to rework the plan: it writes the plan again, changed, so the
+    // panel has a second version to step to and compare.
+    if lower.contains("rework") {
+        s.extend(words(
+            "I reworked the plan: the backup stays two releases, and you hear once that your settings moved.",
+            Step::Say,
+        ));
+        s.push(Step::File(FileRef {
+            name: "settings-migration-plan.md".into(),
+            path: Some("docs/settings-migration-plan.md".into()),
+            content: reworked_plan().into(),
+            bytes: None,
+        }));
         s.push(Step::End { seconds: 4.8 });
         return s;
     }

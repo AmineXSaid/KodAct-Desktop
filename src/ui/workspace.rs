@@ -739,7 +739,21 @@ impl Render for Workspace {
                 below: s.doc_below,
                 from_panel: s.panel.is_some(),
                 text: s.doc_text,
+                version: {
+                    let (all, at) = s.doc_versions();
+                    (at, all.len().max(1))
+                },
+                show_changes: s.doc_show_changes,
             };
+            let doc_changes = s
+                .doc_changes
+                .as_ref()
+                .filter(|(k, _)| {
+                    s.doc
+                        .as_ref()
+                        .is_some_and(|f| crate::state::doc_version_key(f) == *k)
+                })
+                .map(|(_, c)| c);
             let (pane_width, pane_below) = (fit.width, fit.below);
             let read = s
                 .doc_preview
@@ -792,6 +806,7 @@ impl Render for Workspace {
                         read,
                         s.doc_sheet,
                         s.doc_pick,
+                        doc_changes,
                         &t,
                     )
                 })

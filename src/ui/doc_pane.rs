@@ -40,7 +40,15 @@ pub struct Fit {
     pub from_panel: bool,
     /// A document shows its text instead of its pages.
     pub text: bool,
+    /// Which version of the file this is, and how many the chat has.
+    pub version: (usize, usize),
+    /// The panel shows what this version changed.
+    pub show_changes: bool,
 }
+
+/// What this version changed: None while it is worked out, `Some(None)`
+/// when it cannot be.
+pub type ChangesRead<'a> = Option<&'a Option<crate::doc_versions::Changes>>;
 
 /// How wide the panel is when the session area is `main` wide: half for a
 /// document, more for a diagram, whose labels shrink with it.
@@ -59,8 +67,39 @@ pub fn render(
     read: Read,
     sheet: usize,
     pick: super::sheet_view::Pick,
+    changes: ChangesRead,
     t: &Theme,
 ) -> AnyElement {
+    // The version bar at the foot, when the chat has more than one version.
+    let (at, total) = fit.version;
+    let showing_changes = fit.show_changes && at > 0;
+    let summary = match changes {
+        Some(Some(crate::doc_versions::Changes::Text(p))) if showing_changes => {
+            super::doc_changes::summary(p)
+        }
+        Some(Some(crate::doc_versions::Changes::Cells(c))) if showing_changes => {
+            let n: usize = c.values().map(|m| m.len()).sum();
+            Some(format!("{n} cell{} changed", if n == 1 { "" } else { "s" }))
+        }
+        _ => None,
+    };
+    let bar_state = state.clone();
+    let footer = move || {
+        (total > 1).then(|| {
+            super::doc_changes::version_bar(
+                t,
+                bar_state.clone(),
+                at,
+                total,
+                showing_changes,
+                summary.clone(),
+            )
+        })
+    };
+    let changed_cells = match changes {
+        Some(Some(crate::doc_versions::Changes::Cells(c))) if showing_changes => Some(c),
+        _ => None,
+    };
     let did_copy = copied.as_deref() == Some(COPY_KEY);
     let (copier, saver, closer, fitter, opener) = (
         state.clone(),
@@ -219,6 +258,34 @@ pub fn render(
         );
 
     let body = div().id("doc-body").flex_1().min_h_0().overflow_y_scroll();
+    // What this version changed, in words (a workbook's show in its grid).
+    if showing_changes && changed_cells.is_none() {
+        let content: AnyElement = match changes {
+            Some(Some(crate::doc_versions::Changes::Text(p))) => {
+                super::doc_changes::text_view(p, t)
+            }
+            Some(_) => div()
+                .text_size(t.text.body_sm)
+                .text_color(t.colors.text_muted)
+                .child("These two versions cannot be compared.")
+                .into_any_element(),
+            None => div()
+                .text_size(t.text.body_sm)
+                .text_color(t.colors.text_muted)
+                .child("Working out what changed…")
+                .into_any_element(),
+        };
+        let body = body.child(
+            div()
+                .flex()
+                .justify_center()
+                .px(t.space.xxl)
+                .pt(t.space.xl + t.space.xs)
+                .pb(t.space.xxl * 2.)
+                .child(div().w_full().max_w(t.size.doc_measure).child(content)),
+        );
+        return finish_at(fit.below, file, header, body, footer(), fit.width, t);
+    }
     let body = if diagram {
         // The drawing, with its one-line description above it. At actual
         // size a drawing wider than the panel scrolls sideways.
@@ -277,11 +344,15 @@ pub fn render(
                         fit.below,
                         file,
                         header,
-                        body.child(
-                            div()
-                                .p(t.space.xl)
-                                .child(super::sheet_view::render(sheets, sheet, pick, state, t)),
-                        ),
+                        body.child(div().p(t.space.xl).child(super::sheet_view::render(
+                            sheets,
+                            sheet,
+                            pick,
+                            changed_cells,
+                            state,
+                            t,
+                        ))),
+                        footer(),
                         fit.width,
                         t,
                     )
@@ -294,6 +365,7 @@ pub fn render(
                             file,
                             header,
                             body.bg(t.extra.inset).child(pages_view(d, &fit, t)),
+                            footer(),
                             fit.width,
                             t,
                         );
@@ -379,7 +451,7 @@ pub fn render(
         )
     };
 
-    finish_at(fit.below, file, header, body, fit.width, t)
+    finish_at(fit.below, file, header, body, footer(), fit.width, t)
 }
 
 /// A document's pages as they print, each as wide as the panel allows on
@@ -466,6 +538,7 @@ fn finish_at(
     file: &FileRef,
     header: gpui::Div,
     body: gpui::Stateful<gpui::Div>,
+    footer: Option<gpui::Div>,
     width: f32,
     t: &Theme,
 ) -> AnyElement {
@@ -479,6 +552,7 @@ fn finish_at(
         .border_color(t.colors.border)
         .child(header)
         .child(body)
+        .children(footer)
         // In with a short ease-out: it fades and settles 16px from the right.
         .with_animation(
             SharedString::from(format!("doc-in-{}", file.name)),

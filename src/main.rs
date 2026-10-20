@@ -21,6 +21,7 @@ mod commands;
 mod context;
 mod diagnose;
 mod diagram;
+mod doc_versions;
 mod downloads;
 mod endpoints;
 mod export;
@@ -49,6 +50,7 @@ mod stubs;
 #[cfg(test)]
 mod system_md;
 mod term_session;
+mod text_diff;
 mod theme;
 mod ui;
 mod web_view;

@@ -73,6 +73,9 @@ pub fn render(
     sheets: &[Sheet],
     selected: usize,
     pick: Pick,
+    changed: Option<
+        &std::collections::HashMap<String, std::collections::HashMap<(usize, usize), String>>,
+    >,
     state: Entity<AppState>,
     t: &Theme,
 ) -> AnyElement {
@@ -85,6 +88,8 @@ pub fn render(
     };
     let hover = t.colors.hover;
     let line = t.colors.border;
+    // The cells this version changed, and what they held before.
+    let changed = changed.and_then(|c| c.get(&sheet.name));
     let gutter = 44.;
     let widths: Vec<f32> = (0..sheet.rows.first().map_or(0, |r| r.len()))
         .map(|c| width(sheet, c))
@@ -142,6 +147,7 @@ pub fn render(
             let bold = value.look.bold || (header && r == 0);
             let on = picked(pick, r, c);
             let st = state.clone();
+            let was = changed.and_then(|m| m.get(&(r, c))).cloned();
             line_el = line_el.child(
                 cell(*w)
                     .id(SharedString::from(format!("cell-{r}-{c}")))
@@ -156,6 +162,16 @@ pub fn render(
                         None => t.colors.text,
                     })
                     .when(frozen_edge, |d| d.border_b_2())
+                    .when_some(was, |d, was| {
+                        let tip: SharedString = if was.is_empty() {
+                            "New in this version".into()
+                        } else {
+                            format!("Was {was}").into()
+                        };
+                        d.bg(t.extra.warning_tint).tooltip(move |w, cx| {
+                            gpui::component::tooltip::Tooltip::new(tip.clone()).build(w, cx)
+                        })
+                    })
                     .when(on, |d| {
                         d.bg(t.colors.primary_tint).border_color(t.colors.primary)
                     })
