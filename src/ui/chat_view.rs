@@ -480,26 +480,43 @@ fn elapsed(seconds: u64) -> String {
     }
 }
 
-/// The step's words with a light sweeping across them: each letter lifts
-/// from muted to full ink as the sweep passes.
+/// The step's words with a light passing over them, as on Claude's own
+/// working line: the words rest in the muted ink, and a narrow band of
+/// light runs left to right, each letter catching it as it passes: white
+/// at night, a pale shine on paper.
 fn shimmer(label: &str, sweep: f32, t: &crate::theme::Theme) -> StyledText {
     let n = label.chars().count().max(1) as f32;
+    let base = t.colors.text_muted;
+    let strength = if t.is_dark { 1. } else { 0.6 };
     let mut runs = vec![];
     for (i, ch) in label.chars().enumerate() {
         let x = (i as f32 + 0.5) / n;
-        let lift = (-((x - sweep) / 0.16).powi(2)).exp();
+        let lift = (-((x - sweep) / 0.09).powi(2)).exp() * strength;
         let mut f = font(t.font_sans.clone());
         f.weight = FontWeight::MEDIUM;
         runs.push(TextRun {
             len: ch.len_utf8(),
             font: f,
-            color: t.colors.text_strong.opacity(0.5 + 0.5 * lift),
+            color: mix(base, gpui::white(), lift),
             background_color: None,
             underline: None,
             strikethrough: None,
         });
     }
     StyledText::new(label.to_string()).with_runs(runs)
+}
+
+/// `a` moved `k` (0..1) of the way to `b`, in RGB.
+fn mix(a: gpui::Hsla, b: gpui::Hsla, k: f32) -> gpui::Hsla {
+    let (a, b) = (a.to_rgb(), b.to_rgb());
+    let l = |x: f32, y: f32| x + (y - x) * k;
+    gpui::Rgba {
+        r: l(a.r, b.r),
+        g: l(a.g, b.g),
+        b: l(a.b, b.b),
+        a: l(a.a, b.a),
+    }
+    .into()
 }
 
 /// Forge's working line: the mark for the kind of work (`activity.rs`: a
