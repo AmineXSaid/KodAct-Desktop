@@ -3,7 +3,7 @@
 //! The ingot heats in the dark, from iron through ember and orange to
 //! almost white, and locks white hot with a flash, a shockwave and sparks.
 //! Then it cools as metal does, through orange and ember red to its own
-//! colours, and becomes the o of the wordmark.
+//! colours, and becomes the O of the wordmark, FORGE (`ingot::wordmark`).
 //!
 //! - [`Cut::First`] (no name saved yet), 8.3 s: the three lines slam in on
 //!   the beat ("Describe it. Forge builds it. You approve."), a viewfinder
@@ -327,7 +327,7 @@ impl Fit {
     }
 }
 
-/// The wordmark's layout: where "f", the cube and "rge" sit on the stage.
+/// The wordmark's layout: where "F", the cube and "RGE" sit on the stage.
 #[derive(Clone, Copy, Debug)]
 struct Word {
     x0: f32,
@@ -339,7 +339,9 @@ struct Word {
 
 impl Word {
     fn new(wf: f32, wr: f32) -> Self {
-        let (o, gap) = (WORD_SIZE * 0.66, WORD_SIZE * 0.02);
+        // The cube in the O's place, as the sidebar's wordmark sets it,
+        // centred on the capitals.
+        let (o, gap) = (ingot::o_box(WORD_SIZE), WORD_SIZE * 0.02);
         let x0 = STAGE_W / 2. - (wf + o + wr + gap * 2.) / 2.;
         Self {
             x0,
@@ -348,7 +350,7 @@ impl Word {
             gap,
             cube: Place {
                 x: x0 + wf + gap + o / 2.,
-                y: WORD_BASE - o * 0.42,
+                y: WORD_BASE - WORD_SIZE * ingot::WORD_CAP / 2.,
                 s: o,
             },
         }
@@ -772,7 +774,7 @@ fn paint_layer(
             }
         }
     }
-    // The wordmark: "f" and "rge" slide out of the cube; in the first cut
+    // The wordmark: "F" and "RGE" slide out of the cube; in the first cut
     // they part again for the naming screen.
     if t >= m.lockup && sc.iris < 0.3 {
         let k = out_cubic((t - m.lockup - 0.18) / 0.5)
@@ -782,16 +784,16 @@ fn paint_layer(
         let part = 160. * sc.away;
         let base = o.y + px(f.y(WORD_BASE));
         let fl = shape(
-            "f",
-            &fonts.display,
+            "F",
+            &fonts.word,
             WORD_SIZE * f.s,
             pal.paper.opacity(k),
             window,
         );
         paint_text(&fl, o.x + px(f.x(word.x0 + slide - part)), base, window, cx);
         let rge = shape(
-            "rge",
-            &fonts.display,
+            "RGE",
+            &fonts.word,
             WORD_SIZE * f.s,
             pal.paper.opacity(k),
             window,
@@ -906,7 +908,8 @@ fn paint_layer(
 #[derive(Clone)]
 struct Fonts {
     words: Font,
-    display: Font,
+    /// The wordmark's: the interface face in semibold, as `ingot::wordmark`.
+    word: Font,
     sans: Font,
     mono: Font,
 }
@@ -925,9 +928,9 @@ impl Render for Opener {
                 weight: FontWeight::BOLD,
                 ..gpui::font(t.font_sans.clone())
             },
-            display: Font {
-                weight: t.display_weight,
-                ..gpui::font(t.font_display.clone())
+            word: Font {
+                weight: FontWeight::SEMIBOLD,
+                ..gpui::font(t.font_sans.clone())
             },
             sans: gpui::font(t.font_sans.clone()),
             mono: gpui::font(t.font_mono.clone()),
@@ -939,9 +942,9 @@ impl Render for Opener {
         let bar = f32::from(t.size.titlebar);
         let f = Fit::new(bw, bh);
         let probe = |s: &str| {
-            f32::from(shape(s, &fonts.display, WORD_SIZE, self.palette.paper, window).width)
+            f32::from(shape(s, &fonts.word, WORD_SIZE, self.palette.paper, window).width)
         };
-        let word = Word::new(probe("f"), probe("rge"));
+        let word = Word::new(probe("F"), probe("RGE"));
         // The naming screen's hero cube, as `onboarding.rs` lays it out, on the stage.
         let steps_top = bar
             + f32::from(t.space.xl)

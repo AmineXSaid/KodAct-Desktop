@@ -8,7 +8,8 @@
 //! - [`mark`]: the cube at rest, at a corner (the isometric view).
 //! - [`turning`]: the cube while Forge works, a quarter turn at a time,
 //!   easing in and out with a short rest between. Reduced motion: at rest.
-//! - [`wordmark`]: "forge" in the display serif, its o the cube.
+//! - [`wordmark`]: FORGE in capitals, in the interface face, its O the
+//!   cube (as the VS Code extension sets it).
 
 use std::f32::consts::{FRAC_1_SQRT_2, FRAC_PI_2, FRAC_PI_4, SQRT_2, TAU};
 use std::time::Duration;
@@ -387,32 +388,45 @@ fn yaw_at(ms: f32, beat: f32) -> f32 {
 /// "forge" in the display serif at `height` px, its o the cube sitting on
 /// the baseline at the letters' x-height.
 pub fn wordmark(height: f32, t: &Theme) -> AnyElement {
+    // `height` is the type size. Capitals stand about 0.72 of it; the cube,
+    // in the O's place, is as tall as an O is (a hair over the capitals).
+    let cube = o_box(height);
     let letters = |s: &'static str| {
         div()
-            .font_family(t.font_display.clone())
-            .font_weight(t.display_weight)
+            .font_family(t.font_sans.clone())
+            .font_weight(gpui::FontWeight::SEMIBOLD)
             .text_size(px(height))
-            .line_height(px(height * 1.1))
+            .line_height(px(height))
             .text_color(t.colors.text_strong)
             .child(s)
     };
     div()
         .flex()
-        .items_baseline()
-        .child(letters("f"))
+        .items_center()
+        .child(letters("F"))
         .child(
-            // A box aligned to the baseline hangs below it by the cube's
-            // margin and more; lift it so the cube stands on the baseline,
-            // a hair over the x-height, as an o does.
+            // Centred on the capitals, which sit a little above the line's
+            // middle (the line keeps room below for descenders).
             div()
                 .relative()
-                .top(px(-height * 0.125))
-                .ml(px(-height * 0.05))
-                .mr(px(-height * 0.03))
-                .child(mark(height * 0.62)),
+                .top(px(-height * WORD_LIFT))
+                .mx(px(height * 0.02))
+                .child(mark(cube)),
         )
-        .child(letters("rge"))
+        .child(letters("RGE"))
         .into_any_element()
+}
+
+/// The capitals' height, and how far their middle sits above the line's,
+/// as fractions of the type size.
+pub(crate) const WORD_CAP: f32 = 0.72;
+const WORD_LIFT: f32 = 0.05;
+
+/// The box of the cube that stands for the O in FORGE set at `type_size`:
+/// the cube a little taller than the capitals, as a round O overshoots
+/// them. The opener's wordmark uses it too.
+pub(crate) fn o_box(type_size: f32) -> f32 {
+    type_size * WORD_CAP * 1.12 / FILL
 }
 
 #[cfg(test)]

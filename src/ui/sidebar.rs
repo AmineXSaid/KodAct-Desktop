@@ -508,16 +508,16 @@ impl Render for Sidebar {
                 .with_priority(2)
             });
 
-        // The project, at the top of the sheet: its tile, its name and where
-        // it stands (the branch, or where a remote one lives); a click opens
-        // the switcher under it.
+        // Forge's name heads the sheet, always. Working in a folder, the
+        // project sits under it: its tile, its name and where it stands (the
+        // branch, or where a remote one lives); a click opens the switcher.
         let switcher_open = s.switcher_open;
         let switcher = switcher_open.then(|| {
             gpui::deferred(super::workspace::project_switcher(
                 &self.state,
                 window,
                 cx,
-                px(34.) + t.space.md * 2. + t.space.xs,
+                px(28.) + t.space.sm * 2. + t.space.xs,
             ))
             .with_priority(1)
         });
@@ -544,8 +544,9 @@ impl Render for Sidebar {
                     .id("sidebar-project")
                     .flex()
                     .items_center()
-                    .gap(t.space.md)
-                    .p(t.space.md)
+                    .gap(t.space.sm)
+                    .px(t.space.md)
+                    .py(t.space.sm)
                     .border_b_1()
                     .border_color(t.colors.border)
                     .cursor_pointer()
@@ -555,7 +556,7 @@ impl Render for Sidebar {
                         &t,
                         &s.project,
                         &s.project_dir,
-                        px(34.),
+                        px(28.),
                     ))
                     .child(
                         div()
@@ -605,22 +606,23 @@ impl Render for Sidebar {
                     }),
             )
             .children(switcher);
-        // A plain chat has no folder: the head is Forge's own, as a chat
-        // app's is. Working in a folder, it is that project.
-        let header = if s.in_folder() {
-            header.into_any_element()
-        } else {
-            div()
-                .flex_none()
-                .flex()
-                .items_center()
-                .h(px(34.) + t.space.md * 2.)
-                .px(t.space.md)
-                .border_b_1()
-                .border_color(t.colors.border)
-                .child(super::ingot::wordmark(22., &t))
-                .into_any_element()
-        };
+        let brand = div()
+            .flex_none()
+            .flex()
+            .items_center()
+            .h(px(34.) + t.space.md * 2.)
+            .px(t.space.md)
+            .border_b_1()
+            .border_color(t.colors.border)
+            .child(super::ingot::wordmark(20., &t));
+        // A plain chat has no folder: Forge's name alone.
+        let header = div()
+            .flex_none()
+            .flex()
+            .flex_col()
+            .child(brand)
+            .when(s.in_folder(), |d| d.child(header))
+            .into_any_element();
 
         let sheet =
             div()
