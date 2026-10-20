@@ -32,6 +32,8 @@ enum Act {
     Close,
     Browse(Target, String),
     Open(Remote),
+    /// Another folder on the host you're connected to.
+    Change,
 }
 
 /// One row of the list. `act: None` shows it disabled, with its caption
@@ -181,7 +183,21 @@ impl RemotePicker {
                         rows.push(row);
                     }
                 }
-                let mut actions = vec![
+                let mut actions = vec![];
+                // Opened the wrong folder: pick another on the same host,
+                // still connected.
+                if let Some(r) = s.current_remote() {
+                    actions.push(
+                        Row::new("icons/folder-open.svg", "Open another folder…", Act::Change)
+                            .caption(format!(
+                                "On {}, from {}",
+                                r.target.label(),
+                                r.path.trim_end_matches('/').rsplit('/').next().unwrap_or(&r.path)
+                            ))
+                        .more(),
+                    );
+                }
+                actions.extend([
                     Row::new(
                         "icons/server.svg",
                         "Connect to SSH host…",
@@ -194,7 +210,7 @@ impl RemotePicker {
                         Act::Page(RemotePage::Wsl),
                     )
                     .more(),
-                ];
+                ]);
                 // In a dev container: rebuild it, or go back to the folder.
                 if s.in_devcontainer() {
                     actions.push(Row::new(
@@ -335,16 +351,28 @@ impl RemotePicker {
                         ));
                     }
                     if let Some(Ok(entries)) = &f.entries {
+                        let here = s.current_remote().is_some_and(|r| {
+                            r.target == f.target
+                                && r.path.trim_end_matches('/') == f.path.trim_end_matches('/')
+                        });
                         rows.push(
                             Row::new(
                                 "icons/folder-open.svg",
-                                "Open this folder",
+                                if here {
+                                    "Stay in this folder"
+                                } else {
+                                    "Open this folder"
+                                },
                                 Act::Open(Remote {
                                     target: f.target.clone(),
                                     path: f.path.clone(),
                                 }),
                             )
-                            .caption(f.path.clone()),
+                            .caption(if here {
+                                format!("{} · you're in it", f.path)
+                            } else {
+                                f.path.clone()
+                            }),
                         );
                         if f.path != "/" {
                             let up = match f.path.trim_end_matches('/').rsplit_once('/') {
@@ -360,11 +388,15 @@ impl RemotePicker {
                         for e in entries.iter().filter(|e| matches(&e.name)) {
                             if e.dir {
                                 let into = format!("{}/{}", f.path.trim_end_matches('/'), e.name);
-                                rows.push(Row::new(
+                                let here = s
+                                    .current_remote()
+                                    .is_some_and(|r| r.target == f.target && r.path == into);
+                                let row = Row::new(
                                     "icons/folder.svg",
                                     e.name.clone(),
                                     Act::Browse(f.target.clone(), into),
-                                ));
+                                );
+                                rows.push(if here { row.caption("You're here") } else { row });
                             } else {
                                 let mut r = Row::new("icons/file.svg", e.name.clone(), Act::Close);
                                 r.act = None;
@@ -397,6 +429,7 @@ impl RemotePicker {
             Act::Close => s.close_remote(cx),
             Act::Browse(t, p) => s.browse_remote(t, p, cx),
             Act::Open(r) => s.open_remote_folder(r, cx),
+            Act::Change => s.change_remote_folder(cx),
         });
     }
 

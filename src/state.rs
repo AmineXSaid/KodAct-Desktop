@@ -5969,11 +5969,38 @@ impl AppState {
 
     /// Work in a remote folder: it becomes the current project, and
     /// ForgeCLI is put there in the background.
+    /// Opened the wrong folder on a host: its folders, from the one above
+    /// this, to pick another. The connection stays up.
+    pub fn change_remote_folder(&mut self, cx: &mut Context<Self>) {
+        let Some(r) = self.current_remote() else {
+            return self.show_toast("Connect to a WSL distro, SSH host or container first.", cx);
+        };
+        let up = parent_dir(&r.path);
+        self.switcher_open = false;
+        self.sidebar_open = true;
+        if self.remote_menu.is_none() {
+            self.toggle_remote_menu(cx);
+        }
+        self.browse_remote(r.target, up, cx);
+    }
+
     pub fn open_remote_folder(&mut self, remote: crate::remote::Remote, cx: &mut Context<Self>) {
         self.remote_menu = None;
+        // Leaving a folder on the same host that you only looked into (not
+        // a project, no chats): it goes, so Recent isn't left with it.
+        let left = self.current_project;
+        let abandoned = self.project(left).is_some_and(|p| {
+            !p.saved
+                && p.path != remote.to_path()
+                && crate::remote::Remote::parse(&p.path)
+                    .is_some_and(|r| r.target == remote.target)
+        }) && !self.chats.iter().any(|c| c.project == left);
         let target = remote.target.clone();
         // Connecting doesn't make a project: Save as project does, if you want one.
         self.work_in_folder(remote.to_path(), cx);
+        if abandoned {
+            self.projects.retain(|p| p.id != left);
+        }
         if !self.remote_ready.contains_key(&target) {
             self.connect(target, None, cx);
         }
@@ -7041,6 +7068,17 @@ fn script(prompt: &str) -> Vec<Step> {
 /// The projects: the folder Forge was started on (if it was), then the
 /// ones you opened before (`projects.txt` in the config folder), then plain
 /// chats' place, which is no project of yours.
+/// The folder above a remote path (`~/work/api` → `~/work`); the top stays.
+fn parent_dir(path: &str) -> String {
+    let p = path.trim_end_matches('/');
+    match p.rsplit_once('/') {
+        Some(("", _)) => "/".into(),
+        Some((up, _)) => up.to_string(),
+        None if p.is_empty() => "/".into(),
+        None => p.to_string(),
+    }
+}
+
 fn initial_projects(launch: Option<&std::path::Path>, scratch: &std::path::Path) -> Vec<Project> {
     let project = |id, path: std::path::PathBuf, opened| Project {
         id,
@@ -7464,6 +7502,16 @@ fn mock_chats() -> Vec<Chat> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn another_folder_starts_one_up() {
+        assert_eq!(super::parent_dir("/root/work/api-server"), "/root/work");
+        assert_eq!(super::parent_dir("/root/work/"), "/root");
+        assert_eq!(super::parent_dir("/root"), "/");
+        assert_eq!(super::parent_dir("/"), "/");
+        assert_eq!(super::parent_dir("~/work"), "~");
+        assert_eq!(super::parent_dir("~"), "~");
+    }
+
     #[test]
     fn plain_chats_have_their_own_place_and_no_folder_of_yours() {
         let scratch = std::env::temp_dir().join("forge-scratch-test");

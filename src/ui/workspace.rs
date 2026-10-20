@@ -933,6 +933,9 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &ShowProjectMap, _, cx| {
                 this.state.update(cx, |s, cx| s.toggle_map(cx))
             }))
+            .on_action(cx.listener(|this, _: &ChangeRemoteFolder, _, cx| {
+                this.state.update(cx, |s, cx| s.change_remote_folder(cx))
+            }))
             .on_action(cx.listener(|this, _: &FindInFile, _, cx| {
                 this.state.update(cx, |s, cx| s.toggle_doc_find(cx))
             }))
@@ -1509,7 +1512,11 @@ pub fn project_switcher(
                 })
             })
     };
-    let mut list = div().flex().flex_col().gap(px(2.)).child(label("Projects"));
+    let mut list = div()
+        .flex()
+        .flex_col()
+        .gap(px(2.))
+        .when(!projects.is_empty(), |d| d.child(label("Projects")));
     // Rows rise in one after another as the menu opens.
     let mut i = 0;
     for p in &projects {
@@ -1536,7 +1543,9 @@ pub fn project_switcher(
             i += 1;
         }
     }
-    let (all, open) = (state.clone(), state.clone());
+    let (all, open, change) = (state.clone(), state.clone(), state.clone());
+    // Connected to a host: another folder there, without reconnecting.
+    let elsewhere = s.current_remote().map(|r| r.target.label());
     let menu = theme::fit_window(
         theme::popover(&t).id("switcher"),
         window,
@@ -1551,6 +1560,27 @@ pub fn project_switcher(
     .p(t.space.xs)
     .child(list)
     .child(theme::rule(&t).my(t.space.xs))
+    .children(elsewhere.map(|host| {
+        row("switch-change".into(), false)
+            .child(
+                div()
+                    .size(px(28.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(icon(
+                        "icons/folder-open.svg",
+                        t.size.icon_sm,
+                        t.colors.text_muted,
+                    )),
+            )
+            .child(
+                div()
+                    .text_color(t.colors.text)
+                    .child(format!("Open another folder on {host}…")),
+            )
+            .on_click(move |_, _, cx| change.update(cx, |s, cx| s.change_remote_folder(cx)))
+    }))
     .child(
         row("switch-all".into(), false)
             .child(

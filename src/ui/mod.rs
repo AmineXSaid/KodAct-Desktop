@@ -128,6 +128,7 @@ gpui::actions!(
         OpenEndpointsFile,
         ToggleFind,
         FindInFile,
+        ChangeRemoteFolder,
         NextPage,
         PreviousPage,
         ExportPdf,

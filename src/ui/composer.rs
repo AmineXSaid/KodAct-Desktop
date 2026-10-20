@@ -572,6 +572,8 @@ impl Render for Composer {
             .filter(|p| !p.scratch)
             .map(|p| p.name.clone())
             .unwrap_or_else(|| "Work in a folder".into());
+        let host = self.state.read(cx).current_remote().map(|r| r.target.label());
+        let remote = host.is_some();
         let project_button = quiet("project", false)
             .aria_label("Project")
             .text_color(t.colors.text_muted)
@@ -589,14 +591,22 @@ impl Render for Composer {
                     .child(project_name),
             )
             .child(super::button::chevron(&t, false))
-            .tooltip(|window, cx| {
-                gpui::component::tooltip::Tooltip::new(format!(
-                    "Choose the project ({})",
-                    super::shortcut("Shift P")
-                ))
+            .tooltip(move |window, cx| {
+                gpui::component::tooltip::Tooltip::new(match &host {
+                    Some(h) => format!("Open another folder on {h}"),
+                    None => format!("Choose the project ({})", super::shortcut("Shift P")),
+                })
                 .build(window, cx)
             })
-            .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenProjects), cx));
+            // On a host, the folder's own browser there (the connection
+            // stays); here, Projects.
+            .on_click(move |_, window, cx| {
+                if remote {
+                    window.dispatch_action(Box::new(ChangeRemoteFolder), cx)
+                } else {
+                    window.dispatch_action(Box::new(OpenProjects), cx)
+                }
+            });
         let focused = gpui::Focusable::focus_handle(self.input.read(cx), cx).is_focused(window);
 
         let meter = meter.map(|(m, model)| {

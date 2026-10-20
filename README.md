@@ -116,6 +116,13 @@ container** (the folder's `.devcontainer`) and **Attach to running
 container**, then a folder there. Inside a dev container, **Rebuild
 container** starts it afresh (image rebuilt, `postCreateCommand` run again)
 and **Reopen folder locally** goes back to the folder it came from.
+Connecting opens a folder to work in; it becomes a project only if you
+**Save as project** (or make one with **New project**). Opened the wrong
+folder? **Open another folder…** (the folder chip under the message box,
+the project switcher, this menu or the palette) shows the host's folders
+from the one above, yours marked, and keeps the connection; the folder you
+leave goes if it has no chats. **Close remote connection** goes back to
+where Forge started: its folder, else a plain chat.
 A chat in a remote project runs its ForgeCLI on that machine, so its tools,
 shell, git and files are the remote's; this app stays the UI
 (`src/remote.rs`).

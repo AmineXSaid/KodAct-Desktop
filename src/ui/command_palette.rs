@@ -477,6 +477,15 @@ impl CommandPalette {
                 ),
             );
         }
+        // Connected to a host: another folder there, still connected.
+        if let Some(r) = s.current_remote() {
+            out.push(act(
+                &format!("Open another folder on {}…", r.target.label()),
+                "icons/folder-open.svg",
+                None,
+                Box::new(ChangeRemoteFolder),
+            ));
+        }
         // The file beside the chat: find in it, page through it, export it.
         if let Some(f) = s.doc.as_ref() {
             out.push(act(
