@@ -485,17 +485,63 @@ impl Render for Sidebar {
             }
         }
         if !any {
-            list = list.child(
-                div()
-                    .px(t.space.md)
-                    .py(t.space.lg)
-                    .text_color(t.colors.text_muted)
-                    .child(if q.is_empty() {
-                        "Chats you start appear here."
-                    } else {
-                        "No chat matches."
-                    }),
-            );
+            // Headed like the groups that replace it, then what to do.
+            let (title, hint): (&str, SharedString) = if q.is_empty() {
+                (
+                    "No chats yet",
+                    format!("Ask anything in the box, or press {} for a new chat.", shortcut("N")).into(),
+                )
+            } else {
+                ("No chat matches", "Try fewer or other words.".into())
+            };
+            list = list
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .px(t.space.md)
+                        .pt(t.space.lg)
+                        .pb(t.space.xs)
+                        .text_size(t.text.caption)
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(t.colors.text_muted)
+                        .child(div().flex_none().child("Chats"))
+                        .child(div().flex_1().h(px(1.)).mx(t.space.sm).bg(t.colors.border)),
+                )
+                .child(
+                    div()
+                        .mx(t.space.sm)
+                        .mt(t.space.sm)
+                        .p(t.space.md)
+                        .flex()
+                        .gap(t.space.sm)
+                        .rounded(t.radius.button)
+                        .border_1()
+                        .border_dashed()
+                        .border_color(t.colors.border)
+                        .child(icon("icons/message-square.svg", t.size.icon, t.colors.text_muted))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .flex()
+                                .flex_col()
+                                .gap(t.space.xs)
+                                .child(
+                                    div()
+                                        .text_size(t.text.body_sm)
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .text_color(t.colors.text)
+                                        .child(title),
+                                )
+                                .child(
+                                    div()
+                                        .text_size(t.text.caption)
+                                        .text_color(t.colors.text_muted)
+                                        .child(hint),
+                                ),
+                        ),
+                );
         }
 
         // The open chat menu, anchored where it was asked for, over everything.
@@ -700,17 +746,23 @@ impl Render for Sidebar {
                             div()
                                 .flex()
                                 .items_center()
-                                .gap(t.space.xs)
+                                .gap(t.space.sm)
                                 .h(t.size.row)
-                                .pl(t.space.md)
+                                .px(t.space.md)
                                 .rounded(t.radius.button)
                                 .child(icon(
                                     "icons/search.svg",
                                     t.size.icon_sm,
                                     t.colors.text_muted,
                                 ))
+                                // In line with the rows around it: their text
+                                // size, no inset of its own.
                                 .child(div().flex_1().child(
-                                    Input::new(&self.search).appearance(false).cleanable(true),
+                                    Input::new(&self.search)
+                                        .appearance(false)
+                                        .cleanable(true)
+                                        .px_0()
+                                        .text_size(t.text.body_sm),
                                 )),
                         )
                         .child(
