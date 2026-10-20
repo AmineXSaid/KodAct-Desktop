@@ -43,6 +43,7 @@ mod plugin;
 mod profile;
 mod project_ctx;
 mod project_memory;
+mod project_share;
 mod remote;
 mod rules;
 mod secrets;

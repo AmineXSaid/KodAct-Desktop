@@ -13,6 +13,8 @@
 //!   demand.
 //! - **Memory** (`project_memory.rs`): what Forge has learned there.
 //! - **GitHub** (`project_github.rs`): the repository, live.
+//! - **Defaults** (`project_defaults.rs`): the project's model and mode.
+//! - **Share** (`project_sharing.rs`): its setup, with the repo or a file.
 
 use gpui::component::input::TextareaState;
 use gpui::{
@@ -39,6 +41,8 @@ pub struct ProjectRail {
     memory: Entity<super::project_memory::ProjectMemory>,
     /// The repository card (`project_github.rs`).
     github: Entity<super::project_github::ProjectGithub>,
+    /// The Share card (`project_sharing.rs`).
+    sharing: Entity<super::project_sharing::ProjectSharing>,
     _subs: Vec<Subscription>,
 }
 
@@ -53,6 +57,7 @@ impl ProjectRail {
             cx.new(|cx| super::project_knowledge::ProjectKnowledge::new(state.clone(), window, cx));
         let memory = cx.new(|cx| super::project_memory::ProjectMemory::new(state.clone(), window, cx));
         let github = cx.new(|cx| super::project_github::ProjectGithub::new(state.clone(), window, cx));
+        let sharing = cx.new(|cx| super::project_sharing::ProjectSharing::new(state.clone(), cx));
         Self {
             _subs: vec![cx.observe(&state, |_, _, cx| cx.notify())],
             state,
@@ -60,6 +65,7 @@ impl ProjectRail {
             knowledge,
             memory,
             github,
+            sharing,
             mine: false,
             editing: false,
         }
@@ -257,6 +263,7 @@ impl Render for ProjectRail {
             .active_profile()
             .and_then(|p| p.context_window(s.health.get(&p.name)));
         let rules = brief.rules;
+        let defaults = super::project_defaults::card(&t, s, id, self.state.clone());
 
         // Instructions: Shared or Only me, shown, or edited in place.
         let mine = self.mine;
@@ -440,6 +447,8 @@ impl Render for ProjectRail {
             .child(self.knowledge.clone())
             .child(self.memory.clone())
             .child(self.github.clone())
+            .child(defaults)
+            .child(self.sharing.clone())
             .into_any_element()
     }
 }

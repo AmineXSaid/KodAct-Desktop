@@ -23,6 +23,8 @@ pub mod doc_comments;
 pub mod doc_find;
 pub mod new_project;
 pub mod project_github;
+pub mod project_defaults;
+pub mod project_sharing;
 pub mod project_knowledge;
 pub mod project_memory;
 pub mod project_rail;

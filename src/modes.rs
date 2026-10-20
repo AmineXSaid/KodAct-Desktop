@@ -53,6 +53,21 @@ impl ModeId {
         ModeId::Bypass,
     ];
 
+    /// How a project keeps it (`projects.json`).
+    pub fn key(self) -> &'static str {
+        match self {
+            ModeId::Expert => "expert",
+            ModeId::Manual => "manual",
+            ModeId::AcceptEdits => "accept_edits",
+            ModeId::Plan => "plan",
+            ModeId::Bypass => "bypass",
+        }
+    }
+
+    pub fn from_key(key: &str) -> Option<ModeId> {
+        ModeId::ALL.into_iter().find(|m| m.key() == key)
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             ModeId::Expert => "Expert",

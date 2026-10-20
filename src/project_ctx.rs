@@ -34,6 +34,10 @@ pub struct Brief {
     pub knowledge: crate::knowledge::Knowledge,
     /// What Forge has learned there (`project_memory.rs`).
     pub memory: String,
+    /// Its setup files (`project_share.rs`), and how many git would commit
+    /// (None: not a repository).
+    pub setup_files: usize,
+    pub setup_uncommitted: Option<usize>,
 }
 
 impl Brief {
@@ -100,6 +104,13 @@ pub fn read(project: &Path, budget: u64, memory_on: bool) -> Brief {
         rules: crate::rules::scan(project, home.as_deref()).sources.len(),
         knowledge,
         memory,
+        // What you'd recognise: the instructions and the knowledge files
+        // (not Forge's own list and compiled block).
+        setup_files: crate::project_share::setup_files(project, false)
+            .iter()
+            .filter(|f| !f.starts_with(".forge/knowledge."))
+            .count(),
+        setup_uncommitted: crate::project_share::uncommitted(project, false),
     }
 }
 

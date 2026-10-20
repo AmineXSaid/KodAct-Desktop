@@ -355,7 +355,10 @@ pub fn project_meta(chats: usize, current: bool, opened_minutes_ago: u32) -> Str
         if current {
             "open now".to_string()
         } else {
-            format!("opened {} ago", ago(opened_minutes_ago))
+            match opened_minutes_ago {
+                0 => "opened just now".to_string(),
+                m => format!("opened {} ago", ago(m)),
+            }
         }
     )
 }

@@ -772,6 +772,10 @@ pub struct Project {
     /// On your Projects page. The folder Forge was started on is a
     /// project for that run without joining the list, unless you saved it.
     pub listed: bool,
+    /// The model (a profile's name) opening the project picks, and the
+    /// mode its new chats start in; None: yours.
+    pub model: Option<String>,
+    pub default_mode: Option<ModeId>,
     /// You made it a project (Open folder…, Save as project). A remote
     /// folder you connected to is worked in without becoming one.
     pub saved: bool,
@@ -797,6 +801,8 @@ impl Project {
             opened_at: now,
             memory_on: true,
             listed: saved,
+            model: None,
+            default_mode: None,
             saved,
             scratch: false,
         }
@@ -814,6 +820,8 @@ impl Project {
             opened: self.opened_at,
             memory_on: self.memory_on,
             listed: self.listed,
+            model: self.model.clone(),
+            mode: self.default_mode.map(|m| m.key().to_string()),
         }
     }
 
@@ -834,6 +842,8 @@ impl Project {
         }
         self.memory_on = r.memory_on;
         self.listed |= r.listed;
+        self.model = r.model.clone();
+        self.default_mode = r.mode.as_deref().and_then(ModeId::from_key);
     }
 }
 
@@ -868,6 +878,10 @@ struct ProjectRecord {
     memory_on: bool,
     #[serde(default = "yes")]
     listed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    mode: Option<String>,
 }
 
 fn yes() -> bool {
@@ -2052,6 +2066,13 @@ impl AppState {
         if keep {
             self.save_projects(cx);
         }
+        // The project's model, when it has one you still have.
+        let model = self.project(id).and_then(|p| p.model.clone());
+        if let Some(m) = model {
+            if self.active_profile().is_some_and(|p| p.name != m) {
+                self.select_profile(&m, cx);
+            }
+        }
         if self.chat().is_some_and(|c| c.project != id) {
             self.current = None;
             self.sync_mode();
@@ -2159,6 +2180,102 @@ impl AppState {
                     } else {
                         format!("Switched to {branch}.")
                     }
+                })
+            },
+            cx,
+        );
+    }
+
+    /// Project `id`'s model and mode (None: yours).
+    pub fn set_project_defaults(
+        &mut self,
+        id: usize,
+        model: Option<String>,
+        mode: Option<ModeId>,
+        cx: &mut Context<Self>,
+    ) {
+        self.edit_project(id, cx, |p| {
+            p.model = model.clone();
+            p.default_mode = mode;
+        });
+        if let Some(m) = model {
+            if self.current_project == id {
+                self.select_profile(&m, cx);
+            }
+        }
+        if self.current.is_none() {
+            self.sync_mode();
+        }
+    }
+
+    /// Run a sharing step for project `id` off the UI thread, say how it
+    /// went, and read the page again.
+    fn share_step(
+        &mut self,
+        id: usize,
+        step: impl FnOnce(&std::path::Path) -> Result<String, String> + Send + 'static,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(path) = self
+            .project(id)
+            .filter(|p| crate::remote::Remote::parse(&p.path).is_none())
+            .map(|p| p.path.clone())
+        else {
+            return;
+        };
+        cx.spawn(async move |this, cx| {
+            let done = cx.background_spawn(async move { step(&path) }).await;
+            let _ = this.update(cx, |s, cx| {
+                match done {
+                    Ok(note) => s.show_toast(note, cx),
+                    Err(e) => s.show_toast(format!("Couldn't share it: {e}"), cx),
+                }
+                s.load_project_brief(id, cx);
+                s.load_repo(id, cx);
+            });
+        })
+        .detach();
+    }
+
+    /// Commit project `id`'s setup with its repository.
+    pub fn share_commit(&mut self, id: usize, memory: bool, cx: &mut Context<Self>) {
+        self.share_step(id, move |p| crate::project_share::commit(p, memory), cx);
+    }
+
+    /// Export project `id`'s setup as a `.forgeproject` in Downloads.
+    pub fn share_export(&mut self, id: usize, memory: bool, cx: &mut Context<Self>) {
+        let Some(dir) = crate::downloads::dir() else {
+            return self.show_toast("Could not find your Downloads folder.", cx);
+        };
+        let Some(p) = self.project(id) else { return };
+        let (name, description) = (p.name.to_string(), p.description.to_string());
+        self.share_step(
+            id,
+            move |path| {
+                crate::project_share::export(path, &name, &description, memory, &dir).map(|f| {
+                    format!(
+                        "Saved to Downloads as {}. Whoever imports it gets this project's setup.",
+                        f.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+                    )
+                })
+            },
+            cx,
+        );
+    }
+
+    /// Import a `.forgeproject` into project `id`.
+    pub fn share_import(&mut self, id: usize, file: std::path::PathBuf, cx: &mut Context<Self>) {
+        self.share_step(
+            id,
+            move |path| {
+                crate::project_share::import(&file, path).map(|r| match (r.added.len(), r.kept.len()) {
+                    (0, 0) => "That setup was empty.".to_string(),
+                    (a, 0) => format!("Imported {a} file{}.", if a == 1 { "" } else { "s" }),
+                    (a, k) => format!(
+                        "Imported {a} file{}; kept {k} this project already had ({}).",
+                        if a == 1 { "" } else { "s" },
+                        r.kept.join(", ")
+                    ),
                 })
             },
             cx,
@@ -2630,10 +2747,15 @@ impl AppState {
 
     /// The mode for the chat now showing: what it kept, else the setting's.
     fn sync_mode(&mut self) {
+        // A new chat starts in its project's mode, when it has one.
+        let start = self
+            .project(self.current_project)
+            .and_then(|p| p.default_mode)
+            .unwrap_or(self.default_mode);
         self.mode = self
             .current
             .and_then(|id| self.kept_modes.get(&id).copied())
-            .unwrap_or_else(|| crate::modes::initial(self.default_mode, self.bypass_allowed));
+            .unwrap_or_else(|| crate::modes::initial(start, self.bypass_allowed));
     }
 
     fn keep_mode(&mut self) {
@@ -7926,6 +8048,8 @@ fn parse_projects(json: Option<&str>, old: Option<&str>) -> Vec<ProjectRecord> {
             opened: 0,
             memory_on: true,
             listed: true,
+            model: None,
+            mode: None,
         })
         .collect()
 }

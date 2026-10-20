@@ -105,6 +105,43 @@ Page Up/Down and Ctrl+Home/End move through the list.
 `forge.autoApproveSafeCommands: false` in the settings file makes every
 command ask, in every mode.
 
+## Projects
+
+A project is a folder Forge works in, with its own chats, instructions,
+knowledge and memory. **New project** opens a folder, clones one from
+GitHub, or starts a fresh one in `~/Forge Projects` from a template (Blank,
+Code, Writing, Research, Data). The Projects page lists them in All,
+Starred and Archived, searched and sorted; a project's name and description
+are edited in place on its page. Plain chats (no folder) have their own
+place and memory.
+
+A project's page has a rail on the right:
+
+- **What every chat gets**: the instructions, knowledge and memory that
+  load before you type, each with its token cost, against the model's
+  window.
+- **Instructions**: Shared (`FORGE.md`, kept with the folder) or Only me
+  (`FORGE.local.md`), edited in place.
+- **Knowledge**: reference files (copied into `.forge/knowledge/`, or the
+  project's own files where they are), each Always (its text goes into
+  every new chat, within a share of the window) or On demand (Forge reads
+  it when it matters). Drop files on the card, add them, or write a note;
+  a click opens one in the side panel.
+- **Memory**: what Forge learns there, in `.forge/memory.md`, by topic.
+  Each reply that changes it says so ("Remembered … · Undo"); facts can be
+  forgotten one by one, the file edited, the memory turned off.
+- **GitHub**: the repository live: branch (switch or make one), ahead and
+  behind with Pull, changes; open pull requests with their checks, issues
+  and the latest workflow run, through `gh` or GitHub's API. **Ask Forge**
+  starts a chat that reviews a PR, works on an issue or fixes a failing run.
+- **Defaults**: the model opening the project picks, and the mode its new
+  chats start in.
+- **Share**: commit the setup (shared instructions, knowledge, optionally
+  memory; never your own instructions) with the repository, or export it
+  as a `.forgeproject` file that anyone can import.
+
+A chat's menu moves it to another project.
+
 ## Remote development
 
 As in VS Code, the indicator at the left of the status bar says where the
