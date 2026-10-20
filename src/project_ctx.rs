@@ -32,6 +32,8 @@ pub struct Brief {
     pub rules: usize,
     /// Its knowledge (`knowledge.rs`), compiled for new chats.
     pub knowledge: crate::knowledge::Knowledge,
+    /// What Forge has learned there (`project_memory.rs`).
+    pub memory: String,
 }
 
 impl Brief {
@@ -57,8 +59,9 @@ pub fn shared_file(project: &Path) -> PathBuf {
 }
 
 /// Read what loads for `project` and its two instruction files, and
-/// compile its knowledge within `budget` tokens.
-pub fn read(project: &Path, budget: u64) -> Brief {
+/// compile its knowledge within `budget` tokens. `memory_on`: its memory
+/// goes into new chats too.
+pub fn read(project: &Path, budget: u64, memory_on: bool) -> Brief {
     let read = |p: &Path| std::fs::read_to_string(p).unwrap_or_default();
     let mut parts: Vec<Part> = crate::forge_files::memory_files(project)
         .into_iter()
@@ -70,6 +73,14 @@ pub fn read(project: &Path, budget: u64) -> Brief {
         })
         .collect();
     let knowledge = crate::knowledge::compile(project, budget);
+    let memory = crate::project_memory::read(project);
+    if memory_on && !memory.trim().is_empty() {
+        parts.push(Part {
+            kind: "Memory",
+            path: crate::project_memory::path(project),
+            tokens: tokens(&memory),
+        });
+    }
     if knowledge.included_tokens > 0 {
         parts.push(Part {
             kind: "Knowledge",
@@ -88,6 +99,7 @@ pub fn read(project: &Path, budget: u64) -> Brief {
         mine_path,
         rules: crate::rules::scan(project, home.as_deref()).sources.len(),
         knowledge,
+        memory,
     }
 }
 
@@ -118,7 +130,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         // Nothing yet: the shared file would be a new FORGE.md.
-        let b = read(&dir, 1000);
+        let b = read(&dir, 1000, true);
         assert_eq!(b.shared_path, dir.join("FORGE.md"));
         assert!(b.shared.is_empty() && b.mine.is_empty());
         // AGENTS.md is what loads when there is no FORGE.md: edit that.
@@ -128,7 +140,7 @@ mod tests {
         // Written, counted, and removed when emptied.
         write(&dir.join("FORGE.md"), "Answer in French.\n\n").unwrap();
         write(&dir.join("FORGE.local.md"), "I review on Fridays.").unwrap();
-        let b = read(&dir, 1000);
+        let b = read(&dir, 1000, true);
         assert_eq!(b.shared, "Answer in French.\n");
         let project: Vec<_> = b.parts.iter().filter(|p| p.kind != "You").collect();
         assert_eq!(project.len(), 2, "{:?}", b.parts);

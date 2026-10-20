@@ -53,6 +53,8 @@ pub struct ItemContext {
     pub versions_open: bool,
     /// Diagrams showing their source (`AppState::diagram_code`).
     pub sources: std::sync::Arc<std::collections::HashSet<SharedString>>,
+    /// What the newest turn changed in the project's memory, under its reply.
+    pub memory: Option<crate::state::MemoryChange>,
 }
 
 pub fn render(m: &Message, cx: &ItemContext, t: &Theme) -> AnyElement {
@@ -187,7 +189,8 @@ fn turn_footer(
                 }),
             )
         });
-    div()
+    let memory = cx.memory.as_ref().map(|m| memory_line(m, chat, cx.state.clone(), t));
+    let row = div()
         .group(group)
         .flex()
         .items_center()
@@ -204,7 +207,72 @@ fn turn_footer(
                         gpui::component::tooltip::Tooltip::new(tip.clone()).build(w, cx)
                     })
                 }),
+        );
+    match memory {
+        Some(line) => div()
+            .flex()
+            .flex_col()
+            .gap(t.space.xs)
+            .child(row)
+            .child(line)
+            .into_any_element(),
+        None => row.into_any_element(),
+    }
+}
+
+/// Under the newest reply, when it changed the project's memory: what it
+/// remembered or forgot, every fact in the tooltip, and Undo.
+fn memory_line(
+    m: &crate::state::MemoryChange,
+    chat: usize,
+    state: Entity<AppState>,
+    t: &Theme,
+) -> AnyElement {
+    let quote = |f: &str| {
+        let f: String = f.chars().take(60).collect();
+        format!("“{f}”")
+    };
+    let text = match (m.added.first(), m.removed.first()) {
+        (Some(a), _) if m.added.len() == 1 => format!("Remembered {}", quote(a)),
+        (Some(_), _) => format!("Remembered {} things", m.added.len()),
+        (None, Some(r)) if m.removed.len() == 1 => format!("Forgot {}", quote(r)),
+        _ => format!("Forgot {} things", m.removed.len()),
+    };
+    let tip: SharedString = m
+        .added
+        .iter()
+        .map(|f| format!("+ {f}"))
+        .chain(m.removed.iter().map(|f| format!("− {f}")))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .into();
+    div()
+        .id(SharedString::from(format!("memory-line-{chat}")))
+        .flex()
+        .items_center()
+        .gap(t.space.xs)
+        .text_size(t.text.caption)
+        .text_color(t.colors.text_muted)
+        .child(icon("icons/brain.svg", t.size.icon_xs, t.colors.coral))
+        .child(
+            div()
+                .min_w_0()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .child(text),
         )
+        .child(div().text_color(t.colors.text_subtle).child("·"))
+        .child(
+            div()
+                .id(SharedString::from(format!("memory-undo-{chat}")))
+                .cursor_pointer()
+                .text_color(t.colors.text)
+                .hover(|st| st.underline())
+                .child("Undo")
+                .on_click(move |_, _, cx| state.update(cx, |s, cx| s.undo_memory(chat, cx))),
+        )
+        .tooltip(move |w, cx| gpui::component::tooltip::Tooltip::new(tip.clone()).build(w, cx))
         .into_any_element()
 }
 

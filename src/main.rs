@@ -41,6 +41,7 @@ mod palette_check;
 mod plugin;
 mod profile;
 mod project_ctx;
+mod project_memory;
 mod remote;
 mod rules;
 mod secrets;

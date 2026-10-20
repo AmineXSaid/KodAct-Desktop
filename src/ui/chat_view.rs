@@ -377,6 +377,14 @@ impl Render for ChatView {
                                 !matches!(m, Message::TurnEnd { .. } | Message::User { .. })
                             }),
                         can_continue: s.can_continue(),
+                        memory: matches!(m, Message::TurnEnd { .. })
+                            .then(|| s.memory_changes.get(&chat.id).cloned())
+                            .flatten()
+                            .filter(|_| {
+                                !chat.messages[ix + 1..].iter().any(|m| {
+                                    matches!(m, Message::TurnEnd { .. } | Message::User { .. })
+                                })
+                            }),
                         in_last_turn: !chat.messages[ix + 1..]
                             .iter()
                             .any(|m| matches!(m, Message::User { .. })),

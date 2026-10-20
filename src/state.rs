@@ -837,6 +837,15 @@ impl Project {
     }
 }
 
+/// What a turn changed in its project's memory.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MemoryChange {
+    pub project: std::path::PathBuf,
+    pub before: String,
+    pub added: Vec<String>,
+    pub removed: Vec<String>,
+}
+
 /// One project in `projects.json`: everything Forge keeps about it besides
 /// the folder's own files.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -1248,6 +1257,11 @@ pub struct AppState {
     /// gets, read when the page opens. None while it is read, or for a
     /// remote project (its files are on the host).
     pub project_brief: Option<(usize, std::sync::Arc<crate::project_ctx::Brief>)>,
+    /// A chat's project memory as its turn began (`project_memory.rs`), to
+    /// tell what the turn changed; and what the latest turn changed, shown
+    /// under the reply with Undo. Kept for this run only.
+    memory_before: std::collections::HashMap<usize, (std::path::PathBuf, String)>,
+    pub memory_changes: std::collections::HashMap<usize, MemoryChange>,
     /// The panel's find bar is open (`ui/doc_find.rs`).
     pub doc_finding: bool,
     /// The panel's body: its pages are its items, so the keyboard and a
@@ -1484,6 +1498,8 @@ impl AppState {
             doc_originals: vec![],
             doc_finding: false,
             project_brief: None,
+            memory_before: Default::default(),
+            memory_changes: Default::default(),
             doc_scroll: gpui::ScrollHandle::new(),
             next_comment: 1,
             doc_page_pick: None,
@@ -2060,9 +2076,10 @@ impl AppState {
             self.project_brief = None;
         }
         let budget = self.knowledge_budget();
+        let memory_on = self.project(id).is_some_and(|p| p.memory_on);
         cx.spawn(async move |this, cx| {
             let brief = cx
-                .background_spawn(async move { crate::project_ctx::read(&path, budget) })
+                .background_spawn(async move { crate::project_ctx::read(&path, budget, memory_on) })
                 .await;
             let _ = this.update(cx, |s, cx| {
                 s.project_brief = Some((id, std::sync::Arc::new(brief)));
@@ -5219,6 +5236,7 @@ impl AppState {
 
     /// `FORGE_DEMO=1`: replies are the scripted demo, no ForgeCLI needed.
     fn play_script(&mut self, id: usize, text: String, cx: &mut Context<Self>) {
+        self.snapshot_memory(id);
         // A demo chat is named for what its reply does, as a model would
         // name it, not by the word that started the script.
         if let (Some(title), Some(c)) = (demo_title(&text), self.chat_mut(id)) {
@@ -5336,10 +5354,24 @@ impl AppState {
         }
         // A new conversation's first message carries the project's knowledge
         // ahead of your words (`knowledge.rs`); a command doesn't.
+        let dir = self.chat_project_dir(id);
+        let memory_on = self
+            .chats
+            .iter()
+            .find(|c| c.id == id)
+            .and_then(|c| self.project(c.project))
+            .is_some_and(|p| p.memory_on);
         let knowledge = (!resumable && !text.trim_start().starts_with('/'))
-            .then(|| self.chat_project_dir(id))
+            .then_some(dir.as_ref())
             .flatten()
-            .and_then(|dir| crate::knowledge::block(&dir));
+            .and_then(|dir| {
+                let mut block = crate::knowledge::block(dir).unwrap_or_default();
+                if memory_on {
+                    block.push_str(&crate::project_memory::prompt(&crate::project_memory::read(dir)));
+                }
+                (!block.trim().is_empty()).then_some(block)
+            });
+        self.snapshot_memory(id);
         let sent = self
             .sessions
             .get(&id)
@@ -6647,6 +6679,7 @@ impl AppState {
     /// The turn is over: the composer is free again.
     fn finish_turn(&mut self, chat: usize, cx: &mut Context<Self>) {
         self.touch(chat, cx);
+        self.check_memory(chat, cx);
         self.replies.remove(&chat);
         self.turn_started.remove(&chat);
         if let Some(c) = self.chat_mut(chat) {
@@ -6669,6 +6702,115 @@ impl AppState {
             }
         }
         cx.notify();
+    }
+
+    // ------------------------------------------------------------ project memory
+
+    /// The memory as chat `id`'s turn begins, to show what the turn changed.
+    fn snapshot_memory(&mut self, id: usize) {
+        let Some(c) = self.chats.iter().find(|c| c.id == id) else {
+            return;
+        };
+        if !self.project(c.project).is_some_and(|p| p.memory_on) {
+            return;
+        }
+        if let Some(dir) = self.chat_project_dir(id) {
+            let before = crate::project_memory::read(&dir);
+            self.memory_before.insert(id, (dir, before));
+            self.memory_changes.remove(&id);
+        }
+    }
+
+    /// After a turn: what it changed in the project's memory, if anything.
+    fn check_memory(&mut self, chat: usize, cx: &mut Context<Self>) {
+        let Some((dir, before)) = self.memory_before.remove(&chat) else {
+            return;
+        };
+        cx.spawn(async move |this, cx| {
+            let d = dir.clone();
+            let after = cx
+                .background_spawn(async move { crate::project_memory::read(&d) })
+                .await;
+            let (added, removed) = crate::project_memory::diff(&before, &after);
+            if added.is_empty() && removed.is_empty() {
+                return;
+            }
+            let _ = this.update(cx, |s, cx| {
+                s.memory_changes.insert(
+                    chat,
+                    MemoryChange {
+                        project: dir,
+                        before,
+                        added,
+                        removed,
+                    },
+                );
+                if let Screen::Project(id) = s.screen {
+                    s.load_project_brief(id, cx);
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Undo what the latest turn of `chat` changed in its project's memory.
+    pub fn undo_memory(&mut self, chat: usize, cx: &mut Context<Self>) {
+        let Some(change) = self.memory_changes.remove(&chat) else {
+            return;
+        };
+        cx.spawn(async move |this, cx| {
+            let done = cx
+                .background_spawn(async move {
+                    crate::project_memory::write(&change.project, &change.before)
+                })
+                .await;
+            let _ = this.update(cx, |s, cx| {
+                match done {
+                    Ok(()) => s.show_toast("Undone: the memory is as it was before that reply.", cx),
+                    Err(e) => s.show_toast(format!("Couldn't undo it: {e}"), cx),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Forge keeps a memory for project `id`, or doesn't.
+    pub fn set_project_memory(&mut self, id: usize, on: bool, cx: &mut Context<Self>) {
+        self.edit_project(id, cx, |p| p.memory_on = on);
+        self.load_project_brief(id, cx);
+    }
+
+    /// Change project `id`'s memory (off the UI thread), then read it again.
+    pub fn edit_memory(
+        &mut self,
+        id: usize,
+        change: impl FnOnce(&str) -> String + Send + 'static,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(dir) = self
+            .project(id)
+            .filter(|p| crate::remote::Remote::parse(&p.path).is_none())
+            .map(|p| p.path.clone())
+        else {
+            return;
+        };
+        cx.spawn(async move |this, cx| {
+            let done = cx
+                .background_spawn(async move {
+                    let now = crate::project_memory::read(&dir);
+                    crate::project_memory::write(&dir, &change(&now))
+                })
+                .await;
+            let _ = this.update(cx, |s, cx| {
+                if let Err(e) = done {
+                    s.show_toast(format!("Couldn't change the memory: {e}"), cx);
+                }
+                s.load_project_brief(id, cx);
+            });
+        })
+        .detach();
     }
 
     // ------------------------------------------------------------ side questions
@@ -6961,6 +7103,17 @@ impl AppState {
                     usage: Some(usage),
                 });
                 self.touch(chat, cx);
+                self.check_memory(chat, cx);
+            }
+            (Step::Remember(fact), _) => {
+                // As Forge would: the fact written into the project's memory.
+                if let Some(dir) = self.chat_project_dir(chat) {
+                    let now = crate::project_memory::read(&dir);
+                    let _ = crate::project_memory::write(
+                        &dir,
+                        &crate::project_memory::add(&now, "Preferences", &fact),
+                    );
+                }
             }
             _ => {}
         }
@@ -6998,6 +7151,8 @@ enum Step {
     End {
         seconds: f32,
     },
+    /// The reply writes a fact into the project's memory.
+    Remember(String),
 }
 
 impl Step {
@@ -7009,7 +7164,7 @@ impl Step {
             Step::Ask(..) => 300,
             Step::Asked(..) => 450,
             Step::Use(..) => 500,
-            Step::File(..) => 300,
+            Step::File(..) | Step::Remember(_) => 300,
             Step::Agent(..) => 380,
             Step::Denied | Step::End { .. } => 250,
         }
@@ -7282,6 +7437,24 @@ fn script(prompt: &str) -> Vec<Step> {
     ));
     // Asked to draw something: the reply draws it, as a Mermaid diagram.
     let lower = prompt.to_lowercase();
+    // Told to remember something: it says so, and writes it down.
+    if let Some(rest) = lower.strip_prefix("remember") {
+        let fact = prompt[prompt.len() - rest.len()..]
+            .trim_start_matches([':', ' '])
+            .trim_start_matches("that ")
+            .trim();
+        let mut fact = fact.to_string();
+        if let Some(first) = fact.get(..1) {
+            fact = format!("{}{}", first.to_uppercase(), &fact[1..]);
+        }
+        if !fact.ends_with('.') {
+            fact.push('.');
+        }
+        s.extend(words("Noted. I'll keep that in this project's memory.", Step::Say));
+        s.push(Step::Remember(fact));
+        s.push(Step::End { seconds: 1.4 });
+        return s;
+    }
     if lower.contains("agent") {
         s.extend(demo_agents());
         s.push(Step::End { seconds: 14.2 });

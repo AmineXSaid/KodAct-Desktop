@@ -11,6 +11,7 @@
 //!   away.
 //! - **Knowledge** (`project_knowledge.rs`): reference files, Always or On
 //!   demand.
+//! - **Memory** (`project_memory.rs`): what Forge has learned there.
 
 use gpui::component::input::TextareaState;
 use gpui::{
@@ -31,8 +32,10 @@ pub struct ProjectRail {
     mine: bool,
     /// The instructions are being edited (the editor holds them).
     editing: bool,
-    /// The Knowledge card (`project_knowledge.rs`).
+    /// The Knowledge and Memory cards (`project_knowledge.rs`,
+    /// `project_memory.rs`).
     knowledge: Entity<super::project_knowledge::ProjectKnowledge>,
+    memory: Entity<super::project_memory::ProjectMemory>,
     _subs: Vec<Subscription>,
 }
 
@@ -45,11 +48,13 @@ impl ProjectRail {
         });
         let knowledge =
             cx.new(|cx| super::project_knowledge::ProjectKnowledge::new(state.clone(), window, cx));
+        let memory = cx.new(|cx| super::project_memory::ProjectMemory::new(state.clone(), window, cx));
         Self {
             _subs: vec![cx.observe(&state, |_, _, cx| cx.notify())],
             state,
             editor,
             knowledge,
+            memory,
             mine: false,
             editing: false,
         }
@@ -102,6 +107,7 @@ fn part_color(kind: &str, t: &Theme) -> Hsla {
         "You" => t.colors.sky,
         "Local" => t.colors.marigold,
         "Knowledge" => t.extra.success,
+        "Memory" => t.colors.coral,
         _ => t.colors.primary,
     }
 }
@@ -138,6 +144,7 @@ fn budget(t: &Theme, brief: &Brief, project: &std::path::Path, window: Option<u6
             "You" => "Yours, in every project",
             "Local" => "Only you, this computer",
             "Knowledge" => "Knowledge set to Always",
+            "Memory" => "What Forge remembers here",
             _ => "The project's",
         };
         div()
@@ -426,6 +433,7 @@ impl Render for ProjectRail {
         rail.child(budget(&t, &brief, &project.path, window))
             .child(instructions)
             .child(self.knowledge.clone())
+            .child(self.memory.clone())
             .into_any_element()
     }
 }
