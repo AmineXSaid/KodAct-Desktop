@@ -100,6 +100,107 @@ fn cells(old: &[u8], new: &[u8]) -> Option<Changes> {
     Some(Changes::Cells(out))
 }
 
+/// Where a comment points in a file, and the words or cells it quotes.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Anchor {
+    /// "the section “What changed”", "Slide 3", "Page 2", "Budget!B3:C5".
+    pub place: String,
+    /// The selected words, or a range's values; empty for a whole page.
+    pub quote: String,
+}
+
+/// A comment on a file in the side panel, as Claude Docs keeps them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Comment {
+    pub id: usize,
+    /// The file (its path, else its name) and the version commented on.
+    pub file: String,
+    pub version: usize,
+    pub anchor: Anchor,
+    pub note: String,
+    /// Sent to Forge: the versions the file had then. A later version
+    /// answers it.
+    pub sent: Option<usize>,
+}
+
+/// The file a comment belongs to.
+pub fn file_id(f: &FileRef) -> String {
+    f.path.clone().unwrap_or_else(|| f.name.clone()).to_string()
+}
+
+/// Where `quote` sits in a document's text: the slide, page or section
+/// (its nearest heading above) it falls under.
+pub fn place_of(text: &str, quote: &str) -> String {
+    // Words compared without case, punctuation or Markdown marks.
+    let norm = |s: &str| -> Vec<String> {
+        s.split_whitespace()
+            .map(|w| {
+                w.trim_matches(|c: char| !c.is_alphanumeric())
+                    .to_lowercase()
+            })
+            .filter(|w| !w.is_empty())
+            .collect()
+    };
+    let words: Vec<String> = norm(quote).into_iter().take(6).collect();
+    let lines: Vec<&str> = text.lines().collect();
+    // Every word of the text with the line it is on; the quote's place is
+    // the line its first word is on.
+    let all: Vec<(usize, String)> = lines
+        .iter()
+        .enumerate()
+        .flat_map(|(i, l)| norm(l).into_iter().map(move |w| (i, w)))
+        .collect();
+    let found = (!words.is_empty())
+        .then(|| {
+            all.windows(words.len())
+                .find(|w| w.iter().map(|(_, x)| x).eq(words.iter()))
+                .map(|w| w[0].0)
+        })
+        .flatten();
+    let heading = found.and_then(|i| {
+        lines[..=i].iter().rev().find_map(|l| {
+            l.strip_prefix('#')
+                .map(|h| h.trim_start_matches('#').trim().replace(['*', '`'], ""))
+        })
+    });
+    match heading {
+        Some(h) if h.starts_with("Slide ") || h.starts_with("Page ") => {
+            h.split(':').next().unwrap_or(&h).to_string()
+        }
+        Some(h) => format!("the section “{h}”"),
+        None => "the text".into(),
+    }
+}
+
+/// The message that asks Forge to act on `comments` in `file`: each one's
+/// place, quote and request, and how to edit (only those parts, the rest
+/// kept exactly, written back as a new version, then read back).
+/// `word_comments`: also add each as a real comment in the Word file.
+pub fn comments_message(file: &FileRef, comments: &[Comment], word_comments: bool) -> String {
+    let path = file.path.as_deref().unwrap_or(file.name.as_ref());
+    let mut out = format!(
+        "Change `{path}` as these comments ask. Change only the parts they point at and keep everything else exactly as it is (wording, formatting, layout), then write it back to the same file.\n"
+    );
+    for (i, c) in comments.iter().enumerate() {
+        out.push_str(&format!("\n{}. In {}", i + 1, c.anchor.place));
+        if !c.anchor.quote.trim().is_empty() {
+            let q: String = c
+                .anchor
+                .quote
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
+            out.push_str(&format!(", where it says: “{q}”"));
+        }
+        out.push_str(&format!("\n   {}\n", c.note.trim()));
+    }
+    if word_comments {
+        out.push_str("\nAlso add each of these as a Word comment on the text it points at (`docx_tool.py comment`), so they travel with the file.\n");
+    }
+    out.push_str("\nThen read the file back and tell me, comment by comment, what you changed.");
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -111,6 +212,55 @@ mod tests {
             content: content.into(),
             bytes: None,
         }
+    }
+
+    #[test]
+    fn a_quote_is_placed_under_its_heading() {
+        let text = "# Q3 budget\n\nThe forecast is **5,500 EUR**.\n\n## What changed\n\n- Licences fall to 700.";
+        assert_eq!(
+            place_of(text, "Licences fall to 700"),
+            "the section “What changed”"
+        );
+        assert_eq!(
+            place_of(text, "forecast is 5,500"),
+            "the section “Q3 budget”"
+        );
+        let deck = "## Slide 3: What changed\n\n- Licences: 700";
+        assert_eq!(place_of(deck, "Licences: 700"), "Slide 3");
+        assert_eq!(place_of(text, "not in it"), "the text");
+    }
+
+    #[test]
+    fn comments_become_one_precise_request() {
+        let file = md("q3-budget-memo.docx", "finance/q3-budget-memo.docx", "");
+        let c = |place: &str, quote: &str, note: &str| Comment {
+            id: 0,
+            file: file_id(&file),
+            version: 0,
+            anchor: Anchor {
+                place: place.into(),
+                quote: quote.into(),
+            },
+            note: note.into(),
+            sent: None,
+        };
+        let m = comments_message(
+            &file,
+            &[
+                c(
+                    "the section “What changed”",
+                    "Licences fall to\n700 EUR",
+                    "Say why: the renewal was renegotiated.",
+                ),
+                c("Page 2", "", "Drop this page."),
+            ],
+            true,
+        );
+        assert!(m.starts_with("Change `finance/q3-budget-memo.docx` as these comments ask."));
+        assert!(m.contains("1. In the section “What changed”, where it says: “Licences fall to 700 EUR”\n   Say why"));
+        assert!(m.contains("2. In Page 2\n   Drop this page."));
+        assert!(m.contains("docx_tool.py comment"));
+        assert!(m.ends_with("what you changed."));
     }
 
     #[test]

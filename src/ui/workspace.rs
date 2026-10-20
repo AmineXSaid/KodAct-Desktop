@@ -46,6 +46,8 @@ pub struct Workspace {
     askpass: Entity<super::askpass::AskpassDialog>,
     /// The home screen's field of dots, behind the greeting and the composer.
     dots: Entity<super::dot_field::DotField>,
+    /// Comments on the file in the side panel (`doc_comments.rs`).
+    doc_comments: Entity<super::doc_comments::DocComments>,
     /// The film as Forge opens, while it plays (`opener.rs`).
     opener: Option<Entity<super::opener::Opener>>,
     _opener_sub: Option<gpui::Subscription>,
@@ -95,6 +97,8 @@ impl Workspace {
         let browser = cx.new(|cx| super::browser_view::BrowserView::new(state.clone(), window, cx));
         let confirm = cx.new(|cx| ConfirmWindow::new(state.clone(), window, cx));
         let askpass = cx.new(|cx| super::askpass::AskpassDialog::new(state.clone(), window, cx));
+        let doc_comments =
+            cx.new(|cx| super::doc_comments::DocComments::new(state.clone(), window, cx));
         let composer_focus = composer.read(cx).focus_handle(cx);
         let dots = cx.new(|cx| super::dot_field::DotField::new(Some(composer_focus), window, cx));
         let first_run = state.read(cx).onboarding;
@@ -145,6 +149,7 @@ impl Workspace {
             confirm,
             askpass,
             dots,
+            doc_comments,
             opener,
             _opener_sub: opener_sub,
             focus: cx.focus_handle(),
@@ -744,6 +749,7 @@ impl Render for Workspace {
                     (at, all.len().max(1))
                 },
                 show_changes: s.doc_show_changes,
+                page_pick: s.doc_page_pick,
             };
             let doc_changes = s
                 .doc_changes
@@ -807,6 +813,7 @@ impl Render for Workspace {
                         s.doc_sheet,
                         s.doc_pick,
                         doc_changes,
+                        self.doc_comments.clone().into_any_element(),
                         &t,
                     )
                 })

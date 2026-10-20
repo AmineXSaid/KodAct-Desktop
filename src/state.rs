@@ -1134,6 +1134,14 @@ pub struct AppState {
     pub doc_pick: crate::ui::sheet_view::Pick,
     /// The panel shows what its version changed from the one before.
     pub doc_show_changes: bool,
+    /// Comments on files in the panel, as Claude Docs keeps them: each
+    /// on a passage, a page or cells, until it is sent and answered.
+    pub doc_comments: Vec<crate::doc_versions::Comment>,
+    next_comment: usize,
+    /// A page (or slide) of the panel's document picked to comment on, from 0.
+    pub doc_page_pick: Option<usize>,
+    /// Sent comments on a Word file are also written into it as Word comments.
+    pub doc_word_comments: bool,
     /// Those changes, for the version they belong to (`doc_version_key`);
     /// None inside while they could not be worked out.
     pub doc_changes: Option<(SharedString, Option<crate::doc_versions::Changes>)>,
@@ -1356,6 +1364,10 @@ impl AppState {
             doc_text: false,
             doc_pick: None,
             doc_show_changes: false,
+            doc_comments: vec![],
+            next_comment: 1,
+            doc_page_pick: None,
+            doc_word_comments: true,
             doc_changes: None,
             doc_sheet: 0,
             copied_reset: None,
@@ -2661,6 +2673,137 @@ impl AppState {
         let to = at as isize + by;
         if let Some(v) = (to >= 0).then(|| all.get(to as usize)).flatten() {
             self.show_doc(v.clone(), cx);
+        }
+    }
+
+    /// The panel's file's comments, oldest first.
+    pub fn doc_comments_here(&self) -> Vec<crate::doc_versions::Comment> {
+        let Some(file) = &self.doc else {
+            return vec![];
+        };
+        let id = crate::doc_versions::file_id(file);
+        self.doc_comments
+            .iter()
+            .filter(|c| c.file == id)
+            .cloned()
+            .collect()
+    }
+
+    /// Comment on `anchor` in the panel's file (this version).
+    pub fn add_doc_comment(
+        &mut self,
+        anchor: crate::doc_versions::Anchor,
+        note: String,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(file) = &self.doc else { return };
+        if note.trim().is_empty() {
+            return;
+        }
+        let version = self.doc_versions().1;
+        self.doc_comments.push(crate::doc_versions::Comment {
+            id: self.next_comment,
+            file: crate::doc_versions::file_id(file),
+            version,
+            anchor,
+            note: note.trim().to_string(),
+            sent: None,
+        });
+        self.next_comment += 1;
+        self.doc_page_pick = None;
+        self.doc_pick = None;
+        cx.notify();
+    }
+
+    pub fn remove_doc_comment(&mut self, id: usize, cx: &mut Context<Self>) {
+        self.doc_comments.retain(|c| c.id != id);
+        cx.notify();
+    }
+
+    /// Send the panel's file's open comments to Forge as one message: each
+    /// one's place, quote and request. A later version of the file answers
+    /// them.
+    pub fn send_doc_comments(&mut self, cx: &mut Context<Self>) {
+        let Some(file) = self.doc.clone() else { return };
+        if self.busy() {
+            return self.show_toast("Wait for the reply to finish, then send your comments.", cx);
+        }
+        let id = crate::doc_versions::file_id(&file);
+        let open: Vec<_> = self
+            .doc_comments
+            .iter()
+            .filter(|c| c.file == id && c.sent.is_none())
+            .cloned()
+            .collect();
+        if open.is_empty() {
+            return;
+        }
+        let word = self.doc_word_comments && file.office() == Some(crate::office::Kind::Docx);
+        let text = crate::doc_versions::comments_message(&file, &open, word);
+        let versions = self.doc_versions().0.len();
+        for c in self
+            .doc_comments
+            .iter_mut()
+            .filter(|c| c.file == id && c.sent.is_none())
+        {
+            c.sent = Some(versions);
+        }
+        self.send(text, cx);
+    }
+
+    /// One comment, sent at once: "Ask Forge to change this".
+    pub fn ask_doc_change(
+        &mut self,
+        anchor: crate::doc_versions::Anchor,
+        note: String,
+        cx: &mut Context<Self>,
+    ) {
+        let unsent: Vec<usize> = self
+            .doc_comments_here()
+            .iter()
+            .filter(|c| c.sent.is_none())
+            .map(|c| c.id)
+            .collect();
+        self.add_doc_comment(anchor, note, cx);
+        // Only this one goes now; the others wait for Send.
+        let held: Vec<_> = self
+            .doc_comments
+            .iter_mut()
+            .filter(|c| unsent.contains(&c.id))
+            .map(|c| {
+                c.sent = Some(usize::MAX);
+                c.id
+            })
+            .collect();
+        self.send_doc_comments(cx);
+        for c in self
+            .doc_comments
+            .iter_mut()
+            .filter(|c| held.contains(&c.id))
+        {
+            c.sent = None;
+        }
+    }
+
+    pub fn pick_doc_page(&mut self, page: usize, cx: &mut Context<Self>) {
+        self.doc_page_pick = (self.doc_page_pick != Some(page)).then_some(page);
+        cx.notify();
+    }
+
+    pub fn toggle_word_comments(&mut self, cx: &mut Context<Self>) {
+        self.doc_word_comments = !self.doc_word_comments;
+        cx.notify();
+    }
+
+    /// A reply wrote the file open in the panel again: the panel moves to
+    /// the new version, as Claude's does.
+    fn follow_doc(&mut self, chat: usize, file: &FileRef, cx: &mut Context<Self>) {
+        let open = self
+            .doc
+            .as_ref()
+            .is_some_and(|d| crate::doc_versions::same_file(d, file) && d != file);
+        if open && self.current == Some(chat) {
+            self.show_doc(file.clone(), cx);
         }
     }
 
@@ -5059,6 +5202,7 @@ impl AppState {
                             self.remote_written_file(chat, remote, p, cx);
                         }
                     } else if let Some(file) = written.and_then(|p| self.written_file(chat, &p)) {
+                        self.follow_doc(chat, &file, cx);
                         self.push_block(chat, Block::File(file));
                     }
                 }
@@ -5329,6 +5473,7 @@ impl AppState {
         cx.spawn(async move |this, cx| {
             if let Some(file) = task.await {
                 let _ = this.update(cx, |s, cx| {
+                    s.follow_doc(chat, &file, cx);
                     s.push_block(chat, Block::File(file));
                     s.mark_dirty(chat, cx);
                     cx.notify();
@@ -6227,7 +6372,10 @@ impl AppState {
                 blocks.push(Block::Tool(t));
                 self.panel_follows(chat, name);
             }
-            (Step::File(f), Some(blocks)) => blocks.push(Block::File(f)),
+            (Step::File(f), Some(blocks)) => {
+                blocks.push(Block::File(f.clone()));
+                self.follow_doc(chat, &f, cx);
+            }
             (Step::Ask(title, detail), Some(blocks)) => {
                 // The call it asks about is the row just before it.
                 let row = blocks.iter().rposition(|b| matches!(b, Block::Tool(_)));
@@ -6630,7 +6778,7 @@ fn script(prompt: &str) -> Vec<Step> {
     }
     // Asked to rework the plan: it writes the plan again, changed, so the
     // panel has a second version to step to and compare.
-    if lower.contains("rework") {
+    if lower.contains("rework") || lower.contains("as these comments ask") {
         s.extend(words(
             "I reworked the plan: the backup stays two releases, and you hear once that your settings moved.",
             Step::Say,

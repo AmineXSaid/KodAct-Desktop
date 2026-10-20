@@ -12,7 +12,6 @@ use gpui::{
 };
 
 use super::icon;
-use super::markdown::{self, CopyContext, Look};
 use crate::state::{AppState, FileRef};
 use crate::theme::Theme;
 
@@ -44,6 +43,8 @@ pub struct Fit {
     pub version: (usize, usize),
     /// The panel shows what this version changed.
     pub show_changes: bool,
+    /// The page or slide picked to comment on.
+    pub page_pick: Option<usize>,
 }
 
 /// What this version changed: None while it is worked out, `Some(None)`
@@ -68,6 +69,7 @@ pub fn render(
     sheet: usize,
     pick: super::sheet_view::Pick,
     changes: ChangesRead,
+    comments: AnyElement,
     t: &Theme,
 ) -> AnyElement {
     // The version bar at the foot, when the chat has more than one version.
@@ -84,17 +86,25 @@ pub fn render(
         _ => None,
     };
     let bar_state = state.clone();
+    // The foot: comments on the file, then the version bar.
     let footer = move || {
-        (total > 1).then(|| {
-            super::doc_changes::version_bar(
-                t,
-                bar_state.clone(),
-                at,
-                total,
-                showing_changes,
-                summary.clone(),
-            )
-        })
+        Some(
+            div()
+                .flex_none()
+                .flex()
+                .flex_col()
+                .child(comments)
+                .children((total > 1).then(|| {
+                    super::doc_changes::version_bar(
+                        t,
+                        bar_state.clone(),
+                        at,
+                        total,
+                        showing_changes,
+                        summary.clone(),
+                    )
+                })),
+        )
     };
     let changed_cells = match changes {
         Some(Some(crate::doc_versions::Changes::Cells(c))) if showing_changes => Some(c),
@@ -117,6 +127,7 @@ pub fn render(
 
     let from_panel = fit.from_panel;
     let text_view = fit.text;
+    let page_pick = fit.page_pick;
     let has_pages = matches!(read, Some(Ok(p)) if matches!(p.as_ref(), crate::office::Preview::Doc(d) if !d.pages.is_empty()));
     let viewer = state.clone();
     let back = state.clone();
@@ -364,7 +375,8 @@ pub fn render(
                             fit.below,
                             file,
                             header,
-                            body.bg(t.extra.inset).child(pages_view(d, &fit, t)),
+                            body.bg(t.extra.inset)
+                                .child(pages_view(d, &fit, page_pick, state, t)),
                             footer(),
                             fit.width,
                             t,
@@ -390,19 +402,7 @@ pub fn render(
                                 .text_color(t.colors.text_muted)
                                 .child(n)
                         }))
-                        .child(markdown::render_as(
-                            &d.text,
-                            t,
-                            &CopyContext {
-                                streaming: false,
-                                state,
-                                key: "doc".into(),
-                                copied,
-                                scale: fit.scale,
-                                sources: Default::default(),
-                            },
-                            Look::Document,
-                        ))
+                        .child(selectable(&file.name, &d.text, t))
                         .into_any_element()
                 }
             },
@@ -418,19 +418,7 @@ pub fn render(
         )
     } else {
         let page: AnyElement = if file.is_markdown() {
-            markdown::render_as(
-                &file.content,
-                t,
-                &CopyContext {
-                    streaming: false,
-                    state,
-                    key: "doc".into(),
-                    copied,
-                    scale: fit.scale,
-                    sources: Default::default(),
-                },
-                Look::Document,
-            )
+            selectable(&file.name, &file.content, t)
         } else {
             div()
                 .font_family(t.font_mono.clone())
@@ -454,10 +442,34 @@ pub fn render(
     finish_at(fit.below, file, header, body, footer(), fit.width, t)
 }
 
+/// A document's text as you can select it, to comment on a passage or
+/// copy it: Markdown, set in the reading face at the document's size.
+fn selectable(name: &str, text: &str, t: &Theme) -> AnyElement {
+    div()
+        .text_size(t.size.doc_text)
+        .line_height(relative(t.size.line_height_doc))
+        .font_family(t.font_reading.clone())
+        .text_color(t.colors.text_body)
+        .child(
+            gpui::component::text::TextView::markdown(
+                SharedString::from(format!("doc-text-{name}")),
+                text.to_string(),
+            )
+            .selectable(true),
+        )
+        .into_any_element()
+}
+
 /// A document's pages as they print, each as wide as the panel allows on
 /// the quiet inset with a hairline round it; a deck's slides with their
 /// speaker notes under each.
-fn pages_view(d: &crate::office::Doc, fit: &Fit, t: &Theme) -> gpui::Div {
+fn pages_view(
+    d: &crate::office::Doc,
+    fit: &Fit,
+    picked: Option<usize>,
+    state: Entity<AppState>,
+    t: &Theme,
+) -> gpui::Div {
     let room = fit.width - 2. * f32::from(t.space.xl) - 2.;
     let shown = d.pages.len();
     let noun = if d.slides { "Slide" } else { "Page" };
@@ -474,6 +486,8 @@ fn pages_view(d: &crate::office::Doc, fit: &Fit, t: &Theme) -> gpui::Div {
                 room.min(page.width as f32 / fit.scale.max(1.) * 1.2)
             };
             let note = d.notes.get(i).filter(|n| !n.trim().is_empty()).cloned();
+            let on = picked == Some(i);
+            let st = state.clone();
             div()
                 .w(px(w))
                 .flex()
@@ -484,7 +498,8 @@ fn pages_view(d: &crate::office::Doc, fit: &Fit, t: &Theme) -> gpui::Div {
                         .w(px(w))
                         .h(px(w * page.height as f32 / page.width as f32))
                         .border_1()
-                        .border_color(t.colors.border)
+                        .border_color(if on { t.colors.primary } else { t.colors.border })
+                        .when(on, |d| d.shadow(t.elevation_popover()))
                         .when(d.slides, |d| d.rounded(t.radius.small).overflow_hidden())
                         .child(
                             gpui::img(page.image.clone())
@@ -494,10 +509,32 @@ fn pages_view(d: &crate::office::Doc, fit: &Fit, t: &Theme) -> gpui::Div {
                 )
                 .child(
                     div()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .gap(t.space.sm)
                         .text_size(t.text.caption)
                         .text_color(t.colors.text_muted)
-                        .text_center()
-                        .child(format!("{noun} {} of {}", i + 1, d.total.max(shown))),
+                        .child(format!("{noun} {} of {}", i + 1, d.total.max(shown)))
+                        .child(
+                            div()
+                                .id(SharedString::from(format!("page-comment-{i}")))
+                                .flex()
+                                .items_center()
+                                .gap(px(4.))
+                                .px(t.space.xs)
+                                .rounded(t.radius.small)
+                                .cursor_pointer()
+                                .text_color(if on { t.colors.primary } else { t.colors.text_muted })
+                                .hover(|st| st.underline())
+                                .child(icon(
+                                    "icons/message-square.svg",
+                                    t.size.icon_xs,
+                                    if on { t.colors.primary } else { t.colors.text_muted },
+                                ))
+                                .child("Comment")
+                                .on_click(move |_, _, cx| st.update(cx, |s, cx| s.pick_doc_page(i, cx))),
+                        ),
                 )
                 .children(note.map(|n| {
                     div()

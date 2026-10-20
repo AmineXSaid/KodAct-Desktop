@@ -19,6 +19,7 @@ pub mod context_ring;
 pub mod diagnostics;
 pub mod diagram_view;
 pub mod doc_changes;
+pub mod doc_comments;
 pub mod doc_pane;
 pub mod dot_field;
 pub mod editor_kit;
