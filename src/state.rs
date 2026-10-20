@@ -1515,6 +1515,8 @@ pub struct AppState {
     pub find_request: Option<String>,
     /// For `/` completion: the project's own commands (`.forge/commands`).
     custom_commands: Option<(std::path::PathBuf, Vec<crate::commands::Command>)>,
+    /// The skills `/` offers, read with the custom commands.
+    skill_commands: Vec<crate::commands::Command>,
     /// A read of either is under way.
     pub completions_loading: bool,
     /// The context window's breakdown is open (the composer's meter).
@@ -1702,6 +1704,7 @@ impl AppState {
             file_index: None,
             find_request: None,
             custom_commands: None,
+            skill_commands: vec![],
             completions_loading: false,
             context_open: false,
             versions_open: None,
@@ -4292,19 +4295,22 @@ impl AppState {
             .map(|r| (self.remote_extra(&r.target), r));
         cx.spawn(async move |this, cx| {
             let d = dir.clone();
-            let (files, commands) = cx
+            let (files, commands, skills) = cx
                 .background_spawn(async move {
                     match remote {
-                        // A remote project's files come over the connection.
+                        // A remote project's files come over the connection;
+                        // its skills are ForgeCLI's own.
                         Some((extra, r)) => (
                             crate::remote::project_files(&r.target, &r.path, 20_000, &extra)
                                 .map(crate::rules::entries_of)
                                 .unwrap_or_default(),
                             vec![],
+                            crate::commands::bundled_skills().collect(),
                         ),
                         None => (
                             crate::rules::project_entries(&d, 20_000),
                             crate::commands::custom(&d),
+                            crate::commands::skills(&d),
                         ),
                     }
                 })
@@ -4313,6 +4319,7 @@ impl AppState {
                 s.completions_loading = false;
                 s.file_index = Some((dir.clone(), std::sync::Arc::new(files)));
                 s.custom_commands = Some((dir, commands));
+                s.skill_commands = skills;
                 cx.notify();
             });
         })
@@ -4409,6 +4416,17 @@ impl AppState {
                 description: c.description,
                 group: "This project",
             })
+            .chain(
+                self.skill_commands
+                    .iter()
+                    .cloned()
+                    .map(|c| CompletionCommand {
+                        name: c.name,
+                        args: c.args,
+                        description: c.description,
+                        group: "Skills",
+                    }),
+            )
             .chain(
                 crate::commands::builtin()
                     .into_iter()
@@ -5981,7 +5999,20 @@ impl AppState {
                 cx,
             );
         }
-        let attachments = std::mem::take(&mut self.attachments);
+        // ForgeCLI reads a command (`/simplify`) only from a message that is
+        // its text alone, so the attachments wait for the next message.
+        let command = text.starts_with('/');
+        let attachments = if command {
+            vec![]
+        } else {
+            std::mem::take(&mut self.attachments)
+        };
+        if command && !self.attachments.is_empty() {
+            self.show_toast(
+                "The command went on its own; your attachments wait for your next message.",
+                cx,
+            );
+        }
         let id = match self.current {
             Some(id) => id,
             None => {

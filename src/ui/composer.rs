@@ -4,7 +4,9 @@
 //! meter, the model picker (a popover) and the Modes menu. Enter sends;
 //! Shift+Enter adds a line.
 
-use gpui::component::input::{Input, InputEvent, InputState, Textarea, TextareaState};
+use gpui::component::input::{
+    InlineToken, InlineTokenContext, Input, InputEvent, InputState, Textarea, TextareaState,
+};
 use gpui::{
     div, prelude::*, px, relative, Context, Entity, IntoElement, Render, SharedString,
     Subscription, Window,
@@ -123,6 +125,7 @@ impl Composer {
                     InputEvent::PressEnter { shift: false, .. } => this.submit(window, cx),
                     InputEvent::Change => {
                         this.ac_selected = 0;
+                        this.tokenize(window, cx);
                         if super::autocomplete::trigger(&this.text(cx)).is_some() {
                             this.state.update(cx, |s, cx| s.ensure_completions(cx));
                         }
@@ -166,7 +169,35 @@ impl Composer {
             let end = gpui::component::RopeExt::offset_to_position(i.text(), text.len());
             i.set_cursor_position(end, window, cx);
         });
+        self.tokenize(window, cx);
         cx.notify();
+    }
+
+    /// A finished `/command` leading the message, or `@path` naming a
+    /// project file, becomes one unit in the box: bold, a skill in its own
+    /// colour (`mention_token`). Finished means a space follows it, so a
+    /// word being typed stays text. The message sent is the same text.
+    fn tokenize(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let (text, taken) = {
+            let i = self.input.read(cx);
+            let taken: Vec<std::ops::Range<usize>> =
+                i.tokens().iter().map(|t| t.range()).collect();
+            (i.value().to_string(), taken)
+        };
+        let found = mentions(&text, self.state.read(cx));
+        let fresh: Vec<_> = found
+            .into_iter()
+            .filter(|(r, _)| !taken.iter().any(|t| t.start < r.end && r.start < t.end))
+            .collect();
+        if fresh.is_empty() {
+            return;
+        }
+        self.input.update(cx, |i, cx| {
+            // From the end, so the earlier ranges still hold.
+            for (range, token) in fresh.into_iter().rev() {
+                let _ = i.replace_range_with_token(range, token, window, cx);
+            }
+        });
     }
 
     fn text(&self, cx: &gpui::App) -> String {
@@ -215,9 +246,8 @@ impl Composer {
         Some((trig, rows))
     }
 
-    /// Complete with row `i`. `open`: Tab on a folder lists what is in it
-    /// instead of adding it.
-    fn pick(&mut self, i: usize, open: bool, window: &mut Window, cx: &mut Context<Self>) {
+    /// Complete with row `i`.
+    fn pick(&mut self, i: usize, window: &mut Window, cx: &mut Context<Self>) {
         let Some((trig, mut rows)) = self.completion(cx) else {
             return;
         };
@@ -228,12 +258,6 @@ impl Composer {
         let before = text[..trig.start].to_string();
         match rows.swap_remove(i).pick {
             super::autocomplete::Pick::Text(t) => self.fill(&format!("{before}{t}"), window, cx),
-            super::autocomplete::Pick::Folder(p) => {
-                let m = super::autocomplete::mention(&p);
-                // A quoted path can't be typed on from; it is added instead.
-                let end = if open && !m.contains('"') { "" } else { " " };
-                self.fill(&format!("{before}{m}{end}"), window, cx)
-            }
             super::autocomplete::Pick::Action(a) => {
                 self.fill(&before, window, cx);
                 window.dispatch_action(a, cx);
@@ -272,7 +296,7 @@ impl Composer {
             "enter" | "tab" if n > 0 => {
                 let i = self.ac_selected.min(n - 1);
                 self.ac_took_enter = key == "enter";
-                self.pick(i, key == "tab", window, cx);
+                self.pick(i, window, cx);
             }
             "escape" => self.ac_closed_for = Some(self.text(cx)[trig.start..].to_string()),
             _ => return false,
@@ -519,7 +543,7 @@ impl Render for Composer {
                 },
                 ranked,
                 move |i, window, cx| {
-                    let _ = me.update(cx, |c, cx| c.pick(i, false, window, cx));
+                    let _ = me.update(cx, |c, cx| c.pick(i, window, cx));
                 },
                 move |i, cx| {
                     let _ = me2.update(cx, |c, cx| {
@@ -807,7 +831,11 @@ impl Render for Composer {
                                     .child(
                                         Textarea::new(&self.input)
                                             .appearance(false)
-                                            .text_size(t.text.body),
+                                            .text_size(t.text.body)
+                                            .token({
+                                                let t = t.clone();
+                                                move |token, _, _| mention_token(&t, token)
+                                            }),
                                     ),
                             )
                             .child(
@@ -862,4 +890,59 @@ impl Render for Composer {
         // Never wider than its own measure, centred wherever it sits.
         div().w_full().flex().justify_center().child(composer)
     }
+}
+
+/// The finished mentions in `text`, by byte range: a `/name` ForgeCLI runs,
+/// leading the message, and `@path` naming one of the project's files or
+/// folders. Each token's id says its kind (`skill:`, `command:`, `file:`).
+fn mentions(text: &str, s: &AppState) -> Vec<(std::ops::Range<usize>, InlineToken)> {
+    let mut out = vec![];
+    let finished = |end: usize| text[end..].starts_with(char::is_whitespace);
+    if let Some(rest) = text.strip_prefix('/') {
+        let end = 1 + rest.find(char::is_whitespace).unwrap_or(rest.len());
+        let name = &text[1..end];
+        if finished(end) {
+            if let Some(c) = s.completion_commands().into_iter().find(|c| c.name == name) {
+                let kind = if c.group == "Skills" { "skill" } else { "command" };
+                out.push((0..end, InlineToken::new(format!("{kind}:{name}"), &text[..end])));
+            }
+        }
+    }
+    let files = s.completion_files();
+    let mut at = 0;
+    for word in text.split_inclusive(char::is_whitespace) {
+        let start = at;
+        at += word.len();
+        let word = word.trim_end();
+        let Some(path) = word.strip_prefix('@') else {
+            continue;
+        };
+        let end = start + word.len();
+        if path.is_empty() || !finished(end) {
+            continue;
+        }
+        let known = files
+            .iter()
+            .any(|f| f == path || f.trim_end_matches('/') == path.trim_end_matches('/'));
+        if known {
+            out.push((start..end, InlineToken::new(format!("file:{path}"), word)));
+        }
+    }
+    out
+}
+
+/// How a mention shows in the box: its text, bold; a skill in the skills'
+/// colour, a command or a file in the accent.
+fn mention_token(t: &crate::theme::Theme, token: &InlineTokenContext) -> gpui::Div {
+    let skill = token.token().id().starts_with("skill:");
+    div()
+        .flex()
+        .items_center()
+        .h(token.line_height())
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .text_color(if skill { t.extra.skill } else { t.colors.primary })
+        .when(token.is_selected(), |d| {
+            d.bg(t.colors.primary_tint).rounded(t.radius.small)
+        })
+        .child(token.token().label().clone())
 }

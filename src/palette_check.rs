@@ -248,6 +248,7 @@ fn coloured_text_reads_on_its_tint() {
             ("danger", x.danger, Hsla::from(over(x.danger_tint, card))),
             ("warning", x.warning, Hsla::from(over(x.warning_tint, card))),
             ("memory", x.memory, Hsla::from(over(x.memory_tint, card))),
+            ("skill", x.skill, card),
             (
                 "ping fast",
                 x.ping_fast_fg,

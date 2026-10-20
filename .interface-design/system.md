@@ -146,6 +146,7 @@ Contrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of w
 | `danger` | `#a3402c` | 6.3:1 | `#e98a72` | 5.8:1 | failed, errors |
 | `warning` | `#8a5600` | 6.2:1 | `#ffc85a` | 9.5:1 | needs you |
 | `memory` | `#75591a` | 5.6:1 | `#e5c77a` | 7.7:1 | memory and rules, on its tint |
+| `skill` | `#7a3fb0` | 6.6:1 | `#c3a3ec` | 6.8:1 | a skill named in the composer, bold |
 | `mode_plan` | `#1f75cb` | 4.7:1 | `#428fdc` | 4.3:1 | Plan mode |
 | `mode_bypass` | `#a32c12` | 7.2:1 | `#ec5941` | 4.2:1 | Bypass permissions |
 

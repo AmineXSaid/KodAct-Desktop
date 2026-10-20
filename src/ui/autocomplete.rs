@@ -50,8 +50,6 @@ pub enum Pick {
     Action(Box<dyn Action>),
     /// Clear the word, then switch to this mode.
     Mode(ModeId),
-    /// A folder (its path ends in `/`): Enter adds it, Tab opens it in the list.
-    Folder(String),
 }
 
 pub struct Item {
@@ -63,6 +61,8 @@ pub struct Item {
     pub positions: Vec<usize>,
     /// A row of the @ list: a file or a folder of the project.
     pub file: bool,
+    /// A skill: its name shows bold, in the skills' colour.
+    pub skill: bool,
 }
 
 /// The most rows listed.
@@ -91,13 +91,13 @@ fn app_actions() -> Vec<(&'static str, &'static str, &'static str, Box<dyn Actio
         (
             "export",
             "Export this chat as Markdown",
-            "icons/archive.svg",
+            "icons/file-text.svg",
             Box::new(ExportChat),
         ),
         (
             "export-json",
             "Export this chat as JSON",
-            "icons/archive.svg",
+            "icons/file-json.svg",
             Box::new(ExportChatJson),
         ),
         (
@@ -161,6 +161,7 @@ pub fn items(trig: &Trigger, s: &AppState) -> Vec<Item> {
                     pick,
                     positions,
                     file: false,
+                    skill: group == "Skills",
                 },
             ));
         }
@@ -175,14 +176,12 @@ pub fn items(trig: &Trigger, s: &AppState) -> Vec<Item> {
                 format!("{} · {}", c.args, c.description)
             };
             let text = format!("/{} ", c.name);
-            push(
-                order,
-                label,
-                detail,
-                c.group,
-                "icons/terminal.svg",
-                Pick::Text(text),
-            );
+            let icon = if c.group == "Skills" {
+                "icons/wand-sparkles.svg"
+            } else {
+                "icons/terminal.svg"
+            };
+            push(order, label, detail, c.group, icon, Pick::Text(text));
             order += 1;
         }
         for (name, what, icon, action) in app_actions() {
@@ -242,67 +241,82 @@ fn split(entry: &str) -> (&str, &str) {
     }
 }
 
-/// The @ list, as the extension shows it: files and folders, the project's
-/// top level when nothing is typed, a folder's contents once its path ends
-/// in `/`, and otherwise the best matches by name (then by path).
+/// The most rows the @ list shows.
+const MAX_FILE_ROWS: usize = 100;
+
+/// The @ list, as the VS Code extension has it: one flat list, ranked.
+/// Nothing typed: the project's top level, A to Z. Otherwise every file and
+/// folder whose name or path matches, a match in the name counting double;
+/// a `/` in the query first keeps to the paths under its folder part, so
+/// `src/ui/comp` and a pasted `src/ui/composer.rs` both find their file.
+/// Choosing a row (Enter or Tab, file or folder) writes `@path `.
 pub fn file_items(q: &str, entries: &[String]) -> Vec<Item> {
     let item = |entry: &String, positions: Vec<usize>| {
         let folder = entry.ends_with('/');
-        let (name, dir) = split(entry);
+        let (name, _) = split(entry);
         Item {
             label: name.to_string().into(),
-            detail: dir.to_string().into(),
+            detail: entry.trim_end_matches('/').to_string().into(),
             group: if folder { "Folders" } else { "Files" },
             icon: "",
-            pick: if folder {
-                Pick::Folder(entry.clone())
-            } else {
-                Pick::Text(format!("{} ", mention(entry)))
-            },
+            pick: Pick::Text(format!("{} ", mention(entry))),
             positions,
             file: true,
+            skill: false,
         }
     };
-    let (base, rest) = match q.rfind('/') {
-        Some(i) => (&q[..=i], &q[i + 1..]),
+    let q = q.trim_start_matches("./");
+    if q.is_empty() {
+        let mut top: Vec<&String> = entries
+            .iter()
+            .filter(|e| !e.trim_end_matches('/').contains('/'))
+            .collect();
+        top.sort_by_key(|e| e.to_lowercase());
+        return top
+            .into_iter()
+            .take(MAX_FILE_ROWS)
+            .map(|e| item(e, vec![]))
+            .collect();
+    }
+    let lower = q.to_lowercase();
+    let (base, rest) = match lower.rfind('/') {
+        Some(i) => (&lower[..=i], &q[i + 1..]),
         None => ("", q),
     };
-    let known_base = base.is_empty() || entries.iter().any(|e| e == base);
     let mut scored: Vec<(i32, usize, Item)> = vec![];
-    if known_base && (!base.is_empty() || rest.is_empty()) {
-        // One folder's contents (the top level when nothing is typed).
-        for (order, e) in entries.iter().enumerate() {
-            let parent = e.trim_end_matches('/').rfind('/').map_or("", |i| &e[..=i]);
-            if parent != base {
-                continue;
-            }
-            if let Some((score, pos)) = fuzzy(rest, split(e).0) {
-                scored.push((score, order, item(e, pos)));
-            }
+    for (order, e) in entries.iter().enumerate() {
+        let path = e.to_lowercase();
+        // Under the folder typed, not the folder itself.
+        if !path.starts_with(base) || path == base {
+            continue;
         }
-    } else {
-        for (order, e) in entries.iter().enumerate() {
-            let (name, _) = split(e);
-            // A match in the name beats one spread over the path.
-            if let Some((score, pos)) = fuzzy(rest, name).filter(|_| base.is_empty()) {
-                // A name that starts with what you typed comes first (scores are ×10).
-                let prefix = if name.to_lowercase().starts_with(&rest.to_lowercase()) {
-                    1_000
-                } else {
-                    0
-                };
-                scored.push((score * 2 + prefix, order, item(e, pos)));
-            } else if let Some((score, _)) = fuzzy(q, e) {
-                scored.push((score, order, item(e, vec![])));
-            }
+        let (name, _) = split(e);
+        // The path itself, as typed or pasted: first.
+        let exact = path.trim_end_matches('/') == lower.trim_end_matches('/');
+        let by_name = fuzzy(rest, name).map(|(score, pos)| {
+            let prefix = name.to_lowercase().starts_with(&rest.to_lowercase());
+            (score * 2 + if prefix { 1_000 } else { 0 }, pos)
+        });
+        let by_path = fuzzy(q, e).map(|(score, _)| (score, vec![]));
+        let Some((mut score, pos)) = by_name.into_iter().chain(by_path).max_by_key(|m| m.0) else {
+            continue;
+        };
+        if exact {
+            score += 100_000;
         }
+        // Under the folder typed, its own entries before deeper ones.
+        let depth = path[base.len()..].trim_end_matches('/').matches('/').count() as i32;
+        score -= depth * 5;
+        // Tests after the code they test, when the match is as good.
+        if path.contains("test") || path.contains("spec") {
+            score -= 15;
+        }
+        scored.push((score, order, item(e, pos)));
     }
-    if !rest.is_empty() {
-        scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
-    }
+    scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
     scored
         .into_iter()
-        .take(MAX_ROWS)
+        .take(MAX_FILE_ROWS)
         .map(|(_, _, i)| i)
         .collect()
 }
@@ -377,13 +391,14 @@ pub fn render(
             .on_mouse_move(move |_, _, cx| hover(i, cx))
             .on_click(move |_, window, cx| pick(i, window, cx));
         let row = if item.file {
-            // Name first, its folder after it, dimmed and cut from the left.
-            let folder = matches!(item.pick, Pick::Folder(_));
+            // Name first, its whole path after it, dimmed and cut from the left.
+            let folder = item.group == "Folders";
             let (glyph, color) = super::file_icon::for_name(&item.label, folder, t);
             row.gap(t.space.sm)
-                .h(t.size.control)
+                .h(t.size.hit_sm - px(4.))
                 .px(t.space.sm)
-                .child(icon(glyph, t.size.icon_sm, color))
+                .text_size(t.text.body_sm)
+                .child(icon(glyph, t.size.icon, color))
                 .child(
                     div()
                         .flex_none()
@@ -407,15 +422,8 @@ pub fn render(
                         .text_ellipsis()
                         .text_size(t.text.caption)
                         .text_color(t.colors.text_subtle)
-                        .child(tail(&item.detail, 32)),
+                        .child(tail(&item.detail, 56)),
                 )
-                .when(folder, |d| {
-                    d.child(icon(
-                        "icons/chevron-right.svg",
-                        t.size.icon_xs,
-                        t.colors.text_subtle,
-                    ))
-                })
         } else {
             row.gap(t.space.md)
                 .h(t.size.row)
@@ -436,7 +444,16 @@ pub fn render(
                         .overflow_hidden()
                         .whitespace_nowrap()
                         .text_ellipsis()
-                        .child(highlighted(&item.label, &item.positions, t)),
+                        .map(|d| {
+                            if item.skill {
+                                // A skill reads as one: bold, in its colour.
+                                d.font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(t.extra.skill)
+                                    .child(item.label.clone())
+                            } else {
+                                d.child(highlighted(&item.label, &item.positions, t))
+                            }
+                        }),
                 )
                 .child(
                     div()
@@ -475,7 +492,7 @@ pub fn render(
         );
     }
     let hints: &[&str] = if files {
-        &["↑↓ choose", "Enter add", "Tab open folder", "Esc close"]
+        &["↑↓ choose", "Enter or Tab add", "Esc close"]
     } else {
         &["↑↓ choose", "Enter or Tab complete", "Esc close"]
     };
@@ -568,25 +585,27 @@ mod tests {
     }
 
     #[test]
-    fn the_at_list_shows_folders_and_files_like_the_extension() {
-        // Nothing typed: the top level, as given (folders first in the index).
-        assert_eq!(labels(""), ["src", "Cargo.toml", "README.md", "docs"]);
-        // A folder's path: what is in it.
-        assert_eq!(labels("src/"), ["ui", "main.rs", "state.rs"]);
-        assert_eq!(labels("src/ui/"), ["composer.rs"]);
-        assert_eq!(labels("src/st"), ["state.rs"]);
-        // Anything else: by name first.
+    fn the_at_list_is_one_ranked_list_like_the_extension() {
+        // Nothing typed: the top level, A to Z.
+        assert_eq!(labels(""), ["Cargo.toml", "docs", "README.md", "src"]);
+        // A name anywhere in the project, without its folders typed.
         assert_eq!(labels("comp")[0], "composer.rs");
+        // A folder part keeps to what is under it; its own entries first.
+        assert_eq!(labels("src/")[..2], ["ui", "main.rs"]);
+        assert_eq!(labels("src/ui/comp"), ["composer.rs"]);
+        assert_eq!(labels("src/st"), ["state.rs"]);
+        // A pasted path comes first, as it is.
+        let rows = file_items("src/ui/composer.rs", &entries());
+        assert_eq!(rows[0].detail.as_ref(), "src/ui/composer.rs");
+        assert!(matches!(&rows[0].pick, Pick::Text(t) if t == "@src/ui/composer.rs "));
         // Starting with the query beats a scattered match.
         let more: Vec<String> = ["src/ui/command_palette.rs", "src/ui/composer.rs"]
             .map(String::from)
             .to_vec();
         assert_eq!(file_items("comp", &more)[0].label.as_ref(), "composer.rs");
-        let rows = file_items("comp", &entries());
-        assert_eq!(rows[0].detail.as_ref(), "src/ui");
-        assert!(matches!(&rows[0].pick, Pick::Text(t) if t == "@src/ui/composer.rs "));
-        let ui = file_items("src/", &entries());
-        assert!(matches!(&ui[0].pick, Pick::Folder(p) if p == "src/ui/"));
+        // A folder is added like a file.
+        let ui = file_items("src/u", &entries());
+        assert!(matches!(&ui[0].pick, Pick::Text(t) if t == "@src/ui/ "));
         // A space in a path is quoted, as ForgeCLI reads it.
         assert_eq!(mention("docs/a b.md"), "@\"docs/a b.md\"");
     }

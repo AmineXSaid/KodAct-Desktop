@@ -244,6 +244,58 @@ pub fn custom(project: &std::path::Path) -> Vec<Command> {
     out
 }
 
+/// The skills ForgeCLI ships (`forge-agents/bundled`), by name and what
+/// they do. A user or project skill of the same name replaces one.
+const BUNDLED_SKILLS: &[(&str, &str)] = &[
+    ("batch", "Make the same change across many files, in parallel sub-agents"),
+    ("code-review", "Review code changes for bugs, with a depth level and an optional fix pass"),
+    ("fewer-permission-prompts", "Cut down permission prompts by allowing safe commands this project uses often"),
+    ("init", "Write or improve FORGE.md, the project's instructions for Forge"),
+    ("review", "Review code changes for bugs (same as /code-review)"),
+    ("run", "Start the project and show it working"),
+    ("run-skill-generator", "Write a project skill that captures how to build, run and check this project"),
+    ("security-review", "Review pending changes for exploitable security vulnerabilities"),
+    ("simplify", "Review recent changes for reuse, clarity and efficiency, then fix what you find"),
+    ("update-config", "Change Forge's settings files: permissions, hooks, environment variables, model and more"),
+    ("verify", "Prove a change works by running it, not by reading it"),
+];
+
+/// The skills you can run with `/name`: the project's and yours (from the
+/// folders ForgeCLI reads, `forge_files::skills`), then ForgeCLI's own.
+/// A skill marked `user-invocable: false` is the model's alone. Reads
+/// files: call it off the UI thread.
+pub fn skills(project: &std::path::Path) -> Vec<Command> {
+    let mut out: Vec<Command> = crate::forge_files::skills(project)
+        .into_iter()
+        .filter(|s| s.enabled && s.problem.is_none())
+        .filter(|s| {
+            !std::fs::read_to_string(s.dir.join("SKILL.md")).is_ok_and(|md| {
+                md.lines()
+                    .take_while(|l| !l.is_empty())
+                    .any(|l| l.replace(' ', "") == "user-invocable:false")
+            })
+        })
+        .map(|s| Command {
+            name: s.name,
+            args: String::new(),
+            description: s.description,
+        })
+        .collect();
+    out.sort_by(|a, b| a.name.cmp(&b.name));
+    out.dedup_by(|a, b| a.name == b.name);
+    out.extend(bundled_skills().filter(|b| !out.iter().any(|c| c.name == b.name)).collect::<Vec<_>>());
+    out
+}
+
+/// ForgeCLI's own skills, which every project has.
+pub fn bundled_skills() -> impl Iterator<Item = Command> {
+    BUNDLED_SKILLS.iter().map(|(name, what)| Command {
+        name: name.to_string(),
+        args: String::new(),
+        description: what.to_string(),
+    })
+}
+
 /// Whether `text` is a command ForgeCLI answers at once (`/status`, `/usage`…).
 pub fn is_immediate(text: &str) -> bool {
     let Some(rest) = text.trim().strip_prefix('/') else {
