@@ -6,7 +6,7 @@
 //! - As a file: Export a `.forgeproject` to Downloads; Import one here.
 
 use gpui::{
-    div, prelude::*, relative, AnyElement, Context, Entity, FontWeight, IntoElement,
+    div, prelude::*, px, relative, AnyElement, Context, Entity, FontWeight, IntoElement,
     PathPromptOptions, Render, Subscription, Window,
 };
 
@@ -116,9 +116,9 @@ impl Render for ProjectSharing {
             None => note("Not a git repository: share it as a file.".into()).into_any_element(),
             Some(0) => div()
                 .flex()
-                .items_center()
+                .items_start()
                 .gap(t.space.sm)
-                .child(icon("icons/circle-check.svg", t.size.icon_sm, t.extra.success))
+                .child(div().pt(px(2.)).child(icon("icons/circle-check.svg", t.size.icon_sm, t.extra.success)))
                 .child(note("Committed: everyone who clones the project gets it.".into()).flex_1().min_w_0())
                 .into_any_element(),
             Some(n) => div()

@@ -285,27 +285,12 @@ pub fn open_folder(state: Entity<AppState>, cx: &mut gpui::App) {
     .detach();
 }
 
-/// A project's mark: a folder on a tile in a colour of its own (the same
-/// each time), with a corner badge when the folder is remote (WSL, SSH or a
-/// container).
+/// A project's mark: its folder, as an outline icon.
 pub fn project_tile(t: &Theme, name: &str, path: &std::path::Path, size: Pixels) -> AnyElement {
-    let colors = [
-        t.colors.primary,
-        t.colors.marigold,
-        t.extra.success,
-        t.colors.sky,
-        t.colors.coral,
-    ];
-    // From the folder, not the name, so renaming keeps its colour.
     let _ = name;
-    let h = path
-        .to_string_lossy()
-        .bytes()
-        .fold(7usize, |a, b| a.wrapping_mul(31).wrapping_add(b as usize));
-    let color = colors[h % colors.len()];
-    // A folder, in the project's own hue, on a soft wash of it: the shape
-    // says what it is, the colour tells projects apart at a glance. No
-    // outline, so a small tile reads as a mark rather than a checkbox.
+    // A plain outline, as the rest of the chrome draws its icons: a folder,
+    // or for a remote one the place it lives (WSL, an SSH host, a
+    // container). No tinted tile, no colour coding.
     let glyph = if size >= px(40.) {
         t.size.icon_lg
     } else if size >= px(28.) {
@@ -313,37 +298,16 @@ pub fn project_tile(t: &Theme, name: &str, path: &std::path::Path, size: Pixels)
     } else {
         t.size.icon_sm
     };
-    let remote = crate::remote::Remote::parse(path);
+    let path_icon = crate::remote::Remote::parse(path)
+        .map(|r| r.target.icon())
+        .unwrap_or("icons/folder.svg");
+    // As wide as the icon, so it lines up with the text beside or under it.
     div()
-        .relative()
         .flex_none()
-        .size(size)
-        .child(
-            div()
-                .size_full()
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded(t.radius.button)
-                .bg(color.opacity(if t.is_dark { 0.22 } else { 0.15 }))
-                .child(icon("icons/folder.svg", glyph, color)),
-        )
-        // Too small a tile for a badge: the title bar names the remote beside it.
-        .children(remote.filter(|_| size >= px(32.)).map(|r| {
-            div()
-                .absolute()
-                .right(px(-3.))
-                .bottom(px(-3.))
-                .size(t.size.icon + px(2.))
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded(t.radius.pill)
-                .bg(t.colors.surface)
-                .border_1()
-                .border_color(t.colors.border)
-                .child(icon(r.target.icon(), t.size.icon_xs, t.colors.text_muted))
-        }))
+        .h(size)
+        .flex()
+        .items_center()
+        .child(icon(path_icon, glyph, t.colors.text_muted))
         .into_any_element()
 }
 
