@@ -1,0 +1,4 @@
+# The design library is a mirror of upstream trees: keep its bytes exactly as
+# they are on every platform (no CRLF conversion), and keep it out of the
+# repository's language statistics.
+/design-library/** -text linguist-vendored

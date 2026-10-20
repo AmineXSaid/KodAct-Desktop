@@ -1,0 +1,48 @@
+{
+ "open_design": {
+  "repo": "https://github.com/nexu-io/open-design",
+  "commit": "3b0df90f305c8279e748c292accf336d02b924ef",
+  "date": "2026-10-20",
+  "license": "Apache-2.0"
+ },
+ "roots": [
+  "LICENSE",
+  "craft",
+  "skills",
+  "design-systems",
+  "design-templates",
+  "templates",
+  "prompt-templates",
+  "plugins/_official",
+  "plugins/community",
+  "plugins/registry",
+  "plugins/spec",
+  "assets/frames",
+  "assets/prompt-templates",
+  "assets/community-pets",
+  "data/plugin-previews",
+  "figma-plugin",
+  "clipper/capture.js",
+  "clipper/brand-capture.js",
+  "apps/desktop/vendor/dom-to-pptx",
+  "docs/schemas"
+ ],
+ "counts": {
+  "files": 7288,
+  "media_files": 247,
+  "text_files": 7041,
+  "skills": 169,
+  "catalogue_skills": 85,
+  "design_systems": 152,
+  "design_templates": 115,
+  "craft": 11,
+  "official_atoms": 13,
+  "official_scenarios": 14,
+  "official_examples": 188,
+  "official_design_systems": 143,
+  "official_image_templates": 45,
+  "official_video_templates": 63
+ },
+ "skills": [],
+ "not_shipped": []
+}

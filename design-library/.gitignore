@@ -1,0 +1,20 @@
+# Images, video and audio: pinned by SHA-256 in media.lock.json and fetched
+# by `python3 -I scripts/sync_open_design.py media`, never committed. Keep
+# this list the same as [media] extensions in sync.toml.
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.avif
+*.bmp
+*.ico
+*.mp4
+*.webm
+*.mov
+*.mp3
+*.wav
+*.ogg
+*.m4a
+*.gltf
+*.glb

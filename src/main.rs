@@ -19,6 +19,7 @@ mod browser;
 mod browser_mcp;
 mod commands;
 mod context;
+mod design;
 mod diagnose;
 mod diagram;
 mod doc_versions;
@@ -159,6 +160,10 @@ fn main() {
     if args.get(1).map(String::as_str) == Some("--browser-guard") {
         web_view::guard(&args[2..]);
         return;
+    }
+    // `--design-check`: load the design library and report on it (`design::check`).
+    if args.get(1).map(String::as_str) == Some("--design-check") {
+        std::process::exit(design::check(&args[2..]));
     }
     if args.get(1).map(String::as_str) == Some("--browser-mcp") {
         let devtools = args.get(2).cloned().unwrap_or_default();

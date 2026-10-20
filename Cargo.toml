@@ -60,6 +60,10 @@ sevenz-rust2 = { version = "=0.24.0", default-features = false, features = ["bzi
 image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 # Events from each chat's ForgeCLI process to the UI (backend.rs).
 async-channel = "=2.5.0"
+# The design library's SKILL.md and DESIGN.md front-matter is real YAML
+# (nested maps, block text, lists): src/design/frontmatter.rs. Pure Rust,
+# YAML 1.2, MIT/Apache-2.0.
+yaml-rust2 = { version = "=0.13.0", default-features = false }
 
 # Endpoint keys, in Windows Credential Manager (secrets.rs). MIT/Apache-2.0.
 [target.'cfg(windows)'.dependencies]

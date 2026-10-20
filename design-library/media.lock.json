@@ -1,0 +1,1487 @@
+{
+ "note": "Images, video and audio, pinned by SHA-256; fetched by `python3 -I scripts/sync_open_design.py media`.",
+ "files": [
+  {
+   "path": "assets/community-pets/clippit/spritesheet.webp",
+   "sha256": "a1429ff127d109282f0d8d9e053a602073314699da0d6ebd3fefaa83695b4411",
+   "size": 94084,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/assets/community-pets/clippit/spritesheet.webp"
+  },
+  {
+   "path": "assets/community-pets/dario/spritesheet.webp",
+   "sha256": "890c600ff7a9611b981c2bd81885730442f75abebf76a30234d59510d3a3f007",
+   "size": 1763564,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/assets/community-pets/dario/spritesheet.webp"
+  },
+  {
+   "path": "assets/community-pets/dentist/spritesheet.webp",
+   "sha256": "fffc566aad78357724c3b789028cc270e2d57c39b23018fa37383b7271f087c7",
+   "size": 1287830,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/assets/community-pets/dentist/spritesheet.webp"
+  },
+  {
+   "path": "assets/community-pets/nyako-shigure/spritesheet.webp",
+   "sha256": "709387557532dd2abe5e070b0481797dcb57824b9a5aa25ff681019b04ee1560",
+   "size": 2630970,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/assets/community-pets/nyako-shigure/spritesheet.webp"
+  },
+  {
+   "path": "assets/community-pets/slavik/spritesheet.webp",
+   "sha256": "1418220365678026b05bd000081e7fd6772cdd945679dcd7c4c4dbcadcea5868",
+   "size": 2014760,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/assets/community-pets/slavik/spritesheet.webp"
+  },
+  {
+   "path": "assets/community-pets/tux/spritesheet.webp",
+   "sha256": "289290fcacf782ec4cd606b6882bd0bddb02116d436ec67f53519e4a83ff75a3",
+   "size": 1568308,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/assets/community-pets/tux/spritesheet.webp"
+  },
+  {
+   "path": "assets/community-pets/yelling-dario/spritesheet.webp",
+   "sha256": "a2b57111b63f016e69cd5b290fbe4a7c35c36fea1d63bb69d922133d1eceedc0",
+   "size": 2001330,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/assets/community-pets/yelling-dario/spritesheet.webp"
+  },
+  {
+   "path": "assets/community-pets/yorha-sit-2b/spritesheet.webp",
+   "sha256": "88944fd7c5eafe96109c2edb10b28b047bf12c3caeacefb1e0c251f42f210bd4",
+   "size": 2021348,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/assets/community-pets/yorha-sit-2b/spritesheet.webp"
+  },
+  {
+   "path": "assets/prompt-templates/image/game-screenshot-anime-fighting-game-captain-ryuuga-vs-kaze-renshin.jpg",
+   "sha256": "445c7a87ff4680918a729f0aa718552c6bd5b173e5bc0403c6470b76f082c44f",
+   "size": 678814,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/assets/prompt-templates/image/game-screenshot-anime-fighting-game-captain-ryuuga-vs-kaze-renshin.jpg"
+  },
+  {
+   "path": "assets/prompt-templates/image/game-screenshot-three-kingdoms-guanyu-slaying-yanliang.jpg",
+   "sha256": "c4d3284cd0ac5137e346f440b17a1b2d0697768bb78c66c4d8efa99e4e40c5e9",
+   "size": 527414,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/assets/prompt-templates/image/game-screenshot-three-kingdoms-guanyu-slaying-yanliang.jpg"
+  },
+  {
+   "path": "assets/prompt-templates/image/game-screenshot-three-kingdoms-lyubu-yuanmen-archery.jpg",
+   "sha256": "21476ee6328df1908e7bc5c69db053c16eccc701f7403d55c21be541dc1dcc06",
+   "size": 474330,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/assets/prompt-templates/image/game-screenshot-three-kingdoms-lyubu-yuanmen-archery.jpg"
+  },
+  {
+   "path": "assets/prompt-templates/image/game-screenshot-three-kingdoms-zhaoyun-cradle-escape.jpg",
+   "sha256": "a7fc76b9e6f6520449e06748d33cc717242634f53b3aa3b5c9a29d6901f33d00",
+   "size": 445230,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/assets/prompt-templates/image/game-screenshot-three-kingdoms-zhaoyun-cradle-escape.jpg"
+  },
+  {
+   "path": "assets/prompt-templates/image/game-ui-ancient-china-open-world-mmo-hud.jpg",
+   "sha256": "c08ab56e765d5d7369633cfc0cfb806ec260ea3c73be6382a0f5240213cf54d0",
+   "size": 435299,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/assets/prompt-templates/image/game-ui-ancient-china-open-world-mmo-hud.jpg"
+  },
+  {
+   "path": "assets/prompt-templates/image/illustration-crayon-kid-drawing-rework.jpg",
+   "sha256": "adee327c796ca05449ae88de769cf5fe779b13ee4e4d9f90e30fee2e1d56d68d",
+   "size": 440846,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/assets/prompt-templates/image/illustration-crayon-kid-drawing-rework.jpg"
+  },
+  {
+   "path": "assets/prompt-templates/image/infographic-otaku-dance-choreography-breakdown-gokurakujodo-16-panels.jpg",
+   "sha256": "4a6dd8c518c63352e034851b010925b245e727c58741d539042a4aea7499e3d3",
+   "size": 405812,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/assets/prompt-templates/image/infographic-otaku-dance-choreography-breakdown-gokurakujodo-16-panels.jpg"
+  },
+  {
+   "path": "assets/prompt-templates/image/profile-avatar-seedream-high-fashion-dreamy-portrait.jpg",
+   "sha256": "ea74fa41b1f9c29e379a24fa0243674bd9f2f482109139bf4c49ccaa81392318",
+   "size": 303242,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/assets/prompt-templates/image/profile-avatar-seedream-high-fashion-dreamy-portrait.jpg"
+  },
+  {
+   "path": "assets/prompt-templates/image/social-media-post-seedream-squishcraft-kids-clay-ad.jpg",
+   "sha256": "31e1d29d2df438318b2fded6d3e15f2729a6b1e880692fa7d890e40c19bb5ace",
+   "size": 564242,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/assets/prompt-templates/image/social-media-post-seedream-squishcraft-kids-clay-ad.jpg"
+  },
+  {
+   "path": "assets/prompt-templates/image/social-media-post-sensational-girl-dance-storyboard-8-shots.jpg",
+   "sha256": "39d508f131db000ba5be3301531588f367ff542a6ae419c9dfc5a63cdaca6b74",
+   "size": 195412,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/assets/prompt-templates/image/social-media-post-sensational-girl-dance-storyboard-8-shots.jpg"
+  },
+  {
+   "path": "assets/prompt-templates/image/zelda-style-forbidden-city-game-screenshot.jpg",
+   "sha256": "ecbe1fab67397e4141c82d1be005ee1fc882e122eef59611ae83b7ebaa6b98ba",
+   "size": 306933,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/assets/prompt-templates/image/zelda-style-forbidden-city-game-screenshot.jpg"
+  },
+  {
+   "path": "design-systems/tom-modern/preview/tom-modern-components.png",
+   "sha256": "913308bc560ed5410ecc91ec49a393b4727a2af85d3fe32ccb2db8437be4366e",
+   "size": 669762,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-systems/tom-modern/preview/tom-modern-components.png"
+  },
+  {
+   "path": "design-systems/tom-modern/preview/tom-modern-palette.png",
+   "sha256": "3f9bec62f5588f4222672c07c1ff7f6d6b0f835f5b878b30e2688765a6d07d0d",
+   "size": 142172,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-systems/tom-modern/preview/tom-modern-palette.png"
+  },
+  {
+   "path": "design-templates/html-ppt/docs/readme/animations.png",
+   "sha256": "08f10fb73b61f5f76ad2ee63a3007ce76d02c79c6d71361f689f37849a8224ab",
+   "size": 614483,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/docs/readme/animations.png"
+  },
+  {
+   "path": "design-templates/html-ppt/docs/readme/layouts-live.gif",
+   "sha256": "785f2094a28d660c6c09a935ccbc6d204b2707674ddc9bff063a28bdff05b248",
+   "size": 569121,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/docs/readme/layouts-live.gif"
+  },
+  {
+   "path": "design-templates/html-ppt/docs/readme/layouts.png",
+   "sha256": "a430697321ca3ee2009e8458dad0a86cbe7cb0c0441986463d71bdf1e0c0a12b",
+   "size": 117431,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/docs/readme/layouts.png"
+  },
+  {
+   "path": "design-templates/html-ppt/docs/readme/presenter-mode.png",
+   "sha256": "ba45a6030ed277092f5bdcc2d53de811544d6b8a216c1498072c77a33ecb1ea7",
+   "size": 515363,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/docs/readme/presenter-mode.png"
+  },
+  {
+   "path": "design-templates/html-ppt/docs/readme/templates.png",
+   "sha256": "1f58e3adb84f41d28e545ed2eedafe02456e72297948d86fcfee24da4cf47fde",
+   "size": 296628,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/docs/readme/templates.png"
+  },
+  {
+   "path": "design-templates/html-ppt/docs/readme/themes.png",
+   "sha256": "af68501d9c31f42bc5a6fa053ce588432fc40f034f465d03e102c24f986f7085",
+   "size": 251220,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/docs/readme/themes.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_01.png",
+   "sha256": "fcbe8582141463fed44b4b430f3592a2513968ae48f1e4c4929afc61c4d45b06",
+   "size": 70160,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_01.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_02.png",
+   "sha256": "e6a37a80d37fab7df31a2fa4e9a0ed0a8bb37e29073fe098ade7f220673b2ae5",
+   "size": 60872,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_02.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_03.png",
+   "sha256": "d6860f49aa31731d8a61e983048fe26396e3d09689ec5b3cc1af7e75dd65dca6",
+   "size": 51744,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_03.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_04.png",
+   "sha256": "16e8fba0a47d019f28dcc2799b1dd94a1d3cacdba671de029fc6c0d2bf1f6b3e",
+   "size": 65449,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_04.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_05.png",
+   "sha256": "5273d3f00739660f4ce8d651be94987ddddfba1fff028544d99e8fa06e7a3807",
+   "size": 323375,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_05.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_06.png",
+   "sha256": "f54ed28cdf9eb39f89b2fb33c672dafe4488adebd31fde697eb8c68ecbcc1bf6",
+   "size": 123071,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_06.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_07.png",
+   "sha256": "313bb0ff44d77631edf2474997ad4a7b9c904974d089a20e6143a842d352c231",
+   "size": 143856,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_07.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_08.png",
+   "sha256": "c805432548a6d6a897765441399e07984fe6134da138ada264d4676a30590bde",
+   "size": 212293,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_08.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_09.png",
+   "sha256": "f081a95bd660001c7e63bedb28474bd375425f879238d91633837ae66014e0bf",
+   "size": 118092,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_09.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_10.png",
+   "sha256": "06929b0116bcef4909816d7ccc63a6125a31c7dadcfad145db2c8b055c363b79",
+   "size": 90378,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_10.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_11.png",
+   "sha256": "0d060f3a874143d4b9fde2dbd9dcca4239f3aa6d18dbe41783a201c0fb0ad811",
+   "size": 64361,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_11.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_12.png",
+   "sha256": "736b6d9cd363f8c622a7877629c4fb5b3cd90990c09224271d3d254d21b77559",
+   "size": 61286,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_12.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_13.png",
+   "sha256": "283bf9cd0593e60c76deb1169e9b53ca60609af8fc32f51ee81436ab790d5021",
+   "size": 70648,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_13.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_14.png",
+   "sha256": "202ad6111257033d21ad67e7d789ae1b79dbe96c520e96b61a67e83c27be67f8",
+   "size": 82212,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_14.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_15.png",
+   "sha256": "7cd4d1044db0fe0a4b9944e52a923e434e60ad3ee0de8946acf80c0f284b9fff",
+   "size": 174188,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_15.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_16.png",
+   "sha256": "02dfacb073f4b8e704af721f6c836f3c1476a19143289d220ae3243fc5da4a5b",
+   "size": 254016,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_16.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_17.png",
+   "sha256": "061d2cbcf6bad16a328254d6fe1883158d20b37e2d2f427a11a64ae2d35c2700",
+   "size": 65713,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_17.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_18.png",
+   "sha256": "2964e0fc7f341e452ef3ec8c622bd2586a7e24fa204074f111166c7941039c7a",
+   "size": 194303,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_18.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_19.png",
+   "sha256": "edc521f41bb73009edaaa768fb4cdd2a59ac7facd45d1934096f46044aff3acf",
+   "size": 72231,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_19.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_20.png",
+   "sha256": "19ba94d900d73919a0f543c71dcf4176eef678e928034c2f62847bc543a08106",
+   "size": 91488,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/animation-showcase/animation-showcase_20.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_01.png",
+   "sha256": "fb2a5bc9eec1f735247c15001cfbe18bee631e51ff5b270bea53575d6daace0d",
+   "size": 80492,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_01.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_02.png",
+   "sha256": "33c618a53ea267cb3a9ba924296408056392f40c85bd2238e6ff03a0ffe86c13",
+   "size": 96826,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_02.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_03.png",
+   "sha256": "22545e5245fb6dc22afe2acd9bf793add1dd6819ae385b9be241d3a0d0498e8b",
+   "size": 93306,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_03.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_04.png",
+   "sha256": "946886ef638332469eb0fbf93a24ef73e4c0adaabb9e9a2ee462b70c99aecbf4",
+   "size": 69158,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_04.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_05.png",
+   "sha256": "ccacc4ee590c952ec9c0b166da2b2854fe930c06468c4711f20c829c6376eccd",
+   "size": 86472,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_05.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_06.png",
+   "sha256": "588144c6cffc89b24c1c86ac23dcc7370aab769509659c08f30fad943f912ad7",
+   "size": 89257,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_06.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_07.png",
+   "sha256": "460ef8245d88fdef16542540bbe8ee9fe3be44906d863e7a8b584b957cf883a3",
+   "size": 84259,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_07.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_08.png",
+   "sha256": "805052901631daea37674efbb6f89b5344b60223043c2840a0993663a3a84d0f",
+   "size": 89205,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_08.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_09.png",
+   "sha256": "196629161e41ee269c93e7bfa775b198a9432039642dd8bff8db41ac0b440cf5",
+   "size": 77586,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_09.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_10.png",
+   "sha256": "ebfa0aeb784503ba52495cecc58b2fbda677ab1bf353f6205f642aeec87e04b3",
+   "size": 83122,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_10.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_11.png",
+   "sha256": "75d9241626270b3b5848d3db36e5ad1a027bb0afb5242fd32dd8d8ad09eb288e",
+   "size": 80025,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_11.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_12.png",
+   "sha256": "5e6fe0906b90f870bb750b1841e09de9a8f6b3c0e958ad91cf927440d215c94f",
+   "size": 81893,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_12.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_13.png",
+   "sha256": "a4ec10130f5ab37cae1f983c8d4686b6a775386c3ce0192ae435df7ac190665b",
+   "size": 81128,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_13.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_14.png",
+   "sha256": "482fc0187a06c6dde68c5afda8f74a849904b2c5ac617fa333443671af5e8756",
+   "size": 81506,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_14.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_15.png",
+   "sha256": "c9ddd7a359a262bca46bcff1149dafbe2d87aa88b6f768a2e85dcc5ccfb2bb4d",
+   "size": 70415,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_15.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_16.png",
+   "sha256": "f81fa13c8ccb85fe4ecee864c78f4e336d2fa6d7f50f1c9630fb169f2940ee9e",
+   "size": 90353,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_16.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_17.png",
+   "sha256": "3e0906eaf867e80c88fbf0e284b0cccde8c9fe72e9a0b3e710622f7c92e17c10",
+   "size": 74289,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_17.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_18.png",
+   "sha256": "4e7ce7aa565487289bf6213f9c8f1119ed950d51467e6a8894264467c4836fd2",
+   "size": 71167,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_18.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_19.png",
+   "sha256": "b5d055e7cc0619531564819730527466dbb8a8ec3c3165a660486fbf82c045d0",
+   "size": 122185,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_19.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_20.png",
+   "sha256": "c0ad8b2d96883f081da2da973e4a6fa8d95ef5a77a30967e096ba79f6a8fe2d5",
+   "size": 84129,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_20.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_21.png",
+   "sha256": "18d70d2168d6d46b4fa469f4b257b6330f4f23b61e40901402715a98a7816261",
+   "size": 83820,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_21.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_22.png",
+   "sha256": "cecf0668289488f38ce3e6a1c9d628e393773a27e7968a25c365b38552a279d4",
+   "size": 84473,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_22.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_23.png",
+   "sha256": "a0a8dbdb8487c812632f357becd789306c378ba9f474066eed241aeb14394203",
+   "size": 82153,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_23.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_24.png",
+   "sha256": "60d0bdf0aec9c3241e603d7d0a7245d95df8e8506a2295de8455b8a83f250f3f",
+   "size": 71418,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_24.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_25.png",
+   "sha256": "0bb09e8b83f78c81539101a86cbac2e8e322402b43ea1f52c67a4e0634b74314",
+   "size": 155914,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_25.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_26.png",
+   "sha256": "1a1abd8d61eff7ab56a12818936108611c055224414c8b4a2267ff24d74d5007",
+   "size": 96910,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_26.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_27.png",
+   "sha256": "97dca664409b0b07d722a9a592e98ff007b59bec489ece2c540c3f1496e908eb",
+   "size": 93069,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_27.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_28.png",
+   "sha256": "dbd33857ea7ce79f4ada3626c9251aa18badbbcf982e998b1f0fa3b15d2c53b2",
+   "size": 79293,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_28.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_29.png",
+   "sha256": "4cfc99b36383edfc67bde4ebbec59d4c6f96fc3a091a75553efe91da575b5ee0",
+   "size": 122874,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_29.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_30.png",
+   "sha256": "b05b4449699756f69b2672a60da8fee1eb01e124f274a50872192ea91b2c2ff3",
+   "size": 81906,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_30.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_31.png",
+   "sha256": "d305d9dc1a78430eeb421f2f417fabe3e3d4ebb43085edb1c30e12e65da3fc93",
+   "size": 83624,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_31.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_32.png",
+   "sha256": "44d61aa758fdb3bed9727c6f3923530ff9421fb27c0b9b3be5f479301db13a3b",
+   "size": 75464,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_32.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_33.png",
+   "sha256": "a1bda923e7c1cc08fc0cde6bca3f3851af267d4bb660dfe1d10ab61779fea096",
+   "size": 79222,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_33.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_34.png",
+   "sha256": "23700b0928d2d2a72d7d3760554bf9bc9660962e375768b658cd385366fed037",
+   "size": 85236,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_34.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_35.png",
+   "sha256": "e7e904b62c4414f7a70d3b1c6eea345278c60c5a79494c0d17dc0e50fef20eda",
+   "size": 104609,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_35.png"
+  },
+  {
+   "path": "design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_36.png",
+   "sha256": "fd02e264de39df124410fdaf3ba3dcf3591eb578fbc7e7ec1e81178743a95c2a",
+   "size": 79975,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/html-ppt/scripts/verify-output/theme-showcase/theme-showcase_36.png"
+  },
+  {
+   "path": "design-templates/open-design-landing/assets/about.png",
+   "sha256": "8b6cd7e3776adfb2313b44cd4a14723a9fe8bd00978917044158665f042aa9c7",
+   "size": 1921345,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/open-design-landing/assets/about.png"
+  },
+  {
+   "path": "design-templates/open-design-landing/assets/capabilities.png",
+   "sha256": "3f45e6492d6043ee5463c38a3e2c7a13f250bd907b00f3ba3809e1b8db96213b",
+   "size": 1890771,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/open-design-landing/assets/capabilities.png"
+  },
+  {
+   "path": "design-templates/open-design-landing/assets/cta.png",
+   "sha256": "ed4701d41e5466fb624e295c10101bea47275a42aa64bdbdcb0f640dac55e6c5",
+   "size": 1975780,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/open-design-landing/assets/cta.png"
+  },
+  {
+   "path": "design-templates/open-design-landing/assets/hero.png",
+   "sha256": "3a59ff4925f2b79ff8da7ac91b10d76e1b2e7f82898c2b256f1caaa4c216eb6f",
+   "size": 2058917,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/open-design-landing/assets/hero.png"
+  },
+  {
+   "path": "design-templates/open-design-landing/assets/lab-1.png",
+   "sha256": "d5ce492792baf173ccc026f867035d9bdd6835059d53a78d7ca31d7d25b4ce57",
+   "size": 1299830,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/open-design-landing/assets/lab-1.png"
+  },
+  {
+   "path": "design-templates/open-design-landing/assets/lab-2.png",
+   "sha256": "caa72c5544a5b4ad8222af3ea1c789db07ed28b2b7c97739a4c015eb5081a9f9",
+   "size": 1345317,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/open-design-landing/assets/lab-2.png"
+  },
+  {
+   "path": "design-templates/open-design-landing/assets/lab-3.png",
+   "sha256": "73234c899123ed91d6ef84ae5cb254514a211532c8280429339168fcc6def804",
+   "size": 1321595,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/open-design-landing/assets/lab-3.png"
+  },
+  {
+   "path": "design-templates/open-design-landing/assets/lab-4.png",
+   "sha256": "b393e98038082d663739934f08aec2cd7937a21f0d6eb68f9c5109efde62a80e",
+   "size": 1246617,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/open-design-landing/assets/lab-4.png"
+  },
+  {
+   "path": "design-templates/open-design-landing/assets/lab-5.png",
+   "sha256": "6d03a9f64e8ef77e6734f21df613663ed9bda818eea93d6999c9a3546cc0c898",
+   "size": 1170933,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/open-design-landing/assets/lab-5.png"
+  },
+  {
+   "path": "design-templates/open-design-landing/assets/method-1.png",
+   "sha256": "f2b9e4c7b15cc13dcb3b639e9b88322cbf2bb5d4ceaca89e31b4d7d108f56eb9",
+   "size": 1107903,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/open-design-landing/assets/method-1.png"
+  },
+  {
+   "path": "design-templates/open-design-landing/assets/method-2.png",
+   "sha256": "6213294887fe52e3afbe1f88394b774ec4248b42f6fbd07224fc761d34d8fd99",
+   "size": 1142158,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/open-design-landing/assets/method-2.png"
+  },
+  {
+   "path": "design-templates/open-design-landing/assets/method-3.png",
+   "sha256": "d63123e0ea95715153d7de5f62e38024bd9ee17d2d2039c681272a4af39bd164",
+   "size": 1006205,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/open-design-landing/assets/method-3.png"
+  },
+  {
+   "path": "design-templates/open-design-landing/assets/method-4.png",
+   "sha256": "665b7fd84b9bd2da1917df85fda7f1fd6c7b229043053421e16ccbe7033764fc",
+   "size": 1017476,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/open-design-landing/assets/method-4.png"
+  },
+  {
+   "path": "design-templates/open-design-landing/assets/testimonial.png",
+   "sha256": "2143d928305693a331387836b88ce75ff1d3200a3788a38621b9ba46d323250c",
+   "size": 1737581,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/open-design-landing/assets/testimonial.png"
+  },
+  {
+   "path": "design-templates/open-design-landing/assets/work-1.png",
+   "sha256": "f45b7eb7efbcfdfe09eaa092ef75c4f5bbdf9b493c9e29679b6fa23822e45b34",
+   "size": 1231123,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/open-design-landing/assets/work-1.png"
+  },
+  {
+   "path": "design-templates/open-design-landing/assets/work-2.png",
+   "sha256": "699f83d5d4718d74f0e11bcf92b6a9dda1fea9388c565a4798546e0aefc951d7",
+   "size": 1369134,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/design-templates/open-design-landing/assets/work-2.png"
+  },
+  {
+   "path": "plugins/_official/examples/motion-future/assets/cover.jpg",
+   "sha256": "9405e29e9e9943bdd1de5e5a5f66deeb1853362ce694976560fbd4a41c278725",
+   "size": 62960,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/motion-future/assets/cover.jpg"
+  },
+  {
+   "path": "plugins/_official/examples/motion-future/assets/soundtrack.mp3",
+   "sha256": "131d9e1832be0d41531fadbf35bbe9e8edae06c788c7929843b510697dc25375",
+   "size": 240789,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/motion-future/assets/soundtrack.mp3"
+  },
+  {
+   "path": "plugins/_official/examples/motion-product-promo/assets/cover.jpg",
+   "sha256": "d5df429df6dda4b220247f379b16be3ec1cf534f77c9621f00c9b254af1473fd",
+   "size": 21687,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/motion-product-promo/assets/cover.jpg"
+  },
+  {
+   "path": "plugins/_official/examples/motion-product-promo/assets/soundtrack.mp3",
+   "sha256": "74520960e8bec189417cc873395d296a9a94feb81697b5d15d3431968909ba4e",
+   "size": 241205,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/motion-product-promo/assets/soundtrack.mp3"
+  },
+  {
+   "path": "plugins/_official/examples/motion-showreel/assets/cover.jpg",
+   "sha256": "f94de6dbd9068ae1d046adbcf252b1fd35c07fd0c7bf66a65505192bc4a7843e",
+   "size": 13429,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/motion-showreel/assets/cover.jpg"
+  },
+  {
+   "path": "plugins/_official/examples/motion-showreel/assets/soundtrack.mp3",
+   "sha256": "04c3ddb8f08024ac35a1fc4be9e2ed604859039c5a3c57f4c93585afaa53532d",
+   "size": 180916,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/motion-showreel/assets/soundtrack.mp3"
+  },
+  {
+   "path": "plugins/_official/examples/motion-ui-morph/assets/cover.jpg",
+   "sha256": "2804c45839b320463c761f8c812915f418b6d8919d32c3d72e4e3d74010e406b",
+   "size": 3881,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/motion-ui-morph/assets/cover.jpg"
+  },
+  {
+   "path": "plugins/_official/examples/motion-ui-morph/assets/soundtrack.mp3",
+   "sha256": "2dfacaac7bdc41cab4db549cbfdefd6ea875d4da383c7121aab21b5697d55ca3",
+   "size": 168691,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/motion-ui-morph/assets/soundtrack.mp3"
+  },
+  {
+   "path": "plugins/_official/examples/motion-visual-lesson/assets/cover.jpg",
+   "sha256": "78817e6fd4b86633d622bb983d455485e2c12e1092898dc1a58c6654ca7602ee",
+   "size": 26771,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/motion-visual-lesson/assets/cover.jpg"
+  },
+  {
+   "path": "plugins/_official/examples/motion-visual-lesson/assets/soundtrack.mp3",
+   "sha256": "1edb7ec6de8f0600c2d6a0e4212344fbd54bb81dac71100ec3ecf9d5cef1dc47",
+   "size": 240789,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/motion-visual-lesson/assets/soundtrack.mp3"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/apple-icon.png",
+   "sha256": "038ec696af81c03f443b992dd41fbafd6ed68e89f8910573a92cdc68d1a9728f",
+   "size": 9600,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/apple-icon.png"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/bgm.mp3",
+   "sha256": "920f238327ebafbc5aa2f97a013e8c81fecd78018b3b5926c6703d8a96c0b43b",
+   "size": 702216,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/bgm.mp3"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/img/m3.png",
+   "sha256": "86f794ee188cb1b3ecf6a843a547d1e272016acd0278f174e6771299620a964b",
+   "size": 37129,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/img/m3.png"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/model/cnt.gltf",
+   "sha256": "db709d85f2875a72b478062775405ee2277eb1db33a716cdeb912bddf493e5c7",
+   "size": 548160,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/model/cnt.gltf"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/model/cursor.glb",
+   "sha256": "a69d5b3f772e6823db22c139f64978eff5ca9d9a6ec8af6ee11eadc1d3212d4d",
+   "size": 39604,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/model/cursor.glb"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/model/hello.gltf",
+   "sha256": "6ac03b270c2112a43a5663ba9cb40876abc6c7e995721dfa4008c627294f531b",
+   "size": 299324,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/model/hello.gltf"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/sticker_img/s_01.webp",
+   "sha256": "847eb3b1fba3e5ee615aefa817943786481dd84a13f8e65663d6f26c5bd2d099",
+   "size": 188474,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/sticker_img/s_01.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/sticker_img/s_02.webp",
+   "sha256": "154f754f3361a11e5b363758aa3ac1c467d94b559059c4ed69b4a5b57c551d02",
+   "size": 127512,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/sticker_img/s_02.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/sticker_img/s_03.webp",
+   "sha256": "eda6528b4e5103739125d80008d37e2d8a967e036afc89e8dd8c1cb485f878f0",
+   "size": 188062,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/sticker_img/s_03.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/sticker_img/s_04.webp",
+   "sha256": "df3d59a3a842c9fcfb30d00d2cc1a4209c5e146d95feb5e6d59bc81e4f37910a",
+   "size": 365844,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/sticker_img/s_04.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/sticker_img/s_05.webp",
+   "sha256": "d9a10b2e38faa186ea2fdf68f8e8df0f64bdbf6192a9d21a3af753bebd7bff8e",
+   "size": 105604,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/sticker_img/s_05.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/sticker_img/s_06.webp",
+   "sha256": "bafe874279efc4a0644a0aab8dd33d639090c1b002a4717c6f21374beb14f3b4",
+   "size": 197838,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/sticker_img/s_06.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/sticker_img/s_07.webp",
+   "sha256": "9431f348e221247350b956f92639216a9d461d3f8ef4b767d4e0ba1e429545e0",
+   "size": 205366,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/sticker_img/s_07.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/sticker_img/s_08.webp",
+   "sha256": "ec01d57dd47e04968912b5cdd37dc77a2fb23cd95aba817f87a90e09d9382005",
+   "size": 146330,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/sticker_img/s_08.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/sticker_img/s_09.webp",
+   "sha256": "21bc2f834e60988e21d1ebceb7431abf12a6524f0f61d498ac86eda59890c7aa",
+   "size": 80506,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/sticker_img/s_09.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/sticker_img/s_10.webp",
+   "sha256": "62969a50cd2e368c8910932bd70b2210a51a982f441182f270ad2248288c0701",
+   "size": 135046,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/sticker_img/s_10.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/sticker_img/s_11.webp",
+   "sha256": "da25b377e5da5799fd9d768ec36eed12e28600a2c74d39778bb26c862006d87b",
+   "size": 341244,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/sticker_img/s_11.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/sticker_img/s_12.webp",
+   "sha256": "2c92c72cac20f6a461d5e0fb811fbf9e9e708ef5c08bbb51471b52b4b3dc25fd",
+   "size": 234994,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/sticker_img/s_12.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/work/ali01.webp",
+   "sha256": "353c1b7e069ea521464a1c61f1255cf46726edf0a3506566ffa8af542f49b7f1",
+   "size": 248948,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/work/ali01.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/work/ali02.webp",
+   "sha256": "353c1b7e069ea521464a1c61f1255cf46726edf0a3506566ffa8af542f49b7f1",
+   "size": 248948,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/work/ali02.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/work/c4.webp",
+   "sha256": "06da7866343fc44422cc5316734c4805e6c25a3c432c087f5f25db18c44c17f1",
+   "size": 193842,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/work/c4.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/work/ds01.webp",
+   "sha256": "4f3da1b473564d42b3c2502f695f7c342f402d45ddbf0c2e279f5bdc5235e7d6",
+   "size": 244434,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/work/ds01.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/work/ds02.webp",
+   "sha256": "4f3da1b473564d42b3c2502f695f7c342f402d45ddbf0c2e279f5bdc5235e7d6",
+   "size": 244434,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/work/ds02.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/work/inspire_mono_01.webp",
+   "sha256": "ff83cf4fcfaaf958e89afadea5f4d6131fffd06f1fb6902e43b5afae9f4d948c",
+   "size": 173360,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/work/inspire_mono_01.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/work/inspire_mono_02.webp",
+   "sha256": "ff83cf4fcfaaf958e89afadea5f4d6131fffd06f1fb6902e43b5afae9f4d948c",
+   "size": 173360,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/work/inspire_mono_02.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/work/reunimos01.webp",
+   "sha256": "28365e8c4edcc198e32b6cb5e438617166684d48be19cad3fffa12411ea1632a",
+   "size": 351816,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/work/reunimos01.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/work/reunimos02.webp",
+   "sha256": "28365e8c4edcc198e32b6cb5e438617166684d48be19cad3fffa12411ea1632a",
+   "size": 351816,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/work/reunimos02.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/work/s01.webp",
+   "sha256": "bf26fc485e3cbe15a30197c404a5a37857af8ac162de800ee8e687963df0460b",
+   "size": 274366,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/work/s01.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/work/s02.webp",
+   "sha256": "bf26fc485e3cbe15a30197c404a5a37857af8ac162de800ee8e687963df0460b",
+   "size": 274366,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/work/s02.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/work/sd01.webp",
+   "sha256": "3b17cbddb5a5a10d1b594a9ecccf1bd8fd779f984f6f9fb52cf9bb97b27e6548",
+   "size": 131840,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/work/sd01.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/work/sd02.webp",
+   "sha256": "3b17cbddb5a5a10d1b594a9ecccf1bd8fd779f984f6f9fb52cf9bb97b27e6548",
+   "size": 131840,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/work/sd02.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/work/si.webp",
+   "sha256": "db07b1cfbd8afd0cdea4377b03cdbfdbcdbba142b57cc240469389ab17ef7c31",
+   "size": 445296,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/work/si.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/work/si02.webp",
+   "sha256": "db07b1cfbd8afd0cdea4377b03cdbfdbcdbba142b57cc240469389ab17ef7c31",
+   "size": 445296,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/work/si02.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/work/tt01.webp",
+   "sha256": "eec375e6af8a7be1c5a8e51c1383e0f9544e4ce2866c0b87a822e740b7090d05",
+   "size": 1012,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/work/tt01.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/work/tt02.webp",
+   "sha256": "5b40b3715748b563a601f79c520d389a76c77b9986078e0f9bb0b174bf7df517",
+   "size": 1036,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/work/tt02.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/work/vs01.webp",
+   "sha256": "1df689570bdfcfa0a84574fd436e490a56805d0822aa61f1d1f81a544bcb1350",
+   "size": 163274,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/work/vs01.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/work/vs02.webp",
+   "sha256": "1df689570bdfcfa0a84574fd436e490a56805d0822aa61f1d1f81a544bcb1350",
+   "size": 163274,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/work/vs02.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/work/wasm01.webp",
+   "sha256": "69745b36f0e57b360df47cbc244583bb95c52d18bcd8007a307a7b579668f642",
+   "size": 240498,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/work/wasm01.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-homepage/assets/work/wasm02.webp",
+   "sha256": "69745b36f0e57b360df47cbc244583bb95c52d18bcd8007a307a7b579668f642",
+   "size": 240498,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-homepage/assets/work/wasm02.webp"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-landing/assets/about.png",
+   "sha256": "8b6cd7e3776adfb2313b44cd4a14723a9fe8bd00978917044158665f042aa9c7",
+   "size": 1921345,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-landing/assets/about.png"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-landing/assets/capabilities.png",
+   "sha256": "3f45e6492d6043ee5463c38a3e2c7a13f250bd907b00f3ba3809e1b8db96213b",
+   "size": 1890771,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-landing/assets/capabilities.png"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-landing/assets/cta.png",
+   "sha256": "ed4701d41e5466fb624e295c10101bea47275a42aa64bdbdcb0f640dac55e6c5",
+   "size": 1975780,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-landing/assets/cta.png"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-landing/assets/hero.png",
+   "sha256": "3a59ff4925f2b79ff8da7ac91b10d76e1b2e7f82898c2b256f1caaa4c216eb6f",
+   "size": 2058917,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-landing/assets/hero.png"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-landing/assets/lab-1.png",
+   "sha256": "d5ce492792baf173ccc026f867035d9bdd6835059d53a78d7ca31d7d25b4ce57",
+   "size": 1299830,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-landing/assets/lab-1.png"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-landing/assets/lab-2.png",
+   "sha256": "caa72c5544a5b4ad8222af3ea1c789db07ed28b2b7c97739a4c015eb5081a9f9",
+   "size": 1345317,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-landing/assets/lab-2.png"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-landing/assets/lab-3.png",
+   "sha256": "73234c899123ed91d6ef84ae5cb254514a211532c8280429339168fcc6def804",
+   "size": 1321595,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-landing/assets/lab-3.png"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-landing/assets/lab-4.png",
+   "sha256": "b393e98038082d663739934f08aec2cd7937a21f0d6eb68f9c5109efde62a80e",
+   "size": 1246617,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-landing/assets/lab-4.png"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-landing/assets/lab-5.png",
+   "sha256": "6d03a9f64e8ef77e6734f21df613663ed9bda818eea93d6999c9a3546cc0c898",
+   "size": 1170933,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-landing/assets/lab-5.png"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-landing/assets/method-1.png",
+   "sha256": "f2b9e4c7b15cc13dcb3b639e9b88322cbf2bb5d4ceaca89e31b4d7d108f56eb9",
+   "size": 1107903,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-landing/assets/method-1.png"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-landing/assets/method-2.png",
+   "sha256": "6213294887fe52e3afbe1f88394b774ec4248b42f6fbd07224fc761d34d8fd99",
+   "size": 1142158,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-landing/assets/method-2.png"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-landing/assets/method-3.png",
+   "sha256": "d63123e0ea95715153d7de5f62e38024bd9ee17d2d2039c681272a4af39bd164",
+   "size": 1006205,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-landing/assets/method-3.png"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-landing/assets/method-4.png",
+   "sha256": "665b7fd84b9bd2da1917df85fda7f1fd6c7b229043053421e16ccbe7033764fc",
+   "size": 1017476,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-landing/assets/method-4.png"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-landing/assets/testimonial.png",
+   "sha256": "2143d928305693a331387836b88ce75ff1d3200a3788a38621b9ba46d323250c",
+   "size": 1737581,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-landing/assets/testimonial.png"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-landing/assets/work-1.png",
+   "sha256": "f45b7eb7efbcfdfe09eaa092ef75c4f5bbdf9b493c9e29679b6fa23822e45b34",
+   "size": 1231123,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-landing/assets/work-1.png"
+  },
+  {
+   "path": "plugins/_official/examples/open-design-landing/assets/work-2.png",
+   "sha256": "699f83d5d4718d74f0e11bcf92b6a9dda1fea9388c565a4798546e0aefc951d7",
+   "size": 1369134,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/open-design-landing/assets/work-2.png"
+  },
+  {
+   "path": "plugins/_official/examples/webgl-depth-gallery/flower-01.webp",
+   "sha256": "5ba1220bdf9efd791545249abccaa75ca68a9ba19f5e3bf72144ba9901754a2e",
+   "size": 52310,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/webgl-depth-gallery/flower-01.webp"
+  },
+  {
+   "path": "plugins/_official/examples/webgl-depth-gallery/flower-02.webp",
+   "sha256": "bf0282e5311cd6fa2a689d4a234bb8333befe92defa23405b10b6b9fd1fd6899",
+   "size": 38980,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/webgl-depth-gallery/flower-02.webp"
+  },
+  {
+   "path": "plugins/_official/examples/webgl-depth-gallery/flower-03.webp",
+   "sha256": "76f7d53a2242b3a26822b872b222a56d813b9d301e844e98d23650b82392e2ca",
+   "size": 41584,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/webgl-depth-gallery/flower-03.webp"
+  },
+  {
+   "path": "plugins/_official/examples/webgl-depth-gallery/flower-04.webp",
+   "sha256": "327bdc8d043687691947267439a3ce1f1c88482e45c2c144b633f6f5d0e6e7f2",
+   "size": 40938,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/webgl-depth-gallery/flower-04.webp"
+  },
+  {
+   "path": "plugins/_official/examples/webgl-depth-gallery/flower-05.webp",
+   "sha256": "4370126b8aeb14ebad7472d31edc8636d6d9b575066024b824cc9bc00d59e341",
+   "size": 28546,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/webgl-depth-gallery/flower-05.webp"
+  },
+  {
+   "path": "plugins/_official/examples/webgl-distortion-grain/dgs-img/1.jpg",
+   "sha256": "b9f2d34fe1b8e872c3a3fba6ba8b413edfaca8fd21e6d8fb08464b4d9e649c9b",
+   "size": 206308,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/webgl-distortion-grain/dgs-img/1.jpg"
+  },
+  {
+   "path": "plugins/_official/examples/webgl-distortion-grain/dgs-img/2.jpg",
+   "sha256": "a1c9198333d16cf629688b94836c696902633e5a7ebd4e041c7edaa176b2bd39",
+   "size": 159879,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/webgl-distortion-grain/dgs-img/2.jpg"
+  },
+  {
+   "path": "plugins/_official/examples/webgl-distortion-grain/dgs-img/3.jpg",
+   "sha256": "5290b0761126f0d39e79a06b3810bfc0b7aa03548f84df1afa68264bb86f807c",
+   "size": 165567,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/webgl-distortion-grain/dgs-img/3.jpg"
+  },
+  {
+   "path": "plugins/_official/examples/webgl-distortion-grain/dgs-img/4.jpg",
+   "sha256": "1a8d494348ea35e6ff3cd3b431239d0b36c3c32209d659c8c6ce338ccc71a659",
+   "size": 168320,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/webgl-distortion-grain/dgs-img/4.jpg"
+  },
+  {
+   "path": "plugins/_official/examples/webgl-distortion-grain/dgs-img/5.jpg",
+   "sha256": "7b21e4e5e1189285f3dc3ba064da3ca727d46658538c498ed414285a90b2466d",
+   "size": 207362,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/webgl-distortion-grain/dgs-img/5.jpg"
+  },
+  {
+   "path": "plugins/_official/examples/webgl-horizontal-parallax/hpg-img/1.jpg",
+   "sha256": "470ce21e184f6db378134b459d82dfedf4c5d8695070f6284c3478b1df94ecdf",
+   "size": 158143,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/webgl-horizontal-parallax/hpg-img/1.jpg"
+  },
+  {
+   "path": "plugins/_official/examples/webgl-horizontal-parallax/hpg-img/2.jpg",
+   "sha256": "f4401e2a5ad155f75dafdfaa8a8acecad33c1545f6aa337aacb743e34044bf43",
+   "size": 130714,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/webgl-horizontal-parallax/hpg-img/2.jpg"
+  },
+  {
+   "path": "plugins/_official/examples/webgl-horizontal-parallax/hpg-img/3.jpg",
+   "sha256": "236d75d84120af7b933383bbec5ffb29c2294bb59750175f3d8f9ea5ca22a23d",
+   "size": 169832,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/webgl-horizontal-parallax/hpg-img/3.jpg"
+  },
+  {
+   "path": "plugins/_official/examples/webgl-horizontal-parallax/hpg-img/4.jpg",
+   "sha256": "cb4a8b8ed9b9c795ef6197e52cb36d57cd60d4b4fae52f5cbc9c0e1364dd861b",
+   "size": 128347,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/webgl-horizontal-parallax/hpg-img/4.jpg"
+  },
+  {
+   "path": "plugins/_official/examples/webgl-horizontal-parallax/hpg-img/5.jpg",
+   "sha256": "508cac41e51a3f453f67d601725d2964262d9b2fd94ca1088def6478e8f4dc26",
+   "size": 224928,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/webgl-horizontal-parallax/hpg-img/5.jpg"
+  },
+  {
+   "path": "plugins/_official/examples/webgl-horizontal-parallax/hpg-img/6.jpg",
+   "sha256": "f8a5f5aa44d4c9d618590f22adc96132cb36a286f00d075d415d62d02bcd7292",
+   "size": 195081,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/webgl-horizontal-parallax/hpg-img/6.jpg"
+  },
+  {
+   "path": "plugins/_official/examples/webgl-pixel-reveal-gallery/expedition/e1.jpg",
+   "sha256": "6fe6ab911754622106f67f41b562087817125a11001acb71b394d3aac2fc6cd8",
+   "size": 203786,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/webgl-pixel-reveal-gallery/expedition/e1.jpg"
+  },
+  {
+   "path": "plugins/_official/examples/webgl-pixel-reveal-gallery/expedition/e2.jpg",
+   "sha256": "67d638154e5dee45d60091202f380b39bb0c1b299dfa75ba2630c22f1cf0e488",
+   "size": 146048,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/webgl-pixel-reveal-gallery/expedition/e2.jpg"
+  },
+  {
+   "path": "plugins/_official/examples/webgl-pixel-reveal-gallery/expedition/e3.jpg",
+   "sha256": "44c77449806b31d8611e1bd3f08957e7fcb69183240cb41c79bac32f13d30044",
+   "size": 264575,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/webgl-pixel-reveal-gallery/expedition/e3.jpg"
+  },
+  {
+   "path": "plugins/_official/examples/webgl-pixel-reveal-gallery/expedition/e4.jpg",
+   "sha256": "36e7f58cc49457e79a2ce4eaea4f2723c4c3a262a070cdb5c32c406784f7d008",
+   "size": 166592,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/webgl-pixel-reveal-gallery/expedition/e4.jpg"
+  },
+  {
+   "path": "plugins/_official/examples/webgl-pixel-reveal-gallery/expedition/e5.jpg",
+   "sha256": "d670dc084af4cfb5a29b09c92bb0c4532519e77d473c07264966753a1d05e78a",
+   "size": 227267,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/webgl-pixel-reveal-gallery/expedition/e5.jpg"
+  },
+  {
+   "path": "plugins/_official/examples/webgl-pixel-reveal-gallery/expedition/e6.jpg",
+   "sha256": "86d2663f43b85762dfbacf1593ffa5004f4457d3e104679bfa1ffd6c57cd2928",
+   "size": 229556,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/examples/webgl-pixel-reveal-gallery/expedition/e6.jpg"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-bold-poster/preview.mp4",
+   "sha256": "d23beeae8180672f55037e0bbf51a41ae1ceb816761fe406b11cc13f09d67b38",
+   "size": 368055,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-bold-poster/preview.mp4"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-bold-poster/preview.png",
+   "sha256": "47c33139df9e54bc064ffc2139c3dd2a6dc7f59c3443a434b91d636925ebcdcb",
+   "size": 432184,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-bold-poster/preview.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-bold-signal/preview.mp4",
+   "sha256": "64d656ca258d45760e8ab3993e202b07b4139cad3cbd8bdd73af68116407b81f",
+   "size": 150640,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-bold-signal/preview.mp4"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-bold-signal/preview.png",
+   "sha256": "3e8bd4634519c93e1c8c11987a8503755469b49f72f16e4db21476923ad5bf91",
+   "size": 258262,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-bold-signal/preview.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-build-minimal/preview.mp4",
+   "sha256": "a625c3a9ea85a1697d8fd31960e63c4e6229c64c1fa8976072c1656e38e58523",
+   "size": 110826,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-build-minimal/preview.mp4"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-build-minimal/preview.png",
+   "sha256": "87c3356ab23b51a446413313ec45bd1e721bea8a209a3016ad404d24511a5cf0",
+   "size": 115098,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-build-minimal/preview.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-creative-voltage/preview.mp4",
+   "sha256": "9961f8732c66d4f7c9ffe1fdead02686cc11f271d64302b9f54577180e50765a",
+   "size": 144165,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-creative-voltage/preview.mp4"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-creative-voltage/preview.png",
+   "sha256": "6d101fdf23b39d7ff6ee8df167c68db7d913cc9f4d09f65a5d7bcbb6fb500ff1",
+   "size": 232337,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-creative-voltage/preview.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-data-chart-nyt/preview.mp4",
+   "sha256": "58d2cb3509a6eebb670551983d73de53b8cfa8d5da388a9ba69f5cd5bb67a292",
+   "size": 171660,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-data-chart-nyt/preview.mp4"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-data-chart-nyt/preview.png",
+   "sha256": "f21da08bc5f3e34566338581db80466d65a5658f2cf4e36c9cbae749c5c457b6",
+   "size": 350636,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-data-chart-nyt/preview.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-data-rollup/preview.png",
+   "sha256": "1d78dad71876d807d7033b9f30d04b9f972047431f602f8ea165fb8979d0e8bc",
+   "size": 106355,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-data-rollup/preview.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-decision-tree/preview.mp4",
+   "sha256": "248da670dc3569d5f318ec874ffad9e7ebf7d17ce5c7142cfea7056f8593f5d9",
+   "size": 394592,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-decision-tree/preview.mp4"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-decision-tree/preview.png",
+   "sha256": "0f43171d5c52bf302be5b78c4fce90699ab3e2ab6a8ea0d76443b53b2663ecb9",
+   "size": 236550,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-decision-tree/preview.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-electric-studio/preview.mp4",
+   "sha256": "9c3428d3de7dc8911e17591bb217889fdb5948df6ec51e04269030c92a7e6c5c",
+   "size": 96982,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-electric-studio/preview.mp4"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-electric-studio/preview.png",
+   "sha256": "5ed5302eeb4efe9a4debe4899728807bcf5b895c0bc0b448d9339bb8821deab3",
+   "size": 208661,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-electric-studio/preview.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-glitch-title/preview.mp4",
+   "sha256": "f84052102847d20d3d172901a41d186a6b303a50563f828cc716e57414059762",
+   "size": 278102,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-glitch-title/preview.mp4"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-glitch-title/preview.png",
+   "sha256": "0023afce5bef88653c0bd15409372c75a7da92588a7f5fdf4509e49cdcf41575",
+   "size": 410683,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-glitch-title/preview.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-kinetic-type/preview.mp4",
+   "sha256": "8e979eb9b8cb1c258e6023d493166221537f6aee583e3d367d0ad62722b91dba",
+   "size": 540407,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-kinetic-type/preview.mp4"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-kinetic-type/preview.png",
+   "sha256": "3614150ca0a670606733dd1f4c74a05b047a846099791e3338607ba9f3b81d34",
+   "size": 98791,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-kinetic-type/preview.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-light-leak-cinema/preview.mp4",
+   "sha256": "dc84566c3dfe3022415aef6cdf2f65efbdab724c6ddb78982b955f22b58886c7",
+   "size": 156079,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-light-leak-cinema/preview.mp4"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-light-leak-cinema/preview.png",
+   "sha256": "d270c6284b3f8b36b92d025c480a38ede158c6c2f0f4fbdc1e098e214431ed34",
+   "size": 330841,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-light-leak-cinema/preview.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-liquid-bg-hero/preview.mp4",
+   "sha256": "fffdd73499b70ca7503fb2477c53d1e04756f2cefa2b65667e547db8b633b282",
+   "size": 689483,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-liquid-bg-hero/preview.mp4"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-liquid-bg-hero/preview.png",
+   "sha256": "05100b4a24c6ede237c16be3cce1a08960f65faef9c6db5e6f861f7be0d8264d",
+   "size": 715625,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-liquid-bg-hero/preview.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-logo-outro/preview.mp4",
+   "sha256": "f5b560fbf0cacf5cb48cf978e634da2d2b496ebb976c307a2d1b2dd51c6452a1",
+   "size": 73229,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-logo-outro/preview.mp4"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-logo-outro/preview.png",
+   "sha256": "b8f6691098b812cc7d02c6027ce8501e2e8ed8dba5df14002f744b4cf4c301e5",
+   "size": 88034,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-logo-outro/preview.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-nyt-graph/preview.mp4",
+   "sha256": "f1881fa6c04432829c7f21fbda54a0226bbe37ad3a5cf21525181f462ae7cf68",
+   "size": 193690,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-nyt-graph/preview.mp4"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-nyt-graph/preview.png",
+   "sha256": "0ecacb74c60ef538fd980c1c98ffaff2e4789afe04133de8fe4897f67d9bc364",
+   "size": 166195,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-nyt-graph/preview.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-pentagram-stat/preview.mp4",
+   "sha256": "2029476f1c1a2e1ad25e8d18631fff956c434bd82cbead57c9f3f2282f852fdb",
+   "size": 75507,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-pentagram-stat/preview.mp4"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-pentagram-stat/preview.png",
+   "sha256": "0bacd86ad9109392c72ddbfa8d8c666eec779503fbc9d1105a0249149fa9053e",
+   "size": 150503,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-pentagram-stat/preview.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-play-mode/preview.mp4",
+   "sha256": "3cc54a40d351d2efee4c09aad0cb61680a4d825773eb2f766331d71fbfed0286",
+   "size": 546508,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-play-mode/preview.mp4"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-play-mode/preview.png",
+   "sha256": "eb88839051c1f14a965f3f9d3f961db563edab05c6a321d26b700c6bb378440a",
+   "size": 341161,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-play-mode/preview.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-product-promo-30s/preview.mp4",
+   "sha256": "95f38f6b9ff35b9e0279261b45b30528813683735d22996f60cef5211d8a917c",
+   "size": 751147,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-product-promo-30s/preview.mp4"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-product-promo-30s/preview.png",
+   "sha256": "7968d68c9485e8d8e55c8e012b2e01f713fe1dadbeffb94242a9f8b609068aed",
+   "size": 221036,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-product-promo-30s/preview.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-product-promo-30s/source/assets/screenshot-1.png",
+   "sha256": "72ba282c0da7b328a74c9bce45fe3867f3420c2982c0589ad7fd2c97f72a70e4",
+   "size": 36240,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-product-promo-30s/source/assets/screenshot-1.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-product-promo-30s/source/assets/screenshot-2.png",
+   "sha256": "a3943ec13c4b696ea302c700123095f171e9d79e921132d095e75fb0bc2438e8",
+   "size": 35910,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-product-promo-30s/source/assets/screenshot-2.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-product-promo-30s/source/assets/screenshot-3.png",
+   "sha256": "2fdae8fb683b6217b615f7c8a87edc691ad99d34215c26b73fda28c765cb9dc5",
+   "size": 36184,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-product-promo-30s/source/assets/screenshot-3.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-product-promo-30s/source/assets/sfx-twinkle.mp3",
+   "sha256": "e44284fb3d35d6a4eb60659b68e452dfa3a1bddbc8609d114ea567b63225b18f",
+   "size": 9238,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-product-promo-30s/source/assets/sfx-twinkle.mp3"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-product-promo-30s/source/assets/sfx-whoosh-1.mp3",
+   "sha256": "b69cb9bf2fd61135365bf977c43dbe119a8b1e56ed31c5beb07da9ca36ea6d8b",
+   "size": 7340,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-product-promo-30s/source/assets/sfx-whoosh-1.mp3"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-product-promo-30s/source/assets/sfx-whoosh-2.mp3",
+   "sha256": "7cef9f2d4e51dfe2c8018b5dd30c807d29062814c5a95c485736114afaefd5ea",
+   "size": 7340,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-product-promo-30s/source/assets/sfx-whoosh-2.mp3"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-product-promo-30s/source/assets/warm-pad.mp3",
+   "sha256": "69ab030c291ffc10b291d6254cb70f0f7c7c2ec896bbb7d3b67a6c167c0d438d",
+   "size": 481114,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-product-promo-30s/source/assets/warm-pad.mp3"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-product-promo/preview.mp4",
+   "sha256": "1de7ab335a4cf3dd9691f0e97297e537d42761efe64f7fc83d30ac5be1da933e",
+   "size": 283047,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-product-promo/preview.mp4"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-product-promo/preview.png",
+   "sha256": "d8063893bad6814b2ae3df043dc7ff1b5db4d3fb1a896e18e877e9eb20c4a576",
+   "size": 145238,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-product-promo/preview.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-swiss-grid/preview.mp4",
+   "sha256": "e81160d8cd83f041d485a6d30c1ad965a908413dde06f8809d8cd04c1da172a7",
+   "size": 529596,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-swiss-grid/preview.mp4"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-swiss-grid/preview.png",
+   "sha256": "6762d08d4241036deca51be48389354216f2408ea1d3acbe5f228e55ffe5f30f",
+   "size": 215625,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-swiss-grid/preview.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-takram-organic/preview.mp4",
+   "sha256": "ac41009e9cecc05326c2f5732bf262a5d5a22232d4417a46be2435814dd9312e",
+   "size": 316302,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-takram-organic/preview.mp4"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-takram-organic/preview.png",
+   "sha256": "dae95130e25d6692edbc2f3b7e95e1266e229e31a5126c986f211340f0ca241b",
+   "size": 255174,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-takram-organic/preview.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-vignelli/preview.mp4",
+   "sha256": "2e04f83d0da67951643edd7144380f1e88d20fa6f3dcb2696570c6a796c504fc",
+   "size": 264909,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-vignelli/preview.mp4"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-vignelli/preview.png",
+   "sha256": "4062a6b9750b9eafbd744c908ea46e055a6f3bb7327aee4336c0c026bdcc9d13",
+   "size": 104259,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-vignelli/preview.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-warm-grain/preview.mp4",
+   "sha256": "0a92da8cf112b29dcf49361196fb733c7e1b4d57b4c28f82b5e9ce96271c5105",
+   "size": 792683,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-warm-grain/preview.mp4"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-warm-grain/preview.png",
+   "sha256": "3b3e7d512fd6d932c811a676644fadf0770cfff00b8a88d927ae1336b5e2b908",
+   "size": 68388,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-warm-grain/preview.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/frame-warm-grain/source/textures/natural-paper.png",
+   "sha256": "446de3d93d3c3007d99c2007b6b97c0425b76d41bf8405449e0740dcaa41b8e2",
+   "size": 101491,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/frame-warm-grain/source/textures/natural-paper.png"
+  },
+  {
+   "path": "plugins/_official/video-templates/vfx-text-cursor/preview.mp4",
+   "sha256": "804c4dfd76e7198e6a166a87c16578472e1074d786f308feeac4190f5eeb2da3",
+   "size": 167816,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/vfx-text-cursor/preview.mp4"
+  },
+  {
+   "path": "plugins/_official/video-templates/vfx-text-cursor/preview.png",
+   "sha256": "704736ccdef8db97428c71fb7879fa367cb5ffa0dc82cd2ffa21cce0540cc6e2",
+   "size": 465660,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/plugins/_official/video-templates/vfx-text-cursor/preview.png"
+  },
+  {
+   "path": "prompt-templates/image/notion-team-dashboard-live-artifact.preview.png",
+   "sha256": "08136e039cf08c2676faf6815ee9385009f561dc11b83117dc6861ef463ed384",
+   "size": 84664,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/prompt-templates/image/notion-team-dashboard-live-artifact.preview.png"
+  },
+  {
+   "path": "skills/chat-motion-overlay/assets/avatar-library/female-bunny-pink.png",
+   "sha256": "e623d65d38aed6059e26c78052628ea63a14ace2a5a49cd1249cbe6c10d32ae0",
+   "size": 197116,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/skills/chat-motion-overlay/assets/avatar-library/female-bunny-pink.png"
+  },
+  {
+   "path": "skills/chat-motion-overlay/assets/avatar-library/female-cat-orange.png",
+   "sha256": "1c269b57653501299bd5014819b125dd69ef50b460c5ff2feab6470d8aee9e07",
+   "size": 219915,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/skills/chat-motion-overlay/assets/avatar-library/female-cat-orange.png"
+  },
+  {
+   "path": "skills/chat-motion-overlay/assets/avatar-library/female-fox-yellow.png",
+   "sha256": "23bd290c43b7b437c488561ff0d45016bf9ed5d82a2b6d583bc98a79e3b0d44b",
+   "size": 221230,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/skills/chat-motion-overlay/assets/avatar-library/female-fox-yellow.png"
+  },
+  {
+   "path": "skills/chat-motion-overlay/assets/avatar-library/male-bear-mint.png",
+   "sha256": "a5782f44af8989b31ec4268439a0fe20cbb56c27fdf965f9d90dd5a809b6cd80",
+   "size": 199346,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/skills/chat-motion-overlay/assets/avatar-library/male-bear-mint.png"
+  },
+  {
+   "path": "skills/chat-motion-overlay/assets/avatar-library/male-koala-lilac.png",
+   "sha256": "ca23717fc20d1afa9675ae834b6ef6f174ece3ace5d00e06ff9e153f6d02dacb",
+   "size": 220189,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/skills/chat-motion-overlay/assets/avatar-library/male-koala-lilac.png"
+  },
+  {
+   "path": "skills/chat-motion-overlay/assets/avatar-library/male-penguin-blue.png",
+   "sha256": "b03fb2a2384f53ada49cb2fece41b0b29d8325643165caa66f4f5f3894e1c4a0",
+   "size": 199814,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/skills/chat-motion-overlay/assets/avatar-library/male-penguin-blue.png"
+  },
+  {
+   "path": "templates/live-artifacts/otd-operations-brief/preview.png",
+   "sha256": "7232ba763871faed58516f620f5c017bd8618d1e177fe3e670da55b5c829d14d",
+   "size": 54070,
+   "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/templates/live-artifacts/otd-operations-brief/preview.png"
+  }
+ ]
+}

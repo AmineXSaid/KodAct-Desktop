@@ -1,0 +1,55 @@
+# Forge's design library: what is taken from upstream, and from which commit.
+#
+# scripts/sync_open_design.py reads this file. `sync` rebuilds the library
+# from these pinned commits; `media` fetches the images, video and audio
+# that media.lock.json pins by hash (they are not committed); `check`
+# verifies the tree. Re-syncing to a newer commit is a reviewed change:
+# edit `commit`, run `sync`, read the diff.
+#
+# The upstream trees are mirrored verbatim, in their own layout, so every
+# relative link inside a template or skill keeps working. Forge never edits a
+# mirrored file: its own files, and its changed copies (each marked as
+# changed, as Apache-2.0 §4(b) asks), live under forge/.
+
+[open_design]
+repo = "https://github.com/nexu-io/open-design"
+commit = "3b0df90f305c8279e748c292accf336d02b924ef"
+date = "2026-10-20"
+license = "Apache-2.0"
+# Everything Forge uses: the content the model reads, and the scripts that can
+# only run inside a web page or inside Figma. Open Design's own app code
+# (apps/, packages/, tools/, the web UI) is ported to Rust instead.
+roots = [
+  "LICENSE",
+  "craft",
+  "skills",
+  "design-systems",
+  "design-templates",
+  "templates",
+  "prompt-templates",
+  "plugins/_official",
+  "plugins/community",
+  "plugins/registry",
+  "plugins/spec",
+  "assets/frames",
+  "assets/prompt-templates",
+  "assets/community-pets",
+  "data/plugin-previews",
+  "figma-plugin",
+  "clipper/capture.js",
+  "clipper/brand-capture.js",
+  "apps/desktop/vendor/dom-to-pptx",
+  # The JSON schemas the manifests above follow.
+  "docs/schemas",
+]
+
+[media]
+# Pinned in media.lock.json by SHA-256 and fetched from the upstream commit,
+# not committed: they are most of the library's size and git can't compress
+# them. Fonts and the dom-to-pptx bundle are committed: pages and exports
+# need them to render at all.
+extensions = [
+  "png", "jpg", "jpeg", "webp", "gif", "avif", "bmp", "ico",
+  "mp4", "webm", "mov", "mp3", "wav", "ogg", "m4a",
+  "gltf", "glb",
+]
