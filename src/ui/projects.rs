@@ -950,6 +950,7 @@ impl ProjectsView {
         let doc_open = self.state.read(cx).doc.is_some();
         div()
             .flex_1()
+            .min_w_0()
             .min_h_0()
             .flex()
             .child(page)

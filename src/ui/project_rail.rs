@@ -12,6 +12,7 @@
 //! - **Knowledge** (`project_knowledge.rs`): reference files, Always or On
 //!   demand.
 //! - **Memory** (`project_memory.rs`): what Forge has learned there.
+//! - **GitHub** (`project_github.rs`): the repository, live.
 
 use gpui::component::input::TextareaState;
 use gpui::{
@@ -36,6 +37,8 @@ pub struct ProjectRail {
     /// `project_memory.rs`).
     knowledge: Entity<super::project_knowledge::ProjectKnowledge>,
     memory: Entity<super::project_memory::ProjectMemory>,
+    /// The repository card (`project_github.rs`).
+    github: Entity<super::project_github::ProjectGithub>,
     _subs: Vec<Subscription>,
 }
 
@@ -49,12 +52,14 @@ impl ProjectRail {
         let knowledge =
             cx.new(|cx| super::project_knowledge::ProjectKnowledge::new(state.clone(), window, cx));
         let memory = cx.new(|cx| super::project_memory::ProjectMemory::new(state.clone(), window, cx));
+        let github = cx.new(|cx| super::project_github::ProjectGithub::new(state.clone(), window, cx));
         Self {
             _subs: vec![cx.observe(&state, |_, _, cx| cx.notify())],
             state,
             editor,
             knowledge,
             memory,
+            github,
             mine: false,
             editing: false,
         }
@@ -434,6 +439,7 @@ impl Render for ProjectRail {
             .child(instructions)
             .child(self.knowledge.clone())
             .child(self.memory.clone())
+            .child(self.github.clone())
             .into_any_element()
     }
 }

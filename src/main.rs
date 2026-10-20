@@ -27,6 +27,7 @@ mod endpoints;
 mod export;
 mod fonts;
 mod forge_files;
+mod git_status;
 mod greeting;
 mod health;
 mod highlight;

@@ -1091,7 +1091,7 @@ fn same_file(full: &str, target: &str) -> bool {
 const CONTINUE_PROMPT: &str = "Continue from where you stopped.";
 
 /// `FORGE_DEMO=1`: replies are the scripted demo instead of ForgeCLI.
-fn demo_mode() -> bool {
+pub(crate) fn demo_mode() -> bool {
     std::env::var("FORGE_DEMO").is_ok_and(|v| v == "1")
 }
 
@@ -1262,6 +1262,11 @@ pub struct AppState {
     /// under the reply with Undo. Kept for this run only.
     memory_before: std::collections::HashMap<usize, (std::path::PathBuf, String)>,
     pub memory_changes: std::collections::HashMap<usize, MemoryChange>,
+    /// The project page's repository (`git_status.rs`): None while it is
+    /// read; Some(None) when the folder isn't a repository.
+    pub repo: Option<(usize, std::sync::Arc<Option<crate::git_status::Repo>>)>,
+    /// Bumped each time the repository is read, so a stale refresh stops.
+    repo_reads: u64,
     /// The panel's find bar is open (`ui/doc_find.rs`).
     pub doc_finding: bool,
     /// The panel's body: its pages are its items, so the keyboard and a
@@ -1500,6 +1505,8 @@ impl AppState {
             project_brief: None,
             memory_before: Default::default(),
             memory_changes: Default::default(),
+            repo: None,
+            repo_reads: 0,
             doc_scroll: gpui::ScrollHandle::new(),
             next_comment: 1,
             doc_page_pick: None,
@@ -2051,7 +2058,113 @@ impl AppState {
         self.select_project(id, cx);
         self.screen = Screen::Project(id);
         self.load_project_brief(id, cx);
+        self.load_repo(id, cx);
         cx.notify();
+    }
+
+    /// Read project `id`'s repository off the UI thread, then again every
+    /// minute while its page is open.
+    pub fn load_repo(&mut self, id: usize, cx: &mut Context<Self>) {
+        let Some(path) = self
+            .project(id)
+            .filter(|p| crate::remote::Remote::parse(&p.path).is_none())
+            .map(|p| p.path.clone())
+        else {
+            self.repo = None;
+            return;
+        };
+        if self.repo.as_ref().is_some_and(|(r, _)| *r != id) {
+            self.repo = None;
+        }
+        self.repo_reads += 1;
+        let read = self.repo_reads;
+        cx.spawn(async move |this, cx| {
+            let p = path.clone();
+            let repo = cx
+                .background_spawn(async move { crate::git_status::read(&p) })
+                .await;
+            let still = this
+                .update(cx, |s, cx| {
+                    if s.repo_reads != read {
+                        return false;
+                    }
+                    if let Some(r) = &repo {
+                        // The branch shown everywhere follows the repository.
+                        if let Some(p) = s.projects.iter_mut().find(|p| p.id == id) {
+                            p.branch = r.branch.clone().into();
+                        }
+                        if s.current_project == id {
+                            s.branch = r.branch.clone().into();
+                        }
+                    }
+                    s.repo = Some((id, std::sync::Arc::new(repo)));
+                    cx.notify();
+                    s.screen == Screen::Project(id)
+                })
+                .unwrap_or(false);
+            if still {
+                cx.background_executor().timer(Duration::from_secs(60)).await;
+                let _ = this.update(cx, |s, cx| {
+                    if s.repo_reads == read && s.screen == Screen::Project(id) {
+                        s.load_repo(id, cx);
+                    }
+                });
+            }
+        })
+        .detach();
+    }
+
+    /// Run a git change in project `id` off the UI thread, say how it went,
+    /// and read the repository again.
+    fn repo_change(
+        &mut self,
+        id: usize,
+        change: impl FnOnce(&std::path::Path) -> Result<String, String> + Send + 'static,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(path) = self.project(id).map(|p| p.path.clone()) else {
+            return;
+        };
+        cx.spawn(async move |this, cx| {
+            let done = cx.background_spawn(async move { change(&path) }).await;
+            let _ = this.update(cx, |s, cx| {
+                match done {
+                    Ok(note) => s.show_toast(note, cx),
+                    Err(e) => s.show_toast(format!("Git said: {e}"), cx),
+                }
+                s.load_repo(id, cx);
+            });
+        })
+        .detach();
+    }
+
+    pub fn repo_pull(&mut self, id: usize, cx: &mut Context<Self>) {
+        self.show_toast("Pulling…", cx);
+        self.repo_change(id, crate::git_status::pull, cx);
+    }
+
+    pub fn repo_switch(&mut self, id: usize, branch: String, create: bool, cx: &mut Context<Self>) {
+        self.repo_change(
+            id,
+            move |p| {
+                crate::git_status::switch(p, &branch, create).map(|_| {
+                    if create {
+                        format!("Made {branch} and switched to it.")
+                    } else {
+                        format!("Switched to {branch}.")
+                    }
+                })
+            },
+            cx,
+        );
+    }
+
+    /// Start a chat in project `id` asking Forge about something (an issue,
+    /// a pull request, a failing run).
+    pub fn ask_forge(&mut self, id: usize, text: String, cx: &mut Context<Self>) {
+        self.select_project(id, cx);
+        self.new_chat(cx);
+        self.send(text, cx);
     }
 
     /// The local folder chat `id` works in (None for a remote one).

@@ -15,6 +15,8 @@ macro_rules! icons {
 
 icons!(
     "archive",
+    "git-pull-request",
+    "circle-dot",
     "star",
     "star-filled",
     "file-down",
