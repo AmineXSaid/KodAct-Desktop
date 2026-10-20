@@ -162,7 +162,7 @@ impl RemotePicker {
                 let mut recent: Vec<&crate::state::Project> = s
                     .projects
                     .iter()
-                    .filter(|p| p.id != s.current_project && !p.scratch)
+                    .filter(|p| p.id != s.current_project && !p.scratch && !p.archived)
                     .collect();
                 recent.sort_by_key(|p| (p.opened_minutes_ago, std::cmp::Reverse(p.id)));
                 for p in recent {

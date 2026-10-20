@@ -15,6 +15,8 @@ macro_rules! icons {
 
 icons!(
     "archive",
+    "star",
+    "star-filled",
     "file-down",
     "unplug",
     "eraser",

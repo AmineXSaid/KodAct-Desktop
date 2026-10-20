@@ -756,15 +756,119 @@ pub struct Project {
     pub name: SharedString,
     pub path: std::path::PathBuf,
     pub branch: SharedString,
+    /// Starred: first in the switcher and the Projects page.
     pub pinned: bool,
     /// When it was last opened, in minutes before now.
     pub opened_minutes_ago: u32,
+    /// What it is for, in your words (Forge doesn't read it).
+    pub description: SharedString,
+    /// Archived: off the lists, its chats and files kept.
+    pub archived: bool,
+    /// When it was made and last opened (seconds since 1970).
+    pub created: u64,
+    pub opened_at: u64,
+    /// Forge keeps a memory for it (`.forge/memory.md`).
+    pub memory_on: bool,
+    /// On your Projects page. The folder Forge was started on is a
+    /// project for that run without joining the list, unless you saved it.
+    pub listed: bool,
     /// You made it a project (Open folder…, Save as project). A remote
     /// folder you connected to is worked in without becoming one.
     pub saved: bool,
     /// Plain chats' place: no folder of yours, Forge's own (`scratch_dir`).
     /// Never listed as a project, never shown in the sidebar's head.
     pub scratch: bool,
+}
+
+impl Project {
+    /// A folder, as a project now: its name and branch read from it.
+    pub fn at(id: usize, path: std::path::PathBuf, saved: bool) -> Self {
+        let now = now_secs();
+        Project {
+            id,
+            name: project_name(&path).into(),
+            branch: git_branch(&path).into(),
+            path,
+            pinned: false,
+            opened_minutes_ago: 0,
+            description: "".into(),
+            archived: false,
+            created: now,
+            opened_at: now,
+            memory_on: true,
+            listed: saved,
+            saved,
+            scratch: false,
+        }
+    }
+
+    /// Its details as `projects.json` keeps them.
+    fn record(&self) -> ProjectRecord {
+        ProjectRecord {
+            path: self.path.clone(),
+            name: (self.name.as_ref() != project_name(&self.path)).then(|| self.name.to_string()),
+            description: self.description.to_string(),
+            starred: self.pinned,
+            archived: self.archived,
+            created: self.created,
+            opened: self.opened_at,
+            memory_on: self.memory_on,
+            listed: self.listed,
+        }
+    }
+
+    /// The saved details put back on it.
+    fn apply(&mut self, r: &ProjectRecord) {
+        if let Some(n) = r.name.as_ref().filter(|n| !n.trim().is_empty()) {
+            self.name = n.clone().into();
+        }
+        self.description = r.description.clone().into();
+        self.pinned = r.starred;
+        self.archived = r.archived;
+        if r.created > 0 {
+            self.created = r.created;
+        }
+        if r.opened > 0 {
+            self.opened_at = r.opened;
+            self.opened_minutes_ago = (now_secs().saturating_sub(r.opened) / 60) as u32;
+        }
+        self.memory_on = r.memory_on;
+        self.listed |= r.listed;
+    }
+}
+
+/// One project in `projects.json`: everything Forge keeps about it besides
+/// the folder's own files.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+struct ProjectRecord {
+    path: std::path::PathBuf,
+    /// A name you gave it (None: the folder's).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    starred: bool,
+    #[serde(default)]
+    archived: bool,
+    #[serde(default)]
+    created: u64,
+    #[serde(default)]
+    opened: u64,
+    #[serde(default = "yes")]
+    memory_on: bool,
+    #[serde(default = "yes")]
+    listed: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
 }
 
 // ---------------------------------------------------------------- the engine's bookkeeping
@@ -1739,14 +1843,9 @@ impl AppState {
                     // A remote folder's chats come back without making it a project.
                     let saved = crate::remote::Remote::parse(&c.project).is_none();
                     self.projects.push(Project {
-                        id,
                         name: name.into(),
-                        branch: git_branch(&c.project).into(),
-                        path: c.project.clone(),
-                        pinned: false,
                         opened_minutes_ago: 60,
-                        saved,
-                        scratch: false,
+                        ..Project::at(id, c.project.clone(), saved)
                     });
                     added_project |= saved;
                     id
@@ -1908,12 +2007,17 @@ impl AppState {
             return;
         };
         p.opened_minutes_ago = 0;
+        p.opened_at = now_secs();
+        let keep = p.saved && !p.scratch;
         let (name, path, branch) = (p.name.clone(), p.path.clone(), p.branch.clone());
         self.current_project = id;
         self.project = name;
         self.project_dir = path;
         self.branch = branch;
         self.switcher_open = false;
+        if keep {
+            self.save_projects(cx);
+        }
         if self.chat().is_some_and(|c| c.project != id) {
             self.current = None;
             self.sync_mode();
@@ -1951,19 +2055,12 @@ impl AppState {
     fn place_folder(&mut self, path: std::path::PathBuf, save: bool) -> usize {
         if let Some(p) = self.projects.iter_mut().find(|p| p.path == path) {
             p.saved |= save;
+            p.listed |= save;
+            p.archived &= !save;
             return p.id;
         }
         let id = self.projects.iter().map(|p| p.id).max().unwrap_or(0) + 1;
-        self.projects.push(Project {
-            id,
-            name: project_name(&path).into(),
-            branch: git_branch(&path).into(),
-            path,
-            pinned: false,
-            opened_minutes_ago: 0,
-            saved: save,
-            scratch: false,
-        });
+        self.projects.push(Project::at(id, path, save));
         id
     }
 
@@ -1971,6 +2068,7 @@ impl AppState {
     pub fn save_project(&mut self, id: usize, cx: &mut Context<Self>) {
         if let Some(p) = self.projects.iter_mut().find(|p| p.id == id) {
             p.saved = true;
+            p.listed = true;
         }
         self.save_projects(cx);
         cx.notify();
@@ -1989,6 +2087,7 @@ impl AppState {
         if has_chats || id == self.current_project {
             if let Some(p) = self.projects.iter_mut().find(|p| p.id == id) {
                 p.saved = false;
+                p.listed = false;
                 p.pinned = false;
             }
         } else {
@@ -2001,24 +2100,66 @@ impl AppState {
         cx.notify();
     }
 
-    /// Write your projects (all but the folder Forge started on, and plain
-    /// chats' place) to disk.
+    /// Write your projects to disk: the ones on your list, and the folder
+    /// Forge started on (its details, without listing it). Plain chats'
+    /// place and folders you only connected to aren't kept.
     fn save_projects(&self, cx: &mut Context<Self>) {
-        let paths: Vec<std::path::PathBuf> = self
+        let records: Vec<ProjectRecord> = self
             .projects
             .iter()
-            .filter(|p| p.saved && !p.scratch && Some(&p.path) != self.launch_dir.as_ref())
-            .map(|p| p.path.clone())
+            .filter(|p| p.saved && !p.scratch)
+            .map(|p| p.record())
             .collect();
-        cx.background_spawn(async move { save_projects(paths) })
+        cx.background_spawn(async move { save_projects(&records) })
             .detach();
     }
 
+    /// Star a project, or take its star away.
     pub fn toggle_project_pin(&mut self, id: usize, cx: &mut Context<Self>) {
-        if let Some(p) = self.projects.iter_mut().find(|p| p.id == id) {
-            p.pinned = !p.pinned;
+        self.edit_project(id, cx, |p| p.pinned = !p.pinned);
+    }
+
+    /// Change a project's details and keep them.
+    fn edit_project(&mut self, id: usize, cx: &mut Context<Self>, f: impl FnOnce(&mut Project)) {
+        let Some(p) = self.projects.iter_mut().find(|p| p.id == id) else {
+            return;
+        };
+        f(p);
+        if self.current_project == id {
+            self.project = p.name.clone();
         }
+        self.save_projects(cx);
         cx.notify();
+    }
+
+    /// Give a project a name of your own (empty: the folder's again).
+    pub fn rename_project(&mut self, id: usize, name: &str, cx: &mut Context<Self>) {
+        let name = name.trim().to_string();
+        self.edit_project(id, cx, |p| {
+            p.name = if name.is_empty() {
+                project_name(&p.path).into()
+            } else {
+                name.into()
+            }
+        });
+    }
+
+    pub fn describe_project(&mut self, id: usize, text: &str, cx: &mut Context<Self>) {
+        let text = text.trim().to_string();
+        self.edit_project(id, cx, |p| p.description = text.into());
+    }
+
+    /// Archive a project (off the lists, everything kept), or bring it back.
+    pub fn archive_project(&mut self, id: usize, archived: bool, cx: &mut Context<Self>) {
+        self.edit_project(id, cx, |p| {
+            p.archived = archived;
+            if archived {
+                p.pinned = false;
+            }
+        });
+        if archived && self.screen == Screen::Project(id) {
+            self.screen = Screen::Projects;
+        }
     }
 
     pub fn open_chat(&mut self, id: usize, cx: &mut Context<Self>) {
@@ -7080,35 +7221,40 @@ fn parent_dir(path: &str) -> String {
 }
 
 fn initial_projects(launch: Option<&std::path::Path>, scratch: &std::path::Path) -> Vec<Project> {
-    let project = |id, path: std::path::PathBuf, opened| Project {
-        id,
-        name: project_name(&path).into(),
-        branch: git_branch(&path).into(),
-        path,
-        pinned: false,
-        opened_minutes_ago: opened,
-        saved: true,
-        scratch: false,
-    };
-    let mut out: Vec<Project> = launch
-        .map(|here| project(1, here.to_path_buf(), 0))
-        .into_iter()
-        .collect();
-    for path in saved_projects() {
-        let remote = crate::remote::Remote::parse(&path).is_some();
-        if (remote || path.is_dir()) && !out.iter().any(|p| p.path == path) {
-            out.push(project(out.len() + 1, path, 60));
+    initial_projects_from(launch, scratch, &saved_projects())
+}
+
+fn initial_projects_from(
+    launch: Option<&std::path::Path>,
+    scratch: &std::path::Path,
+    records: &[ProjectRecord],
+) -> Vec<Project> {
+    let mut out: Vec<Project> = vec![];
+    // The folder Forge started on: a project this run, with its details
+    // if it has some, on your list only if you saved it.
+    if let Some(here) = launch {
+        let mut p = Project::at(1, here.to_path_buf(), true);
+        p.listed = false;
+        if let Some(r) = records.iter().find(|r| r.path == here) {
+            p.apply(r);
+        }
+        out.push(p);
+    }
+    for r in records.iter().filter(|r| r.listed) {
+        let remote = crate::remote::Remote::parse(&r.path).is_some();
+        if (remote || r.path.is_dir()) && !out.iter().any(|p| p.path == r.path) {
+            let mut p = Project::at(out.len() + 1, r.path.clone(), true);
+            p.opened_minutes_ago = 60;
+            p.apply(r);
+            out.push(p);
         }
     }
     out.push(Project {
-        id: out.len() + 1,
         name: "Chats".into(),
         branch: "".into(),
-        path: scratch.to_path_buf(),
-        pinned: false,
-        opened_minutes_ago: 0,
-        saved: false,
+        listed: false,
         scratch: true,
+        ..Project::at(out.len() + 1, scratch.to_path_buf(), false)
     });
     out
 }
@@ -7144,19 +7290,41 @@ fn project_name(path: &std::path::Path) -> String {
 }
 
 fn projects_file() -> Option<std::path::PathBuf> {
+    crate::profile::dir().map(|d| d.join("projects.json"))
+}
+
+/// The list before `projects.json`: one folder per line.
+fn old_projects_file() -> Option<std::path::PathBuf> {
     crate::profile::dir().map(|d| d.join("projects.txt"))
 }
 
-fn saved_projects() -> Vec<std::path::PathBuf> {
-    projects_file()
-        .and_then(|f| std::fs::read_to_string(f).ok())
-        .map(|t| {
-            t.lines()
-                .filter(|l| !l.trim().is_empty())
-                .map(std::path::PathBuf::from)
-                .collect()
+fn saved_projects() -> Vec<ProjectRecord> {
+    let json = projects_file().and_then(|f| std::fs::read_to_string(f).ok());
+    let old = old_projects_file().and_then(|f| std::fs::read_to_string(f).ok());
+    parse_projects(json.as_deref(), old.as_deref())
+}
+
+/// Your projects from `projects.json`, or from the old list when there is
+/// no JSON yet (each folder listed, nothing else known).
+fn parse_projects(json: Option<&str>, old: Option<&str>) -> Vec<ProjectRecord> {
+    if let Some(records) = json.and_then(|j| serde_json::from_str::<Vec<ProjectRecord>>(j).ok()) {
+        return records;
+    }
+    old.unwrap_or_default()
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| ProjectRecord {
+            path: std::path::PathBuf::from(l.trim()),
+            name: None,
+            description: String::new(),
+            starred: false,
+            archived: false,
+            created: 0,
+            opened: 0,
+            memory_on: true,
+            listed: true,
         })
-        .unwrap_or_default()
+        .collect()
 }
 
 /// A remote ForgeCLI's model settings with the secrets taken out: the route
@@ -7198,14 +7366,15 @@ fn proxied_env(env: &[(String, String)]) -> (crate::model_proxy::Route, Vec<(Str
     (crate::model_proxy::Route { base, headers }, remote)
 }
 
-/// Keep the folders you opened for next time (blocking: off the UI thread).
-fn save_projects(paths: Vec<std::path::PathBuf>) {
+/// Keep your projects for next time (blocking: off the UI thread).
+fn save_projects(records: &[ProjectRecord]) {
     let Some(f) = projects_file() else { return };
     if let Some(d) = f.parent() {
         let _ = std::fs::create_dir_all(d);
     }
-    let text: Vec<String> = paths.iter().map(|p| p.display().to_string()).collect();
-    let _ = std::fs::write(f, text.join("\n"));
+    if let Ok(text) = serde_json::to_string_pretty(records) {
+        let _ = std::fs::write(f, text);
+    }
 }
 
 /// The checked-out branch, read from `.git/HEAD`; empty when it isn't a repository.
@@ -7502,6 +7671,46 @@ fn mock_chats() -> Vec<Chat> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn projects_keep_their_details_and_the_old_list_still_loads() {
+        // The old list: folders only, each on your list.
+        let old = super::parse_projects(None, Some("/a\n\n/b\n"));
+        assert_eq!(old.len(), 2);
+        assert!(old.iter().all(|r| r.listed && r.memory_on && !r.starred));
+        // A project's details round-trip through projects.json.
+        let dir = std::env::temp_dir().join(format!("forge-proj-{}", std::process::id()));
+        let here = dir.join("here");
+        let other = dir.join("other");
+        std::fs::create_dir_all(&here).unwrap();
+        std::fs::create_dir_all(&other).unwrap();
+        let mut p = super::Project::at(1, other.clone(), true);
+        p.name = "Budget work".into();
+        p.description = "Q3 numbers".into();
+        p.pinned = true;
+        let json = serde_json::to_string(&[p.record()]).unwrap();
+        let back = super::parse_projects(Some(&json), Some("/ignored"));
+        assert_eq!(back, vec![p.record()], "the JSON wins over the old list");
+        // Loaded: named, described, starred; the launch folder joins as a
+        // project for the run without being listed.
+        let launch_rec = super::ProjectRecord {
+            listed: false,
+            ..super::Project::at(9, here.clone(), true).record()
+        };
+        let list = super::initial_projects_from(
+            Some(&here),
+            &dir.join("scratch"),
+            &[back[0].clone(), launch_rec],
+        );
+        assert_eq!(list[0].path, here);
+        assert!(list[0].saved && !list[0].listed);
+        let o = list.iter().find(|x| x.path == other).unwrap();
+        assert_eq!((o.name.as_ref(), o.description.as_ref(), o.pinned), ("Budget work", "Q3 numbers", true));
+        assert!(list.last().unwrap().scratch);
+        // A folder's own name isn't stored as a custom one.
+        assert_eq!(super::Project::at(1, other.clone(), true).record().name, None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn another_folder_starts_one_up() {
         assert_eq!(super::parent_dir("/root/work/api-server"), "/root/work");

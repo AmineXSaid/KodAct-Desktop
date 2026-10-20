@@ -92,7 +92,7 @@ impl Workspace {
             cx.new(|cx| super::terminal_dock::TerminalDock::new(state.clone(), window, cx));
         let onboarding = cx.new(|cx| Onboarding::new(state.clone(), window, cx));
         let rules = cx.new(|cx| RulesView::new(state.clone(), window, cx));
-        let projects = cx.new(|cx| ProjectsView::new(state.clone(), composer.clone(), cx));
+        let projects = cx.new(|cx| ProjectsView::new(state.clone(), composer.clone(), window, cx));
         let side = cx.new(|cx| SideChat::new(state.clone(), window, cx));
         let settings = cx.new(|cx| Settings::new(state.clone(), window, cx));
         let find = cx.new(|cx| FindBar::new(state.clone(), window, cx));
@@ -1438,7 +1438,7 @@ pub fn project_switcher(
     let s = state.read(cx);
     let home = crate::rules::home_dir();
     let hover = t.colors.hover;
-    let mut projects: Vec<_> = s.projects.iter().filter(|p| p.saved).cloned().collect();
+    let mut projects: Vec<_> = s.projects.iter().filter(|p| p.saved && (!p.archived || p.id == s.current_project)).cloned().collect();
     projects.sort_by_key(|p| (p.id != s.current_project, !p.pinned, p.opened_minutes_ago));
     let connected: Vec<_> = s
         .projects
