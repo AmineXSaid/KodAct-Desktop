@@ -39,6 +39,7 @@ mod office_render;
 mod palette_check;
 mod plugin;
 mod profile;
+mod project_ctx;
 mod remote;
 mod rules;
 mod secrets;

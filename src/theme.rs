@@ -1022,6 +1022,7 @@ pub struct Sizes {
     pub doc_pane: Pixels,           // 460: the side panel's narrowest
     pub doc_measure: Pixels,        // 680: a document's widest line
     pub rules_list: Pixels,         // 340: the Rules screen's file list
+    pub project_rail: Pixels,       // 340: a project page's right rail (its brief, instructions…)
     pub editor: Pixels,             // 420: a file editor's height
     pub composer_clearance: Pixels, // 150: toasts sit above the composer, its chips included
     pub attach_thumb: Pixels,       // 28: an attachment chip's picture or icon
@@ -1084,6 +1085,7 @@ impl Default for Sizes {
             chat_min: px(400.),
             doc_measure: px(680.),
             rules_list: px(340.),
+            project_rail: px(340.),
             editor: px(420.),
             composer_clearance: px(150.),
             attach_thumb: px(28.),

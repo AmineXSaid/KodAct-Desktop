@@ -1244,6 +1244,10 @@ pub struct AppState {
     /// Files you attached and opened in the panel, as they came (by chat):
     /// each is its file's first version, before Forge edits the copy.
     doc_originals: Vec<(usize, FileRef)>,
+    /// The project page's brief (`project_ctx.rs`): what every chat there
+    /// gets, read when the page opens. None while it is read, or for a
+    /// remote project (its files are on the host).
+    pub project_brief: Option<(usize, std::sync::Arc<crate::project_ctx::Brief>)>,
     /// The panel's find bar is open (`ui/doc_find.rs`).
     pub doc_finding: bool,
     /// The panel's body: its pages are its items, so the keyboard and a
@@ -1479,6 +1483,7 @@ impl AppState {
             doc_comments: vec![],
             doc_originals: vec![],
             doc_finding: false,
+            project_brief: None,
             doc_scroll: gpui::ScrollHandle::new(),
             next_comment: 1,
             doc_page_pick: None,
@@ -2029,7 +2034,66 @@ impl AppState {
     pub fn show_project(&mut self, id: usize, cx: &mut Context<Self>) {
         self.select_project(id, cx);
         self.screen = Screen::Project(id);
+        self.load_project_brief(id, cx);
         cx.notify();
+    }
+
+    /// Read what every chat in project `id` gets (off the UI thread).
+    pub fn load_project_brief(&mut self, id: usize, cx: &mut Context<Self>) {
+        let Some(path) = self
+            .project(id)
+            .filter(|p| crate::remote::Remote::parse(&p.path).is_none())
+            .map(|p| p.path.clone())
+        else {
+            self.project_brief = None;
+            return;
+        };
+        if self.project_brief.as_ref().is_some_and(|(b, _)| *b != id) {
+            self.project_brief = None;
+        }
+        cx.spawn(async move |this, cx| {
+            let brief = cx
+                .background_spawn(async move { crate::project_ctx::read(&path) })
+                .await;
+            let _ = this.update(cx, |s, cx| {
+                s.project_brief = Some((id, std::sync::Arc::new(brief)));
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Save project `id`'s instructions: shared (its FORGE.md) or yours
+    /// only (FORGE.local.md). Empty removes the file.
+    pub fn save_instructions(&mut self, id: usize, mine: bool, text: String, cx: &mut Context<Self>) {
+        let Some((_, brief)) = self.project_brief.as_ref().filter(|(b, _)| *b == id) else {
+            return;
+        };
+        let path = if mine {
+            brief.mine_path.clone()
+        } else {
+            brief.shared_path.clone()
+        };
+        cx.spawn(async move |this, cx| {
+            let done = cx
+                .background_spawn(async move { crate::project_ctx::write(&path, &text) })
+                .await;
+            let _ = this.update(cx, |s, cx| match done {
+                Ok(()) => {
+                    s.show_toast(
+                        if mine {
+                            "Saved your instructions. Every new chat here follows them."
+                        } else {
+                            "Saved the project's instructions. Every new chat here follows them."
+                        },
+                        cx,
+                    );
+                    s.load_project_brief(id, cx);
+                }
+                Err(e) => s.show_toast(format!("Couldn't save the instructions: {e}"), cx),
+            });
+        })
+        .detach();
     }
 
     /// Add a folder as a project (or open it, if it already is one).

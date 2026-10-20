@@ -33,6 +33,8 @@ pub struct ProjectsView {
     /// A project's name or description being edited in place.
     edit: Entity<InputState>,
     editing: Option<(usize, Field)>,
+    /// The page's right rail: what every chat gets, instructions.
+    rail: Entity<super::project_rail::ProjectRail>,
     _subs: Vec<Subscription>,
 }
 
@@ -97,6 +99,7 @@ impl ProjectsView {
     ) -> Self {
         let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search projects"));
         let edit = cx.new(|cx| InputState::new(window, cx));
+        let rail = cx.new(|cx| super::project_rail::ProjectRail::new(state.clone(), window, cx));
         let subs = vec![
             cx.observe(&state, |_, _, cx| cx.notify()),
             cx.subscribe(&search, |_, _, ev: &InputEvent, cx| {
@@ -119,6 +122,7 @@ impl ProjectsView {
             sort: Sort::Recent,
             edit,
             editing: None,
+            rail,
             _subs: subs,
         }
     }
@@ -777,9 +781,10 @@ impl ProjectsView {
         };
         // The folder Forge started in is always here; others can leave the list.
         let (saved, removable) = (p.saved, Some(&p.path) != s.launch_dir.as_ref());
-        div()
+        let page = div()
             .id("project-page")
             .flex_1()
+            .min_w_0()
             .min_h_0()
             .overflow_y_scroll()
             .flex()
@@ -861,61 +866,19 @@ impl ProjectsView {
                                         }),
                                 )
                             })
-                            .when(saved && removable, |d| {
-                                d.child(
-                                    div()
-                                        .id("project-forget")
-                                        .flex()
-                                        .items_center()
-                                        .gap(t.space.xs)
-                                        .h(t.size.control + px(4.))
-                                        .px(t.space.md)
-                                        .rounded(t.radius.button)
-                                        .cursor_pointer()
-                                        .text_color(t.colors.text_muted)
-                                        .hover(move |st| st.bg(hover))
-                                        .tooltip(|w, cx| {
-                                            gpui::component::tooltip::Tooltip::new(
-                                                "Take it off your projects; its chats and files stay",
-                                            )
-                                            .build(w, cx)
-                                        })
-                                        .child(icon("icons/x.svg", t.size.icon_sm, t.colors.text_muted))
-                                        .child("Remove")
-                                        .on_click(move |_, _, cx| {
-                                            forget_state.update(cx, |s, cx| s.forget_project(id, cx))
-                                        }),
-                                )
-                            })
                             .child(
-                                div()
-                                    .id("project-pin")
-                                    .flex()
-                                    .items_center()
-                                    .gap(t.space.xs)
-                                    .h(t.size.control + px(4.))
-                                    .px(t.space.md)
-                                    .rounded(t.radius.button)
-                                    .cursor_pointer()
-                                    .text_color(t.colors.text_muted)
-                                    .hover(move |st| st.bg(hover))
-                                    .child(icon(
-                                        if pinned {
-                                            "icons/star-filled.svg"
-                                        } else {
-                                            "icons/star.svg"
-                                        },
-                                        t.size.icon_sm,
-                                        if pinned {
-                                            t.colors.primary
-                                        } else {
-                                            t.colors.text_muted
-                                        },
-                                    ))
-                                    .child(if pinned { "Starred" } else { "Star" })
-                                    .on_click(move |_, _, cx| {
-                                        pin_state.update(cx, |s, cx| s.toggle_project_pin(id, cx))
-                                    }),
+                                super::button::Button::icon(
+                                    "project-pin",
+                                    if pinned {
+                                        "icons/star-filled.svg"
+                                    } else {
+                                        "icons/star.svg"
+                                    },
+                                    if pinned { "Unstar" } else { "Star: first in your lists" },
+                                )
+                                .on_click(move |_, _, cx| {
+                                    pin_state.update(cx, |s, cx| s.toggle_project_pin(id, cx))
+                                }),
                             )
                             .when(saved && removable, |d| {
                                 d.child(
@@ -930,34 +893,27 @@ impl ProjectsView {
                                 )
                             })
                             .child(
-                                div()
-                                    .id("project-map")
-                                    .flex()
-                                    .items_center()
-                                    .gap(t.space.xs)
-                                    .h(t.size.control + px(4.))
-                                    .px(t.space.md)
-                                    .rounded(t.radius.button)
-                                    .cursor_pointer()
-                                    .text_color(t.colors.text_muted)
-                                    .hover(move |st| st.bg(hover))
-                                    .child(icon(
-                                        "icons/map.svg",
-                                        t.size.icon_sm,
-                                        t.colors.text_muted,
-                                    ))
-                                    .child("Map")
-                                    .on_click(|_, window, cx| {
-                                        window.dispatch_action(Box::new(ShowProjectMap), cx)
-                                    }),
+                                super::button::Button::icon(
+                                    "project-map",
+                                    "icons/map.svg",
+                                    "Map: its folders, and what this chat changed",
+                                )
+                                .on_click(|_, window, cx| {
+                                    window.dispatch_action(Box::new(ShowProjectMap), cx)
+                                }),
                             )
-                            .child(
-                                theme::ghost_button(t, "Rules and memory")
-                                    .id("project-rules")
-                                    .on_click(|_, window, cx| {
-                                        window.dispatch_action(Box::new(OpenRules), cx)
+                            .when(saved && removable, |d| {
+                                d.child(
+                                    super::button::Button::icon(
+                                        "project-forget",
+                                        "icons/x.svg",
+                                        "Remove from projects: its chats and files stay",
+                                    )
+                                    .on_click(move |_, _, cx| {
+                                        forget_state.update(cx, |s, cx| s.forget_project(id, cx))
                                     }),
-                            ),
+                                )
+                            }),
                     )
                     .child(description)
                     .child(self.composer.clone())
@@ -988,7 +944,14 @@ impl ProjectsView {
                             })
                             .children(rows),
                     ),
-            )
+            );
+        // The page, and its rail on the right.
+        div()
+            .flex_1()
+            .min_h_0()
+            .flex()
+            .child(page)
+            .child(self.rail.clone())
             .into_any_element()
     }
 }
