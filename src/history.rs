@@ -147,6 +147,9 @@ pub enum SavedBlock {
         /// When it was answered, in seconds since 1970.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         at: Option<u64>,
+        /// What you told Forge to do instead, with a denial.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        note: Option<String>,
         /// The call's row in the same message.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         row: Option<usize>,
@@ -318,6 +321,7 @@ fn save_messages(chat: &Chat, project: &Path) -> SavedChat {
                 .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                 .map(|d| d.as_secs()),
             row: info.row,
+            note: info.note.as_ref().map(|n| n.to_string()),
             verdict: match verdict {
                 // A question nobody answered is denied once the app is gone.
                 Verdict::Pending | Verdict::Denied => "denied",
@@ -453,6 +457,7 @@ pub fn messages_of(saved: &SavedChat) -> Vec<Message> {
             stopped,
             at,
             row,
+            note,
         } => Block::Permission {
             title: title.clone().into(),
             detail: detail.clone().into(),
@@ -465,7 +470,8 @@ pub fn messages_of(saved: &SavedChat) -> Vec<Message> {
                 },
                 at: at.map(|s| std::time::UNIX_EPOCH + std::time::Duration::from_secs(s)),
                 row: *row,
-                open: false,
+                note: note.clone().map(Into::into),
+                ..Default::default()
             },
             verdict: match verdict.as_str() {
                 "allowed" => Verdict::Allowed,

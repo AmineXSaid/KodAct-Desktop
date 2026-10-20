@@ -399,8 +399,9 @@ impl Session {
         always: bool,
         input: &Value,
         suggestions: &Value,
+        note: Option<&str>,
     ) -> Result<(), String> {
-        self.write(answer_line(request_id, allow, always, input, suggestions))
+        self.write(answer_line(request_id, allow, always, input, suggestions, note))
     }
 
     /// Answer a plan (ExitPlanMode), as Forge for VS Code does.
@@ -474,6 +475,7 @@ pub fn answer_line(
     always: bool,
     input: &Value,
     suggestions: &Value,
+    note: Option<&str>,
 ) -> Value {
     let response = if allow {
         let mut r = json!({ "behavior": "allow", "updatedInput": input });
@@ -482,7 +484,11 @@ pub fn answer_line(
         }
         r
     } else {
-        json!({ "behavior": "deny", "message": "The user declined this. Ask what to do instead." })
+        let message = match note.map(str::trim).filter(|n| !n.is_empty()) {
+            Some(n) => format!("The user declined this and said what to do instead: {n}"),
+            None => "The user declined this. Ask what to do instead.".to_string(),
+        };
+        json!({ "behavior": "deny", "message": message })
     };
     json!({ "type": "control_response", "response": { "subtype": "success", "request_id": request_id, "response": response } })
 }
@@ -1137,19 +1143,23 @@ mod tests {
     fn answers_carry_the_input_and_always_carries_the_rules() {
         let input = json!({"command":"ls"});
         let sugg = json!([{"type":"addRules"}]);
-        let a = answer_line("r1", true, true, &input, &sugg);
+        let a = answer_line("r1", true, true, &input, &sugg, None);
         assert_eq!(a["response"]["request_id"], "r1");
         assert_eq!(a["response"]["response"]["behavior"], "allow");
         assert_eq!(a["response"]["response"]["updatedInput"], input);
         assert_eq!(a["response"]["response"]["updatedPermissions"], sugg);
-        let once = answer_line("r1", true, false, &input, &sugg);
+        let once = answer_line("r1", true, false, &input, &sugg, None);
         assert!(once["response"]["response"]
             .get("updatedPermissions")
             .is_none());
         assert_eq!(
-            answer_line("r1", false, false, &input, &sugg)["response"]["response"]["behavior"],
+            answer_line("r1", false, false, &input, &sugg, None)["response"]["response"]["behavior"],
             "deny"
         );
+        // Denied with your words: Forge gets them, not just a no.
+        let said = answer_line("r1", false, false, &input, &sugg, Some("Use lib.rs instead"));
+        let message = said["response"]["response"]["message"].as_str().unwrap();
+        assert!(message.contains("Use lib.rs instead"), "{message}");
     }
 
     #[test]

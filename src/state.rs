@@ -228,6 +228,57 @@ pub struct PermInfo {
     pub row: Option<usize>,
     /// A run of identical answers that starts here shows each one.
     pub open: bool,
+    /// While it waits: the rule "Always allow" would add, and where.
+    pub offer: Option<SharedString>,
+    pub scope: Option<&'static str>,
+    /// What you told Forge to do instead, with a denial.
+    pub note: Option<SharedString>,
+}
+
+/// Where "Always allow" keeps its rule (the suggestion's `destination`).
+pub fn rule_scope(suggestions: &serde_json::Value) -> Option<&'static str> {
+    let dest = suggestions
+        .as_array()?
+        .iter()
+        .find(|s| s["type"] == "addRules")?["destination"]
+        .as_str()?;
+    Some(match dest {
+        "session" => "for the rest of this chat",
+        "localSettings" => "in this project, for you",
+        "projectSettings" => "in this project, for everyone",
+        "userSettings" => "in every project",
+        _ => return None,
+    })
+}
+
+/// "Always allow", said as what it allows: `Bash(npm test:*)` is
+/// "Always allow npm test", `Edit` "Always allow edits".
+pub fn always_label(rule: Option<&str>) -> String {
+    let Some(rule) = rule else {
+        return "Always allow".into();
+    };
+    let (tool, content) = match rule.split_once('(') {
+        Some((t, c)) => (t, c.trim_end_matches(')')),
+        None => (rule, ""),
+    };
+    let content = content
+        .trim_end_matches(":*")
+        .trim_end_matches('*')
+        .trim_start_matches("domain:")
+        .trim();
+    let what = match (tool, content) {
+        ("Edit" | "Write" | "MultiEdit" | "NotebookEdit", "") => "edits".to_string(),
+        ("Read", "") => "reading files".into(),
+        ("WebSearch", _) => "web searches".into(),
+        ("WebFetch", "") => "web pages".into(),
+        ("Bash", "") => "commands".into(),
+        (_, "") => tool.to_string(),
+        (_, c) if c.chars().count() > 28 => {
+            format!("{}…", c.chars().take(27).collect::<String>().trim_end())
+        }
+        (_, c) => c.to_string(),
+    };
+    format!("Always allow {what}")
 }
 
 /// The rule "Always allow" adds, from a question's suggestions
@@ -5338,6 +5389,54 @@ impl AppState {
         verdict: Verdict,
         cx: &mut Context<Self>,
     ) {
+        self.answer_with(chat, msg, block, verdict, None, cx)
+    }
+
+    /// Deny the question `chat` waits on, telling Forge what to do instead
+    /// (you typed it in the composer while the card waited).
+    pub fn deny_with_note(&mut self, chat: usize, note: String, cx: &mut Context<Self>) {
+        if let Some((msg, block)) = self.pending_question(chat) {
+            self.answer_with(chat, msg, block, Verdict::Denied, Some(note), cx);
+        }
+    }
+
+    /// The chat you're looking at waits on your answer to a question.
+    pub fn asking(&self) -> bool {
+        self.busy() && self.current.and_then(|c| self.pending_question(c)).is_some()
+    }
+
+    /// Deny the question the chat you're looking at waits on, with `note`.
+    pub fn deny_current_with_note(&mut self, note: String, cx: &mut Context<Self>) {
+        if let Some(chat) = self.current {
+            self.deny_with_note(chat, note, cx);
+        }
+    }
+
+    /// The question `chat` waits on: (message, block).
+    pub fn pending_question(&self, chat: usize) -> Option<(usize, usize)> {
+        if let Some(a) = self.asks.get(&chat) {
+            return Some((a.msg, a.block));
+        }
+        let c = self.chats.iter().find(|c| c.id == chat)?;
+        let msg = c.messages.len().checked_sub(1)?;
+        match &c.messages[msg] {
+            Message::Assistant { blocks } => blocks
+                .iter()
+                .rposition(|b| matches!(b, Block::Permission { verdict: Verdict::Pending, .. }))
+                .map(|b| (msg, b)),
+            _ => None,
+        }
+    }
+
+    fn answer_with(
+        &mut self,
+        chat: usize,
+        msg: usize,
+        block: usize,
+        verdict: Verdict,
+        note: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
         if let Some(c) = self.chat_mut(chat) {
             if let Some(Message::Assistant { blocks }) = c.messages.get_mut(msg) {
                 if let Some(Block::Permission {
@@ -5347,6 +5446,7 @@ impl AppState {
                     *v = verdict;
                     if verdict != Verdict::Pending {
                         info.at = Some(std::time::SystemTime::now());
+                        info.note = note.clone().map(Into::into);
                     }
                 }
             }
@@ -5395,9 +5495,12 @@ impl AppState {
             let allow = matches!(verdict, Verdict::Allowed | Verdict::AllowedAlways);
             if !allow {
                 if let Some(&(m, b)) = self.tool_rows.get(&(chat, ask.tool_use_id.clone())) {
+                    let said = note
+                        .as_ref()
+                        .map_or("You declined this.".to_string(), |n| format!("You declined this: {n}"));
                     self.update_tool(chat, m, b, |t| {
                         t.status = ToolStatus::Declined;
-                        t.output = "You declined this.".into();
+                        t.output = said.into();
                     });
                 }
             }
@@ -5408,6 +5511,7 @@ impl AppState {
                     verdict == Verdict::AllowedAlways,
                     &ask.input,
                     &ask.suggestions,
+                    note.as_deref(),
                 )
             });
             if let Some(Err(e)) = sent {
@@ -6072,7 +6176,7 @@ impl AppState {
                     if let Some(l) = self.sessions.get(&chat) {
                         let _ = l
                             .session
-                            .answer(&request_id, false, false, &input, &suggestions);
+                            .answer(&request_id, false, false, &input, &suggestions, None);
                     }
                     return;
                 }
@@ -6168,7 +6272,7 @@ impl AppState {
                     if let Some(l) = self.sessions.get(&chat) {
                         let _ = l
                             .session
-                            .answer(&request_id, true, false, &input, &suggestions);
+                            .answer(&request_id, true, false, &input, &suggestions, None);
                     }
                     return;
                 }
@@ -6176,6 +6280,8 @@ impl AppState {
                 let row = self.tool_rows.get(&(chat, tool_use_id.clone())).copied();
                 let info = PermInfo {
                     kind: Some(crate::backend::tool_call(&tool_name, &input).kind),
+                    offer: rule_name(&suggestions).map(Into::into),
+                    scope: rule_scope(&suggestions),
                     ..Default::default()
                 };
                 if let Some((msg, block)) = self.push_block(
@@ -7440,6 +7546,11 @@ impl AppState {
                     review: Review::Open,
                 }))
             }
+            (Step::ToolDiff(diff), Some(blocks)) => {
+                if let Some(Block::Tool(t)) = blocks.iter_mut().rev().find(|b| matches!(b, Block::Tool(_))) {
+                    t.diff = diff;
+                }
+            }
             (Step::ToolDone(output, diff), Some(blocks)) => {
                 if let Some(Block::Tool(t)) = blocks
                     .iter_mut()
@@ -7476,6 +7587,8 @@ impl AppState {
                     info: PermInfo {
                         kind,
                         row,
+                        offer: Some("Edit".into()),
+                        scope: Some("in this project, for you"),
                         ..Default::default()
                     },
                 })
@@ -7505,7 +7618,7 @@ impl AppState {
                         by,
                         at: Some(std::time::SystemTime::now()),
                         row: own_row.then(|| blocks.len() - 1),
-                        open: false,
+                        ..Default::default()
                     },
                 });
             }
@@ -7581,6 +7694,8 @@ enum Step {
     },
     /// The reply writes a fact into the project's memory.
     Remember(String),
+    /// The running call's change, before it is made.
+    ToolDiff(Vec<DiffLine>),
 }
 
 impl Step {
@@ -7588,6 +7703,7 @@ impl Step {
         match self {
             Step::Think(_) | Step::Say(_) => 45,
             Step::ToolStart(..) => 350,
+            Step::ToolDiff(_) => 0,
             Step::ToolDone(..) => 900,
             Step::Ask(..) => 300,
             Step::Asked(..) => 450,
@@ -7941,24 +8057,25 @@ fn script(prompt: &str) -> Vec<Step> {
         "fn main() {\n    println!(\"Hello, world\");\n}\n".into(),
         vec![],
     ));
+    // The change is known when the call starts, as ForgeCLI sends it: the
+    // card shows it before you allow it.
+    let change = diff(&[
+        (DiffKind::Add, "pub fn greeting() -> &'static str {"),
+        (DiffKind::Add, "    \"Hello, Forge\""),
+        (DiffKind::Add, "}"),
+        (DiffKind::Add, ""),
+        (DiffKind::Same, "fn main() {"),
+        (DiffKind::Del, "    println!(\"Hello, world\");"),
+        (DiffKind::Add, "    println!(\"{}\", greeting());"),
+        (DiffKind::Same, "}"),
+    ]);
     s.push(Step::ToolStart(ToolKind::Edit, "src/main.rs".into(), None));
+    s.push(Step::ToolDiff(change.clone()));
     s.push(Step::Ask(
-        "Edit src/main.rs?".into(),
-        "Replace the greeting with a function main calls, and add a test for it.".into(),
+        "Allow Forge to edit main.rs?".into(),
+        "src/main.rs".into(),
     ));
-    s.push(Step::ToolDone(
-        "The file was updated.".into(),
-        diff(&[
-            (DiffKind::Add, "pub fn greeting() -> &'static str {"),
-            (DiffKind::Add, "    \"Hello, Forge\""),
-            (DiffKind::Add, "}"),
-            (DiffKind::Add, ""),
-            (DiffKind::Same, "fn main() {"),
-            (DiffKind::Del, "    println!(\"Hello, world\");"),
-            (DiffKind::Add, "    println!(\"{}\", greeting());"),
-            (DiffKind::Same, "}"),
-        ]),
-    ));
+    s.push(Step::ToolDone("The file was updated.".into(), change));
     s.push(Step::ToolStart(
         ToolKind::Bash,
         "cargo test".into(),
@@ -8524,6 +8641,20 @@ mod tests {
             super::rule_name(&serde_json::json!([{"type": "setMode"}])),
             None
         );
+    }
+
+    #[test]
+    fn always_allow_says_what_it_allows_and_where() {
+        use super::always_label as l;
+        assert_eq!(l(Some("Bash(npm test:*)")), "Always allow npm test");
+        assert_eq!(l(Some("Edit")), "Always allow edits");
+        assert_eq!(l(Some("WebFetch(domain:docs.rs)")), "Always allow docs.rs");
+        assert_eq!(l(Some("WebSearch")), "Always allow web searches");
+        assert_eq!(l(None), "Always allow");
+        assert!(l(Some("Bash(cargo build --release --target x86_64-pc-windows-gnu)")).ends_with('…'));
+        let s = serde_json::json!([{"type": "addRules", "rules": [{"toolName": "Edit"}], "destination": "localSettings"}]);
+        assert_eq!(super::rule_scope(&s), Some("in this project, for you"));
+        assert_eq!(super::rule_scope(&serde_json::json!([])), None);
     }
 
     #[test]

@@ -476,6 +476,8 @@ impl Render for ChatView {
                     )
                 }
                 None => match &step {
+                    // The card says it waits on you: no second line.
+                    Some((Activity::AwaitingYou, ..)) => div().into_any_element(),
                     Some((activity, label, detail, since)) => {
                         working_line(&t, *activity, label, detail.clone(), *since)
                     }

@@ -657,6 +657,13 @@ fn approval_line(answer: &Block, cx: &ItemContext, t: &Theme) -> AnyElement {
         .into_any_element()
 }
 
+/// `b` is a call whose question still waits on you.
+fn awaits_you(blocks: &[Block], b: usize) -> bool {
+    blocks[b + 1..].iter().any(|blk| {
+        matches!(blk, Block::Permission { verdict: Verdict::Pending, info, .. } if info.row == Some(b))
+    })
+}
+
 /// `b` is a call whose question was denied (the question names it as its row).
 fn denied_call(blocks: &[Block], b: usize) -> bool {
     matches!(blocks[b], Block::Tool(_))
@@ -705,7 +712,7 @@ fn block(blocks: &[Block], b: usize, cx: &ItemContext, t: &Theme) -> AnyElement 
             },
         ),
         Block::Thinking { text, open } => thinking(text, *open, b, cx, t),
-        Block::Tool(call) => tool(call, b, cx, t),
+        Block::Tool(call) => tool(call, b, blocks, cx, t),
         Block::Permission {
             title,
             detail,
@@ -787,6 +794,33 @@ fn thinking(text: &SharedString, open: bool, b: usize, cx: &ItemContext, t: &The
         .into_any_element()
 }
 
+/// A change, a line per row: added and removed lines tinted, coloured by
+/// the file's language.
+fn diff_lines(diff: &[crate::state::DiffLine], lang: &str, t: &Theme) -> gpui::Div {
+    div()
+        .py(t.space.xs)
+        .font_family(t.font_mono.clone())
+        .text_size(t.text.caption + px(0.5))
+        .line_height(relative(1.65))
+        .children(diff.iter().map(|l| {
+            let (bg, sign, fg) = match l.kind {
+                DiffKind::Add => (Some(t.extra.diff_add), "+", t.extra.success),
+                DiffKind::Del => (Some(t.extra.diff_del), "−", t.extra.danger),
+                DiffKind::Same => (None, " ", t.colors.text_subtle),
+            };
+            div()
+                .flex()
+                .px(t.space.md)
+                .when_some(bg, |d, bg| d.bg(bg))
+                .child(div().w(t.space.lg).flex_none().text_color(fg).child(sign))
+                .child(div().whitespace_nowrap().child(markdown::code_text(
+                    if l.text.is_empty() { " " } else { &l.text },
+                    lang,
+                    t,
+                )))
+        }))
+}
+
 fn status_icon(status: ToolStatus, t: &Theme) -> AnyElement {
     match status {
         ToolStatus::Running => icon("icons/loader-circle.svg", t.size.icon_sm, t.extra.accent)
@@ -853,7 +887,7 @@ pub fn env_badge(place: &Option<(SharedString, &'static str)>, t: &Theme) -> Any
         .into_any_element()
 }
 
-fn tool(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
+fn tool(call: &ToolCall, b: usize, blocks: &[Block], cx: &ItemContext, t: &Theme) -> AnyElement {
     let hover = t.colors.hover;
     let adds = call.diff.iter().filter(|l| l.kind == DiffKind::Add).count();
     let dels = call.diff.iter().filter(|l| l.kind == DiffKind::Del).count();
@@ -952,7 +986,12 @@ fn tool(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
             )
         })
         .children(review_controls(call, b, cx, t))
-        .child(status_icon(call.status, t))
+        .child(if call.status == ToolStatus::Running && awaits_you(blocks, b) {
+            // Not working: waiting on the card below.
+            icon("icons/hand.svg", t.size.icon_sm, t.extra.accent).into_any_element()
+        } else {
+            status_icon(call.status, t)
+        })
         .when(has_body, |d| d.child(chevron(call.open, t)))
         .on_click(toggle(cx, b));
 
@@ -970,30 +1009,9 @@ fn tool(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
             };
             terminal::block(call, &at, t)
         } else if !call.diff.is_empty() {
-            div()
+            diff_lines(&call.diff, lang, t)
                 .border_t_1()
                 .border_color(t.colors.border)
-                .py(t.space.xs)
-                .font_family(t.font_mono.clone())
-                .text_size(t.text.caption + px(0.5))
-                .line_height(relative(1.65))
-                .children(call.diff.iter().map(|l| {
-                    let (bg, sign, fg) = match l.kind {
-                        DiffKind::Add => (Some(t.extra.diff_add), "+", t.extra.success),
-                        DiffKind::Del => (Some(t.extra.diff_del), "−", t.extra.danger),
-                        DiffKind::Same => (None, " ", t.colors.text_subtle),
-                    };
-                    div()
-                        .flex()
-                        .px(t.space.md)
-                        .when_some(bg, |d, bg| d.bg(bg))
-                        .child(div().w(t.space.lg).flex_none().text_color(fg).child(sign))
-                        .child(div().whitespace_nowrap().child(markdown::code_text(
-                            if l.text.is_empty() { " " } else { &l.text },
-                            lang,
-                            t,
-                        )))
-                }))
                 .into_any_element()
         } else {
             div()
@@ -1391,7 +1409,18 @@ fn answered(
                             t.colors.text_muted
                         })
                         .child(answer_meta(verdict, info, blocks, cx)),
-                ),
+                )
+                // What you told Forge to do instead, in your words.
+                .children(info.note.as_ref().map(|n| {
+                    div()
+                        .mt(t.space.xs)
+                        .pl(t.space.sm)
+                        .border_l_2()
+                        .border_color(t.colors.border)
+                        .text_size(t.text.body_sm)
+                        .text_color(t.colors.text_body)
+                        .child(n.clone())
+                })),
         )
         .into_any_element()
 }
@@ -1623,18 +1652,96 @@ fn permission(
     }
     let id = |name: &str| SharedString::from(format!("perm-{name}-{}-{}-{b}", cx.chat, cx.index));
     let is_plan = title.as_ref() == crate::backend::PLAN_ASK_TITLE;
+    let is_js = title.as_ref() == crate::backend::JS_ASK_TITLE;
+    // The call it asks about: what you allow is shown, not described.
+    let call = info.row.and_then(|r| match blocks.get(r) {
+        Some(Block::Tool(c)) => Some(c),
+        _ => None,
+    });
+    let diff = call.filter(|c| !c.diff.is_empty());
+    let command = call.filter(|c| c.kind == ToolKind::Bash).map(|c| c.target.clone());
     use super::button::Button;
-    div()
+    // A scrolling well for code: the change, the command, the script.
+    let well = |name: &str, long: bool| {
+        div()
+            .id(id(name))
+            .max_h(px(240.))
+            .overflow_y_scroll()
+            .when(long, super::hold_wheel)
+            .rounded(t.radius.button)
+            .border_1()
+            .border_color(t.colors.border)
+            .bg(t.extra.inset)
+    };
+    let subject: AnyElement = if is_js {
+        let long = detail.lines().count() > 10 || detail.len() > 600;
+        well("script", long)
+            .p(t.space.md)
+            .font_family(t.font_mono.clone())
+            .text_size(t.text.body_sm)
+            .child(super::markdown::code_text(detail, "js", t))
+            .into_any_element()
+    } else if let Some(c) = diff {
+        let (adds, dels) = c.diff.iter().fold((0, 0), |(a, d), l| match l.kind {
+            DiffKind::Add => (a + 1, d),
+            DiffKind::Del => (a, d + 1),
+            DiffKind::Same => (a, d),
+        });
+        div()
+            .flex()
+            .flex_col()
+            .gap(t.space.xs)
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(t.space.sm)
+                    .text_size(t.text.caption)
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .font_family(t.font_mono.clone())
+                            .text_color(t.colors.text_muted)
+                            .child(c.target.clone()),
+                    )
+                    .child(div().text_color(t.extra.success).child(format!("+{adds}")))
+                    .child(div().text_color(t.extra.danger).child(format!("−{dels}"))),
+            )
+            .child(
+                well("diff", c.diff.len() > 12)
+                    .child(diff_lines(&c.diff, markdown::lang_of(&c.target), t)),
+            )
+            .into_any_element()
+    } else if let Some(cmd) = command {
+        well("command", cmd.lines().count() > 10)
+            .p(t.space.md)
+            .font_family(t.font_mono.clone())
+            .text_size(t.text.body_sm)
+            .child(super::markdown::code_text(&cmd, "sh", t))
+            .into_any_element()
+    } else {
+        div()
+            .text_color(t.colors.text_body)
+            .child(detail.clone())
+            .into_any_element()
+    };
+    let always = crate::state::always_label(info.offer.as_deref());
+    let always_tip = match (&info.offer, info.scope) {
+        (Some(rule), Some(scope)) => format!("Adds the rule {rule}, {scope}."),
+        (Some(rule), None) => format!("Adds the rule {rule}."),
+        _ => "Forge won't ask again for this.".to_string(),
+    };
+    let body = div()
+        .flex_1()
+        .min_w_0()
         .flex()
         .flex_col()
         .gap(t.space.md)
         .p(t.space.lg)
-        .bg(t.colors.surface)
-        // Ink, not a warning colour: it waits on you, and nothing is wrong.
-        .border_1()
-        .border_color(t.colors.text_strong)
-        .rounded(t.radius.card)
-        .shadow(t.elevation_popover())
         .child(
             div()
                 .flex()
@@ -1647,7 +1754,14 @@ fn permission(
                         .flex()
                         .flex_col()
                         .gap(px(3.))
-                        .child(theme::eyebrow(t, "Needs you"))
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(t.space.xs)
+                                .child(icon("icons/hand.svg", t.size.icon_xs, t.extra.accent))
+                                .child(theme::eyebrow(t, "Needs you")),
+                        )
                         .child(
                             div()
                                 .text_size(t.text.body + px(2.))
@@ -1658,32 +1772,10 @@ fn permission(
                 )
                 .when(!is_plan, |d| d.child(env_badge(&cx.place, t))),
         )
-        .child(if title.as_ref() == crate::backend::JS_ASK_TITLE {
-            // The script, whole and as code: what you allow is what runs.
-            // A long one scrolls, and keeps the wheel from the chat behind.
-            let long = detail.lines().count() > 10 || detail.len() > 600;
-            div()
-                .id(id("script"))
-                .max_h(px(240.))
-                .overflow_y_scroll()
-                .when(long, super::hold_wheel)
-                .p(t.space.md)
-                .rounded(t.radius.button)
-                .bg(t.extra.inset)
-                .font_family(t.font_mono.clone())
-                .text_size(t.text.body_sm)
-                .child(super::markdown::code_text(detail, "js", t))
-                .into_any_element()
-        } else {
-            div()
-                .text_color(t.colors.text_body)
-                .child(detail.clone())
-                .into_any_element()
-        })
+        .child(subject)
         // A long script scrolls: say so, so its end isn't missed.
         .when(
-            title.as_ref() == crate::backend::JS_ASK_TITLE
-                && (detail.lines().count() > 10 || detail.len() > 600),
+            is_js && (detail.lines().count() > 10 || detail.len() > 600),
             |d| {
                 d.child(
                     div()
@@ -1720,17 +1812,20 @@ fn permission(
                             .on_click(answer(Verdict::PlanAutoAccept)),
                     )
                 })
-                // A tool: deny it, allow it this once (the filled action),
-                // or always. The broad grant is never the loudest button.
+                // A tool: deny it (framed in red), allow it this once (the
+                // filled action), or always, named for what it allows. The
+                // broad grant is never the loudest button.
                 .when(!is_plan, |d| {
                     d.child(
-                        Button::ghost(id("deny"), "Deny")
+                        Button::danger_outline(id("deny"), "Deny")
                             .with_icon("icons/x.svg")
                             .on_click(answer(Verdict::Denied)),
                     )
                     .child(div().flex_1())
                     .child(
-                        Button::secondary(id("always"), "Always allow")
+                        Button::secondary(id("always"), always)
+                            .describe(always_tip)
+                            .tooltip(true)
                             .on_click(answer(Verdict::AllowedAlways)),
                     )
                     .child(
@@ -1739,6 +1834,25 @@ fn permission(
                     )
                 }),
         )
+        .when(!is_plan, |d| {
+            d.child(
+                div()
+                    .text_size(t.text.caption)
+                    .text_color(t.colors.text_muted)
+                    .child("Or type in the box below to tell Forge what to do instead."),
+            )
+        });
+    // A card lifted like the others, its accent edge saying it waits on you.
+    div()
+        .flex()
+        .overflow_hidden()
+        .bg(t.colors.surface)
+        .border_1()
+        .border_color(t.colors.border)
+        .rounded(t.radius.card)
+        .shadow(t.elevation_grain())
+        .child(div().w(px(3.)).flex_none().bg(t.extra.accent))
+        .child(body)
         .into_any_element()
 }
 

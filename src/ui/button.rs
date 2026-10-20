@@ -33,6 +33,8 @@ pub enum Variant {
     Outlined,
     /// A destructive confirm.
     Danger,
+    /// Saying no, framed in red but not filled: Deny.
+    DangerOutline,
     /// The accent fill, kept for sending.
     Accent,
 }
@@ -87,6 +89,12 @@ impl Variant {
                 hover_bg: t.extra.fill_danger.opacity(0.9),
                 fg: t.colors.primary_fg,
                 border: None,
+            },
+            Variant::DangerOutline => Paint {
+                bg: t.colors.surface,
+                hover_bg: over(t.extra.danger_tint, t.colors.surface),
+                fg: t.extra.danger,
+                border: Some(t.extra.danger),
             },
             Variant::Accent => Paint {
                 bg: t.extra.accent,
@@ -175,6 +183,11 @@ impl Button {
 
     pub fn danger(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Self {
         Self::new(id, Variant::Danger).label(label)
+    }
+
+    /// No, in a red frame: Deny.
+    pub fn danger_outline(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Self {
+        Self::new(id, Variant::DangerOutline).label(label)
     }
 
     /// The one decisive action, in the accent: Allow once, Send.
@@ -342,7 +355,11 @@ impl RenderOnce for Button {
             .when(
                 matches!(
                     self.variant,
-                    Variant::Primary | Variant::Danger | Variant::Accent | Variant::Secondary
+                    Variant::Primary
+                        | Variant::Danger
+                        | Variant::DangerOutline
+                        | Variant::Accent
+                        | Variant::Secondary
                 ) || (self.variant == Variant::Ghost && self.size != Size::Compact),
                 |d| d.font_weight(gpui::FontWeight::SEMIBOLD),
             )
