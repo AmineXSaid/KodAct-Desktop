@@ -1,5 +1,6 @@
 //! Everything the app ships inside its binary: the icons (Lucide, ISC
-//! licence, `assets/icons/LICENSE`) and the fonts (OFL, `assets/fonts`).
+//! licence, `assets/icons/LICENSE`), the file icons (Material Icon Theme,
+//! MIT, `assets/file-icons/LICENSE`) and the fonts (OFL, `assets/fonts`).
 
 use std::borrow::Cow;
 
@@ -167,6 +168,13 @@ impl AssetSource for Assets {
         if path.starts_with("avatars/") {
             // Sized to the pixels they're drawn at (`avatars.rs`).
             return Ok(crate::avatars::load(path).map(Cow::Owned));
+        }
+        if path.starts_with("file-icons/") {
+            // The @ list's full-colour file icons (`ui/file_icon.rs`).
+            return Ok(crate::ui::file_icon_map::SVGS
+                .iter()
+                .find(|(p, _)| *p == path)
+                .map(|(_, bytes)| Cow::Borrowed(*bytes)));
         }
         Ok(ICONS
             .iter()

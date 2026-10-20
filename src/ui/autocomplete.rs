@@ -395,12 +395,13 @@ pub fn render(
         let row = if item.file {
             // Name first, its whole path after it, dimmed and cut from the left.
             let folder = item.group == "Folders";
-            let (glyph, color) = super::file_icon::for_name(&item.label, folder, t);
+            // The extension's own icons, in their colours.
+            let glyph = super::file_icon::asset(&item.label, folder, &item.detail);
             row.gap(t.space.sm)
                 .h(t.size.hit_sm - px(4.))
                 .px(t.space.sm)
                 .text_size(t.text.body_sm)
-                .child(icon(glyph, t.size.icon, color))
+                .child(gpui::img(glyph).flex_none().size(t.size.icon))
                 .child(
                     div()
                         .flex_none()
