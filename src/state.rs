@@ -6051,7 +6051,8 @@ impl AppState {
             |s, dir, cx| {
                 s.remote_failed = None;
                 s.remote_lost = None;
-                s.add_project(dir, cx);
+                // The folder, as you were in it: a project only if it was one.
+                s.work_in_folder(dir, cx);
             },
             cx,
         );
@@ -6118,19 +6119,19 @@ impl AppState {
                 || self.project_dir.join(".devcontainer.json").is_file())
     }
 
-    /// Back to this machine: the first local project becomes current.
+    /// Back to this machine, where Forge started: the folder it was
+    /// started in, else a plain chat (no folder), as at launch.
     pub fn close_remote(&mut self, cx: &mut Context<Self>) {
         self.remote_menu = None;
         self.remote_failed = None;
         self.remote_lost = None;
-        if let Some(id) = self
-            .projects
-            .iter()
-            .find(|p| crate::remote::Remote::parse(&p.path).is_none())
-            .map(|p| p.id)
-        {
-            self.select_project(id, cx);
-            self.new_chat(cx);
+        let launch = self.launch_dir.clone();
+        match launch.and_then(|d| self.projects.iter().find(|p| p.path == d).map(|p| p.id)) {
+            Some(id) => {
+                self.select_project(id, cx);
+                self.new_chat(cx);
+            }
+            None => self.new_plain_chat(cx),
         }
         cx.notify();
     }

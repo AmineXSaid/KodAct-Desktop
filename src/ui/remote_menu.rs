@@ -220,7 +220,10 @@ impl RemotePicker {
                         "No devcontainer.json in this folder".into()
                     });
                 }
-                actions.push(reopen);
+                // A plain chat has no folder to reopen.
+                if s.in_folder() {
+                    actions.push(reopen);
+                }
                 actions.push(
                     Row::new(
                         "icons/box.svg",
