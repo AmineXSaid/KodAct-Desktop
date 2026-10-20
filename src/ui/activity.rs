@@ -9,7 +9,7 @@
 //! | Activity | Mark |
 //! |---|---|
 //! | Waiting for the model | the cube turning |
-//! | Thinking | a brain, sparks lighting round it |
+//! | Thinking | sparkles, a spark lighting round them in turn |
 //! | Reading a file | a page, a highlight sweeping down its lines |
 //! | Editing a file | a pencil drawing a short line |
 //! | Writing code | brackets, a caret blinking between them |
@@ -124,9 +124,9 @@ fn frame(activity: Activity, t: &Theme, k: f32) -> Div {
     let layer = div().absolute().size(px(BOX));
     match activity {
         Activity::Thinking => {
-            // Three sparks round the brain, each lighting in its third.
+            // Three sparks round the sparkles, each lighting in its third.
             let spots = [(13.5, 0.5), (15., 9.), (0.5, 4.)];
-            let mut l = layer.child(at(2., 2., glyph("icons/brain.svg", 14., ink)));
+            let mut l = layer.child(at(2., 2., glyph("icons/sparkles.svg", 14., ink)));
             for (i, (x, y)) in spots.into_iter().enumerate() {
                 let phase = (k * 3. - i as f32).clamp(0., 1.);
                 l = l.child(at(x, y, dot(3., accent).opacity(swell(phase))));

@@ -161,6 +161,14 @@ impl ChatView {
                     activity,
                     Activity::Waiting | Activity::Thinking | Activity::Replying
                 );
+                // The thought being written already says so, pulsing.
+                let thought = matches!(
+                    c.messages.last(),
+                    Some(Message::Assistant { blocks }) if matches!(blocks.last(), Some(Block::Thinking { .. }))
+                );
+                if thought {
+                    return None;
+                }
                 Some(match (activity, about) {
                     (Activity::AwaitingYou | Activity::Compacting | Activity::Agents, _) => {
                         (activity, words, None)

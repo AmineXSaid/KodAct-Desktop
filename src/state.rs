@@ -116,6 +116,8 @@ pub struct AgentFeed {
     pub output: String,
     /// The remote's label and icon, or None for this computer.
     pub place: Option<(String, &'static str)>,
+    /// It failed (exit 1 in its footer).
+    pub failed: bool,
 }
 
 impl AgentFeed {
@@ -129,17 +131,49 @@ impl AgentFeed {
             command: c.target.to_string(),
             output: c.output.to_string(),
             place,
+            failed: c.status == ToolStatus::Failed,
         }
     }
 
-    /// The bytes a terminal would have seen: the prompt line, then the
-    /// output with terminal line ends.
+    /// The bytes a terminal would have seen, dressed as the chat's terminal
+    /// block is: the step's description, the prompt with the command in
+    /// colour (`terminal::highlight`), its output, and an exit chip with the
+    /// line count. ANSI colours, so the dock's palette themes them.
     pub fn bytes(&self) -> Vec<u8> {
-        let mut out = format!("\x1b[1m$ {}\x1b[0m\r\n", self.command);
+        use crate::ui::terminal::{highlight, Tok};
+        let mut out = format!("\x1b[2;3m# {}\x1b[0m\r\n", self.title);
+        for (i, line) in self.command.lines().enumerate() {
+            out.push_str(if i == 0 { "\x1b[1;35m$\x1b[0m " } else { "  " });
+            for (tok, text) in highlight(line) {
+                let sgr = match tok {
+                    Tok::Command => "1;34",
+                    Tok::Keyword => "35",
+                    Tok::Flag => "36",
+                    Tok::Str => "32",
+                    Tok::Var | Tok::Num => "33",
+                    Tok::Op => "31",
+                    Tok::Comment => "2;3",
+                    Tok::Plain => "",
+                };
+                if sgr.is_empty() {
+                    out.push_str(&text);
+                } else {
+                    out.push_str(&format!("\x1b[{sgr}m{text}\x1b[0m"));
+                }
+            }
+            out.push_str("\r\n");
+        }
+        out.push_str("\r\n");
+        let lines = self.output.lines().count();
         for line in self.output.lines() {
             out.push_str(line);
             out.push_str("\r\n");
         }
+        let (code, tone) = if self.failed { (1, "31") } else { (0, "32") };
+        out.push_str(&format!(
+            "\r\n\x1b[1;{tone}mexit {code}\x1b[0m \x1b[2m· {lines} line{}\x1b[0m\r\n",
+            if lines == 1 { "" } else { "s" }
+        ));
         out.into_bytes()
     }
 }
@@ -8913,6 +8947,25 @@ mod tests {
         // Someone else's message: nothing of the queue.
         assert!(take_landed(&mut list, "x", "unrelated").is_empty());
         assert_eq!(list.len(), 1);
+    }
+
+    #[test]
+    fn a_shown_command_is_dressed_like_the_chat_terminal() {
+        let feed = super::AgentFeed {
+            title: "Check the branch".into(),
+            command: "git branch --show-current && echo \"done\"".into(),
+            output: "main\ndone".into(),
+            place: None,
+            failed: false,
+        };
+        let text = String::from_utf8(feed.bytes()).unwrap();
+        assert!(text.starts_with("\x1b[2;3m# Check the branch"));
+        assert!(text.contains("\x1b[1;35m$\x1b[0m \x1b[1;34mgit\x1b[0m"));
+        assert!(text.contains("\x1b[36m--show-current\x1b[0m"));
+        assert!(text.contains("main\r\ndone\r\n"));
+        assert!(text.contains("\x1b[1;32mexit 0") && text.contains("2 lines"));
+        let failed = super::AgentFeed { failed: true, ..feed };
+        assert!(String::from_utf8(failed.bytes()).unwrap().contains("\x1b[1;31mexit 1"));
     }
 
     #[test]

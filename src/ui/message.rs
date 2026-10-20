@@ -720,7 +720,7 @@ fn block(blocks: &[Block], b: usize, cx: &ItemContext, t: &Theme) -> AnyElement 
                 streaming: cx.busy && cx.last && newest,
             },
         ),
-        Block::Thinking { text, open } => thinking(text, *open, b, cx, t),
+        Block::Thinking { text, open } => thinking(text, *open, newest, b, cx, t),
         Block::Tool(call) => tool(call, b, blocks, cx, t),
         Block::Permission {
             title,
@@ -759,8 +759,18 @@ fn chevron(open: bool, t: &Theme) -> gpui::Svg {
     )
 }
 
-fn thinking(text: &SharedString, open: bool, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
-    let streaming = cx.busy && cx.last;
+/// The model's reasoning, folded. Only the thought still going on is
+/// marked (a sparkle, softly pulsing); a finished one is a quiet "Thought"
+/// that opens to the text, so a long reply isn't studded with icons.
+fn thinking(
+    text: &SharedString,
+    open: bool,
+    newest: bool,
+    b: usize,
+    cx: &ItemContext,
+    t: &Theme,
+) -> AnyElement {
+    let streaming = cx.busy && cx.last && newest;
     let hover = t.colors.text;
     div()
         .flex()
@@ -776,13 +786,18 @@ fn thinking(text: &SharedString, open: bool, b: usize, cx: &ItemContext, t: &The
                 .items_center()
                 .gap(t.space.xs)
                 .cursor_pointer()
-                .text_color(t.colors.text_muted)
+                .text_size(t.text.body_sm)
+                .text_color(if streaming { t.colors.text_muted } else { t.colors.text_subtle })
                 .hover(move |s| s.text_color(hover))
-                .child(icon(
-                    "icons/brain.svg",
-                    t.size.icon_sm,
-                    t.colors.text_subtle,
-                ))
+                .when(streaming, |d| {
+                    d.child(
+                        icon("icons/sparkles.svg", t.size.icon_sm, t.extra.accent).with_animation(
+                            SharedString::from(format!("think-pulse-{}-{}-{b}", cx.chat, cx.index)),
+                            Animation::new(Duration::from_millis(1600)).repeat(),
+                            |svg, d| svg.opacity(0.45 + 0.55 * (d * std::f32::consts::PI).sin()),
+                        ),
+                    )
+                })
                 .child(if streaming { "Thinking" } else { "Thought" })
                 .child(chevron(open, t))
                 .on_click(toggle(cx, b)),
@@ -790,13 +805,13 @@ fn thinking(text: &SharedString, open: bool, b: usize, cx: &ItemContext, t: &The
         .when(open, |d| {
             d.child(
                 div()
-                    .ml(px(6.))
+                    .ml(px(2.))
                     .pl(t.space.md)
                     .border_l_2()
                     .border_color(t.colors.border)
-                    .text_size(t.size.chat_text - px(0.5))
+                    .text_size(t.text.body_sm)
                     .line_height(relative(t.size.line_height_chat))
-                    .text_color(t.colors.text_body)
+                    .text_color(t.colors.text_muted)
                     .child(text.clone()),
             )
         })
