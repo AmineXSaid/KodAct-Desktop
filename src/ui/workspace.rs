@@ -1625,13 +1625,7 @@ pub fn project_switcher(
                     .child(icon("icons/plus.svg", t.size.icon_sm, t.colors.text_muted)),
             )
             .child(div().text_color(t.colors.text).child("New project…"))
-            .on_click(move |_, _, cx| {
-                open.update(cx, |s, cx| {
-                    s.switcher_open = false;
-                    cx.notify();
-                });
-                super::projects::open_folder(open.clone(), cx);
-            }),
+            .on_click(move |_, _, cx| open.update(cx, |s, cx| s.open_new_project(cx))),
     );
     super::motion::edge_draw(menu, "switcher-in", t.colors.primary, 0., &t)
 }

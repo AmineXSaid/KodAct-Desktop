@@ -35,6 +35,10 @@ pub struct ProjectsView {
     editing: Option<(usize, Field)>,
     /// The page's right rail: what every chat gets, instructions.
     rail: Entity<super::project_rail::ProjectRail>,
+    /// New project's three ways to start (`new_project.rs`).
+    new_project: Entity<super::new_project::NewProject>,
+    /// A project page's search over its chats.
+    chat_search: Entity<InputState>,
     _subs: Vec<Subscription>,
 }
 
@@ -100,9 +104,16 @@ impl ProjectsView {
         let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search projects"));
         let edit = cx.new(|cx| InputState::new(window, cx));
         let rail = cx.new(|cx| super::project_rail::ProjectRail::new(state.clone(), window, cx));
+        let new_project = cx.new(|cx| super::new_project::NewProject::new(state.clone(), window, cx));
+        let chat_search = cx.new(|cx| InputState::new(window, cx).placeholder("Search these chats"));
         let subs = vec![
             cx.observe(&state, |_, _, cx| cx.notify()),
             cx.subscribe(&search, |_, _, ev: &InputEvent, cx| {
+                if matches!(ev, InputEvent::Change) {
+                    cx.notify();
+                }
+            }),
+            cx.subscribe(&chat_search, |_, _, ev: &InputEvent, cx| {
                 if matches!(ev, InputEvent::Change) {
                     cx.notify();
                 }
@@ -123,6 +134,8 @@ impl ProjectsView {
             edit,
             editing: None,
             rail,
+            new_project,
+            chat_search,
             _subs: subs,
         }
     }
@@ -569,6 +582,7 @@ impl ProjectsView {
                 })
         });
         let has_connected = s.projects.iter().any(|p| !p.saved && !p.scratch);
+        let sheet_open = s.new_project_open;
         let state = self.state.clone();
         div()
             .id("projects-page")
@@ -623,9 +637,15 @@ impl ProjectsView {
                                     .flex()
                                     .items_center()
                                     .gap(t.space.xs)
-                                    .on_click(move |_, _, cx| open_folder(state.clone(), cx)),
+                                    .on_click(move |_, _, cx| {
+                                        state.update(cx, |s, cx| {
+                                            s.new_project_open = !s.new_project_open;
+                                            cx.notify();
+                                        })
+                                    }),
                             ),
                     )
+                    .when(sheet_open, |d| d.child(self.new_project.clone()))
                     .child(toolbar)
                     .when(none_shown, |d| {
                         d.child(
@@ -672,7 +692,21 @@ impl ProjectsView {
         };
         let home = crate::rules::home_dir();
         let hover = t.colors.hover;
-        let mut chats: Vec<_> = s.chats.iter().filter(|c| c.project == id).collect();
+        let all_chats = s.chats.iter().filter(|c| c.project == id).count();
+        let q = self.chat_search.read(cx).value().trim().to_lowercase();
+        let mut chats: Vec<_> = s
+            .chats
+            .iter()
+            .filter(|c| c.project == id)
+            .filter(|c| {
+                q.is_empty()
+                    || c.title.to_lowercase().contains(&q)
+                    || c.messages.iter().any(|m| match m {
+                        crate::state::Message::User { text, .. } => text.to_lowercase().contains(&q),
+                        _ => false,
+                    })
+            })
+            .collect();
         chats.sort_by_key(|c| c.minutes_ago);
         let rows: Vec<AnyElement> = chats
             .iter()
@@ -924,14 +958,47 @@ impl ProjectsView {
                             .gap(px(2.))
                             .child(
                                 div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(t.space.md)
                                     .px(t.space.md)
                                     .pb(t.space.xs)
-                                    .text_size(t.text.caption)
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .text_color(t.colors.text_subtle)
-                                    .child(format!("Chats in {}", p.name)),
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .text_size(t.text.caption)
+                                            .font_weight(FontWeight::MEDIUM)
+                                            .text_color(t.colors.text_subtle)
+                                            .child(format!("Chats in {}", p.name)),
+                                    )
+                                    .when(all_chats > 3, |d| {
+                                        d.child(
+                                            div()
+                                                .w(px(200.))
+                                                .flex()
+                                                .items_center()
+                                                .gap(t.space.xs)
+                                                .px(t.space.sm)
+                                                .rounded(t.radius.field)
+                                                .border_1()
+                                                .border_color(t.colors.border)
+                                                .bg(t.colors.surface)
+                                                .text_size(t.text.caption)
+                                                .child(icon("icons/search.svg", t.size.icon_xs, t.colors.text_subtle))
+                                                .child(div().flex_1().child(Input::new(&self.chat_search).appearance(false))),
+                                        )
+                                    }),
                             )
-                            .when(rows.is_empty(), |d| {
+                            .when(rows.is_empty() && !q.is_empty(), |d| {
+                                d.child(
+                                    div()
+                                        .px(t.space.md)
+                                        .py(t.space.md)
+                                        .text_color(t.colors.text_subtle)
+                                        .child(format!("No chat here mentions “{q}”.")),
+                                )
+                            })
+                            .when(rows.is_empty() && q.is_empty(), |d| {
                                 d.child(
                                     div()
                                         .px(t.space.md)

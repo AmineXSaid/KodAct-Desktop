@@ -21,6 +21,7 @@ pub mod diagram_view;
 pub mod doc_changes;
 pub mod doc_comments;
 pub mod doc_find;
+pub mod new_project;
 pub mod project_github;
 pub mod project_knowledge;
 pub mod project_memory;

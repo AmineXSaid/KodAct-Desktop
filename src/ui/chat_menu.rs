@@ -1,6 +1,7 @@
 //! A chat's menu, from its sidebar row's ⋯ button or a right-click: Rename,
-//! Pin, Duplicate, Export as Markdown or JSON, Share (the JSON to the
-//! clipboard; links are `stubs::SHARE_LINK`), then Delete (asks first).
+//! Pin, Move to project (your other projects, or plain chats), Duplicate,
+//! Export as Markdown or JSON, Share (the JSON to the clipboard; links are
+//! `stubs::SHARE_LINK`), then Delete (asks first).
 
 use gpui::{div, prelude::*, px, AnimationExt, AnyElement, Entity, SharedString};
 
@@ -13,6 +14,8 @@ pub fn render(
     state: &Entity<AppState>,
     id: usize,
     pinned: bool,
+    // Some: the menu shows where the chat can move instead.
+    moving: Option<Vec<(usize, SharedString)>>,
     window: &gpui::Window,
 ) -> AnyElement {
     let (hover, danger_hover) = (t.colors.hover, t.extra.danger_tint);
@@ -91,6 +94,62 @@ pub fn render(
             s.toggle_pin(id, cx);
         })),
     )
+    .child(
+        row(
+            "move",
+            "icons/folder-open.svg",
+            "Move to project…",
+            None,
+            false,
+        )
+        .on_click(act(|s, _, cx| {
+            s.chat_menu_moving = !s.chat_menu_moving;
+            cx.notify();
+        })),
+    )
+    .children(moving.map(|targets| {
+        let mut list = div()
+            .flex()
+            .flex_col()
+            .ml(t.space.lg)
+            .pl(t.space.sm)
+            .border_l_1()
+            .border_color(t.colors.border);
+        if targets.is_empty() {
+            list = list.child(
+                div()
+                    .px(t.space.md)
+                    .py(t.space.xs)
+                    .text_size(t.text.caption)
+                    .text_color(t.colors.text_subtle)
+                    .child("No other project yet."),
+            );
+        }
+        for (to, name) in targets {
+            let st = state.clone();
+            list = list.child(
+                div()
+                    .id(SharedString::from(format!("chat-move-{to}")))
+                    .h(t.size.row)
+                    .px(t.space.md)
+                    .flex()
+                    .items_center()
+                    .rounded(t.radius.button)
+                    .cursor_pointer()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
+                    .text_color(t.colors.text)
+                    .hover(move |d| d.bg(hover))
+                    .child(name)
+                    .on_click(move |_, _, cx| {
+                        cx.stop_propagation();
+                        st.update(cx, |s, cx| s.move_chat(id, to, cx));
+                    }),
+            );
+        }
+        list
+    }))
     .child(
         row("duplicate", "icons/copy-plus.svg", "Duplicate", None, false)
             .on_click(act(|s, id, cx| s.duplicate_chat(id, cx))),

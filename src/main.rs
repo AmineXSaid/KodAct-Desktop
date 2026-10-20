@@ -53,6 +53,7 @@ mod state;
 mod stubs;
 #[cfg(test)]
 mod system_md;
+mod templates;
 mod term_session;
 mod text_diff;
 mod theme;

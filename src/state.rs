@@ -1267,6 +1267,10 @@ pub struct AppState {
     pub repo: Option<(usize, std::sync::Arc<Option<crate::git_status::Repo>>)>,
     /// Bumped each time the repository is read, so a stale refresh stops.
     repo_reads: u64,
+    /// The Projects page's New project sheet is open.
+    pub new_project_open: bool,
+    /// The chat menu shows the projects to move the chat to.
+    pub chat_menu_moving: bool,
     /// The panel's find bar is open (`ui/doc_find.rs`).
     pub doc_finding: bool,
     /// The panel's body: its pages are its items, so the keyboard and a
@@ -1507,6 +1511,8 @@ impl AppState {
             memory_changes: Default::default(),
             repo: None,
             repo_reads: 0,
+            new_project_open: false,
+            chat_menu_moving: false,
             doc_scroll: gpui::ScrollHandle::new(),
             next_comment: 1,
             doc_page_pick: None,
@@ -2157,6 +2163,135 @@ impl AppState {
             },
             cx,
         );
+    }
+
+    /// Open the Projects page with its New project sheet.
+    pub fn open_new_project(&mut self, cx: &mut Context<Self>) {
+        self.switcher_open = false;
+        self.screen = Screen::Projects;
+        self.new_project_open = true;
+        cx.notify();
+    }
+
+    /// New project › Start fresh: a folder in `Forge Projects` made from a
+    /// template, opened as a project.
+    pub fn create_project(&mut self, name: String, template: &'static str, cx: &mut Context<Self>) {
+        let (Some(home), Some(folder)) = (
+            crate::templates::projects_home(),
+            crate::templates::folder_name(&name),
+        ) else {
+            return self.show_toast("Give the project a name.", cx);
+        };
+        let dir = home.join(folder);
+        let t = crate::templates::by_key(template);
+        let d = dir.clone();
+        let n = name.clone();
+        cx.spawn(async move |this, cx| {
+            let made = cx
+                .background_spawn(async move { crate::templates::create(&d, &n, t) })
+                .await;
+            let _ = this.update(cx, |s, cx| match made {
+                Ok(()) => {
+                    s.new_project_open = false;
+                    s.add_project(dir.clone(), cx);
+                    if let Some(id) = s.projects.iter().find(|p| p.path == dir).map(|p| p.id) {
+                        s.rename_project(id, &name, cx);
+                        if !t.description.is_empty() {
+                            s.describe_project(id, t.description, cx);
+                        }
+                    }
+                }
+                Err(e) => s.show_toast(format!("Couldn't make the project: {e}"), cx),
+            });
+        })
+        .detach();
+    }
+
+    /// New project › Clone from GitHub: `git clone` into `Forge Projects`,
+    /// then open it as a project.
+    pub fn clone_project(&mut self, url: String, cx: &mut Context<Self>) {
+        let url = url.trim().to_string();
+        let Some(dir) = crate::templates::projects_home()
+            .and_then(|h| crate::templates::clone_target(&h, &url))
+        else {
+            return self.show_toast("Paste a repository's address, like https://github.com/owner/name.", cx);
+        };
+        if dir.exists() {
+            // Already cloned: open it.
+            self.new_project_open = false;
+            return self.add_project(dir, cx);
+        }
+        self.show_toast(format!("Cloning into {}…", dir.display()), cx);
+        let d = dir.clone();
+        cx.spawn(async move |this, cx| {
+            let done = cx
+                .background_spawn(async move {
+                    if let Some(parent) = d.parent() {
+                        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                    }
+                    let mut c = std::process::Command::new("git");
+                    c.args(["clone", "--", &url])
+                        .arg(&d)
+                        .env("GIT_TERMINAL_PROMPT", "0")
+                        .stdin(std::process::Stdio::null())
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::piped());
+                    #[cfg(windows)]
+                    {
+                        use std::os::windows::process::CommandExt;
+                        c.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+                    }
+                    let out = c.output().map_err(|e| match e.kind() {
+                        std::io::ErrorKind::NotFound => "git isn't installed".to_string(),
+                        _ => e.to_string(),
+                    })?;
+                    if out.status.success() {
+                        Ok(())
+                    } else {
+                        Err(String::from_utf8_lossy(&out.stderr)
+                            .lines()
+                            .rfind(|l| !l.trim().is_empty())
+                            .unwrap_or("git clone failed")
+                            .trim()
+                            .to_string())
+                    }
+                })
+                .await;
+            let _ = this.update(cx, |s, cx| match done {
+                Ok(()) => {
+                    s.new_project_open = false;
+                    s.add_project(dir, cx);
+                }
+                Err(e) => s.show_toast(format!("Couldn't clone it: {e}"), cx),
+            });
+        })
+        .detach();
+    }
+
+    /// Move chat `chat` into project `to`. Its next message runs in that
+    /// folder; if the engine can't reopen the conversation there, it says
+    /// so and goes on as a new conversation.
+    pub fn move_chat(&mut self, chat: usize, to: usize, cx: &mut Context<Self>) {
+        self.chat_menu = None;
+        self.chat_menu_moving = false;
+        if self.replies.contains_key(&chat) {
+            return self.show_toast("Wait for the reply to finish, then move the chat.", cx);
+        }
+        let Some(name) = self.project(to).map(|p| p.name.clone()) else {
+            return;
+        };
+        self.sessions.remove(&chat);
+        if let Some(c) = self.chat_mut(chat) {
+            c.project = to;
+            c.version += 1;
+        }
+        if self.current == Some(chat) {
+            self.select_project(to, cx);
+            self.current = Some(chat);
+        }
+        self.touch(chat, cx);
+        self.show_toast(format!("Moved to {name}."), cx);
+        cx.notify();
     }
 
     /// Start a chat in project `id` asking Forge about something (an issue,
@@ -4714,7 +4849,21 @@ impl AppState {
 
     pub fn open_chat_menu(&mut self, id: Option<usize>, cx: &mut Context<Self>) {
         self.chat_menu = id;
+        self.chat_menu_moving = false;
         cx.notify();
+    }
+
+    /// Where chat `chat` can move: your other projects, and plain chats.
+    pub fn move_targets(&self, chat: usize) -> Vec<(usize, SharedString)> {
+        let here = self.chats.iter().find(|c| c.id == chat).map(|c| c.project);
+        self.projects
+            .iter()
+            .filter(|p| Some(p.id) != here && !p.archived && (p.saved || p.scratch))
+            .map(|p| {
+                let name = if p.scratch { "Plain chats".into() } else { p.name.clone() };
+                (p.id, name)
+            })
+            .collect()
     }
 
     /// Start editing a chat's title in the sidebar (shown first, if hidden).

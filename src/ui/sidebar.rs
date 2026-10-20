@@ -501,6 +501,7 @@ impl Render for Sidebar {
                                     &self.state,
                                     c.id,
                                     c.pinned,
+                                    s.chat_menu_moving.then(|| s.move_targets(c.id)),
                                     window,
                                 )),
                         ),
