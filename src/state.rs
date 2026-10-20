@@ -1137,6 +1137,14 @@ pub struct AppState {
     /// Comments on files in the panel, as Claude Docs keeps them: each
     /// on a passage, a page or cells, until it is sent and answered.
     pub doc_comments: Vec<crate::doc_versions::Comment>,
+    /// Files you attached and opened in the panel, as they came (by chat):
+    /// each is its file's first version, before Forge edits the copy.
+    doc_originals: Vec<(usize, FileRef)>,
+    /// The panel's find bar is open (`ui/doc_find.rs`).
+    pub doc_finding: bool,
+    /// The panel's body: its pages are its items, so the keyboard and a
+    /// search result can bring one to the top.
+    pub doc_scroll: gpui::ScrollHandle,
     next_comment: usize,
     /// A page (or slide) of the panel's document picked to comment on, from 0.
     pub doc_page_pick: Option<usize>,
@@ -1365,6 +1373,9 @@ impl AppState {
             doc_pick: None,
             doc_show_changes: false,
             doc_comments: vec![],
+            doc_originals: vec![],
+            doc_finding: false,
+            doc_scroll: gpui::ScrollHandle::new(),
             next_comment: 1,
             doc_page_pick: None,
             doc_word_comments: true,
@@ -2653,13 +2664,89 @@ impl AppState {
         self.show_doc(file, cx);
     }
 
+    /// Open a Word, Excel, PowerPoint or PDF file you attached in the side
+    /// panel, as one Forge wrote: the same preview, comments and versions.
+    /// It points at the project's copy (what Forge edits); the file you
+    /// picked is read for its first version. Anything else opens in its app.
+    pub fn open_attachment(&mut self, a: crate::attach::Attachment, cx: &mut Context<Self>) {
+        use crate::attach::Kind;
+        let ext = a
+            .name
+            .rsplit_once('.')
+            .map(|(_, e)| e.to_ascii_lowercase())
+            .unwrap_or_default();
+        let viewable = matches!(a.kind, Kind::Pdf | Kind::Document(_))
+            && matches!(ext.as_str(), "docx" | "xlsx" | "pptx" | "pdf");
+        let Some(chat) = self.current else { return };
+        let project = self
+            .chat()
+            .and_then(|c| self.project(c.project))
+            .map(|p| p.path.clone())
+            .unwrap_or_else(|| self.project_dir.clone());
+        let copy = a.saved_at.as_ref().map(|rel| project.join(rel));
+        if !viewable {
+            match copy.as_ref().filter(|p| p.exists()).or(a.path.as_ref()) {
+                Some(p) => cx.open_with_system(p),
+                None => self.show_toast("This attachment has no file to open.", cx),
+            }
+            return;
+        }
+        let Some(at) = copy.clone().or_else(|| a.path.clone()) else {
+            return;
+        };
+        let source = a.path.clone();
+        let name = a.name.to_string();
+        let read = cx.background_spawn(async move {
+            let original = source
+                .as_ref()
+                .and_then(|p| std::fs::read(p).ok())
+                .or_else(|| std::fs::read(&at).ok());
+            let first = original
+                .clone()
+                .and_then(|b| file_card(name.clone(), ext.clone(), at.display().to_string(), b));
+            // The copy now: the same file, or Forge's edit of it.
+            let now = std::fs::read(&at)
+                .ok()
+                .and_then(|b| file_card(name, ext, at.display().to_string(), b));
+            (first, now)
+        });
+        cx.spawn(async move |this, cx| {
+            let (first, now) = read.await;
+            let _ = this.update(cx, |s, cx| match first {
+                Some(first) => {
+                    if !s
+                        .doc_originals
+                        .iter()
+                        .any(|(c, f)| *c == chat && crate::doc_versions::same_file(f, &first))
+                    {
+                        s.doc_originals.push((chat, first.clone()));
+                    }
+                    s.doc = None;
+                    s.open_doc(now.unwrap_or(first), cx);
+                }
+                None => s.show_toast("Couldn't read that file any more.", cx),
+            });
+        })
+        .detach();
+    }
+
     /// The panel's file's versions in this chat (oldest first) and which
     /// one it shows.
     pub fn doc_versions(&self) -> (Vec<FileRef>, usize) {
         let (Some(file), Some(chat)) = (&self.doc, self.chat()) else {
             return (vec![], 0);
         };
-        let all = crate::doc_versions::versions(chat, file);
+        let mut all = crate::doc_versions::versions(chat, file);
+        // An attached file you opened: as it came is its first version.
+        if let Some((_, first)) = self
+            .doc_originals
+            .iter()
+            .find(|(c, f)| *c == chat.id && crate::doc_versions::same_file(f, file))
+        {
+            if all.first() != Some(first) {
+                all.insert(0, first.clone());
+            }
+        }
         let at = all
             .iter()
             .position(|v| v == file)
@@ -2899,6 +2986,97 @@ impl AppState {
     }
 
     /// Pages as they print, or the text: the panel's view of a document.
+    /// Open or close the find bar on the panel's file.
+    pub fn toggle_doc_find(&mut self, cx: &mut Context<Self>) {
+        if self.doc.is_none() {
+            self.show_toast("Open a file beside the chat to find in it.", cx);
+            return;
+        }
+        self.doc_finding = !self.doc_finding;
+        cx.notify();
+    }
+
+    /// The panel's document's pages (or slides) as drawn; 0 while they are
+    /// not, or for a workbook.
+    pub fn doc_page_count(&self) -> usize {
+        match self.doc_preview.as_ref().map(|(_, r)| r) {
+            Some(Ok(p)) => match p.as_ref() {
+                crate::office::Preview::Doc(d) => d.pages.len(),
+                _ => 0,
+            },
+            _ => 0,
+        }
+    }
+
+    /// Bring page `i` (from 0) of the panel's document to the top, showing
+    /// the pages if the text was shown.
+    pub fn show_doc_page(&mut self, i: usize, cx: &mut Context<Self>) {
+        let n = self.doc_page_count();
+        if n == 0 {
+            return;
+        }
+        self.doc_text = false;
+        self.doc_show_changes = false;
+        self.doc_scroll.scroll_to_top_of_item(i.min(n - 1));
+        cx.notify();
+    }
+
+    /// The page `by` away from the one at the top (-1 back, +1 on).
+    pub fn step_doc_page(&mut self, by: isize, cx: &mut Context<Self>) {
+        let n = self.doc_page_count();
+        if n == 0 || self.doc_text {
+            return;
+        }
+        let at = self.doc_scroll.top_item().min(n - 1) as isize;
+        self.show_doc_page((at + by).clamp(0, n as isize - 1) as usize, cx);
+    }
+
+    /// Save the panel's Word file, deck or workbook as a PDF in Downloads,
+    /// laid out by LibreOffice as it prints.
+    pub fn export_pdf(&mut self, file: &FileRef, cx: &mut Context<Self>) {
+        use crate::office::Kind;
+        match file.office() {
+            Some(Kind::Pdf) => return self.download(file, cx),
+            Some(_) => {}
+            None => return self.show_toast("Only Word, Excel and PowerPoint files export to PDF.", cx),
+        }
+        if crate::office_render::soffice().is_none() {
+            self.show_toast("Exporting to PDF needs LibreOffice. Install it, then try again.", cx);
+            return;
+        }
+        let Some(dir) = crate::downloads::dir() else {
+            self.show_toast("Could not find your Downloads folder.", cx);
+            return;
+        };
+        let (name, bytes) = (file.name.to_string(), file.data());
+        let pdf_name = format!(
+            "{}.pdf",
+            name.rsplit_once('.').map_or(name.as_str(), |(stem, _)| stem)
+        );
+        self.show_toast(format!("Exporting {pdf_name}…"), cx);
+        cx.spawn(async move |this, cx| {
+            let saved = cx
+                .background_spawn(async move {
+                    let pdf = crate::office_render::to_pdf(&name, &bytes)?;
+                    crate::downloads::save(&dir, &pdf_name, &pdf).map_err(|e| e.to_string())
+                })
+                .await;
+            let _ = this.update(cx, |s, cx| match saved {
+                Ok(path) => s.show_toast(
+                    format!(
+                        "Saved to Downloads as {}",
+                        path.file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_default()
+                    ),
+                    cx,
+                ),
+                Err(e) => s.show_toast(format!("Could not export it: {e}"), cx),
+            });
+        })
+        .detach();
+    }
+
     pub fn toggle_doc_text(&mut self, cx: &mut Context<Self>) {
         self.doc_text = !self.doc_text;
         cx.notify();
@@ -3232,6 +3410,7 @@ impl AppState {
     }
 
     pub fn close_doc(&mut self, cx: &mut Context<Self>) {
+        self.doc_finding = false;
         if self.doc.take().is_some() {
             cx.notify();
         }

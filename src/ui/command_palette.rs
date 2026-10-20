@@ -477,6 +477,40 @@ impl CommandPalette {
                 ),
             );
         }
+        // The file beside the chat: find in it, page through it, export it.
+        if let Some(f) = s.doc.as_ref() {
+            out.push(act(
+                "Find in the open file",
+                "icons/search.svg",
+                Some(shortcut("Shift F")),
+                Box::new(FindInFile),
+            ));
+            if s.doc_page_count() > 1 {
+                out.push(act(
+                    "Next page or slide",
+                    "icons/chevron-down.svg",
+                    Some("Alt ↓".into()),
+                    Box::new(NextPage),
+                ));
+                out.push(act(
+                    "Previous page or slide",
+                    "icons/chevron-up.svg",
+                    Some("Alt ↑".into()),
+                    Box::new(PreviousPage),
+                ));
+            }
+            if matches!(
+                f.office(),
+                Some(crate::office::Kind::Docx | crate::office::Kind::Pptx | crate::office::Kind::Xlsx)
+            ) {
+                out.push(act(
+                    "Export the open file to PDF",
+                    "icons/file-down.svg",
+                    None,
+                    Box::new(ExportPdf),
+                ));
+            }
+        }
         // The chat showing: what you can do with it.
         if let Some(c) = s.chat().filter(|c| !c.messages.is_empty()) {
             let mut chat = vec![

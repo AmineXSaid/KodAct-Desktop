@@ -69,6 +69,9 @@ table in step.
 | Ctrl/⌘ Shift E | Side panel: plan, files, browser |
 | Ctrl/⌘ \ | Side panel beside or below the chat |
 | Ctrl/⌘ F | Find in the conversation |
+| Ctrl/⌘ Shift F | Find in the file beside the chat |
+| Alt ↓ | The file beside the chat: next page or slide |
+| Alt ↑ | The file beside the chat: previous page or slide |
 | Ctrl/⌘ J | Jump to the latest message |
 | Ctrl/⌘ Shift C | Copy the last reply |
 | Ctrl/⌘ / | Choose a model |

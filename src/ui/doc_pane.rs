@@ -2,7 +2,8 @@
 //! rendered as one (`markdown::Look::Document`); a diagram is drawn natively
 //! (`diagram_view.rs`), fitted to the panel or at its actual size, and can
 //! open in the browser where it is interactive. The header names the file
-//! and holds Copy, Download and Close; Escape closes it too.
+//! and holds Find, Copy, Download (and Export to PDF for an Office file)
+//! and Close; Escape closes it too. Alt ↑/↓ page through a document.
 
 use std::time::Duration;
 
@@ -45,6 +46,8 @@ pub struct Fit {
     pub show_changes: bool,
     /// The page or slide picked to comment on.
     pub page_pick: Option<usize>,
+    /// The body's scroll, whose items are the pages.
+    pub scroll: gpui::ScrollHandle,
 }
 
 /// What this version changed: None while it is worked out, `Some(None)`
@@ -70,6 +73,7 @@ pub fn render(
     pick: super::sheet_view::Pick,
     changes: ChangesRead,
     comments: AnyElement,
+    find: AnyElement,
     t: &Theme,
 ) -> AnyElement {
     // The version bar at the foot, when the chat has more than one version.
@@ -131,6 +135,11 @@ pub fn render(
     let has_pages = matches!(read, Some(Ok(p)) if matches!(p.as_ref(), crate::office::Preview::Doc(d) if !d.pages.is_empty()));
     let viewer = state.clone();
     let back = state.clone();
+    let (finder, exporter, to_export) = (state.clone(), state.clone(), file.clone());
+    let exports = matches!(
+        office,
+        Some(crate::office::Kind::Docx | crate::office::Kind::Pptx | crate::office::Kind::Xlsx)
+    );
     let header = div()
         .flex_none()
         .h(px(48.))
@@ -218,6 +227,18 @@ pub fn render(
                 .on_click(move |_, _, cx| viewer.update(cx, |s, cx| s.toggle_doc_text(cx))),
             )
         })
+        .child(
+            tool_button("doc-find", "icons/search.svg", "Find in this file").on_click(
+                move |_, _, cx| finder.update(cx, |s, cx| s.toggle_doc_find(cx)),
+            ),
+        )
+        .when(exports, |d| {
+            d.child(
+                tool_button("doc-export", "icons/file-down.svg", "Export to PDF").on_click(
+                    move |_, _, cx| exporter.update(cx, |s, cx| s.export_pdf(&to_export, cx)),
+                ),
+            )
+        })
         .when(office.is_some(), |d| {
             d.child(
                 tool_button(
@@ -268,6 +289,8 @@ pub fn render(
                 .on_click(move |_, _, cx| closer.update(cx, |s, cx| s.close_doc(cx))),
         );
 
+    // The find bar sits under the header.
+    let header = div().flex_none().flex().flex_col().child(header).child(find);
     let body = div().id("doc-body").flex_1().min_h_0().overflow_y_scroll();
     // What this version changed, in words (a workbook's show in its grid).
     if showing_changes && changed_cells.is_none() {
@@ -375,8 +398,7 @@ pub fn render(
                             fit.below,
                             file,
                             header,
-                            body.bg(t.extra.inset)
-                                .child(pages_view(d, &fit, page_pick, state, t)),
+                            pages_view(body.bg(t.extra.inset), d, &fit, page_pick, state, t),
                             footer(),
                             fit.width,
                             t,
@@ -463,17 +485,20 @@ fn selectable(name: &str, text: &str, t: &Theme) -> AnyElement {
 /// A document's pages as they print, each as wide as the panel allows on
 /// the quiet inset with a hairline round it; a deck's slides with their
 /// speaker notes under each.
+/// The pages are the body's own items, so its scroll can bring one to the
+/// top (Alt ↑/↓, a search result).
 fn pages_view(
+    body: gpui::Stateful<gpui::Div>,
     d: &crate::office::Doc,
     fit: &Fit,
     picked: Option<usize>,
     state: Entity<AppState>,
     t: &Theme,
-) -> gpui::Div {
+) -> gpui::Stateful<gpui::Div> {
     let room = fit.width - 2. * f32::from(t.space.xl) - 2.;
     let shown = d.pages.len();
     let noun = if d.slides { "Slide" } else { "Page" };
-    div()
+    body.track_scroll(&fit.scroll)
         .flex()
         .flex_col()
         .items_center()

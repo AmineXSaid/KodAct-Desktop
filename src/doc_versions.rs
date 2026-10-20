@@ -157,12 +157,19 @@ pub fn place_of(text: &str, quote: &str) -> String {
                 .map(|w| w[0].0)
         })
         .flatten();
-    let heading = found.and_then(|i| {
-        lines[..=i].iter().rev().find_map(|l| {
-            l.strip_prefix('#')
-                .map(|h| h.trim_start_matches('#').trim().replace(['*', '`'], ""))
-        })
-    });
+    place_name(found.and_then(|i| heading_above(&lines, i)))
+}
+
+/// The nearest heading at or above line `i`, without its Markdown marks.
+fn heading_above(lines: &[&str], i: usize) -> Option<String> {
+    lines[..=i].iter().rev().find_map(|l| {
+        l.strip_prefix('#')
+            .map(|h| h.trim_start_matches('#').trim().replace(['*', '`'], ""))
+    })
+}
+
+/// "Slide 3", "Page 2", the section “…”, or "the text".
+fn place_name(heading: Option<String>) -> String {
     match heading {
         Some(h) if h.starts_with("Slide ") || h.starts_with("Page ") => {
             h.split(':').next().unwrap_or(&h).to_string()
@@ -170,6 +177,129 @@ pub fn place_of(text: &str, quote: &str) -> String {
         Some(h) => format!("the section “{h}”"),
         None => "the text".into(),
     }
+}
+
+/// A match of a search in the panel's file.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Hit {
+    /// Where it is: "Slide 3", the section “…”, "Budget!B3".
+    pub place: String,
+    /// The page or slide it is on, from 0, when the text says.
+    pub page: Option<usize>,
+    /// A workbook's sheet and cell (row, column).
+    pub cell: Option<(usize, (usize, usize))>,
+    /// The words around it, and the match itself.
+    pub before: String,
+    pub hit: String,
+    pub after: String,
+}
+
+/// Where `needle` occurs in `hay`, ignoring case: byte ranges.
+fn find_ci(hay: &str, needle: &str) -> Vec<(usize, usize)> {
+    let n: Vec<char> = needle.chars().flat_map(char::to_lowercase).collect();
+    if n.is_empty() {
+        return vec![];
+    }
+    let mut out = vec![];
+    let mut from = 0;
+    for (i, _) in hay.char_indices() {
+        if i < from {
+            continue;
+        }
+        let mut chars = hay[i..].char_indices().flat_map(|(j, c)| c.to_lowercase().map(move |l| (j, l)));
+        let mut end = None;
+        let mut ok = true;
+        for want in &n {
+            match chars.next() {
+                Some((j, got)) if got == *want => end = Some(j),
+                _ => {
+                    ok = false;
+                    break;
+                }
+            }
+        }
+        if let (true, Some(j)) = (ok, end) {
+            let j = i + j;
+            let stop = j + hay[j..].chars().next().map_or(0, char::len_utf8);
+            out.push((i, stop));
+            from = stop;
+        }
+    }
+    out
+}
+
+/// Up to `chars` characters at the end (or start) of `s`.
+fn tail(s: &str, chars: usize) -> String {
+    let n = s.chars().count();
+    let t: String = s.chars().skip(n.saturating_sub(chars)).collect();
+    if n > chars { format!("…{}", t.trim_start()) } else { t }
+}
+
+fn head(s: &str, chars: usize) -> String {
+    let t: String = s.chars().take(chars).collect();
+    if s.chars().count() > chars { format!("{}…", t.trim_end()) } else { t }
+}
+
+fn plain(s: &str) -> String {
+    s.replace(['*', '`'], "")
+}
+
+/// Every match of `query` in a document's text (Markdown): its place and
+/// the words around it. At most `limit`; the second number is how many
+/// there are in all.
+pub fn find_text(text: &str, query: &str, limit: usize) -> (Vec<Hit>, usize) {
+    let lines: Vec<&str> = text.lines().collect();
+    let (mut out, mut total) = (vec![], 0);
+    for (i, line) in lines.iter().enumerate() {
+        for (a, b) in find_ci(line, query.trim()) {
+            total += 1;
+            if out.len() >= limit {
+                continue;
+            }
+            let place = place_name(heading_above(&lines, i));
+            let page = place
+                .strip_prefix("Slide ")
+                .or_else(|| place.strip_prefix("Page "))
+                .and_then(|n| n.trim().parse::<usize>().ok())
+                .and_then(|n| n.checked_sub(1));
+            let before = plain(line[..a].trim_start_matches(['#', '-', '>', '|', ' ']));
+            out.push(Hit {
+                place,
+                page,
+                cell: None,
+                before: tail(&before, 40),
+                hit: line[a..b].to_string(),
+                after: head(&plain(&line[b..]), 60),
+            });
+        }
+    }
+    (out, total)
+}
+
+/// Every cell of a workbook whose text has `query`, as `Sheet!B3`.
+pub fn find_cells(sheets: &[crate::office::Sheet], query: &str, limit: usize) -> (Vec<Hit>, usize) {
+    let (mut out, mut total) = (vec![], 0);
+    for (si, sheet) in sheets.iter().enumerate() {
+        for (r, row) in sheet.rows.iter().enumerate() {
+            for (c, cell) in row.iter().enumerate() {
+                let Some(&(a, b)) = find_ci(&cell.text, query.trim()).first() else {
+                    continue;
+                };
+                total += 1;
+                if out.len() < limit {
+                    out.push(Hit {
+                        place: format!("{}!{}{}", sheet.name, crate::office::column_letters(c), r + 1),
+                        page: None,
+                        cell: Some((si, (r, c))),
+                        before: tail(&cell.text[..a], 30),
+                        hit: cell.text[a..b].to_string(),
+                        after: head(&cell.text[b..], 40),
+                    });
+                }
+            }
+        }
+    }
+    (out, total)
 }
 
 /// The message that asks Forge to act on `comments` in `file`: each one's
@@ -228,6 +358,24 @@ mod tests {
         let deck = "## Slide 3: What changed\n\n- Licences: 700";
         assert_eq!(place_of(deck, "Licences: 700"), "Slide 3");
         assert_eq!(place_of(text, "not in it"), "the text");
+    }
+
+    #[test]
+    fn a_search_finds_each_match_with_its_place() {
+        let deck = "## Slide 1: Q3 budget\n\n- Forecast\n\n## Slide 3: What changed\n\n- **Licences**: 700, licences renegotiated";
+        let (hits, total) = find_text(deck, "licences", 10);
+        assert_eq!(total, 2);
+        assert_eq!(hits[0].place, "Slide 3");
+        assert_eq!(hits[0].page, Some(2));
+        assert_eq!((hits[0].before.as_str(), hits[0].hit.as_str()), ("", "Licences"));
+        assert_eq!(hits[0].after, ": 700, licences renegotiated");
+        assert_eq!(hits[1].hit, "licences");
+        let memo = "# Q3 memo\n\nTravel rises to 520 EUR.";
+        let (hits, _) = find_text(memo, "RISES", 10);
+        assert_eq!((hits[0].place.as_str(), hits[0].page), ("the section “Q3 memo”", None));
+        assert_eq!(find_text(memo, "  ", 10).1, 0, "a blank search finds nothing");
+        assert_eq!(find_ci("Straße straße", "STRASSE").len(), 0);
+        assert_eq!(find_ci("Éclair éclair", "éclair"), vec![(0, 7), (8, 15)]);
     }
 
     #[test]

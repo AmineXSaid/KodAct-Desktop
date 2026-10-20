@@ -451,7 +451,7 @@ fn user(
         .flex_col()
         .items_end()
         .gap(px(2.))
-        .children(super::attachments::sent(t, attachments, &key))
+        .children(super::attachments::sent(t, attachments, &key, &cx.state))
         // A message of only attachments has no text card.
         .when(!text.trim().is_empty(), |d| {
             d.child(

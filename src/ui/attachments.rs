@@ -239,14 +239,38 @@ pub fn pending(t: &Theme, state: &Entity<AppState>, cx: &gpui::App) -> Option<An
     Some(row.into_any_element())
 }
 
-/// The attachments of a sent message (read-only).
-pub fn sent(t: &Theme, list: &[Attachment], key: &str) -> Option<AnyElement> {
+/// The attachments of a sent message. A Word, Excel, PowerPoint or PDF
+/// file opens in the side panel on a click; other files in their app.
+pub fn sent(
+    t: &Theme,
+    list: &[Attachment],
+    key: &str,
+    state: &Entity<AppState>,
+) -> Option<AnyElement> {
     if list.is_empty() {
         return None;
     }
     let mut row = div().flex().flex_wrap().justify_end().gap(t.space.xs);
     for (i, a) in list.iter().enumerate() {
-        row = row.child(chip(a, format!("sent-{key}-{i}").into(), t, None));
+        let opens = !matches!(a.kind, Kind::Image(_)) && !a.pending;
+        let (st, a2) = (state.clone(), a.clone());
+        let ring = t.colors.primary;
+        row = row.child(
+            div()
+                .id(SharedString::from(format!("sent-open-{key}-{i}")))
+                .rounded(t.radius.button)
+                .border_1()
+                .border_color(gpui::transparent_black())
+                .child(chip(a, format!("sent-{key}-{i}").into(), t, None))
+                .when(opens, |d| {
+                    d.cursor_pointer()
+                        .hover(move |d| d.border_color(ring))
+                        .on_click(move |_, _, cx| {
+                            let a = a2.clone();
+                            st.update(cx, |s, cx| s.open_attachment(a, cx))
+                        })
+                }),
+        );
     }
     Some(row.into_any_element())
 }

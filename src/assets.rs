@@ -15,6 +15,7 @@ macro_rules! icons {
 
 icons!(
     "archive",
+    "file-down",
     "unplug",
     "eraser",
     "clipboard-paste",

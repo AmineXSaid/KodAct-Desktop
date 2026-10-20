@@ -48,6 +48,8 @@ pub struct Workspace {
     dots: Entity<super::dot_field::DotField>,
     /// Comments on the file in the side panel (`doc_comments.rs`).
     doc_comments: Entity<super::doc_comments::DocComments>,
+    /// Find in the file in the side panel (`doc_find.rs`).
+    doc_find: Entity<super::doc_find::DocFind>,
     /// The film as Forge opens, while it plays (`opener.rs`).
     opener: Option<Entity<super::opener::Opener>>,
     _opener_sub: Option<gpui::Subscription>,
@@ -99,6 +101,7 @@ impl Workspace {
         let askpass = cx.new(|cx| super::askpass::AskpassDialog::new(state.clone(), window, cx));
         let doc_comments =
             cx.new(|cx| super::doc_comments::DocComments::new(state.clone(), window, cx));
+        let doc_find = cx.new(|cx| super::doc_find::DocFind::new(state.clone(), window, cx));
         let composer_focus = composer.read(cx).focus_handle(cx);
         let dots = cx.new(|cx| super::dot_field::DotField::new(Some(composer_focus), window, cx));
         let first_run = state.read(cx).onboarding;
@@ -150,6 +153,7 @@ impl Workspace {
             askpass,
             dots,
             doc_comments,
+            doc_find,
             opener,
             _opener_sub: opener_sub,
             focus: cx.focus_handle(),
@@ -750,6 +754,7 @@ impl Render for Workspace {
                 },
                 show_changes: s.doc_show_changes,
                 page_pick: s.doc_page_pick,
+                scroll: s.doc_scroll.clone(),
             };
             let doc_changes = s
                 .doc_changes
@@ -814,6 +819,7 @@ impl Render for Workspace {
                         s.doc_pick,
                         doc_changes,
                         self.doc_comments.clone().into_any_element(),
+                        self.doc_find.clone().into_any_element(),
                         &t,
                     )
                 })
@@ -926,6 +932,21 @@ impl Render for Workspace {
             }))
             .on_action(cx.listener(|this, _: &ShowProjectMap, _, cx| {
                 this.state.update(cx, |s, cx| s.toggle_map(cx))
+            }))
+            .on_action(cx.listener(|this, _: &FindInFile, _, cx| {
+                this.state.update(cx, |s, cx| s.toggle_doc_find(cx))
+            }))
+            .on_action(cx.listener(|this, _: &NextPage, _, cx| {
+                this.state.update(cx, |s, cx| s.step_doc_page(1, cx))
+            }))
+            .on_action(cx.listener(|this, _: &PreviousPage, _, cx| {
+                this.state.update(cx, |s, cx| s.step_doc_page(-1, cx))
+            }))
+            .on_action(cx.listener(|this, _: &ExportPdf, _, cx| {
+                this.state.update(cx, |s, cx| match s.doc.clone() {
+                    Some(f) => s.export_pdf(&f, cx),
+                    None => s.show_toast("Open a Word, Excel or PowerPoint file to export it.", cx),
+                })
             }))
             .on_action(cx.listener(|this, _: &TogglePanel, _, cx| {
                 this.state.update(cx, |s, cx| s.toggle_panel(cx))
@@ -1069,6 +1090,9 @@ impl Render for Workspace {
                         s.palette_open = false;
                         s.picker_open = false;
                         cx.notify();
+                    } else if s.doc_finding {
+                        // The find bar first, then the file.
+                        s.toggle_doc_find(cx);
                     } else if s.doc.is_some() && !s.busy() {
                         s.close_doc(cx);
                     } else {
