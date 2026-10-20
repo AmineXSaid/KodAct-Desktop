@@ -25,9 +25,10 @@ pub struct ChatView {
     shown_version: u64,
     /// Re-renders the working line's timer every second while a reply plays.
     ticker: Option<Task<()>>,
-    /// The working line's step, and when it started (its timer restarts
-    /// when the step changes).
-    step: Option<(Activity, String, Instant)>,
+    /// The working line: the step's mark, what the work is about (its
+    /// headline), the step in words (its tooltip), and when the headline
+    /// began (its timer restarts when the work moves on, not at each step).
+    step: Option<(Activity, String, Option<String>, Instant)>,
     /// You scrolled up from the newest message: "Jump to latest" shows.
     away: bool,
     /// The find move last scrolled to.
@@ -142,13 +143,30 @@ impl ChatView {
         // Follow the step, restarting its timer when it changes.
         let step = if busy {
             let s = self.state.read(cx);
-            s.chat().and_then(|c| step_of(c, s.mode))
+            s.chat().and_then(|c| {
+                let (activity, words) = step_of(c, s.mode)?;
+                // The step itself shows in its own row above (Reading a
+                // file, Running the tests): the line says what the work is
+                // about instead, and keeps the step for its tooltip. States
+                // with no row of their own keep their words.
+                Some(match activity {
+                    Activity::AwaitingYou | Activity::Compacting | Activity::Agents => {
+                        (activity, words, None)
+                    }
+                    _ => (activity, headline(c), Some(words)),
+                })
+            })
         } else {
             None
         };
-        match (step, &self.step) {
-            (Some((_, label)), Some((_, shown, _))) if label == *shown => {}
-            (Some((activity, label)), _) => self.step = Some((activity, label, Instant::now())),
+        match (step, &mut self.step) {
+            (Some((activity, label, detail)), Some((a, shown, d, _))) if label == *shown => {
+                *a = activity;
+                *d = detail;
+            }
+            (Some((activity, label, detail)), _) => {
+                self.step = Some((activity, label, detail, Instant::now()))
+            }
             (None, _) => self.step = None,
         }
     }
@@ -245,6 +263,48 @@ fn step_of(c: &Chat, mode: crate::modes::ModeId) -> Option<(Activity, String)> {
         Some(_) => (Activity::Digesting, "Reading the result".into()),
         None => (Activity::Waiting, "Waiting for the model to answer".into()),
     })
+}
+
+/// What the work is about, for the working line: the task the model marked
+/// in progress in its task list; else, on a chat's first turn, the chat's
+/// name (the model's title for it); else your latest message.
+fn headline(c: &Chat) -> String {
+    let clip = |s: &str| {
+        let s = s.trim();
+        if s.chars().count() > 60 {
+            format!("{}…", s.chars().take(59).collect::<String>().trim_end())
+        } else {
+            s.to_string()
+        }
+    };
+    let task = c.messages.iter().rev().find_map(|m| match m {
+        Message::Assistant { blocks } => blocks.iter().rev().find_map(|b| match b {
+            // Its rows (`backend::tool_call`): `[~]` marks the one in progress.
+            Block::Tool(t) if t.target.as_ref() == "TodoWrite" => Some(
+                t.diff
+                    .iter()
+                    .find_map(|l| l.text.trim().strip_prefix("[~] ").map(str::to_string)),
+            ),
+            _ => None,
+        }),
+        _ => None,
+    });
+    if let Some(Some(task)) = task {
+        return clip(&task);
+    }
+    let asks: Vec<&str> = c
+        .messages
+        .iter()
+        .filter_map(|m| match m {
+            Message::User { text, .. } => Some(text.as_ref()),
+            _ => None,
+        })
+        .collect();
+    match asks.as_slice() {
+        [_] if !c.title.trim().is_empty() => clip(&c.title),
+        [.., last] => clip(last.lines().next().unwrap_or_default()),
+        [] => clip(&c.title),
+    }
 }
 
 /// A tool's name as people say it: an MCP tool (`mcp__github__create_issue`)
@@ -416,7 +476,9 @@ impl Render for ChatView {
                     )
                 }
                 None => match &step {
-                    Some((activity, label, since)) => working_line(&t, *activity, label, *since),
+                    Some((activity, label, detail, since)) => {
+                        working_line(&t, *activity, label, detail.clone(), *since)
+                    }
                     None => div().into_any_element(),
                 },
             };
@@ -534,11 +596,13 @@ fn working_line(
     t: &crate::theme::Theme,
     activity: Activity,
     label: &str,
+    detail: Option<String>,
     since: Instant,
 ) -> gpui::AnyElement {
     let theme = t.clone();
     let text = label.to_string();
     div()
+        .id("working-line")
         .flex()
         .items_center()
         .gap(t.space.tight)
@@ -560,6 +624,10 @@ fn working_line(
                 .text_color(t.colors.text_subtle)
                 .child(elapsed(since.elapsed().as_secs())),
         )
+        .when_some(detail, |d, step| {
+            let step: SharedString = step.into();
+            d.tooltip(move |w, cx| gpui::component::tooltip::Tooltip::new(step.clone()).build(w, cx))
+        })
         .into_any_element()
 }
 
