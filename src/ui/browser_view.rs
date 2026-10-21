@@ -67,6 +67,10 @@ pub struct BrowserView {
     sent_size: Rc<Cell<(u32, u32, f32)>>,
     /// The address shown, so typing in it isn't overwritten as pages change.
     shown_url: String,
+    /// The page's zoom as last drawn: the panel shows a CSS pixel this large.
+    zoom: f64,
+    /// The design bar's open menu.
+    design_menu: Option<super::design_bar::Menu>,
     _subs: Vec<Subscription>,
 }
 
@@ -116,8 +120,21 @@ impl BrowserView {
             page_bounds: Rc::new(Cell::new(Bounds::default())),
             sent_size: Rc::new(Cell::new((0, 0, 0.))),
             shown_url: String::new(),
+            zoom: 1.0,
+            design_menu: None,
             _subs: subs,
         }
+    }
+
+    /// The design bar's open menu.
+    pub fn design_menu(&self) -> Option<super::design_bar::Menu> {
+        self.design_menu
+    }
+
+    /// Open one of the design bar's menus, or close it.
+    pub fn set_menu(&mut self, menu: Option<super::design_bar::Menu>, cx: &mut Context<Self>) {
+        self.design_menu = menu;
+        cx.notify();
     }
 
     fn send(&self, cmd: Cmd, cx: &mut Context<Self>) {
@@ -135,13 +152,14 @@ impl BrowserView {
     }
 
     /// A point in the window as a point on the page (CSS pixels): the
-    /// page is laid out at the panel's size, so it is the offset in it.
+    /// page is laid out at the panel's size (over the zoom), so it is the
+    /// offset in it, over the zoom.
     fn to_page(&self, p: gpui::Point<Pixels>) -> Option<(f64, f64)> {
         let b = self.page_bounds.get();
         b.contains(&p).then(|| {
             (
-                f64::from(f32::from(p.x - b.origin.x)),
-                f64::from(f32::from(p.y - b.origin.y)),
+                f64::from(f32::from(p.x - b.origin.x)) / self.zoom,
+                f64::from(f32::from(p.y - b.origin.y)) / self.zoom,
             )
         })
     }
@@ -149,6 +167,12 @@ impl BrowserView {
     fn key(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let k = &ev.keystroke;
         let m = k.modifiers;
+        // Esc ends a presentation before the page gets it.
+        if k.key == "escape" && self.state.read(cx).presenting {
+            self.state.update(cx, |s, cx| s.set_presenting(false, cx));
+            cx.stop_propagation();
+            return;
+        }
         if m.secondary() {
             match k.key.as_str() {
                 "v" => {
@@ -246,6 +270,18 @@ impl Render for BrowserView {
         let (tabs, active) = (page.tabs.clone(), page.active.clone());
         let (frame, loading, error) = (page.frame.clone(), page.loading, page.error.clone());
         let frame_area = page.frame_area;
+        let zoom = s.web_zoom;
+        self.zoom = zoom;
+        let presenting = s.presenting;
+        // A page this chat designed gets the design bar.
+        let design_bar = s.design_on_screen().filter(|_| !presenting).map(|page| {
+            super::design_bar::Bar {
+                page,
+                pages: s.design_pages(),
+                zoom,
+                menu: self.design_menu,
+            }
+        });
         let last_download = page.last_download.clone();
         let url = page.url.clone();
         let hover = t.colors.hover;
@@ -400,6 +436,18 @@ impl Render for BrowserView {
                         ),
                     ),
             )
+            // The zoom, when it isn't 100%: a click puts it back.
+            .when((zoom - 1.0).abs() > 0.001, |d| {
+                d.child(
+                    crate::theme::text_button(&t, super::design_bar::percent(zoom))
+                        .id("web-zoom-reset")
+                        .flex_none()
+                        .tooltip(|window, cx| {
+                            gpui::component::tooltip::Tooltip::new("Back to 100%").build(window, cx)
+                        })
+                        .on_click(|_, window, cx| window.dispatch_action(Box::new(super::ZoomReset), cx)),
+                )
+            })
             .child(
                 bar_button(
                     &t,
@@ -457,7 +505,7 @@ impl Render for BrowserView {
             // the browser says it shows, which may be more than the page.
             .children(frame.clone().map(|f| {
                 let (w, h) = match frame_area {
-                    (w, h) if w > 0.0 && h > 0.0 => (w, h),
+                    (w, h) if w > 0.0 && h > 0.0 => (w * zoom as f32, h * zoom as f32),
                     _ => {
                         let size = f.size(0);
                         let scale = window.scale_factor();
@@ -523,9 +571,16 @@ impl Render for BrowserView {
             }))
             .on_scroll_wheel(cx.listener(|this, ev: &ScrollWheelEvent, _, cx| {
                 if let Some((x, y)) = this.to_page(ev.position) {
+                    // The page moves as far as the wheel did on screen.
                     let d = ev.delta.pixel_delta(px(40.));
+                    let z = this.zoom;
                     this.send(
-                        Cmd::Wheel { x, y, dx: -f64::from(f32::from(d.x)), dy: -f64::from(f32::from(d.y)) },
+                        Cmd::Wheel {
+                            x,
+                            y,
+                            dx: -f64::from(f32::from(d.x)) / z,
+                            dy: -f64::from(f32::from(d.y)) / z,
+                        },
                         cx,
                     );
                 }
@@ -685,15 +740,22 @@ impl Render for BrowserView {
                 )
             });
 
+        // A page this chat designed has the design bar for its toolbar.
+        let bar = match design_bar {
+            Some(b) => super::design_bar::render(b, &t, &self.state, cx).into_any_element(),
+            None => toolbar.into_any_element(),
+        };
+        // Presenting, the page alone, with a quiet way back and through.
+        let present_controls = presenting.then(|| present_controls(&t, cx));
+
         div()
+            .key_context("Browser")
             .size_full()
             .flex()
             .flex_col()
-            .child(tab_strip)
-            .child(toolbar)
-            .child(progress)
-            .child(viewport)
-            .child(
+            .when(!presenting, |d| d.child(tab_strip).child(bar).child(progress))
+            .child(viewport.children(present_controls))
+            .when(!presenting, |d| d.child(
                 // The agent's access, said once at the foot.
                 div()
                     .flex_none()
@@ -759,9 +821,41 @@ impl Render for BrowserView {
                                 }),
                         )
                     }),
-            )
+            ))
             .into_any_element()
     }
+}
+
+/// While presenting: back a screen, on a screen, and the way out, in a
+/// small bar at the page's foot. Its clicks are its own.
+fn present_controls(t: &Theme, cx: &Context<BrowserView>) -> impl IntoElement {
+    let step = |id: &'static str, path: &'static str, tip: &'static str, key: &'static str| {
+        bar_button(t, id, path, tip, true).on_click(cx.listener(move |this, _, window, cx| {
+            window.focus(&this.focus, cx);
+            this.send(Cmd::Key(key.into()), cx);
+        }))
+    };
+    div()
+        .absolute()
+        .bottom(t.space.lg)
+        .left_0()
+        .right_0()
+        .flex()
+        .justify_center()
+        .child(
+            crate::theme::popover(t)
+                .occlude()
+                .flex()
+                .items_center()
+                .gap(t.space.xs)
+                .child(step("present-back", "icons/arrow-left.svg", "Back a screen (Page Up)", "pageup"))
+                .child(step("present-on", "icons/arrow-right.svg", "On a screen (Page Down)", "pagedown"))
+                .child(
+                    crate::theme::text_button(t, "Exit · Esc")
+                        .id("present-exit")
+                        .on_click(|_, window, cx| window.dispatch_action(Box::new(super::Present), cx)),
+                ),
+        )
 }
 
 /// A dialog the page opened, as a card over the page: what it says, and

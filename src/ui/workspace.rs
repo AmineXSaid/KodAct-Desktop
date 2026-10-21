@@ -650,6 +650,7 @@ impl Render for Workspace {
             s.loading,
         );
         let (find_open, shortcuts_open) = (s.find.is_some(), s.shortcuts_open);
+        let presenting = s.presenting;
         let empty = s.chat().is_none_or(|c| c.messages.is_empty());
         self.dots.read(cx).set_backdrop(!empty, s.busy());
         let below = s.doc_below;
@@ -923,6 +924,28 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &TogglePanel, _, cx| {
                 this.state.update(cx, |s, cx| s.toggle_panel(cx))
             }))
+            .on_action(cx.listener(|this, _: &ZoomIn, _, cx| {
+                this.state.update(cx, |s, cx| s.web_zoom_step(1, cx))
+            }))
+            .on_action(cx.listener(|this, _: &ZoomOut, _, cx| {
+                this.state.update(cx, |s, cx| s.web_zoom_step(-1, cx))
+            }))
+            .on_action(cx.listener(|this, _: &ZoomReset, _, cx| {
+                this.state.update(cx, |s, cx| s.web_zoom_to(1.0, cx))
+            }))
+            .on_action(cx.listener(|this, _: &ZoomFit, _, cx| {
+                this.state.update(cx, |s, cx| s.web_zoom_fit(cx))
+            }))
+            .on_action(cx.listener(|this, _: &Present, _, cx| {
+                this.state.update(cx, |s, cx| s.set_presenting(!s.presenting, cx))
+            }))
+            .on_action(cx.listener(|this, _: &SavePagePdf, _, cx| {
+                this.state.update(cx, |s, cx| s.design_export_pdf(cx))
+            }))
+            .on_action(cx.listener(|this, _: &NewDesignPage, window, cx| {
+                this.state.update(cx, |s, cx| s.design_new_page(cx));
+                this.focus_composer(window, cx);
+            }))
             .on_action(cx.listener(|this, _: &ToggleSplit, _, cx| {
                 this.state.update(cx, |s, cx| {
                     s.doc_below = !s.doc_below;
@@ -1045,7 +1068,9 @@ impl Render for Workspace {
                 };
                 this.state.update(cx, |s, cx| {
                     // Esc closes what is open, the newest first, before it stops a reply.
-                    if s.map_open {
+                    if s.presenting {
+                        s.set_presenting(false, cx);
+                    } else if s.map_open {
                         s.toggle_map(cx);
                     } else if s.shortcuts_open
                         || s.chat_menu.is_some()
@@ -1304,14 +1329,18 @@ impl Render for Workspace {
                 }),
             )
             .on_action(cx.listener(|_, _: &Quit, _, cx| cx.quit()))
-            .child(self.title_bar(window, cx))
+            .when(!presenting, |d| d.child(self.title_bar(window, cx)))
             .children(super::status_bar::banner(
                 self.state.read(cx),
                 self.state.clone(),
                 &t,
             ))
             .when(onboarding, |d| d.child(self.onboarding.clone()))
-            .when(!onboarding, |d| {
+            // Presenting: the page alone fills the window.
+            .when(!onboarding && presenting, |d| {
+                d.child(div().flex_1().min_h_0().flex().child(self.browser.clone()))
+            })
+            .when(!onboarding && !presenting, |d| {
                 d.child(
                     div()
                         .flex_1()

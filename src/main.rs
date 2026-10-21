@@ -112,6 +112,11 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("escape", StopReply, Some("Workspace")),
         // Not Ctrl+Shift+Esc: Windows keeps that for the Task Manager.
         KeyBinding::new("secondary-shift-x", StopAgents, Some("Workspace")),
+        // The browser's page, while it has the keyboard; Present anywhere.
+        KeyBinding::new("secondary-=", ZoomIn, Some("Browser")),
+        KeyBinding::new("secondary--", ZoomOut, Some("Browser")),
+        KeyBinding::new("secondary-0", ZoomReset, Some("Browser")),
+        KeyBinding::new("f11", Present, Some("Workspace")),
     ]);
     // Ctrl+Shift+` as a platform may spell it instead of Ctrl+~ (the
     // sheet lists the key once, as `ctrl-~`).

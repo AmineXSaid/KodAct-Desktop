@@ -608,6 +608,30 @@ impl CommandPalette {
                 ));
             }
         }
+        // The browser's page: zoom it, present it, save it; and the design's.
+        if s.web.is_some() {
+            out.extend([
+                act("Zoom the page in", "icons/zoom-in.svg", Some(shortcut("=")), Box::new(ZoomIn)),
+                act("Zoom the page out", "icons/zoom-out.svg", Some(shortcut("-")), Box::new(ZoomOut)),
+                act(
+                    "The page at its own size (100%)",
+                    "icons/search.svg",
+                    Some(shortcut("0")),
+                    Box::new(ZoomReset),
+                ),
+                act("Zoom the page to a desktop width", "icons/scan.svg", None, Box::new(ZoomFit)),
+                act(
+                    "Present the page: it fills the window",
+                    "icons/play.svg",
+                    Some("F11".into()),
+                    Box::new(Present),
+                ),
+                act("Save the page as PDF", "icons/file-down.svg", None, Box::new(SavePagePdf)),
+            ]);
+        }
+        if s.design_on_screen().is_some() {
+            out.push(act("Ask for a new page", "icons/plus.svg", None, Box::new(NewDesignPage)));
+        }
         // The chat showing: what you can do with it.
         if let Some(c) = s.chat().filter(|c| !c.messages.is_empty()) {
             let mut chat = vec![

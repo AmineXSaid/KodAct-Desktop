@@ -99,6 +99,11 @@ pub enum Cmd {
         height: u32,
         scale: f64,
     },
+    /// Zoom the page, as a browser does (1 is its own size).
+    Zoom(f64),
+    /// Print the page on screen to a PDF at this path (backgrounds kept,
+    /// the page's own paper size when it sets one).
+    Pdf(PathBuf),
 }
 
 /// A mouse button, as the page gets it.
@@ -144,6 +149,33 @@ struct Metrics {
     width: u32,
     height: u32,
     scale: f64,
+    /// As a browser zooms: the page lays out in the panel's size divided
+    /// by this, and shows that much larger.
+    zoom: f64,
+}
+
+impl Metrics {
+    /// The page's own size, in its CSS pixels.
+    fn layout(&self) -> (u32, u32) {
+        (
+            (f64::from(self.width) / self.zoom).round() as u32,
+            (f64::from(self.height) / self.zoom).round() as u32,
+        )
+    }
+}
+
+/// The zooms the panel offers, smallest first.
+pub const ZOOMS: [f64; 6] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0];
+
+/// The next zoom in (`step` 1) or out (-1) from `at`, as browsers step:
+/// through these, clamped at the ends.
+pub fn zoom_step(at: f64, step: i32) -> f64 {
+    const STEPS: [f64; 13] = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0];
+    if step > 0 {
+        STEPS.iter().copied().find(|z| *z > at + 0.001).unwrap_or(2.0)
+    } else {
+        STEPS.iter().rev().copied().find(|z| *z < at - 0.001).unwrap_or(0.25)
+    }
 }
 
 /// An open tab: its target id, address and title.
@@ -174,6 +206,8 @@ pub enum Update {
     Downloaded(PathBuf),
     /// A download stopped before it finished: its name.
     DownloadFailed(String),
+    /// The page printed to a PDF (`Cmd::Pdf`): its file, or why not.
+    Printed(Result<PathBuf, String>),
     /// The page's selected text, for the clipboard.
     Copied(String),
     /// The mouse pointer the page wants where the mouse is (CSS names:
@@ -372,6 +406,10 @@ pub fn start(
         "--disable-features=Translate,MediaRouter".into(),
         "--hide-scrollbars".into(),
         "--mute-audio".into(),
+        // Its pictures are taken at twice the CSS pixels (they follow this,
+        // not the page's own density), so a zoomed page, and a screen at
+        // 150 %, stay sharp; they are shrunk to the panel's size.
+        "--force-device-scale-factor=2".into(),
         format!("--window-size={},{}", VIEWPORT.0, VIEWPORT.1),
         format!("--user-data-dir={}", profile.display()),
     ];
@@ -612,6 +650,9 @@ fn fit(
     // top left (the frames say so, and the panel draws them to scale). The
     // window is larger than the page, so that picture still holds all of it,
     // and the pictures are never shrunk to fit.
+    let (width, height) = m.layout();
+    // Pixels per CSS pixel, as drawn: the screen's, times the zoom.
+    let density = m.scale * m.zoom;
     if let Ok(w) = c.call(
         None,
         "Browser.getWindowForTarget",
@@ -621,14 +662,14 @@ fn fit(
         let _ = c.call(
             None,
             "Browser.setWindowBounds",
-            json!({ "windowId": w["windowId"], "bounds": { "width": m.width + WINDOW_SPARE, "height": m.height + WINDOW_SPARE } }),
+            json!({ "windowId": w["windowId"], "bounds": { "width": width + WINDOW_SPARE, "height": height + WINDOW_SPARE } }),
             events,
         );
     }
     c.call(
         s,
         "Emulation.setDeviceMetricsOverride",
-        json!({ "width": m.width, "height": m.height, "deviceScaleFactor": m.scale, "mobile": false }),
+        json!({ "width": width, "height": height, "deviceScaleFactor": density, "mobile": false }),
         events,
     )?;
     let _ = c.call(s, "Page.stopScreencast", json!({}), events);
@@ -636,8 +677,8 @@ fn fit(
         s,
         "Page.startScreencast",
         json!({ "format": "jpeg", "quality": 80,
-            "maxWidth": (f64::from(m.width + WINDOW_SPARE) * m.scale).round() as u32,
-            "maxHeight": (f64::from(m.height + WINDOW_SPARE) * m.scale).round() as u32 }),
+            "maxWidth": (f64::from(width + WINDOW_SPARE) * density).round() as u32,
+            "maxHeight": (f64::from(height + WINDOW_SPARE) * density).round() as u32 }),
         events,
     )?;
     Ok(())
@@ -713,6 +754,7 @@ fn devtools(
         width: VIEWPORT.0,
         height: VIEWPORT.1,
         scale: 1.0,
+        zoom: 1.0,
     };
     let mut tab = attach(&mut c, &first, metrics, &mut events)?;
     let say = |u: Update| {
@@ -1016,7 +1058,31 @@ fn devtools(
                         width: width.max(200),
                         height: height.max(150),
                         scale: scale.clamp(1.0, 3.0),
+                        ..metrics
                     };
+                    let (id, s) = (tab.target.clone(), tab.session.clone());
+                    fit(&mut c, &id, &s, metrics, &mut events)?;
+                }
+                Cmd::Pdf(to) => {
+                    let printed = c
+                        .call(
+                            s,
+                            "Page.printToPDF",
+                            json!({ "printBackground": true, "preferCSSPageSize": true }),
+                            &mut events,
+                        )
+                        .and_then(|r| {
+                            r["data"]
+                                .as_str()
+                                .and_then(crate::browser::decode_base64)
+                                .ok_or_else(|| "the browser gave no PDF".to_string())
+                        })
+                        .and_then(|pdf| std::fs::write(&to, pdf).map_err(|e| e.to_string()))
+                        .map(|()| to);
+                    say(Update::Printed(printed))?;
+                }
+                Cmd::Zoom(zoom) => {
+                    metrics.zoom = zoom.clamp(0.25, 2.0);
                     let (id, s) = (tab.target.clone(), tab.session.clone());
                     fit(&mut c, &id, &s, metrics, &mut events)?;
                 }
@@ -1227,6 +1293,20 @@ pub fn address(typed: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn zoom_steps_as_a_browser_does() {
+        assert_eq!(zoom_step(1.0, 1), 1.1);
+        assert_eq!(zoom_step(1.0, -1), 0.9);
+        assert_eq!(zoom_step(0.6, 1), 0.67);
+        assert_eq!(zoom_step(2.0, 1), 2.0);
+        assert_eq!(zoom_step(0.25, -1), 0.25);
+        // The page lays out in the panel's room over the zoom.
+        let m = Metrics { width: 511, height: 643, scale: 1.0, zoom: 0.5 };
+        assert_eq!(m.layout(), (1022, 1286));
+        let m = Metrics { zoom: 2.0, ..m };
+        assert_eq!(m.layout(), (256, 322));
+    }
 
     #[test]
     fn typed_addresses_become_urls() {

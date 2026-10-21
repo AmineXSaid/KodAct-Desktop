@@ -1385,6 +1385,13 @@ pub struct AppState {
     /// Whether the panel follows Forge's design. Off once you take the
     /// browser yourself, or stop it; on again at the next reply.
     pub design_follow: bool,
+    /// The browser's zoom (1 is the page's own size), as a browser zooms.
+    pub web_zoom: f64,
+    /// The panel's room for the page, last told the browser (CSS pixels).
+    pub web_room: (u32, u32),
+    /// The page on screen fills the window, as a presentation: no chat,
+    /// no browser bars (Esc ends it).
+    pub presenting: bool,
     /// Each chat's sub-agents, in the order they started (`agents_view.rs`).
     pub agents: std::collections::HashMap<usize, Vec<AgentRun>>,
     /// Agent cards opened to show their steps, by the agent's id.
@@ -1667,6 +1674,9 @@ impl AppState {
             web_page: WebPage::default(),
             design_live: None,
             design_follow: true,
+            web_zoom: 1.0,
+            web_room: (0, 0),
+            presenting: false,
             agents: std::collections::HashMap::new(),
             agents_open: std::collections::HashSet::new(),
             doc_fit: true,
@@ -4177,6 +4187,129 @@ impl AppState {
             .filter(|l| l.writing && self.current == Some(l.chat) && self.replies.contains_key(&l.chat))
     }
 
+    /// The pages this chat has written or changed, in the order it first
+    /// did: the design's pages, for the Pages menu.
+    pub fn design_pages(&self) -> Vec<std::path::PathBuf> {
+        let Some(chat) = self.chat() else {
+            return Vec::new();
+        };
+        let mut pages: Vec<std::path::PathBuf> = Vec::new();
+        for m in &chat.messages {
+            let Message::Assistant { blocks } = m else {
+                continue;
+            };
+            for b in blocks {
+                if let Block::Tool(t) = b {
+                    if matches!(t.kind, ToolKind::Write | ToolKind::Edit) {
+                        if let Some(p) = self.design_path(chat.id, &t.target) {
+                            if !pages.contains(&p) {
+                                pages.push(p);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        pages
+    }
+
+    /// The design page the browser shows now, if it shows one of this
+    /// chat's pages.
+    pub fn design_on_screen(&self) -> Option<std::path::PathBuf> {
+        let url = crate::design::live::page_key(&self.web_page.url);
+        self.design_pages()
+            .into_iter()
+            .find(|p| crate::design::live::file_url(p) == url)
+    }
+
+    /// Show one of the design's pages in its tab.
+    pub fn design_show(&mut self, path: &std::path::Path, cx: &mut Context<Self>) {
+        if !path.is_file() {
+            self.show_toast("That page isn't on disk any more.", cx);
+            return;
+        }
+        self.design_panel();
+        self.web_send(
+            crate::web_view::Cmd::Design {
+                key: crate::design::live::file_url(path),
+                draft: None,
+            },
+            cx,
+        );
+        cx.notify();
+    }
+
+    /// Ask for another page: the composer starts the request.
+    pub fn design_new_page(&mut self, cx: &mut Context<Self>) {
+        let like = self
+            .design_on_screen()
+            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()));
+        self.draft = Some(match like {
+            Some(name) => format!("Make a new page in the style of {name}: "),
+            None => "Make a new page: ".to_string(),
+        });
+        cx.notify();
+    }
+
+    /// Save the page on screen as a PDF beside it (or in Downloads when it
+    /// isn't a file), never over another file.
+    pub fn design_export_pdf(&mut self, cx: &mut Context<Self>) {
+        let (dir, stem) = match self.design_on_screen() {
+            Some(p) => (
+                p.parent().map(std::path::Path::to_path_buf),
+                p.file_stem().map(|s| s.to_string_lossy().into_owned()),
+            ),
+            None => (crate::downloads::dir(), None),
+        };
+        let Some(dir) = dir.filter(|d| std::fs::create_dir_all(d).is_ok()) else {
+            self.show_toast("There is nowhere to save the PDF.", cx);
+            return;
+        };
+        let stem = stem
+            .or_else(|| (!self.web_page.title.trim().is_empty()).then(|| self.web_page.title.clone()))
+            .unwrap_or_else(|| "page".to_string());
+        let name = crate::downloads::clean_name(&format!("{stem}.pdf"));
+        let to = crate::downloads::free_path(&dir, &name);
+        self.web_send(crate::web_view::Cmd::Pdf(to), cx);
+    }
+
+    /// Zoom the browser's page: 1 is its own size.
+    pub fn web_zoom_to(&mut self, zoom: f64, cx: &mut Context<Self>) {
+        let zoom = zoom.clamp(0.25, 2.0);
+        if (zoom - self.web_zoom).abs() < 0.001 {
+            return;
+        }
+        self.web_zoom = zoom;
+        self.web_send(crate::web_view::Cmd::Zoom(zoom), cx);
+        cx.notify();
+    }
+
+    /// Zoom in (1) or out (-1) a step, as a browser does.
+    pub fn web_zoom_step(&mut self, step: i32, cx: &mut Context<Self>) {
+        self.web_zoom_to(crate::web_view::zoom_step(self.web_zoom, step), cx);
+    }
+
+    /// The zoom at which a desktop-wide page (1280 px) fits the panel: its
+    /// layout as on a laptop, all of its width in view. Never larger than 1.
+    pub fn web_zoom_fit(&mut self, cx: &mut Context<Self>) {
+        let room = f64::from(self.web_room.0.max(1));
+        self.web_zoom_to((room / 1280.0).min(1.0), cx);
+    }
+
+    /// The page fills the window, or goes back to the panel.
+    pub fn set_presenting(&mut self, on: bool, cx: &mut Context<Self>) {
+        if on && self.web.is_none() {
+            self.show_toast("Open a page in the browser to present it.", cx);
+            return;
+        }
+        self.presenting = on;
+        if on {
+            self.panel = Some(PanelTab::Browser);
+            self.doc = None;
+        }
+        cx.notify();
+    }
+
     /// The chat on screen's design, written while you weren't following:
     /// the badge offers to show it.
     pub fn design_ready(&self) -> Option<&LiveDesign> {
@@ -4348,6 +4481,10 @@ impl AppState {
         match crate::web_view::start(&exe, &profile, &crate::browser::focus_file()) {
             Ok((view, updates)) => {
                 let cdp = view.cdp_url.clone();
+                // A browser started again keeps the zoom you chose.
+                if self.web_zoom != 1.0 {
+                    view.send(crate::web_view::Cmd::Zoom(self.web_zoom));
+                }
                 self.web = Some(std::sync::Arc::new(view));
                 self.web_page = WebPage {
                     loading: true,
@@ -4417,6 +4554,16 @@ impl AppState {
                 self.show_toast(format!("Downloaded {name} to your Downloads folder"), cx);
                 self.web_page.last_download = Some(path);
             }
+            Update::Printed(Ok(path)) => {
+                let name = path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                self.show_toast(format!("Saved {name} beside the page"), cx);
+            }
+            Update::Printed(Err(why)) => {
+                self.show_toast(format!("The page could not be saved as a PDF: {why}"), cx);
+            }
             Update::DownloadFailed(name) => {
                 self.show_toast(format!("The download of {name} did not finish"), cx);
             }
@@ -4436,6 +4583,9 @@ impl AppState {
 
     /// Something for the panel's browser to do (starting it if need be).
     pub fn web_send(&mut self, cmd: crate::web_view::Cmd, cx: &mut Context<Self>) {
+        if let crate::web_view::Cmd::Resize { width, height, .. } = cmd {
+            self.web_room = (width, height);
+        }
         if self.web.is_none() {
             self.web_page.error = None;
             self.ensure_web(cx);

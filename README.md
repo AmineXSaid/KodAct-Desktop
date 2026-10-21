@@ -78,6 +78,10 @@ table in step.
 | Shift Tab | Next permission mode |
 | Esc | Stop the reply, or close what's open |
 | Ctrl/⌘ Shift X | Stop every agent; the reply goes on |
+| Ctrl/⌘ = | Zoom the page in |
+| Ctrl/⌘ - | Zoom the page out |
+| Ctrl/⌘ 0 | The page at its own size |
+| F11 | Present the page: it fills the window |
 | Enter / Shift Enter | Send / new line |
 
 ### Search

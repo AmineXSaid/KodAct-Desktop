@@ -14,6 +14,7 @@ pub mod chat_view;
 pub mod command_palette;
 pub mod composer;
 pub mod confirm;
+pub mod design_bar;
 pub mod context_menu;
 pub mod context_ring;
 pub mod diagnostics;
@@ -157,6 +158,13 @@ gpui::actions!(
         DeleteChat,
         RegenerateReply,
         ContinueReply,
+        ZoomIn,
+        ZoomOut,
+        ZoomReset,
+        ZoomFit,
+        Present,
+        SavePagePdf,
+        NewDesignPage,
         Quit,
     ]
 );

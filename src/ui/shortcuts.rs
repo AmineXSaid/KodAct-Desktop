@@ -61,16 +61,25 @@ pub const SHORTCUTS: &[(&str, &str, &str)] = &[
         "Stop every agent; the reply goes on",
         "Conversation",
     ),
+    ("secondary-=", "Zoom the page in", "Browser"),
+    ("secondary--", "Zoom the page out", "Browser"),
+    ("secondary-0", "The page at its own size", "Browser"),
+    ("f11", "Present the page: it fills the window", "Browser"),
 ];
 
-pub const GROUPS: [&str; 3] = ["General", "Chats", "Conversation"];
+pub const GROUPS: [&str; 4] = ["General", "Chats", "Conversation", "Browser"];
 
 /// The keys of a binding as this platform writes them: `Ctrl Shift L`, `⌘⇧L`.
 pub fn keys(binding: &str) -> Vec<String> {
     let mac = cfg!(target_os = "macos");
-    binding
-        .split('-')
+    // `secondary--` is the minus key: the last `-` is the key itself.
+    let (mods, minus) = match binding.strip_suffix("--") {
+        Some(mods) => (mods, true),
+        None => (binding, false),
+    };
+    mods.split('-')
         .filter(|p| !p.is_empty())
+        .chain(minus.then_some("-"))
         .map(|p| match p {
             "secondary" => if mac { "⌘" } else { "Ctrl" }.to_string(),
             "ctrl" => if mac { "⌃" } else { "Ctrl" }.to_string(),
@@ -275,6 +284,8 @@ mod tests {
             assert_eq!(keys("escape"), vec!["Esc"]);
             assert_eq!(keys("f1"), vec!["F1"]);
             assert_eq!(keys("secondary-,"), vec!["Ctrl", ","]);
+            assert_eq!(keys("secondary--"), vec!["Ctrl", "-"]);
+            assert_eq!(keys("secondary-="), vec!["Ctrl", "="]);
         }
     }
 }

@@ -122,6 +122,67 @@ Acceptance for this section (checked in D2, on Windows and Linux):
 - After an edit to slide 4, the panel is still on slide 4.
 - Recorded as a short screen capture, plus screenshots in light and dark.
 
+Changed while building D2a: pages are shown as `file://` addresses, not
+through a loopback server (item 7). Of Open Design's 281 example pages only
+7 use `fetch()` or ES modules, and `file://` keeps a page's scripts away
+from the rest of the computer.
+
+### 3.1 The design canvas controls, after Claude Desktop
+
+Claude Desktop's design canvas has 34 controls. Each one is adopted into the
+browser panel's design view: the panel shows a page Forge designed with the
+**design bar** in place of the address bar (`src/ui/design_bar.rs`). Forge's
+designs are live HTML pages, not artboards on a canvas, so a few controls
+become their HTML counterpart; the table says how.
+
+| # | Claude Desktop | In Forge | Step |
+|--:|:--|:--|:--|
+| | **Header** | | |
+| 1 | Sidebar toggle | The page's outline: its sections, a click scrolls to one | Canvas 3 |
+| 2 | Title, with its menu | The page's name and menu: rename, duplicate | Canvas 3 |
+| 3 | Comments on/off | Show or hide the comment pins on the page | Canvas 2 |
+| 4 | Comments menu | Open comments, or all of them | Canvas 2 |
+| 5 | Share | Share menu: Save as PDF beside the page, Open in your browser | **Done** (Canvas 1) |
+| 6 | Collapse / expand | Present (the page fills the window), and the panel beside or below the chat | **Done** (Canvas 1) |
+| 7 | Close | The panel's close button | Already there |
+| | **Left toolbar** | | |
+| 8 | Pages menu: Page 1 ✓, the page's ⋯ menu, + New page | The chat's pages, ✓ on the one shown; New page… starts the request in the composer; Show in folder; Copy the file's path | **Done** (Canvas 1) |
+| 9 | Select tool | Point at any part of the page: it is outlined; a click opens a comment on it | Canvas 2 |
+| 10 | Insert menu | The markup tools below, drawn over the page and sent with a comment | Canvas 4 |
+| 11 | Hand | Drag the page to move around it (zoomed in) | Canvas 4 |
+| 12 | Text | A text label on the page | Canvas 4 |
+| 13 | Artboard | A new page at a chosen size: desktop, tablet, phone | Canvas 4 |
+| 14 | Note | A sticky note pinned to a point | Canvas 4 |
+| 15 | Pencil | Freehand marks | Canvas 4 |
+| 16 | Pen | Straight-segment paths | Canvas 4 |
+| 17 | Rectangle | A box around a part | Canvas 4 |
+| 18 | Oval | A ring around a part | Canvas 4 |
+| 19 | Arrow | An arrow to a part | Canvas 4 |
+| 20 | Line | A line | Canvas 4 |
+| | **Right toolbar** | | |
+| 21 | Play | Present: the page fills the window, back and on a screen, Esc to end (F11) | **Done** (Canvas 1) |
+| 22 | Library (book) | The design systems in the library, to apply one | With D3 (design systems) |
+| 23 | Zoom menu: in, out, Fit artboards, 25–200 % | Zoom as a browser zooms (the page lays out wider or narrower): in, out, Fit a desktop width, 25–200 %; Ctrl =, Ctrl -, Ctrl 0 | **Done** (Canvas 1) |
+| 24 | Layout guides ✓ | Outlines of every box on the page | Canvas 3 |
+| 25 | Undo | The page's previous version | Canvas 3 |
+| 26 | Redo | Its next version again | Canvas 3 |
+| | **Comment box** | | |
+| 27 | What it's on ("Canvas") | The part chosen: its tag and text | Canvas 2 |
+| 28 | @Claude | @Forge: the comment is a request to Forge | Canvas 2 |
+| 29 | Queue for Claude | Queue for Forge: sent after the reply running now | Canvas 2 |
+| 30 | Send | Send | Canvas 2 |
+| 31 | "Claude is working. Your comment goes after that." | The same, for Forge | Canvas 2 |
+| | **Tips** | | |
+| 32 | Use @ in a comment to mention someone | Shown in the comment box | Canvas 2 |
+| 33 | Drag an artboard by its title to move it | Drag a page in the Pages menu to reorder it | Canvas 4 |
+| 34 | Comment on any part, and Claude can revise it | Shown the first time the design bar appears | Canvas 2 |
+
+Zoom works the way a browser's does: at 50 % the page lays out twice as
+wide and shows at half size, so a desktop layout fits a narrow panel.
+Chromium pictures pages at twice their CSS pixels
+(`--force-device-scale-factor=2`), so a zoomed page, and a screen at 150 %,
+stay sharp.
+
 ## 4. Everything in Open Design, and where it goes
 
 Every part gets exactly one of four outcomes:

@@ -15,6 +15,9 @@ macro_rules! icons {
 }
 
 icons!(
+    "zoom-in",
+    "zoom-out",
+    "scan",
     "archive",
     "git-pull-request",
     "circle-dot",
