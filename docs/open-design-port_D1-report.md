@@ -117,7 +117,9 @@ copyright line, and credits the 72 CC-BY image and video templates.
 `design-library\` installs beside `Forge.exe` (where Forge looks first). It
 is replaced whole on update and removed on uninstall, but only when it holds
 Forge's `UPSTREAM.json`. `build.sh` fetches and checks the media, then
-stages with `stage`. Compiled with `makensis -WX`: about 86 MB.
+stages with `stage` (8,871 files: the committed library and its 252 media
+files). Compiled with `makensis -WX` around stand-in app files: 82 MB, so the
+library adds about 80 MB to a real installer.
 
 ## Review
 
