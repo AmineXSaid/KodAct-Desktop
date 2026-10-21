@@ -422,17 +422,46 @@ fn runs_in(
     linked(id, spans, text, runs, t)
 }
 
-/// Plain text (your message) that can be selected to copy part of it.
-pub fn selectable_plain(key: SharedString, text: &SharedString, t: &Theme) -> AnyElement {
-    let run = TextRun {
-        len: text.len(),
-        font: gpui::font(t.font_sans.clone()),
-        color: t.colors.text,
-        background_color: None,
-        underline: None,
-        strikethrough: None,
+/// Plain text (your message) that can be selected to copy part of it, its
+/// mentions bold: a skill in the skills' colour, a command or file in the
+/// accent, as they were in the box.
+pub fn selectable_plain(
+    key: SharedString,
+    text: &SharedString,
+    marks: &[(std::ops::Range<usize>, super::autocomplete::Mark)],
+    t: &Theme,
+) -> AnyElement {
+    let run = |len: usize, mark: Option<super::autocomplete::Mark>| {
+        let mut font = gpui::font(t.font_sans.clone());
+        if mark.is_some() {
+            font.weight = FontWeight::SEMIBOLD;
+        }
+        TextRun {
+            len,
+            font,
+            color: match mark {
+                Some(super::autocomplete::Mark::Skill) => t.extra.skill,
+                Some(_) => t.colors.primary,
+                None => t.colors.text,
+            },
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+        }
     };
-    let runs = super::select::prepare(&key, text, vec![run], t.colors.primary_tint);
+    let mut runs = vec![];
+    let mut at = 0;
+    for (r, mark) in marks {
+        if r.start > at {
+            runs.push(run(r.start - at, None));
+        }
+        runs.push(run(r.len(), Some(*mark)));
+        at = r.end;
+    }
+    if at < text.len() || runs.is_empty() {
+        runs.push(run(text.len() - at, None));
+    }
+    let runs = super::select::prepare(&key, text, runs, t.colors.primary_tint);
     let styled = StyledText::new(text.clone()).with_runs(runs);
     let layout = styled.layout().clone();
     super::select::wrap(key, layout, styled.into_any_element())

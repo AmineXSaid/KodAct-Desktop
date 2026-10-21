@@ -42,6 +42,55 @@ pub fn trigger(text: &str) -> Option<Trigger> {
     }
 }
 
+/// A mention in a message: a `/name` ForgeCLI runs leading it (a skill or
+/// a command), or `@path` naming one of the project's files or folders.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Mark {
+    Skill,
+    Command,
+    File,
+}
+
+/// The mentions in `text`, by byte range. In the box a word counts once a
+/// space follows it (`sent` false); in a sent message its end counts too.
+pub fn marks(text: &str, s: &AppState, sent: bool) -> Vec<(std::ops::Range<usize>, Mark)> {
+    let mut out = vec![];
+    let finished = |end: usize| {
+        text[end..].starts_with(char::is_whitespace) || (sent && end == text.len())
+    };
+    if let Some(rest) = text.strip_prefix('/') {
+        let end = 1 + rest.find(char::is_whitespace).unwrap_or(rest.len());
+        let name = &text[1..end];
+        if finished(end) {
+            if let Some(c) = s.completion_commands().into_iter().find(|c| c.name == name) {
+                let mark = if c.group == "Skills" { Mark::Skill } else { Mark::Command };
+                out.push((0..end, mark));
+            }
+        }
+    }
+    let files = s.completion_files();
+    let mut at = 0;
+    for word in text.split_inclusive(char::is_whitespace) {
+        let start = at;
+        at += word.len();
+        let word = word.trim_end();
+        let Some(path) = word.strip_prefix('@') else {
+            continue;
+        };
+        let end = start + word.len();
+        if path.is_empty() || !finished(end) {
+            continue;
+        }
+        let known = files
+            .iter()
+            .any(|f| f == path || f.trim_end_matches('/') == path.trim_end_matches('/'));
+        if known {
+            out.push((start..end, Mark::File));
+        }
+    }
+    out
+}
+
 /// What choosing a row does.
 pub enum Pick {
     /// Replace the word with this text.

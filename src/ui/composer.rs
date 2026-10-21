@@ -986,39 +986,19 @@ impl Render for Composer {
 /// leading the message, and `@path` naming one of the project's files or
 /// folders. Each token's id says its kind (`skill:`, `command:`, `file:`).
 fn mentions(text: &str, s: &AppState) -> Vec<(std::ops::Range<usize>, InlineToken)> {
-    let mut out = vec![];
-    let finished = |end: usize| text[end..].starts_with(char::is_whitespace);
-    if let Some(rest) = text.strip_prefix('/') {
-        let end = 1 + rest.find(char::is_whitespace).unwrap_or(rest.len());
-        let name = &text[1..end];
-        if finished(end) {
-            if let Some(c) = s.completion_commands().into_iter().find(|c| c.name == name) {
-                let kind = if c.group == "Skills" { "skill" } else { "command" };
-                out.push((0..end, InlineToken::new(format!("{kind}:{name}"), &text[..end])));
-            }
-        }
-    }
-    let files = s.completion_files();
-    let mut at = 0;
-    for word in text.split_inclusive(char::is_whitespace) {
-        let start = at;
-        at += word.len();
-        let word = word.trim_end();
-        let Some(path) = word.strip_prefix('@') else {
-            continue;
-        };
-        let end = start + word.len();
-        if path.is_empty() || !finished(end) {
-            continue;
-        }
-        let known = files
-            .iter()
-            .any(|f| f == path || f.trim_end_matches('/') == path.trim_end_matches('/'));
-        if known {
-            out.push((start..end, InlineToken::new(format!("file:{path}"), word)));
-        }
-    }
-    out
+    use super::autocomplete::Mark;
+    super::autocomplete::marks(text, s, false)
+        .into_iter()
+        .map(|(r, mark)| {
+            let word = &text[r.clone()];
+            let id = match mark {
+                Mark::Skill => format!("skill:{}", &word[1..]),
+                Mark::Command => format!("command:{}", &word[1..]),
+                Mark::File => format!("file:{}", &word[1..]),
+            };
+            (r, InlineToken::new(id, word))
+        })
+        .collect()
 }
 
 /// How a mention shows in the box: its text, bold; a skill in the skills'

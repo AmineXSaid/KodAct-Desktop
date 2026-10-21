@@ -25,6 +25,9 @@ use crate::theme::{self, Theme};
 
 pub struct ItemContext {
     pub state: Entity<AppState>,
+    /// Your message's mentions (`/skill`, `/command`, `@path`), shown bold as
+    /// in the box: a skill in its colour, the others in the accent.
+    pub marks: Vec<(std::ops::Range<usize>, super::autocomplete::Mark)>,
     /// Where this chat's agent runs: the remote's label and icon, or None
     /// for this computer. Commands and approvals carry it as a badge.
     pub place: Option<(SharedString, &'static str)>,
@@ -536,6 +539,7 @@ fn user(
                     .child(super::markdown::selectable_plain(
                         SharedString::from(format!("user-text-{key}")),
                         text,
+                        &cx.marks,
                         t,
                     )),
             )

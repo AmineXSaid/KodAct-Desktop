@@ -4525,6 +4525,14 @@ impl AppState {
                         group: "ForgeCLI",
                     }),
             )
+            // Forge's own: a side question (`parse_btw`), answered in a
+            // card over the chat, which leaves the conversation as it is.
+            .chain([CompletionCommand {
+                name: "btw".into(),
+                args: "<question>".into(),
+                description: "Ask a side question; the answer floats over the chat".into(),
+                group: "Forge",
+            }])
             .collect()
     }
 

@@ -440,6 +440,12 @@ impl Render for ChatView {
                         ix == 0 || matches!(chat.messages.get(ix - 1), Some(Message::User { .. }));
                     let ctx = ItemContext {
                         state: state.clone(),
+                        marks: match m {
+                            Message::User { text, .. } => {
+                                super::autocomplete::marks(text, s, true)
+                            }
+                            _ => vec![],
+                        },
                         place: s
                             .chat_remote(chat.id)
                             .map(|r| (r.target.label().into(), r.target.icon())),
