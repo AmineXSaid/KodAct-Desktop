@@ -75,6 +75,15 @@ pub struct BrowserView {
     comment_box: Entity<super::design_comment::DesignCommentBox>,
     /// A comment was open when the app last changed.
     picked: bool,
+    /// A mark being drawn with an Insert tool, in the page's CSS pixels.
+    drawing: Option<crate::design::marks::Mark>,
+    /// A label or note being typed, and where on the page it goes.
+    typing: Option<(crate::design::marks::Shape, (f64, f64))>,
+    mark_input: Entity<InputState>,
+    /// The Library's search box.
+    library_filter: Entity<InputState>,
+    /// The Hand's last place, while it drags the page.
+    hand_at: Option<gpui::Point<Pixels>>,
     _subs: Vec<Subscription>,
 }
 
@@ -126,6 +135,20 @@ impl BrowserView {
         ];
         let comment_box =
             cx.new(|cx| super::design_comment::DesignCommentBox::new(state.clone(), window, cx));
+        let mark_input = cx.new(|cx| InputState::new(window, cx).placeholder("Type, then Enter"));
+        let library_filter =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Search the design systems"));
+        let mut subs = subs;
+        subs.push(cx.subscribe(&library_filter, |_, _, ev: &InputEvent, cx| {
+            if let InputEvent::Change = ev {
+                cx.notify();
+            }
+        }));
+        subs.push(cx.subscribe_in(&mark_input, window, |this, _, ev: &InputEvent, window, cx| {
+            if let InputEvent::PressEnter { .. } = ev {
+                this.place_words(window, cx);
+            }
+        }));
         Self {
             state,
             address,
@@ -137,6 +160,11 @@ impl BrowserView {
             design_menu: None,
             comment_box,
             picked: false,
+            drawing: None,
+            typing: None,
+            mark_input,
+            library_filter,
+            hand_at: None,
             _subs: subs,
         }
     }
@@ -146,6 +174,97 @@ impl BrowserView {
     fn selecting(&self, cx: &gpui::App) -> bool {
         let s = self.state.read(cx);
         s.design_select && !s.presenting && s.design_on_screen().is_some()
+    }
+
+    /// The Insert tool in hand, over a design page.
+    fn tool(&self, cx: &gpui::App) -> Option<crate::state::InsertTool> {
+        let s = self.state.read(cx);
+        s.design_tool
+            .filter(|_| !s.presenting && s.design_on_screen().is_some())
+    }
+
+    /// A point on the panel as a point of the page itself (its CSS pixels
+    /// from its top left, not the window's).
+    fn page_point(&self, p: gpui::Point<Pixels>, cx: &gpui::App) -> Option<(f64, f64)> {
+        let (sx, sy) = self.state.read(cx).web_page.frame_info.scroll;
+        self.to_page(p)
+            .map(|(x, y)| (x + f64::from(sx), y + f64::from(sy)))
+    }
+
+    /// An Insert tool's press on the page: the Hand takes hold, a shape or
+    /// stroke starts, a Pen point is set, a label or note opens for typing.
+    fn tool_down(
+        &mut self,
+        tool: crate::state::InsertTool,
+        ev: &MouseDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        use crate::design::marks::{Mark, Shape};
+        let Some(p) = self.page_point(ev.position, cx) else { return };
+        match tool {
+            crate::state::InsertTool::Hand => self.hand_at = Some(ev.position),
+            crate::state::InsertTool::Mark(shape) if shape.typed() => {
+                self.typing = Some((shape, p));
+                self.mark_input.update(cx, |i, cx| i.set_value("", window, cx));
+                cx.on_next_frame(window, |this, window, cx| {
+                    this.mark_input.update(cx, |i, cx| i.focus(window, cx));
+                });
+            }
+            crate::state::InsertTool::Mark(Shape::Pen) => match &mut self.drawing {
+                Some(m) if m.shape == Shape::Pen => {
+                    if ev.click_count >= 2 {
+                        self.finish_pen(cx);
+                    } else {
+                        m.points.push(p);
+                    }
+                }
+                _ => {
+                    self.drawing = Some(Mark {
+                        shape: Shape::Pen,
+                        points: vec![p, p],
+                        text: String::new(),
+                    })
+                }
+            },
+            crate::state::InsertTool::Mark(shape) => {
+                self.drawing = Some(Mark {
+                    shape,
+                    points: if shape == Shape::Pencil { vec![p] } else { vec![p, p] },
+                    text: String::new(),
+                })
+            }
+        }
+        cx.notify();
+    }
+
+    /// The Pen's path is done: its points, less the one following the mouse.
+    fn finish_pen(&mut self, cx: &mut Context<Self>) {
+        if let Some(mut m) = self.drawing.take() {
+            m.points.pop();
+            m.points.dedup();
+            if m.points.len() >= 2 {
+                self.state.update(cx, |s, cx| s.design_add_mark(m, cx));
+            }
+        }
+        cx.notify();
+    }
+
+    /// The label or note typed goes on the page.
+    fn place_words(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((shape, at)) = self.typing.take() else { return };
+        let text = self.mark_input.read(cx).value().trim().to_string();
+        self.mark_input.update(cx, |i, cx| i.set_value("", window, cx));
+        if !text.is_empty() {
+            let mark = crate::design::marks::Mark {
+                shape,
+                points: vec![at],
+                text,
+            };
+            self.state.update(cx, |s, cx| s.design_add_mark(mark, cx));
+        }
+        window.focus(&self.focus, cx);
+        cx.notify();
     }
 
     /// The design bar's open menu.
@@ -211,6 +330,18 @@ impl BrowserView {
                 cx.stop_propagation();
                 return;
             }
+            // A Pen path ends; else the Insert tool goes down.
+            if self.drawing.as_ref().is_some_and(|m| m.shape == crate::design::marks::Shape::Pen) {
+                self.finish_pen(cx);
+                cx.stop_propagation();
+                return;
+            }
+            if self.tool(cx).is_some() {
+                self.drawing = None;
+                self.state.update(cx, |s, cx| s.design_set_tool(None, cx));
+                cx.stop_propagation();
+                return;
+            }
             if self.selecting(cx) {
                 self.state.update(cx, |s, cx| s.design_set_select(false, cx));
                 cx.stop_propagation();
@@ -232,6 +363,11 @@ impl BrowserView {
                 "r" => self.send(Cmd::Reload, cx),
                 _ => return,
             }
+            cx.stop_propagation();
+            return;
+        }
+        if k.key == "enter" && self.drawing.as_ref().is_some_and(|m| m.shape == crate::design::marks::Shape::Pen) {
+            self.finish_pen(cx);
             cx.stop_propagation();
             return;
         }
@@ -342,8 +478,30 @@ impl Render for BrowserView {
                 guides: s.design_guides,
                 undo: s.design_can_step(-1),
                 redo: s.design_can_step(1),
+                tool: s.design_tool,
+                artboard: s.design_artboard.map(|(name, _)| name),
+                systems: s.design_systems.clone(),
+                filter: self.library_filter.clone(),
+                filter_text: self.library_filter.read(cx).value().to_string(),
             }
         });
+        let tool_now = s.design_tool.filter(|_| design_bar.is_some());
+        // The page's marks, and the one being drawn.
+        let mut marks: Vec<crate::design::marks::Mark> = if design_bar.is_some() {
+            s.design_marks_here().into_iter().cloned().collect()
+        } else {
+            Vec::new()
+        };
+        let marks_count = marks.len();
+        marks.extend(self.drawing.clone().filter(|_| tool_now.is_some()));
+        let marks_place = super::design_marks::Place {
+            scroll: page.frame_info.scroll,
+            zoom: zoom as f32,
+        };
+        let typing_at = self
+            .typing
+            .filter(|_| tool_now.is_some())
+            .map(|(shape, p)| (shape, marks_place.at(p)));
         // The page's outline: its headings, the one at the top marked.
         let outline = (s.design_outline && design_bar.is_some()).then(|| {
             let top = f64::from(page.frame_info.scroll.1) + 80.0;
@@ -656,16 +814,25 @@ impl Render for BrowserView {
                 .left_0()
                 .size_full(),
             )
-            .cursor(if selecting {
-                CursorStyle::Crosshair
-            } else {
-                cursor_for(&page.cursor)
+            .cursor(match tool_now {
+                Some(crate::state::InsertTool::Hand) if self.hand_at.is_some() => CursorStyle::ClosedHand,
+                Some(crate::state::InsertTool::Hand) => CursorStyle::OpenHand,
+                Some(crate::state::InsertTool::Mark(m)) if m.typed() => CursorStyle::IBeam,
+                Some(_) => CursorStyle::Crosshair,
+                None if selecting => CursorStyle::Crosshair,
+                None => cursor_for(&page.cursor),
             })
             // Down and up apart, so a drag selects text or moves a slider.
             // With the comment tool, a click picks the part instead.
             .on_any_mouse_down(cx.listener(|this, ev: &MouseDownEvent, window, cx| {
                 window.focus(&this.focus, cx);
                 let Some((x, y)) = this.to_page(ev.position) else { return };
+                if let Some(tool) = this.tool(cx) {
+                    if ev.button == MouseButton::Left {
+                        this.tool_down(tool, ev, window, cx);
+                    }
+                    return;
+                }
                 if this.selecting(cx) {
                     if ev.button == MouseButton::Left {
                         this.send(Cmd::Inspect { x, y, pick: true }, cx);
@@ -675,6 +842,18 @@ impl Render for BrowserView {
                 }
             }))
             .capture_any_mouse_up(cx.listener(|this, ev: &MouseUpEvent, _, cx| {
+                if this.tool(cx).is_some() {
+                    this.hand_at = None;
+                    // A dragged shape or a stroke is done (a Pen path goes on).
+                    if let Some(m) = this
+                        .drawing
+                        .take_if(|m| m.shape != crate::design::marks::Shape::Pen)
+                    {
+                        this.state.update(cx, |s, cx| s.design_add_mark(m, cx));
+                    }
+                    cx.notify();
+                    return;
+                }
                 if this.selecting(cx) {
                     return;
                 }
@@ -683,6 +862,48 @@ impl Render for BrowserView {
                 }
             }))
             .on_mouse_move(cx.listener(|this, ev: &MouseMoveEvent, _, cx| {
+                if let Some(tool) = this.tool(cx) {
+                    use crate::design::marks::Shape;
+                    let held = ev.pressed_button == Some(MouseButton::Left);
+                    if tool == crate::state::InsertTool::Hand {
+                        // The page follows the hand.
+                        if let (Some(last), true, Some((x, y))) = (this.hand_at, held, this.to_page(ev.position)) {
+                            let d = ev.position - last;
+                            this.hand_at = Some(ev.position);
+                            let z = this.zoom;
+                            this.send(
+                                Cmd::Wheel {
+                                    x,
+                                    y,
+                                    dx: -f64::from(f32::from(d.x)) / z,
+                                    dy: -f64::from(f32::from(d.y)) / z,
+                                },
+                                cx,
+                            );
+                        }
+                        return;
+                    }
+                    let Some(p) = this.page_point(ev.position, cx) else { return };
+                    let step = 2.0 / this.zoom;
+                    if let Some(m) = &mut this.drawing {
+                        match m.shape {
+                            Shape::Pencil if held => {
+                                let last = m.points[m.points.len() - 1];
+                                if (last.0 - p.0).hypot(last.1 - p.1) >= step {
+                                    m.points.push(p);
+                                }
+                            }
+                            Shape::Pen => {
+                                let n = m.points.len();
+                                m.points[n - 1] = p;
+                            }
+                            _ if held && m.points.len() >= 2 => m.points[1] = p,
+                            _ => {}
+                        }
+                        cx.notify();
+                    }
+                    return;
+                }
                 if let Some((x, y)) = this.to_page(ev.position) {
                     if this.selecting(cx) {
                         this.send(Cmd::Inspect { x, y, pick: false }, cx);
@@ -804,6 +1025,75 @@ impl Render for BrowserView {
                         gpui::component::tooltip::Tooltip::new(text.clone()).build(window, cx)
                     })
             }))
+            // The Insert tools' marks, over the page.
+            .when(!marks.is_empty(), |d| d.child(super::design_marks::render(marks, marks_place, &t)))
+            // A label or note being typed, where it goes.
+            .children(typing_at.map(|(shape, (x, y))| {
+                crate::theme::popover(&t)
+                    .id("design-mark-words")
+                    .occlude()
+                    .absolute()
+                    .left(px(x))
+                    .top(px(y))
+                    .w(px(220.))
+                    .on_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| {
+                        if ev.keystroke.key == "escape" {
+                            cx.stop_propagation();
+                            this.typing = None;
+                            window.focus(&this.focus, cx);
+                            cx.notify();
+                        }
+                    }))
+                    .child(
+                        div()
+                            .text_size(t.text.caption)
+                            .text_color(t.colors.text_subtle)
+                            .px(t.space.xs)
+                            .child(if shape == crate::design::marks::Shape::Note { "Note" } else { "Text" }),
+                    )
+                    .child(Input::new(&self.mark_input).appearance(false).text_size(t.text.body_sm))
+            }))
+            // Marks made: comment on them for Forge, or clear them.
+            .when(marks_count > 0 && s.design_pick.is_none() && !selecting, |d| {
+                d.child(
+                    div()
+                        .absolute()
+                        .top(t.space.md)
+                        .left_0()
+                        .right_0()
+                        .flex()
+                        .justify_center()
+                        .child(
+                            crate::theme::popover(&t)
+                                .occlude()
+                                .flex()
+                                .items_center()
+                                .gap(t.space.sm)
+                                .pl(t.space.md)
+                                .text_size(t.text.caption)
+                                .text_color(t.colors.text)
+                                .child(match marks_count {
+                                    1 => "1 mark".to_string(),
+                                    n => format!("{n} marks"),
+                                })
+                                .child(
+                                    crate::theme::ghost_button(&t, "Comment…")
+                                        .id("design-marks-comment")
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.drawing = None;
+                                            this.state.update(cx, |s, cx| s.design_comment_on_marks(cx))
+                                        })),
+                                )
+                                .child(
+                                    crate::theme::text_button(&t, "Clear")
+                                        .id("design-marks-clear")
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.state.update(cx, |s, cx| s.design_clear_marks(cx))
+                                        })),
+                                ),
+                        ),
+                )
+            })
             .when(selecting && s.design_pick.is_none(), |d| {
                 d.child(
                     div()

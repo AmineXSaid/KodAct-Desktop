@@ -16,6 +16,7 @@ pub mod composer;
 pub mod confirm;
 pub mod design_bar;
 pub mod design_comment;
+pub mod design_marks;
 pub mod context_menu;
 pub mod context_ring;
 pub mod diagnostics;

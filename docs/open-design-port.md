@@ -148,20 +148,20 @@ become their HTML counterpart; the table says how.
 | | **Left toolbar** | | |
 | 8 | Pages menu: Page 1 ✓, the page's ⋯ menu, + New page | The chat's pages, ✓ on the one shown; New page… starts the request in the composer; Show in folder; Copy the file's path | **Done** (Canvas 1) |
 | 9 | Select tool | The comment tool: point at any part of the page and it is outlined, with its tag; a click opens a comment on it; Esc puts it down | **Done** (Canvas 2) |
-| 10 | Insert menu | The markup tools below, drawn over the page and sent with a comment | Canvas 4 |
-| 11 | Hand | Drag the page to move around it (zoomed in) | Canvas 4 |
-| 12 | Text | A text label on the page | Canvas 4 |
-| 13 | Artboard | A new page at a chosen size: desktop, tablet, phone | Canvas 4 |
-| 14 | Note | A sticky note pinned to a point | Canvas 4 |
-| 15 | Pencil | Freehand marks | Canvas 4 |
-| 16 | Pen | Straight-segment paths | Canvas 4 |
-| 17 | Rectangle | A box around a part | Canvas 4 |
-| 18 | Oval | A ring around a part | Canvas 4 |
-| 19 | Arrow | An arrow to a part | Canvas 4 |
-| 20 | Line | A line | Canvas 4 |
+| 10 | Insert menu | The tools below, in Claude's order; its button shows the tool in hand. Marks stay on the page (they follow its scroll and zoom) until you comment on them (Comment…: they go to Forge with a picture of the page with them on it, drawn by Chromium, and a list of what each is) or clear them | **Done** (Canvas 4) |
+| 11 | Hand | Drag the page to move round it | **Done** (Canvas 4) |
+| 12 | Text | A label: click, type, Enter | **Done** (Canvas 4) |
+| 13 | Artboard | The page in an artboard: Desktop 1440, Laptop 1280, Tablet 834, Phone 390 or the panel's width; the zoom keeps the artboard's width in view as the panel changes | **Done** (Canvas 4) |
+| 14 | Note | A sticky note: click, type, Enter | **Done** (Canvas 4) |
+| 15 | Pencil | Freehand strokes | **Done** (Canvas 4) |
+| 16 | Pen | A path, a click a point; a double-click or Enter ends it | **Done** (Canvas 4) |
+| 17 | Rectangle | A box, dragged | **Done** (Canvas 4) |
+| 18 | Oval | A ring, dragged | **Done** (Canvas 4) |
+| 19 | Arrow | An arrow, dragged to its tip | **Done** (Canvas 4) |
+| 20 | Line | A line, dragged | **Done** (Canvas 4) |
 | | **Right toolbar** | | |
 | 21 | Play | Present: the page fills the window, back and on a screen, Esc to end (F11) | **Done** (Canvas 1) |
-| 22 | Library (book) | The design systems in the library, to apply one | With D3 (design systems) |
+| 22 | Library (book) | The library's 152 design systems, searched; one restyles the page (the request names its DESIGN.md, in the composer) | **Done** (Canvas 4) |
 | 23 | Zoom menu: in, out, Fit artboards, 25–200 % | Zoom as a browser zooms (the page lays out wider or narrower): in, out, Fit a desktop width, 25–200 %; Ctrl =, Ctrl -, Ctrl 0 | **Done** (Canvas 1) |
 | 24 | Layout guides ✓ | Every box on the page outlined in the theme's accent, kept through reloads and drafts; a Guides chip turns them off elsewhere | **Done** (Canvas 3) |
 | 25 | Undo | The page's version before (kept before Forge's first change and after each), written back and reloaded | **Done** (Canvas 3) |
@@ -174,7 +174,7 @@ become their HTML counterpart; the table says how.
 | 31 | "Claude is working. Your comment goes after that." | The same, for Forge (or "It reads your comment at its next step") | **Done** (Canvas 2) |
 | | **Tips** | | |
 | 32 | Use @ in a comment to mention someone | @Forge's tip: with it Forge revises the part, without it the comment is a note | **Done** (Canvas 2) |
-| 33 | Drag an artboard by its title to move it | Drag a page in the Pages menu to reorder it | Canvas 4 |
+| 33 | Drag an artboard by its title to move it | Drag a page in the Pages menu onto another to put it before that one | **Done** (Canvas 4) |
 | 34 | Comment on any part, and Claude can revise it | Said in the comment box; the tool's own tip says how (point, click, Esc) | **Done** (Canvas 2) |
 
 Zoom works the way a browser's does: at 50 % the page lays out twice as

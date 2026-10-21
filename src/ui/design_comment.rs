@@ -70,7 +70,9 @@ impl DesignCommentBox {
 
     fn submit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let text = self.input.read(cx).value().to_string();
-        if text.trim().is_empty() {
+        // Marks say enough on their own; a part needs words.
+        let marks = self.state.read(cx).design_pick_marks;
+        if text.trim().is_empty() && !marks {
             return;
         }
         let (to_forge, queue) = (self.to_forge, self.queue);
@@ -88,7 +90,8 @@ impl Render for DesignCommentBox {
             return div().into_any_element();
         };
         let busy = s.busy();
-        let ready = !self.input.read(cx).value().trim().is_empty();
+        let marks = s.design_pick_marks;
+        let ready = marks || !self.input.read(cx).value().trim().is_empty();
         let (to_forge, queue) = (self.to_forge, self.queue);
         let hover = t.colors.hover;
 
@@ -223,7 +226,11 @@ impl Render for DesignCommentBox {
                             .text_size(t.text.caption)
                             .font_weight(FontWeight::MEDIUM)
                             .text_color(t.colors.text_muted)
-                            .child(part.label()),
+                            .child(if marks {
+                                format!("{} on the page", part.text)
+                            } else {
+                                part.label()
+                            }),
                     )
                     .child(
                         div()

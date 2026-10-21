@@ -456,6 +456,48 @@ pub struct DesignComment {
     pub resolved: bool,
 }
 
+/// A tool of the design bar's Insert menu.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InsertTool {
+    /// Drag to move round the page.
+    Hand,
+    /// Draw this kind of mark.
+    Mark(crate::design::marks::Shape),
+}
+
+/// A comment on marks, sent once their picture is taken.
+struct MarksOut {
+    chat: usize,
+    page: std::path::PathBuf,
+    message: String,
+    /// Its place among the comments, to mark it sent.
+    n: usize,
+}
+
+/// A design system of the library, as the design bar's Library lists it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SystemCard {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    /// Its folder, with its `DESIGN.md`.
+    pub dir: std::path::PathBuf,
+}
+
+/// The artboards the Insert menu offers: a name and a width.
+pub const ARTBOARDS: [(&str, u32); 4] = [("Desktop", 1440), ("Laptop", 1280), ("Tablet", 834), ("Phone", 390)];
+
+/// A theme colour as CSS, for what Forge draws on a page.
+fn css(c: gpui::Hsla) -> String {
+    format!(
+        "hsla({:.0}, {:.0}%, {:.0}%, {:.2})",
+        c.h * 360.0,
+        c.s * 100.0,
+        c.l * 100.0,
+        c.a
+    )
+}
+
 /// Where a design comment went.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CommentSent {
@@ -1429,7 +1471,24 @@ pub struct AppState {
     pub design_pins: bool,
     pub design_resolved: bool,
     /// Comments waiting for a chat's reply to end, by chat.
-    pub design_held: std::collections::HashMap<usize, Vec<String>>,
+    pub design_held: std::collections::HashMap<usize, Vec<(String, Vec<crate::attach::Attachment>)>>,
+    /// The Insert tool in hand: drawing marks, or moving the page.
+    pub design_tool: Option<InsertTool>,
+    /// Marks drawn on the chats' design pages: (chat, page, mark).
+    pub design_marks: Vec<(usize, std::path::PathBuf, crate::design::marks::Mark)>,
+    /// The comment open is on the page's marks, not on a part.
+    pub design_pick_marks: bool,
+    /// A comment with marks waiting for their picture.
+    design_marks_out: Option<MarksOut>,
+    /// The artboard the page is shown in: its name and width (the zoom
+    /// follows the panel to keep that width in view).
+    pub design_artboard: Option<(&'static str, u32)>,
+    /// The order you dragged the chats' pages into, by chat.
+    pub design_order: std::collections::HashMap<usize, Vec<std::path::PathBuf>>,
+    /// The library's design systems, read once (None until then; empty
+    /// when there is no library).
+    pub design_systems: Option<std::sync::Arc<Vec<SystemCard>>>,
+    design_systems_asked: bool,
     /// Layout guides: every box on the page outlined.
     pub design_guides: bool,
     /// The page's outline beside it, and the headings it lists.
@@ -1733,6 +1792,14 @@ impl AppState {
             design_pins: true,
             design_resolved: false,
             design_held: Default::default(),
+            design_tool: None,
+            design_marks: Vec::new(),
+            design_pick_marks: false,
+            design_marks_out: None,
+            design_artboard: None,
+            design_order: Default::default(),
+            design_systems: None,
+            design_systems_asked: false,
             design_guides: false,
             design_outline: false,
             design_headings: Vec::new(),
@@ -4258,11 +4325,6 @@ impl AppState {
             return Vec::new();
         };
         let mut pages: Vec<std::path::PathBuf> = Vec::new();
-        for (c, p) in &self.design_extra {
-            if *c == chat.id && !pages.contains(p) {
-                pages.push(p.clone());
-            }
-        }
         for m in &chat.messages {
             let Message::Assistant { blocks } = m else {
                 continue;
@@ -4278,6 +4340,16 @@ impl AppState {
                     }
                 }
             }
+        }
+        // Then the copies made beside them.
+        for (c, p) in &self.design_extra {
+            if *c == chat.id && !pages.contains(p) {
+                pages.push(p.clone());
+            }
+        }
+        // In the order you dragged them into; new ones after.
+        if let Some(order) = self.design_order.get(&chat.id) {
+            pages.sort_by_key(|p| order.iter().position(|o| o == p).unwrap_or(usize::MAX));
         }
         pages
     }
@@ -4475,13 +4547,7 @@ impl AppState {
     pub fn design_set_guides(&mut self, on: bool, cx: &mut Context<Self>) {
         use crate::theme::ActiveTheme;
         self.design_guides = on;
-        let c = cx.theme().colors.primary;
-        let colour = format!(
-            "hsla({:.0}, {:.0}%, {:.0}%, 0.55)",
-            c.h * 360.0,
-            c.s * 100.0,
-            c.l * 100.0
-        );
+        let colour = css(cx.theme().colors.primary.opacity(0.55));
         self.web_send(crate::web_view::Cmd::Guides(on.then_some(colour)), cx);
         cx.notify();
     }
@@ -4500,15 +4566,280 @@ impl AppState {
     pub fn design_set_select(&mut self, on: bool, cx: &mut Context<Self>) {
         self.design_select = on;
         self.design_hover = None;
-        if !on {
+        if on {
+            self.design_tool = None;
+        } else {
             self.design_pick = None;
+            self.design_pick_marks = false;
         }
+        cx.notify();
+    }
+
+    /// Take an Insert tool, or put it down. It and the comment tool are
+    /// one at a time.
+    pub fn design_set_tool(&mut self, tool: Option<InsertTool>, cx: &mut Context<Self>) {
+        self.design_tool = tool;
+        if tool.is_some() {
+            self.design_select = false;
+            self.design_hover = None;
+            self.design_pick = None;
+            self.design_pick_marks = false;
+        }
+        cx.notify();
+    }
+
+    /// The marks on the page on screen.
+    pub fn design_marks_here(&self) -> Vec<&crate::design::marks::Mark> {
+        let Some(page) = self.design_on_screen() else {
+            return Vec::new();
+        };
+        self.design_marks
+            .iter()
+            .filter(|(_, p, _)| *p == page)
+            .map(|(_, _, m)| m)
+            .collect()
+    }
+
+    /// Keep a mark drawn on the page on screen (one too small to mean
+    /// anything is dropped).
+    pub fn design_add_mark(&mut self, mark: crate::design::marks::Mark, cx: &mut Context<Self>) {
+        let (Some(page), Some(chat)) = (self.design_on_screen(), self.current) else {
+            return;
+        };
+        if mark.worth_keeping() {
+            self.design_marks.push((chat, page, mark));
+            cx.notify();
+        }
+    }
+
+    /// Take the page's marks off.
+    pub fn design_clear_marks(&mut self, cx: &mut Context<Self>) {
+        if let Some(page) = self.design_on_screen() {
+            self.design_marks.retain(|(_, p, _)| *p != page);
+            self.design_pick_marks = false;
+            if self.design_pick.as_ref().is_some_and(|p| p.tag == "marks") {
+                self.design_pick = None;
+            }
+            cx.notify();
+        }
+    }
+
+    /// Open the comment box on the page's marks: what you say goes to Forge
+    /// with a picture of them.
+    pub fn design_comment_on_marks(&mut self, cx: &mut Context<Self>) {
+        let marks: Vec<_> = self.design_marks_here().into_iter().cloned().collect();
+        let Some((x, y, w, h)) = crate::design::marks::bounds(&marks, 0.0) else {
+            return;
+        };
+        self.design_tool = None;
+        self.design_select = true;
+        self.design_hover = None;
+        self.design_pick = Some(crate::web_view::PagePart {
+            tag: "marks".into(),
+            text: match marks.len() {
+                1 => "1 mark".into(),
+                n => format!("{n} marks"),
+            },
+            selector: String::new(),
+            x,
+            y,
+            w,
+            h,
+        });
+        self.design_pick_marks = true;
+        cx.notify();
+    }
+
+    /// A comment on the page's marks: a note keeps them; for Forge, a
+    /// picture of the page with them on it is taken (`Update::Picture`),
+    /// then they go with it, and come off the page.
+    fn design_comment_marks(
+        &mut self,
+        chat: usize,
+        page: std::path::PathBuf,
+        part: crate::web_view::PagePart,
+        text: String,
+        to_forge: bool,
+        cx: &mut Context<Self>,
+    ) {
+        use crate::theme::ActiveTheme;
+        let marks: Vec<_> = self.design_marks_here().into_iter().cloned().collect();
+        if marks.is_empty() {
+            return;
+        }
+        let name = page
+            .file_name()
+            .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+        let n = self.design_comments.iter().filter(|c| c.page == page).count() + 1;
+        let said = if text.is_empty() {
+            format!("{} on the page", part.text)
+        } else {
+            text.clone()
+        };
+        let sent = if to_forge {
+            let (x, y, w, h) = crate::design::marks::bounds(&marks, 24.0).unwrap_or_default();
+            let t = cx.theme();
+            let (ink, paper) = (css(t.colors.primary), css(t.colors.surface));
+            self.web_send(
+                crate::web_view::Cmd::Picture {
+                    before: crate::design::marks::overlay_js(&marks, &ink, &paper),
+                    clip: (x, y, w.min(3000.0), h.min(3000.0)),
+                    after: crate::design::marks::REMOVE_OVERLAY_JS.into(),
+                },
+                cx,
+            );
+            self.design_marks_out = Some(MarksOut {
+                chat,
+                page: page.clone(),
+                message: crate::design::marks::message(&name, &marks, &text),
+                n,
+            });
+            CommentSent::Waiting
+        } else {
+            CommentSent::Note
+        };
+        self.design_comments.push(DesignComment {
+            n,
+            chat,
+            page,
+            part,
+            text: said,
+            sent,
+            resolved: false,
+        });
+        cx.notify();
+    }
+
+    /// The marks' picture is taken: the comment goes with it now, or once
+    /// the reply running ends; the marks come off the page.
+    fn design_marks_pictured(&mut self, png: Result<Vec<u8>, String>, cx: &mut Context<Self>) {
+        let Some(out) = self.design_marks_out.take() else {
+            return;
+        };
+        let mut attachments = Vec::new();
+        match png {
+            Ok(bytes) => {
+                static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+                let id = 1_000_000 + NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                if let Ok(mut a) = crate::attach::pasted_image(bytes, 1, &self.project_dir, id) {
+                    let stem = out
+                        .page
+                        .file_stem()
+                        .map_or_else(String::new, |s| s.to_string_lossy().into_owned());
+                    a.name = format!("{stem} marks.png").into();
+                    attachments.push(a);
+                }
+            }
+            Err(e) => self.show_toast(format!("The marks' picture didn't work ({e}); they go as words."), cx),
+        }
+        self.design_marks.retain(|(_, p, _)| *p != out.page);
+        let sent = if self.replies.contains_key(&out.chat) {
+            self.design_held
+                .entry(out.chat)
+                .or_default()
+                .push((out.message, attachments));
+            CommentSent::Waiting
+        } else {
+            self.send_in(out.chat, out.message, attachments, cx);
+            CommentSent::Sent
+        };
+        if let Some(c) = self
+            .design_comments
+            .iter_mut()
+            .find(|c| c.page == out.page && c.n == out.n)
+        {
+            c.sent = sent;
+        }
+        cx.notify();
+    }
+
+    /// Show the page in an artboard of this width (None: the panel's own),
+    /// zoomed to keep all of it in view as the panel changes.
+    pub fn design_set_artboard(&mut self, board: Option<(&'static str, u32)>, cx: &mut Context<Self>) {
+        self.design_artboard = board;
+        self.design_fit_artboard(cx);
+        if board.is_none() {
+            self.web_zoom_to(1.0, cx);
+        }
+        cx.notify();
+    }
+
+    /// The zoom that shows the artboard's width in the panel.
+    fn design_fit_artboard(&mut self, cx: &mut Context<Self>) {
+        if let Some((_, width)) = self.design_artboard {
+            let room = f64::from(self.web_room.0.max(1));
+            self.web_zoom_to(room / f64::from(width), cx);
+        }
+    }
+
+    /// Read the library's design systems, once, off the main thread.
+    pub fn design_load_systems(&mut self, cx: &mut Context<Self>) {
+        if std::mem::replace(&mut self.design_systems_asked, true) {
+            return;
+        }
+        cx.spawn(async move |this, cx| {
+            let cards = cx
+                .background_spawn(async move {
+                    use crate::design::library::{Index, Kind};
+                    let Some(root) = crate::design::root() else {
+                        return Vec::new();
+                    };
+                    let ix = Index::load(&root);
+                    let mut cards: Vec<SystemCard> = ix
+                        .of(Kind::DesignSystem)
+                        .map(|e| SystemCard {
+                            id: e.id.clone(),
+                            title: e.title.clone(),
+                            description: e.description.clone(),
+                            dir: root.join(&e.dir),
+                        })
+                        .collect();
+                    cards.sort_by_key(|c| c.title.to_lowercase());
+                    cards
+                })
+                .await;
+            let _ = this.update(cx, |s, cx| {
+                s.design_systems = Some(std::sync::Arc::new(cards));
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Ask Forge to restyle the page on screen with a design system: the
+    /// composer starts the request, naming the system's `DESIGN.md`.
+    pub fn design_apply_system(&mut self, card: &SystemCard, cx: &mut Context<Self>) {
+        let Some(name) = self
+            .design_on_screen()
+            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+        else {
+            return;
+        };
+        self.draft = Some(format!(
+            "Restyle {name} with the {} design system: read {} first, and keep the page's content as it is.",
+            card.title,
+            card.dir.join("DESIGN.md").display()
+        ));
+        cx.notify();
+    }
+
+    /// Put a page of the chat's before another in its list (dragged in
+    /// the Pages menu).
+    pub fn design_move_page(&mut self, from: &std::path::Path, before: &std::path::Path, cx: &mut Context<Self>) {
+        let Some(chat) = self.current else { return };
+        let mut order = self.design_pages();
+        let Some(at) = order.iter().position(|p| p == from) else { return };
+        let moved = order.remove(at);
+        let to = order.iter().position(|p| p == before).unwrap_or(order.len());
+        order.insert(to, moved);
+        self.design_order.insert(chat, order);
         cx.notify();
     }
 
     /// Close the comment being written, keeping the tool on.
     pub fn design_cancel_pick(&mut self, cx: &mut Context<Self>) {
         self.design_pick = None;
+        self.design_pick_marks = false;
         cx.notify();
     }
 
@@ -4528,9 +4859,12 @@ impl AppState {
         let (Some(page), Some(chat)) = (self.design_on_screen(), self.current) else {
             return;
         };
-        let Some(part) = self.design_pick.take().filter(|_| !text.is_empty()) else {
+        let Some(part) = self.design_pick.take().filter(|_| !text.is_empty() || self.design_pick_marks) else {
             return;
         };
+        if std::mem::take(&mut self.design_pick_marks) {
+            return self.design_comment_marks(chat, page, part, text, to_forge, cx);
+        }
         let name = page
             .file_name()
             .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
@@ -4538,10 +4872,10 @@ impl AppState {
         let sent = if !to_forge {
             CommentSent::Note
         } else if !self.replies.contains_key(&chat) {
-            self.send_in(chat, message, cx);
+            self.send_in(chat, message, Vec::new(), cx);
             CommentSent::Sent
         } else if queue {
-            self.design_held.entry(chat).or_default().push(message);
+            self.design_held.entry(chat).or_default().push((message, Vec::new()));
             CommentSent::Waiting
         } else {
             self.queue_message(message, cx);
@@ -4581,7 +4915,13 @@ impl AppState {
     }
 
     /// Send `text` in chat `id`, which isn't replying, as if typed there.
-    fn send_in(&mut self, id: usize, text: String, cx: &mut Context<Self>) {
+    fn send_in(
+        &mut self,
+        id: usize,
+        text: String,
+        attachments: Vec<crate::attach::Attachment>,
+        cx: &mut Context<Self>,
+    ) {
         if self.replies.contains_key(&id) {
             return;
         }
@@ -4590,7 +4930,7 @@ impl AppState {
             c.messages.push(Message::User {
                 text: text.clone().into(),
                 sent: SystemTime::now(),
-                attachments: Vec::new(),
+                attachments: attachments.iter().map(|a| a.for_history()).collect(),
                 turn: None,
             });
             c.version += 1;
@@ -4599,7 +4939,7 @@ impl AppState {
         if demo_mode() {
             self.play_script(id, text, cx);
         } else {
-            self.send_to_forge(id, text, Vec::new(), cx);
+            self.send_to_forge(id, text, attachments, cx);
         }
         cx.notify();
     }
@@ -4848,6 +5188,7 @@ impl AppState {
                 self.show_toast(format!("Downloaded {name} to your Downloads folder"), cx);
                 self.web_page.last_download = Some(path);
             }
+            Update::Picture(png) => self.design_marks_pictured(png, cx),
             Update::Outline(heads) => {
                 self.design_headings = heads;
                 cx.notify();
@@ -4894,15 +5235,22 @@ impl AppState {
 
     /// Something for the panel's browser to do (starting it if need be).
     pub fn web_send(&mut self, cmd: crate::web_view::Cmd, cx: &mut Context<Self>) {
-        if let crate::web_view::Cmd::Resize { width, height, .. } = cmd {
+        let resized = if let crate::web_view::Cmd::Resize { width, height, .. } = cmd {
             self.web_room = (width, height);
-        }
+            true
+        } else {
+            false
+        };
         if self.web.is_none() {
             self.web_page.error = None;
             self.ensure_web(cx);
         }
         if let Some(w) = &self.web {
             w.send(cmd);
+        }
+        // An artboard keeps its width in view as the panel changes.
+        if resized {
+            self.design_fit_artboard(cx);
         }
     }
 
@@ -8331,7 +8679,9 @@ impl AppState {
                 c.sent = CommentSent::Sent;
             }
         }
-        self.send_in(chat, held.join("\n\n---\n\n"), cx);
+        let (texts, attachments): (Vec<String>, Vec<Vec<crate::attach::Attachment>>) =
+            held.into_iter().unzip();
+        self.send_in(chat, texts.join("\n\n---\n\n"), attachments.concat(), cx);
     }
 
     // ------------------------------------------------------------ project memory

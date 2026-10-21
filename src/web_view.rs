@@ -116,6 +116,14 @@ pub enum Cmd {
     /// Tell the panel the page's headings (`Update::Outline`), now and
     /// after each load, while on.
     Outline(bool),
+    /// A picture of part of the page (CSS pixels from its top left, as
+    /// x, y, width, height), with a script run before it (to put something
+    /// on the page) and after (to take it off again): `Update::Picture`.
+    Picture {
+        before: String,
+        clip: (f64, f64, f64, f64),
+        after: String,
+    },
 }
 
 /// A heading of the page, for its outline.
@@ -256,6 +264,8 @@ pub enum Update {
     Part { part: Option<PagePart>, pick: bool },
     /// The page's headings, in order (`Cmd::Outline`).
     Outline(Vec<Heading>),
+    /// A PNG of part of the page (`Cmd::Picture`), or why not.
+    Picture(Result<Vec<u8>, String>),
     /// The open tabs, and which one is on screen.
     Tabs(Vec<TabInfo>, String),
     /// The page's address and title.
@@ -1177,6 +1187,26 @@ fn devtools(
                             json!({ "expression": OUTLINE_JS, "returnByValue": true }),
                         )?);
                     }
+                }
+                Cmd::Picture { before, clip, after } => {
+                    let _ = c.call(s, "Runtime.evaluate", json!({ "expression": before }), &mut events);
+                    let (x, y, w, h) = clip;
+                    let shot = c
+                        .call(
+                            s,
+                            "Page.captureScreenshot",
+                            json!({ "format": "png", "captureBeyondViewport": true,
+                                "clip": { "x": x, "y": y, "width": w, "height": h, "scale": 1 } }),
+                            &mut events,
+                        )
+                        .and_then(|r| {
+                            r["data"]
+                                .as_str()
+                                .and_then(crate::browser::decode_base64)
+                                .ok_or_else(|| "the browser gave no picture".to_string())
+                        });
+                    c.send(s, "Runtime.evaluate", json!({ "expression": after }))?;
+                    say(Update::Picture(shot))?;
                 }
                 Cmd::ScrollTo(x, y) => {
                     let js = format!(

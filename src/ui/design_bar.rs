@@ -23,8 +23,61 @@ use crate::theme::{self, Theme};
 pub enum Menu {
     Pages,
     Comments,
+    Insert,
+    Library,
     Zoom,
     Share,
+}
+
+/// A page dragged in the Pages menu, to put it before another; its name
+/// follows the pointer.
+#[derive(Clone)]
+pub struct DraggedPage(PathBuf, SharedString);
+
+impl gpui::Render for DraggedPage {
+    fn render(&mut self, _: &mut gpui::Window, cx: &mut Context<Self>) -> impl IntoElement {
+        use crate::theme::ActiveTheme;
+        let t = cx.theme();
+        theme::popover(t)
+            .px(t.space.md)
+            .py(t.space.xs)
+            .text_size(t.text.body_sm)
+            .text_color(t.colors.text)
+            .child(self.1.clone())
+    }
+}
+
+/// The Insert menu's tools, in Claude's order (the artboards come after
+/// Text), with their icons.
+const TOOLS: [(&str, &str, Option<crate::design::marks::Shape>); 9] = {
+    use crate::design::marks::Shape;
+    [
+        ("Hand", "icons/hand.svg", None),
+        ("Text", "icons/type.svg", Some(Shape::Text)),
+        ("Note", "icons/sticky-note.svg", Some(Shape::Note)),
+        ("Pencil", "icons/pencil.svg", Some(Shape::Pencil)),
+        ("Pen", "icons/pen-tool.svg", Some(Shape::Pen)),
+        ("Rectangle", "icons/square.svg", Some(Shape::Rect)),
+        ("Oval", "icons/circle.svg", Some(Shape::Oval)),
+        ("Arrow", "icons/arrow-up-right.svg", Some(Shape::Arrow)),
+        ("Line", "icons/minus.svg", Some(Shape::Line)),
+    ]
+};
+
+/// The Insert tool as its menu shows it.
+fn tool_of(shape: Option<crate::design::marks::Shape>) -> crate::state::InsertTool {
+    shape.map_or(
+        crate::state::InsertTool::Hand,
+        crate::state::InsertTool::Mark,
+    )
+}
+
+/// The icon of the tool in hand.
+fn tool_icon(tool: crate::state::InsertTool) -> &'static str {
+    TOOLS
+        .iter()
+        .find(|(_, _, shape)| tool_of(*shape) == tool)
+        .map_or("icons/plus.svg", |(_, icon, _)| icon)
 }
 
 /// A comment, as the comments menu lists it.
@@ -56,6 +109,14 @@ pub struct Bar {
     /// There is a version before, or after, the one on disk.
     pub undo: bool,
     pub redo: bool,
+    /// The Insert tool in hand, and the artboard the page is shown in.
+    pub tool: Option<crate::state::InsertTool>,
+    pub artboard: Option<&'static str>,
+    /// The library's design systems (None while they're read), its search
+    /// box and what is typed in it.
+    pub systems: Option<std::sync::Arc<Vec<crate::state::SystemCard>>>,
+    pub filter: Entity<gpui::component::input::InputState>,
+    pub filter_text: String,
 }
 
 /// What a menu row does to the app.
@@ -253,6 +314,11 @@ pub fn render(
         guides,
         undo,
         redo,
+        tool: in_hand,
+        artboard,
+        systems,
+        filter,
+        filter_text,
     } = bar;
     // Each menu row does its thing on the app, then the menu closes.
     let act = |f: Box<Act>| {
@@ -279,8 +345,10 @@ pub fn render(
             .text_color(t.colors.text_subtle)
             .child("Pages in this chat"),
     );
+    let hover = t.colors.hover;
     for (i, p) in pages.iter().enumerate() {
-        let to = p.clone();
+        let (to, before) = (p.clone(), p.clone());
+        let drop_state = state.clone();
         pages_menu = pages_menu.child(
             row(
                 t,
@@ -290,6 +358,14 @@ pub fn render(
                 None,
                 *p == page,
             )
+            // Drag a page onto another to put it before that one.
+            .on_drag(DraggedPage(p.clone(), name(p).into()), |d, _, _, cx| {
+                cx.new(|_| d.clone())
+            })
+            .drag_over::<DraggedPage>(move |style, _, _, _| style.bg(hover))
+            .on_drop(move |d: &DraggedPage, _, cx| {
+                drop_state.update(cx, |s, cx| s.design_move_page(&d.0, &before, cx))
+            })
             .on_click(act(Box::new(move |s, cx| s.design_show(&to, cx)))),
         );
     }
@@ -475,6 +551,157 @@ pub fn render(
         );
     }
 
+    // Insert: the tools that draw on the page, and the artboards.
+    let mut insert_menu = sheet(t, 240.);
+    for (i, (label, icon_path, shape)) in TOOLS.iter().enumerate() {
+        let tool = tool_of(*shape);
+        insert_menu = insert_menu.child(
+            row(
+                t,
+                format!("insert-{i}"),
+                Some(icon_path),
+                *label,
+                None,
+                in_hand == Some(tool),
+            )
+            .on_click(act(Box::new(move |s, cx| {
+                let next = (s.design_tool != Some(tool)).then_some(tool);
+                s.design_set_tool(next, cx)
+            }))),
+        );
+        // The artboards after Text, as Claude has them.
+        if *label == "Text" {
+            insert_menu = insert_menu.child(
+                row(
+                    t,
+                    "insert-artboard",
+                    Some("icons/frame.svg"),
+                    "Artboard",
+                    None,
+                    false,
+                )
+                .cursor_default(),
+            );
+            for (board, width) in crate::state::ARTBOARDS {
+                insert_menu = insert_menu.child(
+                    row(
+                        t,
+                        format!("artboard-{width}"),
+                        None,
+                        format!("{board} · {width}"),
+                        None,
+                        artboard == Some(board),
+                    )
+                    .pl(t.space.xl)
+                    .on_click(act(Box::new(move |s, cx| {
+                        s.design_set_artboard(Some((board, width)), cx)
+                    }))),
+                );
+            }
+            insert_menu = insert_menu.child(
+                row(
+                    t,
+                    "artboard-panel",
+                    None,
+                    "The panel's width",
+                    None,
+                    artboard.is_none(),
+                )
+                .pl(t.space.xl)
+                .on_click(act(Box::new(|s, cx| s.design_set_artboard(None, cx)))),
+            );
+        }
+    }
+
+    // The library's design systems: search, then one restyles the page.
+    let words: Vec<String> = filter_text
+        .to_lowercase()
+        .split_whitespace()
+        .map(str::to_string)
+        .collect();
+    let shown: Vec<crate::state::SystemCard> = systems
+        .as_deref()
+        .map(|all| {
+            all.iter()
+                .filter(|c| {
+                    let hay = format!("{} {} {}", c.title, c.id, c.description).to_lowercase();
+                    words.iter().all(|w| hay.contains(w.as_str()))
+                })
+                .take(80)
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
+    let library_menu = sheet(t, 320.)
+        .child(
+            div()
+                .m(t.space.xs)
+                .px(t.space.sm)
+                .py(t.space.xs)
+                .rounded(t.radius.button)
+                .bg(t.extra.inset)
+                .child(
+                    gpui::component::input::Input::new(&filter)
+                        .appearance(false)
+                        .text_size(t.text.body_sm),
+                ),
+        )
+        .child(
+            div()
+                .px(t.space.md)
+                .py(t.space.xs)
+                .text_size(t.text.caption)
+                .line_height(relative(1.4))
+                .text_color(t.colors.text_subtle)
+                .child(match &systems {
+                    None => "Reading the library…".to_string(),
+                    Some(all) if all.is_empty() => "No design library here.".to_string(),
+                    Some(all) => format!(
+                        "{} of {} design systems. One restyles the page: Forge reads its DESIGN.md.",
+                        shown.len(),
+                        all.len()
+                    ),
+                }),
+        )
+        .child(
+            div()
+                .id("design-library-list")
+                .max_h(px(360.))
+                .overflow_y_scroll()
+                .flex()
+                .flex_col()
+                .children(shown.into_iter().map(|card| {
+                    let id = SharedString::from(format!("system-{}", card.id));
+                    let (title, description) = (card.title.clone(), card.description.clone());
+                    div()
+                        .id(id)
+                        .flex_none()
+                        .flex()
+                        .flex_col()
+                        .px(t.space.md)
+                        .py(t.space.xs)
+                        .rounded(t.radius.button)
+                        .cursor_pointer()
+                        .hover(move |d| d.bg(hover))
+                        .child(
+                            div()
+                                .text_size(t.text.body_sm)
+                                .text_color(t.colors.text)
+                                .child(title),
+                        )
+                        .child(
+                            div()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .text_size(t.text.caption)
+                                .text_color(t.colors.text_subtle)
+                                .child(description),
+                        )
+                        .on_click(act(Box::new(move |s, cx| s.design_apply_system(&card, cx))))
+                })),
+        );
+
     // The zoom: a step in or out, a desktop's width, or a size.
     let mut zoom_menu = sheet(t, 230.)
         .child(
@@ -639,6 +866,25 @@ pub fn render(
                 }),
         )
         .child(
+            div()
+                .relative()
+                .child(
+                    tool(
+                        t,
+                        "design-insert",
+                        in_hand.map_or("icons/plus.svg", tool_icon),
+                        None,
+                        true,
+                        menu == Some(Menu::Insert) || in_hand.is_some(),
+                        "Insert: draw on the page",
+                    )
+                    .on_click(toggle(Menu::Insert)),
+                )
+                .when(menu == Some(Menu::Insert), |d| {
+                    d.child(hang(t, false, insert_menu, cx))
+                }),
+        )
+        .child(
             tool(
                 t,
                 "design-select",
@@ -690,6 +936,32 @@ pub fn render(
                 }),
         )
         .child(div().flex_1())
+        .child(
+            div()
+                .relative()
+                .child(
+                    tool(
+                        t,
+                        "design-library",
+                        "icons/book-open.svg",
+                        None,
+                        false,
+                        menu == Some(Menu::Library),
+                        "Library: restyle the page with a design system",
+                    )
+                    .on_click({
+                        let state = state.clone();
+                        cx.listener(move |this: &mut BrowserView, _: &gpui::ClickEvent, _, cx| {
+                            let open = this.design_menu() != Some(Menu::Library);
+                            this.set_menu(open.then_some(Menu::Library), cx);
+                            state.update(cx, |s, cx| s.design_load_systems(cx));
+                        })
+                    }),
+                )
+                .when(menu == Some(Menu::Library), |d| {
+                    d.child(hang(t, false, library_menu, cx))
+                }),
+        )
         .child(
             tool(
                 t,
