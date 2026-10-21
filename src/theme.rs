@@ -94,16 +94,31 @@ pub enum Look {
     Slate,
     /// Soft heather and plum.
     Plum,
+    /// Layered: raised cards, the "+" grouped with a line on each row.
+    Layers,
+    /// The "+" opens a tray of chips inside the box, over nothing.
+    Tray,
+    /// Cool studio greys; the "+" splits into a list and its page.
+    Studio,
+    /// Round, roomy; the "+" opens a grid of tiles.
+    Tiles,
+    /// Keyboard first, violet; the "+" is a list you type to filter.
+    Command,
 }
 
 impl Look {
-    pub const ALL: [Look; 6] = [
+    pub const ALL: [Look; 11] = [
         Look::Calm,
         Look::Terracotta,
         Look::Patina,
         Look::Ink,
         Look::Slate,
         Look::Plum,
+        Look::Layers,
+        Look::Tray,
+        Look::Studio,
+        Look::Tiles,
+        Look::Command,
     ];
 
     /// How it is saved (`window.json`).
@@ -115,6 +130,11 @@ impl Look {
             Look::Ink => "ink",
             Look::Slate => "slate",
             Look::Plum => "plum",
+            Look::Layers => "layers",
+            Look::Tray => "tray",
+            Look::Studio => "studio",
+            Look::Tiles => "tiles",
+            Look::Command => "command",
         }
     }
 
@@ -130,6 +150,11 @@ impl Look {
             Look::Ink => "Ink",
             Look::Slate => "Slate",
             Look::Plum => "Plum",
+            Look::Layers => "Layers",
+            Look::Tray => "Tray",
+            Look::Studio => "Studio",
+            Look::Tiles => "Tiles",
+            Look::Command => "Command",
         }
     }
 
@@ -141,6 +166,11 @@ impl Look {
             Look::Ink => "Greys and Geist, nothing else",
             Look::Slate => "Cool grey, Plex, compact",
             Look::Plum => "Heather, an editorial serif",
+            Look::Layers => "Raised cards, a grouped + menu",
+            Look::Tray => "Pills, the + as a tray in the box",
+            Look::Studio => "Cool greys, a split + menu",
+            Look::Tiles => "Round and roomy, + as tiles",
+            Look::Command => "Violet, a + you type to filter",
         }
     }
 
@@ -161,6 +191,7 @@ impl Look {
             depth: Depth::Grain,
             selection: Selection::Soft,
             motion_ms: 200,
+            add_menu: AddMenu::List,
         };
         match self {
             Look::Calm => base,
@@ -240,6 +271,71 @@ impl Look {
                 motion_ms: 220,
                 ..base
             },
+            // Direction A: layers. Hanken Grotesk over Archivo headings,
+            // soft corners, raised cards, the "+" grouped, each row with
+            // a line saying what it does.
+            Look::Layers => Form {
+                sans: Some("Hanken Grotesk"),
+                corners: (8., 14., 10., 18., 9999.),
+                row: 32.,
+                titlebar: 40.,
+                heading: (34., 38.),
+                depth: Depth::Lift,
+                selection: Selection::Card,
+                add_menu: AddMenu::Grouped,
+                ..base
+            },
+            // Direction B: a tray. Pills everywhere; the "+" unfolds a row
+            // of chips inside the box instead of a menu over the chat.
+            Look::Tray => Form {
+                sans: Some("Hanken Grotesk"),
+                corners: (9999., 12., 10., 20., 9999.),
+                row: 32.,
+                titlebar: 38.,
+                depth: Depth::Lift,
+                selection: Selection::Card,
+                add_menu: AddMenu::Tray,
+                ..base
+            },
+            // Direction C: a studio. Cool greys, tidy 8px corners, the "+"
+            // split into a list and the chosen one's page.
+            Look::Studio => Form {
+                sans: Some("Hanken Grotesk"),
+                corners: (8., 10., 8., 18., 8.),
+                chat: (14., 22.),
+                depth: Depth::Lift,
+                selection: Selection::Soft,
+                motion_ms: 180,
+                add_menu: AddMenu::Split,
+                ..base
+            },
+            // Direction D: tiles. Round and roomy, squircle buttons, the
+            // "+" a grid of large tiles.
+            Look::Tiles => Form {
+                sans: Some("Hanken Grotesk"),
+                corners: (12., 18., 12., 22., 12.),
+                row: 34.,
+                titlebar: 40.,
+                chat: (15., 24.),
+                heading: (36., 40.),
+                depth: Depth::Lift,
+                selection: Selection::Wash,
+                motion_ms: 220,
+                add_menu: AddMenu::Tiles,
+                ..base
+            },
+            // Direction E: command first. Compact, a grey wash for what is
+            // selected, the "+" a list you type into.
+            Look::Command => Form {
+                sans: Some("Hanken Grotesk"),
+                corners: (8., 10., 9., 16., 10.),
+                chat: (14., 22.),
+                depth: Depth::Grain,
+                selection: Selection::Wash,
+                motion_ms: 160,
+                add_menu: AddMenu::Search,
+                ..base
+            },
         }
     }
 
@@ -315,6 +411,48 @@ impl Look {
                 0x171217, 0x1f1a1f, 0x2c252c, 0x262026, 0xd3a3c6, 0x171217, 0x3a2a36, 0xd3a3c6,
                 0xe2bfd8, 0xd3a3c6,
             ),
+            // The five directions: Forge's cream surfaces (Studio's cool
+            // greys) under an accent of their own.
+            (Look::Layers, false) => t(
+                0xe3d7cd, 0xf0e9e5, 0xffffff, 0xf5f2f0, 0x3d4f8f, 0xffffff, 0xdfe3f2, 0x3d4f8f,
+                0x2f3e72, 0x3d4f8f,
+            ),
+            (Look::Layers, true) => t(
+                0x171513, 0x1e1c1a, 0x2b2825, 0x262321, 0xa9b5e8, 0x171513, 0x272c40, 0xa9b5e8,
+                0xc4cdf0, 0xa9b5e8,
+            ),
+            (Look::Tray, false) => t(
+                0xe3d7cd, 0xf0e9e5, 0xffffff, 0xf5f2f0, 0x2e6077, 0xffffff, 0xd8e7ee, 0x2e6077,
+                0x234b5e, 0x2e6077,
+            ),
+            (Look::Tray, true) => t(
+                0x171513, 0x1e1c1a, 0x2b2825, 0x262321, 0x93c2d6, 0x171513, 0x233540, 0x93c2d6,
+                0xb3d6e4, 0x93c2d6,
+            ),
+            (Look::Studio, false) => t(
+                0xdcdde3, 0xeeeff3, 0xffffff, 0xf4f5f8, 0x4a4fa0, 0xffffff, 0xe0e1f3, 0x4a4fa0,
+                0x3a3e84, 0x4a4fa0,
+            ),
+            (Look::Studio, true) => t(
+                0x131417, 0x1a1b1f, 0x25262c, 0x202126, 0xb3b6f0, 0x131417, 0x2a2b44, 0xb3b6f0,
+                0xcdcff6, 0xb3b6f0,
+            ),
+            (Look::Tiles, false) => t(
+                0xe3d7cd, 0xf0e9e5, 0xffffff, 0xf5f2f0, 0x3f6b4f, 0xffffff, 0xdbe8df, 0x3f6b4f,
+                0x30543d, 0x3f6b4f,
+            ),
+            (Look::Tiles, true) => t(
+                0x171513, 0x1e1c1a, 0x2b2825, 0x262321, 0x9fcfae, 0x171513, 0x24352b, 0x9fcfae,
+                0xbde0c7, 0x86c19a,
+            ),
+            (Look::Command, false) => t(
+                0xe3d7cd, 0xf0e9e5, 0xffffff, 0xf5f2f0, 0x6a4fa3, 0xffffff, 0xe7dff3, 0x6a4fa3,
+                0x553d86, 0x6a4fa3,
+            ),
+            (Look::Command, true) => t(
+                0x171513, 0x1e1c1a, 0x2b2825, 0x262321, 0xc2adf0, 0x171513, 0x30283f, 0xc2adf0,
+                0xd6c8f5, 0xc2adf0,
+            ),
         }
     }
 }
@@ -338,6 +476,7 @@ struct Form {
     depth: Depth,
     selection: Selection,
     motion_ms: u64,
+    add_menu: AddMenu,
 }
 
 /// How surfaces lift off the canvas.
@@ -349,6 +488,23 @@ pub enum Depth {
     Lift,
     /// No shadow: a 1px edge in the border colour.
     Flat,
+}
+
+/// How the composer's "+" opens (`ui/add_menu.rs`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AddMenu {
+    /// A plain menu: icon, label, shortcut or chevron.
+    List,
+    /// Two groups (add to this message, tools), each row with a line.
+    Grouped,
+    /// A row of chips inside the box, over nothing.
+    Tray,
+    /// A list beside the chosen row's page.
+    Split,
+    /// A grid of large tiles.
+    Tiles,
+    /// A list you type into to filter; Enter picks the first.
+    Search,
 }
 
 /// How a selected row (a chat, a section) stands out.
@@ -400,6 +556,7 @@ pub struct Theme {
     pub font_reading: SharedString, // a reply's prose: the interface face, or a serif (Terracotta)
     pub depth: Depth,               // how surfaces lift: grain, a soft lift, or flat
     pub selection: Selection,       // how a selected row shows
+    pub add_menu: AddMenu,          // how the composer's "+" opens
     pub extra: ExtraColors,
     pub terminal: TerminalColors,
     pub code: CodeColors,
@@ -463,6 +620,7 @@ impl Theme {
             font_reading: crate::fonts::sans(),
             depth: Depth::Grain,
             selection: Selection::Soft,
+            add_menu: AddMenu::List,
             extra: ExtraColors::for_mode(is_dark),
             terminal: TerminalColors::for_mode(is_dark),
             code: CodeColors::for_mode(is_dark),
@@ -531,6 +689,7 @@ impl Theme {
         (z.greeting, z.home_heading) = (px(f.heading.0), px(f.heading.1));
         self.depth = f.depth;
         self.selection = f.selection;
+        self.add_menu = f.add_menu;
         self.motion_ms = f.motion_ms;
     }
 

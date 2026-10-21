@@ -42,6 +42,10 @@ pub struct Composer {
     dismissed_at: Option<gpui::Point<gpui::Pixels>>,
     /// The "+" menu is open.
     add_open: bool,
+    /// The split "+" menu's chosen row (`add_menu::split`).
+    add_split: usize,
+    /// The search "+" menu's field (`add_menu::search`).
+    add_filter: Entity<InputState>,
     /// Holds the keyboard while the model window is open (no search box),
     /// so the arrows move through it instead of the text.
     menu_focus: gpui::FocusHandle,
@@ -75,6 +79,7 @@ impl Composer {
                 .submit_on_enter(true)
         });
         let filter = cx.new(|cx| InputState::new(window, cx).placeholder("Search models…"));
+        let add_filter = cx.new(|cx| InputState::new(window, cx).placeholder("Add or find a tool…"));
         let subs = vec![
             cx.observe_in(&state, window, |this, state, window, cx| {
                 // An edited message comes back here to be changed and sent.
@@ -115,6 +120,26 @@ impl Composer {
                 this.picker_was_open = open;
                 cx.notify();
             }),
+            // The search "+" menu: typing filters it, Enter runs the first match.
+            cx.subscribe_in(&add_filter, window, |this, f, ev: &InputEvent, window, cx| match ev {
+                InputEvent::Change => cx.notify(),
+                InputEvent::PressEnter { .. } => {
+                    let query = f.read(cx).value().to_string();
+                    // Closed here, on the composer already in hand: going
+                    // back through its entity mid-update would panic.
+                    if let Some(&i) = super::add_menu::matches(&query).first() {
+                        match super::add_menu::action(i) {
+                            Some(action) => {
+                                this.add_open = false;
+                                cx.notify();
+                                window.dispatch_action(action, cx);
+                            }
+                            None => this.state.update(cx, |s, cx| s.toggle_browser(cx)),
+                        }
+                    }
+                }
+                _ => {}
+            }),
             cx.subscribe_in(&filter, window, |_, _, ev: &InputEvent, _, cx| {
                 if matches!(ev, InputEvent::Change) {
                     cx.notify();
@@ -145,6 +170,8 @@ impl Composer {
             picker_was_open: false,
             dismissed_at: None,
             add_open: false,
+            add_split: 0,
+            add_filter,
             menu_focus: cx.focus_handle(),
             ac_selected: 0,
             ac_closed_for: None,
@@ -206,6 +233,38 @@ impl Composer {
             let at = gpui::component::RopeExt::offset_to_position(i.text(), caret);
             i.set_cursor_position(at, window, cx);
         });
+    }
+
+    /// What the "+" menu needs from the composer: closing it, a press
+    /// outside, the split menu's chosen row, the search menu's field.
+    fn add_hooks(&self, cx: &mut Context<Self>) -> super::add_menu::Hooks {
+        let me = cx.entity().downgrade();
+        let (close, out, split) = (me.clone(), me.clone(), me);
+        super::add_menu::Hooks {
+            close: std::rc::Rc::new(move |cx| {
+                let _ = close.update(cx, |c, cx| {
+                    c.add_open = false;
+                    cx.notify();
+                });
+            }),
+            on_out: std::rc::Rc::new(move |pos, cx| {
+                let _ = out.update(cx, |c, cx| {
+                    c.dismissed_at = Some(pos);
+                    c.add_open = false;
+                    cx.notify();
+                });
+            }),
+            split_at: self.add_split,
+            on_split: std::rc::Rc::new(move |i, cx| {
+                let _ = split.update(cx, |c, cx| {
+                    if c.add_split != i {
+                        c.add_split = i;
+                        cx.notify();
+                    }
+                });
+            }),
+            filter: self.add_filter.clone(),
+        }
     }
 
     fn text(&self, cx: &gpui::App) -> String {
@@ -453,28 +512,15 @@ impl Render for Composer {
                 dismiss_modes(pos, false, cx)
             })
         });
-        let me = cx.entity().downgrade();
-        let add_menu = self.add_open.then(|| {
-            let (close, out) = (me.clone(), me.clone());
-            super::add_menu::menu(
-                &t,
-                &state,
-                cx,
-                move |cx| {
-                    let _ = close.update(cx, |c, cx| {
-                        c.add_open = false;
-                        cx.notify();
-                    });
-                },
-                move |pos, cx| {
-                    let _ = out.update(cx, |c, cx| {
-                        c.dismissed_at = Some(pos);
-                        c.add_open = false;
-                        cx.notify();
-                    });
-                },
-            )
-        });
+        // The "+": a menu above it in the theme's style, or the tray inside
+        // the box (`add_menu`).
+        let add_hooks = self.add_hooks(cx);
+        let add_menu = self
+            .add_open
+            .then(|| super::add_menu::menu(&t, &state, cx, add_hooks.clone()))
+            .flatten();
+        let add_tray = (self.add_open && t.add_menu == crate::theme::AddMenu::Tray)
+            .then(|| super::add_menu::tray(&t, &state, cx, &add_hooks));
         let query = self.filter.read(cx).value().to_string();
         let search = div()
             .m(px(4.))
@@ -848,6 +894,7 @@ impl Render for Composer {
                                 this.state
                                     .update(cx, |s, cx| s.add_attachment_paths(paths, cx));
                             }))
+                            .children(add_tray)
                             .children(pending)
                             .child(
                                 // The text starts where the + under it starts
@@ -887,11 +934,22 @@ impl Render for Composer {
                                                     "Add files, connectors and more",
                                                 )
                                                 .large()
-                                                .on_click(cx.listener(|this, ev, _, cx| {
+                                                .on_click(cx.listener(|this, ev, window, cx| {
                                                     if this.just_dismissed(ev) {
                                                         return;
                                                     }
                                                     this.add_open = !this.add_open;
+                                                    this.add_split = 0;
+                                                    // The search menu opens on an empty field, typed into.
+                                                    if this.add_open
+                                                        && cx.theme().add_menu
+                                                            == crate::theme::AddMenu::Search
+                                                    {
+                                                        this.add_filter.update(cx, |f, cx| {
+                                                            f.set_value("", window, cx);
+                                                            f.focus(window, cx);
+                                                        });
+                                                    }
                                                     cx.notify();
                                                 })),
                                             )

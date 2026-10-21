@@ -1015,6 +1015,11 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &ThemeInk, _, cx| this.pick_look(Look::Ink, cx)))
             .on_action(cx.listener(|this, _: &ThemeSlate, _, cx| this.pick_look(Look::Slate, cx)))
             .on_action(cx.listener(|this, _: &ThemePlum, _, cx| this.pick_look(Look::Plum, cx)))
+            .on_action(cx.listener(|this, _: &ThemeLayers, _, cx| this.pick_look(Look::Layers, cx)))
+            .on_action(cx.listener(|this, _: &ThemeTray, _, cx| this.pick_look(Look::Tray, cx)))
+            .on_action(cx.listener(|this, _: &ThemeStudio, _, cx| this.pick_look(Look::Studio, cx)))
+            .on_action(cx.listener(|this, _: &ThemeTiles, _, cx| this.pick_look(Look::Tiles, cx)))
+            .on_action(cx.listener(|this, _: &ThemeCommand, _, cx| this.pick_look(Look::Command, cx)))
             .on_action(
                 cx.listener(|this, _: &FocusComposer, window, cx| this.focus_composer(window, cx)),
             )

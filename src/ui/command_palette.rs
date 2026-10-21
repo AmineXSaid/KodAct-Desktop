@@ -282,6 +282,11 @@ impl CommandPalette {
                 crate::theme::Look::Ink => Box::new(ThemeInk),
                 crate::theme::Look::Slate => Box::new(ThemeSlate),
                 crate::theme::Look::Plum => Box::new(ThemePlum),
+                crate::theme::Look::Layers => Box::new(ThemeLayers),
+                crate::theme::Look::Tray => Box::new(ThemeTray),
+                crate::theme::Look::Studio => Box::new(ThemeStudio),
+                crate::theme::Look::Tiles => Box::new(ThemeTiles),
+                crate::theme::Look::Command => Box::new(ThemeCommand),
             };
             out.push(act(
                 &format!("Theme: {} · {}", look.name(), look.blurb()),

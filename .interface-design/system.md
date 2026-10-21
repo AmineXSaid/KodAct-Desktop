@@ -86,6 +86,11 @@ Picked in Settings > General > Theme and kept in `window.json`. Each is a whole 
 | Ink (Greys and Geist, nothing else) | `#e2e2df` / `#f1f1ef` / `#1e1e1e` | `#121212` / `#1b1b1a` / `#f0f0ee` |
 | Slate (Cool grey, Plex, compact) | `#d8dde3` / `#edf0f3` / `#3b5b8c` | `#111418` / `#181c21` / `#9db7e0` |
 | Plum (Heather, an editorial serif) | `#e5d9e0` / `#f2ebef` / `#7a3e65` | `#171217` / `#1f1a1f` / `#d3a3c6` |
+| Layers (Raised cards, a grouped + menu) | `#e3d7cd` / `#f0e9e5` / `#3d4f8f` | `#171513` / `#1e1c1a` / `#a9b5e8` |
+| Tray (Pills, the + as a tray in the box) | `#e3d7cd` / `#f0e9e5` / `#2e6077` | `#171513` / `#1e1c1a` / `#93c2d6` |
+| Studio (Cool greys, a split + menu) | `#dcdde3` / `#eeeff3` / `#4a4fa0` | `#131417` / `#1a1b1f` / `#b3b6f0` |
+| Tiles (Round and roomy, + as tiles) | `#e3d7cd` / `#f0e9e5` / `#3f6b4f` | `#171513` / `#1e1c1a` / `#9fcfae` |
+| Command (Violet, a + you type to filter) | `#e3d7cd` / `#f0e9e5` / `#6a4fa3` | `#171513` / `#1e1c1a` / `#c2adf0` |
 
 | Theme | Faces (UI / display / code / replies) | Corners button · card · field · composer · pressed | Row · title bar · chat | Depth | Selected row |
 |---|---|---|---|---|---|
@@ -95,6 +100,11 @@ Picked in Settings > General > Theme and kept in `window.json`. Each is a whole 
 | Ink | Geist / Geist / Geist Mono / Geist | 6 · 8 · 8 · 12 · 8 | 30 · 36 · 14 | Flat | Wash |
 | Slate | IBM Plex Sans / IBM Plex Sans / IBM Plex Mono / IBM Plex Sans | 3 · 4 · 3 · 6 · 4 | 26 · 32 · 13 | Flat | Tint |
 | Plum | Instrument Sans / Instrument Serif / JetBrains Mono / Instrument Sans | 12 · 16 · 14 · 22 · pill | 32 · 38 · 15 | Lift | Soft |
+| Layers | Hanken Grotesk / Archivo / JetBrains Mono / Hanken Grotesk | 8 · 14 · 10 · 18 · pill | 32 · 40 · 15 | Lift | Card |
+| Tray | Hanken Grotesk / Archivo / JetBrains Mono / Hanken Grotesk | 9999 · 12 · 10 · 20 · pill | 32 · 38 · 15 | Lift | Card |
+| Studio | Hanken Grotesk / Archivo / JetBrains Mono / Hanken Grotesk | 8 · 10 · 8 · 18 · 8 | 30 · 36 · 14 | Lift | Soft |
+| Tiles | Hanken Grotesk / Archivo / JetBrains Mono / Hanken Grotesk | 12 · 18 · 12 · 22 · 12 | 34 · 40 · 15 | Lift | Wash |
+| Command | Hanken Grotesk / Archivo / JetBrains Mono / Hanken Grotesk | 8 · 10 · 9 · 16 · 10 | 30 · 36 · 14 | Grain | Wash |
 
 ### Terminal
 The dock's 16 colours, on `stage` (`palette_check.rs` holds them to AA).
