@@ -13,6 +13,14 @@ out="${1:-$here/target/installer}"
 target=x86_64-pc-windows-gnu
 version="$(grep -m1 '^version' "$here/Cargo.toml" | cut -d'"' -f2)"
 
+# The app speaks the steering protocol (a message sent mid-turn queued with
+# priority "next", `cancel_queued`): ForgeCLI's forge-gpui-steering branch.
+# A checkout without it would build an installer whose mid-turn messages fail.
+if ! grep -q '"cancel_queued"' "$cli/crates/forge-cli/src/host.rs" 2>/dev/null; then
+  echo "error: $cli has no steering protocol; check out ForgeCLI's forge-gpui-steering branch" >&2
+  exit 1
+fi
+
 (cd "$cli" && cargo build --release --target "$target" -p forge-cli)
 # The ForgeCLI this app puts on remotes (WSL, SSH hosts, containers): static Linux.
 (cd "$cli" && CC_x86_64_unknown_linux_musl=musl-gcc cargo build --release --target x86_64-unknown-linux-musl -p forge-cli)

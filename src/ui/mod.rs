@@ -34,6 +34,7 @@ pub mod editor_kit;
 pub mod env_editor;
 pub mod file_card;
 pub mod add_menu;
+pub mod compose_style;
 pub mod select;
 pub mod file_icon;
 pub mod file_icon_map;

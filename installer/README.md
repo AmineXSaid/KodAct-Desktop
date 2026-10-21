@@ -18,4 +18,6 @@ removes everything, including the PATH entry it added. An entry that was
 already on PATH stays.
 
 Needs `rustup target add x86_64-pc-windows-gnu`, `gcc-mingw-w64-x86-64` and
-`nsis`. `FORGECLI_DIR` points at a ForgeCLI checkout (default `../forgecli`).
+`nsis`. `FORGECLI_DIR` points at a ForgeCLI checkout (default `../forgecli`) on its
+`forge-gpui-steering` branch, which has the mid-turn steering protocol the app
+uses; the script stops on a checkout without it.

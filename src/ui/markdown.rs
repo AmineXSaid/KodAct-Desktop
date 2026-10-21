@@ -424,40 +424,40 @@ fn runs_in(
     linked(id, spans, text, runs, t)
 }
 
-/// Plain text (your message) that can be selected to copy part of it, its
-/// mentions bold: a skill in the skills' colour, a command or file in the
-/// accent, as they were in the box.
+/// Your message, selectable to copy part of it, styled as it was in the
+/// box (`compose_style`): its Markdown, and its mentions bold, a skill in the
+/// skills' colour, a command or file in the accent.
 pub fn selectable_plain(
     key: SharedString,
     text: &SharedString,
     marks: &[(std::ops::Range<usize>, super::autocomplete::Mark)],
     t: &Theme,
 ) -> AnyElement {
-    let run = |len: usize, mark: Option<super::autocomplete::Mark>| {
+    let run = |len: usize, h: Option<gpui::HighlightStyle>| {
+        let h = h.unwrap_or_default();
         let mut font = gpui::font(t.font_sans.clone());
-        if mark.is_some() {
-            font.weight = FontWeight::SEMIBOLD;
+        if let Some(w) = h.font_weight {
+            font.weight = w;
+        }
+        if let Some(st) = h.font_style {
+            font.style = st;
         }
         TextRun {
             len,
             font,
-            color: match mark {
-                Some(super::autocomplete::Mark::Skill) => t.extra.skill,
-                Some(_) => t.colors.primary,
-                None => t.colors.text,
-            },
-            background_color: None,
-            underline: None,
-            strikethrough: None,
+            color: h.color.unwrap_or(t.colors.text),
+            background_color: h.background_color,
+            underline: h.underline,
+            strikethrough: h.strikethrough,
         }
     };
     let mut runs = vec![];
     let mut at = 0;
-    for (r, mark) in marks {
+    for (r, h) in super::compose_style::styles(text, marks, t) {
         if r.start > at {
             runs.push(run(r.start - at, None));
         }
-        runs.push(run(r.len(), Some(*mark)));
+        runs.push(run(r.len(), Some(h)));
         at = r.end;
     }
     if at < text.len() || runs.is_empty() {

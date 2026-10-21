@@ -537,12 +537,10 @@ fn user(
                     .rounded(t.radius.card)
                     .text_size(t.size.chat_text)
                     .line_height(relative(t.size.line_height_chat))
-                    .child(super::markdown::selectable_plain(
-                        SharedString::from(format!("user-text-{key}")),
-                        text,
-                        &cx.marks,
-                        t,
-                    )),
+                    .flex()
+                    .flex_col()
+                    .gap(t.space.sm)
+                    .children(user_parts(text, &key, cx, t)),
             )
         })
         .child(actions)
@@ -557,6 +555,65 @@ fn user(
             ))
         })
         .into_any_element()
+}
+
+/// Your message in parts: what you wrote, styled as it was in the box, and
+/// each fenced block (code or a log you pasted) as a code block of its own,
+/// with its language's colours and a copy button.
+fn user_parts(text: &SharedString, key: &str, cx: &ItemContext, t: &Theme) -> Vec<AnyElement> {
+    let mut out = vec![];
+    let plain = |r: std::ops::Range<usize>, out: &mut Vec<AnyElement>| {
+        let body = text[r.clone()].trim_matches('\n');
+        if body.trim().is_empty() {
+            return;
+        }
+        let from = r.start + text[r.clone()].find(body).unwrap_or(0);
+        let marks: Vec<_> = cx
+            .marks
+            .iter()
+            .filter(|(m, _)| m.start >= from && m.end <= from + body.len())
+            .map(|(m, k)| (m.start - from..m.end - from, *k))
+            .collect();
+        out.push(markdown::selectable_plain(
+            SharedString::from(format!("user-text-{key}-{}", out.len())),
+            &SharedString::from(body.to_string()),
+            &marks,
+            t,
+        ));
+    };
+    let (mut at, mut open, mut pos) = (0, None::<usize>, 0);
+    for line in text.split_inclusive('\n') {
+        if line.trim_start().starts_with("```") {
+            match open {
+                None => {
+                    plain(at..pos, &mut out);
+                    open = Some(pos);
+                }
+                Some(start) => {
+                    let end = pos + line.len();
+                    out.push(markdown::render(
+                        &text[start..end],
+                        t,
+                        &CopyContext {
+                            state: cx.state.clone(),
+                            key: format!("{}-{}-u{}", cx.chat, cx.index, out.len()),
+                            copied: cx.copied.clone(),
+                            scale: cx.scale,
+                            sources: cx.sources.clone(),
+                            zooms: cx.zooms.clone(),
+                            streaming: false,
+                        },
+                    ));
+                    open = None;
+                    at = end;
+                }
+            }
+        }
+        pos += line.len();
+    }
+    // An unclosed fence stays text.
+    plain(open.unwrap_or(at)..text.len(), &mut out);
+    out
 }
 
 /// The head of a turn: Forge's logo and name. The logo stays still: the

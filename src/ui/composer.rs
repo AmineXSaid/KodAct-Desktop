@@ -5,7 +5,7 @@
 //! Shift+Enter adds a line.
 
 use gpui::component::input::{
-    InlineToken, InlineTokenContext, Input, InputEvent, InputState, Textarea, TextareaState,
+    Editor, EditorState, Input, InputEvent, InputState, TextDecoration, TextDecorationCollection,
 };
 use gpui::{
     div, prelude::*, px, relative, Context, Entity, IntoElement, Render, SharedString,
@@ -32,7 +32,11 @@ fn placeholder(in_folder: bool, asking: bool, busy: bool) -> &'static str {
 
 pub struct Composer {
     state: Entity<AppState>,
-    input: Entity<TextareaState>,
+    input: Entity<EditorState>,
+    /// The Markdown and mentions styled in the box (`compose_style`).
+    styling: TextDecorationCollection,
+    /// The tallest the box grows, in lines.
+    max_rows: usize,
     /// The model window's search box, and its row under the keyboard.
     filter: Entity<InputState>,
     active: Option<String>,
@@ -73,11 +77,18 @@ impl Composer {
             .max(2.) as usize;
         let in_folder = state.read(cx).in_folder();
         let input = cx.new(|cx| {
-            TextareaState::new(window, cx)
-                .auto_grow(1, max_rows)
+            // An editor, not a plain textarea: only an editor styles ranges
+            // of its text, which Markdown as you type needs. No line numbers,
+            // no brackets closed for you, wrapped like prose.
+            EditorState::new(window, cx)
+                .line_number(false)
+                .folding(false)
+                .auto_close(false)
+                .soft_wrap(true)
                 .placeholder(placeholder(in_folder, false, false))
                 .submit_on_enter(true)
         });
+        let styling = input.update(cx, |i, cx| i.create_decorations_collection(vec![], cx));
         let filter = cx.new(|cx| InputState::new(window, cx).placeholder("Search models…"));
         let add_filter = cx.new(|cx| InputState::new(window, cx).placeholder("Add or find a tool…"));
         let subs = vec![
@@ -152,7 +163,7 @@ impl Composer {
                     InputEvent::PressEnter { shift: false, .. } => this.submit(window, cx),
                     InputEvent::Change => {
                         this.ac_selected = 0;
-                        this.tokenize(window, cx);
+                        this.restyle(cx);
                         if super::autocomplete::trigger(&this.text(cx)).is_some() {
                             this.state.update(cx, |s, cx| s.ensure_completions(cx));
                         }
@@ -170,6 +181,8 @@ impl Composer {
             picker_was_open: false,
             dismissed_at: None,
             add_open: false,
+            styling,
+            max_rows,
             add_split: 0,
             add_filter,
             menu_focus: cx.focus_handle(),
@@ -199,40 +212,91 @@ impl Composer {
             let end = gpui::component::RopeExt::offset_to_position(i.text(), text.len());
             i.set_cursor_position(end, window, cx);
         });
-        self.tokenize(window, cx);
+        self.restyle(cx);
         cx.notify();
     }
 
-    /// A finished `/command` leading the message, or `@path` naming a
-    /// project file, becomes one unit in the box: bold, a skill in its own
-    /// colour (`mention_token`). Finished means a space follows it, so a
-    /// word being typed stays text. The message sent is the same text.
-    fn tokenize(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let (text, taken) = {
-            let i = self.input.read(cx);
-            let taken: Vec<std::ops::Range<usize>> =
-                i.tokens().iter().map(|t| t.range()).collect();
-            (i.value().to_string(), taken)
-        };
-        let found = mentions(&text, self.state.read(cx));
-        let fresh: Vec<_> = found
+    /// Style the box's Markdown and mentions as they stand now: a finished
+    /// `/command` leading the message or `@path` naming a project file reads
+    /// as it will once sent (a skill in its own colour), and **bold**,
+    /// *italic*, `code`, headings, quotes, lists and links read as such.
+    fn restyle(&mut self, cx: &mut Context<Self>) {
+        let text = self.input.read(cx).value().to_string();
+        let marks = super::autocomplete::marks(&text, self.state.read(cx), false);
+        let t = cx.theme().clone();
+        let decorations = super::compose_style::styles(&text, &marks, &t)
             .into_iter()
-            .filter(|(r, _)| !taken.iter().any(|t| t.start < r.end && r.start < t.end))
+            .map(|(r, style)| TextDecoration::new(r, style))
             .collect();
-        if fresh.is_empty() {
-            return;
+        self.styling.set(decorations, cx);
+    }
+
+    /// Ctrl+B, Ctrl+I, Ctrl+E: the selection made bold, italic or code (or
+    /// made plain again). True when it took the key.
+    fn format_key(&mut self, ev: &gpui::KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let k = &ev.keystroke;
+        if !k.modifiers.secondary() || k.modifiers.shift || k.modifiers.alt {
+            return false;
         }
+        let marker = match k.key.as_str() {
+            "i" => "*",
+            "e" => "`",
+            _ => return false,
+        };
+        // A key that reaches the composer is for its box, unless the model
+        // menu's search has it.
+        if self.state.read(cx).picker_open {
+            return false;
+        }
+        self.format(marker, window, cx);
+        true
+    }
+
+    /// Wrap the selection in `marker`, or unwrap it, as one undoable edit.
+    fn format(&mut self, marker: &str, window: &mut Window, cx: &mut Context<Self>) {
         self.input.update(cx, |i, cx| {
-            // Replacing a range leaves the caret at its end, before the space
-            // just typed; the text is unchanged, so put the caret back.
-            let caret = i.cursor();
-            // From the end, so the earlier ranges still hold.
-            for (range, token) in fresh.into_iter().rev() {
-                let _ = i.replace_range_with_token(range, token, window, cx);
-            }
-            let at = gpui::component::RopeExt::offset_to_position(i.text(), caret);
-            i.set_cursor_position(at, window, cx);
+            let r = i.selected_range();
+            let value = i.value();
+            let (_, range) = super::compose_style::toggle(&value, r.clone(), marker);
+            let inner = value[r.clone()].to_string();
+            // Unwrapping takes the markers too: the replaced span is wider.
+            let n = marker.len();
+            let (span, with) = if range.start < r.start {
+                (r.start - n..r.end + n, inner)
+            } else {
+                (r.clone(), format!("{marker}{inner}{marker}"))
+            };
+            i.set_selected_range(span, cx);
+            i.replace(with, window, cx);
+            i.set_selected_range(range, cx);
         });
+        self.restyle(cx);
+    }
+
+    /// Pasted code or logs go in fenced, with their language, the way an
+    /// issue tracker's description takes them. True when it took the paste.
+    fn paste_code(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let Some(text) = cx.read_from_clipboard().and_then(|c| c.text()) else {
+            return false;
+        };
+        let Some(block) = super::compose_style::code_block(&text) else {
+            return false;
+        };
+        self.input.update(cx, |i, cx| {
+            let value = i.value();
+            let r = i.selected_range();
+            let before = &value[..r.start];
+            // Inside a fence already: the text goes in as it is.
+            if before.lines().filter(|l| l.trim_start().starts_with("```")).count() % 2 == 1 {
+                return false;
+            }
+            let lead = if before.is_empty() || before.ends_with('\n') { "" } else { "\n" };
+            let tail = if value[r.end..].starts_with('\n') { "" } else { "\n" };
+            i.replace(format!("{lead}{block}{tail}"), window, cx);
+            true
+        })
+        .then(|| self.restyle(cx))
+        .is_some()
     }
 
     /// What the "+" menu needs from the composer: closing it, a press
@@ -477,6 +541,34 @@ impl Composer {
 
 impl Render for Composer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // The box grows with what you write, up to `max_rows` lines, then
+        // scrolls. An editor takes the height it is given, so count the
+        // lines as the text wraps at the box's width.
+        let box_height = {
+            let t = cx.theme().clone();
+            let input = self.input.read(cx);
+            let width = input.input_bounds().size.width;
+            let text = input.value();
+            let rows = if width > px(40.) && !text.is_empty() {
+                let run = gpui::TextRun {
+                    len: text.len(),
+                    font: gpui::font(t.font_sans.clone()),
+                    color: t.colors.text,
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                };
+                window
+                    .text_system()
+                    .shape_text(text.clone(), t.text.body, &[run], Some(width), None)
+                    .map(|lines| lines.iter().map(|l| l.wrap_boundaries().len() + 1).sum::<usize>())
+                    .unwrap_or(1)
+            } else {
+                text.split('\n').count()
+            };
+            // The editor's own inset above and below its lines.
+            t.text.body * 1.5 * rows.clamp(1, self.max_rows) as f32 + t.space.sm
+        };
         let t = cx.theme().clone();
         let state = self.state.clone();
         let empty = self.text(cx).trim().is_empty();
@@ -843,14 +935,23 @@ impl Render for Composer {
             )
             // The text box's own Paste: an image or files are attached instead.
             .capture_action(
-                cx.listener(|this, _: &gpui::component::input::Paste, _, cx| {
-                    if this.paste_files(cx) {
+                cx.listener(|this, _: &gpui::component::input::Paste, window, cx| {
+                    if this.paste_files(cx) || this.paste_code(window, cx) {
                         cx.stop_propagation();
                     }
                 }),
             )
+            // Ctrl+B is also the sidebar's: with text selected in the box it
+            // makes it bold instead.
+            .capture_action(cx.listener(|this, _: &super::ToggleSidebar, window, cx| {
+                let selected = !this.input.read(cx).selected_range().is_empty();
+                if selected && gpui::Focusable::focus_handle(this.input.read(cx), cx).is_focused(window) {
+                    this.format("**", window, cx);
+                    cx.stop_propagation();
+                }
+            }))
             .capture_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, window, cx| {
-                if this.completion_key(ev, window, cx) {
+                if this.completion_key(ev, window, cx) || this.format_key(ev, window, cx) {
                     return cx.stop_propagation();
                 }
                 this.menu_key(ev, window, cx)
@@ -906,13 +1007,12 @@ impl Render for Composer {
                                     .text_size(t.text.body)
                                     .line_height(relative(1.5))
                                     .child(
-                                        Textarea::new(&self.input)
+                                        Editor::new(&self.input)
                                             .appearance(false)
+                                            .font_family(t.font_sans.clone())
                                             .text_size(t.text.body)
-                                            .token({
-                                                let t = t.clone();
-                                                move |token, _, _| mention_token(&t, token)
-                                            }),
+                                            .line_height(relative(1.5))
+                                            .h(box_height),
                                     ),
                             )
                             .child(
@@ -982,37 +1082,3 @@ impl Render for Composer {
     }
 }
 
-/// The finished mentions in `text`, by byte range: a `/name` ForgeCLI runs,
-/// leading the message, and `@path` naming one of the project's files or
-/// folders. Each token's id says its kind (`skill:`, `command:`, `file:`).
-fn mentions(text: &str, s: &AppState) -> Vec<(std::ops::Range<usize>, InlineToken)> {
-    use super::autocomplete::Mark;
-    super::autocomplete::marks(text, s, false)
-        .into_iter()
-        .map(|(r, mark)| {
-            let word = &text[r.clone()];
-            let id = match mark {
-                Mark::Skill => format!("skill:{}", &word[1..]),
-                Mark::Command => format!("command:{}", &word[1..]),
-                Mark::File => format!("file:{}", &word[1..]),
-            };
-            (r, InlineToken::new(id, word))
-        })
-        .collect()
-}
-
-/// How a mention shows in the box: its text, bold; a skill in the skills'
-/// colour, a command or a file in the accent.
-fn mention_token(t: &crate::theme::Theme, token: &InlineTokenContext) -> gpui::Div {
-    let skill = token.token().id().starts_with("skill:");
-    div()
-        .flex()
-        .items_center()
-        .h(token.line_height())
-        .font_weight(gpui::FontWeight::SEMIBOLD)
-        .text_color(if skill { t.extra.skill } else { t.colors.primary })
-        .when(token.is_selected(), |d| {
-            d.bg(t.colors.primary_tint).rounded(t.radius.small)
-        })
-        .child(token.token().label().clone())
-}
