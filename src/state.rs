@@ -399,9 +399,9 @@ pub fn is_agent_tool(name: &str) -> bool {
 pub struct WebPage {
     /// The latest picture of the page.
     pub frame: Option<std::sync::Arc<gpui::RenderImage>>,
-    /// The area that picture shows, in CSS pixels from the page's top left
-    /// (0 when the browser didn't say).
-    pub frame_area: (f32, f32),
+    /// What that picture shows: its area and the page's scroll, in CSS
+    /// pixels (0 when the browser didn't say).
+    pub frame_info: crate::web_view::FrameInfo,
     pub url: String,
     pub title: String,
     pub loading: bool,
@@ -440,6 +440,31 @@ impl LiveDesign {
             .file_name()
             .map_or(String::new(), |n| n.to_string_lossy().into_owned())
     }
+}
+
+/// A comment on part of a design page (the design bar's comment tool).
+#[derive(Clone, Debug, PartialEq)]
+pub struct DesignComment {
+    /// Its number on its page, as its pin shows it.
+    pub n: usize,
+    pub chat: usize,
+    pub page: std::path::PathBuf,
+    pub part: crate::web_view::PagePart,
+    pub text: String,
+    pub sent: CommentSent,
+    /// Done with: its pin is hidden unless resolved ones are shown.
+    pub resolved: bool,
+}
+
+/// Where a design comment went.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CommentSent {
+    /// Kept as a note for yourself (no @Forge).
+    Note,
+    /// Waiting for Forge's reply to end, then sent.
+    Waiting,
+    /// Sent to Forge.
+    Sent,
 }
 
 /// What the side panel shows when no file is open in it.
@@ -1392,6 +1417,19 @@ pub struct AppState {
     /// The page on screen fills the window, as a presentation: no chat,
     /// no browser bars (Esc ends it).
     pub presenting: bool,
+    /// The comment tool is on: pointing at the page outlines a part, and a
+    /// click opens a comment on it.
+    pub design_select: bool,
+    /// The part under the pointer, and the one a comment is being written on.
+    pub design_hover: Option<crate::web_view::PagePart>,
+    pub design_pick: Option<crate::web_view::PagePart>,
+    /// The comments on the chats' design pages, oldest first.
+    pub design_comments: Vec<DesignComment>,
+    /// Show the comments' pins on the page (and the resolved ones too).
+    pub design_pins: bool,
+    pub design_resolved: bool,
+    /// Comments waiting for a chat's reply to end, by chat.
+    pub design_held: std::collections::HashMap<usize, Vec<String>>,
     /// Each chat's sub-agents, in the order they started (`agents_view.rs`).
     pub agents: std::collections::HashMap<usize, Vec<AgentRun>>,
     /// Agent cards opened to show their steps, by the agent's id.
@@ -1677,6 +1715,13 @@ impl AppState {
             web_zoom: 1.0,
             web_room: (0, 0),
             presenting: false,
+            design_select: false,
+            design_hover: None,
+            design_pick: None,
+            design_comments: Vec::new(),
+            design_pins: true,
+            design_resolved: false,
+            design_held: Default::default(),
             agents: std::collections::HashMap::new(),
             agents_open: std::collections::HashSet::new(),
             doc_fit: true,
@@ -4310,6 +4355,114 @@ impl AppState {
         cx.notify();
     }
 
+    /// Turn the comment tool on or off.
+    pub fn design_set_select(&mut self, on: bool, cx: &mut Context<Self>) {
+        self.design_select = on;
+        self.design_hover = None;
+        if !on {
+            self.design_pick = None;
+        }
+        cx.notify();
+    }
+
+    /// Close the comment being written, keeping the tool on.
+    pub fn design_cancel_pick(&mut self, cx: &mut Context<Self>) {
+        self.design_pick = None;
+        cx.notify();
+    }
+
+    /// The comments on the page on screen, in order.
+    pub fn design_comments_here(&self) -> Vec<&DesignComment> {
+        let Some(page) = self.design_on_screen() else {
+            return Vec::new();
+        };
+        self.design_comments.iter().filter(|c| c.page == page).collect()
+    }
+
+    /// Comment on the part picked: a note for yourself, or (`to_forge`) a
+    /// request Forge acts on; while Forge replies it waits for the reply to
+    /// end (`queue`), or reaches Forge at its next step.
+    pub fn design_comment(&mut self, text: String, to_forge: bool, queue: bool, cx: &mut Context<Self>) {
+        let text = text.trim().to_string();
+        let (Some(page), Some(chat)) = (self.design_on_screen(), self.current) else {
+            return;
+        };
+        let Some(part) = self.design_pick.take().filter(|_| !text.is_empty()) else {
+            return;
+        };
+        let name = page
+            .file_name()
+            .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+        let message = crate::design::live::comment_message(&name, &part, &text);
+        let sent = if !to_forge {
+            CommentSent::Note
+        } else if !self.replies.contains_key(&chat) {
+            self.send_in(chat, message, cx);
+            CommentSent::Sent
+        } else if queue {
+            self.design_held.entry(chat).or_default().push(message);
+            CommentSent::Waiting
+        } else {
+            self.queue_message(message, cx);
+            CommentSent::Sent
+        };
+        let n = self.design_comments.iter().filter(|c| c.page == page).count() + 1;
+        self.design_comments.push(DesignComment {
+            n,
+            chat,
+            page,
+            part,
+            text,
+            sent,
+            resolved: false,
+        });
+        cx.notify();
+    }
+
+    /// Mark a comment done, or open it again.
+    pub fn design_resolve(&mut self, page: &std::path::Path, n: usize, cx: &mut Context<Self>) {
+        if let Some(c) = self.design_comments.iter_mut().find(|c| c.page == page && c.n == n) {
+            c.resolved = !c.resolved;
+        }
+        cx.notify();
+    }
+
+    /// Scroll the page to a comment's part.
+    pub fn design_go_to(&mut self, page: &std::path::Path, n: usize, cx: &mut Context<Self>) {
+        let at = self
+            .design_comments
+            .iter()
+            .find(|c| c.page == page && c.n == n)
+            .map(|c| (c.part.x, c.part.y));
+        if let Some((x, y)) = at {
+            self.web_send(crate::web_view::Cmd::ScrollTo(x, y), cx);
+        }
+    }
+
+    /// Send `text` in chat `id`, which isn't replying, as if typed there.
+    fn send_in(&mut self, id: usize, text: String, cx: &mut Context<Self>) {
+        if self.replies.contains_key(&id) {
+            return;
+        }
+        self.headlines.remove(&id);
+        if let Some(c) = self.chat_mut(id) {
+            c.messages.push(Message::User {
+                text: text.clone().into(),
+                sent: SystemTime::now(),
+                attachments: Vec::new(),
+                turn: None,
+            });
+            c.version += 1;
+        }
+        self.touch(id, cx);
+        if demo_mode() {
+            self.play_script(id, text, cx);
+        } else {
+            self.send_to_forge(id, text, Vec::new(), cx);
+        }
+        cx.notify();
+    }
+
     /// The chat on screen's design, written while you weren't following:
     /// the badge offers to show it.
     pub fn design_ready(&self) -> Option<&LiveDesign> {
@@ -4512,8 +4665,8 @@ impl AppState {
     fn on_web(&mut self, u: crate::web_view::Update, cx: &mut Context<Self>) {
         use crate::web_view::Update;
         match u {
-            Update::Frame(img, area) => {
-                self.web_page.frame_area = area;
+            Update::Frame(img, info) => {
+                self.web_page.frame_info = info;
                 // The last picture leaves the GPU's atlas as the next arrives.
                 if let Some(old) = self.web_page.frame.replace(img) {
                     cx.drop_image(old, None);
@@ -4553,6 +4706,19 @@ impl AppState {
                     .unwrap_or_default();
                 self.show_toast(format!("Downloaded {name} to your Downloads folder"), cx);
                 self.web_page.last_download = Some(path);
+            }
+            Update::Part { part, pick } => {
+                if !self.design_select {
+                    return;
+                }
+                if pick {
+                    if part.is_some() {
+                        self.design_pick = part;
+                    }
+                } else {
+                    self.design_hover = part;
+                }
+                cx.notify();
             }
             Update::Printed(Ok(path)) => {
                 let name = path
@@ -6326,6 +6492,15 @@ impl AppState {
         }
         // What you queued goes back in the box, as Claude does on Esc.
         self.restore_queued(id, cx);
+        // Design comments waiting for the reply stay on the page as notes:
+        // Forge didn't get them.
+        if self.design_held.remove(&id).is_some() {
+            for c in self.design_comments.iter_mut().filter(|c| c.chat == id) {
+                if c.sent == CommentSent::Waiting {
+                    c.sent = CommentSent::Note;
+                }
+            }
+        }
         {
             if let Some(c) = self.chat_mut(id) {
                 for m in c.messages.iter_mut() {
@@ -6515,6 +6690,7 @@ impl AppState {
                             c.unread = true;
                         }
                     }
+                    s.send_design_held(id, cx);
                     cx.notify();
                 });
             }),
@@ -7995,7 +8171,22 @@ impl AppState {
                 c.unread = true;
             }
         }
+        self.send_design_held(chat, cx);
         cx.notify();
+    }
+
+    /// Comments on the design that waited for the chat's reply go once it
+    /// is over, as one message.
+    fn send_design_held(&mut self, chat: usize, cx: &mut Context<Self>) {
+        let Some(held) = self.design_held.remove(&chat).filter(|h| !h.is_empty()) else {
+            return;
+        };
+        for c in self.design_comments.iter_mut().filter(|c| c.chat == chat) {
+            if c.sent == CommentSent::Waiting {
+                c.sent = CommentSent::Sent;
+            }
+        }
+        self.send_in(chat, held.join("\n\n---\n\n"), cx);
     }
 
     // ------------------------------------------------------------ project memory

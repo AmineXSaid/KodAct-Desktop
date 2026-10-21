@@ -104,6 +104,50 @@ pub enum Cmd {
     /// Print the page on screen to a PDF at this path (backgrounds kept,
     /// the page's own paper size when it sets one).
     Pdf(PathBuf),
+    /// Which part of the page is at this point (CSS pixels in the panel):
+    /// asked now and then as the mouse moves, at once for a click (`pick`).
+    Inspect { x: f64, y: f64, pick: bool },
+    /// Scroll so this point of the page (CSS pixels from its top left) is
+    /// near the top.
+    ScrollTo(f64, f64),
+}
+
+/// A part of the page, as the comment tool picks it.
+#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
+pub struct PagePart {
+    pub tag: String,
+    /// The start of its text, on one line.
+    pub text: String,
+    /// A CSS selector that finds it again.
+    pub selector: String,
+    /// Where it is, in CSS pixels from the page's top left (scrolling
+    /// doesn't move it).
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+}
+
+impl PagePart {
+    /// What it is, in a few words: `h2 · Three things you can use…`.
+    pub fn label(&self) -> String {
+        let text: String = self.text.chars().take(48).collect();
+        if text.is_empty() {
+            self.tag.clone()
+        } else if text.len() < self.text.len() {
+            format!("{} · {}…", self.tag, text.trim_end())
+        } else {
+            format!("{} · {text}", self.tag)
+        }
+    }
+}
+
+/// What a picture of the page shows: the area it covers, in CSS pixels
+/// from the page's top left, and how far the page is scrolled.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct FrameInfo {
+    pub area: (f32, f32),
+    pub scroll: (f32, f32),
 }
 
 /// A mouse button, as the page gets it.
@@ -189,9 +233,11 @@ pub struct TabInfo {
 /// What the browser tells the panel.
 #[derive(Debug)]
 pub enum Update {
-    /// A new picture of the page, decoded for drawing, and the area it
-    /// shows in CSS pixels, from the page's top left.
-    Frame(Arc<RenderImage>, (f32, f32)),
+    /// A new picture of the page, decoded for drawing, and what it shows.
+    Frame(Arc<RenderImage>, FrameInfo),
+    /// The part of the page at a point (`Cmd::Inspect`), if there is one;
+    /// `pick` when it was a click.
+    Part { part: Option<PagePart>, pick: bool },
     /// The open tabs, and which one is on screen.
     Tabs(Vec<TabInfo>, String),
     /// The page's address and title.
@@ -797,6 +843,10 @@ fn devtools(
     let (mut cursor_req, mut copy_req) = (None::<u64>, None::<u64>);
     let mut cursor_asked = Instant::now();
     let mut cursor_at: Option<(f64, f64)> = None;
+    // The part of the page under the comment tool: asked as the pointer is.
+    let (mut part_req, mut pick_req) = (None::<u64>, None::<u64>);
+    let mut part_asked = Instant::now();
+    let mut part_at: Option<(f64, f64)> = None;
     let mut focus_checked = Instant::now();
     loop {
         // The agent's tools switched tabs: show the one they use.
@@ -1081,6 +1131,20 @@ fn devtools(
                         .map(|()| to);
                     say(Update::Printed(printed))?;
                 }
+                Cmd::Inspect { x, y, pick: false } => part_at = Some((x, y)),
+                Cmd::Inspect { x, y, pick: true } => {
+                    pick_req = Some(c.send(
+                        s,
+                        "Runtime.evaluate",
+                        json!({ "expression": part_js(x, y), "returnByValue": true }),
+                    )?);
+                }
+                Cmd::ScrollTo(x, y) => {
+                    let js = format!(
+                        "scrollTo({{ left: Math.max(0, {x} - 40), top: Math.max(0, {y} - 80), behavior: 'smooth' }})"
+                    );
+                    c.send(s, "Runtime.evaluate", json!({ "expression": js }))?;
+                }
                 Cmd::Zoom(zoom) => {
                     metrics.zoom = zoom.clamp(0.25, 2.0);
                     let (id, s) = (tab.target.clone(), tab.session.clone());
@@ -1098,6 +1162,17 @@ fn devtools(
                 Some(&tab.session),
                 "Runtime.evaluate",
                 json!({ "expression": cursor_js(x, y), "returnByValue": true }),
+            )?);
+        }
+        if let Some((x, y)) = part_at
+            .filter(|_| part_req.is_none() && part_asked.elapsed() > Duration::from_millis(60))
+        {
+            part_at = None;
+            part_asked = Instant::now();
+            part_req = Some(c.send(
+                Some(&tab.session),
+                "Runtime.evaluate",
+                json!({ "expression": part_js(x, y), "returnByValue": true }),
             )?);
         }
         // What the browser said.
@@ -1119,6 +1194,15 @@ fn devtools(
                 if let Some(v) = value.filter(|v| !v.is_empty()) {
                     say(Update::Copied(v))?;
                 }
+            } else if Some(id) == part_req || Some(id) == pick_req {
+                let pick = Some(id) == pick_req;
+                if pick {
+                    pick_req = None;
+                } else {
+                    part_req = None;
+                }
+                let part = value.and_then(|v| serde_json::from_str::<PagePart>(&v).ok());
+                say(Update::Part { part, pick })?;
             }
             continue;
         }
@@ -1186,11 +1270,12 @@ fn devtools(
                     // The area pictured, in CSS pixels: the page's size,
                     // or, after some loads, the whole window's (see `fit`).
                     let meta = &p["metadata"];
-                    let area = (
-                        meta["deviceWidth"].as_f64().unwrap_or(0.0) as f32,
-                        meta["deviceHeight"].as_f64().unwrap_or(0.0) as f32,
-                    );
-                    say(Update::Frame(img, area))?;
+                    let num = |k: &str| meta[k].as_f64().unwrap_or(0.0) as f32;
+                    let info = FrameInfo {
+                        area: (num("deviceWidth"), num("deviceHeight")),
+                        scroll: (num("scrollOffsetX"), num("scrollOffsetY")),
+                    };
+                    say(Update::Frame(img, info))?;
                 }
             }
             "Page.frameStartedLoading" if on_tab => say(Update::Loading(true))?,
@@ -1239,6 +1324,39 @@ fn devtools(
             _ => {}
         }
     }
+}
+
+/// The part of the page at (x, y), as JSON for `PagePart` (empty over the
+/// page itself): the innermost element there, a selector that finds it
+/// again (by id, else tag, two classes and place, up to six levels), the
+/// start of its text, and its box on the page.
+fn part_js(x: f64, y: f64) -> String {
+    format!(
+        r#"(() => {{
+const e = document.elementFromPoint({x}, {y});
+if (!e || e === document.body || e === document.documentElement) return '';
+const step = el => {{
+  if (el.id) return '#' + CSS.escape(el.id);
+  let s = el.tagName.toLowerCase();
+  for (const c of [...el.classList].slice(0, 2)) s += '.' + CSS.escape(c);
+  const p = el.parentElement;
+  if (p) {{
+    const same = [...p.children].filter(c => c.tagName === el.tagName);
+    if (same.length > 1) s += ':nth-of-type(' + (same.indexOf(el) + 1) + ')';
+  }}
+  return s;
+}};
+const path = [];
+for (let el = e; el && el !== document.body && el !== document.documentElement && path.length < 6; el = el.parentElement) {{
+  const s = step(el);
+  path.unshift(s);
+  if (s.startsWith('#')) break;
+}}
+const r = e.getBoundingClientRect();
+const text = (e.innerText || e.getAttribute('alt') || e.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+return JSON.stringify({{ tag: e.tagName.toLowerCase(), text, selector: path.join(' > '), x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height }});
+}})()"#
+    )
 }
 
 /// The text selected on the page, in a field or out of one.

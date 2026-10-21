@@ -154,6 +154,24 @@ pub fn page_key(url: &str) -> &str {
     url.split_once('#').map_or(url, |(page, _)| page)
 }
 
+/// A comment on part of a page, as the message Forge gets: the page, the
+/// part (its tag, the start of its text, a selector that finds it), what
+/// you said, and to change only that part.
+pub fn comment_message(page: &str, part: &crate::web_view::PagePart, comment: &str) -> String {
+    let what = if part.text.is_empty() {
+        format!("the <{}>", part.tag)
+    } else {
+        let text: String = part.text.chars().take(80).collect();
+        let more = if text.len() < part.text.len() { "…" } else { "" };
+        format!("the <{}> \"{}{more}\"", part.tag, text.trim_end())
+    };
+    format!(
+        "A comment on {page}, on {what} (`{}`):\n\n{}\n\nRevise that part of the page for it, and keep the rest as it is.",
+        part.selector,
+        comment.trim()
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -188,6 +206,27 @@ mod tests {
             partial_write(json),
             Some(("a.html".into(), "<p>x</p>".into()))
         );
+    }
+
+    #[test]
+    fn a_comment_names_its_part() {
+        let part = crate::web_view::PagePart {
+            tag: "h2".into(),
+            text: "Three things you can use the Monday after".into(),
+            selector: "main.deck > section.slide:nth-of-type(2) > h2".into(),
+            x: 0.,
+            y: 0.,
+            w: 1.,
+            h: 1.,
+        };
+        assert_eq!(
+            comment_message("deck.html", &part, " Shorter, please. "),
+            "A comment on deck.html, on the <h2> \"Three things you can use the Monday after\" (`main.deck > section.slide:nth-of-type(2) > h2`):\n\nShorter, please.\n\nRevise that part of the page for it, and keep the rest as it is."
+        );
+        assert_eq!(part.label(), "h2 · Three things you can use the Monday after");
+        let long = crate::web_view::PagePart { text: "x".repeat(100), ..part };
+        assert!(comment_message("d.html", &long, "c").contains(&format!("\"{}…\"", "x".repeat(80))));
+        assert!(long.label().ends_with('…'));
     }
 
     #[test]

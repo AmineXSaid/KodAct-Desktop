@@ -71,6 +71,10 @@ pub struct BrowserView {
     zoom: f64,
     /// The design bar's open menu.
     design_menu: Option<super::design_bar::Menu>,
+    /// The comment tool's box, over the part picked.
+    comment_box: Entity<super::design_comment::DesignCommentBox>,
+    /// A comment was open when the app last changed.
+    picked: bool,
     _subs: Vec<Subscription>,
 }
 
@@ -80,6 +84,13 @@ impl BrowserView {
             cx.new(|cx| InputState::new(window, cx).placeholder("Search or enter an address"));
         let subs = vec![
             cx.observe_in(&state, window, |this, state, window, cx| {
+                // A comment closed: the keyboard is the page's again, so
+                // Esc puts the comment tool down.
+                let picked = state.read(cx).design_pick.is_some();
+                if this.picked && !picked {
+                    window.focus(&this.focus, cx);
+                }
+                this.picked = picked;
                 // The address follows the page, unless you are typing in it.
                 let url = state.read(cx).web_page.url.clone();
                 if url != this.shown_url {
@@ -113,6 +124,8 @@ impl BrowserView {
                 },
             ),
         ];
+        let comment_box =
+            cx.new(|cx| super::design_comment::DesignCommentBox::new(state.clone(), window, cx));
         Self {
             state,
             address,
@@ -122,8 +135,17 @@ impl BrowserView {
             shown_url: String::new(),
             zoom: 1.0,
             design_menu: None,
+            comment_box,
+            picked: false,
             _subs: subs,
         }
+    }
+
+    /// The comment tool is on over a design page: the mouse picks parts
+    /// of the page instead of clicking them.
+    fn selecting(&self, cx: &gpui::App) -> bool {
+        let s = self.state.read(cx);
+        s.design_select && !s.presenting && s.design_on_screen().is_some()
     }
 
     /// The design bar's open menu.
@@ -165,13 +187,35 @@ impl BrowserView {
     }
 
     fn key(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        // Keys are the page's only while it has the keyboard itself, not a
+        // box over it (a comment being written).
+        if !self.focus.is_focused(window) {
+            return;
+        }
         let k = &ev.keystroke;
         let m = k.modifiers;
-        // Esc ends a presentation before the page gets it.
-        if k.key == "escape" && self.state.read(cx).presenting {
-            self.state.update(cx, |s, cx| s.set_presenting(false, cx));
-            cx.stop_propagation();
-            return;
+        // Esc ends a presentation, closes a comment, or puts the comment
+        // tool down, before the page gets it.
+        if k.key == "escape" {
+            let (presenting, picked) = {
+                let s = self.state.read(cx);
+                (s.presenting, s.design_pick.is_some())
+            };
+            if presenting {
+                self.state.update(cx, |s, cx| s.set_presenting(false, cx));
+                cx.stop_propagation();
+                return;
+            }
+            if picked {
+                self.state.update(cx, |s, cx| s.design_cancel_pick(cx));
+                cx.stop_propagation();
+                return;
+            }
+            if self.selecting(cx) {
+                self.state.update(cx, |s, cx| s.design_set_select(false, cx));
+                cx.stop_propagation();
+                return;
+            }
         }
         if m.secondary() {
             match k.key.as_str() {
@@ -269,19 +313,58 @@ impl Render for BrowserView {
         let secure = page.url.starts_with("https://");
         let (tabs, active) = (page.tabs.clone(), page.active.clone());
         let (frame, loading, error) = (page.frame.clone(), page.loading, page.error.clone());
-        let frame_area = page.frame_area;
+        let frame_info = page.frame_info;
         let zoom = s.web_zoom;
         self.zoom = zoom;
         let presenting = s.presenting;
-        // A page this chat designed gets the design bar.
+        // A page this chat designed gets the design bar, and its comments.
+        let here = s.design_comments_here();
         let design_bar = s.design_on_screen().filter(|_| !presenting).map(|page| {
             super::design_bar::Bar {
                 page,
                 pages: s.design_pages(),
                 zoom,
                 menu: self.design_menu,
+                select: s.design_select,
+                comments: here
+                    .iter()
+                    .map(|c| super::design_bar::Note {
+                        n: c.n,
+                        label: c.part.label(),
+                        text: c.text.clone(),
+                        sent: c.sent,
+                        resolved: c.resolved,
+                    })
+                    .collect(),
+                pins: s.design_pins,
+                resolved: s.design_resolved,
             }
         });
+        let selecting = s.design_select && design_bar.is_some();
+        // Where a part of the page is in the panel: its CSS box, less the
+        // page's scroll, times the zoom.
+        let scroll = page.frame_info.scroll;
+        let place = move |p: &crate::web_view::PagePart| {
+            let z = zoom as f32;
+            (
+                (p.x as f32 - scroll.0) * z,
+                (p.y as f32 - scroll.1) * z,
+                p.w as f32 * z,
+                p.h as f32 * z,
+            )
+        };
+        let hover_box = s
+            .design_hover
+            .as_ref()
+            .filter(|_| selecting && s.design_pick.is_none())
+            .map(|p| (place(p), p.tag.clone()));
+        let pick_box = s.design_pick.as_ref().filter(|_| selecting).map(&place);
+        let pins: Vec<_> = here
+            .iter()
+            .filter(|c| design_bar.is_some() && s.design_pins && (s.design_resolved || !c.resolved))
+            .map(|c| (c.n, c.sent, c.text.clone(), place(&c.part)))
+            .collect();
+        let room = self.page_bounds.get().size;
         let last_download = page.last_download.clone();
         let url = page.url.clone();
         let hover = t.colors.hover;
@@ -504,7 +587,7 @@ impl Render for BrowserView {
             // the mouse mapping (`to_page`) expects it: as large as the area
             // the browser says it shows, which may be more than the page.
             .children(frame.clone().map(|f| {
-                let (w, h) = match frame_area {
+                let (w, h) = match frame_info.area {
                     (w, h) if w > 0.0 && h > 0.0 => (w * zoom as f32, h * zoom as f32),
                     _ => {
                         let size = f.size(0);
@@ -550,23 +633,40 @@ impl Render for BrowserView {
                 .left_0()
                 .size_full(),
             )
-            .cursor(cursor_for(&page.cursor))
+            .cursor(if selecting {
+                CursorStyle::Crosshair
+            } else {
+                cursor_for(&page.cursor)
+            })
             // Down and up apart, so a drag selects text or moves a slider.
+            // With the comment tool, a click picks the part instead.
             .on_any_mouse_down(cx.listener(|this, ev: &MouseDownEvent, window, cx| {
                 window.focus(&this.focus, cx);
-                if let (Some((x, y)), Some(button)) = (this.to_page(ev.position), page_button(ev.button)) {
+                let Some((x, y)) = this.to_page(ev.position) else { return };
+                if this.selecting(cx) {
+                    if ev.button == MouseButton::Left {
+                        this.send(Cmd::Inspect { x, y, pick: true }, cx);
+                    }
+                } else if let Some(button) = page_button(ev.button) {
                     this.send(Cmd::Press { x, y, button, count: ev.click_count.max(1) as u32 }, cx);
                 }
             }))
             .capture_any_mouse_up(cx.listener(|this, ev: &MouseUpEvent, _, cx| {
+                if this.selecting(cx) {
+                    return;
+                }
                 if let (Some((x, y)), Some(button)) = (this.to_page(ev.position), page_button(ev.button)) {
                     this.send(Cmd::Release { x, y, button, count: ev.click_count.max(1) as u32 }, cx);
                 }
             }))
             .on_mouse_move(cx.listener(|this, ev: &MouseMoveEvent, _, cx| {
                 if let Some((x, y)) = this.to_page(ev.position) {
-                    let held = ev.pressed_button.and_then(page_button);
-                    this.send(Cmd::Move { x, y, held }, cx);
+                    if this.selecting(cx) {
+                        this.send(Cmd::Inspect { x, y, pick: false }, cx);
+                    } else {
+                        let held = ev.pressed_button.and_then(page_button);
+                        this.send(Cmd::Move { x, y, held }, cx);
+                    }
                 }
             }))
             .on_scroll_wheel(cx.listener(|this, ev: &ScrollWheelEvent, _, cx| {
@@ -650,6 +750,78 @@ impl Render for BrowserView {
                                 })
                             })),
                     )
+            }))
+            // The comment tool: the part under the pointer, the one picked,
+            // the comments' pins, and the box for the next one.
+            .children(hover_box.map(|((x, y, w, h), tag)| {
+                part_outline(&t, x, y, w, h, false).child(
+                    // At the right corner: a pin sits at the left one.
+                    div()
+                        .absolute()
+                        .top(px(-20.))
+                        .right(px(-2.))
+                        .px(t.space.xs)
+                        .rounded(t.radius.small)
+                        .bg(t.colors.primary)
+                        .text_color(t.colors.primary_fg)
+                        .text_size(t.text.caption)
+                        .child(tag),
+                )
+            }))
+            .children(pick_box.map(|(x, y, w, h)| part_outline(&t, x, y, w, h, true)))
+            .children(pins.into_iter().map(|(n, sent, text, (x, y, _, _))| {
+                div()
+                    .id(("design-pin", n))
+                    .absolute()
+                    .left(px(x - 10.))
+                    .top(px(y - 10.))
+                    .occlude()
+                    .child(super::design_bar::pin_mark(&t, n, sent).shadow(t.elevation_popover()))
+                    .tooltip(move |window, cx| {
+                        gpui::component::tooltip::Tooltip::new(text.clone()).build(window, cx)
+                    })
+            }))
+            .when(selecting && s.design_pick.is_none(), |d| {
+                d.child(
+                    div()
+                        .absolute()
+                        .top(t.space.md)
+                        .left_0()
+                        .right_0()
+                        .flex()
+                        .justify_center()
+                        .child(
+                            crate::theme::popover(&t)
+                                .px(t.space.md)
+                                .py(t.space.xs)
+                                .flex()
+                                .items_center()
+                                .gap(t.space.sm)
+                                .text_size(t.text.caption)
+                                .text_color(t.colors.text)
+                                .child(icon("icons/mouse-pointer-2.svg", t.size.icon_xs, t.colors.primary))
+                                .child("Point at any part and click to comment. Esc to stop."),
+                        ),
+                )
+            })
+            .children(pick_box.map(|(x, y, _, h)| {
+                // Under the part when there is room, else over it; inside the panel.
+                let (w_box, h_box, edge) = (300., 190., 8.);
+                let (room_w, room_h) = (f32::from(room.width), f32::from(room.height));
+                let left = x.min(room_w - w_box - edge).max(edge);
+                let below = y + h + edge;
+                let top = if below + h_box <= room_h {
+                    below
+                } else if y - h_box - edge >= edge {
+                    y - h_box - edge
+                } else {
+                    (room_h - h_box - edge).max(edge)
+                };
+                div()
+                    .absolute()
+                    .left(px(left))
+                    .top(px(top))
+                    .child(self.comment_box.clone())
             }))
             // The page's dialog (alert, confirm, prompt), answered here.
             .children(dialog)
@@ -824,6 +996,21 @@ impl Render for BrowserView {
             ))
             .into_any_element()
     }
+}
+
+/// A part of the page outlined: the one under the pointer, or (`picked`)
+/// the one a comment is on, a little filled.
+fn part_outline(t: &Theme, x: f32, y: f32, w: f32, h: f32, picked: bool) -> gpui::Div {
+    div()
+        .absolute()
+        .left(px(x - 2.))
+        .top(px(y - 2.))
+        .w(px(w + 4.))
+        .h(px(h + 4.))
+        .rounded(t.radius.small)
+        .border_2()
+        .border_color(t.colors.primary)
+        .when(picked, |d| d.bg(t.colors.primary_tint))
 }
 
 /// While presenting: back a screen, on a screen, and the way out, in a

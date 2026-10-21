@@ -942,6 +942,15 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &SavePagePdf, _, cx| {
                 this.state.update(cx, |s, cx| s.design_export_pdf(cx))
             }))
+            .on_action(cx.listener(|this, _: &CommentTool, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    if s.design_on_screen().is_some() {
+                        s.design_set_select(!s.design_select, cx)
+                    } else {
+                        s.show_toast("Show a page Forge designed to comment on it.", cx)
+                    }
+                })
+            }))
             .on_action(cx.listener(|this, _: &NewDesignPage, window, cx| {
                 this.state.update(cx, |s, cx| s.design_new_page(cx));
                 this.focus_composer(window, cx);
@@ -1070,6 +1079,10 @@ impl Render for Workspace {
                     // Esc closes what is open, the newest first, before it stops a reply.
                     if s.presenting {
                         s.set_presenting(false, cx);
+                    } else if s.design_pick.is_some() {
+                        s.design_cancel_pick(cx);
+                    } else if s.design_select {
+                        s.design_set_select(false, cx);
                     } else if s.map_open {
                         s.toggle_map(cx);
                     } else if s.shortcuts_open

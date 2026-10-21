@@ -631,6 +631,16 @@ impl CommandPalette {
         }
         if s.design_on_screen().is_some() {
             out.push(act("Ask for a new page", "icons/plus.svg", None, Box::new(NewDesignPage)));
+            out.push(act(
+                if s.design_select {
+                    "Put the comment tool down"
+                } else {
+                    "Comment on part of the page"
+                },
+                "icons/mouse-pointer-2.svg",
+                None,
+                Box::new(CommentTool),
+            ));
         }
         // The chat showing: what you can do with it.
         if let Some(c) = s.chat().filter(|c| !c.messages.is_empty()) {

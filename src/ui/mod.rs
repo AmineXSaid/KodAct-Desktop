@@ -15,6 +15,7 @@ pub mod command_palette;
 pub mod composer;
 pub mod confirm;
 pub mod design_bar;
+pub mod design_comment;
 pub mod context_menu;
 pub mod context_ring;
 pub mod diagnostics;
@@ -165,6 +166,7 @@ gpui::actions!(
         Present,
         SavePagePdf,
         NewDesignPage,
+        CommentTool,
         Quit,
     ]
 );

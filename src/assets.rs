@@ -18,6 +18,7 @@ icons!(
     "zoom-in",
     "zoom-out",
     "scan",
+    "mouse-pointer-2",
     "archive",
     "git-pull-request",
     "circle-dot",

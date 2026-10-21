@@ -140,14 +140,14 @@ become their HTML counterpart; the table says how.
 | | **Header** | | |
 | 1 | Sidebar toggle | The page's outline: its sections, a click scrolls to one | Canvas 3 |
 | 2 | Title, with its menu | The page's name and menu: rename, duplicate | Canvas 3 |
-| 3 | Comments on/off | Show or hide the comment pins on the page | Canvas 2 |
-| 4 | Comments menu | Open comments, or all of them | Canvas 2 |
+| 3 | Comments on/off | Show or hide the comment pins on the page (the count of open ones) | **Done** (Canvas 2) |
+| 4 | Comments menu | The page's comments, each with its part and whether it was sent, waits or is a note; a click scrolls to it; Resolve; Show resolved; Show pins | **Done** (Canvas 2) |
 | 5 | Share | Share menu: Save as PDF beside the page, Open in your browser | **Done** (Canvas 1) |
 | 6 | Collapse / expand | Present (the page fills the window), and the panel beside or below the chat | **Done** (Canvas 1) |
 | 7 | Close | The panel's close button | Already there |
 | | **Left toolbar** | | |
 | 8 | Pages menu: Page 1 ✓, the page's ⋯ menu, + New page | The chat's pages, ✓ on the one shown; New page… starts the request in the composer; Show in folder; Copy the file's path | **Done** (Canvas 1) |
-| 9 | Select tool | Point at any part of the page: it is outlined; a click opens a comment on it | Canvas 2 |
+| 9 | Select tool | The comment tool: point at any part of the page and it is outlined, with its tag; a click opens a comment on it; Esc puts it down | **Done** (Canvas 2) |
 | 10 | Insert menu | The markup tools below, drawn over the page and sent with a comment | Canvas 4 |
 | 11 | Hand | Drag the page to move around it (zoomed in) | Canvas 4 |
 | 12 | Text | A text label on the page | Canvas 4 |
@@ -167,15 +167,15 @@ become their HTML counterpart; the table says how.
 | 25 | Undo | The page's previous version | Canvas 3 |
 | 26 | Redo | Its next version again | Canvas 3 |
 | | **Comment box** | | |
-| 27 | What it's on ("Canvas") | The part chosen: its tag and text | Canvas 2 |
-| 28 | @Claude | @Forge: the comment is a request to Forge | Canvas 2 |
-| 29 | Queue for Claude | Queue for Forge: sent after the reply running now | Canvas 2 |
-| 30 | Send | Send | Canvas 2 |
-| 31 | "Claude is working. Your comment goes after that." | The same, for Forge | Canvas 2 |
+| 27 | What it's on ("Canvas") | The part chosen: its tag and the start of its text | **Done** (Canvas 2) |
+| 28 | @Claude | @Forge: on, the comment asks Forge to revise the part (sent with its selector); off, it is a note for you | **Done** (Canvas 2) |
+| 29 | Queue for Claude | Queue for Forge, while Forge replies: ticked, the comment waits for the reply to end; unticked, Forge reads it at its next step. A stopped reply leaves waiting comments as notes | **Done** (Canvas 2) |
+| 30 | Send | Send (or Enter) | **Done** (Canvas 2) |
+| 31 | "Claude is working. Your comment goes after that." | The same, for Forge (or "It reads your comment at its next step") | **Done** (Canvas 2) |
 | | **Tips** | | |
-| 32 | Use @ in a comment to mention someone | Shown in the comment box | Canvas 2 |
+| 32 | Use @ in a comment to mention someone | @Forge's tip: with it Forge revises the part, without it the comment is a note | **Done** (Canvas 2) |
 | 33 | Drag an artboard by its title to move it | Drag a page in the Pages menu to reorder it | Canvas 4 |
-| 34 | Comment on any part, and Claude can revise it | Shown the first time the design bar appears | Canvas 2 |
+| 34 | Comment on any part, and Claude can revise it | Said in the comment box; the tool's own tip says how (point, click, Esc) | **Done** (Canvas 2) |
 
 Zoom works the way a browser's does: at 50 % the page lays out twice as
 wide and shows at half size, so a desktop layout fits a narrow panel.

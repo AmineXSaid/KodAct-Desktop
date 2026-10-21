@@ -1,9 +1,11 @@
 //! The browser's bar when it shows a page this chat designed, with the
 //! controls of a design canvas (Claude's has the same): the page, whose
 //! menu lists the chat's pages, asks for a new one and says where the file
-//! is; then Present, the zoom (in, out, a desktop's width, 25 to 200 %) and
-//! Share (a PDF beside the page, its path, your own browser). Each menu
-//! hangs under its button, over the page.
+//! is; the comment tool (point at a part, click, say what should change)
+//! and the comments (their pins on the page, and a list); then Present,
+//! the zoom (in, out, a desktop's width, 25 to 200 %) and Share (a PDF
+//! beside the page, your own browser). Each menu hangs under its button,
+//! over the page.
 
 use std::path::{Path, PathBuf};
 
@@ -20,8 +22,18 @@ use crate::theme::{self, Theme};
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Menu {
     Pages,
+    Comments,
     Zoom,
     Share,
+}
+
+/// A comment, as the comments menu lists it.
+pub struct Note {
+    pub n: usize,
+    pub label: String,
+    pub text: String,
+    pub sent: crate::state::CommentSent,
+    pub resolved: bool,
 }
 
 /// What the bar shows.
@@ -32,6 +44,12 @@ pub struct Bar {
     pub pages: Vec<PathBuf>,
     pub zoom: f64,
     pub menu: Option<Menu>,
+    /// The comment tool is on.
+    pub select: bool,
+    /// The page's comments; whether their pins show, resolved ones too.
+    pub comments: Vec<Note>,
+    pub pins: bool,
+    pub resolved: bool,
 }
 
 /// What a menu row does to the app.
@@ -146,6 +164,30 @@ fn row(
         })
 }
 
+/// A comment's number in its pin's colours: Forge's comments in the
+/// accent, notes for you quieter.
+pub fn pin_mark(t: &Theme, n: usize, sent: crate::state::CommentSent) -> gpui::Div {
+    let note = sent == crate::state::CommentSent::Note;
+    div()
+        .flex_none()
+        .size(px(20.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded_full()
+        .border_1()
+        .border_color(t.colors.surface)
+        .bg(if note {
+            t.colors.text_muted
+        } else {
+            t.colors.primary
+        })
+        .text_color(t.colors.primary_fg)
+        .text_size(t.text.caption)
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .child(n.to_string())
+}
+
 /// A thin line between a menu's groups.
 fn gap(t: &Theme) -> impl IntoElement {
     div().my(t.space.xs).mx(t.space.sm).child(theme::rule(t))
@@ -197,6 +239,10 @@ pub fn render(
         pages,
         zoom,
         menu,
+        select,
+        comments,
+        pins,
+        resolved,
     } = bar;
     // Each menu row does its thing on the app, then the menu closes.
     let act = |f: Box<Act>| {
@@ -280,6 +326,122 @@ pub fn render(
                 s.show_toast("Copied the page's path", cx);
             }))),
         );
+
+    // The comments: their pins, resolved ones, then each, newest last.
+    let open_count = comments.iter().filter(|c| !c.resolved).count();
+    let mut comments_menu = sheet(t, 300.)
+        .child(
+            row(
+                t,
+                "comments-pins",
+                Some("icons/eye.svg"),
+                "Show pins on the page",
+                None,
+                pins,
+            )
+            .on_click(act(Box::new(|s, cx| {
+                s.design_pins = !s.design_pins;
+                cx.notify();
+            }))),
+        )
+        .child(
+            row(
+                t,
+                "comments-resolved",
+                Some("icons/circle-check.svg"),
+                "Show resolved comments",
+                None,
+                resolved,
+            )
+            .on_click(act(Box::new(|s, cx| {
+                s.design_resolved = !s.design_resolved;
+                cx.notify();
+            }))),
+        )
+        .child(gap(t));
+    if comments.is_empty() {
+        comments_menu = comments_menu.child(
+            div()
+                .px(t.space.md)
+                .py(t.space.sm)
+                .text_size(t.text.caption)
+                .line_height(relative(1.4))
+                .text_color(t.colors.text_subtle)
+                .child("No comments yet. Turn on the comment tool, point at any part and click."),
+        );
+    }
+    let hover = t.colors.hover;
+    for c in comments.iter().filter(|c| resolved || !c.resolved) {
+        let (n, go, done) = (c.n, page.clone(), page.clone());
+        let status = match c.sent {
+            crate::state::CommentSent::Note => "Note",
+            crate::state::CommentSent::Waiting => "Waiting",
+            crate::state::CommentSent::Sent => "Sent",
+        };
+        comments_menu = comments_menu.child(
+            div()
+                .id(SharedString::from(format!("comment-row-{n}")))
+                .flex()
+                .items_start()
+                .gap(t.space.sm)
+                .px(t.space.md)
+                .py(t.space.xs)
+                .rounded(t.radius.button)
+                .cursor_pointer()
+                .hover(move |d| d.bg(hover))
+                .when(c.resolved, |d| d.opacity(0.6))
+                .child(pin_mark(t, n, c.sent))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .child(
+                            div()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .text_size(t.text.caption)
+                                .text_color(t.colors.text_subtle)
+                                .child(format!("{} · {status}", c.label)),
+                        )
+                        .child(
+                            div()
+                                .text_size(t.text.body_sm)
+                                .line_height(relative(1.4))
+                                .text_color(t.colors.text)
+                                .child(c.text.clone()),
+                        ),
+                )
+                .child(
+                    div()
+                        .id(SharedString::from(format!("comment-resolve-{n}")))
+                        .flex_none()
+                        .size(px(22.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded(t.radius.small)
+                        .hover(move |d| d.bg(hover))
+                        .child(icon(
+                            "icons/circle-check.svg",
+                            t.size.icon_sm,
+                            if c.resolved {
+                                t.colors.primary
+                            } else {
+                                t.colors.text_subtle
+                            },
+                        ))
+                        .tooltip(move |window, cx| {
+                            gpui::component::tooltip::Tooltip::new("Resolve, or open again")
+                                .build(window, cx)
+                        })
+                        .on_click(act(Box::new(move |s, cx| s.design_resolve(&done, n, cx)))),
+                )
+                .on_click(act(Box::new(move |s, cx| s.design_go_to(&go, n, cx)))),
+        );
+    }
 
     // The zoom: a step in or out, a desktop's width, or a size.
     let mut zoom_menu = sheet(t, 230.)
@@ -387,6 +549,57 @@ pub fn render(
                 )
                 .when(menu == Some(Menu::Pages), |d| {
                     d.child(hang(t, false, pages_menu, cx))
+                }),
+        )
+        .child(
+            tool(
+                t,
+                "design-select",
+                "icons/mouse-pointer-2.svg",
+                None,
+                false,
+                select,
+                "Comment on a part: point at it, then click",
+            )
+            .on_click(cx.listener(|_, _, window, cx| {
+                window.dispatch_action(Box::new(super::CommentTool), cx)
+            })),
+        )
+        .child(
+            div()
+                .relative()
+                .flex()
+                .items_center()
+                .child(
+                    tool(
+                        t,
+                        "design-pins",
+                        "icons/message-square.svg",
+                        (!comments.is_empty()).then(|| open_count.to_string()),
+                        false,
+                        pins && !comments.is_empty(),
+                        "Show or hide the comments on the page",
+                    )
+                    .on_click(act(Box::new(|s, cx| {
+                        s.design_pins = !s.design_pins;
+                        cx.notify();
+                    }))),
+                )
+                .child(
+                    tool(
+                        t,
+                        "design-comments",
+                        "icons/chevron-down.svg",
+                        None,
+                        false,
+                        menu == Some(Menu::Comments),
+                        "The comments",
+                    )
+                    .min_w(px(20.))
+                    .on_click(toggle(Menu::Comments)),
+                )
+                .when(menu == Some(Menu::Comments), |d| {
+                    d.child(hang(t, false, comments_menu, cx))
                 }),
         )
         .child(div().flex_1())
