@@ -343,6 +343,43 @@ pub fn run(
     timeout: Duration,
     extra: &Extra,
 ) -> Result<Vec<u8>, Error> {
+    run_once(target, script, args, input, timeout, extra, true)
+}
+
+/// A dev container that stopped (Docker or WSL restarted, the machine slept)
+/// is started again, and one deleted since is built again from its folder's
+/// devcontainer.json; then the script is retried once. VS Code's Dev
+/// Containers does the same when it reconnects.
+fn bring_back(target: &Target, stderr: &str) -> bool {
+    let Target::Container { name, wsl, .. } = target else {
+        return false;
+    };
+    if stderr.contains("is not running") {
+        let started = docker(wsl.as_deref(), &["start", name]).is_ok();
+        // Made before Forge kept its folder: keep it now, from its label.
+        if started && is_devcontainer(target) && remembered_source(name).is_none() {
+            if let Ok(src) = labelled_source(name, wsl.as_deref()) {
+                remember_source(name, &src);
+            }
+        }
+        return started;
+    }
+    if stderr.contains("No such container") && is_devcontainer(target) {
+        return remembered_source(name)
+            .is_some_and(|src| devcontainer_up(&src, false, &|_| {}).is_ok());
+    }
+    false
+}
+
+fn run_once(
+    target: &Target,
+    script: &str,
+    args: &[String],
+    input: &[u8],
+    timeout: Duration,
+    extra: &Extra,
+    may_start: bool,
+) -> Result<Vec<u8>, Error> {
     let mut child = command(target, script, args, extra)
         .spawn()
         .map_err(|e| Error::spawn(target, e))?;
@@ -389,6 +426,8 @@ pub fn run(
     let stderr = err_reader.join().unwrap_or_default();
     if status.success() {
         Ok(stdout)
+    } else if may_start && bring_back(target, &stderr) {
+        run_once(target, script, args, input, timeout, extra, false)
     } else {
         Err(Error::classify(target, status.code(), &stderr))
     }
@@ -480,6 +519,8 @@ impl Error {
                 if has("Cannot connect to the Docker daemon") || has("docker daemon is not running")
                 {
                     "Docker isn't running. Start Docker Desktop (or the docker service).".into()
+                } else if has("No such container") && name.starts_with("forge-dc-") {
+                    format!("The dev container {name} was deleted. Open the folder again (Reopen in container) and Forge builds it anew.")
                 } else if has("No such container") {
                     format!("There's no container named {name}.")
                 } else if has("is not running") {
@@ -1062,9 +1103,49 @@ impl DevSource {
     }
 }
 
+/// Where Forge keeps each dev container's folder (`devcontainers.json`,
+/// name → its `forge.devcontainer` label), so a container deleted since can
+/// be built again: its own label went with it.
+fn sources_file() -> Option<PathBuf> {
+    crate::profile::dir().map(|d| d.join("devcontainers.json"))
+}
+
+fn remember_source(name: &str, src: &DevSource) {
+    let Some(file) = sources_file() else {
+        return;
+    };
+    let mut all: std::collections::BTreeMap<String, String> = std::fs::read_to_string(&file)
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default();
+    if all.get(name) != Some(&src.label()) {
+        all.insert(name.to_string(), src.label());
+        if let Some(d) = file.parent() {
+            let _ = std::fs::create_dir_all(d);
+        }
+        if let Ok(t) = serde_json::to_string_pretty(&all) {
+            let _ = std::fs::write(&file, t + "\n");
+        }
+    }
+}
+
+fn remembered_source(name: &str) -> Option<DevSource> {
+    let t = std::fs::read_to_string(sources_file()?).ok()?;
+    let all: std::collections::BTreeMap<String, String> = serde_json::from_str(&t).ok()?;
+    all.get(name).map(|l| DevSource::from_label(l))
+}
+
 /// The folder a dev container was started from (its `forge.devcontainer`
-/// label), on the Docker of `wsl` or this computer.
+/// label), on the Docker of `wsl` or this computer; for one deleted since,
+/// the folder Forge remembered when it made it.
 pub fn devcontainer_source(name: &str, wsl: Option<&str>) -> Result<DevSource, Error> {
+    match labelled_source(name, wsl) {
+        Ok(src) => Ok(src),
+        Err(e) => remembered_source(name).ok_or(e),
+    }
+}
+
+fn labelled_source(name: &str, wsl: Option<&str>) -> Result<DevSource, Error> {
     let dir = docker(
         wsl,
         &[
@@ -1163,6 +1244,7 @@ pub fn devcontainer_up(src: &DevSource, fresh: bool, progress: &dyn Fn(&str)) ->
         })
         .collect();
     let name = format!("forge-dc-{slug}-{key}");
+    remember_source(&name, src);
     let workspace = dc
         .workspace_folder
         .clone()
@@ -1503,6 +1585,46 @@ pub fn browser_mcp_config(port: u16, token: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // A dev container that stopped, or was deleted, comes back as VS Code's
+    // does. These need a Docker daemon and alpine:3.20, so they're ignored:
+    // run with `cargo test comes_back -- --ignored --test-threads=1`.
+    fn container(name: &str) -> Target {
+        Target::Container {
+            name: name.into(),
+            user: None,
+            wsl: None,
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn a_stopped_container_comes_back() {
+        let name = "forge-test-stopped";
+        let _ = docker(None, &["rm", "-f", name]);
+        docker(None, &["run", "-d", "--name", name, "alpine:3.20", "sleep", "infinity"]).unwrap();
+        docker(None, &["stop", "-t", "1", name]).unwrap();
+        let out = run(&container(name), "echo hi", &[], b"", Duration::from_secs(60), &Extra::default());
+        let _ = docker(None, &["rm", "-f", name]);
+        assert_eq!(String::from_utf8_lossy(&out.unwrap()).trim(), "hi");
+    }
+
+    #[test]
+    #[ignore]
+    fn a_deleted_dev_container_comes_back_from_its_folder() {
+        let root = std::env::temp_dir().join(format!("forge-dc-back-{}", std::process::id()));
+        let dir = root.join("proj");
+        std::fs::create_dir_all(dir.join(".devcontainer")).unwrap();
+        std::fs::write(dir.join(".devcontainer/devcontainer.json"), r#"{"image":"alpine:3.20"}"#).unwrap();
+        std::env::set_var("FORGE_CONFIG_DIR", root.join("config"));
+        let remote = devcontainer_up(&DevSource::Local(dir.clone()), true, &|_| {}).unwrap();
+        let Target::Container { name, .. } = &remote.target else { panic!() };
+        docker(None, &["rm", "-f", name]).unwrap();
+        let out = run(&remote.target, "echo back", &[], b"", Duration::from_secs(120), &Extra::default());
+        let _ = docker(None, &["rm", "-f", name]);
+        let _ = std::fs::remove_dir_all(&root);
+        assert_eq!(String::from_utf8_lossy(&out.unwrap()).trim(), "back");
+    }
 
     fn args(cmd: &Command) -> Vec<String> {
         cmd.get_args()
