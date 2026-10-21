@@ -1,12 +1,15 @@
 //! The design library's index: every skill, template, example, design
 //! system, craft rule, atom and scenario in `design-library/`, read once
 //! from Open Design's own files (`open-design.json` manifests, `SKILL.md`
-//! and `DESIGN.md` front-matter), so the gallery and the prompt builder
-//! never walk the folder themselves.
+//! and `DESIGN.md` front-matter, a design system's `manifest.json`), so the
+//! gallery and the prompt builder never walk the folder themselves.
 //!
 //! Adapted from Open Design (Apache-2.0): how its daemon finds and reads
 //! these files (`apps/daemon/src/skills.ts`, `apps/daemon/src/plugins/`,
-//! `apps/daemon/src/design-systems/`, `packages/plugin-runtime`).
+//! `apps/daemon/src/design-systems/`, `packages/plugin-runtime`). Where its
+//! rules decide what a person sees (which `DESIGN.md`, which preview, which
+//! craft list), they are followed exactly; `plugins/spec/` is left out, as
+//! Open Design leaves it out: it is examples for plugin authors.
 //!
 //! Loading never stops at a bad file: what can't be read becomes a
 //! [`Problem`], which `--design-check` and the tests report.
@@ -16,7 +19,8 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value};
 
-use super::frontmatter;
+use super::frontmatter::{self, Doc};
+use super::skill_meta::{self, SkillMeta};
 
 /// What an entry is, by where it lives in the library.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -28,7 +32,8 @@ pub enum Kind {
     /// A ready-made brief and its example output:
     /// `plugins/_official/examples/<name>/`.
     Example,
-    /// A look: `design-systems/<name>/DESIGN.md`, with its manifest from
+    /// A look: `design-systems/<name>/` (its `DESIGN.md`, tokens and
+    /// manifest), with its gallery card from
     /// `plugins/_official/design-systems/<name>/`.
     DesignSystem,
     /// A rule any designer applies: `craft/<slug>.md`.
@@ -97,11 +102,35 @@ impl Kind {
     }
 }
 
+/// Open Design's old skill names, still accepted: (old, new).
+const ALIASES: [(&str, &str); 3] = [
+    ("editorial-collage", "open-design-landing"),
+    ("editorial-collage-deck", "open-design-landing-deck"),
+    ("taste-skill", "design-taste-frontend"),
+];
+
+/// Where Open Design serves its own repository on the web: a preview there
+/// is a file the library already has.
+const REPO_URLS: [&str; 2] = [
+    "https://cdn.jsdelivr.net/gh/nexu-io/open-design@main/",
+    "https://raw.githubusercontent.com/nexu-io/open-design/main/",
+];
+
+/// What 150 design systems' `manifest.json` says instead of describing
+/// itself: their real summary is in `DESIGN.md`.
+const BOILERPLATE: &str = "Bundled OpenDesign package for";
+
 /// One thing in the library.
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Entry {
-    /// Its folder's name (a craft rule: its file's name without `.md`).
+    /// Its folder's name, unique within its kind. A craft rule: its file's
+    /// name without `.md`; a card made from one of a template's example
+    /// files: `<template>:<file>`.
     pub id: String,
+    /// Open Design's own id for it: a skill's front-matter `name`
+    /// (`design-taste-frontend` for `skills/taste-skill`), a plugin's
+    /// manifest `name` (`example-article-magazine`).
+    pub name: String,
     pub kind: Option<Kind>,
     /// Its folder (a craft rule: its file), relative to the library root.
     pub dir: PathBuf,
@@ -111,21 +140,37 @@ pub struct Entry {
     pub mode: Option<String>,
     /// `od.scenario`: design, marketing, education, finance, …
     pub scenario: Option<String>,
-    /// `od.surface`: web, image, video, hyperframes, audio.
+    /// `od.surface`: web, image, video, audio (hyperframes for some video).
     pub surface: Option<String>,
-    /// `od.category`: professional-training, fundraising-pitch, …
+    /// `desktop` or `mobile`, for a prototype.
+    pub platform: Option<String>,
+    /// `od.category` (professional-training, fundraising-pitch, …); a
+    /// design system's own category (`Media & Consumer`).
     pub category: Option<String>,
+    /// The template gallery's grouping (`slides`, `poster`, `card`…): a
+    /// top-level `category` in some `SKILL.md`, not `od.category`.
+    pub gallery_kind: Option<String>,
     pub tags: Vec<String>,
+    /// What a person might say that should bring it up.
+    pub triggers: Vec<String>,
     /// The instructions the agent reads, relative to the root.
     pub skill: Option<PathBuf>,
+    /// Another skill it runs, by Open Design's name (`{ref: web-clone}`),
+    /// when it has no instructions of its own.
+    pub skill_ref: Option<String>,
     /// The example output to show: an HTML page, a poster, a video.
     pub preview: Option<PathBuf>,
     /// The example output when it is on the web, not in the library (some
-    /// image templates show a picture from their author's site).
+    /// image and video templates show their author's copy).
     pub preview_url: Option<String>,
-    /// The ready-made request (`od.useCase.query.en`).
+    /// The ready-made request (`od.useCase.query.en`), its `{{inputs}}`
+    /// still in place.
     pub query: Option<String>,
-    /// The craft rules it asks for (`od.craft.requires`).
+    /// What to ask for with a skill: its `od.example_prompt`, else the first
+    /// sentence of its description.
+    pub example_prompt: String,
+    /// The craft rules it asks for: `od.craft.requires` in a `SKILL.md`,
+    /// `od.context.craft` in a manifest.
     pub craft: Vec<String>,
     /// What its scripts need to run: `python`, `node`, `bash`.
     pub needs: BTreeSet<String>,
@@ -137,9 +182,27 @@ pub struct Entry {
     pub catalogue: bool,
     /// For a catalogue entry: whether Forge ships the real upstream skill.
     pub upstream_shipped: bool,
-    /// The full manifest (`open-design.json`), for what the index doesn't
-    /// lift out: inputs, pipeline, capabilities.
+    /// Not for the gallery: atoms, Open Design's router and its internal
+    /// prompt package (`od.hidden`, `od.strategy`), and a template whose
+    /// example files are cards of their own.
+    pub hidden: bool,
+    /// Gallery order, lower first (`od.featured`).
+    pub featured: Option<f64>,
+    /// For a card made from one of a template's `examples/*.html`: the
+    /// template's id.
+    pub parent: Option<String>,
+    /// The same thing under another kind: an example and the template or
+    /// skill it was made from.
+    pub twin: Option<(Kind, String)>,
+    pub license: Option<String>,
+    /// Who to credit, for a licence that asks for it (CC-BY).
+    pub credit: Option<String>,
+    /// The full plugin manifest (`open-design.json`), for what the index
+    /// doesn't lift out: inputs, pipeline, capabilities, translations.
     pub manifest: Option<Map<String, Value>>,
+    /// A design system's own manifest (`design-systems/<id>/manifest.json`):
+    /// its files, usage notes, tokens and preview pages.
+    pub kit: Option<Map<String, Value>>,
 }
 
 /// A file the index could not read as expected.
@@ -148,7 +211,8 @@ pub struct Problem {
     pub path: PathBuf,
     pub message: String,
     /// Upstream ships it this way and Forge copes (an invalid YAML header
-    /// whose fields are still read): reported, but not a failure.
+    /// that is still read, a preview upstream names but doesn't ship):
+    /// reported, but not a failure.
     pub tolerated: bool,
 }
 
@@ -160,6 +224,9 @@ pub struct Index {
     pub problems: Vec<Problem>,
     /// `UPSTREAM.json`: the sync's record of what was taken from where.
     pub upstream: Value,
+    /// The media files `media.lock.json` pins (fetched, not committed), as
+    /// library paths with `/`.
+    media: BTreeSet<String>,
 }
 
 /// Image, video and audio: fetched, not committed (`media.lock.json`).
@@ -176,14 +243,24 @@ pub fn is_media(path: &Path) -> bool {
 
 impl Index {
     pub fn load(root: &Path) -> Index {
+        let read_json = |name: &str| {
+            std::fs::read_to_string(root.join(name))
+                .ok()
+                .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+                .unwrap_or(Value::Null)
+        };
+        let media = read_json("media.lock.json")["files"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|f| f["path"].as_str().map(str::to_string))
+            .collect();
         let mut ix = Index {
             root: root.to_path_buf(),
+            upstream: read_json("UPSTREAM.json"),
+            media,
             ..Index::default()
         };
-        ix.upstream = std::fs::read_to_string(root.join("UPSTREAM.json"))
-            .ok()
-            .and_then(|t| serde_json::from_str(&t).ok())
-            .unwrap_or(Value::Null);
         ix.load_skills("skills", Kind::Skill);
         ix.load_skills("design-templates", Kind::Template);
         ix.load_plugins("plugins/_official/examples", Kind::Example);
@@ -195,6 +272,8 @@ impl Index {
         ix.load_design_systems();
         ix.load_craft();
         ix.link_upstream_skills();
+        ix.resolve_skill_refs();
+        ix.link_twins();
         ix.check_references();
         ix.entries.sort_by(|a, b| (a.kind, &a.id).cmp(&(b.kind, &b.id)));
         ix
@@ -205,8 +284,16 @@ impl Index {
         self.entries.iter().filter(move |e| e.kind == Some(kind))
     }
 
-    pub fn get(&self, kind: Kind, id: &str) -> Option<&Entry> {
-        self.of(kind).find(|e| e.id == id)
+    /// An entry by its folder id, or by Open Design's name for it (old
+    /// names included).
+    pub fn get(&self, kind: Kind, key: &str) -> Option<&Entry> {
+        let key = ALIASES
+            .iter()
+            .find(|(old, _)| *old == key)
+            .map_or(key, |(_, new)| new);
+        self.of(kind)
+            .find(|e| e.id == key)
+            .or_else(|| self.of(kind).find(|e| e.name == key))
     }
 
     /// Problems that are failures (not the tolerated upstream quirks).
@@ -220,6 +307,16 @@ impl Index {
             message: message.into(),
             tolerated,
         });
+    }
+
+    /// Whether a library path is there: media against `media.lock.json`
+    /// (it may not be fetched yet), anything else on disk.
+    fn present(&self, p: &Path) -> bool {
+        if is_media(p) {
+            self.media.contains(&slash(p))
+        } else {
+            self.root.join(p).is_file()
+        }
     }
 
     /// The sub-folders of `rel`, sorted, skipping `_schema` and the like.
@@ -236,165 +333,324 @@ impl Index {
         out
     }
 
-    fn read_doc(&mut self, rel: &Path) -> Option<frontmatter::Doc> {
-        let text = std::fs::read_to_string(self.root.join(rel)).ok()?;
+    /// A Markdown file and its front-matter; a missing or unreadable file
+    /// (a user's skill saved as UTF-16, say) is a problem, not a panic.
+    fn read_doc(&mut self, rel: &Path) -> Option<Doc> {
+        let text = match std::fs::read_to_string(self.root.join(rel)) {
+            Ok(t) => t,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                self.problem(rel, "is not there", false);
+                return None;
+            }
+            Err(e) => {
+                self.problem(rel, format!("can't be read as UTF-8 text: {e}"), false);
+                return None;
+            }
+        };
         let doc = frontmatter::parse(&text);
         if let Some(e) = &doc.error {
-            self.problem(rel, format!("front-matter is not valid YAML ({e}); read line by line"), true);
+            self.problem(rel, format!("front-matter is not valid YAML ({e}); read as Open Design reads it"), true);
         }
         Some(doc)
     }
 
-    /// `skills/<name>/SKILL.md` and `design-templates/<name>/SKILL.md`.
+    /// A JSON manifest; `None` (and a problem) when it can't be read.
+    fn read_manifest(&mut self, rel: &Path) -> Option<Map<String, Value>> {
+        let text = match std::fs::read_to_string(self.root.join(rel)) {
+            Ok(t) => t,
+            Err(e) => {
+                self.problem(rel, format!("can't be read: {e}"), false);
+                return None;
+            }
+        };
+        match serde_json::from_str(&text) {
+            Ok(Value::Object(m)) => Some(m),
+            Ok(_) => {
+                self.problem(rel, "is not a JSON object", false);
+                None
+            }
+            Err(e) => {
+                self.problem(rel, format!("is not valid JSON: {e}"), false);
+                None
+            }
+        }
+    }
+
+    /// `skills/<name>/SKILL.md` and `design-templates/<name>/SKILL.md`, read
+    /// as Open Design's skill list reads them, each with its example and the
+    /// cards its `examples/*.html` make.
     fn load_skills(&mut self, base: &str, kind: Kind) {
-        for name in self.folders(base) {
-            let dir = Path::new(base).join(&name);
+        for folder in self.folders(base) {
+            let dir = Path::new(base).join(&folder);
             let skill = dir.join("SKILL.md");
             let Some(doc) = self.read_doc(&skill) else {
-                self.problem(&dir, "no SKILL.md", false);
                 continue;
             };
-            let mut e = from_skill(&name, kind, &dir, &skill, &doc);
-            if kind == Kind::Template {
-                e.preview = ["example.html", "index.html"]
-                    .iter()
-                    .map(|f| dir.join(f))
-                    .find(|p| self.root.join(p).is_file());
-            }
+            let mut e = from_skill(&folder, kind, &dir, &skill, &doc);
+            e.preview = example_preview(&self.root, &dir);
             e.needs = needs(&self.root.join(&dir));
+            // A template that is also packaged as a plugin (aster-atelier):
+            // its manifest gives the ready-made request.
+            let packaged = dir.join("open-design.json");
+            if self.root.join(&packaged).is_file() {
+                if let Some(m) = self.read_manifest(&packaged) {
+                    e.query = query(&m.get("od").cloned().unwrap_or_default()["useCase"]["query"]);
+                    e.manifest = Some(m);
+                }
+            }
+            let cards = derived_examples(&self.root, &e);
+            e.hidden = !cards.is_empty();
             self.entries.push(e);
+            self.entries.extend(cards);
         }
     }
 
     /// `<base>/<name>/open-design.json`, with its `SKILL.md` when it has one.
     fn load_plugins(&mut self, base: &str, kind: Kind) {
-        for name in self.folders(base) {
-            let dir = Path::new(base).join(&name);
-            let Some(e) = self.read_plugin(&name, kind, &dir) else {
-                continue;
-            };
-            self.entries.push(e);
+        for folder in self.folders(base) {
+            let dir = Path::new(base).join(&folder);
+            if let Some(e) = self.read_plugin(&folder, kind, &dir) {
+                self.entries.push(e);
+            }
         }
     }
 
-    fn read_plugin(&mut self, name: &str, kind: Kind, dir: &Path) -> Option<Entry> {
+    fn read_plugin(&mut self, folder: &str, kind: Kind, dir: &Path) -> Option<Entry> {
         let path = dir.join("open-design.json");
-        let text = match std::fs::read_to_string(self.root.join(&path)) {
-            Ok(t) => t,
-            Err(_) => {
-                self.problem(dir, "no open-design.json", false);
-                return None;
-            }
-        };
-        let manifest: Map<String, Value> = match serde_json::from_str(&text) {
-            Ok(Value::Object(m)) => m,
-            Ok(_) => {
-                self.problem(&path, "open-design.json is not an object", false);
-                return None;
-            }
-            Err(e) => {
-                self.problem(&path, format!("open-design.json: {e}"), false);
-                return None;
-            }
-        };
+        let manifest = self.read_manifest(&path)?;
         let od = manifest.get("od").cloned().unwrap_or(Value::Null);
         if od["kind"].as_str().is_none() {
-            self.problem(&path, "open-design.json has no od.kind", false);
+            self.problem(&path, "has no od.kind", false);
         }
-        // The agent's instructions: the manifest's own skill path, else SKILL.md.
-        let skill = manifest
-            .get("compat")
-            .and_then(|c| c["agentSkills"].get(0))
-            .and_then(|s| s["path"].as_str())
-            .or_else(|| od["context"]["skills"].get(0).and_then(|s| s["path"].as_str()))
-            .map(|p| clean(dir, p))
-            .or_else(|| Some(dir.join("SKILL.md")).filter(|p| self.root.join(p).is_file()));
-        let doc = skill.as_ref().and_then(|p| self.read_doc(p));
+        // Its instructions: `od.context.skills` (a path, or another skill by
+        // name), then `compat.agentSkills`, then a SKILL.md beside it.
+        let listed = od["context"]["skills"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .chain(manifest.get("compat").and_then(|c| c["agentSkills"].as_array()).into_iter().flatten());
+        let (mut skill, mut skill_ref) = (None, None);
+        let mut escapes = vec![];
+        for s in listed {
+            match (s["path"].as_str(), s["ref"].as_str()) {
+                (Some(p), _) if p.contains('/') || p.ends_with(".md") => match join_inside(dir, p) {
+                    Some(p) => {
+                        skill.get_or_insert(p);
+                    }
+                    None => escapes.push(p.to_string()),
+                },
+                // A bare path is a skill's name.
+                (Some(name), _) | (None, Some(name)) => {
+                    skill_ref.get_or_insert(name.to_string());
+                }
+                _ => {}
+            }
+        }
+        for p in escapes {
+            self.problem(&path, format!("names `{p}`, outside its folder"), false);
+        }
+        if skill.is_none() {
+            skill = Some(dir.join("SKILL.md")).filter(|p| self.root.join(p).is_file());
+        }
+        if skill.is_some() {
+            skill_ref = None;
+        }
+        let doc = match &skill {
+            Some(p) => self.read_doc(p),
+            None => None,
+        };
+        let meta = doc.as_ref().map(|d| SkillMeta::from_doc(folder, d));
+        // The manifest wins; the SKILL.md fills what it leaves out.
+        let own = |key: &str| od[key].as_str().map(str::to_string);
+        let fill = |key: &str| {
+            doc.as_ref()
+                .and_then(|d| d.path(&format!("od.{key}")))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        };
         let text_of = |key: &str| manifest.get(key).and_then(Value::as_str).map(str::to_string);
-        let shown = od["preview"]["entry"]
-            .as_str()
-            .or_else(|| od["preview"]["poster"].as_str())
-            .or_else(|| od["preview"]["video"].as_str());
-        let web = shown.filter(|p| p.starts_with("https://") || p.starts_with("http://"));
-        let preview = shown.filter(|_| web.is_none()).map(|p| clean(dir, p));
-        let mut e = Entry {
-            id: name.to_string(),
+        let name = text_of("name").unwrap_or_else(|| folder.to_string());
+        let mut craft = skill_meta::slugs(
+            od["context"]["craft"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str),
+        );
+        if craft.is_empty() {
+            craft = meta.as_ref().map(|m| m.craft_requires.clone()).unwrap_or_default();
+        }
+        let license = text_of("license");
+        let credit = license
+            .as_deref()
+            .filter(|l| l.starts_with("CC-BY"))
+            .and_then(|_| manifest.get("author"))
+            .and_then(|a| {
+                let name = a["name"].as_str()?;
+                Some(match a["url"].as_str() {
+                    Some(url) => format!("{name} ({url})"),
+                    None => name.to_string(),
+                })
+            });
+        let (preview, preview_url) = self.plugin_preview(dir, &od["preview"]);
+        Some(Entry {
+            id: folder.to_string(),
+            title: text_of("title")
+                .or_else(|| meta.as_ref().and_then(|m| m.display_name.get("en").cloned()))
+                .unwrap_or_else(|| humanize(&name)),
+            name,
             kind: Some(kind),
             dir: dir.to_path_buf(),
-            title: text_of("title").unwrap_or_else(|| name.to_string()),
-            description: text_of("description").unwrap_or_default().trim().to_string(),
-            mode: od["mode"].as_str().map(str::to_string),
-            scenario: od["scenario"].as_str().map(str::to_string),
-            surface: od["surface"].as_str().map(str::to_string),
-            category: od["category"].as_str().map(str::to_string),
+            description: text_of("description")
+                .or_else(|| meta.as_ref().map(|m| m.description.clone()))
+                .unwrap_or_default()
+                .trim()
+                .to_string(),
+            mode: own("mode").or_else(|| fill("mode")),
+            scenario: own("scenario").or_else(|| fill("scenario")),
+            surface: own("surface").or_else(|| fill("surface")),
+            platform: own("platform").or_else(|| fill("platform")),
+            category: own("category"),
             tags: strings(manifest.get("tags")),
+            triggers: meta.as_ref().map(|m| m.triggers.clone()).unwrap_or_default(),
             skill,
+            skill_ref,
             preview,
-            preview_url: web.map(str::to_string),
+            preview_url,
             query: query(&od["useCase"]["query"]),
-            craft: strings(od.get("craft").and_then(|c| c.get("requires"))),
+            example_prompt: meta.as_ref().map(|m| m.example_prompt.clone()).unwrap_or_default(),
+            craft,
             needs: needs(&self.root.join(dir)),
+            upstream: fill("upstream"),
+            hidden: kind == Kind::Atom || od["hidden"] == true || od.get("strategy").is_some(),
+            featured: od["featured"].as_f64(),
+            license,
+            credit,
             manifest: Some(manifest),
             ..Entry::default()
-        };
-        if let Some(doc) = doc {
-            if e.description.is_empty() {
-                e.description = doc.str("description").unwrap_or_default().trim().to_string();
-            }
-            if e.craft.is_empty() {
-                e.craft = doc.strings("od.craft.requires");
-            }
-        }
-        Some(e)
+        })
     }
 
-    /// One entry per design system: the full kit in `design-systems/<name>/`,
-    /// with the official manifest from `plugins/_official/design-systems/`
-    /// where there is one.
-    fn load_design_systems(&mut self) {
-        let kits = self.folders("design-systems");
-        let official = self.folders("plugins/_official/design-systems");
-        let names: BTreeSet<&String> = kits.iter().chain(&official).collect();
-        for name in names {
-            let kit = Path::new("design-systems").join(name);
-            let plug = Path::new("plugins/_official/design-systems").join(name);
-            let has_kit = self.root.join(&kit).join("DESIGN.md").is_file();
-            let mut e = if official.contains(name) {
-                match self.read_plugin(name, Kind::DesignSystem, &plug) {
-                    Some(e) => e,
-                    None => continue,
-                }
-            } else {
-                Entry {
-                    id: name.clone(),
-                    kind: Some(Kind::DesignSystem),
-                    ..Entry::default()
-                }
+    /// A plugin's preview: its `od.preview` file, the library's copy of one
+    /// Open Design serves from its own repository, a web address otherwise,
+    /// and, when the named file isn't there, the example Open Design would
+    /// find in the folder instead.
+    fn plugin_preview(&self, dir: &Path, preview: &Value) -> (Option<PathBuf>, Option<String>) {
+        let shown = ["entry", "poster", "video"]
+            .iter()
+            .find_map(|k| preview[*k].as_str());
+        let Some(shown) = shown else {
+            return (None, None);
+        };
+        if shown.starts_with("https://") || shown.starts_with("http://") {
+            let local = REPO_URLS
+                .iter()
+                .find_map(|u| shown.strip_prefix(u))
+                .map(PathBuf::from)
+                .filter(|p| self.present(p));
+            return match local {
+                Some(p) => (Some(p), None),
+                None => (None, Some(shown.to_string())),
             };
-            e.dir = if has_kit { kit.clone() } else { plug.clone() };
-            let design = e.dir.join("DESIGN.md");
-            match self.read_doc(&design) {
-                Some(doc) => {
-                    if e.title.is_empty() || e.title == *name {
-                        e.title = doc
-                            .str("name")
-                            .or_else(|| doc.str("title"))
-                            .map(str::to_string)
-                            .or_else(|| heading(&doc.body))
-                            .unwrap_or_else(|| name.clone());
-                    }
-                    if e.description.is_empty() {
-                        e.description = doc.str("description").unwrap_or_default().trim().to_string();
-                    }
-                    e.skill = Some(design);
-                }
-                None => self.problem(&e.dir, "design system without DESIGN.md", false),
-            }
-            if e.mode.is_none() {
-                e.mode = Some("design-system".into());
-            }
-            self.entries.push(e);
         }
+        match join_inside(dir, shown) {
+            Some(p) if self.present(&p) => (Some(p), None),
+            // Not there: what Open Design's preview search finds, else the
+            // named file (reported later as not shipped).
+            named => (example_preview(&self.root, dir).or(named), None),
+        }
+    }
+
+    /// One entry per design system, from `design-systems/<id>/`: its
+    /// `DESIGN.md` and `manifest.json`, which Open Design reads at runtime.
+    /// The card in `plugins/_official/design-systems/<id>/` adds the
+    /// gallery's request, inputs and translations; its own `DESIGN.md` copy
+    /// is older (seven of them lack the usage guardrails) and never used.
+    fn load_design_systems(&mut self) {
+        let cards: BTreeSet<String> = self.folders("plugins/_official/design-systems").into_iter().collect();
+        let kits = self.folders("design-systems");
+        for name in cards.iter().filter(|n| !kits.contains(n)) {
+            self.problem(
+                Path::new("plugins/_official/design-systems").join(name),
+                "a design system card with no design-systems/ folder (its DESIGN.md copy is stale; not used)",
+                false,
+            );
+        }
+        for folder in kits {
+            let dir = Path::new("design-systems").join(&folder);
+            let design = dir.join("DESIGN.md");
+            let Some(doc) = self.read_doc(&design) else {
+                continue;
+            };
+            let kit = self.read_kit(&folder, &dir);
+            let card = if cards.contains(&folder) {
+                self.read_manifest(&Path::new("plugins/_official/design-systems").join(&folder).join("open-design.json"))
+            } else {
+                None
+            };
+            let od = card.as_ref().and_then(|c| c.get("od")).cloned().unwrap_or(Value::Null);
+            let kit_str = |key: &str| kit.as_ref().and_then(|k| k.get(key)).and_then(Value::as_str).map(str::to_string);
+            let quoted = |label: &str| {
+                doc.body.lines().find_map(|l| {
+                    let rest = l.trim().strip_prefix('>')?.trim();
+                    let (k, v) = rest.split_once(':')?;
+                    k.trim().eq_ignore_ascii_case(label).then(|| v.trim().to_string())
+                })
+            };
+            let description = kit_str("description")
+                .filter(|d| !d.starts_with(BOILERPLATE))
+                .or_else(|| Some(summarize(&doc.body)).filter(|s| !s.is_empty()))
+                .or_else(|| card.as_ref().and_then(|c| c.get("description")).and_then(Value::as_str).map(str::to_string))
+                .unwrap_or_default();
+            let preview = kit
+                .as_ref()
+                .and_then(|k| k.get("preview"))
+                .and_then(|p| p["pages"].get(0))
+                .and_then(|p| p["path"].as_str())
+                .and_then(|p| join_inside(&dir, p));
+            self.entries.push(Entry {
+                id: folder.clone(),
+                name: kit_str("id").unwrap_or_else(|| folder.clone()),
+                kind: Some(Kind::DesignSystem),
+                title: kit_str("name")
+                    .or_else(|| heading(&doc.body).map(|h| clean_title(&h)))
+                    .unwrap_or_else(|| humanize(&folder)),
+                description,
+                mode: Some("design-system".into()),
+                scenario: od["scenario"].as_str().map(str::to_string),
+                surface: Some(quoted("surface").unwrap_or_else(|| "web".into())),
+                category: kit_str("category").or_else(|| quoted("category")),
+                tags: strings(card.as_ref().and_then(|c| c.get("tags"))),
+                skill: Some(design),
+                preview,
+                query: query(&od["useCase"]["query"]),
+                license: card.as_ref().and_then(|c| c.get("license")).and_then(Value::as_str).map(str::to_string),
+                dir,
+                manifest: card,
+                kit,
+                ..Entry::default()
+            });
+        }
+    }
+
+    /// `design-systems/<id>/manifest.json`, checked the way Open Design
+    /// checks it. One that fails is reported and the system is read from
+    /// its `DESIGN.md` alone, as Open Design does.
+    fn read_kit(&mut self, folder: &str, dir: &Path) -> Option<Map<String, Value>> {
+        let path = dir.join("manifest.json");
+        if !self.root.join(&path).is_file() {
+            return None;
+        }
+        let kit = self.read_manifest(&path)?;
+        let ok = kit.get("schemaVersion").and_then(Value::as_str) == Some("od-design-system-project/v1")
+            && kit.get("id").and_then(Value::as_str) == Some(folder)
+            && kit.get("files").map(|f| &f["design"]) == Some(&Value::from("DESIGN.md"))
+            && kit.get("files").map(|f| &f["tokens"]) == Some(&Value::from("tokens.css"));
+        if !ok {
+            self.problem(&path, "is not an od-design-system-project/v1 manifest for this folder; using DESIGN.md alone", false);
+            return None;
+        }
+        Some(kit)
     }
 
     /// `craft/<slug>.md`, but not the folder's README or its list of
@@ -419,8 +675,9 @@ impl Index {
                     .str("title")
                     .map(str::to_string)
                     .or_else(|| heading(&doc.body))
-                    .unwrap_or_else(|| id.clone()),
+                    .unwrap_or_else(|| humanize(&id)),
                 description: doc.str("description").unwrap_or_default().trim().to_string(),
+                name: id.clone(),
                 id,
                 kind: Some(Kind::Craft),
                 dir: rel.clone(),
@@ -465,24 +722,60 @@ impl Index {
         }
     }
 
-    /// Every file an entry names exists: its skill, its preview (media is
-    /// checked against `media.lock.json`, since it is fetched), and every
-    /// craft rule it asks for, or that rule is one `craft/FUTURE_SECTIONS.md`
-    /// lists as still to come. A preview upstream names but doesn't ship is
-    /// dropped (the gallery shows none) and listed as tolerated.
+    /// A plugin that runs another skill by name (`examples/web-clone` runs
+    /// `skills/web-clone`) gets that skill's instructions.
+    fn resolve_skill_refs(&mut self) {
+        let skills: BTreeMap<String, PathBuf> = self
+            .of(Kind::Skill)
+            .chain(self.of(Kind::Template))
+            .filter_map(|e| Some((e.name.clone(), e.skill.clone()?)))
+            .chain(
+                self.of(Kind::Skill)
+                    .filter_map(|e| Some((e.id.clone(), e.skill.clone()?))),
+            )
+            .collect();
+        let mut unknown = vec![];
+        for e in self.entries.iter_mut().filter(|e| e.skill.is_none()) {
+            if let Some(name) = &e.skill_ref {
+                match skills.get(name) {
+                    Some(p) => e.skill = Some(p.clone()),
+                    None => unknown.push((e.dir.clone(), name.clone())),
+                }
+            }
+        }
+        for (dir, name) in unknown {
+            self.problem(dir, format!("runs skill `{name}`, which isn't in the library"), false);
+        }
+    }
+
+    /// An example made from a template or a skill of the same folder name:
+    /// each points at the other, so the gallery shows one card.
+    fn link_twins(&mut self) {
+        let made_from: BTreeMap<String, Kind> = self
+            .of(Kind::Skill)
+            .chain(self.of(Kind::Template))
+            .filter(|e| e.parent.is_none())
+            .map(|e| (e.id.clone(), e.kind.unwrap_or(Kind::Skill)))
+            .collect();
+        let examples: BTreeSet<String> = self.of(Kind::Example).map(|e| e.id.clone()).collect();
+        for e in &mut self.entries {
+            match e.kind {
+                Some(Kind::Example) => e.twin = made_from.get(&e.id).map(|k| (*k, e.id.clone())),
+                Some(Kind::Skill | Kind::Template) if e.parent.is_none() && examples.contains(&e.id) => {
+                    e.twin = Some((Kind::Example, e.id.clone()))
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Every file an entry names exists: its instructions, its preview
+    /// (media is checked against `media.lock.json`, since it is fetched),
+    /// and every craft rule it asks for, or that rule is one
+    /// `craft/FUTURE_SECTIONS.md` lists as still to come. A preview upstream
+    /// names but doesn't ship is dropped (the gallery shows none) and listed
+    /// as tolerated.
     fn check_references(&mut self) {
-        let locked: BTreeSet<String> = std::fs::read_to_string(self.root.join("media.lock.json"))
-            .ok()
-            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
-            .map(|v| {
-                v["files"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|f| f["path"].as_str().map(str::to_string))
-                    .collect()
-            })
-            .unwrap_or_default();
         let craft: BTreeSet<String> = self.of(Kind::Craft).map(|e| e.id.clone()).collect();
         let future: BTreeSet<String> = std::fs::read_to_string(self.root.join("craft/FUTURE_SECTIONS.md"))
             .unwrap_or_default()
@@ -490,20 +783,13 @@ impl Index {
             .filter_map(|l| l.trim().strip_prefix("- "))
             .map(|s| s.trim().trim_matches('`').to_string())
             .collect();
-        let present = |p: &Path| {
-            if is_media(p) {
-                locked.contains(&slash(p))
-            } else {
-                self.root.join(p).is_file()
-            }
-        };
         let mut found = vec![];
         let mut no_preview = vec![];
         for (i, e) in self.entries.iter().enumerate() {
-            if let Some(p) = e.skill.as_ref().filter(|p| !present(p)) {
+            if let Some(p) = e.skill.as_ref().filter(|p| !self.present(p)) {
                 found.push((p.clone(), format!("{}: its instructions are not there", e.id), false));
             }
-            if let Some(p) = e.preview.as_ref().filter(|p| !present(p)) {
+            if let Some(p) = e.preview.as_ref().filter(|p| !self.present(p)) {
                 found.push((p.clone(), format!("{}: upstream names this preview but doesn't ship it", e.id), true));
                 no_preview.push(i);
             }
@@ -533,55 +819,135 @@ impl Index {
     }
 }
 
-fn from_skill(name: &str, kind: Kind, dir: &Path, skill: &Path, doc: &frontmatter::Doc) -> Entry {
-    let od = |k: &str| doc.path(&format!("od.{k}")).and_then(Value::as_str).map(str::to_string);
+/// A `skills/` or `design-templates/` entry, as Open Design's skill list
+/// reads its `SKILL.md`.
+fn from_skill(folder: &str, kind: Kind, dir: &Path, skill: &Path, doc: &Doc) -> Entry {
+    let m = SkillMeta::from_doc(folder, doc);
     Entry {
-        id: name.to_string(),
+        id: folder.to_string(),
+        title: m
+            .display_name
+            .get("en")
+            .cloned()
+            .unwrap_or_else(|| humanize(&m.id)),
         kind: Some(kind),
         dir: dir.to_path_buf(),
-        title: doc
-            .str("en_name")
-            .or_else(|| doc.str("title"))
-            .or_else(|| doc.str("name"))
-            .map(str::to_string)
-            .unwrap_or_else(|| name.to_string()),
-        description: doc
-            .str("en_description")
-            .or_else(|| doc.str("description"))
-            .unwrap_or_default()
-            .trim()
-            .to_string(),
-        mode: od("mode"),
-        scenario: od("scenario").or_else(|| doc.str("scenario").map(str::to_string)),
-        surface: od("surface"),
-        category: od("category").or_else(|| doc.str("category").map(str::to_string)),
+        description: m.description.trim().to_string(),
+        mode: Some(m.mode),
+        scenario: Some(m.scenario),
+        surface: Some(m.surface),
+        platform: m.platform,
+        category: m.category,
+        gallery_kind: doc.str("category").map(str::to_string),
         tags: doc.strings("tags"),
+        triggers: m.triggers,
         skill: Some(skill.to_path_buf()),
-        craft: doc.strings("od.craft.requires"),
-        upstream: od("upstream"),
+        example_prompt: m.example_prompt,
+        craft: m.craft_requires,
+        upstream: m.upstream,
+        featured: m.featured,
+        license: doc.str("license").map(str::to_string),
         catalogue: doc
             .body
             .split_whitespace()
             .collect::<Vec<_>>()
             .join(" ")
             .contains("install the upstream bundle"),
+        name: m.id,
         ..Entry::default()
     }
 }
 
-/// `./SKILL.md` inside `dir` as a library-relative path.
-fn clean(dir: &Path, p: &str) -> PathBuf {
+/// The example Open Design shows for a skill or template folder, in its
+/// order: `example.html`; `assets/template.html` (Open Design fills it with
+/// `assets/example-slides.html` when asked; the template alone is shown
+/// here); `assets/index.html`; the first `examples/*.html`.
+fn example_preview(root: &Path, dir: &Path) -> Option<PathBuf> {
+    let has = |p: &str| root.join(dir).join(p).is_file();
+    for p in ["example.html", "assets/template.html", "assets/index.html"] {
+        if has(p) {
+            return Some(dir.join(p));
+        }
+    }
+    example_files(root, dir).into_iter().next().map(|f| dir.join("examples").join(f))
+}
+
+/// The `examples/*.html` files of a folder, sorted: names Open Design
+/// accepts as card ids (`[A-Za-z0-9._-]`, no leading dot).
+fn example_files(root: &Path, dir: &Path) -> Vec<String> {
+    let mut out: Vec<String> = std::fs::read_dir(root.join(dir).join("examples"))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.path().is_file())
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter(|n| {
+            let stem = n.len().checked_sub(5).map(|end| &n[..end]);
+            n.to_ascii_lowercase().ends_with(".html")
+                && stem.is_some_and(|s| {
+                    !s.is_empty()
+                        && !s.starts_with('.')
+                        && s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+                })
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+/// A card for each of a template's `examples/*.html`, as Open Design's
+/// gallery lists them (`live-artifact:stock-dashboard`); the template itself
+/// is then hidden.
+fn derived_examples(root: &Path, parent: &Entry) -> Vec<Entry> {
+    example_files(root, &parent.dir)
+        .into_iter()
+        .map(|file| {
+            let key = &file[..file.len() - 5];
+            Entry {
+                id: format!("{}:{key}", parent.id),
+                name: format!("{}:{key}", parent.name),
+                title: key
+                    .split(['-', '_', '.'])
+                    .filter(|w| !w.is_empty())
+                    .map(|w| {
+                        let lower = w.to_lowercase();
+                        let mut c = lower.chars();
+                        c.next().map_or(String::new(), |f| f.to_uppercase().chain(c).collect())
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                preview: Some(parent.dir.join("examples").join(&file)),
+                parent: Some(parent.id.clone()),
+                craft: vec![],
+                featured: None,
+                hidden: false,
+                ..parent.clone()
+            }
+        })
+        .collect()
+}
+
+/// `./SKILL.md` inside `dir` as a library path; `None` when it would leave
+/// the folder (`../`, an absolute path, a drive or a backslash).
+fn join_inside(dir: &Path, p: &str) -> Option<PathBuf> {
+    if p.starts_with('/') || p.contains('\\') || p.contains(':') {
+        return None;
+    }
     let mut out = dir.to_path_buf();
+    let floor = out.components().count();
     for part in p.split('/') {
         match part {
             "" | "." => {}
             ".." => {
+                if out.components().count() <= floor {
+                    return None;
+                }
                 out.pop();
             }
             _ => out.push(part),
         }
     }
-    out
+    Some(out)
 }
 
 fn slash(p: &Path) -> String {
@@ -612,6 +978,60 @@ fn heading(body: &str) -> Option<String> {
     body.lines()
         .find_map(|l| l.trim_start().strip_prefix("# "))
         .map(|h| h.trim().to_string())
+}
+
+/// A `DESIGN.md` heading as a name: `Design System Inspired by Apple` is
+/// `Apple`.
+fn clean_title(h1: &str) -> String {
+    let lower = h1.to_lowercase();
+    ["design system inspired by ", "design system for "]
+        .iter()
+        .find(|p| lower.starts_with(*p))
+        .map_or(h1, |p| &h1[p.len()..])
+        .trim()
+        .to_string()
+}
+
+/// A design system's one-line summary, as Open Design takes it from
+/// `DESIGN.md`: the first paragraph after the title, without its
+/// `> Category:` and `> Surface:` lines or the `> ` quoting, at most 240
+/// characters.
+fn summarize(body: &str) -> String {
+    let mut lines = body.lines().skip_while(|l| !l.trim_start().starts_with("# "));
+    lines.next();
+    let mut para = vec![];
+    for l in lines {
+        let t = l.trim();
+        if t.starts_with('#') {
+            break;
+        }
+        let quoted = t.strip_prefix('>').map(str::trim);
+        let low = quoted.unwrap_or(t).to_ascii_lowercase();
+        if low.starts_with("category:") || low.starts_with("surface:") {
+            continue;
+        }
+        let t = quoted.unwrap_or(t);
+        if t.is_empty() {
+            if !para.is_empty() {
+                break;
+            }
+            continue;
+        }
+        para.push(t);
+    }
+    para.join(" ").chars().take(240).collect()
+}
+
+/// `audio-jingle` → `Audio Jingle`.
+fn humanize(name: &str) -> String {
+    name.split(['-', '_'])
+        .filter(|w| !w.is_empty())
+        .map(|w| {
+            let mut c = w.chars();
+            c.next().map_or(String::new(), |f| f.to_uppercase().chain(c).collect())
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// `https://github.com/<owner>/<repo>[/…]` → (owner, repo).
@@ -676,13 +1096,17 @@ mod tests {
             .map(|p| format!("{}: {}", p.path.display(), p.message))
             .collect();
         assert!(errors.is_empty(), "{} problems:\n{}", errors.len(), errors.join("\n"));
+        // Upstream's own quirks: two invalid YAML headers, and previews it
+        // names but doesn't ship.
+        let tolerated: Vec<_> = ix.problems.iter().filter(|p| p.tolerated).collect();
+        assert_eq!(tolerated.iter().filter(|p| p.message.contains("YAML")).count(), 2);
     }
 
     #[test]
     fn counts_match_what_the_sync_recorded() {
         let ix = library();
         let c = &ix.upstream["counts"];
-        let n = |k: Kind| ix.of(k).count() as u64;
+        let n = |k: Kind| ix.of(k).filter(|e| e.parent.is_none()).count() as u64;
         assert_eq!(Some(n(Kind::Skill)), c["skills"].as_u64());
         let catalogue = ix.of(Kind::Skill).filter(|e| e.catalogue).count() as u64;
         assert_eq!(Some(catalogue), c["catalogue_skills"].as_u64());
@@ -693,33 +1117,139 @@ mod tests {
         assert_eq!(Some(n(Kind::Scenario)), c["official_scenarios"].as_u64());
         assert_eq!(Some(n(Kind::ImageTemplate)), c["official_image_templates"].as_u64());
         assert_eq!(Some(n(Kind::VideoTemplate)), c["official_video_templates"].as_u64());
-        // Every kit, plus the official manifests that have no kit folder.
-        assert!(n(Kind::DesignSystem) >= c["design_systems"].as_u64().unwrap());
+        assert_eq!(Some(n(Kind::DesignSystem)), c["design_systems"].as_u64());
     }
 
     #[test]
     fn a_deck_example_has_its_brief_preview_and_skill() {
         let ix = library();
         let e = ix.get(Kind::Example, "html-ppt-course-module").expect("course module");
+        assert_eq!(e.name, "example-html-ppt-course-module");
         assert_eq!(e.mode.as_deref(), Some("deck"));
         assert_eq!(e.scenario.as_deref(), Some("education"));
         assert!(e.query.as_deref().is_some_and(|q| q.contains("onboarding")));
         assert_eq!(e.preview.as_deref(), Some(Path::new("plugins/_official/examples/html-ppt-course-module/example.html")));
         assert!(e.skill.as_ref().is_some_and(|s| ix.root.join(s).is_file()));
+        assert_eq!(e.twin, Some((Kind::Template, "html-ppt-course-module".to_string())));
     }
 
     #[test]
-    fn design_systems_merge_kit_and_manifest() {
+    fn skills_go_by_folder_or_by_open_designs_name() {
         let ix = library();
-        // In both trees: the kit's folder, the manifest's data.
+        let taste = ix.get(Kind::Skill, "taste-skill").expect("by folder");
+        assert_eq!(taste.name, "design-taste-frontend");
+        assert_eq!(ix.get(Kind::Skill, "design-taste-frontend"), Some(taste));
+        let guizang = ix.get(Kind::Template, "magazine-web-ppt").expect("by name");
+        assert_eq!(guizang.id, "guizang-ppt");
+        assert_eq!(guizang.mode.as_deref(), Some("deck"));
+        // `od.mode: design` is not a mode: it is guessed from the text.
+        let brand = ix.get(Kind::Skill, "brand-extract").expect("brand-extract");
+        assert!(skill_meta::MODES.contains(&brand.mode.as_deref().unwrap()));
+    }
+
+    #[test]
+    fn the_two_invalid_headers_keep_their_fields() {
+        let ix = library();
+        let landing = ix.get(Kind::Example, "open-design-landing").expect("landing");
+        assert_eq!(landing.craft, ["pixel-discipline", "typographic-rhythm"]);
+        let promo = ix.get(Kind::VideoTemplate, "frame-product-promo-30s").expect("promo");
+        assert_eq!(promo.mode.as_deref(), Some("video"));
+    }
+
+    #[test]
+    fn manifests_keep_craft_under_od_context() {
+        let ix = library();
+        let voltage = ix.get(Kind::Example, "fs-creative-voltage").expect("fs-creative-voltage");
+        assert_eq!(voltage.craft, ["typography"]);
+        for id in ["od-default", "od-new-generation"] {
+            let s = ix.get(Kind::Scenario, id).expect(id);
+            assert_eq!(s.craft, ["typography", "color", "anti-ai-slop"], "{id}");
+        }
+        // Only in its SKILL.md: the manifest leaves it out, the skill fills it.
+        let webgl = ix.of(Kind::Example).find(|e| e.id.starts_with("webgl-")).expect("a webgl example");
+        assert!(!webgl.craft.is_empty());
+    }
+
+    #[test]
+    fn a_plugin_can_run_another_skill_by_name() {
+        let ix = library();
+        let clone = ix.get(Kind::Example, "web-clone").expect("web-clone example");
+        assert_eq!(clone.skill.as_deref(), Some(Path::new("skills/web-clone/SKILL.md")));
+    }
+
+    #[test]
+    fn previews_follow_open_designs_search() {
+        let ix = library();
+        let dash = ix.get(Kind::Template, "dashboard").expect("dashboard");
+        assert_eq!(dash.preview.as_deref(), Some(Path::new("design-templates/dashboard/example.html")));
+        // Skills show their example too.
+        assert!(ix.of(Kind::Skill).filter(|e| e.preview.is_some()).count() >= 39);
+        // Named by upstream, shipped nowhere: no preview.
+        assert_eq!(ix.get(Kind::Example, "dcf-valuation").unwrap().preview, None);
+        // Open Design's own copy on the web is the library's file.
+        let play = ix.get(Kind::VideoTemplate, "frame-play-mode").expect("frame-play-mode");
+        assert_eq!(play.preview.as_deref(), Some(Path::new("plugins/_official/video-templates/frame-play-mode/preview.png")));
+        assert_eq!(play.preview_url, None);
+        // Someone else's site stays a link.
+        assert!(ix.of(Kind::ImageTemplate).any(|e| e.preview_url.as_deref().is_some_and(|u| u.contains("youmind"))));
+    }
+
+    #[test]
+    fn a_template_with_example_files_becomes_cards() {
+        let ix = library();
+        let live = ix.get(Kind::Template, "live-artifact").expect("live-artifact");
+        assert!(live.hidden);
+        let cards: Vec<_> = ix.of(Kind::Template).filter(|e| e.parent.as_deref() == Some("live-artifact")).collect();
+        assert_eq!(cards.len(), 6);
+        assert!(cards.iter().all(|c| c.id.starts_with("live-artifact:") && c.preview.is_some()));
+        assert_eq!(ix.entries.iter().filter(|e| e.parent.is_some()).count(), 11);
+    }
+
+    #[test]
+    fn design_systems_come_from_their_kit() {
+        let ix = library();
         let apple = ix.get(Kind::DesignSystem, "apple").expect("apple");
         assert_eq!(apple.dir, Path::new("design-systems/apple"));
-        assert!(apple.manifest.is_some());
-        assert!(apple.query.is_some());
-        // Only a kit, no official manifest.
-        let hud = ix.get(Kind::DesignSystem, "hud").expect("hud");
-        assert!(hud.manifest.is_none());
-        assert_eq!(hud.skill.as_deref(), Some(Path::new("design-systems/hud/DESIGN.md")));
+        assert_eq!(apple.title, "Apple");
+        assert_eq!(apple.category.as_deref(), Some("Media & Consumer"));
+        assert!(!apple.description.starts_with(BOILERPLATE));
+        assert!(apple.kit.is_some() && apple.manifest.is_some() && apple.query.is_some());
+        assert_eq!(apple.skill.as_deref(), Some(Path::new("design-systems/apple/DESIGN.md")));
+        // The kit's DESIGN.md, never the older copy beside the card.
+        let github = ix.get(Kind::DesignSystem, "github").expect("github");
+        let text = std::fs::read_to_string(ix.root.join(github.skill.as_ref().unwrap())).unwrap();
+        assert!(text.contains("Usage Guardrails"));
+        // Kits without a gallery card.
+        let kit_only: Vec<&str> = ix
+            .of(Kind::DesignSystem)
+            .filter(|e| e.manifest.is_none())
+            .map(|e| e.id.as_str())
+            .collect();
+        assert_eq!(
+            kit_only,
+            ["cisco", "cloudflare-kumo", "hud", "loom", "slack", "tom-modern", "trading-terminal", "webex", "wechat"]
+        );
+        let hud = ix.get(Kind::DesignSystem, "hud").unwrap();
+        assert!(!hud.title.starts_with("Design System"));
+        assert!(!hud.description.is_empty());
+    }
+
+    #[test]
+    fn hidden_entries_are_atoms_and_internal_scenarios() {
+        let ix = library();
+        assert!(ix.of(Kind::Atom).all(|e| e.hidden));
+        assert!(ix.get(Kind::Scenario, "od-default").unwrap().hidden);
+        assert!(ix.get(Kind::Scenario, "od-next-strategy").unwrap().hidden);
+        assert!(!ix.get(Kind::Scenario, "od-design-refine").unwrap().hidden);
+    }
+
+    #[test]
+    fn cc_by_templates_credit_their_author() {
+        let ix = library();
+        let credited = ix.of(Kind::ImageTemplate).chain(ix.of(Kind::VideoTemplate));
+        for e in credited.filter(|e| e.license.as_deref().is_some_and(|l| l.starts_with("CC-BY"))) {
+            assert!(e.credit.is_some(), "{}", e.id);
+        }
     }
 
     #[test]
@@ -740,9 +1270,24 @@ mod tests {
     }
 
     #[test]
-    fn relative_paths_resolve_inside_the_entry() {
-        assert_eq!(clean(Path::new("a/b"), "./SKILL.md"), Path::new("a/b/SKILL.md"));
-        assert_eq!(clean(Path::new("a/b"), "../c/x.html"), Path::new("a/c/x.html"));
+    fn paths_stay_inside_their_folder() {
+        assert_eq!(join_inside(Path::new("a/b"), "./SKILL.md"), Some(PathBuf::from("a/b/SKILL.md")));
+        assert_eq!(join_inside(Path::new("a/b"), "x/../c.html"), Some(PathBuf::from("a/b/c.html")));
+        assert_eq!(join_inside(Path::new("a/b"), "../c/x.html"), None);
+        assert_eq!(join_inside(Path::new("a/b"), "/etc/passwd"), None);
+        assert_eq!(join_inside(Path::new("a/b"), "..\\x"), None);
+        assert_eq!(join_inside(Path::new("a/b"), "C:x"), None);
+    }
+
+    #[test]
+    fn names_titles_and_summaries() {
+        assert_eq!(humanize("audio-jingle"), "Audio Jingle");
+        assert_eq!(clean_title("Design System Inspired by Apple"), "Apple");
+        assert_eq!(clean_title("HUD Design System"), "HUD Design System");
+        assert_eq!(
+            summarize("# Design System Inspired by X\n\n> Category: Tools\n> A calm, dense look.\n\n## 1. Theme\n"),
+            "A calm, dense look."
+        );
         assert_eq!(owner_repo("https://github.com/anthropics/skills/tree/main/skills/pdf"),
             Some(("anthropics".into(), "skills".into())));
     }

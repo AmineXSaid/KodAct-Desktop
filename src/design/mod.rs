@@ -6,6 +6,8 @@
 
 pub mod frontmatter;
 pub mod library;
+pub mod od_subset;
+pub mod skill_meta;
 
 use std::path::{Path, PathBuf};
 

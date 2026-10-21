@@ -3,12 +3,17 @@
 //! YAML (nested maps, block text, lists), read with yaml-rust2 into JSON
 //! values so the rest of the index handles one kind of tree.
 //!
-//! A few upstream files are not valid YAML. They still give their name and
-//! description: the top-level `key: value` lines are read one by one, and the
-//! error is kept for `--design-check` to list.
+//! A few upstream files are not valid YAML. They are read the way Open
+//! Design's own daemon reads them (`od_subset`), so they keep every field;
+//! if even that fails, the top-level `key: value` lines are read one by one.
+//! Either way the error is kept for `--design-check` to list.
 
 use serde_json::{Map, Value};
 use yaml_rust2::{Yaml, YamlLoader};
+
+/// Front-matter larger than this isn't parsed as YAML (the library's largest
+/// is 4.4 KB): a user's skill could otherwise nest deep enough to matter.
+const MAX_YAML: usize = 64 * 1024;
 
 /// A file split into its front-matter and the text after it.
 #[derive(Debug, Clone, PartialEq)]
@@ -77,13 +82,23 @@ pub fn parse(text: &str) -> Doc {
             error: None,
         };
     };
+    if yaml.len() > MAX_YAML {
+        return Doc {
+            meta: lines(yaml),
+            body: body.to_string(),
+            error: Some("front-matter larger than 64 KiB".to_string()),
+        };
+    }
     let (meta, error) = match YamlLoader::load_from_str(yaml) {
         Ok(docs) => match docs.into_iter().next().map(json) {
             Some(Value::Object(m)) => (m, None),
             Some(Value::Null) | None => (Map::new(), None),
             Some(_) => (Map::new(), Some("front-matter is not a map".to_string())),
         },
-        Err(e) => (lines(yaml), Some(e.to_string())),
+        Err(e) => (
+            super::od_subset::parse(yaml).unwrap_or_else(|_| lines(yaml)),
+            Some(e.to_string()),
+        ),
     };
     Doc {
         meta,
@@ -123,7 +138,8 @@ fn key(k: Yaml) -> String {
     }
 }
 
-/// The fallback for invalid YAML: each unindented `key: value` line, with
+/// The last resort, when even Open Design's reader fails: each unindented
+/// `key: value` line, with
 /// one layer of quotes taken off. Block text (`description: |`) keeps the
 /// indented lines that follow, joined by spaces.
 fn lines(yaml: &str) -> Map<String, Value> {
@@ -198,16 +214,36 @@ mod tests {
     }
 
     #[test]
-    fn invalid_yaml_still_gives_name_and_description() {
+    fn invalid_yaml_is_read_the_way_open_design_reads_it() {
         let d = parse(
-            "---\nname: promo\ndescription: A 30s promo: cut: fast\ntitle: \"Promo\"\nnotes: >\n  folded\n  text\n---\nbody",
+            "---\nname: promo\ndescription: A 30s promo: cut: fast\ntitle: \"Promo\"\nnotes: >\n  folded\n  text\nod:\n  mode: video\n  craft:\n    requires: [typography]\n---\nbody",
         );
         assert!(d.error.is_some());
         assert_eq!(d.str("name"), Some("promo"));
         assert_eq!(d.str("description"), Some("A 30s promo: cut: fast"));
         assert_eq!(d.str("title"), Some("Promo"));
-        assert_eq!(d.str("notes"), Some("folded text"));
+        // Open Design keeps the line break in `>` text.
+        assert_eq!(d.str("notes"), Some("folded\ntext"));
+        // Nested fields survive, unlike a reader of top-level lines.
+        assert_eq!(d.path("od.mode").and_then(Value::as_str), Some("video"));
+        assert_eq!(d.strings("od.craft.requires"), ["typography"]);
         assert_eq!(d.body, "body");
+    }
+
+    #[test]
+    fn the_last_resort_reads_top_level_lines() {
+        let m = lines("name: a\ndescription: |\n  two\n  lines\nbad line\nkey with space: x\n");
+        assert_eq!(m["name"], "a");
+        assert_eq!(m["description"], "two lines");
+        assert!(!m.contains_key("key with space"));
+    }
+
+    #[test]
+    fn oversized_front_matter_is_not_parsed_as_yaml() {
+        let big = format!("---\nname: big\nnotes: \"{}\"\n---\n", "x".repeat(MAX_YAML));
+        let d = parse(&big);
+        assert_eq!(d.str("name"), Some("big"));
+        assert!(d.error.is_some_and(|e| e.contains("64 KiB")));
     }
 
     #[test]
