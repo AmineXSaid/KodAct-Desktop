@@ -308,6 +308,14 @@ pub fn always_label(rule: Option<&str>) -> String {
         ("WebSearch", _) => "web searches".into(),
         ("WebFetch", "") => "web pages".into(),
         ("Bash", "") => "commands".into(),
+        // An MCP tool, said as its server and its name: Forge's browser's
+        // `mcp__forge-browser__click` is "browser click".
+        (t, "") if t.starts_with("mcp__") => {
+            let mut parts = t.trim_start_matches("mcp__").splitn(2, "__");
+            let server = parts.next().unwrap_or("").trim_start_matches("forge-");
+            let name = parts.next().unwrap_or("").replace('_', " ");
+            format!("{server} {name}").trim().to_string()
+        }
         (_, "") => tool.to_string(),
         (_, c) if c.chars().count() > 28 => {
             format!("{}…", c.chars().take(27).collect::<String>().trim_end())
@@ -315,6 +323,60 @@ pub fn always_label(rule: Option<&str>) -> String {
         (_, c) => c.to_string(),
     };
     format!("Always allow {what}")
+}
+
+/// Programs used through a subcommand: their rule keeps it (`git push`,
+/// `npm test`), as allowing all of git or npm is not what the click meant.
+const SUBCOMMANDED: &[&str] = &[
+    "git", "npm", "pnpm", "yarn", "bun", "cargo", "docker", "kubectl", "go", "pip", "pip3",
+    "uv", "poetry", "dotnet", "gh", "brew", "apt", "apt-get", "systemctl", "terraform",
+];
+
+/// A command rule widened to the command itself: `rm perm_a.txt` allows
+/// `rm`, `git push origin main` allows `git push`, never one set of options
+/// or files (`Bash(rm:*)`, `Bash(git push:*)`).
+fn command_of(rule: &str) -> String {
+    let first = rule
+        .trim_end_matches(":*")
+        .split(['&', '|', ';'])
+        .next()
+        .unwrap_or("")
+        .trim();
+    let mut words = first.split_whitespace().skip_while(|w| {
+        w.contains('=') && !w.starts_with('-') && !w.starts_with('=')
+    });
+    let Some(program) = words.next() else {
+        return rule.trim_end_matches(":*").to_string();
+    };
+    let program = program.rsplit(['/', '\\']).next().unwrap_or(program);
+    match words.next() {
+        Some(sub)
+            if SUBCOMMANDED.contains(&program)
+                && !sub.starts_with('-')
+                && !sub.contains(['/', '\\', '.']) =>
+        {
+            format!("{program} {sub}")
+        }
+        _ => program.to_string(),
+    }
+}
+
+/// A question's suggested rules with each command rule widened to its
+/// command (`command_of`), so "Always allow" names and saves `rm`, not
+/// `rm perm_a.txt`.
+fn command_rules(mut suggestions: serde_json::Value) -> serde_json::Value {
+    for s in suggestions.as_array_mut().into_iter().flatten() {
+        if s["type"] != "addRules" {
+            continue;
+        }
+        for r in s["rules"].as_array_mut().into_iter().flatten() {
+            let shell = matches!(r["toolName"].as_str(), Some("Bash" | "PowerShell"));
+            if let (true, Some(c)) = (shell, r["ruleContent"].as_str().filter(|c| !c.is_empty())) {
+                r["ruleContent"] = format!("{}:*", command_of(c)).into();
+            }
+        }
+    }
+    suggestions
 }
 
 /// The rule "Always allow" adds, from a question's suggestions
@@ -6680,6 +6742,8 @@ impl AppState {
                 input,
                 suggestions,
             } => {
+                // "Always allow" allows the command, not this one use of it.
+                let suggestions = command_rules(suggestions);
                 // A harmless command, for the mode the chat is in, runs
                 // without a card: its tool row already shows it.
                 if self.auto_approves(chat, &tool_name, &input) {
@@ -9156,12 +9220,36 @@ mod tests {
     }
 
     #[test]
+    fn always_allow_allows_the_command_not_one_use_of_it() {
+        let rule = |c: &str| {
+            let v = super::command_rules(serde_json::json!([{"type": "addRules", "rules": [{"toolName": "Bash", "ruleContent": c}], "destination": "localSettings"}]));
+            super::rule_name(&v).unwrap()
+        };
+        assert_eq!(rule("rm perm_a.txt"), "Bash(rm:*)");
+        assert_eq!(rule("rm -rf build"), "Bash(rm:*)");
+        assert_eq!(rule("python3 -c \"print(1)\""), "Bash(python3:*)");
+        assert_eq!(rule("/usr/bin/curl -s https://x"), "Bash(curl:*)");
+        assert_eq!(rule("git push origin main"), "Bash(git push:*)");
+        assert_eq!(rule("npm test:*"), "Bash(npm test:*)");
+        assert_eq!(rule("git -C repo status"), "Bash(git:*)");
+        assert_eq!(rule("FOO=1 make build && make test"), "Bash(make:*)");
+        assert_eq!(super::always_label(Some(&rule("rm perm_a.txt"))), "Always allow rm");
+        // Other tools' rules are left as they are.
+        let web = super::command_rules(serde_json::json!([{"type": "addRules", "rules": [{"toolName": "WebFetch", "ruleContent": "domain:docs.rs"}]}]));
+        assert_eq!(super::rule_name(&web).unwrap(), "WebFetch(domain:docs.rs)");
+    }
+
+    #[test]
     fn always_allow_says_what_it_allows_and_where() {
         use super::always_label as l;
         assert_eq!(l(Some("Bash(npm test:*)")), "Always allow npm test");
         assert_eq!(l(Some("Edit")), "Always allow edits");
         assert_eq!(l(Some("WebFetch(domain:docs.rs)")), "Always allow docs.rs");
         assert_eq!(l(Some("WebSearch")), "Always allow web searches");
+        assert_eq!(l(Some("mcp__forge-browser__click")), "Always allow browser click");
+        assert_eq!(l(Some("mcp__github__create_issue")), "Always allow github create issue");
+        assert_eq!(l(Some("mcp__forge-browser__click")), "Always allow browser click");
+        assert_eq!(l(Some("mcp__github__create_issue")), "Always allow github create issue");
         assert_eq!(l(None), "Always allow");
         assert!(l(Some("Bash(cargo build --release --target x86_64-pc-windows-gnu)")).ends_with('…'));
         let s = serde_json::json!([{"type": "addRules", "rules": [{"toolName": "Edit"}], "destination": "localSettings"}]);

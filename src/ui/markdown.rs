@@ -1223,6 +1223,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_url_in_code_keeps_its_text() {
+        let b = parse("- Use the OpenAI portal (`https://chat.openai.com`) instead.");
+        let Block::Item { spans, .. } = &b[0] else { panic!("{:?}", b[0]) };
+        let all: String = spans.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(all, "Use the OpenAI portal (https://chat.openai.com) instead.");
+    }
+
+    #[test]
     fn blocks_and_inline_styles() {
         let b = parse("# Title\n\nSome **bold** and `code`.\n\n- one\n- two\n\n1. first\n2. second\n\n```rust\nfn x() {}\n```\n\n> quoted\n\n---");
         assert_eq!(

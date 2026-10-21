@@ -73,6 +73,8 @@ pub struct RiskAssessment {
 /// Programs whose whole purpose is destroying something.
 const DESTRUCTIVE_COMMANDS: &[&str] = &[
     "rm", "rmdir", "shred", "unlink", "truncate", "dd", "mkfs", "fdisk", "parted", "wipefs", "srm",
+    // Windows: cmd.exe and PowerShell (matched case-blind).
+    "del", "erase", "rd", "remove-item", "ri",
 ];
 
 /// Programs that run another program. The real command is one of their
@@ -232,7 +234,7 @@ fn assess_segment(tokens: &[Token], ctx: &RiskContext, findings: &mut Vec<RiskFi
         return;
     }
 
-    let is_destructive = DESTRUCTIVE_COMMANDS.contains(&program_name);
+    let is_destructive = DESTRUCTIVE_COMMANDS.contains(&program_name.to_ascii_lowercase().as_str());
     let conditional = CONDITIONALLY_DESTRUCTIVE
         .iter()
         .find(|(name, _)| *name == program_name)
@@ -268,7 +270,7 @@ fn assess_segment(tokens: &[Token], ctx: &RiskContext, findings: &mut Vec<RiskFi
                     "`{program_name}` takes its targets from a pipe, so what it will delete is not known before it runs"
                 ),
                 target: None,
-                kind: None,
+                kind: Some(FindingKind::Remove),
             });
         }
         let verb = if recursive {
