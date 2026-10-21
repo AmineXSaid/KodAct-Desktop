@@ -50,6 +50,12 @@ pub struct Bar {
     pub comments: Vec<Note>,
     pub pins: bool,
     pub resolved: bool,
+    /// The page's outline is beside it; layout guides are on.
+    pub outline: bool,
+    pub guides: bool,
+    /// There is a version before, or after, the one on disk.
+    pub undo: bool,
+    pub redo: bool,
 }
 
 /// What a menu row does to the app.
@@ -243,6 +249,10 @@ pub fn render(
         comments,
         pins,
         resolved,
+        outline,
+        guides,
+        undo,
+        redo,
     } = bar;
     // Each menu row does its thing on the app, then the menu closes.
     let act = |f: Box<Act>| {
@@ -295,6 +305,28 @@ pub fn render(
                 false,
             )
             .on_click(act(Box::new(|s, cx| s.design_new_page(cx)))),
+        )
+        .child(
+            row(
+                t,
+                "design-duplicate",
+                Some("icons/copy.svg"),
+                "Duplicate",
+                None,
+                false,
+            )
+            .on_click(act(Box::new(|s, cx| s.design_duplicate(cx)))),
+        )
+        .child(
+            row(
+                t,
+                "design-rename",
+                Some("icons/pencil.svg"),
+                "Rename…",
+                None,
+                false,
+            )
+            .on_click(act(Box::new(|s, cx| s.design_rename(cx)))),
         )
         .child(gap(t))
         .child(
@@ -493,6 +525,47 @@ pub fn render(
             .on_click(act(Box::new(move |s, cx| s.web_zoom_to(z, cx)))),
         );
     }
+    // Then the canvas's own: layout guides, undo and redo.
+    let faded = |d: gpui::Stateful<gpui::Div>, on: bool| if on { d } else { d.opacity(0.5) };
+    zoom_menu = zoom_menu
+        .child(gap(t))
+        .child(
+            row(
+                t,
+                "design-guides",
+                Some("icons/layout-grid.svg"),
+                "Layout guides",
+                None,
+                guides,
+            )
+            .on_click(act(Box::new(|s, cx| {
+                s.design_set_guides(!s.design_guides, cx)
+            }))),
+        )
+        .child(faded(
+            row(
+                t,
+                "design-undo",
+                Some("icons/undo-2.svg"),
+                "Undo",
+                None,
+                false,
+            )
+            .on_click(act(Box::new(|s, cx| s.design_step(-1, cx)))),
+            undo,
+        ))
+        .child(faded(
+            row(
+                t,
+                "design-redo",
+                Some("icons/redo-2.svg"),
+                "Redo",
+                None,
+                false,
+            )
+            .on_click(act(Box::new(|s, cx| s.design_step(1, cx)))),
+            redo,
+        ));
 
     // Share: the page as a PDF, or as it is, elsewhere.
     let share_menu = sheet(t, 240.)
@@ -531,6 +604,20 @@ pub fn render(
         .bg(t.colors.surface)
         .border_b_1()
         .border_color(t.colors.border)
+        .child(
+            tool(
+                t,
+                "design-outline",
+                "icons/panel-left.svg",
+                None,
+                false,
+                outline,
+                "The page's outline",
+            )
+            .on_click(cx.listener(|_, _, window, cx| {
+                window.dispatch_action(Box::new(super::PageOutline), cx)
+            })),
+        )
         .child(
             div()
                 .relative()

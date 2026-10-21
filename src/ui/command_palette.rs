@@ -641,6 +641,33 @@ impl CommandPalette {
                 None,
                 Box::new(CommentTool),
             ));
+            out.extend([
+                act(
+                    if s.design_outline {
+                        "Hide the page's outline"
+                    } else {
+                        "The page's outline: its headings"
+                    },
+                    "icons/panel-left.svg",
+                    None,
+                    Box::new(PageOutline),
+                ),
+                act("Undo the page's last change", "icons/undo-2.svg", None, Box::new(UndoPage)),
+                act("Redo the page's change", "icons/redo-2.svg", None, Box::new(RedoPage)),
+                act("Duplicate the page", "icons/copy.svg", None, Box::new(DuplicatePage)),
+            ]);
+        }
+        if s.web.is_some() {
+            out.push(act(
+                if s.design_guides {
+                    "Take the layout guides off the page"
+                } else {
+                    "Layout guides: outline every box on the page"
+                },
+                "icons/layout-grid.svg",
+                None,
+                Box::new(LayoutGuides),
+            ));
         }
         // The chat showing: what you can do with it.
         if let Some(c) = s.chat().filter(|c| !c.messages.is_empty()) {

@@ -942,6 +942,21 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &SavePagePdf, _, cx| {
                 this.state.update(cx, |s, cx| s.design_export_pdf(cx))
             }))
+            .on_action(cx.listener(|this, _: &LayoutGuides, _, cx| {
+                this.state.update(cx, |s, cx| s.design_set_guides(!s.design_guides, cx))
+            }))
+            .on_action(cx.listener(|this, _: &PageOutline, _, cx| {
+                this.state.update(cx, |s, cx| s.design_set_outline(!s.design_outline, cx))
+            }))
+            .on_action(cx.listener(|this, _: &UndoPage, _, cx| {
+                this.state.update(cx, |s, cx| s.design_step(-1, cx))
+            }))
+            .on_action(cx.listener(|this, _: &RedoPage, _, cx| {
+                this.state.update(cx, |s, cx| s.design_step(1, cx))
+            }))
+            .on_action(cx.listener(|this, _: &DuplicatePage, _, cx| {
+                this.state.update(cx, |s, cx| s.design_duplicate(cx))
+            }))
             .on_action(cx.listener(|this, _: &CommentTool, _, cx| {
                 this.state.update(cx, |s, cx| {
                     if s.design_on_screen().is_some() {

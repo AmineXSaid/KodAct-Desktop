@@ -110,6 +110,22 @@ pub enum Cmd {
     /// Scroll so this point of the page (CSS pixels from its top left) is
     /// near the top.
     ScrollTo(f64, f64),
+    /// Outline every box on the page in this CSS colour (layout guides),
+    /// kept through loads and drafts; None takes them off.
+    Guides(Option<String>),
+    /// Tell the panel the page's headings (`Update::Outline`), now and
+    /// after each load, while on.
+    Outline(bool),
+}
+
+/// A heading of the page, for its outline.
+#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
+pub struct Heading {
+    /// 1 to 3, from `h1` to `h3`.
+    pub level: u8,
+    pub text: String,
+    /// Where it is, in CSS pixels from the page's top.
+    pub y: f64,
 }
 
 /// A part of the page, as the comment tool picks it.
@@ -238,6 +254,8 @@ pub enum Update {
     /// The part of the page at a point (`Cmd::Inspect`), if there is one;
     /// `pick` when it was a click.
     Part { part: Option<PagePart>, pick: bool },
+    /// The page's headings, in order (`Cmd::Outline`).
+    Outline(Vec<Heading>),
     /// The open tabs, and which one is on screen.
     Tabs(Vec<TabInfo>, String),
     /// The page's address and title.
@@ -845,6 +863,9 @@ fn devtools(
     let mut cursor_at: Option<(f64, f64)> = None;
     // The part of the page under the comment tool: asked as the pointer is.
     let (mut part_req, mut pick_req) = (None::<u64>, None::<u64>);
+    // Layout guides' colour while they are on; the outline, while asked for.
+    let mut guides: Option<String> = None;
+    let (mut outline_on, mut outline_req) = (false, None::<u64>);
     let mut part_asked = Instant::now();
     let mut part_at: Option<(f64, f64)> = None;
     let mut focus_checked = Instant::now();
@@ -1086,6 +1107,10 @@ fn devtools(
                                 Value::from(page)
                             );
                             c.send(s, "Runtime.evaluate", json!({ "expression": js }))?;
+                            // A draft is a new document: its guides again.
+                            if guides.is_some() {
+                                c.send(s, "Runtime.evaluate", json!({ "expression": guides_js(guides.as_deref()) }))?;
+                            }
                         }
                         None if on == key => {
                             c.send(s, "Page.reload", json!({}))?;
@@ -1138,6 +1163,20 @@ fn devtools(
                         "Runtime.evaluate",
                         json!({ "expression": part_js(x, y), "returnByValue": true }),
                     )?);
+                }
+                Cmd::Guides(colour) => {
+                    guides = colour;
+                    c.send(s, "Runtime.evaluate", json!({ "expression": guides_js(guides.as_deref()) }))?;
+                }
+                Cmd::Outline(on) => {
+                    outline_on = on;
+                    if on {
+                        outline_req = Some(c.send(
+                            s,
+                            "Runtime.evaluate",
+                            json!({ "expression": OUTLINE_JS, "returnByValue": true }),
+                        )?);
+                    }
                 }
                 Cmd::ScrollTo(x, y) => {
                     let js = format!(
@@ -1194,6 +1233,12 @@ fn devtools(
                 if let Some(v) = value.filter(|v| !v.is_empty()) {
                     say(Update::Copied(v))?;
                 }
+            } else if Some(id) == outline_req {
+                outline_req = None;
+                let heads = value
+                    .and_then(|v| serde_json::from_str::<Vec<Heading>>(&v).ok())
+                    .unwrap_or_default();
+                say(Update::Outline(heads))?;
             } else if Some(id) == part_req || Some(id) == pick_req {
                 let pick = Some(id) == pick_req;
                 if pick {
@@ -1279,7 +1324,21 @@ fn devtools(
                 }
             }
             "Page.frameStartedLoading" if on_tab => say(Update::Loading(true))?,
-            "Page.frameStoppedLoading" if on_tab => say(Update::Loading(false))?,
+            "Page.frameStoppedLoading" if on_tab => {
+                say(Update::Loading(false))?;
+                // A page loaded: its guides again, and its headings.
+                let s = Some(tab.session.as_str());
+                if guides.is_some() {
+                    c.send(s, "Runtime.evaluate", json!({ "expression": guides_js(guides.as_deref()) }))?;
+                }
+                if outline_on {
+                    outline_req = Some(c.send(
+                        s,
+                        "Runtime.evaluate",
+                        json!({ "expression": OUTLINE_JS, "returnByValue": true }),
+                    )?);
+                }
+            }
             // A tab the agent (or a link) opened: show it.
             "Target.targetCreated" if p["targetInfo"]["type"] == "page" => {
                 let id = p["targetInfo"]["targetId"]
@@ -1358,6 +1417,22 @@ return JSON.stringify({{ tag: e.tagName.toLowerCase(), text, selector: path.join
 }})()"#
     )
 }
+
+/// Put layout guides on the page (an outline round every box, in `colour`),
+/// or take them off.
+fn guides_js(colour: Option<&str>) -> String {
+    match colour {
+        Some(c) => format!(
+            "(() => {{ let s = document.getElementById('forge-guides'); if (!s) {{ s = document.createElement('style'); s.id = 'forge-guides'; (document.head || document.documentElement).appendChild(s); }} s.textContent = '* {{ outline: 1px solid {} !important; outline-offset: -1px !important; }}'; }})()",
+            c.replace(['\'', '\\'], "")
+        ),
+        None => "document.getElementById('forge-guides')?.remove()".to_string(),
+    }
+}
+
+/// The page's headings, h1 to h3, as JSON for `Heading`: the shown ones,
+/// with text, at most 200.
+const OUTLINE_JS: &str = r"JSON.stringify([...document.querySelectorAll('h1,h2,h3')].filter(e => e.getClientRects().length).slice(0, 200).map(e => ({ level: +e.tagName[1], text: (e.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 80), y: e.getBoundingClientRect().top + scrollY })).filter(h => h.text))";
 
 /// The text selected on the page, in a field or out of one.
 const SELECTION_JS: &str = "(() => { const e = document.activeElement; if (e && typeof e.selectionStart === 'number' && typeof e.value === 'string') return e.value.slice(e.selectionStart, e.selectionEnd); return String(getSelection()); })()";

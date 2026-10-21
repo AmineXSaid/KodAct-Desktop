@@ -1430,6 +1430,17 @@ pub struct AppState {
     pub design_resolved: bool,
     /// Comments waiting for a chat's reply to end, by chat.
     pub design_held: std::collections::HashMap<usize, Vec<String>>,
+    /// Layout guides: every box on the page outlined.
+    pub design_guides: bool,
+    /// The page's outline beside it, and the headings it lists.
+    pub design_outline: bool,
+    pub design_headings: Vec<crate::web_view::Heading>,
+    /// Each design page's versions (its text, before Forge's first change
+    /// and after each), and which one is on disk: undo and redo.
+    pub design_versions:
+        std::collections::HashMap<std::path::PathBuf, (Vec<std::sync::Arc<str>>, usize)>,
+    /// Pages made beside a chat's own (duplicates), by chat.
+    pub design_extra: Vec<(usize, std::path::PathBuf)>,
     /// Each chat's sub-agents, in the order they started (`agents_view.rs`).
     pub agents: std::collections::HashMap<usize, Vec<AgentRun>>,
     /// Agent cards opened to show their steps, by the agent's id.
@@ -1722,6 +1733,11 @@ impl AppState {
             design_pins: true,
             design_resolved: false,
             design_held: Default::default(),
+            design_guides: false,
+            design_outline: false,
+            design_headings: Vec::new(),
+            design_versions: Default::default(),
+            design_extra: Vec::new(),
             agents: std::collections::HashMap::new(),
             agents_open: std::collections::HashSet::new(),
             doc_fit: true,
@@ -4096,6 +4112,8 @@ impl AppState {
             Some(l) => l.since,
             None => {
                 self.design_follow = true;
+                // The page as it was, for undo, before Forge changes it.
+                self.design_keep_version(&path);
                 std::time::Instant::now()
             }
         };
@@ -4172,6 +4190,7 @@ impl AppState {
             l.writing = false;
             l.unseen = unseen;
         }
+        self.design_keep_version(&full);
         self.design_load(chat, cx);
     }
 
@@ -4239,6 +4258,11 @@ impl AppState {
             return Vec::new();
         };
         let mut pages: Vec<std::path::PathBuf> = Vec::new();
+        for (c, p) in &self.design_extra {
+            if *c == chat.id && !pages.contains(p) {
+                pages.push(p.clone());
+            }
+        }
         for m in &chat.messages {
             let Message::Assistant { blocks } = m else {
                 continue;
@@ -4352,6 +4376,123 @@ impl AppState {
             self.panel = Some(PanelTab::Browser);
             self.doc = None;
         }
+        cx.notify();
+    }
+
+    /// Keep the page's text as a version, unless it is the one on disk
+    /// already. A new version after an undo drops the undone ones, as an
+    /// editor does.
+    fn design_keep_version(&mut self, path: &std::path::Path) {
+        let Ok(text) = std::fs::read_to_string(path) else {
+            return;
+        };
+        let (list, at) = self.design_versions.entry(path.to_path_buf()).or_default();
+        if list.get(*at).is_some_and(|v| **v == *text) {
+            return;
+        }
+        if !list.is_empty() {
+            list.truncate(*at + 1);
+        }
+        list.push(text.into());
+        *at = list.len() - 1;
+    }
+
+    /// Whether the page on screen has a version before (`step` -1) or
+    /// after (1) the one on disk.
+    pub fn design_can_step(&self, step: i32) -> bool {
+        self.design_on_screen()
+            .and_then(|p| self.design_versions.get(&p))
+            .is_some_and(|(list, at)| {
+                let to = *at as i64 + i64::from(step);
+                to >= 0 && (to as usize) < list.len()
+            })
+    }
+
+    /// Undo (-1) or redo (1) a change to the page on screen: that version
+    /// is written back, and the page reloads.
+    pub fn design_step(&mut self, step: i32, cx: &mut Context<Self>) {
+        let Some(page) = self.design_on_screen() else {
+            return;
+        };
+        if self.designing().is_some_and(|l| l.path == page) {
+            return self.show_toast("Forge is changing this page; undo once it's done.", cx);
+        }
+        if !self.design_can_step(step) {
+            return self.show_toast(
+                if step < 0 {
+                    "Nothing to undo on this page."
+                } else {
+                    "Nothing to redo on this page."
+                },
+                cx,
+            );
+        }
+        let Some((list, at)) = self.design_versions.get_mut(&page) else {
+            return;
+        };
+        let to = (*at as i64 + i64::from(step)) as usize;
+        if let Err(e) = std::fs::write(&page, list[to].as_bytes()) {
+            return self.show_toast(format!("Couldn't change the page: {e}"), cx);
+        }
+        *at = to;
+        self.design_show(&page, cx);
+    }
+
+    /// A copy of the page on screen beside it, shown, and listed with the
+    /// chat's pages.
+    pub fn design_duplicate(&mut self, cx: &mut Context<Self>) {
+        let (Some(page), Some(chat)) = (self.design_on_screen(), self.current) else {
+            return;
+        };
+        let (Some(dir), Some(stem)) = (page.parent(), page.file_stem()) else {
+            return;
+        };
+        let ext = page
+            .extension()
+            .map_or("html".to_string(), |e| e.to_string_lossy().into_owned());
+        let to = crate::downloads::free_path(dir, &format!("{} copy.{ext}", stem.to_string_lossy()));
+        if let Err(e) = std::fs::copy(&page, &to) {
+            return self.show_toast(format!("Couldn't copy the page: {e}"), cx);
+        }
+        self.design_extra.push((chat, to.clone()));
+        self.design_show(&to, cx);
+    }
+
+    /// Ask Forge to rename the page on screen, so it knows the new name:
+    /// the composer starts the request.
+    pub fn design_rename(&mut self, cx: &mut Context<Self>) {
+        if let Some(name) = self
+            .design_on_screen()
+            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+        {
+            self.draft = Some(format!("Rename {name} to "));
+            cx.notify();
+        }
+    }
+
+    /// Layout guides on or off: every box on the page outlined, in the
+    /// theme's accent.
+    pub fn design_set_guides(&mut self, on: bool, cx: &mut Context<Self>) {
+        use crate::theme::ActiveTheme;
+        self.design_guides = on;
+        let c = cx.theme().colors.primary;
+        let colour = format!(
+            "hsla({:.0}, {:.0}%, {:.0}%, 0.55)",
+            c.h * 360.0,
+            c.s * 100.0,
+            c.l * 100.0
+        );
+        self.web_send(crate::web_view::Cmd::Guides(on.then_some(colour)), cx);
+        cx.notify();
+    }
+
+    /// The page's outline beside it, or not.
+    pub fn design_set_outline(&mut self, on: bool, cx: &mut Context<Self>) {
+        self.design_outline = on;
+        if !on {
+            self.design_headings.clear();
+        }
+        self.web_send(crate::web_view::Cmd::Outline(on), cx);
         cx.notify();
     }
 
@@ -4706,6 +4847,10 @@ impl AppState {
                     .unwrap_or_default();
                 self.show_toast(format!("Downloaded {name} to your Downloads folder"), cx);
                 self.web_page.last_download = Some(path);
+            }
+            Update::Outline(heads) => {
+                self.design_headings = heads;
+                cx.notify();
             }
             Update::Part { part, pick } => {
                 if !self.design_select {

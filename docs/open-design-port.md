@@ -138,8 +138,8 @@ become their HTML counterpart; the table says how.
 | # | Claude Desktop | In Forge | Step |
 |--:|:--|:--|:--|
 | | **Header** | | |
-| 1 | Sidebar toggle | The page's outline: its sections, a click scrolls to one | Canvas 3 |
-| 2 | Title, with its menu | The page's name and menu: rename, duplicate | Canvas 3 |
+| 1 | Sidebar toggle | The page's outline beside it: its headings (h1–h3), the one at the top marked; a click scrolls to one | **Done** (Canvas 3) |
+| 2 | Title, with its menu | The page's menu (the Pages menu): Duplicate (a copy beside it, listed with the chat's pages), Rename… (asked of Forge, so it knows the new name) | **Done** (Canvas 3) |
 | 3 | Comments on/off | Show or hide the comment pins on the page (the count of open ones) | **Done** (Canvas 2) |
 | 4 | Comments menu | The page's comments, each with its part and whether it was sent, waits or is a note; a click scrolls to it; Resolve; Show resolved; Show pins | **Done** (Canvas 2) |
 | 5 | Share | Share menu: Save as PDF beside the page, Open in your browser | **Done** (Canvas 1) |
@@ -163,9 +163,9 @@ become their HTML counterpart; the table says how.
 | 21 | Play | Present: the page fills the window, back and on a screen, Esc to end (F11) | **Done** (Canvas 1) |
 | 22 | Library (book) | The design systems in the library, to apply one | With D3 (design systems) |
 | 23 | Zoom menu: in, out, Fit artboards, 25–200 % | Zoom as a browser zooms (the page lays out wider or narrower): in, out, Fit a desktop width, 25–200 %; Ctrl =, Ctrl -, Ctrl 0 | **Done** (Canvas 1) |
-| 24 | Layout guides ✓ | Outlines of every box on the page | Canvas 3 |
-| 25 | Undo | The page's previous version | Canvas 3 |
-| 26 | Redo | Its next version again | Canvas 3 |
+| 24 | Layout guides ✓ | Every box on the page outlined in the theme's accent, kept through reloads and drafts; a Guides chip turns them off elsewhere | **Done** (Canvas 3) |
+| 25 | Undo | The page's version before (kept before Forge's first change and after each), written back and reloaded | **Done** (Canvas 3) |
+| 26 | Redo | The version after it again; a new change after an undo drops the undone ones | **Done** (Canvas 3) |
 | | **Comment box** | | |
 | 27 | What it's on ("Canvas") | The part chosen: its tag and the start of its text | **Done** (Canvas 2) |
 | 28 | @Claude | @Forge: on, the comment asks Forge to revise the part (sent with its selector); off, it is a note for you | **Done** (Canvas 2) |

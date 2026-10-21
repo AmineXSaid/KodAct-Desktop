@@ -338,8 +338,19 @@ impl Render for BrowserView {
                     .collect(),
                 pins: s.design_pins,
                 resolved: s.design_resolved,
+                outline: s.design_outline,
+                guides: s.design_guides,
+                undo: s.design_can_step(-1),
+                redo: s.design_can_step(1),
             }
         });
+        // The page's outline: its headings, the one at the top marked.
+        let outline = (s.design_outline && design_bar.is_some()).then(|| {
+            let top = f64::from(page.frame_info.scroll.1) + 80.0;
+            let at = s.design_headings.iter().rposition(|h| h.y <= top);
+            (s.design_headings.clone(), at)
+        });
+        let guides_on = s.design_guides;
         let selecting = s.design_select && design_bar.is_some();
         // Where a part of the page is in the panel: its CSS box, less the
         // page's scroll, times the zoom.
@@ -519,6 +530,18 @@ impl Render for BrowserView {
                         ),
                     ),
             )
+            // Layout guides, while on: a click takes them off.
+            .when(guides_on, |d| {
+                d.child(
+                    crate::theme::text_button(&t, "Guides")
+                        .id("web-guides-off")
+                        .flex_none()
+                        .tooltip(|window, cx| {
+                            gpui::component::tooltip::Tooltip::new("Take the layout guides off").build(window, cx)
+                        })
+                        .on_click(|_, window, cx| window.dispatch_action(Box::new(super::LayoutGuides), cx)),
+                )
+            })
             // The zoom, when it isn't 100%: a click puts it back.
             .when((zoom - 1.0).abs() > 0.001, |d| {
                 d.child(
@@ -919,6 +942,70 @@ impl Render for BrowserView {
         };
         // Presenting, the page alone, with a quiet way back and through.
         let present_controls = presenting.then(|| present_controls(&t, cx));
+        // The outline beside the page: a heading's click scrolls to it.
+        let outline_rail = outline.map(|(heads, at)| {
+            let hover = t.colors.hover;
+            let empty = heads.is_empty();
+            div()
+                .id("design-outline")
+                .flex_none()
+                .w(px(200.))
+                .h_full()
+                .overflow_y_scroll()
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .p(t.space.sm)
+                .bg(t.colors.surface)
+                .border_r_1()
+                .border_color(t.colors.border)
+                .child(
+                    div()
+                        .px(t.space.sm)
+                        .pb(t.space.xs)
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_subtle)
+                        .child("Outline"),
+                )
+                .when(empty, |d| {
+                    d.child(
+                        div()
+                            .px(t.space.sm)
+                            .text_size(t.text.caption)
+                            .line_height(relative(1.4))
+                            .text_color(t.colors.text_subtle)
+                            .child("No headings on this page yet."),
+                    )
+                })
+                .children(heads.into_iter().enumerate().map(|(i, h)| {
+                    let state = self.state.clone();
+                    let y = h.y;
+                    div()
+                        .id(("design-heading", i))
+                        .flex_none()
+                        .h(t.size.row)
+                        .flex()
+                        .items_center()
+                        .pl(t.space.sm + t.space.md * f32::from(h.level.saturating_sub(1)))
+                        .pr(t.space.sm)
+                        .rounded(t.radius.button)
+                        .cursor_pointer()
+                        .text_size(t.text.body_sm)
+                        .text_color(if h.level == 1 { t.colors.text_strong } else { t.colors.text })
+                        .map(|d| if at == Some(i) { crate::theme::selected(&t, d) } else { d.hover(move |s| s.bg(hover)) })
+                        .child(
+                            div()
+                                .min_w_0()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .child(h.text),
+                        )
+                        .on_click(move |_, _, cx| {
+                            state.update(cx, |s, cx| s.web_send(Cmd::ScrollTo(0.0, y), cx))
+                        })
+                }))
+        });
 
         div()
             .key_context("Browser")
@@ -926,7 +1013,14 @@ impl Render for BrowserView {
             .flex()
             .flex_col()
             .when(!presenting, |d| d.child(tab_strip).child(bar).child(progress))
-            .child(viewport.children(present_controls))
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .flex()
+                    .children(outline_rail)
+                    .child(viewport.min_w_0().children(present_controls)),
+            )
             .when(!presenting, |d| d.child(
                 // The agent's access, said once at the foot.
                 div()

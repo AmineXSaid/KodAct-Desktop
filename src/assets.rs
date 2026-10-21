@@ -19,6 +19,8 @@ icons!(
     "zoom-out",
     "scan",
     "mouse-pointer-2",
+    "undo-2",
+    "redo-2",
     "archive",
     "git-pull-request",
     "circle-dot",

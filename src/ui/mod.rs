@@ -167,6 +167,11 @@ gpui::actions!(
         SavePagePdf,
         NewDesignPage,
         CommentTool,
+        LayoutGuides,
+        PageOutline,
+        UndoPage,
+        RedoPage,
+        DuplicatePage,
         Quit,
     ]
 );
