@@ -1253,6 +1253,62 @@ mod tests {
     }
 
     #[test]
+    fn upstream_skills_the_sync_fetched_are_the_ones_used() {
+        let ix = library();
+        let listed = ix.upstream["skills"].as_array().map_or(0, Vec::len);
+        let shipped: Vec<_> = ix.of(Kind::Skill).filter(|e| e.upstream_shipped).collect();
+        assert_eq!(shipped.len(), listed);
+        assert!(shipped.iter().all(|e| e.catalogue && e.skill.as_ref().is_some_and(|p| p.starts_with("upstream"))));
+        let canvas = ix.get(Kind::Skill, "canvas-design").expect("canvas-design");
+        assert_eq!(canvas.skill.as_deref(), Some(Path::new("upstream/anthropics__skills/skills/canvas-design/SKILL.md")));
+        // Kept as a link: Anthropic's document skills aren't open source.
+        let pptx = ix.get(Kind::Skill, "pptx").expect("pptx");
+        assert!(pptx.catalogue && !pptx.upstream_shipped);
+    }
+
+    /// CLAUDE.md rule 1: Forge is closed source, so nothing GPL-family ships,
+    /// and every licence a skill or template carries is one that lets Forge
+    /// redistribute it.
+    #[test]
+    fn every_licence_in_the_library_lets_forge_ship_it() {
+        let ix = library();
+        let permissive = ["MIT", "Apache-2.0", "BSD", "ISC", "0BSD", "Unlicense", "CC0-1.0", "CC-BY-4.0"];
+        let mut stack = vec![ix.root.clone()];
+        let mut checked = 0;
+        while let Some(d) = stack.pop() {
+            for e in std::fs::read_dir(&d).unwrap().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    stack.push(p);
+                    continue;
+                }
+                let name = e.file_name().to_string_lossy().to_uppercase();
+                if !(name.starts_with("LICENSE") || name.starts_with("LICENCE") || name.starts_with("COPYING")) {
+                    continue;
+                }
+                let text = std::fs::read_to_string(&p).unwrap_or_default().to_lowercase();
+                for gpl in ["gnu general public license", "gnu lesser general public", "gnu affero"] {
+                    assert!(!text.contains(gpl), "{} is {gpl}", p.display());
+                }
+                checked += 1;
+            }
+        }
+        assert!(checked > 100, "only {checked} licence files found");
+        for s in ix.upstream["skills"].as_array().into_iter().flatten() {
+            let l = s["license"].as_str().unwrap_or_default();
+            assert!(permissive.contains(&l), "{}: {l}", s["stub"]);
+        }
+        for e in &ix.entries {
+            if let Some(l) = &e.license {
+                // SKILL.md `license:` can point at a file instead of naming one.
+                if !l.contains(' ') {
+                    assert!(permissive.contains(&l.as_str()), "{}: {l}", e.dir.display());
+                }
+            }
+        }
+    }
+
+    #[test]
     fn craft_rules_are_indexed_by_slug() {
         let ix = library();
         for slug in ["typography", "color", "anti-ai-slop"] {

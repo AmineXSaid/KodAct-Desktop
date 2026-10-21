@@ -115,3 +115,197 @@ These folders carry a licence of their own, which applies to the files in them.
 | `skills/web-clone/` | `LICENSE` | MIT |
 | `skills/web-design-guidelines/` | `LICENSE` | MIT |
 | `skills/writing-guidelines/` | `LICENSE` | MIT |
+| `upstream/ComposioHQ__awesome-claude-skills/artifacts-builder/` | `LICENSE.txt` | Apache-2.0 |
+| `upstream/MiniMax-AI__skills/skills/minimax-docx/` | `LICENSE` | MIT |
+| `upstream/anthropics__skills/skills/algorithmic-art/` | `LICENSE.txt` | Apache-2.0 |
+| `upstream/anthropics__skills/skills/brand-guidelines/` | `LICENSE.txt` | Apache-2.0 |
+| `upstream/anthropics__skills/skills/canvas-design/` | `LICENSE.txt` | Apache-2.0 |
+| `upstream/anthropics__skills/skills/slack-gif-creator/` | `LICENSE.txt` | Apache-2.0 |
+| `upstream/anthropics__skills/skills/theme-factory/` | `LICENSE.txt` | Apache-2.0 |
+| `upstream/anthropics__skills/skills/web-artifacts-builder/` | `LICENSE.txt` | Apache-2.0 |
+| `upstream/jiannanya__snow-d3/` | `LICENSE` | MIT |
+| `upstream/meodai__skill.color-expert/` | `LICENSE` | CC0-1.0 |
+| `upstream/muthuishere__hand-drawn-diagrams/` | `LICENSE` | MIT |
+| `upstream/op7418__Youtube-clipper-skill/` | `LICENSE` | MIT |
+| `upstream/openai__skills/skills/.curated/screenshot/` | `LICENSE.txt` | Apache-2.0 |
+| `upstream/openai__skills/skills/.curated/speech/` | `LICENSE.txt` | Apache-2.0 |
+| `upstream/openai__skills/skills/.system/imagegen/` | `LICENSE.txt` | Apache-2.0 |
+| `upstream/wholiver__swiftui-design-skill/` | `LICENSE` | MIT |
+
+## Upstream skills
+
+Open Design's catalogue lists these skills by link only. Forge ships the real skill, from the repository and commit below, where its licence allows redistribution. They are under `upstream/<owner>__<repo>/`.
+
+| Catalogue entry | Repository | Commit | Path | Licence |
+|:--|:--|:--|:--|:--|
+| `ad-creative` | [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) | `e85f3cbc2e4a` | `skills/ad-creative` | MIT |
+| `algorithmic-art` | [anthropics/skills](https://github.com/anthropics/skills) | `dbd4588f9e10` | `skills/algorithmic-art` | Apache-2.0 |
+| `artifacts-builder` | [ComposioHQ/awesome-claude-skills](https://github.com/ComposioHQ/awesome-claude-skills) | `be2a406907db` | `artifacts-builder` | Apache-2.0 |
+| `brainstorming` | [obra/superpowers](https://github.com/obra/superpowers) | `b739a8af570e` | `skills/brainstorming` | MIT |
+| `brand-guidelines` | [anthropics/skills](https://github.com/anthropics/skills) | `dbd4588f9e10` | `skills/brand-guidelines` | Apache-2.0 |
+| `canvas-design` | [anthropics/skills](https://github.com/anthropics/skills) | `dbd4588f9e10` | `skills/canvas-design` | Apache-2.0 |
+| `color-expert` | [meodai/skill.color-expert](https://github.com/meodai/skill.color-expert) | `29188b28ef2a` | `` | CC0-1.0 |
+| `copywriting` | [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) | `e85f3cbc2e4a` | `skills/copywriting` | MIT |
+| `creative-director` | [smixs/creative-director-skill](https://github.com/smixs/creative-director-skill) | `ac06eb255371` | `creative-director` | CC-BY-4.0 |
+| `d3-visualization` | [jiannanya/snow-d3](https://github.com/jiannanya/snow-d3) | `f9c319c5f5b1` | `` | MIT |
+| `design-consultation` | [garrytan/gstack](https://github.com/garrytan/gstack) | `b616d6c53dd8` | `design-consultation` | MIT |
+| `design-review` | [garrytan/gstack](https://github.com/garrytan/gstack) | `b616d6c53dd8` | `design-review` | MIT |
+| `frontend-dev` | [MiniMax-AI/skills](https://github.com/MiniMax-AI/skills) | `60aaae52bb2a` | `skills/frontend-dev` | MIT |
+| `frontend-slides` | [zarazhangrui/frontend-slides](https://github.com/zarazhangrui/frontend-slides) | `9906a34d640d` | `plugins/frontend-slides/skills/frontend-slides` | MIT |
+| `gif-sticker-maker` | [MiniMax-AI/skills](https://github.com/MiniMax-AI/skills) | `60aaae52bb2a` | `skills/gif-sticker-maker` | MIT |
+| `hand-drawn-diagrams` | [muthuishere/hand-drawn-diagrams](https://github.com/muthuishere/hand-drawn-diagrams) | `c8ffd6c3febb` | `` | MIT |
+| `imagegen` | [openai/skills](https://github.com/openai/skills) | `49f948faa925` | `skills/.system/imagegen` | Apache-2.0 |
+| `marketing-psychology` | [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) | `e85f3cbc2e4a` | `skills/marketing-psychology` | MIT |
+| `minimax-docx` | [MiniMax-AI/skills](https://github.com/MiniMax-AI/skills) | `60aaae52bb2a` | `skills/minimax-docx` | MIT |
+| `minimax-pdf` | [MiniMax-AI/skills](https://github.com/MiniMax-AI/skills) | `60aaae52bb2a` | `skills/minimax-pdf` | MIT |
+| `plan-design-review` | [garrytan/gstack](https://github.com/garrytan/gstack) | `b616d6c53dd8` | `plan-design-review` | MIT |
+| `pptx-generator` | [MiniMax-AI/skills](https://github.com/MiniMax-AI/skills) | `60aaae52bb2a` | `skills/pptx-generator` | MIT |
+| `screenshot` | [openai/skills](https://github.com/openai/skills) | `49f948faa925` | `skills/.curated/screenshot` | Apache-2.0 |
+| `shader-dev` | [MiniMax-AI/skills](https://github.com/MiniMax-AI/skills) | `60aaae52bb2a` | `skills/shader-dev` | MIT |
+| `slack-gif-creator` | [anthropics/skills](https://github.com/anthropics/skills) | `dbd4588f9e10` | `skills/slack-gif-creator` | Apache-2.0 |
+| `speech` | [openai/skills](https://github.com/openai/skills) | `49f948faa925` | `skills/.curated/speech` | Apache-2.0 |
+| `swiftui-design` | [wholiver/swiftui-design-skill](https://github.com/wholiver/swiftui-design-skill) | `2c82638ebd3c` | `` | MIT |
+| `theme-factory` | [anthropics/skills](https://github.com/anthropics/skills) | `dbd4588f9e10` | `skills/theme-factory` | Apache-2.0 |
+| `ui-ux-pro-max` | [nextlevelbuilder/ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | `56ea9cf174ed` | `.claude/skills/ui-ux-pro-max` | MIT |
+| `venice-audio-music` | [veniceai/skills](https://github.com/veniceai/skills) | `5eaeac576c09` | `skills/venice-audio-music` | MIT |
+| `venice-audio-speech` | [veniceai/skills](https://github.com/veniceai/skills) | `5eaeac576c09` | `skills/venice-audio-speech` | MIT |
+| `venice-image-edit` | [veniceai/skills](https://github.com/veniceai/skills) | `5eaeac576c09` | `skills/venice-image-edit` | MIT |
+| `venice-image-generate` | [veniceai/skills](https://github.com/veniceai/skills) | `5eaeac576c09` | `skills/venice-image-generate` | MIT |
+| `venice-video` | [veniceai/skills](https://github.com/veniceai/skills) | `5eaeac576c09` | `skills/venice-video` | MIT |
+| `web-artifacts-builder` | [anthropics/skills](https://github.com/anthropics/skills) | `dbd4588f9e10` | `skills/web-artifacts-builder` | Apache-2.0 |
+| `youtube-clipper` | [op7418/Youtube-clipper-skill](https://github.com/op7418/Youtube-clipper-skill) | `f31f077ee090` | `` | MIT |
+
+## Catalogue entries kept as links only
+
+Their upstream licence does not allow redistribution, so Forge ships only Open Design's catalogue entry, which links to the upstream skill.
+
+| Catalogue entry | Repository | Why |
+|:--|:--|:--|
+| `ai-music-album` | https://github.com/bitwize-music-studio/claude-ai-music-skills | upstream has 53 skills and none is this one (renamed, split or removed) |
+| `apple-hig` | https://github.com/raintree-technology/apple-hig-skills | upstream has 15 skills and none is this one (renamed, split or removed) |
+| `competitive-ads-extractor` | https://github.com/ComposioHQ/awesome-claude-skills | no licence file: all rights reserved by default |
+| `design-md` | https://github.com/google-labs-code/skills | repository not found on GitHub (private, renamed or removed) |
+| `doc` | https://github.com/openai/skills | upstream has 44 skills and none is this one (renamed, split or removed) |
+| `docx` | https://github.com/anthropics/skills | proprietary licence (all rights reserved) (skills/docx/LICENSE.txt) |
+| `domain-name-brainstormer` | https://github.com/ComposioHQ/awesome-claude-skills | no licence file: all rights reserved by default |
+| `enhance-prompt` | https://github.com/google-labs-code/skills | repository not found on GitHub (private, renamed or removed) |
+| `fal-3d` | https://github.com/fal-ai-community/skills | upstream has 17 skills and none is this one (renamed, split or removed) |
+| `fal-generate` | https://github.com/fal-ai-community/skills | upstream has 17 skills and none is this one (renamed, split or removed) |
+| `fal-image-edit` | https://github.com/fal-ai-community/skills | upstream has 17 skills and none is this one (renamed, split or removed) |
+| `fal-kling-o3` | https://github.com/fal-ai-community/skills | upstream has 17 skills and none is this one (renamed, split or removed) |
+| `fal-lip-sync` | https://github.com/fal-ai-community/skills | upstream has 17 skills and none is this one (renamed, split or removed) |
+| `fal-realtime` | https://github.com/fal-ai-community/skills | upstream has 17 skills and none is this one (renamed, split or removed) |
+| `fal-restore` | https://github.com/fal-ai-community/skills | upstream has 17 skills and none is this one (renamed, split or removed) |
+| `fal-train` | https://github.com/fal-ai-community/skills | upstream has 17 skills and none is this one (renamed, split or removed) |
+| `fal-tryon` | https://github.com/fal-ai-community/skills | upstream has 17 skills and none is this one (renamed, split or removed) |
+| `fal-upscale` | https://github.com/fal-ai-community/skills | upstream has 17 skills and none is this one (renamed, split or removed) |
+| `fal-video-edit` | https://github.com/fal-ai-community/skills | upstream has 17 skills and none is this one (renamed, split or removed) |
+| `fal-vision` | https://github.com/fal-ai-community/skills | upstream has 17 skills and none is this one (renamed, split or removed) |
+| `figma-code-connect-components` | https://github.com/openai/skills | its own terms, not an open-source licence (skills/.curated/figma-code-connect-components/LICENSE.TXT) |
+| `figma-create-design-system-rules` | https://github.com/openai/skills | its own terms, not an open-source licence (skills/.curated/figma-create-design-system-rules/LICENSE.TXT) |
+| `figma-create-new-file` | https://github.com/openai/skills | its own terms, not an open-source licence (skills/.curated/figma-create-new-file/LICENSE.TXT) |
+| `figma-generate-design` | https://github.com/openai/skills | its own terms, not an open-source licence (skills/.curated/figma-generate-design/LICENSE.TXT) |
+| `figma-generate-library` | https://github.com/openai/skills | its own terms, not an open-source licence (skills/.curated/figma-generate-library/LICENSE.TXT) |
+| `figma-implement-design` | https://github.com/openai/skills | its own terms, not an open-source licence (skills/.curated/figma-implement-design/LICENSE.txt) |
+| `figma-use` | https://github.com/openai/skills | its own terms, not an open-source licence (skills/.curated/figma-use/LICENSE.TXT) |
+| `flutter-animating-apps` | https://github.com/flutter/skills | upstream has 31 skills and none is this one (renamed, split or removed) |
+| `frontend-skill` | https://github.com/openai/skills | upstream has 44 skills and none is this one (renamed, split or removed) |
+| `full-page-screenshot` | https://github.com/LewisLiu007/full-page-screenshot | no licence file: all rights reserved by default |
+| `image-enhancer` | https://github.com/ComposioHQ/awesome-claude-skills | no licence file: all rights reserved by default |
+| `imagen` | https://github.com/sanjay3290/imagen | repository not found on GitHub (private, renamed or removed) |
+| `nanobanana-ppt` | https://github.com/op7418/NanoBanana-PPT-Skills | no licence file: all rights reserved by default |
+| `paywall-upgrade-cro` | https://github.com/coreyhaines31/marketingskills | upstream has 52 skills and none is this one (renamed, split or removed) |
+| `pdf` | https://github.com/anthropics/skills | proprietary licence (all rights reserved) (skills/pdf/LICENSE.txt) |
+| `pixelbin-media` | https://github.com/pixelbin-dev/skills | repository not found on GitHub (private, renamed or removed) |
+| `platform-design` | https://github.com/ehmo/platform-design-skills | upstream has 8 skills and none is this one (renamed, split or removed) |
+| `pptx` | https://github.com/anthropics/skills | proprietary licence (all rights reserved) (skills/pptx/LICENSE.txt) |
+| `remotion` | https://github.com/remotion-dev/remotion | upstream has 87 skills and none is this one (renamed, split or removed) |
+| `replicate` | https://github.com/replicate/skills | upstream has 7 skills and none is this one (renamed, split or removed) |
+| `screenshots-marketing` | https://github.com/Shpigford/screenshots | repository not found on GitHub (private, renamed or removed) |
+| `shadcn-ui` | https://github.com/google-labs-code/skills | repository not found on GitHub (private, renamed or removed) |
+| `slides` | https://github.com/openai/skills | upstream has 44 skills and none is this one (renamed, split or removed) |
+| `sora` | https://github.com/openai/skills | upstream has 44 skills and none is this one (renamed, split or removed) |
+| `stitch-loop` | https://github.com/google-labs-code/skills | repository not found on GitHub (private, renamed or removed) |
+| `threejs` | https://github.com/CloudAI-X/threejs-skills | upstream has 13 skills and none is this one (renamed, split or removed) |
+| `ui-skills` | https://github.com/ibelick/ui-skills | upstream has 9 skills and none is this one (renamed, split or removed) |
+| `video-downloader` | https://github.com/ComposioHQ/awesome-claude-skills | no licence file: all rights reserved by default |
+| `wpds` | https://github.com/WordPress/skills | repository not found on GitHub (private, renamed or removed) |
+
+## Templates that ask for credit
+
+These image and video templates are licensed under Creative Commons Attribution: credit goes to their authors, as below.
+
+| Folder | Template | Author | Licence |
+|:--|:--|:--|:--|
+| `plugins/_official/image-templates/3d-stone-staircase-evolution-infographic/` | 3D Stone Staircase Evolution Infographic | [知识猫图解](https://x.com/GeekCatX/status/2045792240044511277#reversed-1) | CC-BY-4.0 |
+| `plugins/_official/image-templates/anime-martial-arts-battle-illustration/` | Anime Martial Arts Battle Illustration | [たねもみ 2.0 / Tanemomi Ver2.0](https://x.com/Tanemomi_Ver2/status/2046063806846214265#reversed-0) | CC-BY-4.0 |
+| `plugins/_official/image-templates/e-commerce-live-stream-ui-mockup/` | E-commerce Live Stream UI Mockup | [神经病不想好转](https://x.com/sjbbxhz/status/2045684734714380687#reversed-0) | CC-BY-4.0 |
+| `plugins/_official/image-templates/illustrated-city-food-map/` | Illustrated City Food Map | [皮皮特](https://x.com/mm_zzm44854/status/2045861258520568230#reversed-1) | CC-BY-4.0 |
+| `plugins/_official/image-templates/momotaro-explainer-slide-in-hybrid-style/` | Momotaro Explainer Slide in Hybrid Style | [やまもん](https://x.com/yammamon/status/2045778624092254603) | CC-BY-4.0 |
+| `plugins/_official/image-templates/profile-avatar-anime-girl-to-cinematic-photo/` | Profile / Avatar - Anime Girl to Cinematic Photo | [maku](https://x.com/maku67879787/status/2049040029612486845#reversed-0) | CC-BY-4.0 |
+| `plugins/_official/image-templates/profile-avatar-casual-fashion-grid-photoshoot/` | Profile / Avatar - Casual Fashion Grid Photoshoot | [Keskin](https://x.com/craftian_keskin/status/2048848908999135645) | CC-BY-4.0 |
+| `plugins/_official/image-templates/profile-avatar-cinematic-south-asian-male-portrait-with-vultures/` | Profile / Avatar - Cinematic South Asian Male Portrait with Vultures | [Jahan Zaib](https://x.com/jzaib4269/status/2048949396222489081) | CC-BY-4.0 |
+| `plugins/_official/image-templates/profile-avatar-cyberpunk-anime-portrait-with-neon-face-text/` | Profile / Avatar - Cyberpunk Anime Portrait with Neon Face Text | [Anifun AI](https://x.com/Anifun_AI/status/2049393871642345834#reversed-0) | CC-BY-4.0 |
+| `plugins/_official/image-templates/profile-avatar-elegant-fantasy-girl-in-violet-garden/` | Profile / Avatar - Elegant Fantasy Girl in Violet Garden | [美和](https://x.com/tokikageyomikag/status/2049200427842064715#reversed-1) | CC-BY-4.0 |
+| `plugins/_official/image-templates/profile-avatar-ethereal-blue-haired-fantasy-portrait/` | Profile / Avatar - Ethereal Blue-Haired Fantasy Portrait | [𝑳𝒊𝒊𝒈𝒋𝒎](https://x.com/lchngjin91/status/2048836910676926484#reversed-0) | CC-BY-4.0 |
+| `plugins/_official/image-templates/profile-avatar-glamorous-woman-in-black-portrait/` | Profile / Avatar - Glamorous Woman in Black Portrait | [LJ](https://x.com/XLOOP37/status/2048976490575155202#reversed-1) | CC-BY-4.0 |
+| `plugins/_official/image-templates/profile-avatar-hyper-realistic-selfie-texture-prompts/` | Profile / Avatar - Hyper-Realistic Selfie Texture Prompts | [Adrian Solarz](https://x.com/adriansolarzz/status/2048950419204751574) | CC-BY-4.0 |
+| `plugins/_official/image-templates/profile-avatar-lavender-fantasy-mage-portrait/` | Profile / Avatar - Lavender Fantasy Mage Portrait | [美和](https://x.com/tokikageyomikag/status/2049200427842064715#reversed-0) | CC-BY-4.0 |
+| `plugins/_official/image-templates/profile-avatar-monochrome-studio-portrait/` | Profile / Avatar - Monochrome Studio Portrait | [K](https://x.com/ChillaiKalan__/status/2048828505497198838) | CC-BY-4.0 |
+| `plugins/_official/image-templates/profile-avatar-old-photo-restoration-to-dslr-portrait/` | Profile / Avatar - Old Photo Restoration to DSLR Portrait | [摆烂程序媛](https://x.com/wanerfu/status/2049006709692359015#reversed-1) | CC-BY-4.0 |
+| `plugins/_official/image-templates/profile-avatar-poetic-woman-in-garden-portrait/` | Profile / Avatar - Poetic Woman in Garden Portrait | [LJ](https://x.com/XLOOP37/status/2048976490575155202#reversed-0) | CC-BY-4.0 |
+| `plugins/_official/image-templates/profile-avatar-professional-identity-portrait-wallpaper/` | Profile / Avatar - Professional Identity Portrait Wallpaper | [𝗦𝗮𝗻𝗶𝗮](https://x.com/saniaspeaks_/status/2048990448882942051) | CC-BY-4.0 |
+| `plugins/_official/image-templates/profile-avatar-realistically-imperfect-ai-selfie/` | Profile / Avatar - Realistically Imperfect AI Selfie | [Tz](https://x.com/Tz_2022/status/2049178230762934731) | CC-BY-4.0 |
+| `plugins/_official/image-templates/profile-avatar-signed-marker-portrait-on-shikishi/` | Profile / Avatar - Signed Marker Portrait on Shikishi | [ダルトワ★TV](https://x.com/MireilleDartois/status/2048894364479565869#reversed-0) | CC-BY-4.0 |
+| `plugins/_official/image-templates/profile-avatar-snow-rabbit-empress-portrait/` | Profile / Avatar - Snow Rabbit Empress Portrait | [전자넹_특이점](https://x.com/zeonzwane_spud/status/2049099351310692544#reversed-2) | CC-BY-4.0 |
+| `plugins/_official/image-templates/profile-avatar-snow-rabbit-mask-hanfu-portrait/` | Profile / Avatar - Snow Rabbit Mask Hanfu Portrait | [전자넹_특이점](https://x.com/zeonzwane_spud/status/2049099351310692544#reversed-1) | CC-BY-4.0 |
+| `plugins/_official/image-templates/profile-avatar-snowy-rabbit-hanfu-portrait/` | Profile / Avatar - Snowy Rabbit Hanfu Portrait | [전자넹_특이점](https://x.com/zeonzwane_spud/status/2049099351310692544#reversed-3) | CC-BY-4.0 |
+| `plugins/_official/image-templates/profile-avatar-snowy-rabbit-spirit-portrait/` | Profile / Avatar - Snowy Rabbit Spirit Portrait | [전자넹_특이점](https://x.com/zeonzwane_spud/status/2049099351310692544#reversed-0) | CC-BY-4.0 |
+| `plugins/_official/image-templates/profile-avatar-song-dynasty-hanfu-portrait/` | Profile / Avatar - Song Dynasty Hanfu Portrait | [Shinning](https://x.com/Shinning1010/status/2049013833021145235) | CC-BY-4.0 |
+| `plugins/_official/image-templates/social-media-post-anime-pokemon-shop-outfit-teaser-poster/` | Social Media Post - Anime Pokémon Shop Outfit Teaser Poster | [ねずみ男(AIイラスト専用)](https://x.com/ratman_aiillust/status/2049107740686204942#reversed-0) | CC-BY-4.0 |
+| `plugins/_official/image-templates/social-media-post-cinematic-elevator-scene/` | Social Media Post - Cinematic Elevator Scene | [Leo AIPhi](https://x.com/xiaochou1945/status/2049299191550407147) | CC-BY-4.0 |
+| `plugins/_official/image-templates/social-media-post-confused-elf-girl-at-pastel-desk/` | Social Media Post - Confused Elf Girl at Pastel Desk | [える](https://x.com/el_el_san/status/2049164203542679602#reversed-0) | CC-BY-4.0 |
+| `plugins/_official/image-templates/social-media-post-editorial-fashion-photography/` | Social Media Post - Editorial Fashion Photography | [Miz](https://x.com/mizq06/status/2049189070732157408) | CC-BY-4.0 |
+| `plugins/_official/image-templates/social-media-post-fashion-editorial-collage/` | Social Media Post - Fashion Editorial Collage | [Sydney](https://x.com/XSydneyFan/status/2049178971653484720) | CC-BY-4.0 |
+| `plugins/_official/image-templates/social-media-post-psg-transfer-announcement-poster/` | Social Media Post - PSG Transfer Announcement Poster | [UxUi Tega (Design & Ai)](https://x.com/Tegadesigns/status/2049400556578382190#reversed-0) | CC-BY-4.0 |
+| `plugins/_official/image-templates/social-media-post-showa-day-retro-culture-magazine-cover/` | Social Media Post - Showa Day Retro Culture Magazine Cover | [Kazuch2ND@AI ART](https://x.com/Kazuch75240438/status/2049292582606496252#reversed-0) | CC-BY-4.0 |
+| `plugins/_official/image-templates/social-media-post-social-media-fashion-outfit-generation/` | Social Media Post - Social Media Fashion Outfit Generation | [Rion Wu](https://x.com/rionaifantasy/status/2049122261249204626) | CC-BY-4.0 |
+| `plugins/_official/image-templates/social-media-post-travel-snapshot-collage-prompt/` | Social Media Post - Travel Snapshot Collage Prompt | [麻酱AI实验室](https://x.com/zhongying14/status/2049128619134300200) | CC-BY-4.0 |
+| `plugins/_official/image-templates/social-media-post-vintage-sign-painter-sketch/` | Social Media Post - Vintage Sign-Painter Sketch | [Ashish Sheth](https://x.com/commanderdgr8/status/2049347770725912874) | CC-BY-4.0 |
+| `plugins/_official/image-templates/vr-headset-exploded-view-poster/` | VR Headset Exploded View Poster | [wory＠ホッピング中](https://x.com/wory37303852/status/2045925660401795478#reversed-0) | CC-BY-4.0 |
+| `plugins/_official/video-templates/3d-animated-boy-building-lego/` | 3D Animated Boy Building Lego | [Alex Zhang](https://x.com/jojogh_007/status/2049123558102810714) | CC-BY-4.0 |
+| `plugins/_official/video-templates/a-decade-of-refinement-glow-up/` | A Decade of Refinement Glow-Up | [Maverick | AI](https://x.com/RizwanAly07/status/2048948726623056366) | CC-BY-4.0 |
+| `plugins/_official/video-templates/ancient-guardian-dragon-rescue/` | Ancient Guardian Dragon Rescue | [Jasmine Ai](https://x.com/jasminekhan90_/status/2049038597333090769) | CC-BY-4.0 |
+| `plugins/_official/video-templates/ancient-indian-kingdom-fpv-video/` | Ancient Indian Kingdom FPV Video | [Shushant Lakhyani](https://x.com/shushant_l/status/2049141805233672529) | CC-BY-4.0 |
+| `plugins/_official/video-templates/animation-transfer-and-camera-tracking-prompt/` | Animation transfer and camera tracking prompt | [Olivio Sarikas](https://x.com/OlivioSarikas/status/2049093762077630628) | CC-BY-4.0 |
+| `plugins/_official/video-templates/beat-synced-outfit-transformation-dance/` | Beat-Synced Outfit Transformation Dance | [Kashberg](https://x.com/Kashberg_0/status/2049074008730247669) | CC-BY-4.0 |
+| `plugins/_official/video-templates/character-intro-motion-graphics-sequence/` | Character Intro Motion Graphics Sequence | [KANA](https://x.com/KanaWorks_AI/status/2049281443956974029) | CC-BY-4.0 |
+| `plugins/_official/video-templates/cinematic-birthday-celebration-sequence/` | Cinematic Birthday Celebration Sequence | [Soulful Ai](https://x.com/soulful__ai/status/2048908956178001993) | CC-BY-4.0 |
+| `plugins/_official/video-templates/cinematic-dragon-interaction-flight/` | Cinematic Dragon Interaction & Flight | [simply](https://x.com/kingofdairyque/status/2049052738924023976) | CC-BY-4.0 |
+| `plugins/_official/video-templates/cinematic-east-asian-woman-hand-dance/` | Cinematic East Asian Woman Hand Dance | [阿绎 AYi](https://x.com/AYi_AInotes/status/2049047545435889883) | CC-BY-4.0 |
+| `plugins/_official/video-templates/cinematic-emotional-face-close-up/` | Cinematic Emotional Face Close-up | [Ai Doctor](https://x.com/DoctorAmna11/status/2049119918755283014) | CC-BY-4.0 |
+| `plugins/_official/video-templates/cinematic-marine-biologist-exploration/` | Cinematic Marine Biologist Exploration | [LudovicCreator](https://x.com/LudovicCreator/status/2049190693550055726) | CC-BY-4.0 |
+| `plugins/_official/video-templates/cinematic-music-podcast-and-guitar-technique/` | Cinematic Music Podcast and Guitar Technique | [TheYudayVerse](https://x.com/yuday9909/status/2048949262109880363) | CC-BY-4.0 |
+| `plugins/_official/video-templates/cinematic-route-navigation-guide/` | Cinematic Route Navigation Guide | [Michael Guo](https://x.com/Michaelzsguo/status/2048966649982669053) | CC-BY-4.0 |
+| `plugins/_official/video-templates/cinematic-street-racing-sequence-for-seedance-2/` | Cinematic Street Racing Sequence for Seedance 2 | [Pierrick Chevallier | IA](https://x.com/CharaspowerAI/status/2039651574297792688) | CC-BY-4.0 |
+| `plugins/_official/video-templates/cinematic-vampire-alley-fight-sequence/` | Cinematic vampire alley fight sequence | [Cortex Visual ・ AI Movies](https://x.com/Cortex__Visual/status/2049070872426688714) | CC-BY-4.0 |
+| `plugins/_official/video-templates/crimson-horizon-sci-fi-cinematic-sequence/` | Crimson Horizon Sci-Fi Cinematic Sequence | [wonder](https://x.com/WonderBoy023/status/2049086862858367347) | CC-BY-4.0 |
+| `plugins/_official/video-templates/cyberpunk-game-trailer-script/` | Cyberpunk Game Trailer Script | [Larus Canus](https://x.com/MrLarus/status/2049004278908330226) | CC-BY-4.0 |
+| `plugins/_official/video-templates/forbidden-city-cat-satire/` | Forbidden City Cat Satire | [The Anxious Mind](https://x.com/drjoetw/status/2048996625654354333) | CC-BY-4.0 |
+| `plugins/_official/video-templates/hollywood-haute-couture-fantasy-video-prompt/` | Hollywood Haute Couture Fantasy Video Prompt | [John](https://x.com/johnAGI168/status/2025849650654122348) | CC-BY-4.0 |
+| `plugins/_official/video-templates/hunched-character-animation/` | Hunched Character Animation | [Olivio Sarikas](https://x.com/OlivioSarikas/status/2049093747011670042) | CC-BY-4.0 |
+| `plugins/_official/video-templates/live-action-anime-adaptation-water-vs-thunder-breathing-duel/` | Live-Action Anime Adaptation: Water vs. Thunder Breathing Duel | [John](https://x.com/johnAGI168/status/2021610292979876208) | CC-BY-4.0 |
+| `plugins/_official/video-templates/luxury-supercar-cinematic-narrative/` | Luxury Supercar Cinematic Narrative | [Ivanna | AI Art & Prompts](https://x.com/ivanka_humeniuk/status/2048962364083691774) | CC-BY-4.0 |
+| `plugins/_official/video-templates/magical-academy-storyboard-sequence/` | Magical Academy Storyboard Sequence | [Soulful Ai](https://x.com/soulful__ai/status/2049186700199620777) | CC-BY-4.0 |
+| `plugins/_official/video-templates/modern-rural-aesthetics-healing-short-film-video-prompt/` | Modern Rural Aesthetics Healing Short Film Video Prompt | [John](https://x.com/johnAGI168/status/2021818021354848258) | CC-BY-4.0 |
+| `plugins/_official/video-templates/nightclub-flyer-atmospheric-animation/` | Nightclub Flyer Atmospheric Animation | [Nash Deen](https://x.com/DeenNash_Fu/status/2048912067361452121) | CC-BY-4.0 |
+| `plugins/_official/video-templates/retro-hk-wuxia-film-aesthetic/` | Retro HK Wuxia Film Aesthetic | [Alex Zhang](https://x.com/jojogh_007/status/2048969153202307329) | CC-BY-4.0 |
+| `plugins/_official/video-templates/seedance-2-0-15-second-cinematic-japanese-romance-short-film/` | Seedance 2.0: 15-Second Cinematic Japanese Romance Short Film | [AIGC｜阳家豪](https://x.com/JiahaoYang_art/status/2033119940216344616) | CC-BY-4.0 |
+| `plugins/_official/video-templates/seedance-2-0-80-year-old-rapper-mv/` | Seedance 2.0: 80-Year-Old Rapper MV | [松果先森](https://x.com/songguoxiansen/status/2033175478765289598) | CC-BY-4.0 |
+| `plugins/_official/video-templates/sequence-and-movement-instruction-for-martial-arts-video/` | Sequence and Movement Instruction for Martial Arts Video | [Aijaz](https://x.com/iamsofiaijaz/status/2049045776001564680) | CC-BY-4.0 |
+| `plugins/_official/video-templates/soul-switching-mirror-magic-sequence/` | Soul-Switching Mirror Magic Sequence | [Soulful Ai](https://x.com/soulful__ai/status/2049094162134532477) | CC-BY-4.0 |
+| `plugins/_official/video-templates/toaster-rocket-jumpscare/` | Toaster Rocket Jumpscare | [Marin](https://x.com/MarinMethod/status/2049140113343394003) | CC-BY-4.0 |
+| `plugins/_official/video-templates/traditional-dance-performance/` | Traditional Dance Performance | [Sydney](https://x.com/XSydneyFan/status/2049170241247449316) | CC-BY-4.0 |
+| `plugins/_official/video-templates/vintage-disney-style-pirate-crocodile-animation/` | Vintage Disney Style Pirate Crocodile Animation | [migrok](https://x.com/migrok293703/status/2049073744346239415) | CC-BY-4.0 |
+| `plugins/_official/video-templates/viral-k-pop-dance-choreography/` | Viral K-pop Dance Choreography | [MetaBynny](https://x.com/MetaBynny/status/2049008203854184461) | CC-BY-4.0 |
+| `plugins/_official/video-templates/wasteland-factory-chase/` | Wasteland Factory Chase | [Alexandra Aisling](https://x.com/AllaAisling/status/2049132779288322134) | CC-BY-4.0 |

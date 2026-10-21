@@ -1482,6 +1482,36 @@
    "sha256": "7232ba763871faed58516f620f5c017bd8618d1e177fe3e670da55b5c829d14d",
    "size": 54070,
    "url": "https://raw.githubusercontent.com/nexu-io/open-design/3b0df90f305c8279e748c292accf336d02b924ef/templates/live-artifacts/otd-operations-brief/preview.png"
+  },
+  {
+   "path": "upstream/muthuishere__hand-drawn-diagrams/assets/demo.gif",
+   "sha256": "3bbcae14e74faac59e960474aeb89c14e9478eabc8013f103ea8cb810c015cfb",
+   "size": 132,
+   "url": "https://raw.githubusercontent.com/muthuishere/hand-drawn-diagrams/c8ffd6c3febbc0e745ab6691ea81c8703a9829c8/assets/demo.gif"
+  },
+  {
+   "path": "upstream/muthuishere__hand-drawn-diagrams/assets/diagram.png",
+   "sha256": "54ce58d00c1e509d280bae68de8acea0b625ed192c9438ebad655c228a9b7ab0",
+   "size": 845404,
+   "url": "https://raw.githubusercontent.com/muthuishere/hand-drawn-diagrams/c8ffd6c3febbc0e745ab6691ea81c8703a9829c8/assets/diagram.png"
+  },
+  {
+   "path": "upstream/openai__skills/skills/.curated/screenshot/assets/screenshot.png",
+   "sha256": "4ff96a476f2a2ac4ca7b626f9d4b78a7aa8cce0219e0688c5f15355513b61b5b",
+   "size": 860,
+   "url": "https://raw.githubusercontent.com/openai/skills/49f948faa9258a0c61caceaf225e179651397431/skills/.curated/screenshot/assets/screenshot.png"
+  },
+  {
+   "path": "upstream/openai__skills/skills/.curated/speech/assets/speech.png",
+   "sha256": "b5abb383bba63a309f73a4da1060b50b6c92b1b5f974f44b8f609b3da10112f9",
+   "size": 1234,
+   "url": "https://raw.githubusercontent.com/openai/skills/49f948faa9258a0c61caceaf225e179651397431/skills/.curated/speech/assets/speech.png"
+  },
+  {
+   "path": "upstream/openai__skills/skills/.system/imagegen/assets/imagegen.png",
+   "sha256": "95952f644064eb9e890f98d8db07216347186526e4c41ad66d3420629eb86e20",
+   "size": 1711,
+   "url": "https://raw.githubusercontent.com/openai/skills/49f948faa9258a0c61caceaf225e179651397431/skills/.system/imagegen/assets/imagegen.png"
   }
  ]
 }
