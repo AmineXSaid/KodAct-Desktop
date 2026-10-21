@@ -399,6 +399,9 @@ pub fn is_agent_tool(name: &str) -> bool {
 pub struct WebPage {
     /// The latest picture of the page.
     pub frame: Option<std::sync::Arc<gpui::RenderImage>>,
+    /// The area that picture shows, in CSS pixels from the page's top left
+    /// (0 when the browser didn't say).
+    pub frame_area: (f32, f32),
     pub url: String,
     pub title: String,
     pub loading: bool,
@@ -413,6 +416,30 @@ pub struct WebPage {
     pub cursor: String,
     /// The browser's last finished download, for the panel to show.
     pub last_download: Option<std::path::PathBuf>,
+}
+
+/// A page Forge is designing, shown live in the browser.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LiveDesign {
+    pub chat: usize,
+    /// The page on disk.
+    pub path: std::path::PathBuf,
+    /// Forge is writing it now: its draft streaming, or an edit not done.
+    pub writing: bool,
+    /// Written while you weren't following: the panel still shows an
+    /// older draft, or another page, until you ask for it.
+    pub unseen: bool,
+    /// When this chat's design began: a reply after it starts afresh.
+    since: std::time::Instant,
+}
+
+impl LiveDesign {
+    /// The page's file name, for the badge.
+    pub fn name(&self) -> String {
+        self.path
+            .file_name()
+            .map_or(String::new(), |n| n.to_string_lossy().into_owned())
+    }
 }
 
 /// What the side panel shows when no file is open in it.
@@ -1352,6 +1379,12 @@ pub struct AppState {
     pub web: Option<std::sync::Arc<crate::web_view::WebView>>,
     /// What it shows: the page, its tabs, whether it is loading.
     pub web_page: WebPage,
+    /// The page Forge is designing: the browser shows it as it is written
+    /// (`design::live`).
+    pub design_live: Option<LiveDesign>,
+    /// Whether the panel follows Forge's design. Off once you take the
+    /// browser yourself, or stop it; on again at the next reply.
+    pub design_follow: bool,
     /// Each chat's sub-agents, in the order they started (`agents_view.rs`).
     pub agents: std::collections::HashMap<usize, Vec<AgentRun>>,
     /// Agent cards opened to show their steps, by the agent's id.
@@ -1632,6 +1665,8 @@ impl AppState {
             panel: None,
             web: None,
             web_page: WebPage::default(),
+            design_live: None,
+            design_follow: true,
             agents: std::collections::HashMap::new(),
             agents_open: std::collections::HashSet::new(),
             doc_fit: true,
@@ -3972,6 +4007,184 @@ impl AppState {
         }
     }
 
+    // ------------------------------------------------------------ the live design
+
+    /// A page in this chat's project, on this computer: the live view shows
+    /// only those (a remote chat's pages are on its host).
+    fn design_path(&self, chat: usize, path: &str) -> Option<std::path::PathBuf> {
+        if !crate::design::live::is_page(path) || self.chat_remote(chat).is_some() {
+            return None;
+        }
+        let p = std::path::Path::new(path);
+        if p.is_absolute() {
+            return Some(p.to_path_buf());
+        }
+        let project = self
+            .chats
+            .iter()
+            .find(|c| c.id == chat)
+            .and_then(|c| self.project(c.project))
+            .map(|p| p.path.clone())
+            .unwrap_or_else(|| self.project_dir.clone());
+        Some(project.join(p))
+    }
+
+    /// Forge starts on a page: the design this chat shows live. A design
+    /// from an earlier reply starts following again.
+    fn design_begin(&mut self, chat: usize, path: std::path::PathBuf) {
+        let turn = self.turn_started.get(&chat).copied();
+        let earlier = self
+            .design_live
+            .as_ref()
+            .filter(|l| l.chat == chat && turn.is_none_or(|t| l.since >= t));
+        let since = match earlier {
+            Some(l) => l.since,
+            None => {
+                self.design_follow = true;
+                std::time::Instant::now()
+            }
+        };
+        self.design_live = Some(LiveDesign {
+            chat,
+            path,
+            writing: true,
+            unseen: false,
+            since,
+        });
+    }
+
+    /// Whether the live view acts for this chat now: it is on screen, and
+    /// you haven't taken the browser.
+    fn design_shown(&self, chat: usize) -> bool {
+        self.design_follow && self.current == Some(chat) && self.design_live.as_ref().is_some_and(|l| l.chat == chat)
+    }
+
+    /// The browser comes to the panel, unless a document you opened is there.
+    fn design_panel(&mut self) {
+        if self.doc.is_none() {
+            self.panel = Some(PanelTab::Browser);
+        }
+    }
+
+    /// A page streaming in: shown as far as it has got.
+    fn design_draft(&mut self, chat: usize, path: &str, content: &str, cx: &mut Context<Self>) {
+        let Some(full) = self.design_path(chat, path) else {
+            return;
+        };
+        self.design_begin(chat, full.clone());
+        if self.design_shown(chat) && self.ensure_web(cx).is_some() {
+            self.design_panel();
+            let dir = full.parent().unwrap_or(&full);
+            if let Some(w) = &self.web {
+                w.send(crate::web_view::Cmd::Design {
+                    key: crate::design::live::file_url(&full),
+                    draft: Some(crate::design::live::draft_page(content, dir)),
+                });
+            }
+        }
+        cx.notify();
+    }
+
+    /// A tool call on a page: a Write's whole content is its last draft; an
+    /// edit shows the page it changes.
+    fn design_call(&mut self, chat: usize, name: &str, input: &serde_json::Value, cx: &mut Context<Self>) {
+        let path = input["file_path"].as_str().unwrap_or_default();
+        match name {
+            "Write" => {
+                if let Some(content) = input["content"].as_str() {
+                    self.design_draft(chat, path, content, cx);
+                }
+            }
+            "Edit" | "MultiEdit" => {
+                if let Some(full) = self.design_path(chat, path) {
+                    self.design_begin(chat, full);
+                    self.design_load(chat, cx);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// The page is written (or the call failed): the browser loads the file
+    /// itself, reloading it when it shows it already, which keeps the scroll
+    /// and a deck's slide.
+    fn design_done(&mut self, chat: usize, path: &str, cx: &mut Context<Self>) {
+        let Some(full) = self.design_path(chat, path) else {
+            return;
+        };
+        let unseen = !self.design_follow;
+        if let Some(l) = self.design_live.as_mut().filter(|l| l.chat == chat && l.path == full) {
+            l.writing = false;
+            l.unseen = unseen;
+        }
+        self.design_load(chat, cx);
+    }
+
+    /// Load the live page's file, when it exists, in its tab.
+    fn design_load(&mut self, chat: usize, cx: &mut Context<Self>) {
+        let Some(full) = self.design_live.as_ref().map(|l| l.path.clone()) else {
+            return;
+        };
+        if self.design_shown(chat) && full.is_file() && self.ensure_web(cx).is_some() {
+            self.design_panel();
+            if let Some(w) = &self.web {
+                w.send(crate::web_view::Cmd::Design {
+                    key: crate::design::live::file_url(&full),
+                    draft: None,
+                });
+            }
+        }
+        cx.notify();
+    }
+
+    /// A page's draft is shown from a temporary file: the address bar and
+    /// the tab name the page itself.
+    fn design_named(&self, url: String, title: String) -> (String, String) {
+        use crate::design::live::{draft_file, file_url, page_key};
+        let Some(l) = &self.design_live else {
+            return (url, title);
+        };
+        let key = file_url(&l.path);
+        if page_key(&url) != file_url(&draft_file(&key)) {
+            return (url, title);
+        }
+        let title = if title.is_empty() || title.starts_with("forge-draft-") {
+            l.name()
+        } else {
+            title
+        };
+        (key, title)
+    }
+
+    /// Follow Forge's design again (the badge's Show), or stop: you take
+    /// the browser yourself, or press Stop following.
+    pub fn design_set_follow(&mut self, on: bool, cx: &mut Context<Self>) {
+        self.design_follow = on;
+        if let Some(l) = self.design_live.as_mut().filter(|_| on) {
+            l.unseen = false;
+        }
+        if let Some(chat) = self.design_live.as_ref().map(|l| l.chat).filter(|_| on) {
+            self.design_load(chat, cx);
+        }
+        cx.notify();
+    }
+
+    /// The design the badge tells of: the chat on screen's, while it
+    /// replies and Forge writes it.
+    pub fn designing(&self) -> Option<&LiveDesign> {
+        self.design_live
+            .as_ref()
+            .filter(|l| l.writing && self.current == Some(l.chat) && self.replies.contains_key(&l.chat))
+    }
+
+    /// The chat on screen's design, written while you weren't following:
+    /// the badge offers to show it.
+    pub fn design_ready(&self) -> Option<&LiveDesign> {
+        self.design_live
+            .as_ref()
+            .filter(|l| !l.writing && l.unseen && self.current == Some(l.chat))
+    }
+
     /// Open or close an agent's card.
     pub fn toggle_agent(&mut self, id: &str, cx: &mut Context<Self>) {
         if !self.agents_open.remove(id) {
@@ -4162,18 +4375,26 @@ impl AppState {
     fn on_web(&mut self, u: crate::web_view::Update, cx: &mut Context<Self>) {
         use crate::web_view::Update;
         match u {
-            Update::Frame(img) => {
+            Update::Frame(img, area) => {
+                self.web_page.frame_area = area;
                 // The last picture leaves the GPU's atlas as the next arrives.
                 if let Some(old) = self.web_page.frame.replace(img) {
                     cx.drop_image(old, None);
                 }
             }
             Update::Page { url, title } => {
+                let (url, title) = self.design_named(url, title);
                 self.web_page.url = url;
                 self.web_page.title = title;
             }
             Update::Tabs(tabs, on) => {
-                self.web_page.tabs = tabs;
+                self.web_page.tabs = tabs
+                    .into_iter()
+                    .map(|mut t| {
+                        (t.url, t.title) = self.design_named(t.url, t.title);
+                        t
+                    })
+                    .collect();
                 self.web_page.active = on;
             }
             Update::Loading(l) => self.web_page.loading = l,
@@ -6537,12 +6758,14 @@ impl AppState {
             Event::Thinking(t) => self.apply(chat, Step::Think(t), cx),
             Event::ToolUse { id, name, input } => {
                 self.panel_follows(chat, &name);
+                self.design_call(chat, &name, &input, cx);
                 if let Some(at) =
                     self.push_block(chat, Block::Tool(crate::backend::tool_call(&name, &input)))
                 {
                     self.tool_rows.insert((chat, id), at);
                 }
             }
+            Event::Drafting { path, content, .. } => self.design_draft(chat, &path, &content, cx),
             Event::ToolResult {
                 id,
                 output,
@@ -6550,7 +6773,11 @@ impl AppState {
             } => {
                 if let Some(&(m, b)) = self.tool_rows.get(&(chat, id)) {
                     let mut written = None;
+                    let mut page = None;
                     self.update_tool(chat, m, b, |t| {
+                        if t.kind == ToolKind::Write && crate::design::live::is_page(&t.target) {
+                            page = Some(t.target.to_string());
+                        }
                         if t.status != ToolStatus::Declined {
                             t.status = if output.starts_with(AGENT_STOPPED) {
                                 // A sub-agent you stopped: not a failure.
@@ -6566,6 +6793,10 @@ impl AppState {
                             }
                         }
                     });
+                    // A page it wrote (or tried to): the live view shows the file.
+                    if let Some(p) = page {
+                        self.design_done(chat, &p, cx);
+                    }
                     // A document Forge wrote gets its card in the reply.
                     if let Some(remote) = self.chat_remote(chat) {
                         if let Some(p) = written {
@@ -7851,6 +8082,29 @@ impl AppState {
     }
 
     fn apply(&mut self, chat: usize, step: Step, cx: &mut Context<Self>) {
+        // A page streaming: the live view, as for a real Write.
+        if let Step::Draft(path, content) = &step {
+            self.design_draft(chat, path, content, cx);
+            return;
+        }
+        if let Step::Wrote(path, content) = &step {
+            let made = std::path::Path::new(path)
+                .parent()
+                .map(std::fs::create_dir_all)
+                .is_some_and(|r| r.is_ok())
+                && std::fs::write(path, content).is_ok();
+            if let Some(Message::Assistant { blocks }) = self.chat_mut(chat).and_then(|c| c.messages.last_mut()) {
+                if let Some(Block::Tool(t)) = blocks.iter_mut().rev().find(|b| matches!(b, Block::Tool(_))) {
+                    t.status = if made { ToolStatus::Done } else { ToolStatus::Failed };
+                }
+            }
+            self.design_done(chat, path, cx);
+            if let Some(file) = self.written_file(chat, path) {
+                self.push_block(chat, Block::File(file));
+            }
+            cx.notify();
+            return;
+        }
         if let Step::Agent(ev) = &step {
             self.on_agent_event(chat, ev);
             // The agent's own row in the reply, as a real one has.
@@ -8075,6 +8329,10 @@ enum Step {
     Remember(String),
     /// The running call's change, before it is made.
     ToolDiff(Vec<DiffLine>),
+    /// A page being written, as far as it has streamed: (path, content).
+    Draft(String, String),
+    /// The page written: the file is made, its row done, its card shown.
+    Wrote(String, String),
 }
 
 impl Step {
@@ -8090,6 +8348,9 @@ impl Step {
             Step::File(..) | Step::Remember(_) => 300,
             Step::Agent(..) => 380,
             Step::Denied | Step::End { .. } => 250,
+            // About the pace a model writes a page at.
+            Step::Draft(..) => 420,
+            Step::Wrote(..) => 450,
         }
     }
 }
@@ -8127,6 +8388,34 @@ const DEMO_CHARTS: &str = "Where the time went:\n\n```mermaid\npie title Time pe
 
 /// The demo's ASCII answer, for checking that box drawing keeps its columns.
 const DEMO_ASCII: &str = "Here it is in ASCII.\n\n```text\n┌──────────────┐     ┌──────────────┐\n│  Forge app   │ ──▶ │   ForgeCLI   │\n└──────┬───────┘     └──────┬───────┘\n       │ stream-json        │ HTTPS\n       ▼                    ▼\n┌──────────────┐     ┌──────────────┐\n│  Chat view   │ ◀── │    Model     │\n└──────────────┘     └──────────────┘\n```\n\nAnd the same without a fence:\n\n+--------+      +---------+\n| Client | ---> | Server  |\n+--------+      +---------+\n     |               |\n     v               v\n  [ UI ]         [ DB ]\n";
+
+/// The demo's page: a six-slide course introduction, written a few lines
+/// at a time, so the live view shows it forming, then made on disk.
+fn demo_design() -> Vec<Step> {
+    const PAGE: &str = include_str!("../assets/demo/course-intro.html");
+    let path = std::env::temp_dir()
+        .join("forge-demo")
+        .join("course-intro.html")
+        .display()
+        .to_string();
+    let mut s = words(
+        "I'll build a six-slide course introduction: the title, what people leave with, the six weeks, how a week runs, who teaches, and the first task.",
+        Step::Say,
+    );
+    s.push(Step::ToolStart(ToolKind::Write, path.clone(), None));
+    let lines: Vec<&str> = PAGE.split_inclusive('\n').collect();
+    let mut so_far = String::new();
+    for chunk in lines.chunks(5) {
+        so_far.extend(chunk.iter().copied());
+        s.push(Step::Draft(path.clone(), so_far.clone()));
+    }
+    s.push(Step::Wrote(path, PAGE.to_string()));
+    s.extend(words(
+        "\n\nIt's open beside the chat. Each slide is 16:9 and stacks on a narrow window; the colours and type are set once at the top, so a new course needs only its words.",
+        Step::Say,
+    ));
+    s
+}
 
 /// The demo's sub-agents: three reviewers at once, each with its own steps
 /// and answer, as the engine reports them.
@@ -8376,6 +8665,11 @@ fn script(prompt: &str) -> Vec<Step> {
         s.extend(words("Noted. I'll keep that in this project's memory.", Step::Say));
         s.push(Step::Remember(fact));
         s.push(Step::End { seconds: 1.4 });
+        return s;
+    }
+    if ["design", "deck", "slides", "course"].iter().any(|w| lower.contains(w)) {
+        s.extend(demo_design());
+        s.push(Step::End { seconds: 21.4 });
         return s;
     }
     if lower.contains("agent") {

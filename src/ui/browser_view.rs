@@ -4,6 +4,9 @@
 //! thin bar while a page loads; then the page itself, which you click,
 //! scroll and type into as in any browser. When Forge drives it (the
 //! browser tools, `browser_mcp.rs`), a badge says so and you watch it work.
+//! When Forge writes a page, the panel follows it and shows it forming
+//! (`design::live`); a badge says which, with Stop following, or Show once
+//! you have taken the browser yourself.
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -118,7 +121,17 @@ impl BrowserView {
     }
 
     fn send(&self, cmd: Cmd, cx: &mut Context<Self>) {
-        self.state.update(cx, |s, cx| s.web_send(cmd, cx));
+        // Taking the browser somewhere yourself stops it following Forge's design.
+        let yours = matches!(
+            cmd,
+            Cmd::Show(_) | Cmd::NewTab(_) | Cmd::Navigate(_) | Cmd::Back | Cmd::Forward | Cmd::Close(_)
+        );
+        self.state.update(cx, |s, cx| {
+            if yours && s.design_follow && s.designing().is_some() {
+                s.design_set_follow(false, cx);
+            }
+            s.web_send(cmd, cx)
+        });
     }
 
     /// A point in the window as a point on the page (CSS pixels): the
@@ -221,10 +234,18 @@ impl Render for BrowserView {
         let agent = s
             .chat()
             .is_some_and(|c| super::workbench::agent_browsing(&c.messages));
+        // The page Forge is writing (true), or wrote while you weren't
+        // following (false), and whether the panel follows it.
+        let design = s
+            .designing()
+            .map(|l| (l.name(), true))
+            .or_else(|| s.design_ready().map(|l| (l.name(), false)));
+        let following = s.design_follow;
         let blank = page.url.is_empty() || page.url == "about:blank";
         let secure = page.url.starts_with("https://");
         let (tabs, active) = (page.tabs.clone(), page.active.clone());
         let (frame, loading, error) = (page.frame.clone(), page.loading, page.error.clone());
+        let frame_area = page.frame_area;
         let last_download = page.last_download.clone();
         let url = page.url.clone();
         let hover = t.colors.hover;
@@ -432,16 +453,23 @@ impl Render for BrowserView {
             .track_focus(&self.focus)
             .on_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| this.key(ev, window, cx)))
             // The page's picture at its true size, from the top left, where
-            // the mouse mapping (`to_page`) expects it.
+            // the mouse mapping (`to_page`) expects it: as large as the area
+            // the browser says it shows, which may be more than the page.
             .children(frame.clone().map(|f| {
-                let size = f.size(0);
-                let scale = window.scale_factor();
+                let (w, h) = match frame_area {
+                    (w, h) if w > 0.0 && h > 0.0 => (w, h),
+                    _ => {
+                        let size = f.size(0);
+                        let scale = window.scale_factor();
+                        (size.width.0 as f32 / scale, size.height.0 as f32 / scale)
+                    }
+                };
                 img(f)
                     .absolute()
                     .top_0()
                     .left_0()
-                    .w(px(size.width.0 as f32 / scale))
-                    .h(px(size.height.0 as f32 / scale))
+                    .w(px(w))
+                    .h(px(h))
                     .object_fit(ObjectFit::Fill)
             }))
             .child(
@@ -570,10 +598,71 @@ impl Render for BrowserView {
             }))
             // The page's dialog (alert, confirm, prompt), answered here.
             .children(dialog)
+            // Forge writing a page: which, and whether the panel follows it.
+            .children(design.clone().map(|(name, writing)| {
+                let following = following && writing;
+                let state = self.state.clone();
+                // Opaque, as it floats over the page, and its clicks are its
+                // own, not the page's under it.
+                crate::theme::popover(&t)
+                    .occlude()
+                    .absolute()
+                    .bottom(t.space.md)
+                    .left(t.space.md)
+                    .max_w(relative(0.9))
+                    .flex()
+                    .items_center()
+                    .gap(t.space.sm)
+                    .pl(t.space.md)
+                    .pr(t.space.xs)
+                    .py(t.space.xs)
+                    .text_size(t.text.caption)
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(t.colors.text)
+                    .child(if !writing {
+                        icon("icons/circle-check.svg", t.size.icon_xs, t.colors.primary).into_any_element()
+                    } else if following {
+                        icon("icons/loader-circle.svg", t.size.icon_xs, t.colors.primary)
+                            .with_animation(
+                                "web-design",
+                                Animation::new(Duration::from_millis(900)).repeat(),
+                                |svg, d| svg.with_transformation(Transformation::rotate(percentage(d))),
+                            )
+                            .into_any_element()
+                    } else {
+                        icon("icons/sparkles.svg", t.size.icon_xs, t.colors.primary).into_any_element()
+                    })
+                    .child(
+                        div()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .child(if writing {
+                                format!("Forge is designing {name}")
+                            } else {
+                                format!("{name} is ready")
+                            }),
+                    )
+                    .child(
+                        // Show leads somewhere, so it is the stronger of the two.
+                        if following {
+                            crate::theme::text_button(&t, "Stop following")
+                        } else {
+                            crate::theme::ghost_button(&t, "Show")
+                        }
+                        .id("web-design-follow")
+                            .flex_none()
+                            .on_click(move |_, _, cx| {
+                                state.update(cx, |s, cx| s.design_set_follow(!following, cx))
+                            }),
+                    )
+            }))
             // Forge at the wheel: a badge over the page.
-            .when(agent, |d| {
+            .when(agent && design.is_none(), |d| {
                 d.child(
-                    div()
+                    crate::theme::popover(&t)
+                        .occlude()
                         .absolute()
                         .bottom(t.space.md)
                         .left(t.space.md)
@@ -582,13 +671,9 @@ impl Render for BrowserView {
                         .gap(t.space.sm)
                         .px(t.space.md)
                         .py(t.space.xs)
-                        .rounded(t.radius.card)
-                        .bg(t.colors.primary_tint)
-                        .border_1()
-                        .border_color(t.colors.primary.opacity(0.3))
                         .text_size(t.text.caption)
                         .font_weight(FontWeight::MEDIUM)
-                        .text_color(t.colors.primary)
+                        .text_color(t.colors.text)
                         .child(
                             icon("icons/loader-circle.svg", t.size.icon_xs, t.colors.primary).with_animation(
                                 "web-agent",

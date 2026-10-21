@@ -56,6 +56,14 @@ pub enum Event {
         name: String,
         input: Value,
     },
+    /// An HTML page a Write call is writing, as far as it has streamed (the
+    /// live design panel shows it forming): at most every few hundred
+    /// milliseconds, and once more, whole, when the call is complete.
+    Drafting {
+        id: String,
+        path: String,
+        content: String,
+    },
     /// A tool call's result.
     ToolResult {
         id: String,
@@ -573,7 +581,13 @@ fn browser_subject(input: &Value) -> Option<String> {
 #[derive(Default)]
 pub struct Parser {
     streamed: bool,
+    /// Write calls streaming in, by content block: their id and input so
+    /// far, and when their draft was last sent.
+    writes: std::collections::HashMap<u64, (String, String, Option<std::time::Instant>)>,
 }
+
+/// How often a page being written is shown again while it streams.
+const DRAFT_EVERY: std::time::Duration = std::time::Duration::from_millis(250);
 
 impl Parser {
     pub fn line(&mut self, line: &str) -> Vec<Event> {
@@ -638,6 +652,18 @@ impl Parser {
                 {
                     out.push(Event::Break);
                 }
+                // A Write call starting: follow its input as it streams.
+                let index = ev["index"].as_u64().unwrap_or(0);
+                if ev["type"] == "content_block_start"
+                    && ev["content_block"]["type"] == "tool_use"
+                    && ev["content_block"]["name"] == "Write"
+                {
+                    let id = ev["content_block"]["id"].as_str().unwrap_or_default();
+                    self.writes.insert(index, (id.to_string(), String::new(), None));
+                }
+                if ev["type"] == "content_block_stop" {
+                    self.writes.remove(&index);
+                }
                 if ev["type"] == "content_block_delta" {
                     let d = &ev["delta"];
                     match d["type"].as_str() {
@@ -650,6 +676,24 @@ impl Parser {
                             out.push(Event::Thinking(
                                 d["thinking"].as_str().unwrap_or_default().into(),
                             ));
+                        }
+                        Some("input_json_delta") => {
+                            if let Some((id, json, sent)) = self.writes.get_mut(&index) {
+                                json.push_str(d["partial_json"].as_str().unwrap_or_default());
+                                let due = sent.is_none_or(|t| t.elapsed() >= DRAFT_EVERY);
+                                if let Some((path, content)) = due
+                                    .then(|| crate::design::live::partial_write(json))
+                                    .flatten()
+                                    .filter(|(p, c)| crate::design::live::is_page(p) && !c.is_empty())
+                                {
+                                    *sent = Some(std::time::Instant::now());
+                                    out.push(Event::Drafting {
+                                        id: id.clone(),
+                                        path,
+                                        content,
+                                    });
+                                }
+                            }
                         }
                         _ => {}
                     }
@@ -1028,6 +1072,39 @@ mod tests {
     fn parse(lines: &[Value]) -> Vec<Event> {
         let mut p = Parser::default();
         lines.iter().flat_map(|l| p.line(&l.to_string())).collect()
+    }
+
+    #[test]
+    fn a_page_being_written_is_drafted_as_it_streams() {
+        let delta = |i: u64, part: &str| json!({"type":"stream_event","parent_tool_use_id":null,"event":{"type":"content_block_delta","index":i,"delta":{"type":"input_json_delta","partial_json":part}}});
+        let start = |i: u64, name: &str| json!({"type":"stream_event","parent_tool_use_id":null,"event":{"type":"content_block_start","index":i,"content_block":{"type":"tool_use","id":format!("w{i}"),"name":name,"input":{}}}});
+        let mut p = Parser::default();
+        let mut feed = |l: Value| p.line(&l.to_string());
+        assert!(feed(start(1, "Write")).is_empty());
+        // Nothing until the path is whole.
+        assert!(feed(delta(1, r#"{"file_path": "site/deck.ht"#)).is_empty());
+        let ev = feed(delta(1, r#"ml", "content": "<h1>Course"#));
+        assert_eq!(
+            ev,
+            [Event::Drafting {
+                id: "w1".into(),
+                path: "site/deck.html".into(),
+                content: "<h1>Course".into()
+            }]
+        );
+        // Then at most every DRAFT_EVERY.
+        assert!(feed(delta(1, " intro</h1>")).is_empty());
+        // Not a page, not a Write, or a sub-agent's: no drafts.
+        feed(start(2, "Write"));
+        assert!(feed(delta(2, r#"{"file_path": "a.md", "content": "x"#)).is_empty());
+        feed(start(3, "Bash"));
+        assert!(feed(delta(3, r#"{"command": "ls"#)).is_empty());
+        let nested = json!({"type":"stream_event","parent_tool_use_id":"t9","event":{"type":"content_block_start","index":4,"content_block":{"type":"tool_use","id":"w4","name":"Write","input":{}}}});
+        feed(nested);
+        assert!(feed(delta(4, r#"{"file_path": "b.html", "content": "x"#)).is_empty());
+        // A finished block is forgotten.
+        feed(json!({"type":"stream_event","parent_tool_use_id":null,"event":{"type":"content_block_stop","index":1}}));
+        assert!(!p.writes.contains_key(&1));
     }
 
     #[test]

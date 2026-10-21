@@ -26,6 +26,9 @@ use serde_json::{json, Value};
 
 /// The page size before the panel says its own, in CSS pixels.
 pub const VIEWPORT: (u32, u32) = (1280, 800);
+/// Room the headless window has beyond the page: its own bar (139 px) and,
+/// for a while, a warning bar (53 px) take some of its height.
+const WINDOW_SPARE: u32 = 240;
 
 /// What the panel asks of the browser.
 #[derive(Debug, Clone, PartialEq)]
@@ -79,6 +82,15 @@ pub enum Cmd {
     Show(String),
     NewTab(String),
     Close(String),
+    /// A page Forge is designing (`design::live`), in a tab of its own,
+    /// brought to the front: `key` is the file's address. With `draft`, the
+    /// page so far is written into the tab as it streams; without, the file
+    /// itself is loaded, or reloaded when the tab shows it already (which
+    /// keeps the scroll and a deck's slide).
+    Design {
+        key: String,
+        draft: Option<String>,
+    },
     /// The panel's size for the page, in CSS pixels, and the screen's
     /// pixels per CSS pixel: the page lays itself out to fit, and its
     /// pictures come at the screen's density.
@@ -145,8 +157,9 @@ pub struct TabInfo {
 /// What the browser tells the panel.
 #[derive(Debug)]
 pub enum Update {
-    /// A new picture of the page, decoded for drawing.
-    Frame(Arc<RenderImage>),
+    /// A new picture of the page, decoded for drawing, and the area it
+    /// shows in CSS pixels, from the page's top left.
+    Frame(Arc<RenderImage>, (f32, f32)),
     /// The open tabs, and which one is on screen.
     Tabs(Vec<TabInfo>, String),
     /// The page's address and title.
@@ -594,7 +607,11 @@ fn fit(
     events: &mut Vec<Value>,
 ) -> Result<(), String> {
     let s = Some(session);
-    // A headless window pictures its whole size: make it the panel's.
+    // The page is laid out at the panel's size (below), but after some
+    // loads Chromium pictures the whole window instead, with the page at its
+    // top left (the frames say so, and the panel draws them to scale). The
+    // window is larger than the page, so that picture still holds all of it,
+    // and the pictures are never shrunk to fit.
     if let Ok(w) = c.call(
         None,
         "Browser.getWindowForTarget",
@@ -604,7 +621,7 @@ fn fit(
         let _ = c.call(
             None,
             "Browser.setWindowBounds",
-            json!({ "windowId": w["windowId"], "bounds": { "width": m.width, "height": m.height } }),
+            json!({ "windowId": w["windowId"], "bounds": { "width": m.width + WINDOW_SPARE, "height": m.height + WINDOW_SPARE } }),
             events,
         );
     }
@@ -619,8 +636,8 @@ fn fit(
         s,
         "Page.startScreencast",
         json!({ "format": "jpeg", "quality": 80,
-            "maxWidth": (m.width as f64 * m.scale).round() as u32,
-            "maxHeight": (m.height as f64 * m.scale).round() as u32 }),
+            "maxWidth": (f64::from(m.width + WINDOW_SPARE) * m.scale).round() as u32,
+            "maxHeight": (f64::from(m.height + WINDOW_SPARE) * m.scale).round() as u32 }),
         events,
     )?;
     Ok(())
@@ -728,6 +745,10 @@ fn devtools(
         );
     }
     let log = crate::browser::downloads_log(focus);
+    // Pages Forge is designing, by address: the tab each one has.
+    let mut designs: std::collections::HashMap<String, String> = Default::default();
+    // A page's draft, before its file exists, is shown from a file of its own.
+    let draft_file = crate::design::live::draft_file;
     let mut pending: std::collections::HashMap<String, String> = Default::default();
     // Answers awaited without blocking the loop: the pointer under the
     // mouse, and the selection to copy.
@@ -752,8 +773,26 @@ fn devtools(
                 }
             }
         }
-        // What the panel asked for.
-        while let Ok(cmd) = cmds.try_recv() {
+        // What the panel asked for. A page's draft that a later one in the
+        // same batch replaces is skipped: the page shows the newest.
+        let batch: Vec<Cmd> = std::iter::from_fn(|| cmds.try_recv().ok()).collect();
+        let newest: std::collections::HashMap<&str, usize> = batch
+            .iter()
+            .enumerate()
+            .filter_map(|(i, c)| match c {
+                Cmd::Design { key, .. } => Some((key.as_str(), i)),
+                _ => None,
+            })
+            .collect();
+        let stale: Vec<bool> = batch
+            .iter()
+            .enumerate()
+            .map(|(i, c)| matches!(c, Cmd::Design { key, draft: Some(_) } if newest.get(key.as_str()).is_some_and(|&n| n > i)))
+            .collect();
+        for (cmd, stale) in batch.into_iter().zip(stale) {
+            if stale {
+                continue;
+            }
             let s = Some(tab.session.as_str());
             let mouse = |kind: &str, x: f64, y: f64, button: &str, count: u32| json!({ "type": kind, "x": x, "y": y, "button": button, "clickCount": count });
             match cmd {
@@ -893,6 +932,78 @@ fn devtools(
                     // The tab shows itself when it is created (below).
                     c.send(None, "Target.createTarget", json!({ "url": url }))?;
                 }
+                Cmd::Design { key, draft } => {
+                    // Its tab: the one made for it, else one already on the
+                    // file, else a new one, made and shown here, now, so the
+                    // draft can't land in another tab.
+                    let open = pages(&mut c, &mut events)?;
+                    let target = designs
+                        .get(&key)
+                        .filter(|id| open.iter().any(|t| &t.id == *id))
+                        .cloned()
+                        .or_else(|| {
+                            open.iter()
+                                .find(|t| crate::design::live::page_key(&t.url) == key)
+                                .map(|t| t.id.clone())
+                        });
+                    // A blank tab nobody has used (the one the browser
+                    // starts with) is taken rather than left beside it.
+                    let blank = open.iter().any(|t| {
+                        t.id == tab.target
+                            && (t.url.is_empty() || t.url == "about:blank")
+                            && !designs.values().any(|d| d == &t.id)
+                    });
+                    let target = match target {
+                        Some(id) => id,
+                        None if blank => tab.target.clone(),
+                        None => {
+                            let made = c.call(None, "Target.createTarget", json!({ "url": "about:blank" }), &mut events)?;
+                            made["targetId"].as_str().ok_or("no new tab")?.to_string()
+                        }
+                    };
+                    designs.insert(key.clone(), target.clone());
+                    if target != tab.target {
+                        let old = tab.session.clone();
+                        let _ = c.send(Some(&old), "Page.stopScreencast", json!({}));
+                        tab = attach(&mut c, &target, metrics, &mut events)?;
+                        c.send(None, "Target.activateTarget", json!({ "targetId": target }))?;
+                        write_focus(focus, &tab.target);
+                        report(&mut c, &mut events, &tab.target)?;
+                    }
+                    let s = Some(tab.session.as_str());
+                    let on = open
+                        .iter()
+                        .find(|t| t.id == tab.target)
+                        .map(|t| crate::design::live::page_key(&t.url).to_string())
+                        .unwrap_or_default();
+                    let file = draft_file(&key);
+                    let draft_url = crate::design::live::file_url(&file);
+                    match draft {
+                        // The first draft opens as a file of its own (a
+                        // file:// page, so its pictures load); later ones are
+                        // written into it, keeping the scroll. A draft that
+                        // can't be written is skipped; the file still loads.
+                        Some(page) if on != draft_url => {
+                            if std::fs::write(&file, page).is_ok() {
+                                c.send(s, "Page.navigate", json!({ "url": draft_url }))?;
+                            }
+                        }
+                        Some(page) => {
+                            let js = format!(
+                                "(()=>{{const y=scrollY;document.open();document.write({});document.close();scrollTo(0,y);}})()",
+                                Value::from(page)
+                            );
+                            c.send(s, "Runtime.evaluate", json!({ "expression": js }))?;
+                        }
+                        None if on == key => {
+                            c.send(s, "Page.reload", json!({}))?;
+                        }
+                        None => {
+                            let _ = std::fs::remove_file(&file);
+                            c.send(s, "Page.navigate", json!({ "url": key }))?;
+                        }
+                    }
+                }
                 Cmd::Close(id) => {
                     c.send(None, "Target.closeTarget", json!({ "targetId": id }))?;
                 }
@@ -1006,7 +1117,14 @@ fn devtools(
                     .and_then(crate::browser::decode_base64)
                     .and_then(|j| decode(&j))
                 {
-                    say(Update::Frame(img))?;
+                    // The area pictured, in CSS pixels: the page's size,
+                    // or, after some loads, the whole window's (see `fit`).
+                    let meta = &p["metadata"];
+                    let area = (
+                        meta["deviceWidth"].as_f64().unwrap_or(0.0) as f32,
+                        meta["deviceHeight"].as_f64().unwrap_or(0.0) as f32,
+                    );
+                    say(Update::Frame(img, area))?;
                 }
             }
             "Page.frameStartedLoading" if on_tab => say(Update::Loading(true))?,
@@ -1137,7 +1255,7 @@ mod tests {
         let until = Instant::now() + Duration::from_secs(20);
         while Instant::now() < until && !(loaded && frames > 1) {
             match rx.try_recv() {
-                Ok(Update::Frame(_)) => frames += 1,
+                Ok(Update::Frame(..)) => frames += 1,
                 Ok(Update::Page { url, .. }) => on_page = url.starts_with("data:"),
                 Ok(Update::Loading(false)) => loaded |= on_page,
                 Ok(Update::Closed(why)) => panic!("{why}"),

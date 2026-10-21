@@ -6,6 +6,7 @@
 
 pub mod frontmatter;
 pub mod library;
+pub mod live;
 pub mod od_subset;
 pub mod skill_meta;
 
