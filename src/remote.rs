@@ -675,6 +675,26 @@ fn parse_listing(text: &str) -> (String, Vec<Entry>) {
 }
 
 /// A remote file's bytes, up to `max` (bigger files are refused).
+/// Which of `paths` (from `dir`, or absolute) are files that changed at or
+/// after `since` (seconds since the epoch), each as its absolute path there.
+pub fn changed_since(target: &Target, dir: &str, paths: &[String], since: u64, extra: &Extra) -> Vec<String> {
+    let script = format!(
+        r#"{TILDE}
+cd "$(x "$1")" 2>/dev/null || exit 3; shift
+for f; do f=$(x "$f"); [ -f "$f" ] && printf '%s\t%s/%s\n' "$(stat -c %Y -- "$f")" "$(cd "$(dirname -- "$f")" && pwd)" "$(basename -- "$f")"; done; true"#
+    );
+    let mut args = vec![dir.to_string()];
+    args.extend(paths.iter().cloned());
+    let out = run(target, &script, &args, b"", Duration::from_secs(20), extra).unwrap_or_default();
+    String::from_utf8_lossy(&out)
+        .lines()
+        .filter_map(|l| {
+            let (t, full) = l.split_once('\t')?;
+            (t.parse::<u64>().ok()? >= since).then(|| full.to_string())
+        })
+        .collect()
+}
+
 pub fn read_file(target: &Target, path: &str, max: u64, extra: &Extra) -> Result<Vec<u8>, Error> {
     let script = format!(
         r#"{TILDE}
@@ -1595,6 +1615,21 @@ mod tests {
             user: None,
             wsl: None,
         }
+    }
+
+    #[test]
+    #[ignore]
+    fn documents_made_in_a_container_are_found_by_when_they_changed() {
+        let name = "forge-test-docs";
+        let _ = docker(None, &["rm", "-f", name]);
+        docker(None, &["run", "-d", "--name", name, "alpine:3.20", "sleep", "infinity"]).unwrap();
+        let t = container(name);
+        let x = Extra::default();
+        run(&t, "mkdir -p /w/out && touch -d @1000 /w/old.pdf && touch /w/out/new.docx", &[], b"", Duration::from_secs(20), &x).unwrap();
+        let paths = ["old.pdf", "out/new.docx", "missing.xlsx"].map(String::from).to_vec();
+        let found = changed_since(&t, "/w", &paths, 5000, &x);
+        let _ = docker(None, &["rm", "-f", name]);
+        assert_eq!(found, ["/w/out/new.docx"]);
     }
 
     #[test]

@@ -1506,6 +1506,9 @@ pub struct AppState {
     stale_turns: std::collections::HashMap<usize, u32>,
     /// Where each tool call's row is (message, block), by chat and call id.
     tool_rows: std::collections::HashMap<(usize, String), (usize, usize)>,
+    /// When each command started: a document it leaves behind, changed
+    /// since, gets its card (`documents_made`).
+    command_started: std::collections::HashMap<(usize, String), SystemTime>,
     /// The permission question each chat is waiting on.
     asks: std::collections::HashMap<usize, Ask>,
     /// What Forge is doing about your latest message in each chat, in a few
@@ -1748,6 +1751,7 @@ impl AppState {
             sessions: Default::default(),
             stale_turns: Default::default(),
             tool_rows: Default::default(),
+            command_started: Default::default(),
             asks: Default::default(),
             headlines: Default::default(),
             queued: Default::default(),
@@ -6723,6 +6727,9 @@ impl AppState {
             Event::Thinking(t) => self.apply(chat, Step::Think(t), cx),
             Event::ToolUse { id, name, input } => {
                 self.panel_follows(chat, &name);
+                if name == "Bash" || name == "PowerShell" {
+                    self.command_started.insert((chat, id.clone()), SystemTime::now());
+                }
                 if let Some(at) =
                     self.push_block(chat, Block::Tool(crate::backend::tool_call(&name, &input)))
                 {
@@ -6734,7 +6741,20 @@ impl AppState {
                 output,
                 is_error,
             } => {
+                let started = self.command_started.remove(&(chat, id.clone()));
                 if let Some(&(m, b)) = self.tool_rows.get(&(chat, id)) {
+                    // A document a command made (a script writing a .docx,
+                    // a PDF export): its card too, as for one Write made.
+                    if let (Some(since), false) = (started, is_error) {
+                        let command = self
+                            .tool_at(chat, m, b)
+                            .map(|t| t.target.to_string())
+                            .unwrap_or_default();
+                        let found = Self::document_paths(&command, &output);
+                        if !found.is_empty() {
+                            self.documents_made(chat, found, since, cx);
+                        }
+                    }
                     let mut written = None;
                     self.update_tool(chat, m, b, |t| {
                         if t.status != ToolStatus::Declined {
@@ -7003,7 +7023,28 @@ impl AppState {
         file_card(name, ext, full.display().to_string(), bytes)
     }
 
-    /// A document Forge wrote on a remote, read back over the connection
+    /// Documents a command may have made: the `.docx`, `.xlsx`, `.pptx` and
+/// `.pdf` paths in its command line and what it printed (at most eight).
+pub fn document_paths(command: &str, output: &str) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    for word in command.split_whitespace().chain(output.split_whitespace()) {
+        let w = word
+            .trim_matches(|c: char| matches!(c, '"' | '\'' | '`' | '(' | ')' | '[' | ']' | ',' | ';'))
+            .trim_end_matches(['.', ':']);
+        let w = w.rsplit_once('=').map_or(w, |(_, v)| v);
+        let lower = w.to_ascii_lowercase();
+        let doc = [".docx", ".xlsx", ".pptx", ".pdf"].iter().any(|e| lower.ends_with(e));
+        if doc && w.len() > 5 && !out.iter().any(|o| o == w) {
+            out.push(w.to_string());
+        }
+        if out.len() == 8 {
+            break;
+        }
+    }
+    out
+}
+
+/// A document Forge wrote on a remote, read back over the connection
     /// (off this thread); its card joins the reply when it arrives.
     fn remote_written_file(
         &mut self,
@@ -7749,6 +7790,72 @@ impl AppState {
         let b = blocks.len() - 1;
         c.version += 1;
         Some((m, b))
+    }
+
+    fn tool_at(&self, chat: usize, msg: usize, block: usize) -> Option<&ToolCall> {
+        let c = self.chats.iter().find(|c| c.id == chat)?;
+        match c.messages.get(msg)? {
+            Message::Assistant { blocks } => match blocks.get(block)? {
+                Block::Tool(t) => Some(t),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// The documents among `paths` that changed since `since` (a command
+    /// made or rewrote them), each read and shown as a card in the reply:
+    /// from disk here, over the connection on a remote, so a document made
+    /// in WSL or a container previews and downloads on this computer too.
+    fn documents_made(&mut self, chat: usize, paths: Vec<String>, since: SystemTime, cx: &mut Context<Self>) {
+        // A little slack: file times and this clock can differ by a beat.
+        let since = since - std::time::Duration::from_secs(2);
+        let shown: Vec<String> = self
+            .chats
+            .iter()
+            .find(|c| c.id == chat)
+            .and_then(|c| c.messages.last())
+            .map(|m| match m {
+                Message::Assistant { blocks } => blocks
+                    .iter()
+                    .filter_map(|b| match b {
+                        Block::File(f) => f.path.as_ref().map(|p| p.to_string()),
+                        _ => None,
+                    })
+                    .collect(),
+                _ => vec![],
+            })
+            .unwrap_or_default();
+        if let Some(remote) = self.chat_remote(chat) {
+            let extra = self.remote_extra(&remote.target);
+            let secs = since.duration_since(SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+            let task = cx.background_spawn(async move {
+                crate::remote::changed_since(&remote.target, &remote.path, &paths, secs, &extra)
+            });
+            cx.spawn(async move |this, cx| {
+                let fresh = task.await;
+                let _ = this.update(cx, |s, cx| {
+                    for full in fresh.into_iter().filter(|f| !shown.contains(f)) {
+                        if let Some(r) = s.chat_remote(chat) {
+                            s.remote_written_file(chat, r, full, cx);
+                        }
+                    }
+                });
+            })
+            .detach();
+            return;
+        }
+        for p in paths {
+            let Some(file) = self.written_file(chat, &p) else { continue };
+            let Some(path) = file.path.as_ref().map(|p| p.to_string()) else { continue };
+            let fresh = std::fs::metadata(&path)
+                .and_then(|m| m.modified())
+                .is_ok_and(|t| t >= since);
+            if fresh && !shown.contains(&path) {
+                self.follow_doc(chat, &file, cx);
+                self.push_block(chat, Block::File(file));
+            }
+        }
     }
 
     fn update_tool(
@@ -9245,6 +9352,16 @@ mod tests {
         assert!(text.contains("\x1b[1;32mexit 0") && text.contains("2 lines"));
         let failed = super::AgentFeed { failed: true, ..feed };
         assert!(String::from_utf8(failed.bytes()).unwrap().contains("\x1b[1;31mexit 1"));
+    }
+
+    #[test]
+    fn a_command_s_documents_are_found_in_its_line_and_output() {
+        let found = super::AppState::document_paths(
+            "python scripts/docx_tool.py create memo.md out/Q3-memo.docx && echo done",
+            "Wrote out/Q3-memo.docx (2 pages).\nAlso saved \"deck.pptx\", budget.XLSX; see report.pdf.",
+        );
+        assert_eq!(found, ["out/Q3-memo.docx", "deck.pptx", "budget.XLSX", "report.pdf"]);
+        assert!(super::AppState::document_paths("ls -la", "a.txt b.md").is_empty());
     }
 
     #[test]
