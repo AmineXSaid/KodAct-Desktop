@@ -631,6 +631,7 @@ impl RulesView {
                     copied,
                     scale: 2.,
                     sources: self.state.read(cx).diagram_code.clone(),
+                    zooms: self.state.read(cx).diagram_zoom.clone(),
                 },
             )
         };

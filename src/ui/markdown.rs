@@ -395,6 +395,8 @@ pub struct CopyContext {
     pub scale: f32,
     /// Diagrams showing their source instead of the drawing (`AppState::diagram_code`).
     pub sources: std::sync::Arc<std::collections::HashSet<SharedString>>,
+    /// Diagrams zoomed in or out (`AppState::diagram_zoom`).
+    pub zooms: std::sync::Arc<std::collections::HashMap<SharedString, f32>>,
     /// The reply is still arriving: its newest words fade in at the end.
     pub streaming: bool,
 }
@@ -1056,90 +1058,144 @@ fn diagram_block(
         content: svg.to_string().into(),
         bytes: None,
     };
-    div()
-        .w_full()
+    // Zoomed: drawn at that width, scrolling inside the block when wider
+    // than it. Fitted: at its own size or the column's, whichever is less.
+    let zoom = copy.zooms.get(&key_owned).copied().unwrap_or(1.);
+    let fit = natural.min(inner);
+    let drawing = if (zoom - 1.).abs() < 0.01 {
+        drawing
+    } else {
+        super::diagram_view::image(&svg, fit * zoom, copy.scale)
+    };
+    let zoomer = |id: &str, glyph: &'static str, tip: &'static str, by: Option<f32>| {
+        let (state, key) = (copy.state.clone(), key_owned.clone());
+        tool_button(&format!("{id}-{key_owned}"), glyph, tip, t)
+            .on_click(move |_, _, cx: &mut App| state.update(cx, |s, cx| s.zoom_diagram(key.clone(), by, cx)))
+    };
+    let group: SharedString = format!("diagram-{key}").into();
+    let fit_state = (copy.state.clone(), key_owned.clone());
+    // The tools float over the drawing's corner, shown only while the
+    // pointer is on the diagram, so at rest it is the drawing alone.
+    let tools = div()
+        .absolute()
+        .top(t.space.sm)
+        .right(t.space.sm)
+        .flex()
+        .items_center()
+        .gap(px(2.))
+        .p(px(3.))
+        .rounded(t.radius.button)
         .bg(t.colors.surface)
+        .border_1()
+        .border_color(t.colors.border)
+        .shadow(t.elevation_popover())
+        .invisible()
+        .group_hover(group.clone(), |d| d.visible())
+        .child(zoomer("zoom-out", "icons/minus.svg", "Zoom out", Some(1. / 1.25)))
+        .child(
+            div()
+                .id(SharedString::from(format!("zoom-fit-{key}")))
+                .min_w(px(40.))
+                .h(px(24.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(t.radius.button)
+                .cursor_pointer()
+                .text_size(t.text.caption)
+                .text_color(t.colors.text_muted)
+                .hover({
+                    let h = t.colors.hover;
+                    move |d| d.bg(h)
+                })
+                .tooltip(|window, cx| gpui::component::tooltip::Tooltip::new("Fit to the column").build(window, cx))
+                .child(format!("{}%", (zoom * 100.).round()))
+                .on_click(move |_, _, cx: &mut App| {
+                    fit_state.0.update(cx, |s, cx| s.zoom_diagram(fit_state.1.clone(), None, cx))
+                }),
+        )
+        .child(zoomer("zoom-in", "icons/plus.svg", "Zoom in", Some(1.25)))
+        .child(div().w(px(1.)).h(px(16.)).mx(px(2.)).bg(t.colors.border))
+        .child(tool_button(&format!("source-{key}"), "icons/code-xml.svg", "Show the code", t).on_click(
+            move |_, _, cx: &mut App| {
+                toggler.update(cx, |s, cx| s.toggle_diagram_code(toggle_key.clone(), cx))
+            },
+        ))
+        .child(tool_button(&format!("open-{key}"), "icons/maximize-2.svg", "Open beside the chat", t).on_click(
+            move |_, _, cx: &mut App| opener.update(cx, |s, cx| s.open_doc(to_open.clone(), cx)),
+        ))
+        .child(
+            tool_button(
+                &format!("copy-{key}"),
+                if copied { "icons/check.svg" } else { "icons/copy.svg" },
+                if copied { "Copied" } else { "Copy the code" },
+                t,
+            )
+            .on_click(move |_, _, cx: &mut App| {
+                cx.write_to_clipboard(ClipboardItem::new_string(code.clone()));
+                let key = key_owned.clone();
+                copier.update(cx, |s, cx| s.mark_copied(key, cx));
+            }),
+        );
+    let _ = kind;
+    div()
+        .id(SharedString::from(format!("diagram-block-{key}")))
+        .group(group)
+        .relative()
+        .w_full()
+        .bg(t.extra.sunk)
         .border_1()
         .border_color(t.colors.border)
         .rounded(t.radius.card)
         .overflow_hidden()
         .child(
             div()
-                .flex()
-                .items_center()
-                .gap(t.space.xs)
-                .px(t.space.md)
-                .py(t.space.xs)
-                .border_b_1()
-                .border_color(t.colors.border)
-                .text_size(t.text.caption)
-                .text_color(t.colors.text_subtle)
-                .child(icon(
-                    "icons/route.svg",
-                    t.size.icon_xs,
-                    t.colors.text_subtle,
-                ))
+                .id(SharedString::from(format!("diagram-scroll-{key}")))
+                .w_full()
+                .when(zoom > 1.01, |d| d.overflow_x_scroll())
                 .child(
                     div()
-                        .flex_1()
-                        .min_w_0()
-                        .overflow_hidden()
-                        .whitespace_nowrap()
-                        .text_ellipsis()
-                        .child(format!("Diagram · {kind}")),
-                )
-                .child(
-                    header_button(
-                        &format!("source-{key}"),
-                        "icons/code-xml.svg",
-                        "Code",
-                        false,
-                        t,
-                    )
-                    .on_click(move |_, _, cx: &mut App| {
-                        toggler.update(cx, |s, cx| s.toggle_diagram_code(toggle_key.clone(), cx))
-                    }),
-                )
-                .child(
-                    header_button(
-                        &format!("open-{key}"),
-                        "icons/maximize-2.svg",
-                        "Open",
-                        false,
-                        t,
-                    )
-                    .on_click(move |_, _, cx: &mut App| {
-                        opener.update(cx, |s, cx| s.open_doc(to_open.clone(), cx))
-                    }),
-                )
-                .child(
-                    header_button(
-                        &format!("copy-{key}"),
-                        if copied {
-                            "icons/check.svg"
-                        } else {
-                            "icons/copy.svg"
-                        },
-                        if copied { "Copied" } else { "Copy" },
-                        copied,
-                        t,
-                    )
-                    .on_click(move |_, _, cx: &mut App| {
-                        cx.write_to_clipboard(ClipboardItem::new_string(code.clone()));
-                        let key = key_owned.clone();
-                        copier.update(cx, |s, cx| s.mark_copied(key, cx));
-                    }),
+                        .flex()
+                        .when(zoom <= 1.01, |d| d.justify_center())
+                        .px(t.space.lg)
+                        .py(t.space.lg)
+                        // The drawing fades in once it is ready, never a
+                        // blank card snapping full.
+                        .children(drawing.map(|d| {
+                            // Fitted, the drawing takes its width from this
+                            // wrapper; zoomed, it has its own.
+                            let wrap = if zoom <= 1.01 {
+                                div().w_full().flex().justify_center().child(d)
+                            } else {
+                                div().flex_none().child(d)
+                            };
+                            super::motion::rise_in(
+                                wrap,
+                                SharedString::from(format!("diagram-in-{key}")),
+                                0.,
+                                t,
+                            )
+                        })),
                 ),
         )
-        // The drawing, centred, at its own size or the column's, whichever is smaller.
-        .child(
-            div()
-                .flex()
-                .justify_center()
-                .p(t.space.md)
-                .children(drawing),
-        )
+        .child(tools)
         .into_any_element()
+}
+
+/// An icon button in a diagram's floating tools, its name as a tooltip.
+fn tool_button(id: &str, path: &'static str, tip: &'static str, t: &Theme) -> gpui::Stateful<gpui::Div> {
+    let hover = t.colors.hover;
+    div()
+        .id(SharedString::from(id.to_string()))
+        .size(px(24.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(t.radius.button)
+        .cursor_pointer()
+        .hover(move |d| d.bg(hover))
+        .tooltip(move |window, cx| gpui::component::tooltip::Tooltip::new(tip).build(window, cx))
+        .child(icon(path, t.size.icon_sm, t.colors.text_muted))
 }
 
 /// A small text button in a block's header.

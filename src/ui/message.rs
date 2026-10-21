@@ -56,6 +56,7 @@ pub struct ItemContext {
     pub versions_open: bool,
     /// Diagrams showing their source (`AppState::diagram_code`).
     pub sources: std::sync::Arc<std::collections::HashSet<SharedString>>,
+    pub zooms: std::sync::Arc<std::collections::HashMap<SharedString, f32>>,
     /// What the newest turn changed in the project's memory, under its reply.
     pub memory: Option<crate::state::MemoryChange>,
 }
@@ -725,6 +726,7 @@ fn block(blocks: &[Block], b: usize, cx: &ItemContext, t: &Theme) -> AnyElement 
                 copied: cx.copied.clone(),
                 scale: cx.scale,
                 sources: cx.sources.clone(),
+                zooms: cx.zooms.clone(),
                 streaming: cx.busy && cx.last && newest,
             },
         ),

@@ -1561,6 +1561,8 @@ pub struct AppState {
     pub agent_feed: Option<AgentFeed>,
     /// Diagrams in replies showing their source instead (by block key).
     pub diagram_code: std::sync::Arc<std::collections::HashSet<SharedString>>,
+    /// Each diagram's zoom, when not fitted to the column (1.0 = fitted).
+    pub diagram_zoom: std::sync::Arc<std::collections::HashMap<SharedString, f32>>,
     /// Chats are still loading: screens show placeholders.
     pub loading: bool,
     load: Option<Task<()>>,
@@ -1771,6 +1773,7 @@ impl AppState {
             model_routes: Default::default(),
             relay_errors: async_channel::unbounded().0,
             diagram_code: Default::default(),
+            diagram_zoom: Default::default(),
             loading: true,
             load: None,
             history: crate::history::dir(),
@@ -5033,6 +5036,31 @@ impl AppState {
     }
 
     /// Show a diagram's source, or its drawing again.
+    /// Zoom a diagram by `factor` (between a quarter and four times its
+    /// fitted size); `None` fits it to the column again.
+    pub fn zoom_diagram(&mut self, key: SharedString, factor: Option<f32>, cx: &mut Context<Self>) {
+        let map = std::sync::Arc::make_mut(&mut self.diagram_zoom);
+        match factor {
+            Some(f) => {
+                let z = (map.get(&key).copied().unwrap_or(1.) * f).clamp(0.25, 4.);
+                if (z - 1.).abs() < 0.01 {
+                    map.remove(&key);
+                } else {
+                    map.insert(key, z);
+                }
+            }
+            None => {
+                map.remove(&key);
+            }
+        }
+        if let Some(id) = self.current {
+            if let Some(c) = self.chat_mut(id) {
+                c.version += 1;
+            }
+        }
+        cx.notify();
+    }
+
     pub fn toggle_diagram_code(&mut self, key: SharedString, cx: &mut Context<Self>) {
         let set = std::sync::Arc::make_mut(&mut self.diagram_code);
         if !set.remove(&key) {

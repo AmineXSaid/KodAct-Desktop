@@ -491,6 +491,7 @@ impl Render for ChatView {
                         },
                         versions_open: s.versions_open == Some((chat.id, ix)),
                         sources: s.diagram_code.clone(),
+                        zooms: s.diagram_zoom.clone(),
                     };
                     // A message rises into place as it arrives (and as it
                     // scrolls back into view), as the reference's sections do.

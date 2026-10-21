@@ -340,6 +340,7 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
                             copied: v.copied.clone(),
                             scale: v.scale,
                             sources: Default::default(),
+                            zooms: Default::default(),
                         },
                         Look::Document,
                     ))

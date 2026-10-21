@@ -100,12 +100,14 @@ fn css(c: gpui::Hsla) -> String {
 /// The colours Forge draws a Mermaid diagram in, from the theme's tokens.
 pub fn palette(t: &crate::theme::Theme) -> crate::mermaid::Palette {
     crate::mermaid::Palette {
-        node_fill: css(t.colors.surface),
-        node_stroke: css(t.colors.text_subtle.opacity(0.55)),
+        // Filled shapes in the accent's pale form, edged in the accent, on
+        // the block's recessed well: a figure, not a wireframe.
+        node_fill: css(t.extra.accent_soft),
+        node_stroke: css(t.colors.primary.opacity(0.55)),
         text: css(t.colors.text_strong),
         muted: css(t.colors.text_muted),
-        edge: css(t.colors.text_muted),
-        label_bg: css(t.colors.surface),
+        edge: css(t.colors.text_muted.opacity(0.9)),
+        label_bg: css(t.extra.sunk),
         accent: css(t.colors.primary),
         accent_tint: css(t.colors.primary_tint),
         group_fill: css(t.extra.inset),
@@ -144,7 +146,7 @@ pub fn fence(lang: &str, code: &str, t: &crate::theme::Theme) -> Option<Arc<str>
     ) {
         return None;
     }
-    let k = (key(&format!("{lang}\u{0}{code}")), t.is_dark);
+    let k = (key(&format!("{lang}\u{0}{code}\u{0}{}", t.look.id())), t.is_dark);
     FENCES.with(|f| {
         let mut f = f.borrow_mut();
         if let Some(hit) = f.get(&k) {
