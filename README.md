@@ -72,6 +72,10 @@ table in step.
 | Ctrl/⌘ Shift F | Find in the file beside the chat |
 | Alt ↓ | The file beside the chat: next page or slide |
 | Alt ↑ | The file beside the chat: previous page or slide |
+| Alt ← | Back to the chat or page you were on |
+| Alt → | Forward again |
+| Ctrl/⌘ [ | Back (also Alt+Left) |
+| Ctrl/⌘ ] | Forward (also Alt+Right) |
 | Ctrl/⌘ J | Jump to the latest message |
 | Ctrl/⌘ Shift C | Copy the last reply |
 | Ctrl/⌘ / | Choose a model |

@@ -31,6 +31,10 @@ pub const SHORTCUTS: &[(&str, &str, &str)] = &[
         "Remote: WSL, SSH host or container",
         "Chats",
     ),
+    ("alt-left", "Back to the chat or page you were on", "Chats"),
+    ("alt-right", "Forward again", "Chats"),
+    ("secondary-[", "Back (also Alt+Left)", "Chats"),
+    ("secondary-]", "Forward (also Alt+Right)", "Chats"),
     ("ctrl-`", "Show or hide the terminal", "General"),
     ("ctrl-~", "New terminal", "General"),
     (
