@@ -50,9 +50,16 @@ fn set(nodes: &mut [Node], obj: usize, key: &str, v: Slot) -> Result<(), String>
 }
 
 pub fn parse(src: &str) -> Result<Map<String, Value>, String> {
-    let lines: Vec<&str> = src.split('\n').map(|l| l.strip_suffix('\r').unwrap_or(l)).collect();
+    let lines: Vec<&str> = src
+        .split('\n')
+        .map(|l| l.strip_suffix('\r').unwrap_or(l))
+        .collect();
     let mut nodes = vec![Node::Obj(vec![])];
-    let mut stack = vec![Frame { indent: -1, node: 0, key: None }];
+    let mut stack = vec![Frame {
+        indent: -1,
+        node: 0,
+        key: None,
+    }];
     let mut i = 0;
     while i < lines.len() {
         let raw = lines[i];
@@ -83,7 +90,11 @@ pub fn parse(src: &str) -> Result<Map<String, Value>, String> {
             let value = line[2..].trim();
             let mut cont = stack[top].node;
             if !matches!(nodes[cont], Node::Arr(_)) {
-                let parent = if stack.len() >= 2 { Some(stack.len() - 2) } else { None };
+                let parent = if stack.len() >= 2 {
+                    Some(stack.len() - 2)
+                } else {
+                    None
+                };
                 match (parent, stack[top].key.clone()) {
                     (Some(p), Some(k)) if !k.is_empty() => {
                         let pn = stack[p].node;
@@ -113,7 +124,11 @@ pub fn parse(src: &str) -> Result<Map<String, Value>, String> {
                 if let Node::Arr(a) = &mut nodes[cont] {
                     a.push(Slot::Node(oi));
                 }
-                stack.push(Frame { indent: indent as i64, node: oi, key: None });
+                stack.push(Frame {
+                    indent: indent as i64,
+                    node: oi,
+                    key: None,
+                });
             } else if let Node::Arr(a) = &mut nodes[cont] {
                 a.push(Slot::Val(coerce(value)));
             }
@@ -141,7 +156,11 @@ pub fn parse(src: &str) -> Result<Map<String, Value>, String> {
             nodes.push(Node::Obj(vec![]));
             let ni = nodes.len() - 1;
             set(&mut nodes, tn, &key, Slot::Node(ni))?;
-            stack.push(Frame { indent: indent as i64, node: ni, key: Some(key) });
+            stack.push(Frame {
+                indent: indent as i64,
+                node: ni,
+                key: Some(key),
+            });
             i += 1;
             continue;
         }
@@ -168,7 +187,12 @@ pub fn parse(src: &str) -> Result<Map<String, Value>, String> {
                 collected.push(&next[byte..]);
                 i += 1;
             }
-            set(&mut nodes, tn, &key, Slot::Val(Value::String(collected.join("\n").trim_end().to_string())))?;
+            set(
+                &mut nodes,
+                tn,
+                &key,
+                Slot::Val(Value::String(collected.join("\n").trim_end().to_string())),
+            )?;
             continue;
         }
         if val == "[]" {
@@ -237,7 +261,9 @@ fn split_inline(inner: &str) -> Vec<String> {
 fn coerce(raw: &str) -> Value {
     let v = raw.trim();
     let b = v.as_bytes();
-    if b.len() >= 2 && ((b[0] == b'"' && b[b.len() - 1] == b'"') || (b[0] == b'\'' && b[b.len() - 1] == b'\'')) {
+    if b.len() >= 2
+        && ((b[0] == b'"' && b[b.len() - 1] == b'"') || (b[0] == b'\'' && b[b.len() - 1] == b'\''))
+    {
         return Value::String(v[1..v.len() - 1].to_string());
     }
     match v {

@@ -9,6 +9,7 @@
 //! Either way the error is kept for `--design-check` to list.
 
 use serde_json::{Map, Value};
+use yaml_rust2::parser::{Event, Parser};
 use yaml_rust2::{Yaml, YamlLoader};
 
 /// Front-matter larger than this isn't parsed as YAML (the library's largest
@@ -55,20 +56,41 @@ impl Doc {
     }
 }
 
-/// The front-matter block and the body, if the file opens with `---`.
+/// The front-matter block and the body, if the file opens with `---`. The
+/// delimiter lines may carry trailing spaces (an editor's), never anything
+/// else.
 fn split(text: &str) -> Option<(&str, &str)> {
-    let rest = text
-        .strip_prefix("---\n")
-        .or_else(|| text.strip_prefix("---\r\n"))?;
+    let (first, rest) = match text.split_once('\n') {
+        Some((first, rest)) => (first, rest),
+        None => (text, ""),
+    };
+    if first.trim_end() != "---" {
+        return None;
+    }
     // The closing line: `---` alone, possibly the last line of the file.
     let mut at = 0;
     for line in rest.split_inclusive('\n') {
-        if line.trim_end_matches(['\r', '\n']) == "---" {
+        if line.trim_end() == "---" {
             return Some((&rest[..at], &rest[at + line.len()..]));
         }
         at += line.len();
     }
     None
+}
+
+/// Whether the YAML uses an alias (`*name`). yaml-rust2 copies the anchored
+/// node for every alias, so a few hundred bytes of aliases to aliases grow
+/// into gigabytes. Nothing in the library uses them; a file that does is
+/// read the way Open Design reads it instead.
+fn has_alias(yaml: &str) -> bool {
+    let mut parser = Parser::new_from_str(yaml);
+    loop {
+        match parser.next_token() {
+            Ok((Event::Alias(_), _)) => return true,
+            Ok((Event::StreamEnd, _)) | Err(_) => return false,
+            Ok(_) => {}
+        }
+    }
 }
 
 /// Parse a file's front-matter. Never fails: a file without one has an
@@ -87,6 +109,13 @@ pub fn parse(text: &str) -> Doc {
             meta: lines(yaml),
             body: body.to_string(),
             error: Some("front-matter larger than 64 KiB".to_string()),
+        };
+    }
+    if has_alias(yaml) {
+        return Doc {
+            meta: super::od_subset::parse(yaml).unwrap_or_else(|_| lines(yaml)),
+            body: body.to_string(),
+            error: Some("front-matter uses YAML aliases".to_string()),
         };
     }
     let (meta, error) = match YamlLoader::load_from_str(yaml) {
@@ -120,11 +149,7 @@ fn json(y: Yaml) -> Value {
             .map_or(Value::String(r), Value::Number),
         Yaml::Boolean(b) => Value::Bool(b),
         Yaml::Array(a) => Value::Array(a.into_iter().map(json).collect()),
-        Yaml::Hash(h) => Value::Object(
-            h.into_iter()
-                .map(|(k, v)| (key(k), json(v)))
-                .collect(),
-        ),
+        Yaml::Hash(h) => Value::Object(h.into_iter().map(|(k, v)| (key(k), json(v))).collect()),
         Yaml::Null | Yaml::Alias(_) | Yaml::BadValue => Value::Null,
     }
 }
@@ -236,6 +261,27 @@ mod tests {
         assert_eq!(m["name"], "a");
         assert_eq!(m["description"], "two lines");
         assert!(!m.contains_key("key with space"));
+    }
+
+    #[test]
+    fn aliases_are_never_expanded() {
+        // Nine levels of nine aliases each: 9^9 nodes if expanded.
+        let mut yaml = String::from("---\nname: bomb\na0: &a0 [x, x, x, x, x, x, x, x, x]\n");
+        for i in 1..9 {
+            let refs = vec![format!("*a{}", i - 1); 9].join(", ");
+            yaml.push_str(&format!("a{i}: &a{i} [{refs}]\n"));
+        }
+        yaml.push_str("---\nbody");
+        let d = parse(&yaml);
+        assert_eq!(d.str("name"), Some("bomb"));
+        assert!(d.error.is_some_and(|e| e.contains("aliases")));
+    }
+
+    #[test]
+    fn delimiters_may_have_trailing_spaces() {
+        let d = parse("--- \nname: a\n---\t\nbody");
+        assert_eq!(d.str("name"), Some("a"));
+        assert_eq!(d.body, "body");
     }
 
     #[test]

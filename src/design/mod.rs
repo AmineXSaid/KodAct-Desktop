@@ -40,6 +40,8 @@ pub fn root() -> Option<PathBuf> {
 /// `--design-check <kind> <id>` prints one entry instead, as the index read
 /// it: `--design-check example html-ppt-course-module`.
 pub fn check(args: &[String]) -> i32 {
+    #[cfg(windows)]
+    attach_console();
     let Some(root) = root() else {
         eprintln!("No design library: set FORGE_DESIGN_LIB, or put design-library beside the app.");
         return 1;
@@ -67,10 +69,17 @@ pub fn check(args: &[String]) -> i32 {
     );
     let counts = ix.counts();
     for kind in Kind::ALL {
-        println!("  {:>4} {}", counts.get(&kind).copied().unwrap_or(0), kind.label());
+        println!(
+            "  {:>4} {}",
+            counts.get(&kind).copied().unwrap_or(0),
+            kind.label()
+        );
     }
     let shipped = ix.of(Kind::Skill).filter(|e| e.upstream_shipped).count();
-    let links = ix.of(Kind::Skill).filter(|e| e.catalogue && !e.upstream_shipped).count();
+    let links = ix
+        .of(Kind::Skill)
+        .filter(|e| e.catalogue && !e.upstream_shipped)
+        .count();
     println!("  upstream skills: {shipped} shipped, {links} kept as links");
     let tolerated: Vec<_> = ix.problems.iter().filter(|p| p.tolerated).collect();
     let failed: Vec<_> = ix.errors().collect();
@@ -83,4 +92,20 @@ pub fn check(args: &[String]) -> i32 {
         }
     }
     i32::from(!failed.is_empty())
+}
+
+/// A release build on Windows is a window app with no console of its own:
+/// borrow the one `--design-check` was started from, so its report shows.
+#[cfg(windows)]
+fn attach_console() {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn AttachConsole(process: u32) -> i32;
+    }
+    const ATTACH_PARENT_PROCESS: u32 = u32::MAX;
+    // SAFETY: a plain Win32 call with no pointers; failing (no parent
+    // console, or one already attached) leaves things as they were.
+    unsafe {
+        AttachConsole(ATTACH_PARENT_PROCESS);
+    }
 }

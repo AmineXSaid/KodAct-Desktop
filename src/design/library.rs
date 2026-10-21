@@ -231,8 +231,8 @@ pub struct Index {
 
 /// Image, video and audio: fetched, not committed (`media.lock.json`).
 const MEDIA: &[&str] = &[
-    "png", "jpg", "jpeg", "webp", "gif", "avif", "bmp", "ico", "mp4", "webm", "mov", "mp3",
-    "wav", "ogg", "m4a", "gltf", "glb",
+    "png", "jpg", "jpeg", "webp", "gif", "avif", "bmp", "ico", "mp4", "webm", "mov", "mp3", "wav",
+    "ogg", "m4a", "gltf", "glb",
 ];
 
 pub fn is_media(path: &Path) -> bool {
@@ -275,7 +275,8 @@ impl Index {
         ix.resolve_skill_refs();
         ix.link_twins();
         ix.check_references();
-        ix.entries.sort_by(|a, b| (a.kind, &a.id).cmp(&(b.kind, &b.id)));
+        ix.entries
+            .sort_by(|a, b| (a.kind, &a.id).cmp(&(b.kind, &b.id)));
         ix
     }
 
@@ -312,11 +313,7 @@ impl Index {
     /// Whether a library path is there: media against `media.lock.json`
     /// (it may not be fetched yet), anything else on disk.
     fn present(&self, p: &Path) -> bool {
-        if is_media(p) {
-            self.media.contains(&slash(p))
-        } else {
-            self.root.join(p).is_file()
-        }
+        is_media(p) && self.media.contains(&slash(p)) || self.root.join(p).is_file()
     }
 
     /// The sub-folders of `rel`, sorted, skipping `_schema` and the like.
@@ -349,7 +346,11 @@ impl Index {
         };
         let doc = frontmatter::parse(&text);
         if let Some(e) = &doc.error {
-            self.problem(rel, format!("front-matter is not valid YAML ({e}); read as Open Design reads it"), true);
+            self.problem(
+                rel,
+                format!("front-matter is not valid YAML ({e}); read as Open Design reads it"),
+                true,
+            );
         }
         Some(doc)
     }
@@ -428,17 +429,25 @@ impl Index {
             .as_array()
             .into_iter()
             .flatten()
-            .chain(manifest.get("compat").and_then(|c| c["agentSkills"].as_array()).into_iter().flatten());
+            .chain(
+                manifest
+                    .get("compat")
+                    .and_then(|c| c["agentSkills"].as_array())
+                    .into_iter()
+                    .flatten(),
+            );
         let (mut skill, mut skill_ref) = (None, None);
         let mut escapes = vec![];
         for s in listed {
             match (s["path"].as_str(), s["ref"].as_str()) {
-                (Some(p), _) if p.contains('/') || p.ends_with(".md") => match join_inside(dir, p) {
-                    Some(p) => {
-                        skill.get_or_insert(p);
+                (Some(p), _) if p.contains('/') || p.ends_with(".md") => {
+                    match join_inside(dir, p) {
+                        Some(p) => {
+                            skill.get_or_insert(p);
+                        }
+                        None => escapes.push(p.to_string()),
                     }
-                    None => escapes.push(p.to_string()),
-                },
+                }
                 // A bare path is a skill's name.
                 (Some(name), _) | (None, Some(name)) => {
                     skill_ref.get_or_insert(name.to_string());
@@ -468,7 +477,12 @@ impl Index {
                 .and_then(Value::as_str)
                 .map(str::to_string)
         };
-        let text_of = |key: &str| manifest.get(key).and_then(Value::as_str).map(str::to_string);
+        let text_of = |key: &str| {
+            manifest
+                .get(key)
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        };
         let name = text_of("name").unwrap_or_else(|| folder.to_string());
         let mut craft = skill_meta::slugs(
             od["context"]["craft"]
@@ -478,7 +492,10 @@ impl Index {
                 .filter_map(Value::as_str),
         );
         if craft.is_empty() {
-            craft = meta.as_ref().map(|m| m.craft_requires.clone()).unwrap_or_default();
+            craft = meta
+                .as_ref()
+                .map(|m| m.craft_requires.clone())
+                .unwrap_or_default();
         }
         let license = text_of("license");
         let credit = license
@@ -496,7 +513,10 @@ impl Index {
         Some(Entry {
             id: folder.to_string(),
             title: text_of("title")
-                .or_else(|| meta.as_ref().and_then(|m| m.display_name.get("en").cloned()))
+                .or_else(|| {
+                    meta.as_ref()
+                        .and_then(|m| m.display_name.get("en").cloned())
+                })
                 .unwrap_or_else(|| humanize(&name)),
             name,
             kind: Some(kind),
@@ -512,13 +532,19 @@ impl Index {
             platform: own("platform").or_else(|| fill("platform")),
             category: own("category"),
             tags: strings(manifest.get("tags")),
-            triggers: meta.as_ref().map(|m| m.triggers.clone()).unwrap_or_default(),
+            triggers: meta
+                .as_ref()
+                .map(|m| m.triggers.clone())
+                .unwrap_or_default(),
             skill,
             skill_ref,
             preview,
             preview_url,
             query: query(&od["useCase"]["query"]),
-            example_prompt: meta.as_ref().map(|m| m.example_prompt.clone()).unwrap_or_default(),
+            example_prompt: meta
+                .as_ref()
+                .map(|m| m.example_prompt.clone())
+                .unwrap_or_default(),
             craft,
             needs: needs(&self.root.join(dir)),
             upstream: fill("upstream"),
@@ -546,7 +572,7 @@ impl Index {
             let local = REPO_URLS
                 .iter()
                 .find_map(|u| shown.strip_prefix(u))
-                .map(PathBuf::from)
+                .and_then(|rest| join_inside(Path::new(""), rest))
                 .filter(|p| self.present(p));
             return match local {
                 Some(p) => (Some(p), None),
@@ -567,7 +593,10 @@ impl Index {
     /// gallery's request, inputs and translations; its own `DESIGN.md` copy
     /// is older (seven of them lack the usage guardrails) and never used.
     fn load_design_systems(&mut self) {
-        let cards: BTreeSet<String> = self.folders("plugins/_official/design-systems").into_iter().collect();
+        let cards: BTreeSet<String> = self
+            .folders("plugins/_official/design-systems")
+            .into_iter()
+            .collect();
         let kits = self.folders("design-systems");
         for name in cards.iter().filter(|n| !kits.contains(n)) {
             self.problem(
@@ -584,23 +613,43 @@ impl Index {
             };
             let kit = self.read_kit(&folder, &dir);
             let card = if cards.contains(&folder) {
-                self.read_manifest(&Path::new("plugins/_official/design-systems").join(&folder).join("open-design.json"))
+                self.read_manifest(
+                    &Path::new("plugins/_official/design-systems")
+                        .join(&folder)
+                        .join("open-design.json"),
+                )
             } else {
                 None
             };
-            let od = card.as_ref().and_then(|c| c.get("od")).cloned().unwrap_or(Value::Null);
-            let kit_str = |key: &str| kit.as_ref().and_then(|k| k.get(key)).and_then(Value::as_str).map(str::to_string);
+            let od = card
+                .as_ref()
+                .and_then(|c| c.get("od"))
+                .cloned()
+                .unwrap_or(Value::Null);
+            let kit_str = |key: &str| {
+                kit.as_ref()
+                    .and_then(|k| k.get(key))
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            };
             let quoted = |label: &str| {
                 doc.body.lines().find_map(|l| {
                     let rest = l.trim().strip_prefix('>')?.trim();
                     let (k, v) = rest.split_once(':')?;
-                    k.trim().eq_ignore_ascii_case(label).then(|| v.trim().to_string())
+                    k.trim()
+                        .eq_ignore_ascii_case(label)
+                        .then(|| v.trim().to_string())
                 })
             };
             let description = kit_str("description")
                 .filter(|d| !d.starts_with(BOILERPLATE))
                 .or_else(|| Some(summarize(&doc.body)).filter(|s| !s.is_empty()))
-                .or_else(|| card.as_ref().and_then(|c| c.get("description")).and_then(Value::as_str).map(str::to_string))
+                .or_else(|| {
+                    card.as_ref()
+                        .and_then(|c| c.get("description"))
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                })
                 .unwrap_or_default();
             let preview = kit
                 .as_ref()
@@ -624,7 +673,11 @@ impl Index {
                 skill: Some(design),
                 preview,
                 query: query(&od["useCase"]["query"]),
-                license: card.as_ref().and_then(|c| c.get("license")).and_then(Value::as_str).map(str::to_string),
+                license: card
+                    .as_ref()
+                    .and_then(|c| c.get("license"))
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
                 dir,
                 manifest: card,
                 kit,
@@ -642,7 +695,8 @@ impl Index {
             return None;
         }
         let kit = self.read_manifest(&path)?;
-        let ok = kit.get("schemaVersion").and_then(Value::as_str) == Some("od-design-system-project/v1")
+        let ok = kit.get("schemaVersion").and_then(Value::as_str)
+            == Some("od-design-system-project/v1")
             && kit.get("id").and_then(Value::as_str) == Some(folder)
             && kit.get("files").map(|f| &f["design"]) == Some(&Value::from("DESIGN.md"))
             && kit.get("files").map(|f| &f["tokens"]) == Some(&Value::from("tokens.css"));
@@ -676,7 +730,11 @@ impl Index {
                     .map(str::to_string)
                     .or_else(|| heading(&doc.body))
                     .unwrap_or_else(|| humanize(&id)),
-                description: doc.str("description").unwrap_or_default().trim().to_string(),
+                description: doc
+                    .str("description")
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string(),
                 name: id.clone(),
                 id,
                 kind: Some(Kind::Craft),
@@ -697,16 +755,20 @@ impl Index {
             .filter_map(|s| {
                 let stub = s["stub"].as_str()?;
                 let (owner, repo) = owner_repo(s["repo"].as_str()?)?;
-                let path = Path::new("upstream")
-                    .join(format!("{owner}__{repo}"))
-                    .join(s["path"].as_str()?)
-                    .join("SKILL.md");
-                Some((stub.to_string(), path))
+                let inside = format!("{owner}__{repo}/{}/SKILL.md", s["path"].as_str()?);
+                Some((
+                    stub.to_string(),
+                    join_inside(Path::new("upstream"), &inside)?,
+                ))
             })
             .collect();
         let root = self.root.clone();
         let mut missing = vec![];
-        for e in self.entries.iter_mut().filter(|e| e.kind == Some(Kind::Skill)) {
+        for e in self
+            .entries
+            .iter_mut()
+            .filter(|e| e.kind == Some(Kind::Skill))
+        {
             if let Some(path) = shipped.get(&e.id) {
                 if root.join(path).is_file() {
                     e.skill = Some(path.clone());
@@ -718,7 +780,11 @@ impl Index {
             }
         }
         for p in missing {
-            self.problem(p, "upstream skill listed in UPSTREAM.json is missing", false);
+            self.problem(
+                p,
+                "upstream skill listed in UPSTREAM.json is missing",
+                false,
+            );
         }
     }
 
@@ -744,7 +810,11 @@ impl Index {
             }
         }
         for (dir, name) in unknown {
-            self.problem(dir, format!("runs skill `{name}`, which isn't in the library"), false);
+            self.problem(
+                dir,
+                format!("runs skill `{name}`, which isn't in the library"),
+                false,
+            );
         }
     }
 
@@ -761,7 +831,9 @@ impl Index {
         for e in &mut self.entries {
             match e.kind {
                 Some(Kind::Example) => e.twin = made_from.get(&e.id).map(|k| (*k, e.id.clone())),
-                Some(Kind::Skill | Kind::Template) if e.parent.is_none() && examples.contains(&e.id) => {
+                Some(Kind::Skill | Kind::Template)
+                    if e.parent.is_none() && examples.contains(&e.id) =>
+                {
                     e.twin = Some((Kind::Example, e.id.clone()))
                 }
                 _ => {}
@@ -777,25 +849,38 @@ impl Index {
     /// as tolerated.
     fn check_references(&mut self) {
         let craft: BTreeSet<String> = self.of(Kind::Craft).map(|e| e.id.clone()).collect();
-        let future: BTreeSet<String> = std::fs::read_to_string(self.root.join("craft/FUTURE_SECTIONS.md"))
-            .unwrap_or_default()
-            .lines()
-            .filter_map(|l| l.trim().strip_prefix("- "))
-            .map(|s| s.trim().trim_matches('`').to_string())
-            .collect();
+        let future: BTreeSet<String> =
+            std::fs::read_to_string(self.root.join("craft/FUTURE_SECTIONS.md"))
+                .unwrap_or_default()
+                .lines()
+                .filter_map(|l| l.trim().strip_prefix("- "))
+                .map(|s| s.trim().trim_matches('`').to_string())
+                .collect();
         let mut found = vec![];
         let mut no_preview = vec![];
         for (i, e) in self.entries.iter().enumerate() {
             if let Some(p) = e.skill.as_ref().filter(|p| !self.present(p)) {
-                found.push((p.clone(), format!("{}: its instructions are not there", e.id), false));
+                found.push((
+                    p.clone(),
+                    format!("{}: its instructions are not there", e.id),
+                    false,
+                ));
             }
             if let Some(p) = e.preview.as_ref().filter(|p| !self.present(p)) {
-                found.push((p.clone(), format!("{}: upstream names this preview but doesn't ship it", e.id), true));
+                found.push((
+                    p.clone(),
+                    format!("{}: upstream names this preview but doesn't ship it", e.id),
+                    true,
+                ));
                 no_preview.push(i);
             }
             for slug in &e.craft {
                 if !craft.contains(slug) && !future.contains(slug) {
-                    found.push((e.dir.clone(), format!("asks for craft rule `{slug}`, which doesn't exist"), false));
+                    found.push((
+                        e.dir.clone(),
+                        format!("asks for craft rule `{slug}`, which doesn't exist"),
+                        false,
+                    ));
                 }
             }
         }
@@ -869,7 +954,10 @@ fn example_preview(root: &Path, dir: &Path) -> Option<PathBuf> {
             return Some(dir.join(p));
         }
     }
-    example_files(root, dir).into_iter().next().map(|f| dir.join("examples").join(f))
+    example_files(root, dir)
+        .into_iter()
+        .next()
+        .map(|f| dir.join("examples").join(f))
 }
 
 /// The `examples/*.html` files of a folder, sorted: names Open Design
@@ -882,13 +970,15 @@ fn example_files(root: &Path, dir: &Path) -> Vec<String> {
         .filter(|e| e.path().is_file())
         .filter_map(|e| e.file_name().into_string().ok())
         .filter(|n| {
-            let stem = n.len().checked_sub(5).map(|end| &n[..end]);
-            n.to_ascii_lowercase().ends_with(".html")
-                && stem.is_some_and(|s| {
-                    !s.is_empty()
-                        && !s.starts_with('.')
-                        && s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
-                })
+            // `.html` is ASCII, so once it's there the cut is on a character.
+            n.to_ascii_lowercase().ends_with(".html") && {
+                let stem = &n[..n.len() - 5];
+                !stem.is_empty()
+                    && !stem.starts_with('.')
+                    && stem
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+            }
         })
         .collect();
     out.sort();
@@ -912,7 +1002,8 @@ fn derived_examples(root: &Path, parent: &Entry) -> Vec<Entry> {
                     .map(|w| {
                         let lower = w.to_lowercase();
                         let mut c = lower.chars();
-                        c.next().map_or(String::new(), |f| f.to_uppercase().chain(c).collect())
+                        c.next()
+                            .map_or(String::new(), |f| f.to_uppercase().chain(c).collect())
                     })
                     .collect::<Vec<_>>()
                     .join(" "),
@@ -959,7 +1050,10 @@ fn slash(p: &Path) -> String {
 
 fn strings(v: Option<&Value>) -> Vec<String> {
     match v {
-        Some(Value::Array(a)) => a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect(),
+        Some(Value::Array(a)) => a
+            .iter()
+            .filter_map(|x| x.as_str().map(str::to_string))
+            .collect(),
         Some(Value::String(s)) => vec![s.clone()],
         _ => vec![],
     }
@@ -997,7 +1091,9 @@ fn clean_title(h1: &str) -> String {
 /// `> Category:` and `> Surface:` lines or the `> ` quoting, at most 240
 /// characters.
 fn summarize(body: &str) -> String {
-    let mut lines = body.lines().skip_while(|l| !l.trim_start().starts_with("# "));
+    let mut lines = body
+        .lines()
+        .skip_while(|l| !l.trim_start().starts_with("# "));
     lines.next();
     let mut para = vec![];
     for l in lines {
@@ -1028,7 +1124,8 @@ fn humanize(name: &str) -> String {
         .filter(|w| !w.is_empty())
         .map(|w| {
             let mut c = w.chars();
-            c.next().map_or(String::new(), |f| f.to_uppercase().chain(c).collect())
+            c.next()
+                .map_or(String::new(), |f| f.to_uppercase().chain(c).collect())
         })
         .collect::<Vec<_>>()
         .join(" ")
@@ -1045,21 +1142,41 @@ fn owner_repo(url: &str) -> Option<(String, String)> {
 
 /// What an entry's own scripts need: Python for `.py`, Node for `.mjs`,
 /// `.cjs` or a `package.json`, a shell for `.sh`. Scripts that run in the
-/// page (`.js` under `assets/`) need nothing.
+/// page (`.js` under `assets/`) need nothing. Symlinks are never followed,
+/// and the walk stops at a depth and a file count no real skill reaches, so
+/// a user's odd folder can't stall loading.
 fn needs(dir: &Path) -> BTreeSet<String> {
+    const SKIP: [&str; 6] = [
+        "node_modules",
+        "assets",
+        ".git",
+        ".venv",
+        "venv",
+        "__pycache__",
+    ];
     let mut out = BTreeSet::new();
-    let mut stack = vec![dir.to_path_buf()];
-    while let Some(d) = stack.pop() {
+    let mut stack = vec![(dir.to_path_buf(), 0)];
+    let mut seen = 0;
+    while let Some((d, depth)) = stack.pop() {
         for e in std::fs::read_dir(&d).into_iter().flatten().flatten() {
-            let p = e.path();
+            seen += 1;
+            if seen > 20_000 {
+                return out;
+            }
+            let Ok(kind) = e.file_type() else {
+                continue;
+            };
             let name = e.file_name().to_string_lossy().to_string();
-            if p.is_dir() {
-                if name != "node_modules" && name != "assets" {
-                    stack.push(p);
+            if kind.is_dir() {
+                if depth < 8 && !SKIP.contains(&name.as_str()) {
+                    stack.push((e.path(), depth + 1));
                 }
                 continue;
             }
-            match p.extension().and_then(|x| x.to_str()) {
+            if !kind.is_file() {
+                continue;
+            }
+            match Path::new(&name).extension().and_then(|x| x.to_str()) {
                 Some("py") => {
                     out.insert("python".to_string());
                 }
@@ -1095,11 +1212,22 @@ mod tests {
             .errors()
             .map(|p| format!("{}: {}", p.path.display(), p.message))
             .collect();
-        assert!(errors.is_empty(), "{} problems:\n{}", errors.len(), errors.join("\n"));
+        assert!(
+            errors.is_empty(),
+            "{} problems:\n{}",
+            errors.len(),
+            errors.join("\n")
+        );
         // Upstream's own quirks: two invalid YAML headers, and previews it
         // names but doesn't ship.
         let tolerated: Vec<_> = ix.problems.iter().filter(|p| p.tolerated).collect();
-        assert_eq!(tolerated.iter().filter(|p| p.message.contains("YAML")).count(), 2);
+        assert_eq!(
+            tolerated
+                .iter()
+                .filter(|p| p.message.contains("YAML"))
+                .count(),
+            2
+        );
     }
 
     #[test]
@@ -1115,22 +1243,38 @@ mod tests {
         assert_eq!(Some(n(Kind::Example)), c["official_examples"].as_u64());
         assert_eq!(Some(n(Kind::Atom)), c["official_atoms"].as_u64());
         assert_eq!(Some(n(Kind::Scenario)), c["official_scenarios"].as_u64());
-        assert_eq!(Some(n(Kind::ImageTemplate)), c["official_image_templates"].as_u64());
-        assert_eq!(Some(n(Kind::VideoTemplate)), c["official_video_templates"].as_u64());
+        assert_eq!(
+            Some(n(Kind::ImageTemplate)),
+            c["official_image_templates"].as_u64()
+        );
+        assert_eq!(
+            Some(n(Kind::VideoTemplate)),
+            c["official_video_templates"].as_u64()
+        );
         assert_eq!(Some(n(Kind::DesignSystem)), c["design_systems"].as_u64());
     }
 
     #[test]
     fn a_deck_example_has_its_brief_preview_and_skill() {
         let ix = library();
-        let e = ix.get(Kind::Example, "html-ppt-course-module").expect("course module");
+        let e = ix
+            .get(Kind::Example, "html-ppt-course-module")
+            .expect("course module");
         assert_eq!(e.name, "example-html-ppt-course-module");
         assert_eq!(e.mode.as_deref(), Some("deck"));
         assert_eq!(e.scenario.as_deref(), Some("education"));
         assert!(e.query.as_deref().is_some_and(|q| q.contains("onboarding")));
-        assert_eq!(e.preview.as_deref(), Some(Path::new("plugins/_official/examples/html-ppt-course-module/example.html")));
+        assert_eq!(
+            e.preview.as_deref(),
+            Some(Path::new(
+                "plugins/_official/examples/html-ppt-course-module/example.html"
+            ))
+        );
         assert!(e.skill.as_ref().is_some_and(|s| ix.root.join(s).is_file()));
-        assert_eq!(e.twin, Some((Kind::Template, "html-ppt-course-module".to_string())));
+        assert_eq!(
+            e.twin,
+            Some((Kind::Template, "html-ppt-course-module".to_string()))
+        );
     }
 
     #[test]
@@ -1150,58 +1294,95 @@ mod tests {
     #[test]
     fn the_two_invalid_headers_keep_their_fields() {
         let ix = library();
-        let landing = ix.get(Kind::Example, "open-design-landing").expect("landing");
+        let landing = ix
+            .get(Kind::Example, "open-design-landing")
+            .expect("landing");
         assert_eq!(landing.craft, ["pixel-discipline", "typographic-rhythm"]);
-        let promo = ix.get(Kind::VideoTemplate, "frame-product-promo-30s").expect("promo");
+        let promo = ix
+            .get(Kind::VideoTemplate, "frame-product-promo-30s")
+            .expect("promo");
         assert_eq!(promo.mode.as_deref(), Some("video"));
     }
 
     #[test]
     fn manifests_keep_craft_under_od_context() {
         let ix = library();
-        let voltage = ix.get(Kind::Example, "fs-creative-voltage").expect("fs-creative-voltage");
+        let voltage = ix
+            .get(Kind::Example, "fs-creative-voltage")
+            .expect("fs-creative-voltage");
         assert_eq!(voltage.craft, ["typography"]);
         for id in ["od-default", "od-new-generation"] {
             let s = ix.get(Kind::Scenario, id).expect(id);
             assert_eq!(s.craft, ["typography", "color", "anti-ai-slop"], "{id}");
         }
         // Only in its SKILL.md: the manifest leaves it out, the skill fills it.
-        let webgl = ix.of(Kind::Example).find(|e| e.id.starts_with("webgl-")).expect("a webgl example");
+        let webgl = ix
+            .of(Kind::Example)
+            .find(|e| e.id.starts_with("webgl-"))
+            .expect("a webgl example");
         assert!(!webgl.craft.is_empty());
     }
 
     #[test]
     fn a_plugin_can_run_another_skill_by_name() {
         let ix = library();
-        let clone = ix.get(Kind::Example, "web-clone").expect("web-clone example");
-        assert_eq!(clone.skill.as_deref(), Some(Path::new("skills/web-clone/SKILL.md")));
+        let clone = ix
+            .get(Kind::Example, "web-clone")
+            .expect("web-clone example");
+        assert_eq!(
+            clone.skill.as_deref(),
+            Some(Path::new("skills/web-clone/SKILL.md"))
+        );
     }
 
     #[test]
     fn previews_follow_open_designs_search() {
         let ix = library();
         let dash = ix.get(Kind::Template, "dashboard").expect("dashboard");
-        assert_eq!(dash.preview.as_deref(), Some(Path::new("design-templates/dashboard/example.html")));
+        assert_eq!(
+            dash.preview.as_deref(),
+            Some(Path::new("design-templates/dashboard/example.html"))
+        );
         // Skills show their example too.
         assert!(ix.of(Kind::Skill).filter(|e| e.preview.is_some()).count() >= 39);
         // Named by upstream, shipped nowhere: no preview.
-        assert_eq!(ix.get(Kind::Example, "dcf-valuation").unwrap().preview, None);
+        assert_eq!(
+            ix.get(Kind::Example, "dcf-valuation").unwrap().preview,
+            None
+        );
         // Open Design's own copy on the web is the library's file.
-        let play = ix.get(Kind::VideoTemplate, "frame-play-mode").expect("frame-play-mode");
-        assert_eq!(play.preview.as_deref(), Some(Path::new("plugins/_official/video-templates/frame-play-mode/preview.png")));
+        let play = ix
+            .get(Kind::VideoTemplate, "frame-play-mode")
+            .expect("frame-play-mode");
+        assert_eq!(
+            play.preview.as_deref(),
+            Some(Path::new(
+                "plugins/_official/video-templates/frame-play-mode/preview.png"
+            ))
+        );
         assert_eq!(play.preview_url, None);
         // Someone else's site stays a link.
-        assert!(ix.of(Kind::ImageTemplate).any(|e| e.preview_url.as_deref().is_some_and(|u| u.contains("youmind"))));
+        assert!(ix.of(Kind::ImageTemplate).any(|e| e
+            .preview_url
+            .as_deref()
+            .is_some_and(|u| u.contains("youmind"))));
     }
 
     #[test]
     fn a_template_with_example_files_becomes_cards() {
         let ix = library();
-        let live = ix.get(Kind::Template, "live-artifact").expect("live-artifact");
+        let live = ix
+            .get(Kind::Template, "live-artifact")
+            .expect("live-artifact");
         assert!(live.hidden);
-        let cards: Vec<_> = ix.of(Kind::Template).filter(|e| e.parent.as_deref() == Some("live-artifact")).collect();
+        let cards: Vec<_> = ix
+            .of(Kind::Template)
+            .filter(|e| e.parent.as_deref() == Some("live-artifact"))
+            .collect();
         assert_eq!(cards.len(), 6);
-        assert!(cards.iter().all(|c| c.id.starts_with("live-artifact:") && c.preview.is_some()));
+        assert!(cards
+            .iter()
+            .all(|c| c.id.starts_with("live-artifact:") && c.preview.is_some()));
         assert_eq!(ix.entries.iter().filter(|e| e.parent.is_some()).count(), 11);
     }
 
@@ -1214,7 +1395,10 @@ mod tests {
         assert_eq!(apple.category.as_deref(), Some("Media & Consumer"));
         assert!(!apple.description.starts_with(BOILERPLATE));
         assert!(apple.kit.is_some() && apple.manifest.is_some() && apple.query.is_some());
-        assert_eq!(apple.skill.as_deref(), Some(Path::new("design-systems/apple/DESIGN.md")));
+        assert_eq!(
+            apple.skill.as_deref(),
+            Some(Path::new("design-systems/apple/DESIGN.md"))
+        );
         // The kit's DESIGN.md, never the older copy beside the card.
         let github = ix.get(Kind::DesignSystem, "github").expect("github");
         let text = std::fs::read_to_string(ix.root.join(github.skill.as_ref().unwrap())).unwrap();
@@ -1227,7 +1411,17 @@ mod tests {
             .collect();
         assert_eq!(
             kit_only,
-            ["cisco", "cloudflare-kumo", "hud", "loom", "slack", "tom-modern", "trading-terminal", "webex", "wechat"]
+            [
+                "cisco",
+                "cloudflare-kumo",
+                "hud",
+                "loom",
+                "slack",
+                "tom-modern",
+                "trading-terminal",
+                "webex",
+                "wechat"
+            ]
         );
         let hud = ix.get(Kind::DesignSystem, "hud").unwrap();
         assert!(!hud.title.starts_with("Design System"));
@@ -1258,21 +1452,55 @@ mod tests {
         let listed = ix.upstream["skills"].as_array().map_or(0, Vec::len);
         let shipped: Vec<_> = ix.of(Kind::Skill).filter(|e| e.upstream_shipped).collect();
         assert_eq!(shipped.len(), listed);
-        assert!(shipped.iter().all(|e| e.catalogue && e.skill.as_ref().is_some_and(|p| p.starts_with("upstream"))));
+        assert!(shipped
+            .iter()
+            .all(|e| e.catalogue && e.skill.as_ref().is_some_and(|p| p.starts_with("upstream"))));
         let canvas = ix.get(Kind::Skill, "canvas-design").expect("canvas-design");
-        assert_eq!(canvas.skill.as_deref(), Some(Path::new("upstream/anthropics__skills/skills/canvas-design/SKILL.md")));
+        assert_eq!(
+            canvas.skill.as_deref(),
+            Some(Path::new(
+                "upstream/anthropics__skills/skills/canvas-design/SKILL.md"
+            ))
+        );
         // Kept as a link: Anthropic's document skills aren't open source.
         let pptx = ix.get(Kind::Skill, "pptx").expect("pptx");
         assert!(pptx.catalogue && !pptx.upstream_shipped);
     }
 
-    /// CLAUDE.md rule 1: Forge is closed source, so nothing GPL-family ships,
-    /// and every licence a skill or template carries is one that lets Forge
-    /// redistribute it.
+    /// CLAUDE.md rule 1: Forge is closed source, so every licence in the
+    /// library must let Forge redistribute it: no copyleft, nothing
+    /// non-commercial or proprietary, and every declared licence one Forge
+    /// knows to be permissive.
     #[test]
     fn every_licence_in_the_library_lets_forge_ship_it() {
         let ix = library();
-        let permissive = ["MIT", "Apache-2.0", "BSD", "ISC", "0BSD", "Unlicense", "CC0-1.0", "CC-BY-4.0"];
+        let permissive = [
+            "MIT",
+            "Apache-2.0",
+            "BSD",
+            "ISC",
+            "0BSD",
+            "Unlicense",
+            "CC0-1.0",
+            "CC-BY-4.0",
+        ];
+        let forbidden = [
+            "gnu general public license",
+            "gnu lesser general public",
+            "gnu affero",
+            "server side public license",
+            "business source license",
+            "commons clause",
+            "noncommercial",
+            "non-commercial",
+            "noderivatives",
+        ];
+        let grants = [
+            "permission is hereby granted",
+            "apache license",
+            "redistribution and use in source and binary forms",
+            "permission to use, copy, modify",
+        ];
         let mut stack = vec![ix.root.clone()];
         let mut checked = 0;
         while let Some(d) = stack.pop() {
@@ -1283,13 +1511,27 @@ mod tests {
                     continue;
                 }
                 let name = e.file_name().to_string_lossy().to_uppercase();
-                if !(name.starts_with("LICENSE") || name.starts_with("LICENCE") || name.starts_with("COPYING")) {
+                if !(name.starts_with("LICENSE")
+                    || name.starts_with("LICENCE")
+                    || name.starts_with("COPYING"))
+                {
                     continue;
                 }
-                let text = std::fs::read_to_string(&p).unwrap_or_default().to_lowercase();
-                for gpl in ["gnu general public license", "gnu lesser general public", "gnu affero"] {
-                    assert!(!text.contains(gpl), "{} is {gpl}", p.display());
+                let text = std::fs::read_to_string(&p)
+                    .unwrap_or_else(|e| panic!("{}: {e}", p.display()))
+                    .to_lowercase();
+                let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+                for bad in forbidden {
+                    assert!(!text.contains(bad), "{} says {bad:?}", p.display());
                 }
+                let reserved = text[..text.len().min(600)].contains("all rights reserved");
+                assert!(
+                    !reserved
+                        || grants.iter().any(|g| text.contains(g))
+                        || text.contains("creative commons"),
+                    "{} reserves all rights",
+                    p.display()
+                );
                 checked += 1;
             }
         }
@@ -1297,15 +1539,55 @@ mod tests {
         for s in ix.upstream["skills"].as_array().into_iter().flatten() {
             let l = s["license"].as_str().unwrap_or_default();
             assert!(permissive.contains(&l), "{}: {l}", s["stub"]);
+            assert!(
+                s["license_file"].as_str().is_some(),
+                "{}: no licence text ships",
+                s["stub"]
+            );
         }
         for e in &ix.entries {
-            if let Some(l) = &e.license {
-                // SKILL.md `license:` can point at a file instead of naming one.
-                if !l.contains(' ') {
-                    assert!(permissive.contains(&l.as_str()), "{}: {l}", e.dir.display());
-                }
+            let Some(l) = &e.license else {
+                continue;
+            };
+            if l == "Complete terms in LICENSE.txt" {
+                // Anthropic's skills point at their file: it must be Apache.
+                let text = std::fs::read_to_string(ix.root.join(&e.dir).join("LICENSE.txt"))
+                    .unwrap_or_else(|_| panic!("{}: no LICENSE.txt", e.dir.display()));
+                assert!(text.contains("Apache License"), "{}", e.dir.display());
+            } else {
+                assert!(permissive.contains(&l.as_str()), "{}: {l}", e.dir.display());
             }
         }
+    }
+
+    #[test]
+    fn odd_folders_cant_panic_or_stall_loading() {
+        let tmp = std::env::temp_dir().join(format!("forge-design-odd-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let skill = tmp.join("skills/a");
+        std::fs::create_dir_all(skill.join("examples")).unwrap();
+        std::fs::write(
+            skill.join("SKILL.md"),
+            "---\nname: a\ndescription: d\n---\nbody",
+        )
+        .unwrap();
+        // Multi-byte characters at the end of names that aren't .html.
+        for f in ["café.txt", "示例.md", "résumé.pdf", "ok.html"] {
+            std::fs::write(skill.join("examples").join(f), "x").unwrap();
+        }
+        #[cfg(unix)]
+        for i in 0..3 {
+            std::fs::create_dir_all(skill.join("sub")).unwrap();
+            std::os::unix::fs::symlink("..", skill.join(format!("sub/up{i}"))).unwrap();
+        }
+        std::fs::write(tmp.join("UPSTREAM.json"), "{}").unwrap();
+        let ix = Index::load(&tmp);
+        let a = ix.get(Kind::Skill, "a").expect("a");
+        assert_eq!(
+            a.preview.as_deref(),
+            Some(Path::new("skills/a/examples/ok.html"))
+        );
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]
@@ -1327,12 +1609,26 @@ mod tests {
 
     #[test]
     fn paths_stay_inside_their_folder() {
-        assert_eq!(join_inside(Path::new("a/b"), "./SKILL.md"), Some(PathBuf::from("a/b/SKILL.md")));
-        assert_eq!(join_inside(Path::new("a/b"), "x/../c.html"), Some(PathBuf::from("a/b/c.html")));
+        assert_eq!(
+            join_inside(Path::new("a/b"), "./SKILL.md"),
+            Some(PathBuf::from("a/b/SKILL.md"))
+        );
+        assert_eq!(
+            join_inside(Path::new("a/b"), "x/../c.html"),
+            Some(PathBuf::from("a/b/c.html"))
+        );
         assert_eq!(join_inside(Path::new("a/b"), "../c/x.html"), None);
         assert_eq!(join_inside(Path::new("a/b"), "/etc/passwd"), None);
         assert_eq!(join_inside(Path::new("a/b"), "..\\x"), None);
         assert_eq!(join_inside(Path::new("a/b"), "C:x"), None);
+        // Open Design's own web address, with a path that tries to leave.
+        assert_eq!(join_inside(Path::new(""), "/etc/passwd"), None);
+        assert_eq!(join_inside(Path::new(""), "../../etc/hostname"), None);
+        assert_eq!(join_inside(Path::new(""), "C:/Windows/win.ini"), None);
+        assert_eq!(
+            join_inside(Path::new(""), "a/b.png"),
+            Some(PathBuf::from("a/b.png"))
+        );
     }
 
     #[test]
@@ -1344,7 +1640,9 @@ mod tests {
             summarize("# Design System Inspired by X\n\n> Category: Tools\n> A calm, dense look.\n\n## 1. Theme\n"),
             "A calm, dense look."
         );
-        assert_eq!(owner_repo("https://github.com/anthropics/skills/tree/main/skills/pdf"),
-            Some(("anthropics".into(), "skills".into())));
+        assert_eq!(
+            owner_repo("https://github.com/anthropics/skills/tree/main/skills/pdf"),
+            Some(("anthropics".into(), "skills".into()))
+        );
     }
 }

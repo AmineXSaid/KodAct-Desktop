@@ -141,7 +141,7 @@ stub = "color-expert"
 repo = "https://github.com/meodai/skill.color-expert"
 commit = "29188b28ef2a7b374a1ea0fb71303f5252f0d372"
 path = ""
-license = "CC0-1.0"
+license = "CC-BY-4.0"
 license_file = "LICENSE"
 
 [[skills]]
@@ -158,6 +158,8 @@ repo = "https://github.com/smixs/creative-director-skill"
 commit = "ac06eb255371da35d1db0a146dbfcca8c8857543"
 path = "creative-director"
 license = "CC-BY-4.0"
+license_file = "LICENSE"
+notices = ["NOTICE"]
 
 [[skills]]
 stub = "d3-visualization"
@@ -174,6 +176,7 @@ commit = "b616d6c53dd8fc0d8db210444b44a131b553b83e"
 path = "design-consultation"
 license = "MIT"
 license_file = "LICENSE"
+notices = ["NOTICE.md"]
 
 [[skills]]
 stub = "design-review"
@@ -182,6 +185,7 @@ commit = "b616d6c53dd8fc0d8db210444b44a131b553b83e"
 path = "design-review"
 license = "MIT"
 license_file = "LICENSE"
+notices = ["NOTICE.md"]
 
 [[skills]]
 stub = "frontend-dev"
@@ -189,6 +193,8 @@ repo = "https://github.com/MiniMax-AI/skills"
 commit = "60aaae52bb2af8162732751a4332f62a5fef518b"
 path = "skills/frontend-dev"
 license = "MIT"
+license_file = "LICENSE"
+notices = ["CREDITS.md"]
 
 [[skills]]
 stub = "frontend-slides"
@@ -204,6 +210,8 @@ repo = "https://github.com/MiniMax-AI/skills"
 commit = "60aaae52bb2af8162732751a4332f62a5fef518b"
 path = "skills/gif-sticker-maker"
 license = "MIT"
+license_file = "LICENSE"
+notices = ["CREDITS.md"]
 
 [[skills]]
 stub = "hand-drawn-diagrams"
@@ -236,6 +244,7 @@ commit = "60aaae52bb2af8162732751a4332f62a5fef518b"
 path = "skills/minimax-docx"
 license = "MIT"
 license_file = "skills/minimax-docx/LICENSE"
+notices = ["CREDITS.md"]
 
 [[skills]]
 stub = "minimax-pdf"
@@ -243,6 +252,8 @@ repo = "https://github.com/MiniMax-AI/skills"
 commit = "60aaae52bb2af8162732751a4332f62a5fef518b"
 path = "skills/minimax-pdf"
 license = "MIT"
+license_file = "LICENSE"
+notices = ["CREDITS.md"]
 
 [[skills]]
 stub = "plan-design-review"
@@ -251,6 +262,7 @@ commit = "b616d6c53dd8fc0d8db210444b44a131b553b83e"
 path = "plan-design-review"
 license = "MIT"
 license_file = "LICENSE"
+notices = ["NOTICE.md"]
 
 [[skills]]
 stub = "pptx-generator"
@@ -258,6 +270,8 @@ repo = "https://github.com/MiniMax-AI/skills"
 commit = "60aaae52bb2af8162732751a4332f62a5fef518b"
 path = "skills/pptx-generator"
 license = "MIT"
+license_file = "LICENSE"
+notices = ["CREDITS.md"]
 
 [[skills]]
 stub = "screenshot"
@@ -273,6 +287,8 @@ repo = "https://github.com/MiniMax-AI/skills"
 commit = "60aaae52bb2af8162732751a4332f62a5fef518b"
 path = "skills/shader-dev"
 license = "MIT"
+license_file = "LICENSE"
+notices = ["CREDITS.md"]
 
 [[skills]]
 stub = "slack-gif-creator"

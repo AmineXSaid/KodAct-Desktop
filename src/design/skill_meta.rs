@@ -12,7 +12,16 @@ use serde_json::Value;
 
 use super::frontmatter::Doc;
 
-pub const MODES: [&str; 8] = ["utility", "image", "video", "audio", "deck", "design-system", "template", "prototype"];
+pub const MODES: [&str; 8] = [
+    "utility",
+    "image",
+    "video",
+    "audio",
+    "deck",
+    "design-system",
+    "template",
+    "prototype",
+];
 pub const SURFACES: [&str; 4] = ["web", "image", "video", "audio"];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -50,7 +59,11 @@ impl SkillMeta {
         let description = doc.str("description").unwrap_or("").to_string();
         let mode = normalize_mode(od("mode"), &doc.body, &description);
         SkillMeta {
-            id: doc.str("name").filter(|n| !n.is_empty()).unwrap_or(folder).to_string(),
+            id: doc
+                .str("name")
+                .filter(|n| !n.is_empty())
+                .unwrap_or(folder)
+                .to_string(),
             folder: folder.to_string(),
             display_name: localized(m.get("en_name"), m.get("zh_name")),
             description_i18n: localized(m.get("en_description"), m.get("zh_description")),
@@ -62,8 +75,13 @@ impl SkillMeta {
             platform: normalize_platform(od("platform"), &mode, &doc.body, &description),
             scenario: normalize_scenario(od("scenario"), &doc.body, &description),
             category: normalize_category(od("category")),
-            preview_type: od("preview.type").and_then(Value::as_str).unwrap_or("html").to_string(),
-            design_system_required: od("design_system.requires").and_then(Value::as_bool).unwrap_or(true),
+            preview_type: od("preview.type")
+                .and_then(Value::as_str)
+                .unwrap_or("html")
+                .to_string(),
+            design_system_required: od("design_system.requires")
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
             default_for: normalize_default_for(od("default_for")),
             upstream: od("upstream").and_then(Value::as_str).map(str::to_string),
             featured: normalize_featured(od("featured")),
@@ -99,7 +117,8 @@ impl SkillMeta {
 /// `^[a-z0-9][a-z0-9-]*$`
 pub fn is_slug(s: &str) -> bool {
     let mut c = s.chars();
-    c.next().is_some_and(|f| f.is_ascii_lowercase() || f.is_ascii_digit())
+    c.next()
+        .is_some_and(|f| f.is_ascii_lowercase() || f.is_ascii_digit())
         && c.all(|x| x.is_ascii_lowercase() || x.is_ascii_digit() || x == '-')
 }
 
@@ -129,7 +148,11 @@ fn js_string(v: &Value) -> Option<String> {
 fn localized(en: Option<&Value>, zh: Option<&Value>) -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
     for (k, v) in [("en", en), ("zh-CN", zh)] {
-        if let Some(s) = v.and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty()) {
+        if let Some(s) = v
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
             out.insert(k.to_string(), s.to_string());
         }
     }
@@ -141,7 +164,10 @@ fn normalize_default_for(v: Option<&Value>) -> Vec<String> {
         None | Some(Value::Null) | Some(Value::Bool(false)) => vec![],
         Some(Value::String(s)) if s.is_empty() => vec![],
         Some(Value::Number(n)) if n.as_f64() == Some(0.0) => vec![],
-        Some(Value::Array(a)) => a.iter().map(|x| js_string(x).unwrap_or_else(|| "null".into())).collect(),
+        Some(Value::Array(a)) => a
+            .iter()
+            .map(|x| js_string(x).unwrap_or_else(|| "null".into()))
+            .collect(),
         Some(x) => js_string(x).into_iter().collect(),
     }
 }
@@ -150,7 +176,9 @@ fn normalize_featured(v: Option<&Value>) -> Option<f64> {
     match v? {
         Value::Bool(true) => Some(1.0),
         Value::Number(n) => n.as_f64().filter(|f| f.is_finite()),
-        Value::String(s) if !s.trim().is_empty() => s.trim().parse::<f64>().ok().filter(|f| f.is_finite()),
+        Value::String(s) if !s.trim().is_empty() => {
+            s.trim().parse::<f64>().ok().filter(|f| f.is_finite())
+        }
         _ => None,
     }
 }
@@ -187,10 +215,20 @@ fn normalize_surface(v: Option<&Value>, mode: &str) -> String {
             return s;
         }
     }
-    if matches!(mode, "image" | "video" | "audio") { mode } else { "web" }.to_string()
+    if matches!(mode, "image" | "video" | "audio") {
+        mode
+    } else {
+        "web"
+    }
+    .to_string()
 }
 
-fn normalize_platform(v: Option<&Value>, mode: &str, body: &str, description: &str) -> Option<String> {
+fn normalize_platform(
+    v: Option<&Value>,
+    mode: &str,
+    body: &str,
+    description: &str,
+) -> Option<String> {
     if let Some(p @ ("desktop" | "mobile")) = v.and_then(Value::as_str) {
         return Some(p.to_string());
     }
@@ -198,7 +236,9 @@ fn normalize_platform(v: Option<&Value>, mode: &str, body: &str, description: &s
         return None;
     }
     let hay = format!("{description}\n{body}").to_lowercase();
-    let mobile = ["mobile", "phone", "ios", "android", "手机", "移动端"].iter().any(|k| hay.contains(k));
+    let mobile = ["mobile", "phone", "ios", "android", "手机", "移动端"]
+        .iter()
+        .any(|k| hay.contains(k));
     Some(if mobile { "mobile" } else { "desktop" }.to_string())
 }
 
@@ -212,7 +252,11 @@ fn normalize_scenario(v: Option<&Value>, body: &str, description: &str) -> Strin
 }
 
 fn derive_prompt(explicit: Option<&Value>, description: &str) -> String {
-    if let Some(s) = explicit.and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(s) = explicit
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         return s.to_string();
     }
     let desc = description.trim();
@@ -224,12 +268,18 @@ fn derive_prompt(explicit: Option<&Value>, description: &str) -> String {
     let chars: Vec<(usize, char)> = collapsed.char_indices().collect();
     let mut first = collapsed.as_str();
     for (n, &(at, c)) in chars.iter().enumerate().skip(1) {
-        if matches!(c, '.' | '!' | '?' | '。' | '！' | '？') && chars.get(n + 1).is_none_or(|&(_, nx)| nx.is_whitespace()) {
+        if matches!(c, '.' | '!' | '?' | '。' | '！' | '？')
+            && chars.get(n + 1).is_none_or(|&(_, nx)| nx.is_whitespace())
+        {
             first = collapsed[..at + c.len_utf8()].trim();
             break;
         }
     }
-    let first = if first.is_empty() { collapsed.as_str() } else { first };
+    let first = if first.is_empty() {
+        collapsed.as_str()
+    } else {
+        first
+    };
     first.chars().take(320).collect()
 }
 
@@ -249,15 +299,48 @@ fn inferred(hay: &str, bounded: &[&str], plain: &[&str]) -> bool {
 
 pub fn infer_mode(body: &str, description: &str) -> &'static str {
     let hay = format!("{description}\n{body}").to_lowercase();
-    if inferred(&hay, &["image"], &["poster", "illustration", "photography", "图片", "海报", "插画"]) {
+    if inferred(
+        &hay,
+        &["image"],
+        &[
+            "poster",
+            "illustration",
+            "photography",
+            "图片",
+            "海报",
+            "插画",
+        ],
+    ) {
         "image"
-    } else if inferred(&hay, &["video"], &["motion", "shortform", "animation", "视频", "动效", "短片"]) {
+    } else if inferred(
+        &hay,
+        &["video"],
+        &["motion", "shortform", "animation", "视频", "动效", "短片"],
+    ) {
         "video"
-    } else if inferred(&hay, &["audio"], &["music", "jingle", "tts", "sound", "音频", "音乐", "配音", "音效"]) {
+    } else if inferred(
+        &hay,
+        &["audio"],
+        &[
+            "music", "jingle", "tts", "sound", "音频", "音乐", "配音", "音效",
+        ],
+    ) {
         "audio"
-    } else if inferred(&hay, &["ppt"], &["deck", "slide", "presentation", "幻灯", "投影"]) {
+    } else if inferred(
+        &hay,
+        &["ppt"],
+        &["deck", "slide", "presentation", "幻灯", "投影"],
+    ) {
         "deck"
-    } else if ["design system", "design-system", "design.md", "design tokens"].iter().any(|k| word(&hay, k, true, false)) {
+    } else if [
+        "design system",
+        "design-system",
+        "design.md",
+        "design tokens",
+    ]
+    .iter()
+    .any(|k| word(&hay, k, true, false))
+    {
         "design-system"
     } else if word(&hay, "template", true, true) {
         "template"
@@ -271,7 +354,8 @@ pub fn infer_scenario(body: &str, description: &str) -> &'static str {
     let any = |ks: &[&str]| ks.iter().any(|k| hay.contains(k));
     if any(&["finance", "invoice", "expense", "budget", "p&l", "revenue"]) {
         "finance"
-    } else if word(&hay, "hr", true, true) || any(&["onboarding", "payroll", "employee", "人事"]) {
+    } else if word(&hay, "hr", true, true) || any(&["onboarding", "payroll", "employee", "人事"])
+    {
         "hr"
     } else if any(&["marketing", "campaign", "brand", "landing"]) {
         "marketing"

@@ -33,14 +33,11 @@ if compgen -G "$here/installer/private-fonts/*.[oOtT][tT][fF]" >/dev/null; then
   fonts=(-DFONTS_DIR="$out/stage/fonts")
 fi
 
-# The design library, with its media (pinned by hash, fetched once and
-# cached): everything but the sync tool's git files.
+# The design library: its committed files and the media its lock pins
+# (fetched once, cached by hash), checked, and nothing else from the folder.
 python3 -I "$here/scripts/sync_open_design.py" media
 python3 -I "$here/scripts/sync_open_design.py" check
-rm -rf "$out/stage/design-library"
-mkdir -p "$out/stage/design-library"
-(cd "$here/design-library" && tar cf - --exclude=.gitignore --exclude=.gitattributes .) \
-  | (cd "$out/stage/design-library" && tar xf -)
+python3 -I "$here/scripts/sync_open_design.py" stage "$out/stage/design-library"
 
 makensis -V2 -WX \
   "${fonts[@]}" \

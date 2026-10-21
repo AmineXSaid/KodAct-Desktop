@@ -116,6 +116,7 @@ These folders carry a licence of their own, which applies to the files in them.
 | `skills/web-design-guidelines/` | `LICENSE` | MIT |
 | `skills/writing-guidelines/` | `LICENSE` | MIT |
 | `upstream/ComposioHQ__awesome-claude-skills/artifacts-builder/` | `LICENSE.txt` | Apache-2.0 |
+| `upstream/MiniMax-AI__skills/` | `LICENSE` | MIT |
 | `upstream/MiniMax-AI__skills/skills/minimax-docx/` | `LICENSE` | MIT |
 | `upstream/anthropics__skills/skills/algorithmic-art/` | `LICENSE.txt` | Apache-2.0 |
 | `upstream/anthropics__skills/skills/brand-guidelines/` | `LICENSE.txt` | Apache-2.0 |
@@ -123,57 +124,66 @@ These folders carry a licence of their own, which applies to the files in them.
 | `upstream/anthropics__skills/skills/slack-gif-creator/` | `LICENSE.txt` | Apache-2.0 |
 | `upstream/anthropics__skills/skills/theme-factory/` | `LICENSE.txt` | Apache-2.0 |
 | `upstream/anthropics__skills/skills/web-artifacts-builder/` | `LICENSE.txt` | Apache-2.0 |
+| `upstream/coreyhaines31__marketingskills/` | `LICENSE` | MIT |
+| `upstream/garrytan__gstack/` | `LICENSE` | MIT |
 | `upstream/jiannanya__snow-d3/` | `LICENSE` | MIT |
-| `upstream/meodai__skill.color-expert/` | `LICENSE` | CC0-1.0 |
+| `upstream/meodai__skill.color-expert/` | `LICENSE` | CC-BY-4.0 |
 | `upstream/muthuishere__hand-drawn-diagrams/` | `LICENSE` | MIT |
+| `upstream/nextlevelbuilder__ui-ux-pro-max-skill/` | `LICENSE` | MIT |
+| `upstream/obra__superpowers/` | `LICENSE` | MIT |
 | `upstream/op7418__Youtube-clipper-skill/` | `LICENSE` | MIT |
 | `upstream/openai__skills/skills/.curated/screenshot/` | `LICENSE.txt` | Apache-2.0 |
 | `upstream/openai__skills/skills/.curated/speech/` | `LICENSE.txt` | Apache-2.0 |
 | `upstream/openai__skills/skills/.system/imagegen/` | `LICENSE.txt` | Apache-2.0 |
+| `upstream/smixs__creative-director-skill/` | `LICENSE` | CC-BY-4.0 |
+| `upstream/veniceai__skills/` | `LICENSE` | MIT |
 | `upstream/wholiver__swiftui-design-skill/` | `LICENSE` | MIT |
+| `upstream/zarazhangrui__frontend-slides/` | `LICENSE` | MIT |
 
 ## Upstream skills
 
 Open Design's catalogue lists these skills by link only. Forge ships the real skill, from the repository and commit below, where its licence allows redistribution. They are under `upstream/<owner>__<repo>/`.
 
-| Catalogue entry | Repository | Commit | Path | Licence |
-|:--|:--|:--|:--|:--|
-| `ad-creative` | [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) | `e85f3cbc2e4a` | `skills/ad-creative` | MIT |
-| `algorithmic-art` | [anthropics/skills](https://github.com/anthropics/skills) | `dbd4588f9e10` | `skills/algorithmic-art` | Apache-2.0 |
-| `artifacts-builder` | [ComposioHQ/awesome-claude-skills](https://github.com/ComposioHQ/awesome-claude-skills) | `be2a406907db` | `artifacts-builder` | Apache-2.0 |
-| `brainstorming` | [obra/superpowers](https://github.com/obra/superpowers) | `b739a8af570e` | `skills/brainstorming` | MIT |
-| `brand-guidelines` | [anthropics/skills](https://github.com/anthropics/skills) | `dbd4588f9e10` | `skills/brand-guidelines` | Apache-2.0 |
-| `canvas-design` | [anthropics/skills](https://github.com/anthropics/skills) | `dbd4588f9e10` | `skills/canvas-design` | Apache-2.0 |
-| `color-expert` | [meodai/skill.color-expert](https://github.com/meodai/skill.color-expert) | `29188b28ef2a` | `` | CC0-1.0 |
-| `copywriting` | [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) | `e85f3cbc2e4a` | `skills/copywriting` | MIT |
-| `creative-director` | [smixs/creative-director-skill](https://github.com/smixs/creative-director-skill) | `ac06eb255371` | `creative-director` | CC-BY-4.0 |
-| `d3-visualization` | [jiannanya/snow-d3](https://github.com/jiannanya/snow-d3) | `f9c319c5f5b1` | `` | MIT |
-| `design-consultation` | [garrytan/gstack](https://github.com/garrytan/gstack) | `b616d6c53dd8` | `design-consultation` | MIT |
-| `design-review` | [garrytan/gstack](https://github.com/garrytan/gstack) | `b616d6c53dd8` | `design-review` | MIT |
-| `frontend-dev` | [MiniMax-AI/skills](https://github.com/MiniMax-AI/skills) | `60aaae52bb2a` | `skills/frontend-dev` | MIT |
-| `frontend-slides` | [zarazhangrui/frontend-slides](https://github.com/zarazhangrui/frontend-slides) | `9906a34d640d` | `plugins/frontend-slides/skills/frontend-slides` | MIT |
-| `gif-sticker-maker` | [MiniMax-AI/skills](https://github.com/MiniMax-AI/skills) | `60aaae52bb2a` | `skills/gif-sticker-maker` | MIT |
-| `hand-drawn-diagrams` | [muthuishere/hand-drawn-diagrams](https://github.com/muthuishere/hand-drawn-diagrams) | `c8ffd6c3febb` | `` | MIT |
-| `imagegen` | [openai/skills](https://github.com/openai/skills) | `49f948faa925` | `skills/.system/imagegen` | Apache-2.0 |
-| `marketing-psychology` | [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) | `e85f3cbc2e4a` | `skills/marketing-psychology` | MIT |
-| `minimax-docx` | [MiniMax-AI/skills](https://github.com/MiniMax-AI/skills) | `60aaae52bb2a` | `skills/minimax-docx` | MIT |
-| `minimax-pdf` | [MiniMax-AI/skills](https://github.com/MiniMax-AI/skills) | `60aaae52bb2a` | `skills/minimax-pdf` | MIT |
-| `plan-design-review` | [garrytan/gstack](https://github.com/garrytan/gstack) | `b616d6c53dd8` | `plan-design-review` | MIT |
-| `pptx-generator` | [MiniMax-AI/skills](https://github.com/MiniMax-AI/skills) | `60aaae52bb2a` | `skills/pptx-generator` | MIT |
-| `screenshot` | [openai/skills](https://github.com/openai/skills) | `49f948faa925` | `skills/.curated/screenshot` | Apache-2.0 |
-| `shader-dev` | [MiniMax-AI/skills](https://github.com/MiniMax-AI/skills) | `60aaae52bb2a` | `skills/shader-dev` | MIT |
-| `slack-gif-creator` | [anthropics/skills](https://github.com/anthropics/skills) | `dbd4588f9e10` | `skills/slack-gif-creator` | Apache-2.0 |
-| `speech` | [openai/skills](https://github.com/openai/skills) | `49f948faa925` | `skills/.curated/speech` | Apache-2.0 |
-| `swiftui-design` | [wholiver/swiftui-design-skill](https://github.com/wholiver/swiftui-design-skill) | `2c82638ebd3c` | `` | MIT |
-| `theme-factory` | [anthropics/skills](https://github.com/anthropics/skills) | `dbd4588f9e10` | `skills/theme-factory` | Apache-2.0 |
-| `ui-ux-pro-max` | [nextlevelbuilder/ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | `56ea9cf174ed` | `.claude/skills/ui-ux-pro-max` | MIT |
-| `venice-audio-music` | [veniceai/skills](https://github.com/veniceai/skills) | `5eaeac576c09` | `skills/venice-audio-music` | MIT |
-| `venice-audio-speech` | [veniceai/skills](https://github.com/veniceai/skills) | `5eaeac576c09` | `skills/venice-audio-speech` | MIT |
-| `venice-image-edit` | [veniceai/skills](https://github.com/veniceai/skills) | `5eaeac576c09` | `skills/venice-image-edit` | MIT |
-| `venice-image-generate` | [veniceai/skills](https://github.com/veniceai/skills) | `5eaeac576c09` | `skills/venice-image-generate` | MIT |
-| `venice-video` | [veniceai/skills](https://github.com/veniceai/skills) | `5eaeac576c09` | `skills/venice-video` | MIT |
-| `web-artifacts-builder` | [anthropics/skills](https://github.com/anthropics/skills) | `dbd4588f9e10` | `skills/web-artifacts-builder` | Apache-2.0 |
-| `youtube-clipper` | [op7418/Youtube-clipper-skill](https://github.com/op7418/Youtube-clipper-skill) | `f31f077ee090` | `` | MIT |
+Each one's licence text (and any notice it asks to keep) ships beside it, at the path given.
+
+| Catalogue entry | Repository | Commit | Path | Licence | Licence text |
+|:--|:--|:--|:--|:--|:--|
+| `ad-creative` | [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) | `e85f3cbc2e4a` | `skills/ad-creative` | MIT — Copyright (c) 2025 Corey Haines | `upstream/coreyhaines31__marketingskills/LICENSE` |
+| `algorithmic-art` | [anthropics/skills](https://github.com/anthropics/skills) | `dbd4588f9e10` | `skills/algorithmic-art` | Apache-2.0 — copyright notice that is included in or attached to the work | `upstream/anthropics__skills/skills/algorithmic-art/LICENSE.txt` |
+| `artifacts-builder` | [ComposioHQ/awesome-claude-skills](https://github.com/ComposioHQ/awesome-claude-skills) | `be2a406907db` | `artifacts-builder` | Apache-2.0 — copyright notice that is included in or attached to the work | `upstream/ComposioHQ__awesome-claude-skills/artifacts-builder/LICENSE.txt` |
+| `brainstorming` | [obra/superpowers](https://github.com/obra/superpowers) | `b739a8af570e` | `skills/brainstorming` | MIT — Copyright (c) 2025 Jesse Vincent | `upstream/obra__superpowers/LICENSE` |
+| `brand-guidelines` | [anthropics/skills](https://github.com/anthropics/skills) | `dbd4588f9e10` | `skills/brand-guidelines` | Apache-2.0 — copyright notice that is included in or attached to the work | `upstream/anthropics__skills/skills/brand-guidelines/LICENSE.txt` |
+| `canvas-design` | [anthropics/skills](https://github.com/anthropics/skills) | `dbd4588f9e10` | `skills/canvas-design` | Apache-2.0 — copyright notice that is included in or attached to the work | `upstream/anthropics__skills/skills/canvas-design/LICENSE.txt` |
+| `color-expert` | [meodai/skill.color-expert](https://github.com/meodai/skill.color-expert) | `29188b28ef2a` | `/` | CC-BY-4.0 — copyright and certain other rights. Our licenses are | `upstream/meodai__skill.color-expert/LICENSE` |
+| `copywriting` | [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) | `e85f3cbc2e4a` | `skills/copywriting` | MIT — Copyright (c) 2025 Corey Haines | `upstream/coreyhaines31__marketingskills/LICENSE` |
+| `creative-director` | [smixs/creative-director-skill](https://github.com/smixs/creative-director-skill) | `ac06eb255371` | `creative-director` | CC-BY-4.0 — copyright and certain other rights. Our licenses are | `upstream/smixs__creative-director-skill/LICENSE`, `upstream/smixs__creative-director-skill/NOTICE` |
+| `d3-visualization` | [jiannanya/snow-d3](https://github.com/jiannanya/snow-d3) | `f9c319c5f5b1` | `/` | MIT — Copyright (c) 2026 Jiannanya | `upstream/jiannanya__snow-d3/LICENSE` |
+| `design-consultation` | [garrytan/gstack](https://github.com/garrytan/gstack) | `b616d6c53dd8` | `design-consultation` | MIT — Copyright (c) 2026 Garry Tan | `upstream/garrytan__gstack/LICENSE`, `upstream/garrytan__gstack/NOTICE.md` |
+| `design-review` | [garrytan/gstack](https://github.com/garrytan/gstack) | `b616d6c53dd8` | `design-review` | MIT — Copyright (c) 2026 Garry Tan | `upstream/garrytan__gstack/LICENSE`, `upstream/garrytan__gstack/NOTICE.md` |
+| `frontend-dev` | [MiniMax-AI/skills](https://github.com/MiniMax-AI/skills) | `60aaae52bb2a` | `skills/frontend-dev` | MIT — Copyright (c) 2026 MiniMax | `upstream/MiniMax-AI__skills/LICENSE`, `upstream/MiniMax-AI__skills/CREDITS.md` |
+| `frontend-slides` | [zarazhangrui/frontend-slides](https://github.com/zarazhangrui/frontend-slides) | `9906a34d640d` | `plugins/frontend-slides/skills/frontend-slides` | MIT — Copyright (c) 2025 Zara Zhang | `upstream/zarazhangrui__frontend-slides/LICENSE` |
+| `gif-sticker-maker` | [MiniMax-AI/skills](https://github.com/MiniMax-AI/skills) | `60aaae52bb2a` | `skills/gif-sticker-maker` | MIT — Copyright (c) 2026 MiniMax | `upstream/MiniMax-AI__skills/LICENSE`, `upstream/MiniMax-AI__skills/CREDITS.md` |
+| `hand-drawn-diagrams` | [muthuishere/hand-drawn-diagrams](https://github.com/muthuishere/hand-drawn-diagrams) | `c8ffd6c3febb` | `/` | MIT — Copyright (c) 2025 Muthukumaran Navaneethakrishnan | `upstream/muthuishere__hand-drawn-diagrams/LICENSE` |
+| `imagegen` | [openai/skills](https://github.com/openai/skills) | `49f948faa925` | `skills/.system/imagegen` | Apache-2.0 — copyright notice that is included in or attached to the work | `upstream/openai__skills/skills/.system/imagegen/LICENSE.txt` |
+| `marketing-psychology` | [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) | `e85f3cbc2e4a` | `skills/marketing-psychology` | MIT — Copyright (c) 2025 Corey Haines | `upstream/coreyhaines31__marketingskills/LICENSE` |
+| `minimax-docx` | [MiniMax-AI/skills](https://github.com/MiniMax-AI/skills) | `60aaae52bb2a` | `skills/minimax-docx` | MIT — Copyright (c) 2026 MiniMaxAI | `upstream/MiniMax-AI__skills/skills/minimax-docx/LICENSE`, `upstream/MiniMax-AI__skills/CREDITS.md` |
+| `minimax-pdf` | [MiniMax-AI/skills](https://github.com/MiniMax-AI/skills) | `60aaae52bb2a` | `skills/minimax-pdf` | MIT — Copyright (c) 2026 MiniMax | `upstream/MiniMax-AI__skills/LICENSE`, `upstream/MiniMax-AI__skills/CREDITS.md` |
+| `plan-design-review` | [garrytan/gstack](https://github.com/garrytan/gstack) | `b616d6c53dd8` | `plan-design-review` | MIT — Copyright (c) 2026 Garry Tan | `upstream/garrytan__gstack/LICENSE`, `upstream/garrytan__gstack/NOTICE.md` |
+| `pptx-generator` | [MiniMax-AI/skills](https://github.com/MiniMax-AI/skills) | `60aaae52bb2a` | `skills/pptx-generator` | MIT — Copyright (c) 2026 MiniMax | `upstream/MiniMax-AI__skills/LICENSE`, `upstream/MiniMax-AI__skills/CREDITS.md` |
+| `screenshot` | [openai/skills](https://github.com/openai/skills) | `49f948faa925` | `skills/.curated/screenshot` | Apache-2.0 — copyright notice that is included in or attached to the work | `upstream/openai__skills/skills/.curated/screenshot/LICENSE.txt` |
+| `shader-dev` | [MiniMax-AI/skills](https://github.com/MiniMax-AI/skills) | `60aaae52bb2a` | `skills/shader-dev` | MIT — Copyright (c) 2026 MiniMax | `upstream/MiniMax-AI__skills/LICENSE`, `upstream/MiniMax-AI__skills/CREDITS.md` |
+| `slack-gif-creator` | [anthropics/skills](https://github.com/anthropics/skills) | `dbd4588f9e10` | `skills/slack-gif-creator` | Apache-2.0 — copyright notice that is included in or attached to the work | `upstream/anthropics__skills/skills/slack-gif-creator/LICENSE.txt` |
+| `speech` | [openai/skills](https://github.com/openai/skills) | `49f948faa925` | `skills/.curated/speech` | Apache-2.0 — copyright notice that is included in or attached to the work | `upstream/openai__skills/skills/.curated/speech/LICENSE.txt` |
+| `swiftui-design` | [wholiver/swiftui-design-skill](https://github.com/wholiver/swiftui-design-skill) | `2c82638ebd3c` | `/` | MIT — Copyright (c) 2026 wholiver | `upstream/wholiver__swiftui-design-skill/LICENSE` |
+| `theme-factory` | [anthropics/skills](https://github.com/anthropics/skills) | `dbd4588f9e10` | `skills/theme-factory` | Apache-2.0 — copyright notice that is included in or attached to the work | `upstream/anthropics__skills/skills/theme-factory/LICENSE.txt` |
+| `ui-ux-pro-max` | [nextlevelbuilder/ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | `56ea9cf174ed` | `.claude/skills/ui-ux-pro-max` | MIT — Copyright (c) 2024 Next Level Builder | `upstream/nextlevelbuilder__ui-ux-pro-max-skill/LICENSE` |
+| `venice-audio-music` | [veniceai/skills](https://github.com/veniceai/skills) | `5eaeac576c09` | `skills/venice-audio-music` | MIT — Copyright (c) 2026 Venice.ai | `upstream/veniceai__skills/LICENSE` |
+| `venice-audio-speech` | [veniceai/skills](https://github.com/veniceai/skills) | `5eaeac576c09` | `skills/venice-audio-speech` | MIT — Copyright (c) 2026 Venice.ai | `upstream/veniceai__skills/LICENSE` |
+| `venice-image-edit` | [veniceai/skills](https://github.com/veniceai/skills) | `5eaeac576c09` | `skills/venice-image-edit` | MIT — Copyright (c) 2026 Venice.ai | `upstream/veniceai__skills/LICENSE` |
+| `venice-image-generate` | [veniceai/skills](https://github.com/veniceai/skills) | `5eaeac576c09` | `skills/venice-image-generate` | MIT — Copyright (c) 2026 Venice.ai | `upstream/veniceai__skills/LICENSE` |
+| `venice-video` | [veniceai/skills](https://github.com/veniceai/skills) | `5eaeac576c09` | `skills/venice-video` | MIT — Copyright (c) 2026 Venice.ai | `upstream/veniceai__skills/LICENSE` |
+| `web-artifacts-builder` | [anthropics/skills](https://github.com/anthropics/skills) | `dbd4588f9e10` | `skills/web-artifacts-builder` | Apache-2.0 — copyright notice that is included in or attached to the work | `upstream/anthropics__skills/skills/web-artifacts-builder/LICENSE.txt` |
+| `youtube-clipper` | [op7418/Youtube-clipper-skill](https://github.com/op7418/Youtube-clipper-skill) | `f31f077ee090` | `/` | MIT — Copyright (c) 2026 op7418 | `upstream/op7418__Youtube-clipper-skill/LICENSE` |
 
 ## Catalogue entries kept as links only
 

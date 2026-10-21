@@ -28,9 +28,9 @@
   "docs/schemas"
  ],
  "counts": {
-  "files": 8859,
+  "files": 8865,
   "media_files": 252,
-  "text_files": 8607,
+  "text_files": 8613,
   "skills": 169,
   "catalogue_skills": 85,
   "design_systems": 152,
@@ -49,252 +49,318 @@
    "repo": "https://github.com/coreyhaines31/marketingskills",
    "commit": "e85f3cbc2e4a79bf33b2a12e9bdd9087d414735b",
    "path": "skills/ad-creative",
-   "license": "MIT"
+   "license": "MIT",
+   "license_file": "LICENSE"
   },
   {
    "stub": "algorithmic-art",
    "repo": "https://github.com/anthropics/skills",
    "commit": "dbd4588f9e1033efb41dad4bef2f7947c8993d44",
    "path": "skills/algorithmic-art",
-   "license": "Apache-2.0"
+   "license": "Apache-2.0",
+   "license_file": "skills/algorithmic-art/LICENSE.txt"
   },
   {
    "stub": "artifacts-builder",
    "repo": "https://github.com/ComposioHQ/awesome-claude-skills",
    "commit": "be2a406907dbc61b73e6827ded415c96139d13a2",
    "path": "artifacts-builder",
-   "license": "Apache-2.0"
+   "license": "Apache-2.0",
+   "license_file": "artifacts-builder/LICENSE.txt"
   },
   {
    "stub": "brainstorming",
    "repo": "https://github.com/obra/superpowers",
    "commit": "b739a8af570e10a95898f2bdf6cec97467fa6c12",
    "path": "skills/brainstorming",
-   "license": "MIT"
+   "license": "MIT",
+   "license_file": "LICENSE"
   },
   {
    "stub": "brand-guidelines",
    "repo": "https://github.com/anthropics/skills",
    "commit": "dbd4588f9e1033efb41dad4bef2f7947c8993d44",
    "path": "skills/brand-guidelines",
-   "license": "Apache-2.0"
+   "license": "Apache-2.0",
+   "license_file": "skills/brand-guidelines/LICENSE.txt"
   },
   {
    "stub": "canvas-design",
    "repo": "https://github.com/anthropics/skills",
    "commit": "dbd4588f9e1033efb41dad4bef2f7947c8993d44",
    "path": "skills/canvas-design",
-   "license": "Apache-2.0"
+   "license": "Apache-2.0",
+   "license_file": "skills/canvas-design/LICENSE.txt"
   },
   {
    "stub": "color-expert",
    "repo": "https://github.com/meodai/skill.color-expert",
    "commit": "29188b28ef2a7b374a1ea0fb71303f5252f0d372",
    "path": "",
-   "license": "CC0-1.0"
+   "license": "CC-BY-4.0",
+   "license_file": "LICENSE"
   },
   {
    "stub": "copywriting",
    "repo": "https://github.com/coreyhaines31/marketingskills",
    "commit": "e85f3cbc2e4a79bf33b2a12e9bdd9087d414735b",
    "path": "skills/copywriting",
-   "license": "MIT"
+   "license": "MIT",
+   "license_file": "LICENSE"
   },
   {
    "stub": "creative-director",
    "repo": "https://github.com/smixs/creative-director-skill",
    "commit": "ac06eb255371da35d1db0a146dbfcca8c8857543",
    "path": "creative-director",
-   "license": "CC-BY-4.0"
+   "license": "CC-BY-4.0",
+   "license_file": "LICENSE",
+   "notices": [
+    "NOTICE"
+   ]
   },
   {
    "stub": "d3-visualization",
    "repo": "https://github.com/jiannanya/snow-d3",
    "commit": "f9c319c5f5b148f6c1c7d1669bcebb8a97b07b6f",
    "path": "",
-   "license": "MIT"
+   "license": "MIT",
+   "license_file": "LICENSE"
   },
   {
    "stub": "design-consultation",
    "repo": "https://github.com/garrytan/gstack",
    "commit": "b616d6c53dd8fc0d8db210444b44a131b553b83e",
    "path": "design-consultation",
-   "license": "MIT"
+   "license": "MIT",
+   "license_file": "LICENSE",
+   "notices": [
+    "NOTICE.md"
+   ]
   },
   {
    "stub": "design-review",
    "repo": "https://github.com/garrytan/gstack",
    "commit": "b616d6c53dd8fc0d8db210444b44a131b553b83e",
    "path": "design-review",
-   "license": "MIT"
+   "license": "MIT",
+   "license_file": "LICENSE",
+   "notices": [
+    "NOTICE.md"
+   ]
   },
   {
    "stub": "frontend-dev",
    "repo": "https://github.com/MiniMax-AI/skills",
    "commit": "60aaae52bb2af8162732751a4332f62a5fef518b",
    "path": "skills/frontend-dev",
-   "license": "MIT"
+   "license": "MIT",
+   "license_file": "LICENSE",
+   "notices": [
+    "CREDITS.md"
+   ]
   },
   {
    "stub": "frontend-slides",
    "repo": "https://github.com/zarazhangrui/frontend-slides",
    "commit": "9906a34d640d2111f724544cbc50f7f130569ae1",
    "path": "plugins/frontend-slides/skills/frontend-slides",
-   "license": "MIT"
+   "license": "MIT",
+   "license_file": "LICENSE"
   },
   {
    "stub": "gif-sticker-maker",
    "repo": "https://github.com/MiniMax-AI/skills",
    "commit": "60aaae52bb2af8162732751a4332f62a5fef518b",
    "path": "skills/gif-sticker-maker",
-   "license": "MIT"
+   "license": "MIT",
+   "license_file": "LICENSE",
+   "notices": [
+    "CREDITS.md"
+   ]
   },
   {
    "stub": "hand-drawn-diagrams",
    "repo": "https://github.com/muthuishere/hand-drawn-diagrams",
    "commit": "c8ffd6c3febbc0e745ab6691ea81c8703a9829c8",
    "path": "",
-   "license": "MIT"
+   "license": "MIT",
+   "license_file": "LICENSE"
   },
   {
    "stub": "imagegen",
    "repo": "https://github.com/openai/skills",
    "commit": "49f948faa9258a0c61caceaf225e179651397431",
    "path": "skills/.system/imagegen",
-   "license": "Apache-2.0"
+   "license": "Apache-2.0",
+   "license_file": "skills/.system/imagegen/LICENSE.txt"
   },
   {
    "stub": "marketing-psychology",
    "repo": "https://github.com/coreyhaines31/marketingskills",
    "commit": "e85f3cbc2e4a79bf33b2a12e9bdd9087d414735b",
    "path": "skills/marketing-psychology",
-   "license": "MIT"
+   "license": "MIT",
+   "license_file": "LICENSE"
   },
   {
    "stub": "minimax-docx",
    "repo": "https://github.com/MiniMax-AI/skills",
    "commit": "60aaae52bb2af8162732751a4332f62a5fef518b",
    "path": "skills/minimax-docx",
-   "license": "MIT"
+   "license": "MIT",
+   "license_file": "skills/minimax-docx/LICENSE",
+   "notices": [
+    "CREDITS.md"
+   ]
   },
   {
    "stub": "minimax-pdf",
    "repo": "https://github.com/MiniMax-AI/skills",
    "commit": "60aaae52bb2af8162732751a4332f62a5fef518b",
    "path": "skills/minimax-pdf",
-   "license": "MIT"
+   "license": "MIT",
+   "license_file": "LICENSE",
+   "notices": [
+    "CREDITS.md"
+   ]
   },
   {
    "stub": "plan-design-review",
    "repo": "https://github.com/garrytan/gstack",
    "commit": "b616d6c53dd8fc0d8db210444b44a131b553b83e",
    "path": "plan-design-review",
-   "license": "MIT"
+   "license": "MIT",
+   "license_file": "LICENSE",
+   "notices": [
+    "NOTICE.md"
+   ]
   },
   {
    "stub": "pptx-generator",
    "repo": "https://github.com/MiniMax-AI/skills",
    "commit": "60aaae52bb2af8162732751a4332f62a5fef518b",
    "path": "skills/pptx-generator",
-   "license": "MIT"
+   "license": "MIT",
+   "license_file": "LICENSE",
+   "notices": [
+    "CREDITS.md"
+   ]
   },
   {
    "stub": "screenshot",
    "repo": "https://github.com/openai/skills",
    "commit": "49f948faa9258a0c61caceaf225e179651397431",
    "path": "skills/.curated/screenshot",
-   "license": "Apache-2.0"
+   "license": "Apache-2.0",
+   "license_file": "skills/.curated/screenshot/LICENSE.txt"
   },
   {
    "stub": "shader-dev",
    "repo": "https://github.com/MiniMax-AI/skills",
    "commit": "60aaae52bb2af8162732751a4332f62a5fef518b",
    "path": "skills/shader-dev",
-   "license": "MIT"
+   "license": "MIT",
+   "license_file": "LICENSE",
+   "notices": [
+    "CREDITS.md"
+   ]
   },
   {
    "stub": "slack-gif-creator",
    "repo": "https://github.com/anthropics/skills",
    "commit": "dbd4588f9e1033efb41dad4bef2f7947c8993d44",
    "path": "skills/slack-gif-creator",
-   "license": "Apache-2.0"
+   "license": "Apache-2.0",
+   "license_file": "skills/slack-gif-creator/LICENSE.txt"
   },
   {
    "stub": "speech",
    "repo": "https://github.com/openai/skills",
    "commit": "49f948faa9258a0c61caceaf225e179651397431",
    "path": "skills/.curated/speech",
-   "license": "Apache-2.0"
+   "license": "Apache-2.0",
+   "license_file": "skills/.curated/speech/LICENSE.txt"
   },
   {
    "stub": "swiftui-design",
    "repo": "https://github.com/wholiver/swiftui-design-skill",
    "commit": "2c82638ebd3c801d9d2d12b5f2d6c20495939995",
    "path": "",
-   "license": "MIT"
+   "license": "MIT",
+   "license_file": "LICENSE"
   },
   {
    "stub": "theme-factory",
    "repo": "https://github.com/anthropics/skills",
    "commit": "dbd4588f9e1033efb41dad4bef2f7947c8993d44",
    "path": "skills/theme-factory",
-   "license": "Apache-2.0"
+   "license": "Apache-2.0",
+   "license_file": "skills/theme-factory/LICENSE.txt"
   },
   {
    "stub": "ui-ux-pro-max",
    "repo": "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill",
    "commit": "56ea9cf174ed86786187daa9de0e6247cb0747e4",
    "path": ".claude/skills/ui-ux-pro-max",
-   "license": "MIT"
+   "license": "MIT",
+   "license_file": "LICENSE"
   },
   {
    "stub": "venice-audio-music",
    "repo": "https://github.com/veniceai/skills",
    "commit": "5eaeac576c099fcad61b494a07799e5e66d1d334",
    "path": "skills/venice-audio-music",
-   "license": "MIT"
+   "license": "MIT",
+   "license_file": "LICENSE"
   },
   {
    "stub": "venice-audio-speech",
    "repo": "https://github.com/veniceai/skills",
    "commit": "5eaeac576c099fcad61b494a07799e5e66d1d334",
    "path": "skills/venice-audio-speech",
-   "license": "MIT"
+   "license": "MIT",
+   "license_file": "LICENSE"
   },
   {
    "stub": "venice-image-edit",
    "repo": "https://github.com/veniceai/skills",
    "commit": "5eaeac576c099fcad61b494a07799e5e66d1d334",
    "path": "skills/venice-image-edit",
-   "license": "MIT"
+   "license": "MIT",
+   "license_file": "LICENSE"
   },
   {
    "stub": "venice-image-generate",
    "repo": "https://github.com/veniceai/skills",
    "commit": "5eaeac576c099fcad61b494a07799e5e66d1d334",
    "path": "skills/venice-image-generate",
-   "license": "MIT"
+   "license": "MIT",
+   "license_file": "LICENSE"
   },
   {
    "stub": "venice-video",
    "repo": "https://github.com/veniceai/skills",
    "commit": "5eaeac576c099fcad61b494a07799e5e66d1d334",
    "path": "skills/venice-video",
-   "license": "MIT"
+   "license": "MIT",
+   "license_file": "LICENSE"
   },
   {
    "stub": "web-artifacts-builder",
    "repo": "https://github.com/anthropics/skills",
    "commit": "dbd4588f9e1033efb41dad4bef2f7947c8993d44",
    "path": "skills/web-artifacts-builder",
-   "license": "Apache-2.0"
+   "license": "Apache-2.0",
+   "license_file": "skills/web-artifacts-builder/LICENSE.txt"
   },
   {
    "stub": "youtube-clipper",
    "repo": "https://github.com/op7418/Youtube-clipper-skill",
    "commit": "f31f077ee0905c95a510a6f34bbd0c3c85b15129",
    "path": "",
-   "license": "MIT"
+   "license": "MIT",
+   "license_file": "LICENSE"
   }
  ],
  "not_shipped": [

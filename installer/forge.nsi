@@ -96,8 +96,10 @@ Section "Design library" SecDesign
   SectionIn RO
   ; Open Design's skills, templates, design systems and craft rules, which
   ; Forge's design chats read (design-library/, staged by build.sh with its
-  ; media fetched). Replaced whole, so an update leaves no stale files.
-  RMDir /r "$INSTDIR\design-library"
+  ; media fetched). Replaced whole, so an update leaves no stale files; only
+  ; a library Forge put there (it has UPSTREAM.json) is ever removed.
+  IfFileExists "$INSTDIR\design-library\UPSTREAM.json" 0 +2
+    RMDir /r "$INSTDIR\design-library"
   SetOutPath "$INSTDIR\design-library"
   File /r "${DESIGN_DIR}\*.*"
 SectionEnd
@@ -281,7 +283,8 @@ Section "Uninstall"
   Delete "$INSTDIR\Forge.exe"
   Delete "$INSTDIR\forge.ico"
   RMDir /r "$INSTDIR\fonts"
-  RMDir /r "$INSTDIR\design-library"
+  IfFileExists "$INSTDIR\design-library\UPSTREAM.json" 0 +2
+    RMDir /r "$INSTDIR\design-library"
   Delete "$INSTDIR\Uninstall.exe"
   RMDir "$INSTDIR"
 
