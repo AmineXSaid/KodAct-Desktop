@@ -701,6 +701,16 @@ impl Chat {
 
 // ---------------------------------------------------------------- models and modes
 
+/// Where you are, for back and forward: the screen, and on a chat which.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Place {
+    pub screen: Screen,
+    pub chat: Option<usize>,
+}
+
+/// How many places back remembers.
+const NAV_DEPTH: usize = 50;
+
 /// What fills the main area.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Screen {
@@ -1304,6 +1314,13 @@ pub struct AppState {
     pub branch: SharedString,
     pub chats: Vec<Chat>,
     pub current: Option<usize>,
+    /// Back and forward, as Claude Desktop has them: the places you were
+    /// (a chat, a project, Projects, Rules), the one you're at, and whether
+    /// the next change of place is a step through them (`go_back`).
+    pub nav_back: Vec<Place>,
+    pub nav_forward: Vec<Place>,
+    nav_at: Option<Place>,
+    nav_stepping: bool,
     pub sidebar_open: bool,
     pub search: SharedString,
     /// Endpoint profiles (each one endpoint and its model); None while
@@ -1600,6 +1617,10 @@ impl AppState {
             filter_open: false,
             screen: Screen::Chat,
             current: None,
+            nav_back: vec![],
+            nav_forward: vec![],
+            nav_at: None,
+            nav_stepping: false,
             chats,
             sidebar_open: true,
             search: "".into(),
@@ -2207,6 +2228,73 @@ impl AppState {
     }
 
     /// Open a project's page.
+    fn place(&self) -> Place {
+        Place {
+            screen: self.screen,
+            chat: (self.screen == Screen::Chat).then_some(self.current).flatten(),
+        }
+    }
+
+    /// Note where you are now (the workspace calls it after each change):
+    /// a new place pushes the last one on back and clears forward, unless
+    /// it came from stepping back or forward.
+    pub fn track_place(&mut self) {
+        let here = self.place();
+        if self.nav_at != Some(here) {
+            if let Some(was) = self.nav_at.filter(|_| !self.nav_stepping) {
+                self.nav_back.push(was);
+                if self.nav_back.len() > NAV_DEPTH {
+                    self.nav_back.remove(0);
+                }
+                self.nav_forward.clear();
+            }
+            self.nav_at = Some(here);
+        }
+        self.nav_stepping = false;
+    }
+
+    /// A place that is still there: its chat or project not deleted since.
+    fn reachable(&self, p: &Place) -> bool {
+        match p.screen {
+            Screen::Chat => p.chat.is_none_or(|id| self.chats.iter().any(|c| c.id == id)),
+            Screen::Project(id) => self.project(id).is_some(),
+            Screen::Rules | Screen::Projects => true,
+        }
+    }
+
+    /// Back (`forward` false) or forward: to the nearest place still there.
+    pub fn step_place(&mut self, forward: bool, cx: &mut Context<Self>) {
+        loop {
+            let next = if forward { self.nav_forward.pop() } else { self.nav_back.pop() };
+            let Some(next) = next else {
+                return;
+            };
+            if !self.reachable(&next) {
+                continue;
+            }
+            if let Some(at) = self.nav_at {
+                if forward {
+                    self.nav_back.push(at);
+                } else {
+                    self.nav_forward.push(at);
+                }
+            }
+            self.nav_stepping = true;
+            match (next.screen, next.chat) {
+                (Screen::Chat, Some(id)) => self.open_chat(id, cx),
+                (Screen::Project(id), _) => self.show_project(id, cx),
+                (screen, _) => {
+                    self.screen = screen;
+                    if screen == Screen::Chat {
+                        self.current = None;
+                    }
+                    cx.notify();
+                }
+            }
+            return;
+        }
+    }
+
     pub fn show_project(&mut self, id: usize, cx: &mut Context<Self>) {
         self.select_project(id, cx);
         self.screen = Screen::Project(id);

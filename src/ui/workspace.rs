@@ -75,7 +75,12 @@ impl Workspace {
             s.load(cx);
             s
         });
-        cx.observe(&state, |_, _, cx| cx.notify()).detach();
+        cx.observe(&state, |_, state, cx| {
+            // Each change of place goes on back and forward's list.
+            state.update(cx, |s, _| s.track_place());
+            cx.notify()
+        })
+        .detach();
         // The theme and mode you left it in.
         {
             let s = state.read(cx);
@@ -314,6 +319,24 @@ impl Workspace {
                         window.dispatch_action(Box::new(ToggleSidebar), cx)
                     })),
                 )
+                // Back and forward through the places you were, dimmed when
+                // there's nowhere to go.
+                .child(nav_button(
+                    "go-back",
+                    "icons/arrow-left.svg",
+                    "Back (Alt+Left)",
+                    !s.nav_back.is_empty(),
+                    Box::new(GoBack),
+                    &t,
+                ))
+                .child(nav_button(
+                    "go-forward",
+                    "icons/arrow-right.svg",
+                    "Forward (Alt+Right)",
+                    !s.nav_forward.is_empty(),
+                    Box::new(GoForward),
+                    &t,
+                ))
                 // The project and its branch: here while the sidebar is
                 // hidden, at the top of the sidebar's sheet while it shows.
                 // A plain chat has no folder to show.
@@ -650,6 +673,8 @@ impl Render for Workspace {
             s.loading,
         );
         let (find_open, shortcuts_open) = (s.find.is_some(), s.shortcuts_open);
+        // Which chat shows: its transcript animates in when it changes.
+        let chat_key = s.chat().map_or(usize::MAX, |c| c.id);
         let empty = s.chat().is_none_or(|c| c.messages.is_empty());
         self.dots.read(cx).set_backdrop(!empty, s.busy());
         let below = s.doc_below;
@@ -857,11 +882,31 @@ impl Render for Workspace {
                         .flex_col()
                         .relative()
                         .child(self.chat.clone())
+                        // The words fade out where the composer starts, so
+                        // text running under it reads as "there's more".
+                        .child(
+                            div()
+                                .absolute()
+                                .left_0()
+                                .right_0()
+                                .bottom_0()
+                                .h(t.size.edge_fade)
+                                .bg(gpui::linear_gradient(
+                                    180.,
+                                    gpui::linear_color_stop(t.extra.stage.opacity(0.), 0.),
+                                    gpui::linear_color_stop(t.extra.stage, 1.),
+                                )),
+                        )
                         .children(super::tasks::render(&t, &self.state, cx))
+                        // Each chat opened fades and rises in, its task pill
+                        // with it.
                         .with_animation(
-                            "transcript-in",
-                            gpui::Animation::new(std::time::Duration::from_millis(t.motion_ms)),
-                            |d, delta| d.opacity(delta),
+                            ("transcript-in", chat_key),
+                            gpui::Animation::new(std::time::Duration::from_millis(
+                                if super::motion::reduced_motion() { 1 } else { t.size.panel_in_ms },
+                            ))
+                            .with_easing(gpui::ease_out_quint()),
+                            |d, k| d.opacity(k).mt(px(10. * (1. - k))),
                         ),
                 )
                 .child(
@@ -1213,6 +1258,29 @@ impl Render for Workspace {
             }))
             .on_action(cx.listener(|this, _: &AttachFiles, _, cx| {
                 super::attachments::pick(this.state.clone(), cx)
+            }))
+            // Text selected in the transcript (`select.rs`): a press
+            // anywhere clears it (a paragraph pressed starts a new one), and
+            // Ctrl+C copies it, before the focused box sees the key.
+            .capture_any_mouse_down(|_, window, _| {
+                if super::select::clear() {
+                    window.refresh();
+                }
+            })
+            .capture_key_down(|ev: &gpui::KeyDownEvent, _, cx| {
+                let k = &ev.keystroke;
+                if k.key == "c" && k.modifiers.secondary() && !k.modifiers.shift && !k.modifiers.alt {
+                    if let Some(text) = super::select::selected_text() {
+                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+                        cx.stop_propagation();
+                    }
+                }
+            })
+            .on_action(cx.listener(|this, _: &GoBack, _, cx| {
+                this.state.update(cx, |s, cx| s.step_place(false, cx))
+            }))
+            .on_action(cx.listener(|this, _: &GoForward, _, cx| {
+                this.state.update(cx, |s, cx| s.step_place(true, cx))
             }))
             .on_action(cx.listener(|this, _: &JumpToLatest, _, cx| {
                 this.chat.update(cx, |c, cx| c.jump_to_latest(cx))
@@ -1644,4 +1712,36 @@ mod tests {
         // Only the dock.
         assert_eq!(share_out(1000., None, Some((700., 280.)), 400.), (0., 600.));
     }
+}
+
+/// The title bar's back or forward button: dimmed, and doing nothing, when
+/// there's nowhere to go that way.
+fn nav_button(
+    id: &'static str,
+    path: &'static str,
+    tip: &'static str,
+    can: bool,
+    action: Box<dyn gpui::Action>,
+    t: &crate::theme::Theme,
+) -> gpui::Stateful<gpui::Div> {
+    let hover = t.colors.hover;
+    div()
+        .id(id)
+        .occlude()
+        .tooltip(move |window, cx| gpui::component::tooltip::Tooltip::new(tip).build(window, cx))
+        .size(t.size.control)
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(t.radius.pill)
+        .child(icon(
+            path,
+            t.size.icon,
+            if can { t.colors.text_muted } else { t.colors.text_muted.opacity(0.35) },
+        ))
+        .when(can, move |d| {
+            d.cursor_pointer()
+                .hover(move |st| st.bg(hover))
+                .on_click(move |_, window, cx| window.dispatch_action(action.boxed_clone(), cx))
+        })
 }

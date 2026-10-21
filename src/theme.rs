@@ -1233,6 +1233,7 @@ pub struct Sizes {
     pub switch_thumb: Pixels, // 14
     pub rail: Pixels,      // 52: the collapsed sidebar
     pub side_shade: Pixels, // 12: the sidebar's shadow across the session's left edge
+    pub edge_fade: Pixels, // 40: the transcript fading out where the composer meets it
     pub home_heading: Pixels, // 36: the home screen's heading, Archivo 600
     pub mark_turn: Pixels, // 28: Forge's mark heading each reply, and while it works
     pub mark_home: Pixels, // 44: the mark beside the home screen's greeting
@@ -1296,6 +1297,7 @@ impl Default for Sizes {
             switch_thumb: px(14.),
             rail: px(52.),
             side_shade: px(12.),
+            edge_fade: px(40.),
             home_heading: px(36.),
             mark_turn: px(28.),
             mark_home: px(44.),

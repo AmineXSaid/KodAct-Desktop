@@ -83,6 +83,11 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("secondary-k", ToggleCommandPalette, None),
         KeyBinding::new("secondary-n", NewChat, None),
         KeyBinding::new("secondary-b", ToggleSidebar, None),
+        // Back and forward through the places you were, as Claude Desktop.
+        KeyBinding::new("alt-left", GoBack, None),
+        KeyBinding::new("alt-right", GoForward, None),
+        KeyBinding::new("secondary-[", GoBack, None),
+        KeyBinding::new("secondary-]", GoForward, None),
         KeyBinding::new("secondary-shift-l", ToggleTheme, None),
         KeyBinding::new("secondary-l", FocusComposer, None),
         KeyBinding::new("secondary-/", ToggleModelPicker, None),

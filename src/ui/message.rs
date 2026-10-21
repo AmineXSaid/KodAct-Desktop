@@ -533,7 +533,11 @@ fn user(
                     .rounded(t.radius.card)
                     .text_size(t.size.chat_text)
                     .line_height(relative(t.size.line_height_chat))
-                    .child(text.clone()),
+                    .child(super::markdown::selectable_plain(
+                        SharedString::from(format!("user-text-{key}")),
+                        text,
+                        t,
+                    )),
             )
         })
         .child(actions)

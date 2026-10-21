@@ -316,6 +316,8 @@ impl CommandPalette {
                 Some(shortcut("/")),
                 Box::new(ToggleModelPicker),
             ),
+            act("Go back", "icons/arrow-left.svg", Some("Alt+Left".into()), Box::new(GoBack)),
+            act("Go forward", "icons/arrow-right.svg", Some("Alt+Right".into()), Box::new(GoForward)),
             act(
                 "Focus the composer",
                 "icons/pencil.svg",

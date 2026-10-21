@@ -29,8 +29,19 @@ pub struct Sidebar {
     nav_hover: Option<&'static str>,
     /// The chat row under the pointer: its wash eases in (`motion::hover_wash`).
     row_hover: Option<usize>,
+    /// Whether the project header showed last time, and how many times it
+    /// came or went: each change unfolds or folds it (`motion::unfold`).
+    head_shown: Option<bool>,
+    head_turns: u32,
+    /// Each chat row's place last time, and how often it moved up: a chat
+    /// that rises to the top of its group rises into its new place.
+    places: std::collections::HashMap<usize, usize>,
+    bumps: std::collections::HashMap<usize, u32>,
     _subs: Vec<Subscription>,
 }
+
+/// The project row's height, under Forge's name.
+const PROJECT_ROW: gpui::Pixels = px(52.);
 
 const GROUPS: [&str; 5] = ["Pinned", "Today", "Yesterday", "Previous 7 days", "Older"];
 
@@ -108,6 +119,10 @@ impl Sidebar {
             menu_at: Default::default(),
             nav_hover: None,
             row_hover: None,
+            head_shown: None,
+            head_turns: 0,
+            places: Default::default(),
+            bumps: Default::default(),
             _subs: subs,
         }
     }
@@ -249,6 +264,7 @@ impl Render for Sidebar {
             .filter(|p| p.pinned && q.is_empty())
             .collect();
         let mut any = false;
+        let mut place = 0usize;
         for group in GROUPS {
             let rows: Vec<_> = s
                 .chats
@@ -256,6 +272,12 @@ impl Render for Sidebar {
                 .filter(|c| c.group() == group)
                 .filter(shown)
                 .collect();
+            // The chat you last wrote in, or that last answered, first;
+            // pinned chats keep the order you gave them.
+            let mut rows = rows;
+            if group != "Pinned" {
+                rows.sort_by(|a, b| b.updated.cmp(&a.updated));
+            }
             let projects_here = if group == "Pinned" {
                 pinned_projects.as_slice()
             } else {
@@ -324,8 +346,16 @@ impl Render for Sidebar {
                         .on_click(move |_, _, cx| state.update(cx, |s, cx| s.show_project(id, cx))),
                 );
             }
-            for c in rows {
+            for (local, c) in rows.into_iter().enumerate() {
                 let id = c.id;
+                // Risen to the top of its group since last time: it rises
+                // into place there.
+                let was = self.places.insert(id, place);
+                place += 1;
+                if local == 0 && was.is_some_and(|w| w > place - 1) {
+                    *self.bumps.entry(id).or_default() += 1;
+                }
+                let bump = self.bumps.get(&id).copied().unwrap_or(0);
                 let selected = s.screen == Screen::Chat && s.current == Some(id);
                 let pinned = c.pinned;
                 let state = self.state.clone();
@@ -345,8 +375,7 @@ impl Render for Sidebar {
                 let (state_menu, state_right) = (self.state.clone(), self.state.clone());
                 let me = cx.entity().downgrade();
                 let me_right = me.clone();
-                list = list.child(
-                    div()
+                let row = div()
                         .id(("chat", id))
                         .group("row")
                         .flex()
@@ -505,8 +534,12 @@ impl Render for Sidebar {
                             let _ = me_right.update(cx, |this, _| this.menu_at = at);
                             state_right.update(cx, |s, cx| s.open_chat_menu(Some(id), cx));
                         })
-                        .on_click(move |_, _, cx| state.update(cx, |s, cx| s.open_chat(id, cx))),
-                );
+                        .on_click(move |_, _, cx| state.update(cx, |s, cx| s.open_chat(id, cx)));
+                list = list.child(if bump > 0 {
+                    super::motion::row_in(row, SharedString::from(format!("chat-pop-{id}-{bump}")), 0, &t)
+                } else {
+                    row.into_any_element()
+                });
             }
         }
         if !any {
@@ -635,7 +668,8 @@ impl Render for Sidebar {
                     .items_center()
                     .gap(t.space.sm)
                     .px(t.space.md)
-                    .py(t.space.sm)
+                    // A set height, so it can unfold and fold (below).
+                    .h(PROJECT_ROW)
                     .border_b_1()
                     .border_color(t.colors.border)
                     .cursor_pointer()
@@ -704,13 +738,35 @@ impl Render for Sidebar {
             .border_b_1()
             .border_color(t.colors.border)
             .child(super::ingot::wordmark(20., &t));
-        // A plain chat has no folder: Forge's name alone.
+        // A plain chat has no folder: Forge's name alone. Moving between a
+        // chat in a folder and one without, the project unfolds or folds,
+        // and the list under it slides instead of jumping.
+        let in_folder = s.in_folder();
+        if self.head_shown.is_some_and(|was| was != in_folder) {
+            self.head_turns += 1;
+        }
+        self.head_shown = Some(in_folder);
+        let turn = self.head_turns;
         let header = div()
             .flex_none()
             .flex()
             .flex_col()
             .child(brand)
-            .when(s.in_folder(), |d| d.child(header))
+            .map(|d| match (in_folder, turn) {
+                (true, 0) => d.child(header),
+                (true, n) => d.child(super::motion::unfold(
+                    header,
+                    SharedString::from(format!("project-in-{n}")),
+                    PROJECT_ROW,
+                    &t,
+                )),
+                (false, 0) => d,
+                (false, n) => d.child(super::motion::fold(
+                    SharedString::from(format!("project-out-{n}")),
+                    PROJECT_ROW,
+                    &t,
+                )),
+            })
             .into_any_element();
 
         let sheet =
@@ -981,15 +1037,6 @@ pub fn rail(t: &crate::theme::Theme, screen: Screen) -> impl IntoElement {
         .gap(t.space.xs)
         .py(t.space.sm)
         .bg(t.extra.pane)
-        .child(
-            nav(
-                "rail-expand",
-                "icons/panel-left.svg",
-                format!("Show the sidebar ({})", shortcut("B")),
-                false,
-            )
-            .on_click(dispatch(Box::new(ToggleSidebar))),
-        )
         .child(
             div()
                 .id("rail-new-chat")

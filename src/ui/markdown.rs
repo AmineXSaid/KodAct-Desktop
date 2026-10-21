@@ -419,12 +419,37 @@ fn runs_in(
     color: gpui::Hsla,
 ) -> AnyElement {
     let (text, runs) = run_list(spans, t, family, base_weight, color);
-    linked(id, spans, StyledText::new(text).with_runs(runs))
+    linked(id, spans, text, runs, t)
+}
+
+/// Plain text (your message) that can be selected to copy part of it.
+pub fn selectable_plain(key: SharedString, text: &SharedString, t: &Theme) -> AnyElement {
+    let run = TextRun {
+        len: text.len(),
+        font: gpui::font(t.font_sans.clone()),
+        color: t.colors.text,
+        background_color: None,
+        underline: None,
+        strikethrough: None,
+    };
+    let runs = super::select::prepare(&key, text, vec![run], t.colors.primary_tint);
+    let styled = StyledText::new(text.clone()).with_runs(runs);
+    let layout = styled.layout().clone();
+    super::select::wrap(key, layout, styled.into_any_element())
 }
 
 /// The text, with its links clickable (opened in the system browser) and
-/// their address shown on hover; plain text when it has none.
-fn linked(id: ElementId, spans: &[Span], text: StyledText) -> AnyElement {
+/// their address shown on hover; plain text when it has none. Either way
+/// it can be selected to copy part of it (`select.rs`).
+fn linked(id: ElementId, spans: &[Span], text: String, runs: Vec<TextRun>, t: &Theme) -> AnyElement {
+    let key = SharedString::from(format!("{id:?}"));
+    let runs = super::select::prepare(&key, &text, runs, t.colors.primary_tint);
+    let text = StyledText::new(text).with_runs(runs);
+    let layout = text.layout().clone();
+    super::select::wrap(key, layout, linked_text(id, spans, text))
+}
+
+fn linked_text(id: ElementId, spans: &[Span], text: StyledText) -> AnyElement {
     let mut ranges: Vec<std::ops::Range<usize>> = vec![];
     let mut urls: Vec<String> = vec![];
     let mut at = 0;
@@ -576,7 +601,7 @@ const TAIL_CHARS: usize = 24;
 fn runs_streaming(id: ElementId, spans: &[Span], t: &Theme, color: gpui::Hsla) -> AnyElement {
     let (text, runs) = run_list(spans, t, &t.font_reading, FontWeight::NORMAL, color);
     let runs = fade_tail(&text, runs, TAIL_CHARS);
-    linked(id, spans, StyledText::new(text).with_runs(runs))
+    linked(id, spans, text, runs, t)
 }
 
 /// Splits `runs` so the last `n` characters of `text` step down in opacity

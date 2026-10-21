@@ -420,9 +420,14 @@ fn icon_arrow(t: &crate::theme::Theme) -> gpui::Svg {
 
 impl Render for ChatView {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Paragraphs take their reading order afresh, top to bottom.
+        super::select::begin_frame();
         let state = self.state.clone();
         let step = self.step.clone();
-        let jump = self.away.then(|| self.jump_button(cx));
+        // Only when there is something below to jump to: a short chat, or
+        // one that stopped following while nothing more came, has none.
+        let below = self.list.is_scrolled_to_end() == Some(false);
+        let jump = (self.away && below).then(|| self.jump_button(cx));
         let list = list(self.list.clone(), move |ix, window, cx| {
             let t = cx.theme().clone();
             let s = state.read(cx);
@@ -563,6 +568,13 @@ impl Render for ChatView {
             .flex()
             .flex_col()
             .child(list)
+            // The transcript's scrollbar, over its right edge.
+            .child(
+                div().absolute().inset_0().child(
+                    gpui::component::scroll::Scrollbar::vertical(&self.list)
+                        .id("chat-scrollbar"),
+                ),
+            )
             .children(jump)
     }
 }
