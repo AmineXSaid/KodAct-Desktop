@@ -8,7 +8,7 @@
 use std::fmt::Write as _;
 
 /// What a mark is.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Shape {
     Rect,
     Oval,
@@ -32,7 +32,7 @@ impl Shape {
 }
 
 /// A mark on the page.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Mark {
     pub shape: Shape,
     /// In the page's CSS pixels from its top left: two corners or ends for

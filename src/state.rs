@@ -2257,6 +2257,9 @@ impl AppState {
                 design: c.design,
                 ..Chat::new(id, project, c.title.into())
             });
+            if let Some(d) = c.design_pages {
+                self.design_restore(id, d);
+            }
         }
         // Pinned first is the sidebar's job; here, the most recent first.
         self.chats.sort_by_key(|c| std::cmp::Reverse(c.updated));
@@ -2317,9 +2320,70 @@ impl AppState {
                     .project(c.project)
                     .map(|p| p.path.clone())
                     .unwrap_or_else(|| self.project_dir.clone());
-                crate::history::save_form(c, &dir)
+                let mut saved = crate::history::save_form(c, &dir);
+                saved.design_pages = Some(self.design_saved(c.id)).filter(|d| !d.is_empty());
+                saved
             })
             .collect()
+    }
+
+    /// A chat's design pages' comments, marks, order and added pages, as
+    /// written with it.
+    fn design_saved(&self, chat: usize) -> crate::design::store::SavedDesign {
+        use crate::design::store::{SavedComment, SavedDesign};
+        SavedDesign {
+            comments: self
+                .design_comments
+                .iter()
+                .filter(|c| c.chat == chat)
+                .map(|c| SavedComment {
+                    n: c.n,
+                    page: c.page.clone(),
+                    part: c.part.clone(),
+                    text: c.text.clone(),
+                    sent: match c.sent {
+                        CommentSent::Note => "note",
+                        CommentSent::Waiting => "waiting",
+                        CommentSent::Sent => "sent",
+                    }
+                    .into(),
+                    resolved: c.resolved,
+                })
+                .collect(),
+            marks: self
+                .design_marks
+                .iter()
+                .filter(|(c, _, _)| *c == chat)
+                .map(|(_, p, m)| (p.clone(), m.clone()))
+                .collect(),
+            order: self.design_order.get(&chat).cloned().unwrap_or_default(),
+            extra: self
+                .design_extra
+                .iter()
+                .filter(|(c, _)| *c == chat)
+                .map(|(_, p)| p.clone())
+                .collect(),
+        }
+    }
+
+    /// A chat's design state back from its file.
+    fn design_restore(&mut self, chat: usize, d: crate::design::store::SavedDesign) {
+        for c in d.comments {
+            self.design_comments.push(DesignComment {
+                n: c.n,
+                chat,
+                page: c.page,
+                part: c.part,
+                text: c.text,
+                sent: if c.sent == "sent" { CommentSent::Sent } else { CommentSent::Note },
+                resolved: c.resolved,
+            });
+        }
+        self.design_marks.extend(d.marks.into_iter().map(|(p, m)| (chat, p, m)));
+        if !d.order.is_empty() {
+            self.design_order.insert(chat, d.order);
+        }
+        self.design_extra.extend(d.extra.into_iter().map(|p| (chat, p)));
     }
 
     /// Write what's pending now (the app is closing).
@@ -4404,6 +4468,7 @@ impl AppState {
             self.show_toast("That page isn't on disk any more.", cx);
             return;
         }
+        self.design_load_versions(path);
         self.design_panel();
         self.web_send(
             crate::web_view::Cmd::Design {
@@ -4493,6 +4558,7 @@ impl AppState {
         let Ok(text) = std::fs::read_to_string(path) else {
             return;
         };
+        self.design_load_versions(path);
         let (list, at) = self.design_versions.entry(path.to_path_buf()).or_default();
         if list.get(*at).is_some_and(|v| **v == *text) {
             return;
@@ -4502,6 +4568,17 @@ impl AppState {
         }
         list.push(text.into());
         *at = list.len() - 1;
+        let kept = crate::design::store::save_versions(path, list, *at);
+        self.design_versions.insert(path.to_path_buf(), kept);
+    }
+
+    /// A page's versions from its file, the first time the page is used
+    /// (none kept leaves it empty, so it isn't read again).
+    fn design_load_versions(&mut self, path: &std::path::Path) {
+        if !self.design_versions.contains_key(path) {
+            let kept = crate::design::store::load_versions(path).unwrap_or_default();
+            self.design_versions.insert(path.to_path_buf(), kept);
+        }
     }
 
     /// Whether the page on screen has a version before (`step` -1) or
@@ -4542,6 +4619,8 @@ impl AppState {
             return self.show_toast(format!("Couldn't change the page: {e}"), cx);
         }
         *at = to;
+        let list = list.clone();
+        crate::design::store::save_versions(&page, &list, to);
         self.design_show(&page, cx);
     }
 
@@ -4562,6 +4641,7 @@ impl AppState {
             return self.show_toast(format!("Couldn't copy the page: {e}"), cx);
         }
         self.design_extra.push((chat, to.clone()));
+        self.mark_dirty(chat, cx);
         self.design_show(&to, cx);
     }
 
@@ -4643,6 +4723,7 @@ impl AppState {
         };
         if mark.worth_keeping() {
             self.design_marks.push((chat, page, mark));
+            self.mark_dirty(chat, cx);
             cx.notify();
         }
     }
@@ -4651,6 +4732,9 @@ impl AppState {
     pub fn design_clear_marks(&mut self, cx: &mut Context<Self>) {
         if let Some(page) = self.design_on_screen() {
             self.design_marks.retain(|(_, p, _)| *p != page);
+            if let Some(chat) = self.current {
+                self.mark_dirty(chat, cx);
+            }
             self.design_pick_marks = false;
             if self.design_pick.as_ref().is_some_and(|p| p.tag == "marks") {
                 self.design_pick = None;
@@ -4742,6 +4826,7 @@ impl AppState {
             sent,
             resolved: false,
         });
+        self.mark_dirty(chat, cx);
         cx.notify();
     }
 
@@ -4785,6 +4870,7 @@ impl AppState {
         {
             c.sent = sent;
         }
+        self.mark_dirty(out.chat, cx);
         cx.notify();
     }
 
@@ -4989,6 +5075,7 @@ impl AppState {
         let to = order.iter().position(|p| p == before).unwrap_or(order.len());
         order.insert(to, moved);
         self.design_order.insert(chat, order);
+        self.mark_dirty(chat, cx);
         cx.notify();
     }
 
@@ -5047,13 +5134,19 @@ impl AppState {
             sent,
             resolved: false,
         });
+        self.mark_dirty(chat, cx);
         cx.notify();
     }
 
     /// Mark a comment done, or open it again.
     pub fn design_resolve(&mut self, page: &std::path::Path, n: usize, cx: &mut Context<Self>) {
+        let mut chat = None;
         if let Some(c) = self.design_comments.iter_mut().find(|c| c.page == page && c.n == n) {
             c.resolved = !c.resolved;
+            chat = Some(c.chat);
+        }
+        if let Some(chat) = chat {
+            self.mark_dirty(chat, cx);
         }
         cx.notify();
     }
@@ -5313,6 +5406,10 @@ impl AppState {
                 let (url, title) = self.design_named(url, title);
                 self.web_page.url = url;
                 self.web_page.title = title;
+                // A design page on screen: its undo history from its file.
+                if let Some(p) = self.design_on_screen() {
+                    self.design_load_versions(&p);
+                }
             }
             Update::Tabs(tabs, on) => {
                 self.web_page.tabs = tabs

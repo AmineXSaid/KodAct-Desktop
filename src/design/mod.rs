@@ -12,6 +12,7 @@ pub mod marks;
 pub mod od_subset;
 pub mod prompt;
 pub mod skill_meta;
+pub mod store;
 
 use std::path::{Path, PathBuf};
 

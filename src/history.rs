@@ -47,6 +47,10 @@ pub struct SavedChat {
     /// A design chat's setup (`design::prompt::Setup`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub design: Option<crate::design::prompt::Setup>,
+    /// Its design pages' comments, marks, order and added pages
+    /// (`design::store`), filled in by the app.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub design_pages: Option<crate::design::store::SavedDesign>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -361,6 +365,7 @@ fn save_messages(chat: &Chat, project: &Path) -> SavedChat {
         updated: secs(chat.updated),
         versions: vec![],
         design: chat.design.clone(),
+        design_pages: None,
         messages: chat
             .messages
             .iter()
