@@ -532,6 +532,7 @@ impl Render for BrowserView {
             .filter(|_| selecting && s.design_pick.is_none())
             .map(|p| (place(p), p.tag.clone()));
         let pick_box = s.design_pick.as_ref().filter(|_| selecting).map(&place);
+        let drawing_tool = s.design_tool.is_some();
         let pins: Vec<_> = here
             .iter()
             .filter(|c| design_bar.is_some() && s.design_pins && (s.design_resolved || !c.resolved))
@@ -865,6 +866,20 @@ impl Render for BrowserView {
                     this.send(Cmd::Release { x, y, button, count: ev.click_count.max(1) as u32 }, cx);
                 }
             }))
+            // Let go over a pin, or outside the page: a shape being drawn
+            // is done all the same (else it would hang there, unsaved).
+            .on_mouse_up_out(MouseButton::Left, cx.listener(|this, _: &MouseUpEvent, _, cx| {
+                if this.tool(cx).is_some() {
+                    this.hand_at = None;
+                    if let Some(m) = this
+                        .drawing
+                        .take_if(|m| m.shape != crate::design::marks::Shape::Pen)
+                    {
+                        this.state.update(cx, |s, cx| s.design_add_mark(m, cx));
+                    }
+                    cx.notify();
+                }
+            }))
             .on_mouse_move(cx.listener(|this, ev: &MouseMoveEvent, _, cx| {
                 if let Some(tool) = this.tool(cx) {
                     use crate::design::marks::Shape;
@@ -1023,10 +1038,13 @@ impl Render for BrowserView {
                     .absolute()
                     .left(px(x - 10.))
                     .top(px(y - 10.))
-                    .occlude()
                     .child(super::design_bar::pin_mark(&t, n, sent).shadow(t.elevation_popover()))
-                    .tooltip(move |window, cx| {
-                        gpui::component::tooltip::Tooltip::new(text.clone()).build(window, cx)
+                    // With a tool in hand the pins let the mouse through, so
+                    // a stroke can pass over them.
+                    .when(!drawing_tool, |d| {
+                        d.occlude().tooltip(move |window, cx| {
+                            gpui::component::tooltip::Tooltip::new(text.clone()).build(window, cx)
+                        })
                     })
             }))
             // The Insert tools' marks, over the page.

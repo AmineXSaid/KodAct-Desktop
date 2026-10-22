@@ -1242,7 +1242,10 @@ fn devtools(
                     c.send(s, "Runtime.evaluate", json!({ "expression": guides_js(guides.as_deref()) }))?;
                 }
                 Cmd::AnchorAt { id, x, y } => {
-                    let js = format!("(() => {{ const x = {x} - scrollX, y = {y} - scrollY; return ({})(); }})()", part_fn_js());
+                    let js = format!(
+                        "(() => {{ const x = {x} - scrollX, y = {y} - scrollY; const j = ({})(); if (!j) return ''; const p = JSON.parse(j); const e = document.querySelector(p.selector); if (e) [p.x, p.y, p.w, p.h] = ({CONTENT_BOX_JS})(e); return JSON.stringify(p); }})()",
+                        part_fn_js()
+                    );
                     let req = c.send(s, "Runtime.evaluate", json!({ "expression": js, "returnByValue": true }))?;
                     anchor_at_req.insert(req, id);
                 }
@@ -1589,11 +1592,16 @@ return JSON.stringify({ tag: e.tagName.toLowerCase(), text, selector: path.join(
 }"#
 }
 
-/// Where each selector's element is now (page CSS pixels), as JSON: a box,
-/// or null when it isn't on the page.
+/// Where an element's content is (page CSS pixels), as `[x, y, w, h]`: its
+/// text's lines together, which a heading's own box (as wide as its
+/// container) doesn't show; its box when it has no text.
+const CONTENT_BOX_JS: &str = "e => { const r = document.createRange(); r.selectNodeContents(e); let b = r.getBoundingClientRect(); if (!b.width || !b.height) b = e.getBoundingClientRect(); return [b.left + scrollX, b.top + scrollY, b.width, b.height]; }";
+
+/// Where each selector's element's content is now, as JSON: a box, or null
+/// when it isn't on the page.
 fn anchors_js(selectors: &[String]) -> String {
     format!(
-        "JSON.stringify({}.map(s => {{ try {{ const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); return [r.left + scrollX, r.top + scrollY, r.width, r.height]; }} catch (_) {{ return null; }} }}))",
+        "JSON.stringify({}.map(s => {{ try {{ const e = document.querySelector(s); return e ? ({CONTENT_BOX_JS})(e) : null; }} catch (_) {{ return null; }} }}))",
         serde_json::to_string(selectors).unwrap_or_else(|_| "[]".into())
     )
 }
