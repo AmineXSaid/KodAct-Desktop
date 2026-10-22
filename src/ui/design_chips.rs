@@ -32,10 +32,11 @@ pub fn trigger(
     let look = setup
         .and_then(|d| d.system.as_deref())
         .map(|id| title_of(s.design_index.as_deref(), Kind::DesignSystem, id));
-    let label: SharedString = match (setup, look) {
-        (None, _) => "Design".into(),
-        (Some(d), None) => d.surface.name().into(),
-        (Some(d), Some(look)) => format!("{} · {look}", d.surface.name()).into(),
+    // An ordinary chat: the icon alone (its tooltip says what it does).
+    let label: Option<SharedString> = match (setup, look) {
+        (None, _) => None,
+        (Some(d), None) => Some(d.surface.name().into()),
+        (Some(d), Some(look)) => Some(format!("{} · {look}", d.surface.name()).into()),
     };
     let on = setup.is_some();
     let fg = if on {
@@ -54,14 +55,14 @@ pub fn trigger(
             .aria_label("Design chat")
             .text_color(fg)
             .child(icon("icons/sparkles.svg", t.size.icon_sm, fg))
-            .child(
+            .children(label.map(|label| {
                 div()
-                    .max_w(px(180.))
+                    .max_w(px(140.))
                     .overflow_hidden()
                     .whitespace_nowrap()
                     .text_ellipsis()
-                    .child(label),
-            )
+                    .child(label)
+            }))
             .child(super::button::chevron(t, open))
             // Not over its own open menu.
             .when(!open, |d| {

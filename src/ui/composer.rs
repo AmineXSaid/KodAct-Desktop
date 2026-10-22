@@ -641,11 +641,16 @@ impl Render for Composer {
 
         // In the tray: quiet selectors, washed while open or hovered.
         let quiet = |id: &'static str, open: bool| super::button::selector(&t, id, open);
+        // The tray's buttons give up room, as an ellipsis, when the
+        // composer is narrow (the side panel open), so every one stays.
         let model_button = quiet("model", picker_open)
+            .flex_shrink(1.)
+            .min_w_0()
             .aria_label("Model")
             .child(icon("icons/cpu.svg", t.size.icon_sm, t.colors.text_muted))
             .child(
                 div()
+                    .min_w_0()
                     .max_w(px(220.))
                     .overflow_hidden()
                     .whitespace_nowrap()
@@ -679,6 +684,8 @@ impl Render for Composer {
         let host = self.state.read(cx).current_remote().map(|r| r.target.label());
         let remote = host.is_some();
         let project_button = quiet("project", false)
+            .flex_shrink(1.)
+            .min_w_0()
             .aria_label("Project")
             .text_color(t.colors.text_muted)
             .child(icon(
@@ -688,6 +695,7 @@ impl Render for Composer {
             ))
             .child(
                 div()
+                    .min_w_0()
                     .max_w(px(180.))
                     .overflow_hidden()
                     .whitespace_nowrap()
@@ -939,7 +947,7 @@ impl Render for Composer {
                             .child(project_button)
                             // A design chat: the chip and its menu above it.
                             .children(design_trigger.map(|d| {
-                                div().relative().child(d).children(design_menu)
+                                div().relative().flex_none().child(d).children(design_menu)
                             }))
                             .children(meter)
                             .child(div().flex_1())
