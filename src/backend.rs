@@ -21,7 +21,7 @@ use serde_json::{json, Value};
 
 use crate::endpoints::{Profile, Wire};
 use crate::modes::ModeId;
-use crate::state::{DiffKind, DiffLine, Review, ToolCall, ToolKind, ToolStatus};
+use crate::state::{DiffKind, DiffLine, QOption, Question, Review, ToolCall, ToolKind, ToolStatus};
 
 /// What the process said, in the order it said it.
 #[derive(Debug, Clone, PartialEq)]
@@ -423,6 +423,21 @@ impl Session {
         self.write(answer_line(request_id, allow, always, input, suggestions, note))
     }
 
+    /// Answer AskUserQuestion with what you chose (`questions_answer_line`).
+    pub fn answer_questions(
+        &self,
+        request_id: &str,
+        input: &Value,
+        questions: &[Question],
+    ) -> Result<(), String> {
+        self.write(questions_answer_line(request_id, input, questions))
+    }
+
+    /// Skip AskUserQuestion: Forge goes on with its own assumptions.
+    pub fn skip_questions(&self, request_id: &str) -> Result<(), String> {
+        self.write(skip_questions_line(request_id))
+    }
+
     /// Answer a plan (ExitPlanMode), as Forge for VS Code does.
     pub fn answer_plan(
         &self,
@@ -510,6 +525,71 @@ pub fn answer_line(
         json!({ "behavior": "deny", "message": message })
     };
     json!({ "type": "control_response", "response": { "subtype": "success", "request_id": request_id, "response": response } })
+}
+
+/// The tool that puts questions to you.
+pub const QUESTION_TOOL: &str = "AskUserQuestion";
+
+/// Tools ForgeCLI always asks about, whatever the rules: a rule for them
+/// would never be used, so their cards offer no "Always allow".
+pub fn always_asks(tool: &str) -> bool {
+    matches!(tool, QUESTION_TOOL | "EnterPlanMode" | "ExitPlanMode")
+}
+
+/// The questions an AskUserQuestion call asks (`questions[]`), none chosen yet.
+pub fn questions(input: &Value) -> Vec<Question> {
+    let s = |v: &Value, k: &str| v[k].as_str().unwrap_or_default().trim().to_string();
+    input["questions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|q| Question {
+            header: s(q, "header"),
+            text: s(q, "question"),
+            options: q["options"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|o| QOption {
+                    label: s(o, "label"),
+                    description: s(o, "description"),
+                })
+                .collect(),
+            multi: q["multiSelect"].as_bool().unwrap_or(false),
+            ..Default::default()
+        })
+        .collect()
+}
+
+/// A question card's title: "Forge has a question", "Forge has 3 questions".
+pub fn questions_title(n: usize) -> String {
+    if n == 1 {
+        "Forge has a question".into()
+    } else {
+        format!("Forge has {n} questions")
+    }
+}
+
+/// Your answers to AskUserQuestion: the call's input with `answers`
+/// (question → answer) added, which ForgeCLI hands the tool.
+pub fn questions_answer_line(request_id: &str, input: &Value, questions: &[Question]) -> Value {
+    let answers: serde_json::Map<String, Value> = questions
+        .iter()
+        .filter_map(|q| Some((q.text.clone(), Value::String(q.answer()?))))
+        .collect();
+    let mut updated = input.clone();
+    updated["answers"] = Value::Object(answers);
+    json!({ "type": "control_response", "response": { "subtype": "success", "request_id": request_id,
+        "response": { "behavior": "allow", "updatedInput": updated } } })
+}
+
+/// What Forge hears when you skip its questions.
+pub const QUESTIONS_SKIPPED: &str =
+    "The user skipped these questions. Proceed with your best judgement and state your assumptions.";
+
+pub fn skip_questions_line(request_id: &str) -> Value {
+    json!({ "type": "control_response", "response": { "subtype": "success", "request_id": request_id,
+        "response": { "behavior": "deny", "message": QUESTIONS_SKIPPED } } })
 }
 
 /// How a plan is answered: start on it with edits approved automatically or
@@ -898,6 +978,15 @@ pub fn tool_call(name: &str, input: &Value) -> ToolCall {
                 .or_else(|| input["index"].as_u64().map(|i| format!("element {i}")));
             (ToolKind::Other, browser.to_string(), what, vec![])
         }
+        QUESTION_TOOL => {
+            let n = input["questions"].as_array().map_or(0, Vec::len);
+            (
+                ToolKind::Other,
+                QUESTION_TOOL.to_string(),
+                Some(if n == 1 { "1 question".into() } else { format!("{n} questions") }),
+                vec![],
+            )
+        }
         // A skill reads as its name, without its plugin's prefix.
         "Skill" => {
             let skill = s("skill");
@@ -962,6 +1051,11 @@ pub fn ask_text(tool: &str, input: &Value) -> (String, String) {
             "The plan is in the side panel's Plan tab. Approve it to leave Plan mode and start, or keep planning."
                 .to_string(),
         );
+    }
+    if tool == QUESTION_TOOL {
+        let qs = questions(input);
+        let first = qs.first().map(|q| q.text.clone()).unwrap_or_default();
+        return (questions_title(qs.len()), first);
     }
     let call = tool_call(tool, input);
     let title = match call.kind {
@@ -1150,6 +1244,36 @@ mod tests {
         let typed = "x".repeat(300);
         let (_, detail) = ask_text("mcp__forge-browser__type", &json!({ "text": typed }));
         assert_eq!(detail, typed);
+    }
+
+    #[test]
+    fn questions_are_answered_in_the_calls_input() {
+        let input = json!({ "questions": [
+            { "question": "Which stack?", "header": "Stack", "multiSelect": false,
+              "options": [{ "label": "Tauri", "description": "a" }, { "label": "Leptos", "description": "b" }] },
+            { "question": "Which targets?", "header": "Targets", "multiSelect": true,
+              "options": [{ "label": "Windows", "description": "" }, { "label": "Linux", "description": "" }] },
+            { "question": "Name?", "header": "Name", "multiSelect": false,
+              "options": [{ "label": "folio", "description": "" }, { "label": "notes", "description": "" }] } ] });
+        let mut qs = questions(&input);
+        assert_eq!(qs.len(), 3);
+        assert_eq!((qs[0].header.as_str(), qs[0].options[1].label.as_str()), ("Stack", "Leptos"));
+        assert!(qs[1].multi && !qs[0].multi);
+        assert_eq!(ask_text(QUESTION_TOOL, &input).0, "Forge has 3 questions");
+        qs[0].picked = vec![0];
+        qs[1].picked = vec![0, 1];
+        qs[2].own = Some("my-notes".into());
+        let line = questions_answer_line("r1", &input, &qs);
+        let r = &line["response"]["response"];
+        assert_eq!(r["behavior"], "allow");
+        assert_eq!(r["updatedInput"]["questions"], input["questions"]);
+        assert_eq!(
+            r["updatedInput"]["answers"],
+            json!({ "Which stack?": "Tauri", "Which targets?": "Windows, Linux", "Name?": "my-notes" })
+        );
+        let skip = skip_questions_line("r1");
+        assert_eq!(skip["response"]["response"]["behavior"], "deny");
+        assert!(always_asks(QUESTION_TOOL) && always_asks("ExitPlanMode") && !always_asks("Bash"));
     }
 
     #[test]

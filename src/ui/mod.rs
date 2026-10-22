@@ -58,6 +58,7 @@ pub mod plugins_editor;
 pub mod profiles_editor;
 pub mod project_map;
 pub mod projects;
+pub mod question_card;
 pub mod queued;
 pub mod remote_menu;
 pub mod rules_view;
@@ -79,6 +80,7 @@ pub mod versions;
 pub mod voxels;
 pub mod workbench;
 pub mod workspace;
+pub mod work_group;
 pub mod writing_hand;
 
 use gpui::{div, prelude::*, svg, App, Div, Hsla, Pixels, SharedString, Svg};

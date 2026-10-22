@@ -18,8 +18,11 @@ use crate::theme::ActiveTheme;
 
 /// The empty box's line: while a question waits, or a reply runs, what
 /// typing does then; else a project's, or a plain chat's.
-fn placeholder(in_folder: bool, asking: bool, busy: bool) -> &'static str {
-    if asking {
+/// `asking`: a question card (`Some(true)`) or a permission card waits.
+fn placeholder(in_folder: bool, asking: Option<bool>, busy: bool) -> &'static str {
+    if asking == Some(true) {
+        "Type your own answer…"
+    } else if asking.is_some() {
         "Or tell Forge what to do instead…"
     } else if busy {
         "Add to the task, or steer Forge…"
@@ -64,7 +67,7 @@ pub struct Composer {
     /// caret's place and line height there, in the window.
     ac_anchor: Option<(usize, gpui::Point<gpui::Pixels>, gpui::Pixels)>,
     /// The placeholder shown: (a project's, a question waits, a reply runs).
-    placeholder_now: (bool, bool, bool),
+    placeholder_now: (bool, Option<bool>, bool),
     _subs: Vec<Subscription>,
 }
 
@@ -85,7 +88,7 @@ impl Composer {
                 .folding(false)
                 .auto_close(false)
                 .soft_wrap(true)
-                .placeholder(placeholder(in_folder, false, false))
+                .placeholder(placeholder(in_folder, None, false))
                 .submit_on_enter(true)
         });
         let styling = input.update(cx, |i, cx| i.create_decorations_collection(vec![], cx));
@@ -100,7 +103,7 @@ impl Composer {
                 // A plain chat asks for anything; a project's, for work on it.
                 // While a question waits, what you type answers it.
                 let s = state.read(cx);
-                let now = (s.in_folder(), s.asking(), s.busy());
+                let now = (s.in_folder(), s.asking().then(|| s.asking_question()), s.busy());
                 if now != this.placeholder_now {
                     this.placeholder_now = now;
                     this.input.update(cx, |i, cx| {
@@ -190,7 +193,7 @@ impl Composer {
             ac_closed_for: None,
             ac_took_enter: false,
             ac_anchor: None,
-            placeholder_now: (in_folder, false, false),
+            placeholder_now: (in_folder, None, false),
             _subs: subs,
         }
     }
@@ -340,10 +343,10 @@ impl Composer {
             return;
         }
         let text = self.text(cx);
-        // A question waits: what you typed denies it and says what to do
-        // instead.
+        // A question waits: what you typed answers a question card, or
+        // denies a permission card and says what to do instead.
         if self.state.read(cx).asking() && !text.trim().is_empty() && crate::state::parse_btw(&text).is_none() {
-            self.state.update(cx, |s, cx| s.deny_current_with_note(text.trim().to_string(), cx));
+            self.state.update(cx, |s, cx| s.answer_in_words(text.trim().to_string(), cx));
             self.input.update(cx, |i, cx| i.set_value("", window, cx));
             return;
         }

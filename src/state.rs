@@ -45,6 +45,19 @@ impl ToolKind {
         if status == ToolStatus::Declined {
             return "Skipped";
         }
+        // A call that failed changed nothing: it says so, not "Wrote".
+        if status == ToolStatus::Failed {
+            return match self {
+                ToolKind::Read => "Couldn't read",
+                ToolKind::Edit => "Couldn't edit",
+                ToolKind::Write => "Couldn't write",
+                ToolKind::Bash => "Failed:",
+                ToolKind::Search => "Search failed:",
+                ToolKind::Web => "Couldn't fetch",
+                ToolKind::WebSearch => "Web search failed:",
+                ToolKind::Other => "Failed:",
+            };
+        }
         let running = status == ToolStatus::Running;
         match (self, running) {
             (ToolKind::Read, true) => "Reading",
@@ -189,6 +202,7 @@ impl ToolCall {
         match self.target.as_ref() {
             "ExitPlanMode" => "plan".into(),
             "TodoWrite" => "task list".into(),
+            crate::backend::QUESTION_TOOL => "questions".into(),
             "Task" | "Agent" => "agent".into(),
             _ => self.target.clone(),
         }
@@ -269,6 +283,56 @@ pub struct PermInfo {
     pub scope: Option<&'static str>,
     /// What you told Forge to do instead, with a denial.
     pub note: Option<SharedString>,
+    /// AskUserQuestion's questions, with what you chose: the card is a
+    /// question card, not a permission prompt.
+    pub questions: Vec<Question>,
+    /// The question the card shows.
+    pub step: usize,
+    /// ForgeCLI asks about this tool every time: no "Always allow".
+    pub every_time: bool,
+}
+
+/// One question AskUserQuestion puts to you, and what you chose.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Question {
+    /// A short label for its tab ("Stack").
+    pub header: String,
+    pub text: String,
+    pub options: Vec<QOption>,
+    #[serde(default)]
+    pub multi: bool,
+    /// The options picked, by index.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub picked: Vec<usize>,
+    /// Your own words instead of an option.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub own: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct QOption {
+    pub label: String,
+    #[serde(default)]
+    pub description: String,
+}
+
+impl Question {
+    /// The answer as Forge hears it: your words, else the labels picked.
+    pub fn answer(&self) -> Option<String> {
+        if let Some(own) = self.own.as_deref().map(str::trim).filter(|o| !o.is_empty()) {
+            return Some(own.to_string());
+        }
+        let labels: Vec<&str> = self
+            .picked
+            .iter()
+            .filter_map(|&i| self.options.get(i).map(|o| o.label.as_str()))
+            .collect();
+        (!labels.is_empty()).then(|| labels.join(", "))
+    }
+
+    pub fn answered(&self) -> bool {
+        self.answer().is_some()
+    }
 }
 
 /// Where "Always allow" keeps its rule (the suggestion's `destination`).
@@ -285,6 +349,55 @@ pub fn rule_scope(suggestions: &serde_json::Value) -> Option<&'static str> {
         "userSettings" => "in every project",
         _ => return None,
     })
+}
+
+/// Pick option `opt` of question `q` (see `AppState::pick_option`).
+pub fn pick(qs: &mut [Question], step: &mut usize, q: usize, opt: usize) {
+    let Some(question) = qs.get_mut(q) else { return };
+    if opt >= question.options.len() {
+        return;
+    }
+    question.own = None;
+    if question.multi {
+        match question.picked.iter().position(|&p| p == opt) {
+            Some(i) => {
+                question.picked.remove(i);
+            }
+            None => {
+                question.picked.push(opt);
+                question.picked.sort_unstable();
+            }
+        }
+        return;
+    }
+    question.picked = vec![opt];
+    if let Some(next) = next_unanswered(qs, q) {
+        *step = next;
+    }
+}
+
+/// Your own words as the answer to the question shown; true once every
+/// question has its answer.
+pub fn own_answer(qs: &mut [Question], step: &mut usize, text: String) -> bool {
+    let q = (*step).min(qs.len().saturating_sub(1));
+    if let Some(question) = qs.get_mut(q) {
+        question.own = Some(text);
+        question.picked.clear();
+    }
+    match next_unanswered(qs, q) {
+        Some(next) => {
+            *step = next;
+            false
+        }
+        None => qs.iter().all(Question::answered),
+    }
+}
+
+/// The first question after `from` (wrapping round) with no answer yet.
+fn next_unanswered(qs: &[Question], from: usize) -> Option<usize> {
+    (1..=qs.len())
+        .map(|d| (from + d) % qs.len())
+        .find(|&i| !qs[i].answered())
 }
 
 /// "Always allow", said as what it allows: `Bash(npm test:*)` is
@@ -1607,9 +1720,14 @@ pub struct AppState {
     pub context_open: bool,
     /// The versions list open under your message: (chat, message).
     pub versions_open: Option<(usize, usize)>,
-    /// A message to scroll to (its move's number, its index), and the count.
-    pub jump: Option<(u64, usize)>,
+    /// A jump to show: its number, the message, and the block in it to
+    /// bring into view (None: the message's top).
+    pub jump: Option<(u64, usize, Option<usize>)>,
     jump_seq: u64,
+    /// Runs of calls opened to their steps: (chat, message, first block).
+    pub open_groups: std::collections::HashSet<(usize, usize, usize)>,
+    /// The row a jump landed on, marked for a moment: (chat, message, block).
+    pub flash: Option<(usize, usize, usize)>,
     /// The task panel and the approvals list are open.
     pub tasks_open: bool,
     pub approvals_open: bool,
@@ -1800,6 +1918,8 @@ impl AppState {
             versions_open: None,
             jump: None,
             jump_seq: 0,
+            open_groups: Default::default(),
+            flash: None,
             tasks_open: false,
             approvals_open: false,
             compacting: Default::default(),
@@ -4652,7 +4772,62 @@ impl AppState {
     /// Show message `msg` of the chat showing (the list scrolls to it).
     pub fn jump_to(&mut self, msg: usize, cx: &mut Context<Self>) {
         self.jump_seq += 1;
-        self.jump = Some((self.jump_seq, msg));
+        self.jump = Some((self.jump_seq, msg, None));
+        cx.notify();
+    }
+
+    /// Open or close a run of calls (`work_group`), by its first block.
+    pub fn toggle_group(&mut self, chat: usize, msg: usize, start: usize, cx: &mut Context<Self>) {
+        let key = (chat, msg, start);
+        if !self.open_groups.remove(&key) {
+            self.open_groups.insert(key);
+        }
+        if let Some(c) = self.chat_mut(chat) {
+            c.version += 1;
+        }
+        cx.notify();
+    }
+
+    /// Show block `block` of message `msg` in the chat showing: the run of
+    /// calls holding it opens, the call opens (a failure shows its error),
+    /// the list scrolls to it and it is marked for a moment.
+    pub fn jump_to_block(&mut self, msg: usize, block: usize, cx: &mut Context<Self>) {
+        let Some(chat) = self.current else { return };
+        let streaming = self.busy();
+        let mut start = None;
+        if let Some(c) = self.chat_mut(chat) {
+            let last = msg + 1 == c.messages.len();
+            if let Some(Message::Assistant { blocks }) = c.messages.get_mut(msg) {
+                start = crate::ui::work_group::run_of(blocks, block, streaming && last).map(|r| r.start);
+                if let Some(Block::Tool(t)) = blocks.get_mut(block) {
+                    // A command in a run shows its block when `open` is off
+                    // (`work_group::as_step`).
+                    t.open = !(start.is_some() && t.kind == ToolKind::Bash);
+                }
+            }
+            c.version += 1;
+        }
+        if let Some(start) = start {
+            self.open_groups.insert((chat, msg, start));
+        }
+        self.tasks_open = false;
+        self.flash = Some((chat, msg, block));
+        self.jump_seq += 1;
+        self.jump = Some((self.jump_seq, msg, Some(block)));
+        // The mark fades by itself; then it goes.
+        let seq = self.jump_seq;
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(Duration::from_millis(1800)).await;
+            let _ = this.update(cx, |s, cx| {
+                if s.jump_seq == seq && s.flash.take().is_some() {
+                    if let Some(c) = s.chat_mut(chat) {
+                        c.version += 1;
+                    }
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
         cx.notify();
     }
 
@@ -4703,7 +4878,10 @@ impl AppState {
     pub fn reveal_approval(&mut self, chat: usize, msg: usize, cx: &mut Context<Self>) {
         self.approvals_open = false;
         self.open_chat(chat, cx);
-        self.jump_to(msg, cx);
+        match self.pending_question(chat) {
+            Some((m, b)) => self.jump_to_block(m, b, cx),
+            None => self.jump_to(msg, cx),
+        }
     }
 
     // ------------------------------------------------------------ JSON export and share
@@ -5742,17 +5920,108 @@ impl AppState {
         }
     }
 
+    /// The questions on the card at (msg, block), as answered so far.
+    fn questions_at(&self, chat: usize, msg: usize, block: usize) -> Vec<Question> {
+        match self
+            .chats
+            .iter()
+            .find(|c| c.id == chat)
+            .and_then(|c| c.messages.get(msg))
+        {
+            Some(Message::Assistant { blocks }) => match blocks.get(block) {
+                Some(Block::Permission { info, .. }) => info.questions.clone(),
+                _ => vec![],
+            },
+            _ => vec![],
+        }
+    }
+
+    /// Change a waiting question card's questions and the one it shows.
+    fn edit_questions(
+        &mut self,
+        chat: usize,
+        msg: usize,
+        block: usize,
+        f: impl FnOnce(&mut Vec<Question>, &mut usize),
+    ) {
+        if let Some(c) = self.chat_mut(chat) {
+            if let Some(Message::Assistant { blocks }) = c.messages.get_mut(msg) {
+                if let Some(Block::Permission {
+                    verdict: Verdict::Pending,
+                    info,
+                    ..
+                }) = blocks.get_mut(block)
+                {
+                    f(&mut info.questions, &mut info.step);
+                    c.version += 1;
+                }
+            }
+        }
+    }
+
+    /// Pick option `opt` of question `q`: one choice moves on to the next
+    /// question not yet answered; with several allowed it toggles.
+    pub fn pick_option(
+        &mut self,
+        chat: usize,
+        msg: usize,
+        block: usize,
+        q: usize,
+        opt: usize,
+        cx: &mut Context<Self>,
+    ) {
+        self.edit_questions(chat, msg, block, |qs, step| pick(qs, step, q, opt));
+        cx.notify();
+    }
+
+    /// Show question `q` on its card.
+    pub fn question_tab(&mut self, chat: usize, msg: usize, block: usize, q: usize, cx: &mut Context<Self>) {
+        self.edit_questions(chat, msg, block, |qs, step| {
+            if q < qs.len() {
+                *step = q;
+            }
+        });
+        cx.notify();
+    }
+
+    /// Send your answers, once every question has one.
+    pub fn submit_answers(&mut self, chat: usize, msg: usize, block: usize, cx: &mut Context<Self>) {
+        if self.questions_at(chat, msg, block).iter().all(Question::answered) {
+            self.answer(chat, msg, block, Verdict::Allowed, cx);
+        }
+    }
+
+    /// What you typed while a question card waits: your own answer to the
+    /// question it shows. The card moves on, and the last answer sends them
+    /// all. A permission card is denied with it, as before.
+    pub fn answer_in_words(&mut self, text: String, cx: &mut Context<Self>) {
+        let Some(chat) = self.current else { return };
+        let Some((msg, block)) = self.pending_question(chat) else { return };
+        if self.questions_at(chat, msg, block).is_empty() {
+            return self.deny_with_note(chat, text, cx);
+        }
+        let mut done = false;
+        self.edit_questions(chat, msg, block, |qs, step| {
+            done = own_answer(qs, step, text);
+        });
+        if done {
+            self.answer(chat, msg, block, Verdict::Allowed, cx);
+        }
+        cx.notify();
+    }
+
     /// The chat you're looking at waits on your answer to a question.
     pub fn asking(&self) -> bool {
         self.busy() && self.current.and_then(|c| self.pending_question(c)).is_some()
     }
 
-    /// Deny the question the chat you're looking at waits on, with `note`.
-    pub fn deny_current_with_note(&mut self, note: String, cx: &mut Context<Self>) {
-        if let Some(chat) = self.current {
-            self.deny_with_note(chat, note, cx);
-        }
+    /// What the chat you're looking at waits on is a question card.
+    pub fn asking_question(&self) -> bool {
+        self.current
+            .and_then(|c| Some((c, self.pending_question(c)?)))
+            .is_some_and(|(c, (m, b))| !self.questions_at(c, m, b).is_empty())
     }
+
 
     // ------------------------------------------------------------ messages sent while Forge works
 
@@ -5967,6 +6236,37 @@ impl AppState {
                 return;
             }
             let allow = matches!(verdict, Verdict::Allowed | Verdict::AllowedAlways);
+            // Questions: your answers ride in the call's input; skipping
+            // (or your own words typed as a denial) says so.
+            if ask.tool_name == crate::backend::QUESTION_TOOL {
+                let questions = self.questions_at(chat, msg, block);
+                if !allow {
+                    if let Some(&(m, b)) = self.tool_rows.get(&(chat, ask.tool_use_id.clone())) {
+                        self.update_tool(chat, m, b, |t| {
+                            t.status = ToolStatus::Declined;
+                            t.output = "You skipped the questions.".into();
+                        });
+                    }
+                }
+                let sent = self.sessions.get(&chat).map(|l| match (allow, note.as_deref()) {
+                    (true, _) => l.session.answer_questions(&ask.request_id, &ask.input, &questions),
+                    (false, Some(n)) => l.session.answer(
+                        &ask.request_id,
+                        false,
+                        false,
+                        &ask.input,
+                        &ask.suggestions,
+                        Some(n),
+                    ),
+                    (false, None) => l.session.skip_questions(&ask.request_id),
+                });
+                if let Some(Err(e)) = sent {
+                    self.notice(chat, e, true);
+                    self.finish_turn(chat, cx);
+                }
+                cx.notify();
+                return;
+            }
             if !allow {
                 if let Some(&(m, b)) = self.tool_rows.get(&(chat, ask.tool_use_id.clone())) {
                     let said = note
@@ -6794,7 +7094,9 @@ impl AppState {
                 let suggestions = command_rules(suggestions);
                 // A harmless command, for the mode the chat is in, runs
                 // without a card: its tool row already shows it.
-                if self.auto_approves(chat, &tool_name, &input) {
+                if !crate::backend::always_asks(&tool_name)
+                    && self.auto_approves(chat, &tool_name, &input)
+                {
                     if let Some(l) = self.sessions.get(&chat) {
                         let _ = l
                             .session
@@ -6804,10 +7106,18 @@ impl AppState {
                 }
                 let (title, detail) = crate::backend::ask_text(&tool_name, &input);
                 let row = self.tool_rows.get(&(chat, tool_use_id.clone())).copied();
+                // A tool ForgeCLI always asks about offers no rule.
+                let offers = !crate::backend::always_asks(&tool_name);
                 let info = PermInfo {
                     kind: Some(crate::backend::tool_call(&tool_name, &input).kind),
-                    offer: rule_name(&suggestions).map(Into::into),
-                    scope: rule_scope(&suggestions),
+                    offer: rule_name(&suggestions).filter(|_| offers).map(Into::into),
+                    scope: rule_scope(&suggestions).filter(|_| offers),
+                    every_time: !offers,
+                    questions: if tool_name == crate::backend::QUESTION_TOOL {
+                        crate::backend::questions(&input)
+                    } else {
+                        vec![]
+                    },
                     ..Default::default()
                 };
                 if let Some((msg, block)) = self.push_block(
@@ -8236,6 +8546,31 @@ impl AppState {
                     t.diff = diff;
                 }
             }
+            (Step::Failed(output), Some(blocks)) => {
+                if let Some(Block::Tool(t)) = blocks.iter_mut().rev().find(|b| matches!(b, Block::Tool(_))) {
+                    t.status = ToolStatus::Failed;
+                    t.output = output.into();
+                }
+            }
+            (Step::Question(input), Some(blocks)) => {
+                let mut t = crate::backend::tool_call(crate::backend::QUESTION_TOOL, &input);
+                t.status = ToolStatus::Done;
+                blocks.push(Block::Tool(t));
+                let row = blocks.len() - 1;
+                let (title, detail) = crate::backend::ask_text(crate::backend::QUESTION_TOOL, &input);
+                blocks.push(Block::Permission {
+                    title: title.into(),
+                    detail: detail.into(),
+                    verdict: Verdict::Pending,
+                    info: PermInfo {
+                        kind: Some(ToolKind::Other),
+                        row: Some(row),
+                        every_time: true,
+                        questions: crate::backend::questions(&input),
+                        ..Default::default()
+                    },
+                });
+            }
             (Step::Use(name, input, output), Some(blocks)) => {
                 let mut t = crate::backend::tool_call(name, &input);
                 t.status = ToolStatus::Done;
@@ -8370,6 +8705,10 @@ enum Step {
     Remember(String),
     /// The running call's change, before it is made.
     ToolDiff(Vec<DiffLine>),
+    /// The running call failed, with this error.
+    Failed(String),
+    /// AskUserQuestion with this input: its card waits on your answers.
+    Question(serde_json::Value),
 }
 
 impl Step {
@@ -8379,7 +8718,8 @@ impl Step {
             Step::ToolStart(..) => 350,
             Step::ToolDiff(_) => 0,
             Step::ToolDone(..) => 900,
-            Step::Ask(..) => 300,
+            Step::Ask(..) | Step::Question(_) => 300,
+            Step::Failed(_) => 600,
             Step::Asked(..) => 450,
             Step::Use(..) => 500,
             Step::File(..) | Step::Remember(_) => 300,
@@ -8451,6 +8791,73 @@ fn demo_approvals() -> Vec<Step> {
     ]);
     s.extend(words(
         "The survey is done; I left the build folder alone, as you asked.",
+        Step::Say,
+    ));
+    s
+}
+
+/// Questions first (a card with two), then a burst of work: a write that
+/// fails as ForgeCLI's does on a file not read yet, then edits and commands
+/// with thinking between them, as a real build-out goes.
+fn demo_questions() -> Vec<Step> {
+    use serde_json::json;
+    let mut s = words("Before I scaffold anything, two choices change the whole layout:", Step::Say);
+    s.push(Step::Question(json!({ "questions": [
+        { "question": "Which stack should the app use?", "header": "Stack", "multiSelect": false, "options": [
+            { "label": "Tauri v2 hybrid (Recommended)", "description": "React and TypeScript for the UI, a Rust core for files and search." },
+            { "label": "Leptos", "description": "All Rust, UI included; a smaller ecosystem." },
+            { "label": "Electron", "description": "The widest ecosystem; a much larger install." } ] },
+        { "question": "Where should sheets be stored?", "header": "Storage", "multiSelect": false, "options": [
+            { "label": "JSON files", "description": "Easy to back up and to read by hand." },
+            { "label": "SQLite", "description": "One file, fast queries, harder to diff." } ] } ] })));
+    s.extend(words("Going with your answers. The Rust core first, then the frontend on top.", Step::Say));
+    s.push(Step::ToolStart(ToolKind::Write, "folio/Cargo.toml".into(), None));
+    s.push(Step::ToolDiff(diff(&[
+        (DiffKind::Add, "[package]"),
+        (DiffKind::Add, "name = \"folio-core\""),
+        (DiffKind::Add, "version = \"0.1.0\""),
+        (DiffKind::Add, "edition = \"2021\""),
+    ])));
+    s.push(Step::Failed(
+        "File has not been read yet. Read it first before writing to it.".into(),
+    ));
+    s.extend(words("cargo init already made it; read it, then edit.", Step::Think));
+    s.push(Step::Use("Read", json!({ "file_path": "folio/Cargo.toml" }), "[package]\nname = \"folio\"\nversion = \"0.1.0\"\nedition = \"2021\"\n".into()));
+    let edit = |file: &str, old: &str, new: &str| {
+        Step::Use(
+            "Edit",
+            json!({ "file_path": file, "old_string": old, "new_string": new }),
+            "The file was updated.".into(),
+        )
+    };
+    s.push(edit("folio/Cargo.toml", "name = \"folio\"", "name = \"folio-core\""));
+    s.push(edit("folio/src/model.rs", "pub struct Sheet;", "pub struct Sheet {\n    pub id: Uuid,\n    pub stickers: Vec<Sticker>,\n}"));
+    s.push(edit("folio/src/lib.rs", "", "pub mod model;\npub mod store;\npub mod assets;"));
+    s.push(Step::Use(
+        "Bash",
+        json!({ "command": "cargo build", "description": "Build the Rust core" }),
+        "error[E0277]: the trait `From<ZipError>` is not implemented for `Error`".into(),
+    ));
+    s.push(Step::Failed("error[E0277]: the trait `From<ZipError>` is not implemented for `Error`\nexit 101".into()));
+    s.extend(words("The zip error needs its own variant.", Step::Think));
+    for (file, old, new) in [
+        ("folio/src/lib.rs", "Io(std::io::Error),", "Io(std::io::Error),\n    Zip(zip::result::ZipError),"),
+        ("folio/src/assets.rs", "fn import(", "pub fn import("),
+        ("folio/src/assets.rs", "let img = decode(bytes)?;", "let img = decode(bytes).map_err(Error::Image)?;"),
+        ("folio/src/store.rs", "fn save(", "pub fn save("),
+        ("folio/src/store.rs", "std::fs::write(path, json)?;", "write_atomic(path, json.as_bytes())?;"),
+        ("folio/src/workspace.rs", "sheets: vec![],", "sheets: Vec::new(),"),
+        ("folio/src/backup.rs", "zip.finish();", "zip.finish()?;"),
+    ] {
+        s.push(edit(file, old, new));
+    }
+    s.push(Step::Use(
+        "Bash",
+        json!({ "command": "cargo build", "description": "Rebuild the Rust core" }),
+        "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.12s".into(),
+    ));
+    s.extend(words(
+        "The core builds. **Stack**: Tauri v2 with a Rust core; **storage**: JSON files, written atomically.",
         Step::Say,
     ));
     s
@@ -8676,6 +9083,11 @@ fn script(prompt: &str) -> Vec<Step> {
     if lower.contains("agent") {
         s.extend(demo_agents());
         s.push(Step::End { seconds: 14.2 });
+        return s;
+    }
+    if lower.contains("question") {
+        s.extend(demo_questions());
+        s.push(Step::End { seconds: 38.6 });
         return s;
     }
     if lower.contains("approv") {
@@ -9446,6 +9858,43 @@ mod tests {
         assert_eq!(remote[1].1, crate::model_proxy::PLACEHOLDER_KEY);
     }
     use super::*;
+
+    fn question(multi: bool, labels: &[&str]) -> Question {
+        Question {
+            header: "H".into(),
+            text: format!("{labels:?}?"),
+            options: labels
+                .iter()
+                .map(|l| QOption { label: l.to_string(), description: String::new() })
+                .collect(),
+            multi,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn picking_answers_a_question_and_moves_on() {
+        let mut qs = vec![question(false, &["a", "b"]), question(true, &["x", "y", "z"])];
+        let mut step = 0;
+        pick(&mut qs, &mut step, 0, 1);
+        assert_eq!((qs[0].answer().as_deref(), step), (Some("b"), 1));
+        // Several allowed: picks toggle, and the card stays.
+        pick(&mut qs, &mut step, 1, 2);
+        pick(&mut qs, &mut step, 1, 0);
+        pick(&mut qs, &mut step, 1, 2);
+        assert_eq!((qs[1].answer().as_deref(), step), (Some("x"), 1));
+        // Your own words replace the picks; the last answer completes them all.
+        assert!(own_answer(&mut qs, &mut step, "both".into()));
+        assert_eq!(qs[1].answer().as_deref(), Some("both"));
+        // Typed on the first of two unanswered: it moves to the second.
+        let mut qs = vec![question(false, &["a", "b"]), question(false, &["c", "d"])];
+        let mut step = 0;
+        assert!(!own_answer(&mut qs, &mut step, "mine".into()));
+        assert_eq!(step, 1);
+        // An option out of range does nothing.
+        pick(&mut qs, &mut step, 1, 9);
+        assert!(!qs[1].answered());
+    }
 
     #[test]
     fn find_looks_through_every_kind_of_message() {

@@ -18,6 +18,8 @@ icons!(
     "archive",
     "git-pull-request",
     "circle-dot",
+    "circle",
+    "circle-help",
     "star",
     "star-filled",
     "file-down",

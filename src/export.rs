@@ -162,6 +162,17 @@ fn block(out: &mut String, b: &Block) {
             }
             out.push('\n');
         }
+        Block::Permission { verdict, info, .. } if !info.questions.is_empty() => {
+            let skipped = *verdict != Verdict::Allowed;
+            for q in &info.questions {
+                let said = match q.answer() {
+                    Some(a) if !skipped => a,
+                    _ => "skipped".into(),
+                };
+                out.push_str(&format!("- _{}_ — {said}\n", q.text));
+            }
+            out.push('\n');
+        }
         Block::Permission { title, verdict, .. } => {
             let said = match verdict {
                 Verdict::Pending => "asked",

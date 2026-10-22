@@ -17,6 +17,8 @@ use crate::theme::{self, Theme};
 /// One task: where its row is, and how it reads.
 pub struct Task {
     pub msg: usize,
+    /// Its row's block in that message.
+    pub block: usize,
     pub kind: ToolKind,
     pub status: ToolStatus,
     pub label: String,
@@ -33,16 +35,20 @@ pub fn tasks(messages: &[Message]) -> Vec<Task> {
     let mut out = vec![];
     for (i, m) in messages.iter().enumerate().skip(from) {
         if let Message::Assistant { blocks } = m {
-            for b in blocks {
+            for (block, b) in blocks.iter().enumerate() {
                 if let Block::Tool(t) = b {
                     // A command reads as its description ("Run the tests"), as its row does.
                     let label = match (&t.note, t.kind) {
+                        (Some(n), _) if t.target.as_ref() == crate::backend::QUESTION_TOOL => {
+                            format!("Asked you {n}")
+                        }
                         (Some(n), ToolKind::Bash) => n.to_string(),
                         (Some(n), ToolKind::Other) => format!("{} · {n}", t.shown_target()),
                         _ => format!("{} {}", t.kind.verb(t.status), t.shown_target()),
                     };
                     out.push(Task {
                         msg: i,
+                        block,
                         kind: t.kind,
                         status: t.status,
                         label,
@@ -176,7 +182,7 @@ pub fn render(t: &Theme, state: &Entity<AppState>, cx: &gpui::App) -> Option<Any
             // More tasks than fit: the list keeps the wheel from the chat under it.
             .when(list.len() > 8, super::hold_wheel);
         for (i, task) in list.iter().enumerate() {
-            let (st, msg) = (state.clone(), task.msg);
+            let (st, msg, block) = (state.clone(), task.msg, task.block);
             rows = rows.child(
                 div()
                     .id(("task", i))
@@ -205,7 +211,7 @@ pub fn render(t: &Theme, state: &Entity<AppState>, cx: &gpui::App) -> Option<Any
                             .text_color(t.colors.text)
                             .child(task.label.clone()),
                     )
-                    .on_click(move |_, _, cx| st.update(cx, |s, cx| s.jump_to(msg, cx))),
+                    .on_click(move |_, _, cx| st.update(cx, |s, cx| s.jump_to_block(msg, block, cx))),
             );
         }
         theme::popover(t)
@@ -282,9 +288,9 @@ mod tests {
         let t = tasks(&m);
         assert_eq!(
             t.iter()
-                .map(|t| (t.msg, t.label.as_str()))
+                .map(|t| (t.msg, t.block, t.label.as_str()))
                 .collect::<Vec<_>>(),
-            vec![(3, "Edited a.rs"), (3, "Running cargo test")]
+            vec![(3, 0, "Edited a.rs"), (3, 1, "Running cargo test")]
         );
     }
 }

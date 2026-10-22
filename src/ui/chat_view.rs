@@ -36,6 +36,11 @@ pub struct ChatView {
     shown_find: u64,
     /// The jump (tasks, approvals) last scrolled to.
     shown_jump: u64,
+    /// A jump to a block still finding it: its message, and where the
+    /// block turned out to be drawn (`message::Reveal`).
+    reveal: Option<(usize, std::rc::Rc<message::Reveal>)>,
+    /// Frames the reveal has looked for its block; it gives up after a few.
+    reveal_tries: u8,
 }
 
 impl ChatView {
@@ -70,6 +75,8 @@ impl ChatView {
             away: false,
             shown_find: 0,
             shown_jump: 0,
+            reveal: None,
+            reveal_tries: 0,
         };
         view.sync(cx);
         view
@@ -122,13 +129,26 @@ impl ChatView {
         self.shown_find = find.map_or(0, |(seq, _)| seq);
 
         // A jump from the task panel or the approvals list.
-        if let Some((seq, ix)) = self.state.read(cx).jump {
+        // A block in it: the message comes to the top first, so it is laid
+        // out, then the block's row is scrolled to once its place is known.
+        if let Some((seq, ix, block)) = self.state.read(cx).jump {
             if seq != self.shown_jump && ix < count {
                 self.list.scroll_to(gpui::ListOffset {
                     item_ix: ix,
                     offset_in_item: px(0.),
                 });
                 self.away = true;
+                self.reveal_tries = 0;
+                self.reveal = block.map(|block| {
+                    (
+                        ix,
+                        std::rc::Rc::new(message::Reveal {
+                            block,
+                            root: Default::default(),
+                            row: Default::default(),
+                        }),
+                    )
+                });
             }
             self.shown_jump = seq;
         }
@@ -418,10 +438,38 @@ fn icon_arrow(t: &crate::theme::Theme) -> gpui::Svg {
     super::icon("icons/arrow-down.svg", t.size.icon_sm, t.colors.text_muted)
 }
 
+impl ChatView {
+    /// A jump's block, once drawn: scroll so its row sits just under the
+    /// top (clear of the task pill). Until then, look again next frame.
+    fn finish_reveal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((ix, r)) = &self.reveal else { return };
+        match (r.root.get(), r.row.get()) {
+            (Some(root), Some(row)) => {
+                let t = cx.theme();
+                let margin = t.size.control + t.space.lg;
+                self.list.scroll_to(gpui::ListOffset {
+                    item_ix: *ix,
+                    offset_in_item: (row - root - margin).max(px(0.)),
+                });
+                self.reveal = None;
+                cx.notify();
+            }
+            // Not drawn (yet): look again, a few frames at most.
+            _ if self.reveal_tries < 8 => {
+                self.reveal_tries += 1;
+                window.request_animation_frame();
+            }
+            _ => self.reveal = None,
+        }
+    }
+}
+
 impl Render for ChatView {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // Paragraphs take their reading order afresh, top to bottom.
         super::select::begin_frame();
+        self.finish_reveal(window, cx);
+        let reveal = self.reveal.clone();
         let state = self.state.clone();
         let step = self.step.clone();
         // Only when there is something below to jump to: a short chat, or
@@ -492,6 +540,20 @@ impl Render for ChatView {
                         versions_open: s.versions_open == Some((chat.id, ix)),
                         sources: s.diagram_code.clone(),
                         zooms: s.diagram_zoom.clone(),
+                        open_groups: s
+                            .open_groups
+                            .iter()
+                            .filter(|(c, m, _)| *c == chat.id && *m == ix)
+                            .map(|(_, _, start)| *start)
+                            .collect(),
+                        flash: s
+                            .flash
+                            .filter(|(c, m, _)| *c == chat.id && *m == ix)
+                            .map(|(_, _, b)| b),
+                        reveal: reveal
+                            .as_ref()
+                            .filter(|(m, _)| *m == ix)
+                            .map(|(_, r)| r.clone()),
                     };
                     // A message rises into place as it arrives (and as it
                     // scrolls back into view), as the reference's sections do.

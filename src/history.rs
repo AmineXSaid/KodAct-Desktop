@@ -156,6 +156,9 @@ pub enum SavedBlock {
         /// The call's row in the same message.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         row: Option<usize>,
+        /// AskUserQuestion's questions, with what you chose.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        questions: Vec<crate::state::Question>,
     },
     File {
         name: String,
@@ -326,6 +329,7 @@ fn save_messages(chat: &Chat, project: &Path) -> SavedChat {
                 .map(|d| d.as_secs()),
             row: info.row,
             note: info.note.as_ref().map(|n| n.to_string()),
+            questions: info.questions.clone(),
             verdict: match verdict {
                 // A question nobody answered is denied once the app is gone.
                 Verdict::Pending | Verdict::Denied => "denied",
@@ -462,6 +466,7 @@ pub fn messages_of(saved: &SavedChat) -> Vec<Message> {
             at,
             row,
             note,
+            questions,
         } => Block::Permission {
             title: title.clone().into(),
             detail: detail.clone().into(),
@@ -478,6 +483,7 @@ pub fn messages_of(saved: &SavedChat) -> Vec<Message> {
                 at: at.map(|s| std::time::UNIX_EPOCH + std::time::Duration::from_secs(s)),
                 row: *row,
                 note: note.clone().map(Into::into),
+                questions: questions.clone(),
                 ..Default::default()
             },
             verdict: match verdict.as_str() {

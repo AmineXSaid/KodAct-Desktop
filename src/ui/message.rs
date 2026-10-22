@@ -59,6 +59,51 @@ pub struct ItemContext {
     pub zooms: std::sync::Arc<std::collections::HashMap<SharedString, f32>>,
     /// What the newest turn changed in the project's memory, under its reply.
     pub memory: Option<crate::state::MemoryChange>,
+    /// The runs of calls opened to their steps, by their first block.
+    pub open_groups: Vec<usize>,
+    /// The block a jump just landed on, to mark it for a moment.
+    pub flash: Option<usize>,
+    /// A jump to a block of this message: where the block sits in it.
+    pub reveal: Option<std::rc::Rc<Reveal>>,
+}
+
+/// Where a jump's block is drawn, so the list can scroll it into view: the
+/// window tops of its message and of its row, set as they are laid out.
+pub struct Reveal {
+    pub block: usize,
+    pub root: std::cell::Cell<Option<gpui::Pixels>>,
+    pub row: std::cell::Cell<Option<gpui::Pixels>>,
+}
+
+/// `el`, noting its top in `cell` as it is laid out.
+fn noted(el: AnyElement, cell: std::rc::Rc<Reveal>, root: bool) -> AnyElement {
+    div()
+        .relative()
+        .child(el)
+        .child(
+            gpui::canvas(
+                move |bounds, _, _| {
+                    let top = Some(bounds.origin.y);
+                    if root {
+                        cell.root.set(top);
+                    } else {
+                        cell.row.set(top);
+                    }
+                },
+                |_, _, _, _| {},
+            )
+            .absolute()
+            .size_full(),
+        )
+        .into_any_element()
+}
+
+/// The row for block `b`, noted when a jump looks for it.
+pub(super) fn mark(el: AnyElement, b: usize, cx: &ItemContext) -> AnyElement {
+    match &cx.reveal {
+        Some(r) if r.block == b => noted(el, r.clone(), false),
+        _ => el,
+    }
 }
 
 pub fn render(m: &Message, cx: &ItemContext, t: &Theme) -> AnyElement {
@@ -69,7 +114,10 @@ pub fn render(m: &Message, cx: &ItemContext, t: &Theme) -> AnyElement {
             attachments,
             ..
         } => user(text, *sent, attachments, cx, t),
-        Message::Assistant { blocks } => assistant(blocks, cx, t),
+        Message::Assistant { blocks } => match &cx.reveal {
+            Some(r) => noted(assistant(blocks, cx, t), r.clone(), true),
+            None => assistant(blocks, cx, t),
+        },
         Message::TurnEnd { seconds, usage } => turn_footer(*seconds, usage.as_ref(), cx, t),
         Message::Notice { text, error } => notice(text, *error, cx, t),
     }
@@ -636,30 +684,20 @@ fn turn_header(_cx: &ItemContext, t: &Theme) -> AnyElement {
 fn assistant(blocks: &[Block], cx: &ItemContext, t: &Theme) -> AnyElement {
     // Answers in a row that say the same thing show as one row.
     let mut rows = vec![];
+    // Calls in a row fold into one line (`work_group`).
+    let mut work = super::work_group::runs(blocks, cx.busy && cx.last).into_iter().peekable();
     let mut b = 0;
     while b < blocks.len() {
-        let run = same_answers(blocks, b);
-        if denied_call(blocks, b) || folded_answer(blocks, b) {
-            // A denied call never ran: its denial says all there is. An
-            // allowed one shows once, its row carrying the answer.
-            b += 1;
-        } else if let Some(p) = answer_for(blocks, b) {
-            rows.push(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(4.))
-                    .child(self::block(blocks, b, cx, t))
-                    .child(approval_line(&blocks[p], cx, t))
-                    .into_any_element(),
-            );
-            b += 1;
-        } else if run > 1 {
-            rows.push(answer_group(&blocks[b..b + run], blocks, b, cx, t));
-            b += run;
-        } else {
-            rows.push(self::block(blocks, b, cx, t));
-            b += 1;
+        let (from, before) = (b, rows.len());
+        let group = assistant_row(blocks, &mut b, &mut rows, &mut work, cx, t);
+        // A jump's block inside the row just made: note the row. An open
+        // run's steps note themselves, closer.
+        if let Some(r) = &cx.reveal {
+            let opened = group && cx.open_groups.contains(&from);
+            if rows.len() > before && (from..b).contains(&r.block) && !opened {
+                let last = rows.pop().expect("a row was pushed");
+                rows.push(noted(last, r.clone(), false));
+            }
         }
     }
     div()
@@ -671,19 +709,70 @@ fn assistant(blocks: &[Block], cx: &ItemContext, t: &Theme) -> AnyElement {
         .into_any_element()
 }
 
+/// The row starting at block `*b`, if it shows one; moves `*b` past what
+/// it covers. True when it is a run of calls folded into one line.
+fn assistant_row(
+    blocks: &[Block],
+    b: &mut usize,
+    rows: &mut Vec<AnyElement>,
+    work: &mut std::iter::Peekable<std::vec::IntoIter<std::ops::Range<usize>>>,
+    cx: &ItemContext,
+    t: &Theme,
+) -> bool {
+    let at = *b;
+    let run = same_answers(blocks, at);
+    if let Some(w) = work.next_if(|w| w.start == at) {
+        *b = w.end;
+        rows.push(super::work_group::render(blocks, w, cx, t));
+        return true;
+    }
+    if denied_call(blocks, at) || folded_answer(blocks, at) || asked_call(blocks, at) {
+        // A denied call never ran: its denial says all there is. An
+        // allowed one shows once, its row carrying the answer.
+        *b += 1;
+    } else if let Some(p) = answer_for(blocks, at) {
+        rows.push(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(4.))
+                .child(self::block(blocks, at, cx, t))
+                .child(approval_line(&blocks[p], cx, t))
+                .into_any_element(),
+        );
+        *b += 1;
+    } else if run > 1 {
+        rows.push(answer_group(&blocks[at..at + run], blocks, at, cx, t));
+        *b += run;
+    } else {
+        rows.push(self::block(blocks, at, cx, t));
+        *b += 1;
+    }
+    false
+}
+
 /// The allowed answer about the call at `b`, when it names `b` as its row.
-fn answer_for(blocks: &[Block], b: usize) -> Option<usize> {
+/// A question card stands on its own, so it is never folded into its call.
+pub(super) fn answer_for(blocks: &[Block], b: usize) -> Option<usize> {
     if !matches!(blocks.get(b), Some(Block::Tool(_))) {
         return None;
     }
     blocks.iter().enumerate().skip(b + 1).find_map(|(i, blk)| {
-        matches!(blk, Block::Permission { verdict: Verdict::Allowed | Verdict::AllowedAlways, info, .. } if info.row == Some(b))
+        matches!(blk, Block::Permission { verdict: Verdict::Allowed | Verdict::AllowedAlways, info, .. } if info.row == Some(b) && info.questions.is_empty())
             .then_some(i)
     })
 }
 
+/// `b` is an AskUserQuestion call: its question card says all there is.
+pub(super) fn asked_call(blocks: &[Block], b: usize) -> bool {
+    matches!(blocks[b], Block::Tool(_))
+        && blocks[b + 1..].iter().any(|blk| {
+            matches!(blk, Block::Permission { info, .. } if info.row == Some(b) && !info.questions.is_empty())
+        })
+}
+
 /// `b` is an allowed answer shown on its call's own row instead.
-fn folded_answer(blocks: &[Block], b: usize) -> bool {
+pub(super) fn folded_answer(blocks: &[Block], b: usize) -> bool {
     match &blocks[b] {
         Block::Permission {
             verdict: Verdict::Allowed | Verdict::AllowedAlways,
@@ -697,7 +786,7 @@ fn folded_answer(blocks: &[Block], b: usize) -> bool {
 }
 
 /// Under a call's row: who allowed it, where and when.
-fn approval_line(answer: &Block, cx: &ItemContext, t: &Theme) -> AnyElement {
+pub(super) fn approval_line(answer: &Block, cx: &ItemContext, t: &Theme) -> AnyElement {
     let Block::Permission { verdict, info, .. } = answer else {
         return div().into_any_element();
     };
@@ -733,14 +822,14 @@ fn approval_line(answer: &Block, cx: &ItemContext, t: &Theme) -> AnyElement {
 }
 
 /// `b` is a call whose question still waits on you.
-fn awaits_you(blocks: &[Block], b: usize) -> bool {
+pub(super) fn awaits_you(blocks: &[Block], b: usize) -> bool {
     blocks[b + 1..].iter().any(|blk| {
         matches!(blk, Block::Permission { verdict: Verdict::Pending, info, .. } if info.row == Some(b))
     })
 }
 
 /// `b` is a call whose question was denied (the question names it as its row).
-fn denied_call(blocks: &[Block], b: usize) -> bool {
+pub(super) fn denied_call(blocks: &[Block], b: usize) -> bool {
     matches!(blocks[b], Block::Tool(_))
         && blocks[b + 1..].iter().any(|blk| {
             matches!(blk, Block::Permission { verdict: Verdict::Denied, info, .. } if info.row == Some(b))
@@ -751,8 +840,9 @@ fn denied_call(blocks: &[Block], b: usize) -> bool {
 /// same answer): 0 when `b` isn't one.
 fn same_answers(blocks: &[Block], b: usize) -> usize {
     let key = |blk: &Block| match blk {
-        Block::Permission { title, verdict, .. }
-            if matches!(
+        Block::Permission { title, verdict, info, .. }
+            if info.questions.is_empty()
+                && matches!(
                 verdict,
                 Verdict::Allowed | Verdict::AllowedAlways | Verdict::Denied
             ) =>
@@ -771,7 +861,7 @@ fn same_answers(blocks: &[Block], b: usize) -> usize {
 }
 
 /// `newest`: the reply's last block, the one still growing while it streams.
-fn block(blocks: &[Block], b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
+pub(super) fn block(blocks: &[Block], b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
     let (block, newest) = (&blocks[b], b + 1 == blocks.len());
     match block {
         Block::Text(text) => markdown::render(
@@ -789,6 +879,9 @@ fn block(blocks: &[Block], b: usize, cx: &ItemContext, t: &Theme) -> AnyElement 
         ),
         Block::Thinking { text, open } => thinking(text, *open, newest, b, cx, t),
         Block::Tool(call) => tool(call, b, blocks, cx, t),
+        Block::Permission { verdict, info, .. } if !info.questions.is_empty() => {
+            super::question_card::render(*verdict, info, b, cx, t)
+        }
         Block::Permission {
             title,
             detail,
@@ -978,23 +1071,52 @@ pub fn env_badge(place: &Option<(SharedString, &'static str)>, t: &Theme) -> Any
         .into_any_element()
 }
 
-fn tool(call: &ToolCall, b: usize, blocks: &[Block], cx: &ItemContext, t: &Theme) -> AnyElement {
+/// The first line of a failed call's error, for its header.
+pub(super) fn failure_line(call: &ToolCall) -> Option<SharedString> {
+    if call.status != ToolStatus::Failed {
+        return None;
+    }
+    call.output
+        .lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty())
+        .map(|l| SharedString::from(l.to_string()))
+}
+
+/// The call has something to open: a command's terminal, a change, output.
+pub(super) fn has_body(call: &ToolCall) -> bool {
+    call.kind == ToolKind::Bash || !call.diff.is_empty() || !call.output.is_empty()
+}
+
+/// A tool call's one line: its icon, verb and target (a command's
+/// description), why it failed, the change's size, review controls, its
+/// status and the chevron. Clicking it opens the body.
+pub(super) fn tool_header(
+    call: &ToolCall,
+    b: usize,
+    blocks: &[Block],
+    cx: &ItemContext,
+    t: &Theme,
+) -> gpui::Stateful<gpui::Div> {
     let hover = t.colors.hover;
-    let adds = call.diff.iter().filter(|l| l.kind == DiffKind::Add).count();
-    let dels = call.diff.iter().filter(|l| l.kind == DiffKind::Del).count();
+    let failed = call.status == ToolStatus::Failed;
+    // A failed change was never made: no counts for it.
+    let adds = call.diff.iter().filter(|l| l.kind == DiffKind::Add && !failed).count();
+    let dels = call.diff.iter().filter(|l| l.kind == DiffKind::Del && !failed).count();
     let shell = call.kind == ToolKind::Bash;
-    // A command always has a body: its terminal block.
-    let has_body = shell || !call.diff.is_empty() || !call.output.is_empty();
-    let header = div()
+    let has_body = has_body(call);
+    let why = failure_line(call).filter(|_| !shell);
+    div()
         .id(SharedString::from(format!(
             "tool-{}-{}-{b}",
             cx.chat, cx.index
         )))
         .role(gpui::accesskit::Role::Button)
         .aria_label(SharedString::from(format!(
-            "{} {}{}",
+            "{} {}{}{}",
             call.kind.verb(call.status),
             call.shown_target(),
+            why.as_ref().map(|w| format!(": {w}")).unwrap_or_default(),
             if !has_body {
                 ""
             } else if call.open {
@@ -1041,9 +1163,9 @@ fn tool(call: &ToolCall, b: usize, blocks: &[Block], cx: &ItemContext, t: &Theme
                 .child(
                     div()
                         .min_w_0()
-                        // With a note, the target is a short name (`browser ·
-                        // eval`) and keeps its room; the note is cut instead.
-                        .when(call.note.is_some(), |d| d.flex_none())
+                        // With a note or a reason, the target is kept and
+                        // the words after it are cut instead.
+                        .when(call.note.is_some() || why.is_some(), |d| d.flex_none().max_w(px(280.)))
                         .overflow_hidden()
                         .whitespace_nowrap()
                         .text_ellipsis()
@@ -1052,7 +1174,7 @@ fn tool(call: &ToolCall, b: usize, blocks: &[Block], cx: &ItemContext, t: &Theme
                         .text_color(t.colors.text_muted)
                         .child(call.shown_target()),
                 )
-                .children(call.note.clone().map(|n| {
+                .children(call.note.clone().filter(|_| why.is_none()).map(|n| {
                     div()
                         .min_w_0()
                         .overflow_hidden()
@@ -1063,6 +1185,17 @@ fn tool(call: &ToolCall, b: usize, blocks: &[Block], cx: &ItemContext, t: &Theme
                         .child(n)
                 })),
         })
+        // Why it failed, in its own words, cut to the line.
+        .children(why.map(|w| {
+            div()
+                .min_w_0()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .text_size(t.text.caption)
+                .text_color(t.extra.danger)
+                .child(w)
+        }))
         .when(shell, |d| d.child(env_badge(&cx.place, t)))
         .child(div().flex_1())
         .when(adds + dels > 0, |d| {
@@ -1080,52 +1213,115 @@ fn tool(call: &ToolCall, b: usize, blocks: &[Block], cx: &ItemContext, t: &Theme
         .child(if call.status == ToolStatus::Running && awaits_you(blocks, b) {
             // Not working: waiting on the card below.
             icon("icons/hand.svg", t.size.icon_sm, t.extra.accent).into_any_element()
+        } else if failed {
+            // The whole error, on hover.
+            let full = SharedString::from(call.output.trim().to_string());
+            div()
+                .id(SharedString::from(format!("tool-why-{}-{}-{b}", cx.chat, cx.index)))
+                .child(status_icon(call.status, t))
+                .tooltip(move |w, cx| {
+                    gpui::component::tooltip::Tooltip::new(full.clone()).build(w, cx)
+                })
+                .into_any_element()
         } else {
             status_icon(call.status, t)
         })
         .when(has_body, |d| d.child(chevron(call.open, t)))
-        .on_click(toggle(cx, b));
+        .on_click(toggle(cx, b))
+}
 
+/// What a tool call's row opens to: a command's terminal block, the change,
+/// or what went in and came out. A failed call shows its error first, and
+/// the change it would have made, marked as not made.
+pub(super) fn tool_body(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> Option<AnyElement> {
+    if !(call.open && has_body(call)) {
+        return None;
+    }
     let lang = markdown::lang_of(&call.target);
-    let body = (call.open && has_body).then(|| {
-        if shell {
-            let at = terminal::Where {
-                state: cx.state.clone(),
-                place: cx.place.clone(),
-                chat: cx.chat,
-                msg: cx.index,
-                block: b,
-                copied: cx.copied.clone(),
-                busy: cx.busy,
-            };
-            terminal::block(call, &at, t)
-        } else if !call.diff.is_empty() {
-            diff_lines(&call.diff, lang, t)
-                .border_t_1()
-                .border_color(t.colors.border)
-                .into_any_element()
-        } else {
+    if call.kind == ToolKind::Bash {
+        let at = terminal::Where {
+            state: cx.state.clone(),
+            place: cx.place.clone(),
+            chat: cx.chat,
+            msg: cx.index,
+            block: b,
+            copied: cx.copied.clone(),
+            busy: cx.busy,
+        };
+        return Some(terminal::block(call, &at, t));
+    }
+    if call.status == ToolStatus::Failed {
+        return Some(
             div()
                 .border_t_1()
                 .border_color(t.colors.border)
                 .flex()
                 .flex_col()
-                .child(io_row("IN", call.target.clone(), "", t))
-                // A file's contents are coloured by its language.
-                .child(io_row(
-                    "OUT",
-                    call.output.clone(),
-                    if call.kind == ToolKind::Read {
-                        lang
-                    } else {
-                        ""
-                    },
-                    t,
-                ))
-                .into_any_element()
-        }
-    });
+                .child(
+                    div()
+                        .px(t.space.md)
+                        .py(t.space.sm)
+                        .bg(t.extra.danger_tint)
+                        .font_family(t.font_mono.clone())
+                        .text_size(t.text.caption + px(0.5))
+                        .text_color(t.colors.text)
+                        .child(call.output.trim().to_string()),
+                )
+                .when(!call.diff.is_empty(), |d| {
+                    d.child(
+                        div()
+                            .px(t.space.md)
+                            .pt(t.space.sm)
+                            .text_size(t.text.caption)
+                            .text_color(t.colors.text_muted)
+                            .child("Not applied"),
+                    )
+                    .child(diff_lines(&call.diff, lang, t).opacity(0.55))
+                })
+                .into_any_element(),
+        );
+    }
+    Some(if !call.diff.is_empty() {
+        diff_lines(&call.diff, lang, t)
+            .border_t_1()
+            .border_color(t.colors.border)
+            .into_any_element()
+    } else {
+        div()
+            .border_t_1()
+            .border_color(t.colors.border)
+            .flex()
+            .flex_col()
+            .child(io_row("IN", call.target.clone(), "", t))
+            // A file's contents are coloured by its language.
+            .child(io_row(
+                "OUT",
+                call.output.clone(),
+                if call.kind == ToolKind::Read { lang } else { "" },
+                t,
+            ))
+            .into_any_element()
+    })
+}
 
+/// A row a jump landed on: an accent ring that fades, so the eye finds it.
+pub(super) fn flash(row: gpui::Div, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
+    if cx.flash != Some(b) {
+        return row.into_any_element();
+    }
+    let ring = t.extra.accent;
+    row.rounded(t.radius.button)
+        .border_2()
+        .border_color(ring)
+        .with_animation(
+            SharedString::from(format!("flash-{}-{}-{b}", cx.chat, cx.index)),
+            Animation::new(Duration::from_millis(1600)).with_easing(gpui::ease_in_out),
+            move |d, delta| d.border_color(ring.opacity(1. - delta)),
+        )
+        .into_any_element()
+}
+
+fn tool(call: &ToolCall, b: usize, blocks: &[Block], cx: &ItemContext, t: &Theme) -> AnyElement {
     // The row's edge says how it went, quietly: firmer while it runs, a
     // danger tint when it failed.
     let edge = match call.status {
@@ -1133,15 +1329,18 @@ fn tool(call: &ToolCall, b: usize, blocks: &[Block], cx: &ItemContext, t: &Theme
         ToolStatus::Failed => t.extra.danger.opacity(0.45),
         _ => t.colors.border,
     };
-    div()
+    let row = div()
         .bg(t.colors.surface)
         .border_1()
         .border_color(edge)
         .rounded(t.radius.card)
         .overflow_hidden()
-        .child(header)
-        .children(body)
-        .into_any_element()
+        .child(tool_header(call, b, blocks, cx, t))
+        .children(tool_body(call, b, cx, t));
+    if cx.flash == Some(b) {
+        return flash(div().child(row), b, cx, t);
+    }
+    row.into_any_element()
 }
 
 /// A finished file change's review: Keep and Revert… while undecided; then
@@ -1918,12 +2117,14 @@ fn permission(
                             .on_click(answer(Verdict::Denied)),
                     )
                     .child(div().flex_1())
-                    .child(
-                        Button::secondary(id("always"), always)
-                            .describe(always_tip)
-                            .tooltip(true)
-                            .on_click(answer(Verdict::AllowedAlways)),
-                    )
+                    .when(!info.every_time, |d| {
+                        d.child(
+                            Button::secondary(id("always"), always)
+                                .describe(always_tip)
+                                .tooltip(true)
+                                .on_click(answer(Verdict::AllowedAlways)),
+                        )
+                    })
                     .child(
                         Button::accent(id("allow"), "Allow once")
                             .on_click(answer(Verdict::Allowed)),
