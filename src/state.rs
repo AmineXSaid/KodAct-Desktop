@@ -7477,6 +7477,9 @@ impl AppState {
                 c.title = title.into();
             }
         }
+        // When the turn began, as for a real reply (the live design keeps
+        // the page as it was before a new turn's first change).
+        self.turn_started.insert(id, std::time::Instant::now());
         self.replies.insert(
             id,
             cx.spawn(async move |this, cx| {
