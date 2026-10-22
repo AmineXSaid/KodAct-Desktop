@@ -8,7 +8,8 @@
 > **Source:** [nexu-io/open-design](https://github.com/nexu-io/open-design),
 > Apache-2.0, v0.25.1, pinned at commit `3b0df90` (2026-10-20).
 >
-> **Status:** plan only. No code yet. Phases D1–D8 are in §6.
+> **Status:** D1 and D2 done (`docs/open-design-port_D1-report.md`,
+> `docs/open-design-port_D2-report.md`). Phases D1–D8 are in §6.
 
 ---
 
