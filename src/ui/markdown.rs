@@ -593,7 +593,11 @@ fn run_list(
         } else {
             family.clone()
         });
-        f.weight = if s.bold {
+        // Code keeps the mono face's regular weight, in bold text too: the
+        // mono faces ship Regular and Bold only, and bold mono shouts.
+        f.weight = if s.code {
+            FontWeight::NORMAL
+        } else if s.bold {
             FontWeight::SEMIBOLD
         } else {
             base_weight
@@ -604,12 +608,16 @@ fn run_list(
         runs.push(TextRun {
             len: s.text.len(),
             font: f,
+            // Inline code (a file, a command) in coral on a faint wash of
+            // it, so it reads as a name without weighing on the line.
             color: if s.link.is_some() {
                 t.colors.primary
+            } else if s.code {
+                t.colors.coral
             } else {
                 color
             },
-            background_color: s.code.then_some(t.extra.inset),
+            background_color: s.code.then(|| t.colors.coral.opacity(0.1)),
             underline: s.link.is_some().then(|| UnderlineStyle {
                 thickness: px(1.),
                 color: Some(t.colors.primary),
