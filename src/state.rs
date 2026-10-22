@@ -4798,7 +4798,7 @@ impl AppState {
         let sent = if to_forge {
             let (x, y, w, h) = crate::design::marks::bounds(&marks, 24.0).unwrap_or_default();
             let t = cx.theme();
-            let (ink, paper) = (css(t.colors.primary), css(t.colors.surface));
+            let (ink, paper) = (css(t.extra.page_ink), css(t.extra.page_halo));
             self.web_send(
                 crate::web_view::Cmd::Picture {
                     before: crate::design::marks::overlay_js(&marks, &ink, &paper),

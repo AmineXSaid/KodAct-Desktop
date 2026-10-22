@@ -48,7 +48,7 @@ fn stroke(m: &Mark, place: Place) -> Vec<Vec<(f32, f32)>> {
 
 /// The marks, and the one being drawn, over the page.
 pub fn render(marks: Vec<Mark>, place: Place, t: &Theme) -> impl IntoElement {
-    let ink: Hsla = t.colors.primary;
+    let (ink, halo): (Hsla, Hsla) = (t.extra.page_ink, t.extra.page_halo.opacity(0.85));
     let width = px(3.);
     // The text ones, as a label or a sticky note.
     let words: Vec<_> = marks
@@ -69,7 +69,7 @@ pub fn render(marks: Vec<Mark>, place: Place, t: &Theme) -> impl IntoElement {
                     .px(t.space.snug)
                     .py(t.space.sm)
                     .rounded(t.radius.small)
-                    .bg(t.colors.surface)
+                    .bg(t.extra.page_halo)
                     .border_1()
                     .border_color(ink)
                     .text_size(px(14. * place.zoom))
@@ -103,26 +103,29 @@ pub fn render(marks: Vec<Mark>, place: Place, t: &Theme) -> impl IntoElement {
                     let at = |(x, y): (f32, f32)| {
                         point(bounds.origin.x + px(x), bounds.origin.y + px(y))
                     };
-                    for line in &lines {
-                        let mut b = PathBuilder::stroke(width);
-                        b.move_to(at(line[0]));
-                        for q in &line[1..] {
-                            b.line_to(at(*q));
+                    // Each stroke twice: a wider halo, then the ink on it.
+                    for (w, colour) in [(width * 2.2, halo), (width, ink)] {
+                        for line in &lines {
+                            let mut b = PathBuilder::stroke(w);
+                            b.move_to(at(line[0]));
+                            for q in &line[1..] {
+                                b.line_to(at(*q));
+                            }
+                            if let Ok(path) = b.build() {
+                                window.paint_path(path, colour);
+                            }
                         }
-                        if let Ok(path) = b.build() {
-                            window.paint_path(path, ink);
-                        }
-                    }
-                    // An oval: two half arcs round its box.
-                    for &(x, y, w, h) in &ovals {
-                        let radii = point(px(w / 2.), px(h / 2.));
-                        let (left, right) = (at((x, y + h / 2.)), at((x + w, y + h / 2.)));
-                        let mut b = PathBuilder::stroke(width);
-                        b.move_to(left);
-                        b.arc_to(radii, px(0.), false, true, right);
-                        b.arc_to(radii, px(0.), false, true, left);
-                        if let Ok(path) = b.build() {
-                            window.paint_path(path, ink);
+                        // An oval: two half arcs round its box.
+                        for &(x, y, ow, oh) in &ovals {
+                            let radii = point(px(ow / 2.), px(oh / 2.));
+                            let (left, right) = (at((x, y + oh / 2.)), at((x + ow, y + oh / 2.)));
+                            let mut b = PathBuilder::stroke(w);
+                            b.move_to(left);
+                            b.arc_to(radii, px(0.), false, true, right);
+                            b.arc_to(radii, px(0.), false, true, left);
+                            if let Ok(path) = b.build() {
+                                window.paint_path(path, colour);
+                            }
                         }
                     }
                 },

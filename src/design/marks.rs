@@ -195,7 +195,7 @@ pub fn overlay_html(marks: &[Mark], ink: &str, paper: &str) -> String {
         }
     }
     format!(
-        r#"<div id="forge-marks" style="position:absolute;left:0;top:0;width:0;height:0;overflow:visible;pointer-events:none;z-index:2147483647"><svg style="position:absolute;left:0;top:0;overflow:visible" width="1" height="1" fill="none" stroke="{ink}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">{svg}</svg>{notes}</div>"#
+        r#"<div id="forge-marks" style="position:absolute;left:0;top:0;width:0;height:0;overflow:visible;pointer-events:none;z-index:2147483647"><svg style="position:absolute;left:0;top:0;overflow:visible;filter:drop-shadow(0 0 1.5px #fff)" width="1" height="1" fill="none" stroke="{ink}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">{svg}</svg>{notes}</div>"#
     )
 }
 

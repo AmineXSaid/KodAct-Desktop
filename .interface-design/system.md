@@ -135,6 +135,7 @@ Contrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of w
 | `fill` | `#1e1e1e` | 13.9:1 | `#f0e9e5` | 15.2:1 | filled buttons: ink on paper, paper on charcoal |
 | `toggle_on` | `#41608a` | 6.4:1 | `#9db7d9` | 7.1:1 | a switch that is on |
 | `mark_top` | `#41608a` | 5.4:1 | `#9db7d9` | 8.3:1 | the ingot mark's top face (`ui/ingot.rs`) |
+| `page_ink` | `#41608a` | 6.4:1 | `#41608a` | 6.4:1 | marks drawn on a design page, on their halo (`ui/design_marks.rs`) |
 | `mark_left` | `#1e1e1e` | 13.9:1 | `#f0e9e5` | 14.1:1 | the ingot's left face |
 | `mark_right` | `#8b857e` | 3.0:1 | `#7d776f` | 3.8:1 | the ingot's right face |
 | `mark_heat_white` | `#fff2cc` | 1.1:1 | `#fff2cc` | 15.2:1 | the ingot white hot from the forge (onboarding); never at rest |

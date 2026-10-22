@@ -492,6 +492,7 @@ impl Theme {
         self.extra.accent_soft = c(k.accent_soft);
         self.extra.toggle_on = c(k.link);
         self.extra.mark_top = c(k.mark_top);
+        self.extra.page_ink = c(look.tint(false).link);
         self.colors.primary = c(k.link);
         self.colors.primary_hover = c(k.link_hover);
         self.colors.primary_tint = c(k.link).opacity(if self.is_dark { 0.16 } else { 0.12 });
@@ -697,6 +698,11 @@ pub struct ExtraColors {
     pub mark_top: Hsla,
     pub mark_left: Hsla,
     pub mark_right: Hsla,
+    // Marks drawn on a design page (`ui/design_marks.rs`): the page is
+    // usually light whatever the app's mode, so the ink is the look's
+    // light-mode link in both modes, over a thin halo for dark pages.
+    pub page_ink: Hsla,
+    pub page_halo: Hsla,
     // The ingot fresh from the forge (onboarding, a strike), as hot metal
     // cools: white hot, then the orange glow, then a dull ember red, then
     // dark iron, before each face settles to its own colour. Never a resting colour; the same
@@ -767,6 +773,8 @@ impl ExtraColors {
                 accent_soft: rgb(0x27303c).into(),
                 accent_fg: rgb(0x171513).into(),
                 mark_top: rgb(0x9db7d9).into(),
+                page_ink: rgb(0x41608a).into(),
+                page_halo: rgb(0xffffff).into(),
                 mark_left: rgb(0xf0e9e5).into(),
                 mark_right: rgb(0x7d776f).into(),
                 mark_heat_white: rgb(0xfff2cc).into(),
@@ -837,6 +845,8 @@ impl ExtraColors {
                 accent_soft: rgb(0xdde3ec).into(),
                 accent_fg: rgb(0xffffff).into(),
                 mark_top: rgb(0x41608a).into(),
+                page_ink: rgb(0x41608a).into(),
+                page_halo: rgb(0xffffff).into(),
                 mark_left: rgb(0x1e1e1e).into(),
                 mark_right: rgb(0x8b857e).into(),
                 mark_heat_white: rgb(0xfff2cc).into(),
@@ -1337,6 +1347,7 @@ mod look_tests {
                 (a.extra.accent, b.extra.accent),
                 (a.colors.primary, b.colors.primary),
                 (a.extra.mark_top, b.extra.mark_top),
+                (a.extra.page_ink, b.extra.page_ink),
                 (a.colors.surface, b.colors.surface),
             ] {
                 assert_eq!(x.to_rgb(), y.to_rgb());
