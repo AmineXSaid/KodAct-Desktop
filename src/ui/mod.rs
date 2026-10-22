@@ -15,6 +15,7 @@ pub mod command_palette;
 pub mod composer;
 pub mod confirm;
 pub mod design_bar;
+pub mod design_chips;
 pub mod design_comment;
 pub mod design_marks;
 pub mod context_menu;

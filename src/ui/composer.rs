@@ -35,6 +35,9 @@ pub struct Composer {
     input: Entity<TextareaState>,
     /// The model window's search box, and its row under the keyboard.
     filter: Entity<InputState>,
+    /// The design menu's search box, and the tab it was cleared for.
+    design_filter: Entity<InputState>,
+    design_tab_was: Option<crate::state::DesignTab>,
     active: Option<String>,
     picker_was_open: bool,
     /// Where the press that just closed a menu happened: the click it ends
@@ -73,6 +76,8 @@ impl Composer {
                 .submit_on_enter(true)
         });
         let filter = cx.new(|cx| InputState::new(window, cx).placeholder("Search models…"));
+        let design_filter =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Search the design library…"));
         let subs = vec![
             cx.observe_in(&state, window, |this, state, window, cx| {
                 // An edited message comes back here to be changed and sent.
@@ -111,7 +116,25 @@ impl Composer {
                     this.input.update(cx, |i, cx| i.focus(window, cx));
                 }
                 this.picker_was_open = open;
+                // The design menu on a new tab: an empty search.
+                let tab = state.read(cx).design_menu;
+                if tab != this.design_tab_was {
+                    let was = std::mem::replace(&mut this.design_tab_was, tab);
+                    this.design_filter.update(cx, |f, cx| f.set_value("", window, cx));
+                    // A list's search takes the keys; closing gives them back.
+                    match tab {
+                        Some(crate::state::DesignTab::Work) => {}
+                        Some(_) => this.design_filter.update(cx, |f, cx| f.focus(window, cx)),
+                        None if was.is_some() => this.input.update(cx, |i, cx| i.focus(window, cx)),
+                        None => {}
+                    }
+                }
                 cx.notify();
+            }),
+            cx.subscribe_in(&design_filter, window, |_, _, ev: &InputEvent, _, cx| {
+                if matches!(ev, InputEvent::Change) {
+                    cx.notify();
+                }
             }),
             cx.subscribe_in(&filter, window, |_, _, ev: &InputEvent, _, cx| {
                 if matches!(ev, InputEvent::Change) {
@@ -139,6 +162,8 @@ impl Composer {
             state,
             input,
             filter,
+            design_filter,
+            design_tab_was: None,
             active: None,
             picker_was_open: false,
             dismissed_at: None,
@@ -423,31 +448,58 @@ impl Render for Composer {
         // A menu closes on a press outside it (each listens on itself: it
         // floats above the composer, outside the composer's own box).
         let me = cx.entity().downgrade();
-        let dismiss = move |pos: gpui::Point<gpui::Pixels>, models: bool, cx: &mut gpui::App| {
+        let dismiss = move |pos: gpui::Point<gpui::Pixels>, menu: Menu, cx: &mut gpui::App| {
             let _ = me.update(cx, |c, cx| {
                 c.dismissed_at = Some(pos);
                 c.state.update(cx, |s, cx| {
-                    if models {
-                        s.picker_open = false;
-                    } else {
-                        s.modes_open = false;
-                        s.bypass_warning = false;
+                    match menu {
+                        Menu::Models => s.picker_open = false,
+                        Menu::Modes => {
+                            s.modes_open = false;
+                            s.bypass_warning = false;
+                        }
+                        Menu::Design => s.design_menu = None,
                     }
                     cx.notify();
                 });
             });
         };
-        let (dismiss_models, dismiss_modes) = (dismiss.clone(), dismiss);
+        let (dismiss_models, dismiss_modes, dismiss_design) =
+            (dismiss.clone(), dismiss.clone(), dismiss);
         let me = cx.entity().downgrade();
         let skip = move |ev: &gpui::ClickEvent, cx: &mut gpui::App| -> bool {
             me.update(cx, |c, _| c.just_dismissed(ev)).unwrap_or(false)
         };
 
         // The pieces that read the state are built first.
+        let me = cx.entity().downgrade();
+        let skip_design = move |ev: &gpui::ClickEvent, cx: &mut gpui::App| -> bool {
+            me.update(cx, |c, _| c.just_dismissed(ev)).unwrap_or(false)
+        };
+        let design_trigger = super::design_chips::trigger(&t, &state, cx, skip_design);
+        let design_menu = self.state.read(cx).design_menu.map(|tab| {
+            let query = self.design_filter.read(cx).value().to_string();
+            let search = div()
+                .mx(px(8.))
+                .mb(px(4.))
+                .child(
+                    Input::new(&self.design_filter)
+                        .appearance(false)
+                        .text_size(t.text.body_sm),
+                )
+                .px(px(8.))
+                .py(px(4.))
+                .rounded(px(4.))
+                .bg(t.colors.hover)
+                .into_any_element();
+            super::design_chips::menu(&t, &state, tab, &query, search, window, cx, move |pos, cx| {
+                dismiss_design(pos, Menu::Design, cx)
+            })
+        });
         let mode_trigger = super::mode_menu::trigger(&t, &state, cx, skip);
         let modes_menu = self.state.read(cx).modes_open.then(|| {
             super::mode_menu::menu(&t, &state, window, cx, move |pos, cx| {
-                dismiss_modes(pos, false, cx)
+                dismiss_modes(pos, Menu::Modes, cx)
             })
         });
         let query = self.filter.read(cx).value().to_string();
@@ -484,7 +536,7 @@ impl Render for Composer {
                 search,
                 window,
                 on_hover,
-                move |pos, cx| dismiss_models(pos, true, cx),
+                move |pos, cx| dismiss_models(pos, Menu::Models, cx),
             )
         });
         let model_name: SharedString = match (&s.endpoints, s.active_profile()) {
@@ -885,6 +937,10 @@ impl Render for Composer {
                             .px(t.space.tight)
                             .py(t.space.xs)
                             .child(project_button)
+                            // A design chat: the chip and its menu above it.
+                            .children(design_trigger.map(|d| {
+                                div().relative().child(d).children(design_menu)
+                            }))
                             .children(meter)
                             .child(div().flex_1())
                             .child(model_button)
@@ -895,6 +951,14 @@ impl Render for Composer {
         // Never wider than its own measure, centred wherever it sits.
         div().w_full().flex().justify_center().child(composer)
     }
+}
+
+/// The composer's menus, for closing the one a press fell outside of.
+#[derive(Clone, Copy)]
+enum Menu {
+    Models,
+    Modes,
+    Design,
 }
 
 /// The finished mentions in `text`, by byte range: a `/name` ForgeCLI runs,

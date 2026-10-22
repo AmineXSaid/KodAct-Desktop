@@ -104,6 +104,7 @@ pub fn trigger(
                 s.modes_open = !s.modes_open;
                 s.bypass_warning = false;
                 s.picker_open = false;
+                s.design_menu = None;
                 cx.notify();
             })
         })

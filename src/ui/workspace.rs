@@ -1084,6 +1084,7 @@ impl Render for Workspace {
                 this.state.update(cx, |s, cx| {
                     s.picker_open = !s.picker_open;
                     s.modes_open = false;
+                    s.design_menu = None;
                     cx.notify();
                 })
             }))
@@ -1109,6 +1110,8 @@ impl Render for Workspace {
                     // Esc closes what is open, the newest first, before it stops a reply.
                     if s.presenting {
                         s.set_presenting(false, cx);
+                    } else if s.design_menu.is_some() {
+                        s.design_menu_to(None, cx);
                     } else if s.design_pick.is_some() {
                         s.design_cancel_pick(cx);
                     } else if s.design_select {

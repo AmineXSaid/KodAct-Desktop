@@ -681,6 +681,18 @@ pub struct RemoteMenu {
     pub error: Option<SharedString>,
 }
 
+/// The composer's design menu's tabs: what a design chat is set up with.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DesignTab {
+    /// The kind of work (`design::prompt::Surface`).
+    Work,
+    /// The design system.
+    Look,
+    /// The template.
+    Start,
+    Skill,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum RemotePage {
     #[default]
@@ -1495,11 +1507,14 @@ pub struct AppState {
     design_systems_asked: bool,
     /// The whole design library's index, for design chats' prompts: read
     /// once, off the main thread, when the first design chat needs it.
-    design_index: Option<std::sync::Arc<crate::design::library::Index>>,
+    pub design_index: Option<std::sync::Arc<crate::design::library::Index>>,
     design_index_asked: bool,
     /// Chosen before the chat exists (on a new chat's screen): the chat
     /// your next message starts is a design chat set up with this.
     pub design_next: Option<crate::design::prompt::Setup>,
+    /// The composer's design menu (`ui/design_chips.rs`): open, and on
+    /// which tab.
+    pub design_menu: Option<DesignTab>,
     /// Layout guides: every box on the page outlined.
     pub design_guides: bool,
     /// The page's outline beside it, and the headings it lists.
@@ -1814,6 +1829,7 @@ impl AppState {
             design_index: None,
             design_index_asked: false,
             design_next: None,
+            design_menu: None,
             design_guides: false,
             design_outline: false,
             design_headings: Vec::new(),
@@ -4903,12 +4919,42 @@ impl AppState {
     /// Make the open chat a design chat for `surface`, keeping the design
     /// system, template and skill it already has.
     pub fn design_surface(&mut self, surface: crate::design::prompt::Surface, cx: &mut Context<Self>) {
-        let mut setup = match self.current {
-            Some(_) => self.chat().and_then(|c| c.design.clone()),
-            None => self.design_next.clone(),
-        }
-        .unwrap_or_default();
+        let mut setup = self.design_setup().cloned().unwrap_or_default();
         setup.surface = surface;
+        self.set_design(Some(setup), cx);
+    }
+
+    /// The open chat's design setup, or the next chat's on a new chat's
+    /// screen.
+    pub fn design_setup(&self) -> Option<&crate::design::prompt::Setup> {
+        match self.current {
+            Some(_) => self.chat().and_then(|c| c.design.as_ref()),
+            None => self.design_next.as_ref(),
+        }
+    }
+
+    /// Open the composer's design menu on `tab` (None closes it).
+    pub fn design_menu_to(&mut self, tab: Option<DesignTab>, cx: &mut Context<Self>) {
+        self.design_menu = tab;
+        if tab.is_some() {
+            self.picker_open = false;
+            self.modes_open = false;
+            self.design_load_index(cx);
+        }
+        cx.notify();
+    }
+
+    /// Set one part of the design setup from the composer's menu: the
+    /// design system, template or skill (by library id; None clears it).
+    /// Picking one makes the chat a design chat.
+    pub fn design_pick(&mut self, tab: DesignTab, id: Option<String>, cx: &mut Context<Self>) {
+        let mut setup = self.design_setup().cloned().unwrap_or_default();
+        match tab {
+            DesignTab::Work => return,
+            DesignTab::Look => setup.system = id,
+            DesignTab::Start => setup.template = id,
+            DesignTab::Skill => setup.skill = id,
+        }
         self.set_design(Some(setup), cx);
     }
 

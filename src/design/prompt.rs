@@ -72,6 +72,45 @@ impl Surface {
         }
     }
 
+    /// Its name on the composer's chip.
+    pub fn name(self) -> &'static str {
+        match self {
+            Surface::Any => "Design",
+            Surface::Deck => "Deck",
+            Surface::Prototype => "Prototype",
+            Surface::Document => "Document",
+            Surface::Marketing => "Marketing",
+            Surface::Video => "Video",
+            Surface::Motion => "Motion",
+        }
+    }
+
+    /// What it makes, under its name in the composer's menu.
+    pub fn description(self) -> &'static str {
+        match self {
+            Surface::Any => "Forge picks the kind of work from each request",
+            Surface::Deck => "Slides to present: a talk, a pitch, a course",
+            Surface::Prototype => "Screens to click through: an app, a site, a flow",
+            Surface::Document => "A page to read: a report, a guide, a course page",
+            Surface::Marketing => "A poster, a social image, a one-page layout",
+            Surface::Video => "A video made in HTML (HyperFrames)",
+            Surface::Motion => "Motion graphics: titles, transitions, explainers",
+        }
+    }
+
+    /// The library's `mode` for the skills and templates that fit it
+    /// (None: any).
+    pub fn modes(self) -> Option<&'static [&'static str]> {
+        match self {
+            Surface::Any => None,
+            Surface::Deck => Some(&["deck"]),
+            Surface::Prototype => Some(&["prototype"]),
+            Surface::Document => Some(&["prototype", "template", "utility"]),
+            Surface::Marketing => Some(&["image"]),
+            Surface::Video | Surface::Motion => Some(&["video"]),
+        }
+    }
+
     /// Open Design's task profile for it, in the library (Document has
     /// none: the charter and craft cover it).
     pub fn profile(self) -> Option<&'static str> {

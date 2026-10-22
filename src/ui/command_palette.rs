@@ -611,11 +611,7 @@ impl CommandPalette {
         // Design chats: the design prompt and tools (`design::prompt`).
         if crate::design::root().is_some() {
             use crate::design::prompt::Surface;
-            let now = match s.current {
-                Some(_) => s.chat().and_then(|c| c.design.as_ref()),
-                None => s.design_next.as_ref(),
-            }
-            .map(|d| d.surface);
+            let now = s.design_setup().map(|d| d.surface);
             let kinds: [(Surface, &str, Box<dyn Action>); 4] = [
                 (Surface::Any, "Design chat: any design", Box::new(DesignChat)),
                 (Surface::Deck, "Design chat: a deck", Box::new(DesignDeck)),
