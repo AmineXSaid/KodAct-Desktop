@@ -221,6 +221,7 @@ impl BrowserView {
                 }
                 _ => {
                     self.drawing = Some(Mark {
+                        anchor: None,
                         shape: Shape::Pen,
                         points: vec![p, p],
                         text: String::new(),
@@ -229,6 +230,7 @@ impl BrowserView {
             },
             crate::state::InsertTool::Mark(shape) => {
                 self.drawing = Some(Mark {
+                    anchor: None,
                     shape,
                     points: if shape == Shape::Pencil { vec![p] } else { vec![p, p] },
                     text: String::new(),
@@ -257,6 +259,7 @@ impl BrowserView {
         self.mark_input.update(cx, |i, cx| i.set_value("", window, cx));
         if !text.is_empty() {
             let mark = crate::design::marks::Mark {
+                anchor: None,
                 shape,
                 points: vec![at],
                 text,
@@ -489,7 +492,7 @@ impl Render for BrowserView {
         let tool_now = s.design_tool.filter(|_| design_bar.is_some());
         // The page's marks, and the one being drawn.
         let mut marks: Vec<crate::design::marks::Mark> = if design_bar.is_some() {
-            s.design_marks_here().into_iter().cloned().collect()
+            s.design_marks_here()
         } else {
             Vec::new()
         };
@@ -532,7 +535,7 @@ impl Render for BrowserView {
         let pins: Vec<_> = here
             .iter()
             .filter(|c| design_bar.is_some() && s.design_pins && (s.design_resolved || !c.resolved))
-            .map(|c| (c.n, c.sent, c.text.clone(), place(&c.part)))
+            .map(|c| (c.n, c.sent, c.text.clone(), place(&s.design_part_now(&c.part))))
             .collect();
         let room = self.page_bounds.get().size;
         let last_download = page.last_download.clone();

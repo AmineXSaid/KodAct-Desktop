@@ -119,6 +119,13 @@ pub enum Cmd {
     /// A deck's next (1) or previous (-1) slide: scrolled to when its
     /// slides are stacked, else by the deck's own arrow keys.
     Slide(i32),
+    /// Which part of the page is at this point (CSS pixels from the page's
+    /// top left): a new mark's anchor, said as `Update::AnchoredAt`.
+    AnchorAt { id: u64, x: f64, y: f64 },
+    /// The parts (CSS selectors) comments and marks are on: where each is
+    /// now is said as `Update::Anchors` whenever it changes (a zoom, a
+    /// wider panel, an edit), so they follow their part.
+    Anchors(Vec<String>),
     /// A picture of part of the page (CSS pixels from its top left, as
     /// x, y, width, height), with a script run before it (to put something
     /// on the page) and after (to take it off again): `Update::Picture`.
@@ -270,6 +277,11 @@ pub enum Update {
     /// The page is a deck: the slide in view and how many (None: not a
     /// deck). Said when it changes.
     Deck(Option<(usize, usize)>),
+    /// The part at a point (`Cmd::AnchorAt`).
+    AnchoredAt(u64, Option<PagePart>),
+    /// Where the tracked parts are now, each as its selector and box (CSS
+    /// pixels from the page's top left); a part not on the page is left out.
+    Anchors(Vec<(String, (f64, f64, f64, f64))>),
     /// A PNG of part of the page (`Cmd::Picture`), or why not.
     Picture(Result<Vec<u8>, String>),
     /// The open tabs, and which one is on screen.
@@ -893,6 +905,12 @@ fn devtools(
     // Layout guides' colour while they are on; the outline, while asked for.
     let mut guides: Option<String> = None;
     let (mut outline_on, mut outline_req) = (false, None::<u64>);
+    // The parts comments and marks are on, where they were last said to
+    // be, and the answers awaited: their boxes, and a new mark's part.
+    let mut anchors: Vec<String> = vec![];
+    let mut anchors_now: Vec<(String, (f64, f64, f64, f64))> = vec![];
+    let (mut anchors_req, mut anchors_asked) = (None::<u64>, Instant::now());
+    let mut anchor_at_req: std::collections::HashMap<u64, u64> = Default::default();
     // Which slide a deck shows, asked a few times a second.
     let (mut deck_req, mut deck_now) = (None::<u64>, None::<(usize, usize)>);
     let mut deck_asked = Instant::now();
@@ -1167,6 +1185,7 @@ fn devtools(
                     };
                     let (id, s) = (tab.target.clone(), tab.session.clone());
                     fit(&mut c, &id, &s, metrics, &mut events)?;
+                    anchors_asked = Instant::now() - Duration::from_millis(500);
                 }
                 Cmd::Pdf(to) => {
                     // A deck prints a slide a page (`live::DECK_PRINT_JS`).
@@ -1210,6 +1229,16 @@ fn devtools(
                 Cmd::Guides(colour) => {
                     guides = colour;
                     c.send(s, "Runtime.evaluate", json!({ "expression": guides_js(guides.as_deref()) }))?;
+                }
+                Cmd::AnchorAt { id, x, y } => {
+                    let js = format!("(() => {{ const x = {x} - scrollX, y = {y} - scrollY; return ({})(); }})()", part_fn_js());
+                    let req = c.send(s, "Runtime.evaluate", json!({ "expression": js, "returnByValue": true }))?;
+                    anchor_at_req.insert(req, id);
+                }
+                Cmd::Anchors(list) => {
+                    anchors = list;
+                    anchors_now.clear();
+                    anchors_asked = Instant::now() - Duration::from_secs(1);
                 }
                 Cmd::Slide(step) => {
                     c.send(s, "Runtime.evaluate", json!({ "expression": crate::design::live::slide_step_js(step) }))?;
@@ -1256,6 +1285,8 @@ fn devtools(
                     metrics.zoom = zoom.clamp(0.25, 2.0);
                     let (id, s) = (tab.target.clone(), tab.session.clone());
                     fit(&mut c, &id, &s, metrics, &mut events)?;
+                    // The page laid out again: where its parts went, soon.
+                    anchors_asked = Instant::now() - Duration::from_millis(500);
                 }
             }
         }
@@ -1280,6 +1311,14 @@ fn devtools(
                 Some(&tab.session),
                 "Runtime.evaluate",
                 json!({ "expression": part_js(x, y), "returnByValue": true }),
+            )?);
+        }
+        if !anchors.is_empty() && anchors_req.is_none() && anchors_asked.elapsed() > Duration::from_millis(700) {
+            anchors_asked = Instant::now();
+            anchors_req = Some(c.send(
+                Some(&tab.session),
+                "Runtime.evaluate",
+                json!({ "expression": anchors_js(&anchors), "returnByValue": true }),
             )?);
         }
         if deck_req.is_none() && deck_asked.elapsed() > Duration::from_millis(400) {
@@ -1309,6 +1348,22 @@ fn devtools(
                 if let Some(v) = value.filter(|v| !v.is_empty()) {
                     say(Update::Copied(v))?;
                 }
+            } else if Some(id) == anchors_req {
+                anchors_req = None;
+                let boxes: Vec<Option<(f64, f64, f64, f64)>> =
+                    value.and_then(|v| serde_json::from_str(&v).ok()).unwrap_or_default();
+                let now: Vec<_> = anchors
+                    .iter()
+                    .zip(boxes)
+                    .filter_map(|(sel, b)| b.map(|b| (sel.clone(), b)))
+                    .collect();
+                if now != anchors_now {
+                    anchors_now = now.clone();
+                    say(Update::Anchors(now))?;
+                }
+            } else if let Some(mark) = anchor_at_req.remove(&id) {
+                let part = value.and_then(|v| serde_json::from_str::<PagePart>(&v).ok());
+                say(Update::AnchoredAt(mark, part))?;
             } else if Some(id) == deck_req {
                 deck_req = None;
                 let at = value
@@ -1411,6 +1466,8 @@ fn devtools(
             "Page.frameStartedLoading" if on_tab => say(Update::Loading(true))?,
             "Page.frameStoppedLoading" if on_tab => {
                 say(Update::Loading(false))?;
+                // Where the comments' and marks' parts are on it, soon.
+                anchors_asked = Instant::now() - Duration::from_millis(500);
                 // A page loaded: its guides again, and its headings.
                 let s = Some(tab.session.as_str());
                 if guides.is_some() {
@@ -1475,31 +1532,44 @@ fn devtools(
 /// again (by id, else tag, two classes and place, up to six levels), the
 /// start of its text, and its box on the page.
 fn part_js(x: f64, y: f64) -> String {
-    format!(
-        r#"(() => {{
-const e = document.elementFromPoint({x}, {y});
+    format!("(() => {{ const x = {x}, y = {y}; return ({})(); }})()", part_fn_js())
+}
+
+/// The part of the page at viewport point (`x`, `y`, in scope), as a
+/// function: its tag, text, a selector that finds it again, and its box.
+fn part_fn_js() -> &'static str {
+    r#"() => {
+const e = document.elementFromPoint(x, y);
 if (!e || e === document.body || e === document.documentElement) return '';
-const step = el => {{
+const step = el => {
   if (el.id) return '#' + CSS.escape(el.id);
   let s = el.tagName.toLowerCase();
   for (const c of [...el.classList].slice(0, 2)) s += '.' + CSS.escape(c);
   const p = el.parentElement;
-  if (p) {{
+  if (p) {
     const same = [...p.children].filter(c => c.tagName === el.tagName);
     if (same.length > 1) s += ':nth-of-type(' + (same.indexOf(el) + 1) + ')';
-  }}
+  }
   return s;
-}};
+};
 const path = [];
-for (let el = e; el && el !== document.body && el !== document.documentElement && path.length < 6; el = el.parentElement) {{
+for (let el = e; el && el !== document.body && el !== document.documentElement && path.length < 6; el = el.parentElement) {
   const s = step(el);
   path.unshift(s);
   if (s.startsWith('#')) break;
-}}
+}
 const r = e.getBoundingClientRect();
 const text = (e.innerText || e.getAttribute('alt') || e.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim().slice(0, 160);
-return JSON.stringify({{ tag: e.tagName.toLowerCase(), text, selector: path.join(' > '), x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height }});
-}})()"#
+return JSON.stringify({ tag: e.tagName.toLowerCase(), text, selector: path.join(' > '), x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height });
+}"#
+}
+
+/// Where each selector's element is now (page CSS pixels), as JSON: a box,
+/// or null when it isn't on the page.
+fn anchors_js(selectors: &[String]) -> String {
+    format!(
+        "JSON.stringify({}.map(s => {{ try {{ const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); return [r.left + scrollX, r.top + scrollY, r.width, r.height]; }} catch (_) {{ return null; }} }}))",
+        serde_json::to_string(selectors).unwrap_or_else(|_| "[]".into())
     )
 }
 

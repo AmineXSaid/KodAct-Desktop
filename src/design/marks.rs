@@ -41,6 +41,58 @@ pub struct Mark {
     pub points: Vec<(f64, f64)>,
     /// A label's or a note's words.
     pub text: String,
+    /// The part of the page it was drawn on, and that part's box then: it
+    /// follows the part when the page lays out again (a zoom, a wider
+    /// panel). None until the page says (or when drawn on nothing).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<Anchor>,
+}
+
+/// A part of the page, and its box (page CSS pixels) when it was taken.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Anchor {
+    pub selector: String,
+    pub at: (f64, f64, f64, f64),
+}
+
+impl Anchor {
+    /// Where `p`, placed against this part's box then, is against its box
+    /// `now`: the same place from its corner, scaled as its height changed
+    /// (type keeps its size when the page lays out wider, so a title keeps
+    /// its height while its box widens; type that grows with the window
+    /// grows the part's height too).
+    pub fn follow(&self, now: (f64, f64, f64, f64), (x, y): (f64, f64)) -> (f64, f64) {
+        let k = if self.at.3 > 0.0 { (now.3 / self.at.3).clamp(0.5, 2.0) } else { 1.0 };
+        (now.0 + (x - self.at.0) * k, now.1 + (y - self.at.1) * k)
+    }
+}
+
+impl Mark {
+    /// The point whose part the mark follows: a box's or ring's middle, an
+    /// arrow's or line's tip, where a label or note was put, a stroke's
+    /// middle.
+    pub fn anchor_point(&self) -> Option<(f64, f64)> {
+        match self.shape {
+            Shape::Arrow | Shape::Line => self.points.last().copied(),
+            Shape::Text | Shape::Note => self.points.first().copied(),
+            _ => {
+                let (x, y, w, h) = self.bounds();
+                (!self.points.is_empty()).then_some((x + w / 2.0, y + h / 2.0))
+            }
+        }
+    }
+
+    /// The mark where its part is `now` (unchanged without an anchor or a
+    /// box for it).
+    pub fn followed(&self, now: Option<(f64, f64, f64, f64)>) -> Mark {
+        match (&self.anchor, now) {
+            (Some(a), Some(now)) if now != a.at => Mark {
+                points: self.points.iter().map(|p| a.follow(now, *p)).collect(),
+                ..self.clone()
+            },
+            _ => self.clone(),
+        }
+    }
 }
 
 impl Mark {
@@ -252,8 +304,26 @@ pub fn message(page: &str, marks: &[Mark], comment: &str) -> String {
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_mark_follows_its_part() {
+        let mut m = mark(Shape::Rect, &[(110.0, 210.0), (150.0, 230.0)], "");
+        m.anchor = Some(Anchor { selector: "h1".into(), at: (100.0, 200.0, 400.0, 40.0) });
+        // The page laid out wider: the title moved and grew by half.
+        let moved = m.followed(Some((50.0, 300.0, 600.0, 60.0)));
+        assert_eq!(moved.points, vec![(65.0, 315.0), (125.0, 345.0)]);
+        // A title one line high in a wider box keeps its size.
+        let wider = m.followed(Some((50.0, 300.0, 900.0, 40.0)));
+        assert_eq!(wider.points, vec![(60.0, 310.0), (100.0, 330.0)]);
+        assert_eq!(m.anchor_point(), Some((130.0, 220.0)));
+        assert_eq!(mark(Shape::Arrow, &[(0.0, 0.0), (9.0, 9.0)], "").anchor_point(), Some((9.0, 9.0)));
+        // Nowhere to be found, or where it was: as drawn.
+        assert_eq!(m.followed(None), m);
+        assert_eq!(m.followed(Some((100.0, 200.0, 400.0, 40.0))), m);
+    }
+
     fn mark(shape: Shape, points: &[(f64, f64)], text: &str) -> Mark {
         Mark {
+            anchor: None,
             shape,
             points: points.to_vec(),
             text: text.into(),

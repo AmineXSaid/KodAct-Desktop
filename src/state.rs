@@ -1520,6 +1520,13 @@ pub struct AppState {
     /// The composer's design menu (`ui/design_chips.rs`): open, and on
     /// which tab.
     pub design_menu: Option<DesignTab>,
+    /// Where the parts the page's comments and marks are on are now, by
+    /// selector (`Update::Anchors`); the selectors last given the browser;
+    /// new marks waiting to hear their part, by request.
+    pub design_anchors: std::collections::HashMap<String, (f64, f64, f64, f64)>,
+    design_anchors_sent: Vec<String>,
+    design_anchor_wait: std::collections::HashMap<u64, (std::path::PathBuf, Vec<(f64, f64)>)>,
+    design_anchor_next: u64,
     /// Layout guides: every box on the page outlined.
     pub design_guides: bool,
     /// The page's outline beside it, and the headings it lists.
@@ -1835,6 +1842,10 @@ impl AppState {
             design_index: None,
             design_index_asked: false,
             design_next: None,
+            design_anchors: Default::default(),
+            design_anchors_sent: vec![],
+            design_anchor_wait: Default::default(),
+            design_anchor_next: 0,
             design_menu: None,
             design_guides: false,
             design_outline: false,
@@ -4710,15 +4721,54 @@ impl AppState {
     }
 
     /// The marks on the page on screen.
-    pub fn design_marks_here(&self) -> Vec<&crate::design::marks::Mark> {
+    /// The marks on the page on screen, where their parts are now.
+    pub fn design_marks_here(&self) -> Vec<crate::design::marks::Mark> {
         let Some(page) = self.design_on_screen() else {
             return Vec::new();
         };
         self.design_marks
             .iter()
             .filter(|(_, p, _)| *p == page)
-            .map(|(_, _, m)| m)
+            .map(|(_, _, m)| {
+                let now = m.anchor.as_ref().and_then(|a| self.design_anchors.get(&a.selector)).copied();
+                m.followed(now)
+            })
             .collect()
+    }
+
+    /// A comment's part where it is now (as picked when the page doesn't
+    /// say otherwise).
+    pub fn design_part_now(&self, part: &crate::web_view::PagePart) -> crate::web_view::PagePart {
+        match self.design_anchors.get(&part.selector) {
+            Some(&(x, y, w, h)) => crate::web_view::PagePart { x, y, w, h, ..part.clone() },
+            None => part.clone(),
+        }
+    }
+
+    /// Tell the browser which parts the page on screen has comments and
+    /// marks on, when that changes, so they follow them.
+    fn design_sync_anchors(&mut self, cx: &mut Context<Self>) {
+        let mut list: Vec<String> = self
+            .design_comments_here()
+            .iter()
+            .map(|c| c.part.selector.clone())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if let Some(page) = self.design_on_screen() {
+            list.extend(
+                self.design_marks
+                    .iter()
+                    .filter(|(_, p, _)| *p == page)
+                    .filter_map(|(_, _, m)| m.anchor.as_ref().map(|a| a.selector.clone())),
+            );
+        }
+        list.sort();
+        list.dedup();
+        if list != self.design_anchors_sent {
+            self.design_anchors.clear();
+            self.design_anchors_sent = list.clone();
+            self.web_send(crate::web_view::Cmd::Anchors(list), cx);
+        }
     }
 
     /// Keep a mark drawn on the page on screen (one too small to mean
@@ -4728,6 +4778,13 @@ impl AppState {
             return;
         };
         if mark.worth_keeping() {
+            // Ask which part it is on, to follow that part later.
+            if let Some((x, y)) = mark.anchor_point() {
+                self.design_anchor_next += 1;
+                let id = self.design_anchor_next;
+                self.design_anchor_wait.insert(id, (page.clone(), mark.points.clone()));
+                self.web_send(crate::web_view::Cmd::AnchorAt { id, x, y }, cx);
+            }
             self.design_marks.push((chat, page, mark));
             self.mark_dirty(chat, cx);
             cx.notify();
@@ -4752,7 +4809,7 @@ impl AppState {
     /// Open the comment box on the page's marks: what you say goes to Forge
     /// with a picture of them.
     pub fn design_comment_on_marks(&mut self, cx: &mut Context<Self>) {
-        let marks: Vec<_> = self.design_marks_here().into_iter().cloned().collect();
+        let marks: Vec<_> = self.design_marks_here();
         let Some((x, y, w, h)) = crate::design::marks::bounds(&marks, 0.0) else {
             return;
         };
@@ -4788,7 +4845,7 @@ impl AppState {
         cx: &mut Context<Self>,
     ) {
         use crate::theme::ActiveTheme;
-        let marks: Vec<_> = self.design_marks_here().into_iter().cloned().collect();
+        let marks: Vec<_> = self.design_marks_here();
         if marks.is_empty() {
             return;
         }
@@ -5141,6 +5198,7 @@ impl AppState {
             resolved: false,
         });
         self.mark_dirty(chat, cx);
+        self.design_sync_anchors(cx);
         cx.notify();
     }
 
@@ -5412,10 +5470,12 @@ impl AppState {
                 let (url, title) = self.design_named(url, title);
                 self.web_page.url = url;
                 self.web_page.title = title;
-                // A design page on screen: its undo history from its file.
+                // A design page on screen: its undo history from its file,
+                // and the parts its comments and marks are on, to follow.
                 if let Some(p) = self.design_on_screen() {
                     self.design_load_versions(&p);
                 }
+                self.design_sync_anchors(cx);
             }
             Update::Tabs(tabs, on) => {
                 self.web_page.tabs = tabs
@@ -5450,6 +5510,27 @@ impl AppState {
             Update::Picture(png) => self.design_marks_pictured(png, cx),
             Update::Deck(at) => {
                 self.web_page.deck = at;
+            }
+            Update::Anchors(now) => {
+                self.design_anchors = now.into_iter().collect();
+            }
+            Update::AnchoredAt(id, part) => {
+                let (Some((page, points)), Some(part)) = (self.design_anchor_wait.remove(&id), part) else {
+                    return;
+                };
+                let found = self
+                    .design_marks
+                    .iter_mut()
+                    .find(|(_, p, m)| *p == page && m.points == points && m.anchor.is_none());
+                if let Some((chat, _, m)) = found {
+                    m.anchor = Some(crate::design::marks::Anchor {
+                        selector: part.selector,
+                        at: (part.x, part.y, part.w, part.h),
+                    });
+                    let chat = *chat;
+                    self.mark_dirty(chat, cx);
+                    self.design_sync_anchors(cx);
+                }
             }
             Update::Outline(heads) => {
                 self.design_headings = heads;

@@ -162,6 +162,7 @@ mod tests {
             marks: vec![(
                 "/p/index.html".into(),
                 Mark {
+                    anchor: None,
                     shape: super::super::marks::Shape::Rect,
                     points: vec![(1.0, 2.0), (3.0, 4.0)],
                     text: String::new(),
