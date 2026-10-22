@@ -6,9 +6,11 @@
 
 pub mod frontmatter;
 pub mod library;
+pub mod lint;
 pub mod live;
 pub mod marks;
 pub mod od_subset;
+pub mod prompt;
 pub mod skill_meta;
 
 use std::path::{Path, PathBuf};

@@ -20,6 +20,7 @@ mod browser_mcp;
 mod commands;
 mod context;
 mod design;
+mod design_mcp;
 mod diagnose;
 mod diagram;
 mod doc_versions;
@@ -169,6 +170,17 @@ fn main() {
     // `--design-check`: load the design library and report on it (`design::check`).
     if args.get(1).map(String::as_str) == Some("--design-check") {
         std::process::exit(design::check(&args[2..]));
+    }
+    // `--design-mcp <devtools> <focus-file>`: serve the design tools
+    // (`design_mcp.rs`); an empty devtools address means no browser.
+    if args.get(1).map(String::as_str) == Some("--design-mcp") {
+        let devtools = args.get(2).cloned().unwrap_or_default();
+        let focus = args
+            .get(3)
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(browser::focus_file);
+        design_mcp::serve(&devtools, &focus);
+        return;
     }
     if args.get(1).map(String::as_str) == Some("--browser-mcp") {
         let devtools = args.get(2).cloned().unwrap_or_default();

@@ -44,6 +44,9 @@ pub struct SavedChat {
     /// Earlier versions, replaced by an edit or a retry.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub versions: Vec<SavedVersion>,
+    /// A design chat's setup (`design::prompt::Setup`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub design: Option<crate::design::prompt::Setup>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -357,6 +360,7 @@ fn save_messages(chat: &Chat, project: &Path) -> SavedChat {
         pinned: chat.pinned,
         updated: secs(chat.updated),
         versions: vec![],
+        design: chat.design.clone(),
         messages: chat
             .messages
             .iter()

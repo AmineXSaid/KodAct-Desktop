@@ -353,6 +353,31 @@ output for every surface, and a token budget is tested per surface.
 `backend.rs` passes the result with `--append-system-prompt` for design
 chats. The flag is already in use.
 
+Built in D2b (`src/design/prompt.rs`):
+- Part 1 is Forge's own charter: one self-contained HTML file, written top to
+  bottom so the panel shows it forming; Edit for changes; real content only;
+  render, lint and critique up to three rounds; how comments arrive; no
+  claimed exports. Open Design's core prompt and orchestration aren't used:
+  they drive its plan-then-build turns and host markers, which Forge doesn't
+  have.
+- Part 2 is Open Design's task profile, kept exactly as written, after a short
+  note on what its host's words mean in Forge (`.od-frames/` files are copied
+  from the library). "Any design" lists the profiles for `design_read`.
+- Parts 3 to 6 come from the library index. Craft is the surface's set plus
+  the skill's and template's. Budgets: charter 8 KB, profile 24 KB, design
+  system 40 KB, craft 48 KB, skill and template 24 KB each. A part over its
+  budget is cut at a paragraph and names the path to read the rest.
+- The prompt goes in a file (`--append-system-prompt-file`), because Windows
+  caps a command line at 32K characters. ForgeCLI joins it to the surface
+  prompt. Checked against the real ForgeCLI with a stand-in API.
+- A chat becomes a design chat from the palette ("Design chat: a deck,
+  a prototype, a document, any design"; "End the design chat"), or on a new
+  chat's screen for the chat your next message starts. The setup is saved
+  with the chat. Picking a design system from the Library keeps it for the
+  chat. The composer chips are still to come.
+- Local chats only for now: a remote ForgeCLI can't read the prompt file or
+  run this app as an MCP server.
+
 ### 5.2 The design library on disk
 
 - Everything in §4.1 and §4.2 lives in a `design/` folder.
@@ -380,6 +405,20 @@ These replace Open Design's `od` CLI. They're an MCP server served by the same
 | `design_capture` | A URL → HTML snapshot, Figma IR, or brand kit |
 | `design_tokens` | Read or suggest a project's tokens |
 | `design_ask` | Show a GenUI form in Forge (discovery questions, direction picker) |
+
+Built in D2b (`src/design_mcp.rs`, `src/design/lint.rs`): `design_search`,
+`design_read` (entries, task profiles as kind `profile`, any file inside the
+library, never outside it; long files in parts), `design_render` and
+`design_lint`. Render shows the page in the panel (its own tab reloaded, or a
+new one) and takes the picture. For slides n..m it scrolls to slides stacked
+down the page, and drives a one-at-a-time deck (html-ppt) with its own keys.
+Lint checks the source for placeholders, stub comments, unpaired tags, a
+missing `</html>`, missing local files, unpinned or `@latest` CDN links, and
+a missing title or viewport. When the panel shows the page, it also checks
+in the page for horizontal overflow, content outside its slide, and clipped
+text. Design chats get the tools on the panel's Chromium, started for them.
+`design_tokens`, `design_export`, `design_capture` and `design_ask` come with
+D3–D5.
 
 ### 5.4 Exports
 

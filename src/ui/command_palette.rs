@@ -608,6 +608,29 @@ impl CommandPalette {
                 ));
             }
         }
+        // Design chats: the design prompt and tools (`design::prompt`).
+        if crate::design::root().is_some() {
+            use crate::design::prompt::Surface;
+            let now = match s.current {
+                Some(_) => s.chat().and_then(|c| c.design.as_ref()),
+                None => s.design_next.as_ref(),
+            }
+            .map(|d| d.surface);
+            let kinds: [(Surface, &str, Box<dyn Action>); 4] = [
+                (Surface::Any, "Design chat: any design", Box::new(DesignChat)),
+                (Surface::Deck, "Design chat: a deck", Box::new(DesignDeck)),
+                (Surface::Prototype, "Design chat: a prototype", Box::new(DesignPrototype)),
+                (Surface::Document, "Design chat: a document", Box::new(DesignDocument)),
+            ];
+            for (surface, label, action) in kinds {
+                if now != Some(surface) {
+                    out.push(act(label, "icons/sparkles.svg", None, action));
+                }
+            }
+            if now.is_some() {
+                out.push(act("End the design chat", "icons/x.svg", None, Box::new(EndDesignChat)));
+            }
+        }
         // The browser's page: zoom it, present it, save it; and the design's.
         if s.web.is_some() {
             out.extend([

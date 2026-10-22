@@ -173,6 +173,11 @@ gpui::actions!(
         UndoPage,
         RedoPage,
         DuplicatePage,
+        DesignChat,
+        DesignDeck,
+        DesignPrototype,
+        DesignDocument,
+        EndDesignChat,
         Quit,
     ]
 );

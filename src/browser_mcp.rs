@@ -201,7 +201,7 @@ fn key_info(key: &str) -> Option<(String, String, i64, Option<String>)> {
     Some((c.to_string(), code, vk, Some(c.to_string())))
 }
 
-struct Browser {
+pub(crate) struct Browser {
     http: String,
     focus_file: PathBuf,
     conn: Option<Conn>,
@@ -223,14 +223,14 @@ fn download_lines(focus_file: &Path) -> Vec<String> {
 }
 
 /// One tool's answer: MCP content blocks, and whether it failed.
-type Answer = Result<Vec<Value>, String>;
+pub(crate) type Answer = Result<Vec<Value>, String>;
 
 fn text(s: impl Into<String>) -> Vec<Value> {
     vec![json!({ "type": "text", "text": s.into() })]
 }
 
 impl Browser {
-    fn new(http: &str, focus_file: &Path) -> Self {
+    pub(crate) fn new(http: &str, focus_file: &Path) -> Self {
         Self {
             http: http.trim_end_matches('/').to_string(),
             focus_file: focus_file.to_path_buf(),
@@ -241,6 +241,22 @@ impl Browser {
             events: vec![],
             downloads_seen: download_lines(focus_file).len(),
         }
+    }
+
+    /// One of the browser tools, as the agent would call it (the design
+    /// tools' render and lint use these on the panel's own tab).
+    pub(crate) fn step(&mut self, name: &str, a: &Value) -> Answer {
+        self.run_step(name, a)
+    }
+
+    /// The open tabs.
+    pub(crate) fn tab_list(&mut self) -> Result<Vec<TabInfo>, String> {
+        self.tabs()
+    }
+
+    /// Run JS in the current tab.
+    pub(crate) fn js(&mut self, js: &str) -> Result<Value, String> {
+        self.eval(js)
     }
 
     /// Run a tool, and add what else happened meanwhile: dialogs the page

@@ -661,6 +661,9 @@ pub struct Chat {
     pub updated: SystemTime,
     /// Earlier versions of the conversation, replaced by an edit or a retry.
     pub versions: Vec<Version>,
+    /// A design chat: what its design prompt is built from
+    /// (`design::prompt`). None for an ordinary chat.
+    pub design: Option<crate::design::prompt::Setup>,
 }
 
 /// The remote indicator's menu (`ui/remote_menu.rs`): which page shows and
@@ -770,6 +773,7 @@ impl Chat {
             resumable: false,
             updated: SystemTime::now(),
             versions: vec![],
+            design: None,
         }
     }
 
@@ -1489,6 +1493,13 @@ pub struct AppState {
     /// when there is no library).
     pub design_systems: Option<std::sync::Arc<Vec<SystemCard>>>,
     design_systems_asked: bool,
+    /// The whole design library's index, for design chats' prompts: read
+    /// once, off the main thread, when the first design chat needs it.
+    design_index: Option<std::sync::Arc<crate::design::library::Index>>,
+    design_index_asked: bool,
+    /// Chosen before the chat exists (on a new chat's screen): the chat
+    /// your next message starts is a design chat set up with this.
+    pub design_next: Option<crate::design::prompt::Setup>,
     /// Layout guides: every box on the page outlined.
     pub design_guides: bool,
     /// The page's outline beside it, and the headings it lists.
@@ -1800,6 +1811,9 @@ impl AppState {
             design_order: Default::default(),
             design_systems: None,
             design_systems_asked: false,
+            design_index: None,
+            design_index_asked: false,
+            design_next: None,
             design_guides: false,
             design_outline: false,
             design_headings: Vec::new(),
@@ -2220,6 +2234,7 @@ impl AppState {
                 resumable: c.resumable,
                 updated,
                 versions,
+                design: c.design,
                 ..Chat::new(id, project, c.title.into())
             });
         }
@@ -4820,7 +4835,101 @@ impl AppState {
             card.title,
             card.dir.join("DESIGN.md").display()
         ));
+        // A design chat keeps the look for what it makes next.
+        if let Some(mut setup) = self.chat().and_then(|c| c.design.clone()) {
+            setup.system = Some(card.id.clone());
+            self.set_design(Some(setup), cx);
+        }
         cx.notify();
+    }
+
+    /// Make the open chat a design chat set up with `setup`, or an
+    /// ordinary chat again (None). Its next message starts ForgeCLI again
+    /// (resuming the conversation) with the design prompt and tools.
+    pub fn set_design(&mut self, setup: Option<crate::design::prompt::Setup>, cx: &mut Context<Self>) {
+        if setup.is_some() && crate::design::root().is_none() {
+            return self.show_toast(
+                "Forge's design library isn't installed: put design-library beside Forge, or set FORGE_DESIGN_LIB.",
+                cx,
+            );
+        }
+        // A new chat's screen: the chat your next message starts.
+        let Some(id) = self.current else {
+            let toast = match &setup {
+                Some(s) => format!("Your next chat is a design chat: {}.", s.surface.label()),
+                None => "Your next chat is an ordinary chat.".into(),
+            };
+            self.design_next = setup;
+            if self.design_next.is_some() {
+                self.design_load_index(cx);
+            }
+            self.show_toast(toast, cx);
+            return cx.notify();
+        };
+        if self.chat_remote(id).is_some() && setup.is_some() {
+            self.show_toast("Design chats work in local projects for now: this one gets no design prompt or tools.", cx);
+        }
+        let Some(chat) = self.chat_mut(id) else { return };
+        if chat.design == setup {
+            return;
+        }
+        let was = std::mem::replace(&mut chat.design, setup.clone());
+        let toast = match (&setup, was) {
+            (Some(s), None) => format!(
+                "Design chat: {}. Forge gets the design prompt and tools from your next message.",
+                s.surface.label()
+            ),
+            (Some(s), Some(_)) => format!("Design chat: {}.", s.surface.label()),
+            (None, _) => "An ordinary chat again: no design prompt or tools from the next message.".into(),
+        };
+        // Its ForgeCLI starts again on the next message, unless a reply is
+        // running (that one keeps what it started with).
+        if self
+            .chats
+            .iter()
+            .find(|c| c.id == id)
+            .is_some_and(|c| self.status(c) != ChatStatus::Working)
+        {
+            self.sessions.remove(&id);
+        }
+        self.mark_dirty(id, cx);
+        if setup.is_some() {
+            self.design_load_index(cx);
+        }
+        self.show_toast(toast, cx);
+        cx.notify();
+    }
+
+    /// Make the open chat a design chat for `surface`, keeping the design
+    /// system, template and skill it already has.
+    pub fn design_surface(&mut self, surface: crate::design::prompt::Surface, cx: &mut Context<Self>) {
+        let mut setup = match self.current {
+            Some(_) => self.chat().and_then(|c| c.design.clone()),
+            None => self.design_next.clone(),
+        }
+        .unwrap_or_default();
+        setup.surface = surface;
+        self.set_design(Some(setup), cx);
+    }
+
+    /// Read the library's index for design chats, once, off the main thread.
+    fn design_load_index(&mut self, cx: &mut Context<Self>) {
+        if std::mem::replace(&mut self.design_index_asked, true) {
+            return;
+        }
+        cx.spawn(async move |this, cx| {
+            let ix = cx
+                .background_spawn(async move {
+                    crate::design::root().map(|r| std::sync::Arc::new(crate::design::library::Index::load(&r)))
+                })
+                .await;
+            let _ = this.update(cx, |s, _| {
+                if s.design_index.is_none() {
+                    s.design_index = ix;
+                }
+            });
+        })
+        .detach();
     }
 
     /// Put a page of the chat's before another in its list (dragged in
@@ -7075,8 +7184,13 @@ impl AppState {
                 } else {
                     crate::title::untitled(self.chats.iter().map(|c| c.title.as_ref()))
                 };
-                self.chats
-                    .insert(0, Chat::new(id, self.current_project, title.clone().into()));
+                self.chats.insert(
+                    0,
+                    Chat {
+                        design: self.design_next.take(),
+                        ..Chat::new(id, self.current_project, title.clone().into())
+                    },
+                );
                 self.current = Some(id);
                 self.keep_mode();
                 if let Some(profile) = profile.filter(|_| !demo_mode() && !text.trim().is_empty()) {
@@ -7342,6 +7456,47 @@ impl AppState {
                     "--mcp-config".to_string(),
                     crate::browser::mcp_config(&exe, &cdp, &crate::browser::focus_file()),
                 ]);
+            }
+        }
+        // A design chat: its prompt, built from the library, and the design
+        // tools on the panel's browser (started for it even when the
+        // browser setting is off). Local chats only for now: a remote
+        // ForgeCLI can't run this app or read the prompt's file.
+        let design = self
+            .chats
+            .iter()
+            .find(|c| c.id == id)
+            .and_then(|c| c.design.clone());
+        if let (Some(setup), None) = (design, &remote) {
+            if let Some(root) = crate::design::root() {
+                // Read in the background when the chat became a design chat;
+                // if that hasn't finished, read now.
+                let ix = self.design_index.clone().unwrap_or_else(|| {
+                    std::sync::Arc::new(crate::design::library::Index::load(&root))
+                });
+                let text = crate::design::prompt::compose(&ix, &setup);
+                self.design_index = Some(ix);
+                let file = crate::profile::dir()
+                    .unwrap_or_else(std::env::temp_dir)
+                    .join("design-prompts")
+                    .join(format!("{session_id}.md"));
+                let written = file
+                    .parent()
+                    .map_or(Ok(()), std::fs::create_dir_all)
+                    .and_then(|_| std::fs::write(&file, text));
+                if written.is_ok() {
+                    launch.args.extend([
+                        "--append-system-prompt-file".to_string(),
+                        file.to_string_lossy().into_owned(),
+                    ]);
+                }
+                if let Ok(exe) = std::env::current_exe() {
+                    let cdp = self.ensure_web(cx).unwrap_or_default();
+                    launch.args.extend([
+                        "--mcp-config".to_string(),
+                        crate::design_mcp::mcp_config(&exe, &cdp, &crate::browser::focus_file()),
+                    ]);
+                }
             }
         }
         // The settings profile, layered above the other settings files, and

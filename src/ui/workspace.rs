@@ -936,6 +936,21 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &ZoomFit, _, cx| {
                 this.state.update(cx, |s, cx| s.web_zoom_fit(cx))
             }))
+            .on_action(cx.listener(|this, _: &DesignChat, _, cx| {
+                this.state.update(cx, |s, cx| s.design_surface(crate::design::prompt::Surface::Any, cx))
+            }))
+            .on_action(cx.listener(|this, _: &DesignDeck, _, cx| {
+                this.state.update(cx, |s, cx| s.design_surface(crate::design::prompt::Surface::Deck, cx))
+            }))
+            .on_action(cx.listener(|this, _: &DesignPrototype, _, cx| {
+                this.state.update(cx, |s, cx| s.design_surface(crate::design::prompt::Surface::Prototype, cx))
+            }))
+            .on_action(cx.listener(|this, _: &DesignDocument, _, cx| {
+                this.state.update(cx, |s, cx| s.design_surface(crate::design::prompt::Surface::Document, cx))
+            }))
+            .on_action(cx.listener(|this, _: &EndDesignChat, _, cx| {
+                this.state.update(cx, |s, cx| s.set_design(None, cx))
+            }))
             .on_action(cx.listener(|this, _: &Present, _, cx| {
                 this.state.update(cx, |s, cx| s.set_presenting(!s.presenting, cx))
             }))
