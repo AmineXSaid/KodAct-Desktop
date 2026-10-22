@@ -1,7 +1,7 @@
 //! Forge's own plugin (`assets/forge-plugin`), given to every ForgeCLI
 //! session with `--plugin-dir`: the Diagram Design skill (MIT,
-//! cathrynlavery/diagram-design, in Forge's skin) and the office-documents
-//! skill. It is built into the app and unpacked once per version into the
+//! cathrynlavery/diagram-design, in Forge's skin), the design skill (decks,
+//! pages and prototypes for the side panel) and the office-documents skill. It is built into the app and unpacked once per version into the
 //! config folder, `plugin/<hash>/forge/`, so a release needs no files beside it.
 
 use std::path::PathBuf;
@@ -79,6 +79,7 @@ mod tests {
             names.contains(&"forge:diagram-design".to_string()),
             "{names:?}"
         );
+        assert!(names.contains(&"forge:design".to_string()), "{names:?}");
         assert!(super::skills().iter().all(|(_, d)| !d.is_empty()));
     }
 

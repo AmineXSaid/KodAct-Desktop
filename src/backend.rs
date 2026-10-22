@@ -158,8 +158,9 @@ fn cli_base_url(profile: &Profile) -> String {
 /// here. Every diagram is drawn with the Diagram Design skill (`plugin.rs`)
 /// unless the user names another format (Mermaid, ASCII, SVG, ...), which
 /// then wins; Mermaid and SVG blocks still render inline (`mermaid.rs`).
-/// An HTML page Forge writes is rendered, critiqued and revised before the
-/// reply ends (up to three rounds).
+/// Visual design work goes through the design skill. An HTML page Forge
+/// writes is rendered, critiqued and revised before the reply ends (up to
+/// three rounds).
 pub const SURFACE_PROMPT: &str = "You are running inside Forge Desktop, which renders your replies as Markdown and draws diagrams in the chat. \
 Diagram Design is the default for every diagram. When the user asks for a diagram, chart or graph, or one would explain structure \
 or flow better than prose (architecture, a request's path, data flow, states, a sequence of calls, a data model, a timeline, a \
@@ -169,6 +170,7 @@ and name it in your reply. When the user asks for a specific format (Mermaid, AS
 use exactly that format without hesitating. When the diagram-design skill is not available, fall back to a ```mermaid fenced \
 block or an ```svg block with one <svg>; both render inline here (Mermaid: flowchart, sequenceDiagram, stateDiagram-v2, \
 classDiagram, erDiagram, mindmap, pie, gantt, timeline, journey, xychart-beta, quadrantChart, gitGraph). Put ASCII art in a ```text block so it keeps its alignment. \
+For a deck, a page, a prototype, a poster or any other visual design, use the design skill. \
 When you write or change an HTML page (a report, a page, a mockup; diagrams included), review it before you call it done. \
 Look at it rendered: when Forge's browser tools are available (navigate, screenshot), navigate to the file (a file:// URL), \
 take a screenshot, and look at the picture; otherwise read the file back as a reviewer would. Critique it in two passes. Design: hierarchy \
@@ -1301,6 +1303,7 @@ mod tests {
         assert!(surface.contains("```mermaid") && surface.contains("ASCII"));
         // An HTML page is looked at, critiqued and revised, three rounds at most.
         assert!(surface.contains("When you write or change an HTML page"));
+        assert!(surface.contains("use the design skill"));
         assert!(surface.contains("after three rounds"));
         let o: Profile = serde_json::from_value(
             json!({"name":"o","baseUrl":"http://127.0.0.1:11434","wire":"openai","model":"q"}),

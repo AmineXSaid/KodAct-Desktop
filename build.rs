@@ -1,5 +1,5 @@
-//! Embeds Forge's plugin (`assets/forge-plugin`: the Diagram Design and
-//! office-documents skills, the Expert output style) so the app can unpack
+//! Embeds Forge's plugin (`assets/forge-plugin`: the Diagram Design,
+//! design and office-documents skills, the Expert output style) so the app can unpack
 //! it next to its config and hand it to every ForgeCLI it starts
 //! (`src/plugin.rs`). The list and a content hash are generated here.
 
