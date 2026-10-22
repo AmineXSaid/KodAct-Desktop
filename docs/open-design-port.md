@@ -374,9 +374,16 @@ Built in D2b (`src/design/prompt.rs`):
   a prototype, a document, any design"; "End the design chat"), or on a new
   chat's screen for the chat your next message starts. The setup is saved
   with the chat. Picking a design system from the Library keeps it for the
-  chat. The composer chips are still to come.
-- Local chats only for now: a remote ForgeCLI can't read the prompt file or
-  run this app as an MCP server.
+  chat.
+- Remote chats (WSL, SSH, containers) get the same prompt through the boot
+  script: it writes the prompt to `~/.forge/design-prompts/` on the remote
+  before ForgeCLI starts, keeping it out of the environment (Linux caps one
+  string at 128 KB). They get the design tools over HTTP, forwarded back
+  like the browser tools. Their pages are read from the remote; render
+  shows a copy here (things it loads from beside it there don't show), and
+  lint checks its linked files on the remote.
+- The composer's design chip (`ui/design_chips.rs`) shows and sets all of
+  it: the kind of work, the look, the template and the skill.
 
 ### 5.2 The design library on disk
 

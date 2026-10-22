@@ -1410,6 +1410,9 @@ pub struct AppState {
     wsl_devcontainers: std::collections::HashMap<std::path::PathBuf, bool>,
     /// The browser's tool server over HTTP, for remote agents: (port, token).
     browser_http: Option<(u16, String)>,
+    /// The design tools' HTTP servers for remote projects, by target and
+    /// folder (`ensure_design_http`).
+    design_http: std::collections::HashMap<String, (u16, String)>,
     pub screen: Screen,
     pub branch: SharedString,
     pub chats: Vec<Chat>,
@@ -1766,6 +1769,7 @@ impl AppState {
             remote_menu: None,
             wsl_devcontainers: Default::default(),
             browser_http: None,
+            design_http: Default::default(),
             branch: first.branch.clone(),
             current_project: first.id,
             projects,
@@ -4882,9 +4886,6 @@ impl AppState {
             self.show_toast(toast, cx);
             return cx.notify();
         };
-        if self.chat_remote(id).is_some() && setup.is_some() {
-            self.show_toast("Design chats work in local projects for now: this one gets no design prompt or tools.", cx);
-        }
         let Some(chat) = self.chat_mut(id) else { return };
         if chat.design == setup {
             return;
@@ -7506,42 +7507,63 @@ impl AppState {
         }
         // A design chat: its prompt, built from the library, and the design
         // tools on the panel's browser (started for it even when the
-        // browser setting is off). Local chats only for now: a remote
-        // ForgeCLI can't run this app or read the prompt's file.
+        // browser setting is off). A remote ForgeCLI gets the prompt through
+        // its boot script (`remote::HOST_FILE`) and the tools over HTTP,
+        // forwarded back here; its pages are read from the remote.
         let design = self
             .chats
             .iter()
             .find(|c| c.id == id)
             .and_then(|c| c.design.clone());
-        if let (Some(setup), None) = (design, &remote) {
-            if let Some(root) = crate::design::root() {
-                // Read in the background when the chat became a design chat;
-                // if that hasn't finished, read now.
-                let ix = self.design_index.clone().unwrap_or_else(|| {
-                    std::sync::Arc::new(crate::design::library::Index::load(&root))
-                });
-                let text = crate::design::prompt::compose(&ix, &setup);
-                self.design_index = Some(ix);
-                let file = crate::profile::dir()
-                    .unwrap_or_else(std::env::temp_dir)
-                    .join("design-prompts")
-                    .join(format!("{session_id}.md"));
-                let written = file
-                    .parent()
-                    .map_or(Ok(()), std::fs::create_dir_all)
-                    .and_then(|_| std::fs::write(&file, text));
-                if written.is_ok() {
-                    launch.args.extend([
-                        "--append-system-prompt-file".to_string(),
-                        file.to_string_lossy().into_owned(),
-                    ]);
+        if let (Some(setup), Some(root)) = (design, crate::design::root()) {
+            // Read in the background when the chat became a design chat;
+            // if that hasn't finished, read now.
+            let ix = self.design_index.clone().unwrap_or_else(|| {
+                std::sync::Arc::new(crate::design::library::Index::load(&root))
+            });
+            let text = crate::design::prompt::compose(&ix, &setup);
+            self.design_index = Some(ix);
+            let cdp = self.ensure_web(cx).unwrap_or_default();
+            match &remote {
+                None => {
+                    let file = crate::profile::dir()
+                        .unwrap_or_else(std::env::temp_dir)
+                        .join("design-prompts")
+                        .join(format!("{session_id}.md"));
+                    let written = file
+                        .parent()
+                        .map_or(Ok(()), std::fs::create_dir_all)
+                        .and_then(|_| std::fs::write(&file, text));
+                    if written.is_ok() {
+                        launch.args.extend([
+                            "--append-system-prompt-file".to_string(),
+                            file.to_string_lossy().into_owned(),
+                        ]);
+                    }
+                    if let Ok(exe) = std::env::current_exe() {
+                        launch.args.extend([
+                            "--mcp-config".to_string(),
+                            crate::design_mcp::mcp_config(&exe, &cdp, &crate::browser::focus_file()),
+                        ]);
+                    }
                 }
-                if let Ok(exe) = std::env::current_exe() {
-                    let cdp = self.ensure_web(cx).unwrap_or_default();
-                    launch.args.extend([
-                        "--mcp-config".to_string(),
-                        crate::design_mcp::mcp_config(&exe, &cdp, &crate::browser::focus_file()),
-                    ]);
+                Some(remote) => {
+                    let base = crate::app_settings::get().server_install_dir;
+                    let file = format!(
+                        "{}/design-prompts/{session_id}.md",
+                        base.trim().trim_end_matches('/')
+                    );
+                    launch.env.push((crate::remote::HOST_FILE.into(), file.clone()));
+                    launch.env.push((crate::remote::HOST_TEXT.into(), text));
+                    launch.args.extend(["--append-system-prompt-file".to_string(), file]);
+                    if let Some((port, token)) = self.ensure_design_http(remote, &cdp) {
+                        let there = crate::remote::forward_port(&format!("{session_id}-design"), port);
+                        launch.args.extend([
+                            "--mcp-config".to_string(),
+                            crate::design_mcp::http_mcp_config(there, &token),
+                        ]);
+                        backs.push((there, port));
+                    }
                 }
             }
         }
@@ -8751,6 +8773,19 @@ impl AppState {
     }
 
     /// The browser's tool server over HTTP, started on first use: (port, token).
+    /// The design tools' HTTP server for a remote project's chats, started
+    /// once per project: (port, token).
+    fn ensure_design_http(&mut self, remote: &crate::remote::Remote, cdp: &str) -> Option<(u16, String)> {
+        let key = format!("{}\u{0}{}", remote.target.label(), remote.path);
+        if let Some(h) = self.design_http.get(&key) {
+            return Some(h.clone());
+        }
+        let token = crate::history::new_id().replace('-', "");
+        let port = crate::design_mcp::serve_http(cdp, &crate::browser::focus_file(), &token, remote.clone()).ok()?;
+        self.design_http.insert(key, (port, token.clone()));
+        Some((port, token))
+    }
+
     fn ensure_browser_http(&mut self, cx: &mut Context<Self>) -> Option<(u16, String)> {
         if let Some(h) = &self.browser_http {
             return Some(h.clone());

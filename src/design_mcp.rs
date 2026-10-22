@@ -66,6 +66,19 @@ struct Tools {
     browser: Option<Browser>,
     /// The library, loaded the first time a tool needs it.
     index: Option<Index>,
+    /// A remote chat's project: its pages are read from there, and shown
+    /// from a copy on this computer.
+    remote: Option<crate::remote::Remote>,
+}
+
+/// A page a tool works on: where it is (as the agent named it), its HTML,
+/// and the file on this computer the panel shows.
+struct Page {
+    name: String,
+    html: String,
+    shown: PathBuf,
+    /// Read from a remote: its own folder there, for its linked files.
+    remote_dir: Option<String>,
 }
 
 fn text(s: impl Into<String>) -> Vec<Value> {
@@ -106,22 +119,33 @@ impl Tools {
                 read(ix, kind, id, path, offset).map(text)
             }
             "design_render" => {
-                let path = page_path(a)?;
+                self.browser()?;
+                let page = self.page(a)?;
                 let slides = match a["slides"].as_str().filter(|s| !s.trim().is_empty()) {
                     Some(s) => Some(slide_range(s)?),
                     None => None,
                 };
                 let full = a["full_page"].as_bool() == Some(true);
-                self.render(&path, slides, full)
+                let mut out = self.render(&page.shown, slides, full)?;
+                if page.remote_dir.is_some() {
+                    out.push(json!({ "type": "text", "text": "Shown from a copy of the remote page: pictures, styles and scripts it loads from beside it on the remote don't show here." }));
+                }
+                Ok(out)
             }
             "design_lint" => {
-                let path = page_path(a)?;
-                let html = std::fs::read_to_string(&path)
-                    .map_err(|e| format!("Can't read {}: {e}", path.display()))?;
-                let mut lines: Vec<String> = lint::check(&html, &path)
-                    .iter()
-                    .map(|f| f.to_string())
-                    .collect();
+                let page = self.page(a)?;
+                let findings = match &page.remote_dir {
+                    None => lint::check(&page.html, &page.shown),
+                    Some(dir) => {
+                        let remote = self.remote.clone().expect("a remote page");
+                        lint::check_with(&page.html, &mut |files| {
+                            crate::remote::exist(&remote.target, dir, files, &Default::default())
+                                .unwrap_or_else(|_| vec![true; files.len()])
+                        })
+                    }
+                };
+                let mut lines: Vec<String> = findings.iter().map(|f| f.to_string()).collect();
+                let (path, name) = (page.shown.clone(), page.name.clone());
                 match self.overflow(&path) {
                     Ok(Some(found)) => lines.extend(found.into_iter().map(|f| format!("error, on screen: {f}"))),
                     Ok(None) => lines.push("(Overflow not checked: the panel isn't showing this page. design_render it, then lint again.)".into()),
@@ -129,8 +153,8 @@ impl Tools {
                 }
                 let problems = lines.iter().filter(|l| !l.starts_with('(')).count();
                 let head = match problems {
-                    0 => format!("{}: no problems found.", path.display()),
-                    n => format!("{}: {n} to look at.", path.display()),
+                    0 => format!("{name}: no problems found."),
+                    n => format!("{name}: {n} to look at."),
                 };
                 Ok(text(
                     std::iter::once(head)
@@ -141,6 +165,50 @@ impl Tools {
             }
             _ => Err(format!("no tool {name}")),
         }
+    }
+
+    /// The page a tool's `path` names: a file here, or on the remote (read
+    /// from there, and copied here for the panel to show).
+    fn page(&self, a: &Value) -> Result<Page, String> {
+        let raw = a["path"]
+            .as_str()
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+            .ok_or("path is needed")?;
+        let Some(remote) = &self.remote else {
+            let shown = page_path(a)?;
+            let html = std::fs::read_to_string(&shown)
+                .map_err(|e| format!("No page at {}: {e}", shown.display()))?;
+            return Ok(Page {
+                name: shown.display().to_string(),
+                html,
+                shown,
+                remote_dir: None,
+            });
+        };
+        let name = if raw.starts_with('/') || raw.starts_with('~') {
+            raw.to_string()
+        } else {
+            format!("{}/{raw}", remote.path.trim_end_matches('/'))
+        };
+        let bytes =
+            crate::remote::read_file(&remote.target, &name, 16 * 1024 * 1024, &Default::default())
+                .map_err(|e| format!("Can't read {name} on {}: {e:?}", remote.target.label()))?;
+        let html = String::from_utf8_lossy(&bytes).into_owned();
+        let dir = name
+            .rsplit_once('/')
+            .map_or(".".to_string(), |(d, _)| d.to_string());
+        let shown = remote_copy(&remote.target.label(), &name);
+        if let Some(parent) = shown.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        std::fs::write(&shown, &html).map_err(|e| e.to_string())?;
+        Ok(Page {
+            name,
+            html,
+            shown,
+            remote_dir: Some(dir),
+        })
     }
 
     /// Show `path` in the panel (its tab if it has one, reloaded; else a
@@ -276,6 +344,23 @@ fn slide_range(s: &str) -> Result<(usize, usize), String> {
         return Err(bad());
     }
     Ok((from, to.min(from + SLIDES_MAX - 1)))
+}
+
+/// Where a remote page is copied to be shown: one folder per page, named
+/// for its place, keeping its file name (the tab shows it).
+pub fn remote_copy(target: &str, path: &str) -> PathBuf {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (target, path).hash(&mut h);
+    let file = path
+        .rsplit('/')
+        .next()
+        .filter(|f| !f.is_empty())
+        .unwrap_or("page.html");
+    std::env::temp_dir()
+        .join("forge-remote-pages")
+        .join(format!("{:016x}", h.finish()))
+        .join(file)
 }
 
 /// A tool's `path`, absolute or from the project's folder (this server's
@@ -556,6 +641,7 @@ pub fn serve(devtools: &str, focus_file: &Path) {
     let mut t = Tools {
         browser: (!devtools.trim().is_empty()).then(|| Browser::new(devtools, focus_file)),
         index: None,
+        remote: None,
     };
     let stdin = std::io::stdin();
     let mut out = std::io::stdout();
@@ -569,6 +655,34 @@ pub fn serve(devtools: &str, focus_file: &Path) {
             }
         }
     }
+}
+
+/// Serve the design tools over HTTP for a ForgeCLI on `remote` (as the
+/// browser tools are, `browser_mcp::serve_http`): pages are read from the
+/// remote, the library and the panel's browser are this computer's.
+/// Returns the port.
+pub fn serve_http(
+    devtools: &str,
+    focus_file: &Path,
+    token: &str,
+    remote: crate::remote::Remote,
+) -> std::io::Result<u16> {
+    let mut t = Tools {
+        browser: (!devtools.trim().is_empty()).then(|| Browser::new(devtools, focus_file)),
+        index: None,
+        remote: Some(remote),
+    };
+    crate::browser_mcp::serve_json_http(token, move |msg| handle(&mut t, msg))
+}
+
+/// The design tools as a remote ForgeCLI reaches them: over HTTP on the
+/// remote's `127.0.0.1:<port>`, forwarded back here.
+pub fn http_mcp_config(port: u16, token: &str) -> String {
+    json!({ "mcpServers": { SERVER: {
+        "type": "http",
+        "url": format!("http://127.0.0.1:{port}/mcp/{token}"),
+    } } })
+    .to_string()
 }
 
 /// The `--mcp-config` JSON that gives a ForgeCLI the design tools; an
@@ -589,6 +703,7 @@ mod tests {
         Tools {
             browser: None,
             index: None,
+            remote: None,
         }
     }
 
@@ -737,6 +852,92 @@ mod tests {
             json!({"path": "/no/such/page.html"}),
         );
         assert!(err && msg.contains("browser isn't on"), "{msg}");
+    }
+
+    /// Over a real SSH remote (`FORGE_TEST_SSH=user@host:port`, and
+    /// `FORGE_TEST_DEVTOOLS` for render): a remote page is linted with its
+    /// linked files checked there, and rendered from a copy here.
+    #[test]
+    #[ignore]
+    fn remote_pages_over_ssh() {
+        let Ok(host) = std::env::var("FORGE_TEST_SSH") else {
+            return;
+        };
+        let dir = format!("/tmp/forge-remote-design-{}", std::process::id());
+        let page = format!(
+            "<!doctype html><html lang=\"en\"><head><meta name=\"viewport\" content=\"width=device-width\"><title>R</title></head><body><h1>Remote page</h1><img src=\"here.png\"><img src=\"gone.png\"><p>{}</p></body></html>",
+            "Words enough for a page. ".repeat(12)
+        );
+        let target = crate::remote::Target::Ssh(host);
+        let extra = crate::remote::Extra::default();
+        crate::remote::run(
+            &target,
+            "mkdir -p \"$1\" && cat > \"$1/index.html\" && : > \"$1/here.png\"",
+            std::slice::from_ref(&dir),
+            page.as_bytes(),
+            Duration::from_secs(30),
+            &extra,
+        )
+        .unwrap();
+        let devtools = std::env::var("FORGE_TEST_DEVTOOLS").unwrap_or_default();
+        let focus = std::env::temp_dir().join("forge-remote-design-focus.txt");
+        let port = serve_http(
+            &devtools,
+            &focus,
+            "tok",
+            crate::remote::Remote {
+                target: target.clone(),
+                path: dir.clone(),
+            },
+        )
+        .unwrap();
+        let call = |name: &str, args: Value| -> Value {
+            use std::io::Read;
+            let body = json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":name,"arguments":args}}).to_string();
+            let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+            write!(
+                s,
+                "POST /mcp/tok HTTP/1.1\r\nHost: x\r\nContent-Length: {}\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
+            let mut out = String::new();
+            s.read_to_string(&mut out).unwrap();
+            serde_json::from_str(out.split("\r\n\r\n").nth(1).unwrap()).unwrap()
+        };
+        let lint = call("design_lint", json!({"path": "index.html"}));
+        let said = lint["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert!(
+            said.starts_with(&format!("{dir}/index.html: 1 to look at.")),
+            "{said}"
+        );
+        assert!(
+            said.contains("isn't there: gone.png") && !said.contains("here.png"),
+            "{said}"
+        );
+        if !devtools.is_empty() {
+            let shot = call(
+                "design_render",
+                json!({"path": format!("{dir}/index.html")}),
+            );
+            let content = shot["result"]["content"].as_array().unwrap();
+            assert!(content.iter().any(|c| c["type"] == "image"), "{shot}");
+            assert!(content.iter().any(|c| c["text"]
+                .as_str()
+                .is_some_and(|t| t.contains("copy of the remote page"))));
+        }
+        crate::remote::run(
+            &target,
+            "rm -rf \"$1\"",
+            &[dir],
+            b"",
+            Duration::from_secs(30),
+            &extra,
+        )
+        .unwrap();
     }
 
     #[test]

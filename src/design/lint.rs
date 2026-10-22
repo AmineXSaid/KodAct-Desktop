@@ -69,6 +69,26 @@ const STUBS: [&str; 6] = [
 
 /// Check `html`, the page at `path` (relative links resolve from its folder).
 pub fn check(html: &str, path: &Path) -> Vec<Finding> {
+    let dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
+    check_with(html, &mut |files| {
+        files
+            .iter()
+            .map(|f| {
+                let p = Path::new(f);
+                if p.is_absolute() {
+                    p.exists()
+                } else {
+                    dir.join(p).exists()
+                }
+            })
+            .collect()
+    })
+}
+
+/// [`check`], with `exists` saying which linked files are there (each as
+/// the page writes it: relative to its folder, or absolute), all at once:
+/// a remote page's are checked on the remote in one go.
+pub fn check_with(html: &str, exists: &mut dyn FnMut(&[String]) -> Vec<bool>) -> Vec<Finding> {
     let mut out = vec![];
     let line_of = |at: usize| html[..at].matches('\n').count() + 1;
     let mut push = |level, line, message: String| {
@@ -169,7 +189,7 @@ pub fn check(html: &str, path: &Path) -> Vec<Finding> {
     }
 
     // Links: local files that aren't there, CDN links with no version.
-    let dir = path.parent().unwrap_or(Path::new("."));
+    let mut files: Vec<(usize, String, String)> = vec![];
     for (at, url) in links(html) {
         let u = url.trim();
         let low = u.to_ascii_lowercase();
@@ -197,16 +217,23 @@ pub fn check(html: &str, path: &Path) -> Vec<Finding> {
             continue;
         }
         let file = u.split(['?', '#']).next().unwrap_or(u).replace("%20", " ");
-        let file = file.strip_prefix("file://").unwrap_or(&file);
-        let target = if Path::new(file).is_absolute() {
-            Path::new(file).to_path_buf()
-        } else {
-            dir.join(file)
-        };
-        if !target.exists() {
+        let file = file.strip_prefix("file://").unwrap_or(&file).to_string();
+        files.push((at, file, u.to_string()));
+    }
+    let names: Vec<String> = files.iter().map(|(_, f, _)| f.clone()).collect();
+    let there = if names.is_empty() {
+        vec![]
+    } else {
+        exists(&names)
+    };
+    for ((at, _, u), there) in files
+        .iter()
+        .zip(there.iter().chain(std::iter::repeat(&true)))
+    {
+        if !there {
             push(
                 Level::Error,
-                line_of(at),
+                line_of(*at),
                 format!("Links a file that isn't there: {u}"),
             );
         }

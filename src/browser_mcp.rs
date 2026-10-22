@@ -1001,18 +1001,27 @@ pub fn serve(devtools_http: &str, focus_file: &Path) {
 /// a remote, which reaches it through an `ssh -R` forward (`remote.rs`).
 /// Requests without the token are refused. Returns the port.
 pub fn serve_http(devtools_http: &str, focus_file: &Path, token: &str) -> std::io::Result<u16> {
+    let mut browser = Browser::new(devtools_http, focus_file);
+    serve_json_http(token, move |msg| handle(&mut browser, msg))
+}
+
+/// An MCP server over HTTP on `127.0.0.1:<port>` (`POST /mcp/<token>`, one
+/// JSON-RPC message per request, its answer as JSON), answering with
+/// `answer`: the browser tools' and the design tools' for remote chats.
+/// Requests without the token are refused. Returns the port.
+pub(crate) fn serve_json_http(
+    token: &str,
+    answer: impl FnMut(&Value) -> Option<Value> + Send + 'static,
+) -> std::io::Result<u16> {
     let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
     let port = listener.local_addr()?.port();
-    let browser = std::sync::Arc::new(std::sync::Mutex::new(Browser::new(
-        devtools_http,
-        focus_file,
-    )));
+    let answer = std::sync::Arc::new(std::sync::Mutex::new(answer));
     let path = format!("/mcp/{token}");
     std::thread::spawn(move || {
         for stream in listener.incoming().map_while(Result::ok) {
-            let (browser, path) = (browser.clone(), path.clone());
+            let (answer, path) = (answer.clone(), path.clone());
             std::thread::spawn(move || {
-                let _ = http_exchange(stream, &path, &browser);
+                let _ = http_exchange(stream, &path, &mut |msg| (answer.lock().unwrap())(msg));
             });
         }
     });
@@ -1023,7 +1032,7 @@ pub fn serve_http(devtools_http: &str, focus_file: &Path, token: &str) -> std::i
 fn http_exchange(
     mut stream: std::net::TcpStream,
     path: &str,
-    browser: &std::sync::Mutex<Browser>,
+    answer: &mut dyn FnMut(&Value) -> Option<Value>,
 ) -> std::io::Result<()> {
     use std::io::Read;
     stream.set_read_timeout(Some(Duration::from_secs(30)))?;
@@ -1064,8 +1073,7 @@ fn http_exchange(
             let Ok(msg) = serde_json::from_slice::<Value>(&body) else {
                 return respond(&mut stream, "400 Bad Request", "{}");
             };
-            let answer = handle(&mut browser.lock().unwrap(), &msg);
-            match answer {
+            match answer(&msg) {
                 Some(r) => respond(&mut stream, "200 OK", &r.to_string()),
                 None => respond(&mut stream, "202 Accepted", ""),
             }

@@ -288,6 +288,14 @@ pub fn command(target: &Target, script: &str, args: &[String], extra: &Extra) ->
 /// `~` and `~/…` to the remote home, as a shell function the scripts share.
 const TILDE: &str = r#"x() { case $1 in "~") printf '%s' "$HOME";; "~/"*) printf '%s/%s' "$HOME" "${1#"~/"}";; *) printf '%s' "$1";; esac; }"#;
 
+/// A file the boot script writes before ForgeCLI starts: `HOST_FILE` names
+/// it, `HOST_TEXT` holds it. A design chat's prompt goes this way: too big
+/// for a command line, and too big for the environment (Linux caps one
+/// string at 128 KB, and a big one stops every program starting), so the
+/// script keeps the text in a shell variable it never exports.
+pub const HOST_FILE: &str = "FORGE_HOST_FILE";
+pub const HOST_TEXT: &str = "FORGE_HOST_TEXT";
+
 /// Starts ForgeCLI on the remote: `$1` the folder, `$2` ForgeCLI, the rest
 /// its arguments; the environment comes first on stdin, one `KEY=value` a
 /// line (backslash escapes, see [`env_line`]), ended by an empty line.
@@ -297,7 +305,18 @@ pub fn boot_script() -> String {
 d=$(x "$1"); f=$(x "$2"); shift 2
 n=$#
 while [ "$n" -gt 0 ]; do a=$(x "$1"); shift; set -- "$@" "$a"; n=$((n-1)); done
-while IFS= read -r l && [ -n "$l" ]; do export "$(printf '%b' "$l")"; done
+t=
+while IFS= read -r l && [ -n "$l" ]; do
+  case $l in
+    {HOST_TEXT}=*) t=$(printf '%b' "${{l#{HOST_TEXT}=}}");;
+    *) export "$(printf '%b' "$l")";;
+  esac
+done
+if [ -n "${{{HOST_FILE}:-}}" ]; then
+  h=$(x "${HOST_FILE}"); mkdir -p "${{h%/*}}" && printf '%s' "$t" > "$h"
+  unset {HOST_FILE}
+fi
+unset t
 cd "$d" 2>/dev/null || {{ echo "forge: there is no folder $d on $(uname -n)" >&2; exit 97; }}
 exec "$f" "$@""#
     )
@@ -651,6 +670,21 @@ cat -- "$f""#
         Duration::from_secs(60),
         extra,
     )
+}
+
+/// Which of `files` are there, each relative to `dir` (or absolute, or from
+/// `~`), checked in one go: a remote page's linked files, for `design_lint`.
+pub fn exist(target: &Target, dir: &str, files: &[String], extra: &Extra) -> Result<Vec<bool>, Error> {
+    let script = format!(
+        r#"{TILDE}
+cd "$(x "$1")" 2>/dev/null || exit 3
+shift
+for f; do if [ -e "$(x "$f")" ]; then echo 1; else echo 0; fi; done"#
+    );
+    let mut args = vec![dir.to_string()];
+    args.extend(files.iter().cloned());
+    let out = run(target, &script, &args, b"", Duration::from_secs(30), extra)?;
+    Ok(String::from_utf8_lossy(&out).lines().map(|l| l == "1").collect())
 }
 
 /// A remote project's files, relative to its folder, for the @ list:
@@ -1685,6 +1719,32 @@ mod tests {
             home.display()
         );
         assert_eq!(out, want);
+        std::fs::remove_dir_all(home).ok();
+    }
+
+    /// A long file in the environment (a design chat's prompt) is written
+    /// where it's named, and gone from what ForgeCLI inherits.
+    #[cfg(unix)]
+    #[test]
+    fn boot_writes_the_host_file() {
+        let home = std::env::temp_dir().join(format!("forge-boot-file-{}", std::process::id()));
+        std::fs::create_dir_all(&home).unwrap();
+        let text = format!("# Prompt\nwith a \\ and 'quotes' $HOME\n{}", "x".repeat(200_000));
+        let mut prelude = env_line(HOST_FILE, "~/p/design.md");
+        prelude.push_str(&env_line(HOST_TEXT, &text));
+        prelude.push('\n');
+        let mut child = Command::new("sh")
+            .args(["-c", &boot_script(), "sh", "~", "/bin/sh", "-c"])
+            .arg(r#"printf '%s|%s' "${FORGE_HOST_TEXT:-gone}" "${FORGE_HOST_FILE:-gone}""#)
+            .env("HOME", &home)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        child.stdin.take().unwrap().write_all(prelude.as_bytes()).unwrap();
+        let out = String::from_utf8(child.wait_with_output().unwrap().stdout).unwrap();
+        assert_eq!(out, "gone|gone");
+        assert_eq!(std::fs::read_to_string(home.join("p/design.md")).unwrap(), text);
         std::fs::remove_dir_all(home).ok();
     }
 
