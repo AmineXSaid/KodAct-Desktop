@@ -627,6 +627,11 @@ impl CommandPalette {
                 out.push(act("End the design chat", "icons/x.svg", None, Box::new(EndDesignChat)));
             }
         }
+        // A deck in the browser, with no document open: its slides.
+        if s.doc.is_none() && s.web_page.deck.is_some() {
+            out.push(act("Next slide", "icons/chevron-down.svg", Some("Alt ↓".into()), Box::new(NextPage)));
+            out.push(act("Previous slide", "icons/chevron-up.svg", Some("Alt ↑".into()), Box::new(PreviousPage)));
+        }
         // The browser's page: zoom it, present it, save it; and the design's.
         if s.web.is_some() {
             out.extend([

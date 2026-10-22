@@ -116,6 +116,9 @@ pub enum Cmd {
     /// Tell the panel the page's headings (`Update::Outline`), now and
     /// after each load, while on.
     Outline(bool),
+    /// A deck's next (1) or previous (-1) slide: scrolled to when its
+    /// slides are stacked, else by the deck's own arrow keys.
+    Slide(i32),
     /// A picture of part of the page (CSS pixels from its top left, as
     /// x, y, width, height), with a script run before it (to put something
     /// on the page) and after (to take it off again): `Update::Picture`.
@@ -264,6 +267,9 @@ pub enum Update {
     Part { part: Option<PagePart>, pick: bool },
     /// The page's headings, in order (`Cmd::Outline`).
     Outline(Vec<Heading>),
+    /// The page is a deck: the slide in view and how many (None: not a
+    /// deck). Said when it changes.
+    Deck(Option<(usize, usize)>),
     /// A PNG of part of the page (`Cmd::Picture`), or why not.
     Picture(Result<Vec<u8>, String>),
     /// The open tabs, and which one is on screen.
@@ -887,6 +893,9 @@ fn devtools(
     // Layout guides' colour while they are on; the outline, while asked for.
     let mut guides: Option<String> = None;
     let (mut outline_on, mut outline_req) = (false, None::<u64>);
+    // Which slide a deck shows, asked a few times a second.
+    let (mut deck_req, mut deck_now) = (None::<u64>, None::<(usize, usize)>);
+    let mut deck_asked = Instant::now();
     let mut part_asked = Instant::now();
     let mut part_at: Option<(f64, f64)> = None;
     let mut focus_checked = Instant::now();
@@ -1202,6 +1211,11 @@ fn devtools(
                     guides = colour;
                     c.send(s, "Runtime.evaluate", json!({ "expression": guides_js(guides.as_deref()) }))?;
                 }
+                Cmd::Slide(step) => {
+                    c.send(s, "Runtime.evaluate", json!({ "expression": crate::design::live::slide_step_js(step) }))?;
+                    // Say where it got to soon, not at the next ask.
+                    deck_asked = Instant::now() - Duration::from_millis(250);
+                }
                 Cmd::Outline(on) => {
                     outline_on = on;
                     if on {
@@ -1268,6 +1282,14 @@ fn devtools(
                 json!({ "expression": part_js(x, y), "returnByValue": true }),
             )?);
         }
+        if deck_req.is_none() && deck_asked.elapsed() > Duration::from_millis(400) {
+            deck_asked = Instant::now();
+            deck_req = Some(c.send(
+                Some(&tab.session),
+                "Runtime.evaluate",
+                json!({ "expression": crate::design::live::DECK_AT_JS, "returnByValue": true }),
+            )?);
+        }
         // What the browser said.
         let next = if events.is_empty() {
             c.read()?
@@ -1286,6 +1308,15 @@ fn devtools(
                 copy_req = None;
                 if let Some(v) = value.filter(|v| !v.is_empty()) {
                     say(Update::Copied(v))?;
+                }
+            } else if Some(id) == deck_req {
+                deck_req = None;
+                let at = value
+                    .and_then(|v| serde_json::from_str::<(usize, usize)>(&v).ok())
+                    .filter(|(n, of)| *of > 1 && *n >= 1);
+                if at != deck_now {
+                    deck_now = at;
+                    say(Update::Deck(at))?;
                 }
             } else if Some(id) == outline_req {
                 outline_req = None;

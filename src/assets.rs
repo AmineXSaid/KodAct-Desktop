@@ -46,6 +46,7 @@ icons!(
     "brain",
     "check",
     "chevron-down",
+    "chevron-left",
     "chevron-right",
     "chevron-up",
     "chevrons-up-down",

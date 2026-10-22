@@ -476,6 +476,7 @@ impl Render for BrowserView {
                 resolved: s.design_resolved,
                 outline: s.design_outline,
                 guides: s.design_guides,
+                deck: s.web_page.deck,
                 undo: s.design_can_step(-1),
                 redo: s.design_can_step(1),
                 tool: s.design_tool,

@@ -405,6 +405,8 @@ pub struct WebPage {
     pub url: String,
     pub title: String,
     pub loading: bool,
+    /// A deck: the slide in view and how many (`Update::Deck`).
+    pub deck: Option<(usize, usize)>,
     pub tabs: Vec<crate::web_view::TabInfo>,
     /// The tab on screen.
     pub active: String,
@@ -4127,6 +4129,10 @@ impl AppState {
 
     /// The page `by` away from the one at the top (-1 back, +1 on).
     pub fn step_doc_page(&mut self, by: isize, cx: &mut Context<Self>) {
+        // No document open, and the browser shows a deck: its slides.
+        if self.doc.is_none() && self.web_page.deck.is_some() {
+            return self.web_send(crate::web_view::Cmd::Slide(by.signum() as i32), cx);
+        }
         let n = self.doc_page_count();
         if n == 0 || self.doc_text {
             return;
@@ -5442,6 +5448,9 @@ impl AppState {
                 self.web_page.last_download = Some(path);
             }
             Update::Picture(png) => self.design_marks_pictured(png, cx),
+            Update::Deck(at) => {
+                self.web_page.deck = at;
+            }
             Update::Outline(heads) => {
                 self.design_headings = heads;
                 cx.notify();

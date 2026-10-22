@@ -106,6 +106,8 @@ pub struct Bar {
     /// The page's outline is beside it; layout guides are on.
     pub outline: bool,
     pub guides: bool,
+    /// A deck: the slide in view and how many.
+    pub deck: Option<(usize, usize)>,
     /// There is a version before, or after, the one on disk.
     pub undo: bool,
     pub redo: bool,
@@ -312,6 +314,7 @@ pub fn render(
         resolved,
         outline,
         guides,
+        deck,
         undo,
         redo,
         tool: in_hand,
@@ -962,6 +965,50 @@ pub fn render(
                     d.child(hang(t, false, library_menu, cx))
                 }),
         )
+        // A deck: back, the slide and how many, on.
+        .children(deck.map(|(n, of)| {
+            div()
+                .flex()
+                .items_center()
+                .child(
+                    tool(
+                        t,
+                        "design-slide-back",
+                        "icons/chevron-left.svg",
+                        None,
+                        false,
+                        false,
+                        "Previous slide (Alt ↑)",
+                    )
+                    .when(n <= 1, |d| d.opacity(0.4))
+                    .on_click(cx.listener(|_, _, window, cx| {
+                        window.dispatch_action(Box::new(super::PreviousPage), cx)
+                    })),
+                )
+                .child(
+                    div()
+                        .px(t.space.xs)
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_muted)
+                        .whitespace_nowrap()
+                        .child(format!("{n} / {of}")),
+                )
+                .child(
+                    tool(
+                        t,
+                        "design-slide-on",
+                        "icons/chevron-right.svg",
+                        None,
+                        false,
+                        false,
+                        "Next slide (Alt ↓)",
+                    )
+                    .when(n >= of, |d| d.opacity(0.4))
+                    .on_click(cx.listener(|_, _, window, cx| {
+                        window.dispatch_action(Box::new(super::NextPage), cx)
+                    })),
+                )
+        }))
         .child(
             tool(
                 t,

@@ -154,6 +154,55 @@ pub fn page_key(url: &str) -> &str {
     url.split_once('#').map_or(url, |(page, _)| page)
 }
 
+/// The deck's slides, as `design_render` and the PDF find them: the first
+/// group of `section.slide`, `.slide` or `[data-slide]` sharing a parent.
+macro_rules! deck_slides {
+    () => {
+        "[...document.querySelectorAll('section.slide, .slide, [data-slide]')].filter((s, _, a) => s.parentElement === a[0].parentElement)"
+    };
+}
+
+/// The slide a deck shows (the visible one nearest the middle of the
+/// window) and how many, as JSON `[n, count]`; "" for a page that isn't a
+/// deck.
+pub const DECK_AT_JS: &str = concat!(
+    "(() => { const slides = ",
+    deck_slides!(),
+    r#"; if (slides.length < 2) return '';
+  let best = -1, far = Infinity;
+  slides.forEach((s, i) => {
+    const r = s.getBoundingClientRect(), cs = getComputedStyle(s);
+    if (!r.width || !r.height || cs.visibility === 'hidden' || cs.display === 'none' || +cs.opacity === 0) return;
+    if (r.bottom < 0 || r.top > innerHeight) return;
+    const d = Math.abs((r.top + r.bottom) / 2 - innerHeight / 2);
+    if (d < far) { far = d; best = i; }
+  });
+  return best < 0 ? '' : JSON.stringify([best + 1, slides.length]);
+})()"#
+);
+
+/// Go a slide on (1) or back (-1): scroll to it when the slides are
+/// stacked down the page, else press the deck's own arrow key.
+pub fn slide_step_js(step: i32) -> String {
+    let key = if step > 0 { "ArrowRight" } else { "ArrowLeft" };
+    format!(
+        r#"(() => {{ const slides = {}; if (slides.length < 2) return;
+  const a = slides[0].getBoundingClientRect(), b = slides[1].getBoundingClientRect();
+  if (Math.abs(b.top - a.top) >= a.height * 0.5) {{
+    let at = 0, far = Infinity;
+    slides.forEach((s, i) => {{ const r = s.getBoundingClientRect(); const d = Math.abs(r.top); if (d < far) {{ far = d; at = i; }} }});
+    const to = slides[Math.max(0, Math.min(slides.length - 1, at + ({step})))];
+    to.scrollIntoView({{ block: 'start', behavior: 'smooth' }});
+    return;
+  }}
+  const el = document.activeElement || document.body;
+  el.dispatchEvent(new KeyboardEvent('keydown', {{ key: '{key}', code: '{key}', bubbles: true }}));
+  el.dispatchEvent(new KeyboardEvent('keyup', {{ key: '{key}', code: '{key}', bubbles: true }}));
+}})()"#,
+        deck_slides!()
+    )
+}
+
 /// Before a deck is printed (Save as PDF): one slide a page, at 16:9. A
 /// deck built at a fixed size (its slides 1600px wide or more before any
 /// scaling, as html-ppt's 1920) prints at 1920×1080; one sized to the
