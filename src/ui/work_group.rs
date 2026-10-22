@@ -93,7 +93,7 @@ pub fn summary(calls: &[&ToolCall]) -> String {
     use std::collections::HashSet;
     let ok: Vec<&&ToolCall> = calls
         .iter()
-        .filter(|c| !matches!(c.status, ToolStatus::Failed | ToolStatus::Declined))
+        .filter(|c| !matches!(c.status, ToolStatus::Failed | ToolStatus::Declined | ToolStatus::Interrupted))
         .collect();
     let files = |kinds: &[ToolKind]| {
         ok.iter()
@@ -168,6 +168,7 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
     let all: Vec<&ToolCall> = calls.iter().map(|(_, c)| *c).collect();
     let open = cx.open_groups.contains(&run.start);
     let failed = all.iter().filter(|c| c.status == ToolStatus::Failed).count();
+    let stopped = all.iter().filter(|c| c.status == ToolStatus::Interrupted).count();
     let (adds, dels) = all
         .iter()
         .filter(|c| c.status != ToolStatus::Failed)
@@ -237,6 +238,14 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
         .when(failed > 0, |d| {
             d.child(
                 theme::pill(t, t.extra.danger_tint, t.extra.danger, format!("{failed} failed"))
+                    .flex_none()
+                    .text_size(t.text.caption),
+            )
+        })
+        // Stopped mid-way: their outcome is unknown, so they are counted apart.
+        .when(stopped > 0, |d| {
+            d.child(
+                theme::pill(t, t.extra.warning_tint, t.extra.warning, format!("{stopped} stopped"))
                     .flex_none()
                     .text_size(t.text.caption),
             )

@@ -330,6 +330,7 @@ pub fn render(
                     ToolStatus::Done => t.extra.success.opacity(0.75),
                     ToolStatus::Failed => t.extra.danger,
                     ToolStatus::Declined => t.colors.text_subtle,
+                    ToolStatus::Interrupted => t.extra.warning,
                 })
             }));
 
@@ -380,7 +381,9 @@ pub fn render(
                                 ToolStatus::Running if run.stopping => "stopping…".to_string(),
                                 ToolStatus::Running => format!("running · {}", elapsed(took)),
                                 ToolStatus::Failed => format!("failed · {}", elapsed(took)),
-                                ToolStatus::Declined => format!("stopped · {}", elapsed(took)),
+                                ToolStatus::Declined | ToolStatus::Interrupted => {
+                                    format!("stopped · {}", elapsed(took))
+                                }
                                 ToolStatus::Done => format!("done · {}", elapsed(took)),
                             }),
                     )

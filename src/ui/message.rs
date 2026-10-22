@@ -1026,6 +1026,10 @@ fn status_icon(status: ToolStatus, t: &Theme) -> AnyElement {
             t.colors.text_subtle,
         )
         .into_any_element(),
+        // Stopped mid-way: neither failed nor done; it may have taken effect.
+        ToolStatus::Interrupted => {
+            icon("icons/circle-pause.svg", t.size.icon_sm, t.extra.warning).into_any_element()
+        }
     }
 }
 
@@ -1072,8 +1076,9 @@ pub fn env_badge(place: &Option<(SharedString, &'static str)>, t: &Theme) -> Any
 }
 
 /// The first line of a failed call's error, for its header.
+/// A call stopped mid-way gives its reason too: it may have taken effect.
 pub(super) fn failure_line(call: &ToolCall) -> Option<SharedString> {
-    if call.status != ToolStatus::Failed {
+    if !matches!(call.status, ToolStatus::Failed | ToolStatus::Interrupted) {
         return None;
     }
     call.output
@@ -1100,9 +1105,11 @@ pub(super) fn tool_header(
 ) -> gpui::Stateful<gpui::Div> {
     let hover = t.colors.hover;
     let failed = call.status == ToolStatus::Failed;
-    // A failed change was never made: no counts for it.
-    let adds = call.diff.iter().filter(|l| l.kind == DiffKind::Add && !failed).count();
-    let dels = call.diff.iter().filter(|l| l.kind == DiffKind::Del && !failed).count();
+    // A failed change was never made, a stopped one may not have been: no
+    // counts for either.
+    let unknown = call.status == ToolStatus::Interrupted;
+    let adds = call.diff.iter().filter(|l| l.kind == DiffKind::Add && !failed && !unknown).count();
+    let dels = call.diff.iter().filter(|l| l.kind == DiffKind::Del && !failed && !unknown).count();
     let shell = call.kind == ToolKind::Bash;
     let has_body = has_body(call);
     let why = failure_line(call).filter(|_| !shell);
@@ -1193,7 +1200,11 @@ pub(super) fn tool_header(
                 .whitespace_nowrap()
                 .text_ellipsis()
                 .text_size(t.text.caption)
-                .text_color(t.extra.danger)
+                .text_color(if call.status == ToolStatus::Interrupted {
+                    t.extra.warning
+                } else {
+                    t.extra.danger
+                })
                 .child(w)
         }))
         .when(shell, |d| d.child(env_badge(&cx.place, t)))
@@ -1250,7 +1261,8 @@ pub(super) fn tool_body(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) 
         };
         return Some(terminal::block(call, &at, t));
     }
-    if call.status == ToolStatus::Failed {
+    if matches!(call.status, ToolStatus::Failed | ToolStatus::Interrupted) {
+        let stopped = call.status == ToolStatus::Interrupted;
         return Some(
             div()
                 .border_t_1()
@@ -1261,7 +1273,7 @@ pub(super) fn tool_body(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) 
                     div()
                         .px(t.space.md)
                         .py(t.space.sm)
-                        .bg(t.extra.danger_tint)
+                        .bg(if stopped { t.extra.warning_tint } else { t.extra.danger_tint })
                         .font_family(t.font_mono.clone())
                         .text_size(t.text.caption + px(0.5))
                         .text_color(t.colors.text)
@@ -1274,7 +1286,7 @@ pub(super) fn tool_body(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) 
                             .pt(t.space.sm)
                             .text_size(t.text.caption)
                             .text_color(t.colors.text_muted)
-                            .child("Not applied"),
+                            .child(if stopped { "May or may not have been applied" } else { "Not applied" }),
                     )
                     .child(diff_lines(&call.diff, lang, t).opacity(0.55))
                 })
@@ -1540,6 +1552,7 @@ fn outcome(info: &PermInfo, blocks: &[Block]) -> Option<String> {
     });
     match (call.status, call.kind) {
         (ToolStatus::Running | ToolStatus::Declined, _) => None,
+        (ToolStatus::Interrupted, _) => Some("stopped, outcome unknown".into()),
         (ToolStatus::Failed, ToolKind::Bash) => Some("exit 1, failed".into()),
         (ToolStatus::Failed, _) => Some("failed".into()),
         (_, ToolKind::Bash) => Some("exit 0".into()),

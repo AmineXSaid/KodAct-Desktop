@@ -83,6 +83,10 @@ pub(super) fn status_icon(status: ToolStatus, t: &Theme, key: SharedString) -> A
             t.colors.text_subtle,
         )
         .into_any_element(),
+        // Stopped mid-way: neither failed nor done; it may have taken effect.
+        ToolStatus::Interrupted => {
+            icon("icons/circle-pause.svg", t.size.icon_sm, t.extra.warning).into_any_element()
+        }
     }
 }
 
@@ -132,12 +136,14 @@ pub fn render(t: &Theme, state: &Entity<AppState>, cx: &gpui::App) -> Option<Any
     let hover = t.colors.hover;
     let toggle = state.clone();
     // Declined is not done: you said no, or you stopped the agent.
-    let stopped = list.iter().filter(|t| t.stopped).count();
+    let stopped = list
+        .iter()
+        .filter(|t| t.stopped || t.status == ToolStatus::Interrupted)
+        .count();
     let denied = list
         .iter()
-        .filter(|t| t.status == ToolStatus::Declined)
-        .count()
-        - stopped;
+        .filter(|t| t.status == ToolStatus::Declined && !t.stopped)
+        .count();
     let summary = summary(list.len(), running, failed, denied, stopped);
     let pill = div()
         .id("tasks-pill")

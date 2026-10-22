@@ -130,6 +130,7 @@ fn block(out: &mut String, b: &Block) {
                 ToolStatus::Running => " (running)",
                 ToolStatus::Failed => " (failed)",
                 ToolStatus::Declined => " (skipped)",
+                ToolStatus::Interrupted => " (stopped; it may have taken effect)",
             };
             out.push_str(&format!(
                 "- **{}** `{}`{status}\n",

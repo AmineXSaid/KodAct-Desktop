@@ -23,7 +23,14 @@ pub enum ToolStatus {
     Failed,
     /// You said no when Forge asked, so it never ran.
     Declined,
+    /// Stopped while it ran (Stop, or the app closed): it may or may not
+    /// have taken effect, so nothing says it failed or worked.
+    Interrupted,
 }
+
+/// What a call stopped mid-way says about itself.
+pub const INTERRUPTED_CALL: &str =
+    "Stopped before it finished. It may have taken effect: check before running it again.";
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum ToolKind {
@@ -44,6 +51,9 @@ impl ToolKind {
     pub fn verb(self, status: ToolStatus) -> &'static str {
         if status == ToolStatus::Declined {
             return "Skipped";
+        }
+        if status == ToolStatus::Interrupted {
+            return "Stopped:";
         }
         // A call that failed changed nothing: it says so, not "Wrote".
         if status == ToolStatus::Failed {
@@ -6452,8 +6462,8 @@ impl AppState {
                         for b in blocks.iter_mut() {
                             if let Block::Tool(t) = b {
                                 if t.status == ToolStatus::Running {
-                                    t.status = ToolStatus::Failed;
-                                    t.output = "Interrupted.".into();
+                                    t.status = ToolStatus::Interrupted;
+                                    t.output = INTERRUPTED_CALL.into();
                                 }
                             }
                         }

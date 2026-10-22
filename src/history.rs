@@ -282,7 +282,9 @@ fn save_messages(chat: &Chat, project: &Path) -> SavedChat {
             target: c.target.to_string(),
             note: c.note.as_ref().map(|n| n.to_string()),
             status: match c.status {
-                ToolStatus::Running | ToolStatus::Failed => "failed",
+                // Still running when saved: the app closed under it.
+                ToolStatus::Running | ToolStatus::Interrupted => "interrupted",
+                ToolStatus::Failed => "failed",
                 ToolStatus::Done => "done",
                 ToolStatus::Declined => "declined",
             }
@@ -434,6 +436,7 @@ pub fn messages_of(saved: &SavedChat) -> Vec<Message> {
             status: match status.as_str() {
                 "done" => ToolStatus::Done,
                 "declined" => ToolStatus::Declined,
+                "interrupted" => ToolStatus::Interrupted,
                 _ => ToolStatus::Failed,
             },
             output: output.clone().into(),
@@ -769,9 +772,10 @@ mod tests {
         let Message::Assistant { blocks } = &m[1] else {
             panic!()
         };
-        // A tool still running when saved was cut off; an unanswered question was denied.
+        // A tool still running when saved was cut off (its outcome unknown); an
+        // unanswered question was denied.
         assert!(
-            matches!(&blocks[2], Block::Tool(t) if t.status == ToolStatus::Failed && t.diff[0].kind == DiffKind::Del)
+            matches!(&blocks[2], Block::Tool(t) if t.status == ToolStatus::Interrupted && t.diff[0].kind == DiffKind::Del)
         );
         assert!(matches!(
             &blocks[3],
