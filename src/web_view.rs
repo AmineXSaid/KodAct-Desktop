@@ -119,6 +119,10 @@ pub enum Cmd {
     /// A deck's next (1) or previous (-1) slide: scrolled to when its
     /// slides are stacked, else by the deck's own arrow keys.
     Slide(i32),
+    /// Scroll to the page's nth heading (`h1`–`h3` shown, as the outline
+    /// lists them): it, not where it was, so a page laid out again since
+    /// still lands there.
+    ScrollToHeading(usize),
     /// Which part of the page is at this point (CSS pixels from the page's
     /// top left): a new mark's anchor, said as `Update::AnchoredAt`.
     AnchorAt { id: u64, x: f64, y: f64 },
@@ -1186,6 +1190,13 @@ fn devtools(
                     let (id, s) = (tab.target.clone(), tab.session.clone());
                     fit(&mut c, &id, &s, metrics, &mut events)?;
                     anchors_asked = Instant::now() - Duration::from_millis(500);
+                    if outline_on {
+                        outline_req = Some(c.send(
+                            Some(s.as_str()),
+                            "Runtime.evaluate",
+                            json!({ "expression": OUTLINE_JS, "returnByValue": true }),
+                        )?);
+                    }
                 }
                 Cmd::Pdf(to) => {
                     // A deck prints a slide a page (`live::DECK_PRINT_JS`).
@@ -1240,6 +1251,12 @@ fn devtools(
                     anchors_now.clear();
                     anchors_asked = Instant::now() - Duration::from_secs(1);
                 }
+                Cmd::ScrollToHeading(n) => {
+                    let js = format!(
+                        "(() => {{ const h = [...document.querySelectorAll('h1,h2,h3')].filter(e => e.getClientRects().length && (e.innerText || '').trim())[{n}]; if (h) scrollTo({{ top: Math.max(0, h.getBoundingClientRect().top + scrollY - 120), behavior: 'smooth' }}); }})()"
+                    );
+                    c.send(s, "Runtime.evaluate", json!({ "expression": js }))?;
+                }
                 Cmd::Slide(step) => {
                     c.send(s, "Runtime.evaluate", json!({ "expression": crate::design::live::slide_step_js(step) }))?;
                     // Say where it got to soon, not at the next ask.
@@ -1285,8 +1302,16 @@ fn devtools(
                     metrics.zoom = zoom.clamp(0.25, 2.0);
                     let (id, s) = (tab.target.clone(), tab.session.clone());
                     fit(&mut c, &id, &s, metrics, &mut events)?;
-                    // The page laid out again: where its parts went, soon.
+                    // The page laid out again: where its parts went, soon,
+                    // and its headings.
                     anchors_asked = Instant::now() - Duration::from_millis(500);
+                    if outline_on {
+                        outline_req = Some(c.send(
+                            Some(s.as_str()),
+                            "Runtime.evaluate",
+                            json!({ "expression": OUTLINE_JS, "returnByValue": true }),
+                        )?);
+                    }
                 }
             }
         }

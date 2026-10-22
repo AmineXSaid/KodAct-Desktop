@@ -1273,7 +1273,6 @@ impl Render for BrowserView {
                 })
                 .children(heads.into_iter().enumerate().map(|(i, h)| {
                     let state = self.state.clone();
-                    let y = h.y;
                     div()
                         .id(("design-heading", i))
                         .flex_none()
@@ -1296,7 +1295,7 @@ impl Render for BrowserView {
                                 .child(h.text),
                         )
                         .on_click(move |_, _, cx| {
-                            state.update(cx, |s, cx| s.web_send(Cmd::ScrollTo(0.0, y), cx))
+                            state.update(cx, |s, cx| s.web_send(Cmd::ScrollToHeading(i), cx))
                         })
                 }))
         });

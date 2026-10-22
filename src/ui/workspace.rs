@@ -1114,6 +1114,8 @@ impl Render for Workspace {
                         s.design_menu_to(None, cx);
                     } else if s.design_pick.is_some() {
                         s.design_cancel_pick(cx);
+                    } else if s.design_tool.is_some() {
+                        s.design_set_tool(None, cx);
                     } else if s.design_select {
                         s.design_set_select(false, cx);
                     } else if s.map_open {
