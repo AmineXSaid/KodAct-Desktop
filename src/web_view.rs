@@ -137,7 +137,7 @@ pub struct Heading {
 }
 
 /// A part of the page, as the comment tool picks it.
-#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PagePart {
     pub tag: String,
     /// The start of its text, on one line.
@@ -307,9 +307,16 @@ impl WebView {
 
 impl Drop for WebView {
     fn drop(&mut self) {
-        // Closing the guard's stdin closes the browser; kill makes sure.
+        // Closing the guard's stdin closes the browser. The guard is given
+        // a moment to do it: killed at once, it would leave the browser
+        // running, holding its profile, so the next start fails. Kill
+        // makes sure.
         let _ = self.child.lock().map(|mut c| {
             drop(c.stdin.take());
+            let until = Instant::now() + Duration::from_secs(2);
+            while Instant::now() < until && matches!(c.try_wait(), Ok(None)) {
+                std::thread::sleep(Duration::from_millis(20));
+            }
             c.kill()
         });
     }
@@ -337,7 +344,11 @@ pub fn guard(args: &[String]) {
     std::thread::spawn(move || {
         let mut sink = Vec::new();
         let _ = std::io::Read::read_to_end(&mut std::io::stdin(), &mut sink);
-        let _ = watched.lock().map(|mut c| c.kill());
+        let _ = watched.lock().map(|mut c| {
+            let _ = c.kill();
+            // Gone before the guard is, so nothing holds the profile.
+            c.wait()
+        });
         std::process::exit(0);
     });
     loop {
