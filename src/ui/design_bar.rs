@@ -169,6 +169,7 @@ fn tool(
         .child(icon(path, t.size.icon_sm, t.colors.text_muted))
         .children(label.map(|l| {
             div()
+                .min_w_0()
                 .max_w(px(180.))
                 .overflow_hidden()
                 .whitespace_nowrap()
@@ -851,7 +852,10 @@ pub fn render(
         .child(
             div()
                 .relative()
-                .min_w_0()
+                .flex()
+                .flex_shrink(1.)
+                // The page's name gives up room as an ellipsis, never all.
+                .min_w(px(80.))
                 .child(
                     tool(
                         t,
@@ -862,6 +866,8 @@ pub fn render(
                         menu == Some(Menu::Pages),
                         "The design's pages",
                     )
+                    .flex_shrink(1.)
+                    .min_w_0()
                     .on_click(toggle(Menu::Pages)),
                 )
                 .when(menu == Some(Menu::Pages), |d| {
@@ -987,7 +993,6 @@ pub fn render(
                 )
                 .child(
                     div()
-                        .px(t.space.xs)
                         .text_size(t.text.caption)
                         .text_color(t.colors.text_muted)
                         .whitespace_nowrap()
@@ -1052,7 +1057,8 @@ pub fn render(
                         t,
                         "design-share",
                         "icons/share-2.svg",
-                        Some("Share".into()),
+                        // Its icon alone: the page's name needs the room.
+                        None,
                         true,
                         menu == Some(Menu::Share),
                         "Save or open the page",

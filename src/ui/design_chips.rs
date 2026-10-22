@@ -337,7 +337,8 @@ pub fn menu(
         window,
         t,
         t.size.viewport_margin + px(140.),
-        Some(px(320.)),
+        // Room for all seven kinds of work at once.
+        Some(px(400.)),
     )
     .child(rows);
     let menu = div()

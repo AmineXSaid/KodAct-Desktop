@@ -170,6 +170,10 @@ impl PagePart {
     /// What it is, in a few words: `h2 · Three things you can use…`.
     pub fn label(&self) -> String {
         let text: String = self.text.chars().take(48).collect();
+        // The page as a whole (a click on its background) says so once.
+        if self.tag == "page" {
+            return self.text.clone();
+        }
         if text.is_empty() {
             self.tag.clone()
         } else if text.len() < self.text.len() {
