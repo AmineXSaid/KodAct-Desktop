@@ -96,7 +96,24 @@ fn read_versions(file: &Path, page: &Path) -> Option<(Vec<Arc<str>>, usize)> {
 pub fn save_versions(page: &Path, list: &[Arc<str>], at: usize) -> (Vec<Arc<str>>, usize) {
     let (list, at) = trimmed(list, at);
     if let Some(file) = versions_file(page) {
-        let _ = write_versions(&file, page, &list, at);
+        // Off the main thread: a big page's versions are megabytes. Only
+        // the newest save of a page is written, so an older one finishing
+        // late never replaces it.
+        static NEWEST: std::sync::Mutex<Option<std::collections::HashMap<PathBuf, u64>>> =
+            std::sync::Mutex::new(None);
+        static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if let Ok(mut n) = NEWEST.lock() {
+            n.get_or_insert_with(Default::default)
+                .insert(file.clone(), seq);
+        }
+        let (page, kept) = (page.to_path_buf(), list.clone());
+        std::thread::spawn(move || {
+            let Ok(n) = NEWEST.lock() else { return };
+            if n.as_ref().and_then(|n| n.get(&file)) == Some(&seq) {
+                let _ = write_versions(&file, &page, &kept, at);
+            }
+        });
     }
     (list, at)
 }

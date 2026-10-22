@@ -107,9 +107,9 @@ pub fn menu(
     let mut tabs = div()
         .flex()
         .items_center()
-        .gap(px(2.))
-        .px(px(8.))
-        .pb(px(6.));
+        .gap(t.space.xs)
+        .px(t.space.sm)
+        .pb(t.space.tight);
     for (tb, name) in [
         (DesignTab::Work, "Work"),
         (DesignTab::Look, "Look"),
@@ -148,13 +148,13 @@ pub fn menu(
     let row = |id: SharedString, title: SharedString, sub: Option<SharedString>, picked: bool| {
         div()
             .id(id)
-            .mx(px(4.))
-            .px(px(8.))
-            .py(px(5.))
+            .mx(t.space.xs)
+            .px(t.space.sm)
+            .py(t.space.xs)
             .flex()
             .items_center()
-            .gap(px(10.))
-            .rounded(px(4.))
+            .gap(t.space.snug)
+            .rounded(t.radius.button)
             .cursor_pointer()
             .when(picked, |d| d.bg(hover))
             .hover(move |d| d.bg(hover))
@@ -187,7 +187,7 @@ pub fn menu(
                             .child(sub)
                     })),
             )
-            .child(div().w(px(14.)).flex_none().when(picked, |d| {
+            .child(div().w(t.size.icon_sm).flex_none().when(picked, |d| {
                 d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.text))
             }))
     };
@@ -243,8 +243,8 @@ pub fn menu(
                 None => {
                     rows = rows.child(
                         div()
-                            .px(px(12.))
-                            .py(px(6.))
+                            .px(t.space.md)
+                            .py(t.space.tight)
                             .text_size(t.text.caption)
                             .text_color(t.colors.text_subtle)
                             .child("Reading the design library…"),
@@ -284,8 +284,8 @@ pub fn menu(
                     };
                     rows = rows.children(note.map(|n| {
                         div()
-                            .px(px(12.))
-                            .py(px(6.))
+                            .px(t.space.md)
+                            .py(t.space.tight)
                             .text_size(t.text.caption)
                             .text_color(t.colors.text_subtle)
                             .child(n)
@@ -298,20 +298,20 @@ pub fn menu(
     let end = setup.is_some().then(|| {
         let st = state.clone();
         div()
-            .mt(px(4.))
-            .pt(px(4.))
+            .mt(t.space.xs)
+            .pt(t.space.xs)
             .border_t_1()
             .border_color(t.colors.border)
             .child(
                 div()
                     .id("design-end")
-                    .mx(px(4.))
-                    .px(px(8.))
-                    .py(px(5.))
+                    .mx(t.space.xs)
+                    .px(t.space.sm)
+                    .py(t.space.xs)
                     .flex()
                     .items_center()
-                    .gap(px(10.))
-                    .rounded(px(4.))
+                    .gap(t.space.snug)
+                    .rounded(t.radius.button)
                     .cursor_pointer()
                     .text_color(t.colors.text_muted)
                     .hover(move |d| d.bg(hover))
@@ -322,8 +322,8 @@ pub fn menu(
     });
 
     let header = div()
-        .px(px(12.))
-        .py(px(4.))
+        .px(t.space.md)
+        .py(t.space.xs)
         .text_size(t.text.caption)
         .text_color(t.colors.text_subtle)
         .child(match (setup.is_some(), s.current.is_some()) {
@@ -338,16 +338,16 @@ pub fn menu(
         t,
         t.size.viewport_margin + px(140.),
         // Room for all seven kinds of work at once.
-        Some(px(400.)),
+        Some(t.size.design_menu_list),
     )
     .child(rows);
     let menu = div()
         .id("design-menu")
         .on_mouse_down_out(move |ev, _, cx| on_out(ev.position, cx))
         .relative()
-        .w(px(340.))
-        .pt(px(6.))
-        .pb(px(4.))
+        .w(t.size.design_menu)
+        .pt(t.space.tight)
+        .pb(t.space.xs)
         .bg(t.colors.surface)
         .border_1()
         .border_color(t.colors.border)
@@ -365,7 +365,7 @@ pub fn menu(
             gpui::anchored()
                 .anchor(gpui::Anchor::BottomLeft)
                 .snap_to_window_with_margin(t.size.viewport_margin)
-                .child(div().pb(px(8.)).child(super::motion::edge_draw(
+                .child(div().pb(t.space.sm).child(super::motion::edge_draw(
                     menu,
                     "design-in",
                     t.colors.primary,

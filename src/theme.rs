@@ -1058,6 +1058,8 @@ pub struct Sizes {
     pub composer_clearance: Pixels, // 150: toasts sit above the composer, its chips included
     pub attach_thumb: Pixels,       // 28: an attachment chip's picture or icon
     pub attach_chip: Pixels,        // 220: an attachment chip's widest
+    pub design_menu: Pixels,        // 340: the composer's design menu's width
+    pub design_menu_list: Pixels,   // 400: its list's tallest, room for every kind of work
     pub popover_list: Pixels,       // 300: the tallest an autocomplete or context list grows
     pub completion_width: Pixels,   // 460: the / and @ lists, opened at the caret
     pub settings_nav: Pixels,       // 200: the Settings window's section list
@@ -1121,6 +1123,8 @@ impl Default for Sizes {
             composer_clearance: px(150.),
             attach_thumb: px(28.),
             attach_chip: px(220.),
+            design_menu: px(340.),
+            design_menu_list: px(400.),
             popover_list: px(300.),
             completion_width: px(460.),
             settings_nav: px(200.),

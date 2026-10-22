@@ -1105,6 +1105,9 @@ struct Live {
     generation: u64,
     /// Started with Expert's output style, which is fixed for a process.
     expert: bool,
+    /// Started as a design chat with this setup (its prompt and tools are
+    /// fixed for a process).
+    design: Option<crate::design::prompt::Setup>,
     /// Relays carrying the remote's ports back here (WSL, containers):
     /// they end with the session.
     _relays: Vec<std::sync::Arc<crate::relay::Relay>>,
@@ -4745,6 +4748,21 @@ impl AppState {
         }
     }
 
+    /// Take a page's marks off, in every chat that had them, each chat
+    /// written again so they don't come back.
+    fn design_marks_off(&mut self, page: &std::path::Path, cx: &mut Context<Self>) {
+        let chats: std::collections::BTreeSet<usize> = self
+            .design_marks
+            .iter()
+            .filter(|(_, p, _)| p == page)
+            .map(|(c, _, _)| *c)
+            .collect();
+        self.design_marks.retain(|(_, p, _)| p != page);
+        for chat in chats {
+            self.mark_dirty(chat, cx);
+        }
+    }
+
     /// Tell the browser which parts the page on screen has comments and
     /// marks on, when that changes, so they follow them.
     fn design_sync_anchors(&mut self, cx: &mut Context<Self>) {
@@ -4752,7 +4770,8 @@ impl AppState {
             .design_comments_here()
             .iter()
             .map(|c| c.part.selector.clone())
-            .filter(|s| !s.is_empty())
+            // The page as a whole stays where it was clicked.
+            .filter(|s| !s.is_empty() && s != "body")
             .collect();
         if let Some(page) = self.design_on_screen() {
             list.extend(
@@ -4794,10 +4813,7 @@ impl AppState {
     /// Take the page's marks off.
     pub fn design_clear_marks(&mut self, cx: &mut Context<Self>) {
         if let Some(page) = self.design_on_screen() {
-            self.design_marks.retain(|(_, p, _)| *p != page);
-            if let Some(chat) = self.current {
-                self.mark_dirty(chat, cx);
-            }
+            self.design_marks_off(&page, cx);
             self.design_pick_marks = false;
             if self.design_pick.as_ref().is_some_and(|p| p.tag == "marks") {
                 self.design_pick = None;
@@ -4915,7 +4931,7 @@ impl AppState {
             }
             Err(e) => self.show_toast(format!("The marks' picture didn't work ({e}); they go as words."), cx),
         }
-        self.design_marks.retain(|(_, p, _)| *p != out.page);
+        self.design_marks_off(&out.page.clone(), cx);
         let sent = if self.replies.contains_key(&out.chat) {
             self.design_held
                 .entry(out.chat)
@@ -7579,6 +7595,11 @@ impl AppState {
         if resumable && self.sessions.get(&id).is_some_and(|l| l.expert != expert) {
             self.sessions.remove(&id);
         }
+        // So is a design chat's setup (changed, perhaps, while a reply ran).
+        let design = self.chats.iter().find(|c| c.id == id).and_then(|c| c.design.clone());
+        if resumable && self.sessions.get(&id).is_some_and(|l| l.design != design) {
+            self.sessions.remove(&id);
+        }
         // A remote project's first message connects (and installs ForgeCLI
         // there if needed) in the background, then sends.
         if !self.sessions.contains_key(&id) {
@@ -7872,6 +7893,7 @@ impl AppState {
                 profile,
                 generation,
                 expert: self.mode == ModeId::Expert,
+                design: self.chats.iter().find(|c| c.id == id).and_then(|c| c.design.clone()),
                 _relays: relays,
             },
         );
@@ -8966,7 +8988,9 @@ impl AppState {
     /// The design tools' HTTP server for a remote project's chats, started
     /// once per project: (port, token).
     fn ensure_design_http(&mut self, remote: &crate::remote::Remote, cdp: &str) -> Option<(u16, String)> {
-        let key = format!("{}\u{0}{}", remote.target.label(), remote.path);
+        // Per browser too: one started before the browser was, or on a
+        // browser since closed, would render nothing.
+        let key = format!("{}\u{0}{}\u{0}{cdp}", remote.target.label(), remote.path);
         if let Some(h) = self.design_http.get(&key) {
             return Some(h.clone());
         }

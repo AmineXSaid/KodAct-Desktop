@@ -134,17 +134,24 @@ impl Tools {
             }
             "design_lint" => {
                 let page = self.page(a)?;
+                let mut unchecked = None;
                 let findings = match &page.remote_dir {
                     None => lint::check(&page.html, &page.shown),
                     Some(dir) => {
                         let remote = self.remote.clone().expect("a remote page");
                         lint::check_with(&page.html, &mut |files| {
                             crate::remote::exist(&remote.target, dir, files, &Default::default())
-                                .unwrap_or_else(|_| vec![true; files.len()])
+                                .unwrap_or_else(|e| {
+                                    unchecked = Some(format!("{e:?}"));
+                                    vec![true; files.len()]
+                                })
                         })
                     }
                 };
                 let mut lines: Vec<String> = findings.iter().map(|f| f.to_string()).collect();
+                if let Some(why) = unchecked {
+                    lines.push(format!("warning: the files the page links couldn't be checked on the remote ({why}): check them before calling it done."));
+                }
                 let (path, name) = (page.shown.clone(), page.name.clone());
                 match self.overflow(&path) {
                     Ok(Some(found)) => lines.extend(found.into_iter().map(|f| format!("error, on screen: {f}"))),
@@ -221,9 +228,9 @@ impl Tools {
         let url = live::file_url(path);
         show(b, &url)?;
         let Some((from, to)) = slides else {
-            return b.step("screenshot", &json!({ "full_page": full }));
+            return b.run_step("screenshot", &json!({ "full_page": full }));
         };
-        let count = b.js(&slide_count_js())?.as_u64().unwrap_or(0) as usize;
+        let count = b.eval(&slide_count_js())?.as_u64().unwrap_or(0) as usize;
         if count == 0 {
             return Err(
                 "This page has no slides (no section.slide or .slide): render it without slides."
@@ -236,9 +243,9 @@ impl Tools {
         }
         let mut out = vec![];
         for n in from..=to {
-            b.js(&go_to_slide_js(n))?;
+            b.eval(&go_to_slide_js(n))?;
             std::thread::sleep(Duration::from_millis(450));
-            let shot = b.step("screenshot", &json!({}))?;
+            let shot = b.run_step("screenshot", &json!({}))?;
             out.push(json!({ "type": "text", "text": format!("Slide {n} of {count}:") }));
             out.extend(shot.into_iter().filter(|c| c["type"] == "image"));
         }
@@ -252,15 +259,15 @@ impl Tools {
         };
         let url = live::file_url(path);
         let Some(tab) = b
-            .tab_list()?
+            .tabs()?
             .into_iter()
             .find(|t| live::page_key(&t.url) == live::page_key(&url))
         else {
             return Ok(None);
         };
-        b.step("switch_tab", &json!({ "id": tab.id }))?;
-        b.step("reload", &json!({}))?;
-        let found = b.js(lint::OVERFLOW_JS)?;
+        b.run_step("switch_tab", &json!({ "id": tab.id }))?;
+        b.run_step("reload", &json!({}))?;
+        let found = b.eval(lint::OVERFLOW_JS)?;
         Ok(Some(
             found
                 .as_array()
@@ -275,16 +282,16 @@ impl Tools {
 /// Make the panel show `url`: its own tab, reloaded, or a new tab.
 fn show(b: &mut Browser, url: &str) -> Result<(), String> {
     let tab = b
-        .tab_list()?
+        .tabs()?
         .into_iter()
         .find(|t| live::page_key(&t.url) == live::page_key(url));
     match tab {
         Some(t) => {
-            b.step("switch_tab", &json!({ "id": t.id }))?;
-            b.step("reload", &json!({}))?;
+            b.run_step("switch_tab", &json!({ "id": t.id }))?;
+            b.run_step("reload", &json!({}))?;
         }
         None => {
-            b.step("new_tab", &json!({ "url": url }))?;
+            b.run_step("new_tab", &json!({ "url": url }))?;
         }
     }
     // Web fonts and first animations.
@@ -292,19 +299,10 @@ fn show(b: &mut Browser, url: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// The deck's slides: the first group of `section.slide`, `.slide` or
-/// `[data-slide]` that share a parent (an overview's copies, added later
-/// in the page, aren't counted).
-const SLIDES_JS: &str = r#"(() => {
-  const all = [...document.querySelectorAll('section.slide, .slide, [data-slide]')];
-  if (!all.length) return [];
-  const parent = all[0].parentElement;
-  return all.filter(s => s.parentElement === parent);
-})()"#;
-
-/// How many slides the page has.
+/// How many slides the page has (`live::deck_slides`: an overview's
+/// copies, added later in the page, aren't counted).
 fn slide_count_js() -> String {
-    format!("{SLIDES_JS}.length")
+    format!("{}.length", live::deck_slides!())
 }
 
 /// Go to slide n (1-based). Slides stacked down the page are scrolled to;
@@ -313,11 +311,10 @@ fn slide_count_js() -> String {
 fn go_to_slide_js(n: usize) -> String {
     format!(
         r#"(() => {{
-  const slides = {SLIDES_JS};
+  const slides = {};
   const el = slides[{n} - 1];
   if (!el) return false;
-  const a = slides[0].getBoundingClientRect(), b = (slides[1] || slides[0]).getBoundingClientRect();
-  if (slides.length > 1 && Math.abs(b.top - a.top) >= a.height * 0.5) {{
+  if ({}) {{
     el.scrollIntoView({{ block: 'start' }});
     return true;
   }}
@@ -325,7 +322,9 @@ fn go_to_slide_js(n: usize) -> String {
   key('Home');
   for (let i = 1; i < {n}; i++) key('ArrowRight');
   return true;
-}})()"#
+}})()"#,
+        live::deck_slides!(),
+        live::deck_stacked!()
     )
 }
 

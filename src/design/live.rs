@@ -161,6 +161,18 @@ macro_rules! deck_slides {
         "[...document.querySelectorAll('section.slide, .slide, [data-slide]')].filter((s, _, a) => s.parentElement === a[0].parentElement)"
     };
 }
+pub(crate) use deck_slides;
+
+/// Whether a deck's `slides` (in scope) are stacked down the page, so going
+/// to one is scrolling to it: its first two slides that show sit one below
+/// the other. A deck that shows one at a time (the others hidden, or laid
+/// over each other) isn't.
+macro_rules! deck_stacked {
+    () => {
+        "(() => { const vis = slides.map(s => s.getBoundingClientRect()).filter(r => r.width && r.height); return vis.length > 1 && Math.abs(vis[1].top - vis[0].top) >= vis[0].height * 0.5; })()"
+    };
+}
+pub(crate) use deck_stacked;
 
 /// The slide a deck shows (the visible one nearest the middle of the
 /// window) and how many, as JSON `[n, count]`; "" for a page that isn't a
@@ -187,8 +199,7 @@ pub fn slide_step_js(step: i32) -> String {
     let key = if step > 0 { "ArrowRight" } else { "ArrowLeft" };
     format!(
         r#"(() => {{ const slides = {}; if (slides.length < 2) return;
-  const a = slides[0].getBoundingClientRect(), b = slides[1].getBoundingClientRect();
-  if (Math.abs(b.top - a.top) >= a.height * 0.5) {{
+  if ({}) {{
     let at = 0, far = Infinity;
     slides.forEach((s, i) => {{ const r = s.getBoundingClientRect(); const d = Math.abs(r.top); if (d < far) {{ far = d; at = i; }} }});
     const to = slides[Math.max(0, Math.min(slides.length - 1, at + ({step})))];
@@ -199,7 +210,8 @@ pub fn slide_step_js(step: i32) -> String {
   el.dispatchEvent(new KeyboardEvent('keydown', {{ key: '{key}', code: '{key}', bubbles: true }}));
   el.dispatchEvent(new KeyboardEvent('keyup', {{ key: '{key}', code: '{key}', bubbles: true }}));
 }})()"#,
-        deck_slides!()
+        deck_slides!(),
+        deck_stacked!()
     )
 }
 
@@ -212,12 +224,12 @@ pub fn slide_step_js(step: i32) -> String {
 /// lose their scaling and fixed boxes, everything else beside them (a
 /// deck's controls, an overview) is left out, and hidden slides show.
 /// Returns how many slides, or null for a page that isn't a deck.
-pub const DECK_PRINT_JS: &str = r#"(() => {
-  const all = [...document.querySelectorAll('section.slide, .slide, [data-slide]')];
-  if (!all.length) return null;
-  const parent = all[0].parentElement;
-  const slides = all.filter(s => s.parentElement === parent);
+pub const DECK_PRINT_JS: &str = concat!(
+    "(() => { const slides = ",
+    deck_slides!(),
+    r#";
   if (slides.length < 2) return null;
+  const parent = slides[0].parentElement;
   const W = slides[0].offsetWidth >= 1600 ? 1920 : 1280, H = W * 9 / 16;
   for (let a = parent; a && a !== document.documentElement; a = a.parentElement) a.classList.add('forge-print-host');
   for (const s of slides) {
@@ -237,7 +249,8 @@ pub const DECK_PRINT_JS: &str = r#"(() => {
 }`;
   document.head.appendChild(st);
   return slides.length;
-})()"#;
+})()"#
+);
 
 /// After the print: the page as it was.
 pub const DECK_UNPRINT_JS: &str = r#"(() => {

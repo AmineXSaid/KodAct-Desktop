@@ -150,6 +150,12 @@ fn render() -> String {
             z.remote_menu,
             "the remote quick pick's width",
         ),
+        ("design_menu", z.design_menu, "the composer's design menu's width"),
+        (
+            "design_menu_list",
+            z.design_menu_list,
+            "the design menu's list at its tallest: every kind of work",
+        ),
         (
             "edge_bar",
             z.edge_bar,

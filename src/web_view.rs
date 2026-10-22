@@ -319,7 +319,7 @@ pub enum Update {
 
 /// The running browser: its process and the line to its DevTools thread.
 pub struct WebView {
-    child: Mutex<Child>,
+    child: Arc<Mutex<Child>>,
     cmds: mpsc::Sender<Cmd>,
     /// Where the browser tools connect: `http://127.0.0.1:<port>`.
     pub cdp_url: String,
@@ -337,13 +337,18 @@ impl Drop for WebView {
         // a moment to do it: killed at once, it would leave the browser
         // running, holding its profile, so the next start fails. Kill
         // makes sure.
-        let _ = self.child.lock().map(|mut c| {
-            drop(c.stdin.take());
+        // Waited for on a thread of its own, so the window never stops
+        // for it.
+        let child = self.child.clone();
+        let _ = self.child.lock().map(|mut c| drop(c.stdin.take()));
+        std::thread::spawn(move || {
             let until = Instant::now() + Duration::from_secs(2);
-            while Instant::now() < until && matches!(c.try_wait(), Ok(None)) {
+            while Instant::now() < until
+                && child.lock().is_ok_and(|mut c| matches!(c.try_wait(), Ok(None)))
+            {
                 std::thread::sleep(Duration::from_millis(20));
             }
-            c.kill()
+            let _ = child.lock().map(|mut c| c.kill());
         });
     }
 }
@@ -581,7 +586,7 @@ pub fn start(
     });
     Ok((
         WebView {
-            child: Mutex::new(child),
+            child: Arc::new(Mutex::new(child)),
             cmds: cmd_tx,
             cdp_url: format!("http://127.0.0.1:{port}"),
         },
@@ -1241,10 +1246,16 @@ fn devtools(
                 Cmd::Inspect { x, y, pick: false } => part_at = Some((x, y)),
                 Cmd::Inspect { x, y, pick: true } => {
                     pick_at = Some((x, y));
+                    // Its box is where its content is, as its pin's anchor
+                    // will say (`Cmd::Anchors`), so the pin stays put.
+                    let js = format!(
+                        "(() => {{ const j = {}; if (!j) return ''; const p = JSON.parse(j); const e = document.querySelector(p.selector); if (e) [p.x, p.y, p.w, p.h] = ({CONTENT_BOX_JS})(e); return JSON.stringify(p); }})()",
+                        part_js(x, y)
+                    );
                     pick_req = Some(c.send(
                         s,
                         "Runtime.evaluate",
-                        json!({ "expression": part_js(x, y), "returnByValue": true }),
+                        json!({ "expression": js, "returnByValue": true }),
                     )?);
                 }
                 Cmd::Guides(colour) => {

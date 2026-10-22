@@ -243,25 +243,11 @@ impl Browser {
         }
     }
 
-    /// One of the browser tools, as the agent would call it (the design
-    /// tools' render and lint use these on the panel's own tab).
-    pub(crate) fn step(&mut self, name: &str, a: &Value) -> Answer {
-        self.run_step(name, a)
-    }
-
-    /// The open tabs.
-    pub(crate) fn tab_list(&mut self) -> Result<Vec<TabInfo>, String> {
-        self.tabs()
-    }
-
-    /// Run JS in the current tab.
-    pub(crate) fn js(&mut self, js: &str) -> Result<Value, String> {
-        self.eval(js)
-    }
-
     /// Run a tool, and add what else happened meanwhile: dialogs the page
     /// opened, a tab a click opened, downloads started or finished.
-    fn run_step(&mut self, name: &str, a: &Value) -> Answer {
+    /// (The design tools' render and lint use this, `tabs` and `eval`, on
+    /// the panel's own tab.)
+    pub(crate) fn run_step(&mut self, name: &str, a: &Value) -> Answer {
         let accept = a["dialog"].as_str() == Some("accept");
         if let Some(c) = self.conn.as_mut() {
             c.dialogs.clear();
@@ -449,7 +435,7 @@ impl Browser {
         }
     }
 
-    fn tabs(&mut self) -> Result<Vec<TabInfo>, String> {
+    pub(crate) fn tabs(&mut self) -> Result<Vec<TabInfo>, String> {
         let mut events = std::mem::take(&mut self.events);
         let r = pages(self.conn()?, &mut events);
         self.events = events;
@@ -515,7 +501,7 @@ impl Browser {
     }
 
     /// Run JS in the current page; its value, or why it threw.
-    fn eval(&mut self, js: &str) -> Result<Value, String> {
+    pub(crate) fn eval(&mut self, js: &str) -> Result<Value, String> {
         let s = self.cur_session()?;
         let r = self.call(
             Some(&s),

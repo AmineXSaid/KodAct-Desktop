@@ -52,6 +52,8 @@ Lucide, 2px stroke as drawn. Sizes: 12 / 14 / 16 / 20 only.
 - `terminal_min`: 280px, the terminal dock's narrowest
 - `chat_min`: 400px, the chat's narrowest: the side panel, then the dock, give way to it
 - `remote_menu`: 288px, the remote quick pick's width
+- `design_menu`: 340px, the composer's design menu's width
+- `design_menu_list`: 400px, the design menu's list at its tallest: every kind of work
 - `edge_bar`: 3px, the jewel edge a window draws as it opens
 - `hit_sm`: 28px, an icon button in a dense row
 - `hit`: 34px, an icon button's square
