@@ -906,6 +906,11 @@ fn devtools(
     let mut cursor_at: Option<(f64, f64)> = None;
     // The part of the page under the comment tool: asked as the pointer is.
     let (mut part_req, mut pick_req) = (None::<u64>, None::<u64>);
+    // Where the comment tool was clicked (viewport CSS pixels), for a
+    // click on the page's own background.
+    let mut pick_at: Option<(f64, f64)> = None;
+    // The page's scroll, as its last picture said.
+    let mut frame_scroll = (0.0f64, 0.0f64);
     // Layout guides' colour while they are on; the outline, while asked for.
     let mut guides: Option<String> = None;
     let (mut outline_on, mut outline_req) = (false, None::<u64>);
@@ -1231,6 +1236,7 @@ fn devtools(
                 }
                 Cmd::Inspect { x, y, pick: false } => part_at = Some((x, y)),
                 Cmd::Inspect { x, y, pick: true } => {
+                    pick_at = Some((x, y));
                     pick_req = Some(c.send(
                         s,
                         "Runtime.evaluate",
@@ -1414,7 +1420,23 @@ fn devtools(
                 } else {
                     part_req = None;
                 }
-                let part = value.and_then(|v| serde_json::from_str::<PagePart>(&v).ok());
+                let mut part = value.and_then(|v| serde_json::from_str::<PagePart>(&v).ok());
+                // A click on the page's background (its margins, a gap):
+                // the comment is on the page as a whole.
+                if pick && part.is_none() {
+                    if let Some((x, y)) = pick_at.take() {
+                        let scroll = frame_scroll;
+                        part = Some(PagePart {
+                            tag: "page".into(),
+                            text: "The whole page".into(),
+                            selector: "body".into(),
+                            x: x + scroll.0,
+                            y: y + scroll.1,
+                            w: 0.0,
+                            h: 0.0,
+                        });
+                    }
+                }
                 say(Update::Part { part, pick })?;
             }
             continue;
@@ -1488,6 +1510,7 @@ fn devtools(
                         area: (num("deviceWidth"), num("deviceHeight")),
                         scroll: (num("scrollOffsetX"), num("scrollOffsetY")),
                     };
+                    frame_scroll = (f64::from(info.scroll.0), f64::from(info.scroll.1));
                     say(Update::Frame(img, info))?;
                 }
             }
