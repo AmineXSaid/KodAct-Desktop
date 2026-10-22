@@ -154,6 +154,49 @@ pub fn page_key(url: &str) -> &str {
     url.split_once('#').map_or(url, |(page, _)| page)
 }
 
+/// Before a deck is printed (Save as PDF): one slide a page, at 16:9. A
+/// deck built at a fixed size (its slides 1600px wide or more before any
+/// scaling, as html-ppt's 1920) prints at 1920×1080; one sized to the
+/// window, at 1280×720, so its type keeps its weight on the page.
+/// The deck's slides (the first group of `section.slide`, `.slide` or
+/// `[data-slide]` sharing a parent) are marked; the elements holding them
+/// lose their scaling and fixed boxes, everything else beside them (a
+/// deck's controls, an overview) is left out, and hidden slides show.
+/// Returns how many slides, or null for a page that isn't a deck.
+pub const DECK_PRINT_JS: &str = r#"(() => {
+  const all = [...document.querySelectorAll('section.slide, .slide, [data-slide]')];
+  if (!all.length) return null;
+  const parent = all[0].parentElement;
+  const slides = all.filter(s => s.parentElement === parent);
+  if (slides.length < 2) return null;
+  const W = slides[0].offsetWidth >= 1600 ? 1920 : 1280, H = W * 9 / 16;
+  for (let a = parent; a && a !== document.documentElement; a = a.parentElement) a.classList.add('forge-print-host');
+  for (const s of slides) {
+    s.classList.add('forge-print-slide');
+    if (getComputedStyle(s).display === 'none') s.classList.add('forge-print-shown');
+  }
+  const st = document.createElement('style');
+  st.id = 'forge-print';
+  st.textContent = `@page { size: ${W}px ${H}px; margin: 0 }
+@media print {
+  html, body { margin: 0 !important; padding: 0 !important; width: ${W}px !important; height: auto !important; overflow: visible !important; }
+  .forge-print-host { transform: none !important; position: static !important; width: auto !important; height: auto !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; display: block !important; }
+  .forge-print-host > :not(.forge-print-host):not(.forge-print-slide) { display: none !important; }
+  .forge-print-slide { position: relative !important; inset: auto !important; transform: none !important; width: ${W}px !important; height: ${H}px !important; max-width: none !important; max-height: none !important; margin: 0 !important; opacity: 1 !important; visibility: visible !important; break-after: page !important; break-inside: avoid !important; overflow: hidden !important; box-sizing: border-box !important; }
+  .forge-print-slide.forge-print-shown { display: block !important; }
+  .forge-print-slide, .forge-print-slide * { animation: none !important; transition: none !important; }
+}`;
+  document.head.appendChild(st);
+  return slides.length;
+})()"#;
+
+/// After the print: the page as it was.
+pub const DECK_UNPRINT_JS: &str = r#"(() => {
+  document.getElementById('forge-print')?.remove();
+  for (const c of ['forge-print-host', 'forge-print-slide', 'forge-print-shown'])
+    for (const el of [...document.getElementsByClassName(c)]) el.classList.remove(c);
+})()"#;
+
 /// A comment on part of a page, as the message Forge gets: the page, the
 /// part (its tag, the start of its text, a selector that finds it), what
 /// you said, and to change only that part.

@@ -1160,6 +1160,13 @@ fn devtools(
                     fit(&mut c, &id, &s, metrics, &mut events)?;
                 }
                 Cmd::Pdf(to) => {
+                    // A deck prints a slide a page (`live::DECK_PRINT_JS`).
+                    let _ = c.call(
+                        s,
+                        "Runtime.evaluate",
+                        json!({ "expression": crate::design::live::DECK_PRINT_JS, "returnByValue": true }),
+                        &mut events,
+                    );
                     let printed = c
                         .call(
                             s,
@@ -1175,6 +1182,12 @@ fn devtools(
                         })
                         .and_then(|pdf| std::fs::write(&to, pdf).map_err(|e| e.to_string()))
                         .map(|()| to);
+                    let _ = c.call(
+                        s,
+                        "Runtime.evaluate",
+                        json!({ "expression": crate::design::live::DECK_UNPRINT_JS }),
+                        &mut events,
+                    );
                     say(Update::Printed(printed))?;
                 }
                 Cmd::Inspect { x, y, pick: false } => part_at = Some((x, y)),
