@@ -802,6 +802,41 @@ mod tests {
     }
 
     #[test]
+    fn a_question_card_comes_back_with_what_you_chose() {
+        use crate::state::{QOption, Question};
+        let mut c = Chat::new(1, 0, "Q".into());
+        let q = |text: &str, picked: Vec<usize>, own: Option<&str>| Question {
+            header: "H".into(),
+            text: text.into(),
+            options: vec![
+                QOption { label: "Tauri (Recommended)".into(), description: "d".into() },
+                QOption { label: "Leptos".into(), description: "".into() },
+            ],
+            multi: false,
+            picked,
+            own: own.map(Into::into),
+        };
+        c.messages.push(Message::Assistant {
+            blocks: vec![Block::Permission {
+                title: "Forge has 2 questions".into(),
+                detail: "Stack?".into(),
+                verdict: Verdict::Allowed,
+                info: PermInfo {
+                    questions: vec![q("Stack?", vec![0], None), q("Store?", vec![], Some("Markdown files"))],
+                    ..Default::default()
+                },
+            }],
+        });
+        let json = serde_json::to_string(&save_form(&c, Path::new("/w"))).unwrap();
+        let back = messages_of(&serde_json::from_str(&json).unwrap());
+        let Message::Assistant { blocks } = &back[0] else { panic!() };
+        let Block::Permission { verdict, info, .. } = &blocks[0] else { panic!() };
+        assert_eq!(*verdict, Verdict::Allowed);
+        let answers: Vec<_> = info.questions.iter().map(|q| q.answer()).collect();
+        assert_eq!(answers, [Some("Tauri (Recommended)".into()), Some("Markdown files".into())]);
+    }
+
+    #[test]
     fn files_are_written_whole_and_read_back_newest_first() {
         let dir = std::env::temp_dir().join(format!("forge-history-{}", new_id()));
         let mut a = save_form(&sample(), Path::new("/p"));

@@ -109,6 +109,26 @@ Page Up/Down and Ctrl+Home/End move through the list.
 `forge.autoApproveSafeCommands: false` in the settings file makes every
 command ask, in every mode.
 
+### Replies
+
+- **Questions.** When Forge asks you something (AskUserQuestion), it shows a
+  card with the question, its options and a tab per question. Pick an
+  option, or type your own answer in the message box; **Skip** lets Forge go
+  on with its own assumptions. Your answers reach Forge in the call itself,
+  and the card then folds to one line with what you chose. Questions are
+  asked every time, in every mode, so they have no "Always allow".
+- **Work in a row.** Two or more tool calls in a row, with the thinking
+  between them, fold into one line ("Edited 6 files, ran 2 commands"), with
+  the change's size and how many failed or were stopped. It opens to the
+  steps, and each step opens to its change or output. Text Forge writes to
+  you, and anything waiting on you, stands on its own.
+- **Failed and stopped calls.** A failed call says so ("Couldn't write
+  Cargo.toml") with its reason, and its change is marked Not applied. A
+  call cut off by Stop reads "Stopped": it may have taken effect, so check
+  before running it again.
+- **This turn's tasks** (Ctrl/⌘ Shift T): a click on a task scrolls to its
+  row, opens it and marks it for a moment.
+
 ## Projects
 
 A project is a folder Forge works in, with its own chats, instructions,

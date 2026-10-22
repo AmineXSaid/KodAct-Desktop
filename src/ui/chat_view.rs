@@ -41,6 +41,11 @@ pub struct ChatView {
     reveal: Option<(usize, std::rc::Rc<message::Reveal>)>,
     /// Frames the reveal has looked for its block; it gives up after a few.
     reveal_tries: u8,
+    /// The waiting question card's "Other" field, made with the first frame
+    /// (it needs the window), and the question it last showed.
+    other: Option<gpui::Entity<gpui::component::input::InputState>>,
+    other_for: Option<(usize, usize, usize, usize)>,
+    _other_subs: Vec<gpui::Subscription>,
 }
 
 impl ChatView {
@@ -77,6 +82,9 @@ impl ChatView {
             shown_jump: 0,
             reveal: None,
             reveal_tries: 0,
+            other: None,
+            other_for: None,
+            _other_subs: vec![],
         };
         view.sync(cx);
         view
@@ -464,8 +472,53 @@ impl ChatView {
     }
 }
 
+impl ChatView {
+    /// The "Other" field of the question card waiting on you: made once,
+    /// and showing what you typed for the question the card shows.
+    fn other_field(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::Entity<gpui::component::input::InputState>> {
+        use gpui::component::input::{InputEvent, InputState};
+        let Some((chat, msg, block, step, own)) = self.state.read(cx).waiting_question() else {
+            self.other_for = None;
+            return None;
+        };
+        let input = match &self.other {
+            Some(i) => i.clone(),
+            None => {
+                let i = cx.new(|cx| InputState::new(window, cx).placeholder("Type your answer"));
+                let state = self.state.clone();
+                self._other_subs.push(cx.subscribe_in(&i, window, move |_, i, ev: &InputEvent, _, cx| {
+                    let text = i.read(cx).value().to_string();
+                    match ev {
+                        InputEvent::Change => state.update(cx, |s, cx| s.set_own_text(text, cx)),
+                        // Enter answers this question with it and moves on.
+                        InputEvent::PressEnter { .. } if !text.trim().is_empty() => {
+                            state.update(cx, |s, cx| s.answer_in_words(text.trim().to_string(), cx))
+                        }
+                        _ => {}
+                    }
+                }));
+                self.other = Some(i.clone());
+                i
+            }
+        };
+        let key = (chat, msg, block, step);
+        if self.other_for != Some(key) {
+            self.other_for = Some(key);
+            let text = own.unwrap_or_default();
+            input.update(cx, |i, cx| i.set_value(text, window, cx));
+        }
+        Some(input)
+    }
+}
+
 impl Render for ChatView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let other = self.other_field(window, cx);
+        let other_msg = self.other_for.map(|(_, m, _, _)| m).filter(|_| other.is_some());
         // Paragraphs take their reading order afresh, top to bottom.
         super::select::begin_frame();
         self.finish_reveal(window, cx);
@@ -550,6 +603,7 @@ impl Render for ChatView {
                             .flash
                             .filter(|(c, m, _)| *c == chat.id && *m == ix)
                             .map(|(_, _, b)| b),
+                        other: other.clone().filter(|_| other_msg == Some(ix)),
                         reveal: reveal
                             .as_ref()
                             .filter(|(m, _)| *m == ix)

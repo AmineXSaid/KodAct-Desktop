@@ -141,6 +141,8 @@ pub struct AgentFeed {
     pub place: Option<(String, &'static str)>,
     /// It failed (exit 1 in its footer).
     pub failed: bool,
+    /// Stop cut it off: no exit code, "stopped" in its footer.
+    pub stopped: bool,
 }
 
 impl AgentFeed {
@@ -155,6 +157,7 @@ impl AgentFeed {
             output: c.output.to_string(),
             place,
             failed: c.status == ToolStatus::Failed,
+            stopped: c.status == ToolStatus::Interrupted,
         }
     }
 
@@ -192,9 +195,13 @@ impl AgentFeed {
             out.push_str(line);
             out.push_str("\r\n");
         }
-        let (code, tone) = if self.failed { (1, "31") } else { (0, "32") };
+        let (chip, tone) = match (self.stopped, self.failed) {
+            (true, _) => ("stopped", "33"),
+            (_, true) => ("exit 1", "31"),
+            _ => ("exit 0", "32"),
+        };
         out.push_str(&format!(
-            "\r\n\x1b[1;{tone}mexit {code}\x1b[0m \x1b[2m· {lines} line{}\x1b[0m\r\n",
+            "\r\n\x1b[1;{tone}m{chip}\x1b[0m \x1b[2m· {lines} line{}\x1b[0m\r\n",
             if lines == 1 { "" } else { "s" }
         ));
         out.into_bytes()
@@ -5984,6 +5991,49 @@ impl AppState {
         cx.notify();
     }
 
+    /// Choose "Other" on question `q`: your own words replace the options
+    /// picked, typed in the card's field (`set_own_text`).
+    pub fn choose_other(&mut self, chat: usize, msg: usize, block: usize, q: usize, cx: &mut Context<Self>) {
+        self.edit_questions(chat, msg, block, |qs, _| {
+            if let Some(question) = qs.get_mut(q) {
+                question.picked.clear();
+                question.own.get_or_insert_with(String::new);
+            }
+        });
+        cx.notify();
+    }
+
+    /// What you are typing as "Other" on the question the waiting card shows.
+    pub fn set_own_text(&mut self, text: String, cx: &mut Context<Self>) {
+        let Some(chat) = self.current else { return };
+        let Some((msg, block)) = self.pending_question(chat) else { return };
+        self.edit_questions(chat, msg, block, |qs, step| {
+            if let Some(question) = qs.get_mut(*step) {
+                if question.own.is_some() {
+                    question.own = Some(text);
+                }
+            }
+        });
+        cx.notify();
+    }
+
+    /// The question card the chat you're looking at waits on: (chat,
+    /// message, block, the question it shows, what you typed there).
+    pub fn waiting_question(&self) -> Option<(usize, usize, usize, usize, Option<String>)> {
+        let chat = self.current?;
+        let (msg, block) = self.pending_question(chat)?;
+        let qs = self.questions_at(chat, msg, block);
+        let step = match self.chats.iter().find(|c| c.id == chat)?.messages.get(msg)? {
+            Message::Assistant { blocks } => match blocks.get(block)? {
+                Block::Permission { info, .. } => info.step,
+                _ => 0,
+            },
+            _ => 0,
+        };
+        let own = qs.get(step)?.own.clone();
+        Some((chat, msg, block, step, own))
+    }
+
     /// Show question `q` on its card.
     pub fn question_tab(&mut self, chat: usize, msg: usize, block: usize, q: usize, cx: &mut Context<Self>) {
         self.edit_questions(chat, msg, block, |qs, step| {
@@ -9765,6 +9815,7 @@ mod tests {
             output: "main\ndone".into(),
             place: None,
             failed: false,
+            stopped: false,
         };
         let text = String::from_utf8(feed.bytes()).unwrap();
         assert!(text.starts_with("\x1b[2;3m# Check the branch"));
@@ -9772,7 +9823,9 @@ mod tests {
         assert!(text.contains("\x1b[36m--show-current\x1b[0m"));
         assert!(text.contains("main\r\ndone\r\n"));
         assert!(text.contains("\x1b[1;32mexit 0") && text.contains("2 lines"));
-        let failed = super::AgentFeed { failed: true, ..feed };
+        let failed = super::AgentFeed { failed: true, ..feed.clone() };
+        let stopped = super::AgentFeed { stopped: true, ..feed.clone() };
+        assert!(String::from_utf8_lossy(&stopped.bytes()).contains("stopped"));
         assert!(String::from_utf8(failed.bytes()).unwrap().contains("\x1b[1;31mexit 1"));
     }
 

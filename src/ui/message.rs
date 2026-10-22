@@ -65,6 +65,8 @@ pub struct ItemContext {
     pub flash: Option<usize>,
     /// A jump to a block of this message: where the block sits in it.
     pub reveal: Option<std::rc::Rc<Reveal>>,
+    /// The waiting question card's "Other" field, when that card is here.
+    pub other: Option<gpui::Entity<gpui::component::input::InputState>>,
 }
 
 /// Where a jump's block is drawn, so the list can scroll it into view: the
@@ -1288,7 +1290,7 @@ pub(super) fn tool_body(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) 
                             .text_color(t.colors.text_muted)
                             .child(if stopped { "May or may not have been applied" } else { "Not applied" }),
                     )
-                    .child(diff_lines(&call.diff, lang, t).opacity(0.55))
+                    .child(diff_lines(&call.diff, lang, t).opacity(0.75))
                 })
                 .into_any_element(),
         );
