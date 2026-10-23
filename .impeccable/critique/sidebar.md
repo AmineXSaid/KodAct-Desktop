@@ -1,0 +1,29 @@
+# Critique: sidebar (`src/ui/sidebar.rs`)
+
+## Run 1, baseline (2026-10-23, before the craft-floor and polish passes)
+
+Design specificity: generic. The wordmark, project block and chat list could
+belong to any developer tool; nothing says "agent sessions" except the dots.
+
+| # | Heuristic | Score | Note |
+|---|---|---|---|
+| 1 | Visibility of system status | 3 | Working and unread marks exist; three signals per row blur them |
+| 2 | Match with the real world | 3 | Plain names; branch shown as code |
+| 3 | User control and freedom | 3 | Collapse, filter, rename, delete |
+| 4 | Consistency and standards | 2 | Blue edge + dot + time per row; branch in sidebar and status bar; mono as chrome |
+| 5 | Error prevention | 3 | Delete confirms |
+| 6 | Recognition over recall | 3 | Titles and groups by date |
+| 7 | Flexibility and efficiency | 3 | Ctrl+B, Ctrl+N, filter |
+| 8 | Aesthetic and minimalist design | 1 | Heavy letter-spaced wordmark, dividers, a filled account card, a status bar under it |
+| 9 | Error recovery | 3 | |
+| 10 | Help and documentation | 2 | Empty state teaches; little else |
+| | **Total** | **26/40** | Acceptable |
+
+Cognitive load: 3 failures (single focus, visual hierarchy, minimal choices).
+
+Priority issues:
+- P1: coloured 2px edge on the open chat (craft floor: no coloured edge over 1px on list items).
+- P1: branch name in mono as decoration (craft floor: no mono as a technical costume), and duplicated in the status bar.
+- P2: every row carries a time; the dot shows on every row; together with the edge, three signals.
+- P2: dividers between every section; the account as a filled card.
+- P3: wordmark weight and letter-spacing louder than any content.
