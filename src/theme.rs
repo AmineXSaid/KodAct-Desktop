@@ -885,6 +885,10 @@ pub struct ExtraColors {
     // Memory and rules: the reference's ochre.
     pub memory: Hsla,
     pub memory_tint: Hsla,
+    // Inline code in prose (a file, a command): Forge's coral on a faint
+    // wash, a rounded chip (`ui/markdown.rs`).
+    pub code_inline_fg: Hsla,
+    pub code_inline_bg: Hsla,
     // The home screen's field of dots (`ui/dot_field.rs`).
     pub dot: Hsla,
     // Permission modes, as Forge for VS Code tints them (forge-tokens.css).
@@ -952,6 +956,8 @@ impl ExtraColors {
                 toggle_on: rgb(0x9db7d9).into(),
                 memory: rgb(0xe5c77a).into(),
                 memory_tint: rgb(0x3a3220).into(),
+                code_inline_fg: rgb(0xef968b).into(),
+                code_inline_bg: Hsla::from(rgb(0xf0e6dc)).opacity(0.09),
                 dot: rgb(0x8b857e).into(),
                 mode_edit: rgb(0x2da160).into(),
                 mode_plan: rgb(0x428fdc).into(),
@@ -1022,6 +1028,8 @@ impl ExtraColors {
                 toggle_on: rgb(0x41608a).into(),
                 memory: rgb(0x75591a).into(),
                 memory_tint: rgb(0xf6ecd2).into(),
+                code_inline_fg: rgb(0xa13430).into(),
+                code_inline_bg: Hsla::from(rgb(0x2b2622)).opacity(0.065),
                 dot: rgb(0x8b857e).into(),
                 mode_edit: rgb(0x108548).into(),
                 mode_plan: rgb(0x1f75cb).into(),

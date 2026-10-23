@@ -24,3 +24,14 @@ After: 8.5/10.
 
 Before the last fixes: 8.0 (thumbnail and caption repeated beside the open
 picture). After: 8.5/10.
+
+## 2026-10-23: step B, transcript polish (md/b/jump screenshots)
+
+- Inline code: Forge's coral on a rounded chip (`code_inline_fg/bg`, AA in
+  every theme), padded inside, painted per wrapped row; a row holding only
+  padding gets no chip. Before the wrap fix: 8.0. After: 8.5.
+- Bullets per level (• ◦ –); the heavy ▪ fallback glyph replaced: 8.5.
+- Change sizes as tinted chips on tool lines, run headers and the
+  permission card: 8.5.
+- Jump to latest: a round arrow button, words and key in its tooltip, a
+  dot while Forge replies: 8.5.

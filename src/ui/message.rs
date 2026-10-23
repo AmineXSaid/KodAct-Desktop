@@ -1114,6 +1114,28 @@ pub(super) fn has_body(call: &ToolCall) -> bool {
         || !call.images.is_empty()
 }
 
+/// A change's size as two tinted chips, "+76" and "−90", as Claude Code
+/// shows it; a side with nothing to count is left out.
+pub(super) fn diff_counts(adds: usize, dels: usize, t: &Theme) -> gpui::Div {
+    let chip = |text: String, fg: gpui::Hsla, bg: gpui::Hsla| {
+        div()
+            .px(t.space.xs)
+            .rounded(t.radius.small)
+            .bg(bg)
+            .text_color(fg)
+            .child(text)
+    };
+    div()
+        .flex()
+        .flex_none()
+        .items_center()
+        .gap(t.space.xs)
+        .font_family(t.font_mono.clone())
+        .text_size(t.text.caption)
+        .when(adds > 0, |d| d.child(chip(format!("+{adds}"), t.extra.success, t.extra.success_tint)))
+        .when(dels > 0, |d| d.child(chip(format!("−{dels}"), t.extra.danger, t.extra.danger_tint)))
+}
+
 /// The pictures calls returned, as thumbnails pushed to the end of their
 /// line: three at most, then how many more. The line opens to them.
 pub(super) fn thumbs<'a>(
@@ -1290,18 +1312,7 @@ pub(super) fn tool_header(
                 .text_color(if unknown { t.extra.warning } else { t.extra.danger })
                 .child(w)
         }))
-        .when(adds + dels > 0, |d| {
-            d.child(
-                div()
-                    .flex()
-                    .flex_none()
-                    .gap(t.space.xs)
-                    .font_family(t.font_mono.clone())
-                    .text_size(t.text.caption)
-                    .child(div().text_color(t.extra.success.opacity(0.85)).child(format!("+{adds}")))
-                    .child(div().text_color(t.extra.danger.opacity(0.85)).child(format!("−{dels}"))),
-            )
-        })
+        .when(adds + dels > 0, |d| d.child(diff_counts(adds, dels, t)))
         .when(has_body, |d| {
             d.child(icon(
                 if call.open {
@@ -2126,8 +2137,7 @@ fn permission(
                             .text_color(t.colors.text_muted)
                             .child(c.target.clone()),
                     )
-                    .child(div().text_color(t.extra.success).child(format!("+{adds}")))
-                    .child(div().text_color(t.extra.danger).child(format!("−{dels}"))),
+                    .child(diff_counts(adds, dels, t)),
             )
             .child(
                 well("diff", c.diff.len() > 12)

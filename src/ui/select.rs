@@ -171,7 +171,8 @@ pub fn selected_text() -> Option<String> {
                 parts.push(text[r].to_string());
             }
         }
-        (!parts.is_empty()).then(|| parts.join("\n"))
+        // Inline code's padding (`markdown::CODE_PAD`) isn't part of the text.
+        (!parts.is_empty()).then(|| parts.join("\n").replace(super::markdown::CODE_PAD, ""))
     })
 }
 

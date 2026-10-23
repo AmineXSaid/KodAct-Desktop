@@ -248,6 +248,9 @@ fn coloured_text_reads_on_its_tint() {
             ("danger", x.danger, Hsla::from(over(x.danger_tint, card))),
             ("warning", x.warning, Hsla::from(over(x.warning_tint, card))),
             ("memory", x.memory, Hsla::from(over(x.memory_tint, card))),
+            // A file or command named in a reply, on the session and on a card.
+            ("inline code", x.code_inline_fg, Hsla::from(over(x.code_inline_bg, x.stage))),
+            ("inline code on a card", x.code_inline_fg, Hsla::from(over(x.code_inline_bg, card))),
             ("skill", x.skill, card),
             (
                 "ping fast",

@@ -13,9 +13,9 @@
 //! title in the display serif. Both draw tables and task lists.
 
 use gpui::{
-    div, font, prelude::*, px, relative, AnyElement, App, ClipboardItem, ElementId, Entity,
-    FontStyle, FontWeight, InteractiveText, SharedString, StrikethroughStyle, StyledText, TextRun,
-    UnderlineStyle,
+    canvas, div, fill, font, point, prelude::*, px, relative, size, AnyElement, App, Bounds,
+    ClipboardItem, ElementId, Entity, FontStyle, FontWeight, InteractiveText, SharedString,
+    StrikethroughStyle, StyledText, TextLayout, TextRun, UnderlineStyle,
 };
 use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
@@ -479,7 +479,121 @@ fn linked(id: ElementId, spans: &[Span], text: String, runs: Vec<TextRun>, t: &T
     let runs = super::select::prepare(&key, &text, runs, t.colors.primary_tint);
     let text = StyledText::new(text).with_runs(runs);
     let layout = text.layout().clone();
-    super::select::wrap(key, layout, linked_text(id, spans, text))
+    let code = code_ranges(spans);
+    let el = linked_text(id, spans, text);
+    let el = if code.is_empty() {
+        el
+    } else {
+        // The chips paint first, so the text sits on them.
+        div()
+            .relative()
+            .child(chips(layout.clone(), code, t))
+            .child(el)
+            .into_any_element()
+    };
+    super::select::wrap(key, layout, el)
+}
+
+/// Inline code's padding: a narrow space each side, inside the chip; a
+/// no-break one, so a line never wraps between the padding and the name.
+pub const CODE_PAD: &str = "\u{202F}";
+
+/// A span's text as it is laid out: code padded inside its chip.
+fn shown(s: &Span) -> std::borrow::Cow<'_, str> {
+    if s.code {
+        format!("{CODE_PAD}{}{CODE_PAD}", s.text).into()
+    } else {
+        s.text.as_str().into()
+    }
+}
+
+/// Where the code spans sit in the laid-out text.
+fn code_ranges(spans: &[Span]) -> Vec<std::ops::Range<usize>> {
+    let mut out = vec![];
+    let mut at = 0;
+    for s in spans.iter().filter(|s| !s.text.is_empty()) {
+        let len = shown(s).len();
+        if s.code {
+            out.push(at..at + len);
+        }
+        at += len;
+    }
+    out
+}
+
+/// Rounded grounds behind inline code, one per row a span wraps onto: text
+/// runs can only fill square, so these are painted from the laid-out
+/// glyph positions, under the text.
+fn chips(layout: TextLayout, ranges: Vec<std::ops::Range<usize>>, t: &Theme) -> impl IntoElement {
+    let (bg, radius) = (t.extra.code_inline_bg, t.radius.small);
+    canvas(
+        |_, _, _| {},
+        move |_, _, window, _| {
+            let line = layout.line_height();
+            let text = layout.text();
+            for r in &ranges {
+                for b in rows(&layout, &text, r.clone(), line) {
+                    window.paint_quad(fill(b, bg).corner_radii(radius));
+                }
+            }
+        },
+    )
+    .absolute()
+    .size_full()
+}
+
+/// The bounds a range covers on each row it wraps onto, trimmed to sit
+/// inside the line's height. A row holding only the padding (the wrapper
+/// breaks at any space, a no-break one too) gets none.
+fn rows(
+    layout: &TextLayout,
+    text: &str,
+    r: std::ops::Range<usize>,
+    line: gpui::Pixels,
+) -> Vec<Bounds<gpui::Pixels>> {
+    let mut out: Vec<Bounds<gpui::Pixels>> = vec![];
+    let inset = line * 0.12;
+    // (where the row starts, its last glyph's x, glyphs, any besides padding)
+    let mut row: Option<(gpui::Point<gpui::Pixels>, gpui::Pixels, usize, bool)> = None;
+    let close = |start: gpui::Point<gpui::Pixels>,
+                 end: gpui::Pixels,
+                 ink: bool,
+                 out: &mut Vec<Bounds<gpui::Pixels>>| {
+        if ink && end > start.x {
+            out.push(Bounds::new(
+                point(start.x, start.y + inset),
+                size(end - start.x, line - inset * 2.),
+            ));
+        }
+    };
+    let starts: Vec<usize> = text
+        .get(r.clone())
+        .map(|s| s.char_indices().map(|(i, _)| r.start + i).collect())
+        .unwrap_or_default();
+    for i in starts {
+        let Some(p) = layout.position_for_index(i) else { continue };
+        let ink = !text[i..].starts_with(CODE_PAD);
+        row = match row {
+            Some((start, last, n, had)) if start.y == p.y => {
+                Some((start, p.x.max(last), n + 1, had || ink))
+            }
+            Some((start, last, n, had)) => {
+                // Wrapped: the row ends a character past its last start.
+                let step = if n > 1 { (last - start.x) / (n - 1) as f32 } else { line * 0.5 };
+                close(start, last + step, had, &mut out);
+                Some((p, p.x, 1, ink))
+            }
+            None => Some((p, p.x, 1, ink)),
+        };
+    }
+    if let Some((start, last, n, ink)) = row {
+        let end = match layout.position_for_index(r.end) {
+            Some(e) if e.y == start.y => e.x,
+            _ => last + if n > 1 { (last - start.x) / (n - 1) as f32 } else { line * 0.5 },
+        };
+        close(start, end, ink, &mut out);
+    }
+    out
 }
 
 fn linked_text(id: ElementId, spans: &[Span], text: StyledText) -> AnyElement {
@@ -487,17 +601,18 @@ fn linked_text(id: ElementId, spans: &[Span], text: StyledText) -> AnyElement {
     let mut urls: Vec<String> = vec![];
     let mut at = 0;
     for s in spans.iter().filter(|s| !s.text.is_empty()) {
+        let len = shown(s).len();
         if let Some(url) = &s.link {
             // Neighbouring spans of one link (bold inside it) join up.
             match (ranges.last_mut(), urls.last()) {
-                (Some(r), Some(u)) if *u == *url && r.end == at => r.end = at + s.text.len(),
+                (Some(r), Some(u)) if *u == *url && r.end == at => r.end = at + len,
                 _ => {
-                    ranges.push(at..at + s.text.len());
+                    ranges.push(at..at + len);
                     urls.push(url.clone());
                 }
             }
         }
-        at += s.text.len();
+        at += len;
     }
     if ranges.is_empty() {
         return text.into_any_element();
@@ -589,7 +704,8 @@ fn run_list(
         if s.text.is_empty() {
             continue;
         }
-        text.push_str(&s.text);
+        let shown = shown(s);
+        text.push_str(&shown);
         let mut f = font(if s.code {
             t.font_code_inline.clone()
         } else {
@@ -608,19 +724,18 @@ fn run_list(
             f.style = FontStyle::Italic;
         }
         runs.push(TextRun {
-            len: s.text.len(),
+            len: shown.len(),
             font: f,
-            // Inline code (a file, a command) in the strong ink on a faint
-            // wash: a name set apart by its face and ground, not by a colour
-            // that turns a list of names into noise.
+            // Inline code (a file, a command) in Forge's coral on a rounded
+            // chip (painted by `chips`): a name set apart at a glance.
             color: if s.link.is_some() {
                 t.colors.primary
             } else if s.code {
-                t.colors.text_strong
+                t.extra.code_inline_fg
             } else {
                 color
             },
-            background_color: s.code.then(|| t.colors.text.opacity(if t.is_dark { 0.09 } else { 0.06 })),
+            background_color: None,
             underline: s.link.is_some().then(|| UnderlineStyle {
                 thickness: px(1.),
                 color: Some(t.colors.primary),
@@ -818,7 +933,8 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                         .text_color(t.colors.text_muted)
                         .child(match number {
                             Some(n) => format!("{n}."),
-                            None => "•".to_string(),
+                            // A bullet per level, as a written outline: • ◦ –.
+                            None => ["•", "◦", "–"][depth.min(2)].to_string(),
                         })
                         .into_any_element(),
                 })

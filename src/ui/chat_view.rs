@@ -406,31 +406,43 @@ impl ChatView {
             .flex()
             .justify_center()
             .child(
+                // A round button, as Claude Code's: the arrow says it all;
+                // the words and the key are in its tooltip.
                 div()
                     .id("jump-latest")
+                    .relative()
                     .flex()
                     .items_center()
-                    .gap(t.space.xs)
-                    .h(t.size.control + px(4.))
-                    .px(t.space.md)
-                    .rounded(t.radius.button)
+                    .justify_center()
+                    .size(t.size.button_h)
+                    .rounded(t.radius.pill)
                     .bg(t.colors.surface)
                     .border_1()
                     .border_color(t.colors.border)
                     .shadow(t.elevation_popover())
                     .cursor_pointer()
-                    .text_size(t.text.caption)
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(t.colors.text)
                     .hover(move |d| d.bg(hover))
                     .child(icon_arrow(&t))
-                    // While a reply plays, the button says there's more coming.
-                    .child(if busy {
-                        "New messages below"
-                    } else {
-                        "Jump to latest"
+                    // While a reply plays, a dot says there's more coming.
+                    .when(busy, |d| {
+                        d.child(
+                            div()
+                                .absolute()
+                                .top(px(1.))
+                                .right(px(1.))
+                                .size(px(7.))
+                                .rounded(t.radius.pill)
+                                .bg(t.extra.accent),
+                        )
                     })
-                    .child(super::kbd(&t, super::shortcut("J")))
+                    .tooltip(move |w, cx| {
+                        let words = if busy { "New messages below" } else { "Jump to latest" };
+                        gpui::component::tooltip::Tooltip::new(format!(
+                            "{words} ({})",
+                            super::shortcut("J")
+                        ))
+                        .build(w, cx)
+                    })
                     .on_click(cx.listener(|this, _, _, cx| this.jump_to_latest(cx)))
                     .with_animation(
                         "jump-in",

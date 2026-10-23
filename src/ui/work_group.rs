@@ -275,24 +275,7 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
             )
         })
         .when(adds + dels > 0 && live_step.is_none(), |d| {
-            d.child(
-                div()
-                    .flex()
-                    .flex_none()
-                    .gap(t.space.xs)
-                    .font_family(t.font_mono.clone())
-                    .text_size(t.text.caption)
-                    .child(
-                        div()
-                            .text_color(t.extra.success.opacity(0.85))
-                            .child(format!("+{adds}")),
-                    )
-                    .child(
-                        div()
-                            .text_color(t.extra.danger.opacity(0.85))
-                            .child(format!("−{dels}")),
-                    ),
-            )
+            d.child(message::diff_counts(adds, dels, t))
         })
         .child(icon(
             if open {

@@ -9293,6 +9293,11 @@ fn script(prompt: &str) -> Vec<Step> {
         s.push(Step::End { seconds: 38.6 });
         return s;
     }
+    if lower.contains("summar") {
+        s.extend(words(DEMO_SUMMARY, Step::Say));
+        s.push(Step::End { seconds: 4.2 });
+        return s;
+    }
     if lower.contains("screenshot") {
         s.extend(demo_screenshots());
         s.push(Step::End { seconds: 6.1 });
@@ -9383,6 +9388,11 @@ fn script(prompt: &str) -> Vec<Step> {
     s.push(Step::End { seconds: 14.2 });
     s
 }
+
+/// A reply in the shape of a written plan: numbered points with bold
+/// lead-ins, bullets three deep, and names in inline code, one long enough
+/// to wrap.
+const DEMO_SUMMARY: &str = "I've written the plan to `/root/.claude/plans/scalable-forging-stearns.md`. Nothing is changed yet.\n\n**Where Forge loses**\n\n1. **No chat title.** The open chat's title goes in the title bar, and clicking it opens the chat's actions (Rename, Pin, Move, Export, Delete).\n   - The search pill leaves the title bar: `Search` becomes the sidebar's first row.\n2. **The message box looks like a form.** It becomes one line: `+`, the text, then send.\n   - Mode, model and the context ring move under the box as quiet text.\n     - The ring keeps its numbers in the tooltip.\n3. **You can't read the session at a glance.** A Session column shows the place, the branch in `git_status::Repo`, context use and changes.\n\nThe tokens live in `src/theme.rs`; run `UPDATE_SYSTEM_MD=1 cargo test system_md` after changing one.";
 
 // ---------------------------------------------------------------- mock chats
 
