@@ -287,24 +287,23 @@ fn pending(info: &PermInfo, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement
         .flex_col()
         .gap(t.space.md)
         .p(t.space.lg)
-        .child(
+        // Several questions: their steps, and where you are. The question
+        // below is the heading; no label above it.
+        .children(steps.map(|steps| {
             div()
                 .flex()
                 .items_center()
-                .gap(t.space.xs)
-                .child(icon("icons/hand.svg", t.size.icon_xs, t.extra.accent))
-                .child(theme::eyebrow(t, "Needs you"))
+                .gap(t.space.sm)
+                .child(steps)
                 .child(div().flex_1())
-                .when(qs.len() > 1, |d| {
-                    d.child(
-                        div()
-                            .text_size(t.text.caption)
-                            .text_color(t.colors.text_muted)
-                            .child(format!("Question {} of {}", step + 1, qs.len())),
-                    )
-                }),
-        )
-        .children(steps)
+                .child(
+                    div()
+                        .flex_none()
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_muted)
+                        .child(format!("{} of {}", step + 1, qs.len())),
+                )
+        }))
         .child(
             div()
                 .flex()
@@ -336,7 +335,6 @@ fn pending(info: &PermInfo, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement
         .border_color(t.colors.border)
         .rounded(t.radius.card)
         .shadow(t.elevation_grain())
-        .child(div().w(px(3.)).flex_none().bg(t.extra.accent))
         .child(body)
         .into_any_element()
 }

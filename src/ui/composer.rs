@@ -1,8 +1,8 @@
-//! The composer, one unit: a white card holding a multi-line input that
-//! grows up to a limit, the outlined + (attach) and Send (Stop while a reply
-//! plays), set in a recessed tray that carries the project, the context
-//! meter, the model picker (a popover) and the Modes menu. Enter sends;
-//! Shift+Enter adds a line.
+//! The composer, one surface as Claude's is: a lifted box holding a
+//! multi-line input that grows up to a limit, and under it one row: the +
+//! (attach and tools) and the project on the left, the context meter, the
+//! model picker (a popover) and the Modes menu on the right, then Send
+//! (Stop while a reply plays). Enter sends; Shift+Enter adds a line.
 
 use gpui::component::input::{
     Editor, EditorState, Input, InputEvent, InputState, TextDecoration, TextDecorationCollection,
@@ -18,14 +18,17 @@ use crate::theme::ActiveTheme;
 
 /// The empty box's line: while a question waits, or a reply runs, what
 /// typing does then; else a project's, or a plain chat's.
-/// `asking`: a question card (`Some(true)`) or a permission card waits.
-fn placeholder(in_folder: bool, asking: Option<bool>, busy: bool) -> &'static str {
+/// `asking`: a question card (`Some(true)`) or a permission card waits;
+/// `in_chat`: the conversation has begun, so the box replies.
+fn placeholder(in_folder: bool, asking: Option<bool>, busy: bool, in_chat: bool) -> &'static str {
     if asking == Some(true) {
         "Type your own answer…"
     } else if asking.is_some() {
         "Or tell Forge what to do instead…"
     } else if busy {
         "Add to the task, or steer Forge…"
+    } else if in_chat {
+        "Reply to Forge…"
     } else if in_folder {
         "What should we build today?"
     } else {
@@ -67,7 +70,7 @@ pub struct Composer {
     /// caret's place and line height there, in the window.
     ac_anchor: Option<(usize, gpui::Point<gpui::Pixels>, gpui::Pixels)>,
     /// The placeholder shown: (a project's, a question waits, a reply runs).
-    placeholder_now: (bool, Option<bool>, bool),
+    placeholder_now: (bool, Option<bool>, bool, bool),
     _subs: Vec<Subscription>,
 }
 
@@ -88,7 +91,7 @@ impl Composer {
                 .folding(false)
                 .auto_close(false)
                 .soft_wrap(true)
-                .placeholder(placeholder(in_folder, None, false))
+                .placeholder(placeholder(in_folder, None, false, false))
                 .submit_on_enter(true)
         });
         let styling = input.update(cx, |i, cx| i.create_decorations_collection(vec![], cx));
@@ -103,11 +106,12 @@ impl Composer {
                 // A plain chat asks for anything; a project's, for work on it.
                 // While a question waits, what you type answers it.
                 let s = state.read(cx);
-                let now = (s.in_folder(), s.asking().then(|| s.asking_question()), s.busy());
+                let in_chat = s.chat().is_some_and(|c| !c.messages.is_empty());
+                let now = (s.in_folder(), s.asking().then(|| s.asking_question()), s.busy(), in_chat);
                 if now != this.placeholder_now {
                     this.placeholder_now = now;
                     this.input.update(cx, |i, cx| {
-                        i.set_placeholder(placeholder(now.0, now.1, now.2), window, cx)
+                        i.set_placeholder(placeholder(now.0, now.1, now.2, now.3), window, cx)
                     });
                 }
                 // The model window opening: an empty search, the current row active.
@@ -193,7 +197,7 @@ impl Composer {
             ac_closed_for: None,
             ac_took_enter: false,
             ac_anchor: None,
-            placeholder_now: (in_folder, None, false),
+            placeholder_now: (in_folder, None, false, false),
             _subs: subs,
         }
     }
@@ -655,7 +659,8 @@ impl Render for Composer {
         });
         let model_name: SharedString = match (&s.endpoints, s.active_profile()) {
             (None, _) => "Model".into(),
-            (Some(_), None) => "Set up an endpoint first".into(),
+            // No endpoint yet: an invitation, not an alarm; the menu sets one up.
+            (Some(_), None) => "Choose a model".into(),
             (Some(_), Some(p)) => p.display().to_string().into(),
         };
         let pill_effort = super::model_menu::pill_effort(&t, s);
@@ -965,32 +970,26 @@ impl Render for Composer {
             .children(model_menu)
             // Painted last, over the cards under the box on the new-chat screen.
             .children(completion.map(|c| gpui::deferred(c).with_priority(2)))
-            // One unit: the white box (what you write, + on the left, send on
-            // the right) resting in a recessed tray that holds the selectors.
+            // One surface: what you write, then one row with everything
+            // about it. It lifts off the page; the mode tints its edge, as it
+            // tints the extension's focus ring, and the keyboard deepens it.
             .child(
                 div()
                     .flex()
                     .flex_col()
-                    .rounded(t.size.composer_radius)
-                    .bg(t.extra.sunk)
-                    .border_1()
-                    .border_color(t.colors.border)
                     .child(
                         div()
                             .flex()
                             .flex_col()
                             .bg(t.colors.surface)
                             .border_1()
-                            // The mode tints the box's edge, as it tints the extension's
-                            // focus ring; the keyboard deepens it.
                             .border_color(tint.map(|c| c.opacity(0.55)).unwrap_or(if focused {
                                 t.extra.border_strong
                             } else {
                                 t.colors.border
                             }))
                             .rounded(t.size.composer_radius)
-                            // The tray's edge meets the box's: no double hairline.
-                            .m(px(-1.))
+                            .shadow(t.elevation_grain())
                             // Files dropped anywhere on the box are attached.
                             .drag_over::<gpui::ExternalPaths>({
                                 let (edge, wash) = (t.colors.primary, t.colors.primary_tint);
@@ -1025,7 +1024,7 @@ impl Render for Composer {
                                 div()
                                     .flex()
                                     .items_center()
-                                    .gap(t.space.sm)
+                                    .gap(t.space.xs)
                                     // Equal insets right and below, so send sits
                                     // square in the box's corner.
                                     .p(t.space.snug)
@@ -1034,12 +1033,13 @@ impl Render for Composer {
                                         div()
                                             .relative()
                                             .child(
-                                                super::button::Button::outlined_icon(
+                                                super::button::Button::icon(
                                                     "attach",
                                                     "icons/plus.svg",
                                                     "Add files, connectors and more",
                                                 )
-                                                .large()
+                                                // Its name, not over its own open menu.
+                                                .tooltip(!self.add_open)
                                                 .on_click(cx.listener(|this, ev, window, cx| {
                                                     if this.just_dismissed(ev) {
                                                         return;
@@ -1061,26 +1061,14 @@ impl Render for Composer {
                                             )
                                             .children(add_menu),
                                     )
-                                    .child(div().flex_1())
+                                    .child(project_button)
+                                    .child(div().flex_1().relative().children(context_popover))
+                                    .children(meter)
+                                    .child(model_button)
+                                    // Modes: the button and its menu above it.
+                                    .child(div().relative().child(mode_trigger).children(modes_menu))
                                     .child(send),
                             ),
-                    )
-                    // The tray: the project, the context meter, the model, the mode.
-                    .child(
-                        div()
-                            .relative()
-                            .children(context_popover)
-                            .flex()
-                            .items_center()
-                            .gap(t.space.xs)
-                            .px(t.space.tight)
-                            .py(t.space.xs)
-                            .child(project_button)
-                            .children(meter)
-                            .child(div().flex_1())
-                            .child(model_button)
-                            // Modes: the button and its menu above it.
-                            .child(div().relative().child(mode_trigger).children(modes_menu)),
                     ),
             );
         // Never wider than its own measure, centred wherever it sits.

@@ -159,24 +159,58 @@ pub struct CommandPalette {
 
 /// Fuzzy match: every query character in order. Higher is better: matches at
 /// word starts and in runs score more. Returns the matched byte positions.
+/// When the query also appears whole in the text, that run is used if it
+/// scores at least as well, so "theme" lights up "theme", not "th…e…me".
 pub fn fuzzy(query: &str, text: &str) -> Option<(i32, Vec<usize>)> {
-    if query.is_empty() {
+    let q: Vec<char> = query
+        .chars()
+        .map(|c| c.to_ascii_lowercase())
+        .filter(|c| !c.is_whitespace())
+        .collect();
+    if q.is_empty() {
         return Some((0, vec![]));
     }
     let lower: Vec<(usize, char)> = text
         .char_indices()
         .map(|(i, c)| (i, c.to_ascii_lowercase()))
         .collect();
-    let mut positions = vec![];
-    let mut score = 0;
+    let mut hits = vec![];
     let mut at = 0;
+    for &c in &q {
+        let found = (at..lower.len()).find(|&k| lower[k].1 == c)?;
+        hits.push(found);
+        at = found + 1;
+    }
+    let mut best = (score(&lower, &hits), hits);
+    for start in 0..lower.len().saturating_sub(q.len() - 1) {
+        if (0..q.len()).all(|k| lower[start + k].1 == q[k]) {
+            let run: Vec<usize> = (start..start + q.len()).collect();
+            let s = score(&lower, &run);
+            if s >= best.0 {
+                best = (s, run);
+            }
+            // The first word-start occurrence is the one to show.
+            if start == 0 || !lower[start - 1].1.is_alphanumeric() {
+                break;
+            }
+        }
+    }
+    let positions = best.1.iter().map(|&k| lower[k].0).collect();
+    // Shorter labels win ties.
+    Some((best.0 * 10 - text.len() as i32 / 4, positions))
+}
+
+/// A query found whole in a command's group name ("mode" in "Modes"),
+/// scored under any label match.
+fn group_match(query: &str, group: &str) -> Option<i32> {
+    let q = query.trim().to_lowercase();
+    (q.chars().count() >= 3 && group.to_lowercase().contains(&q)).then_some(-100)
+}
+
+fn score(lower: &[(usize, char)], hits: &[usize]) -> i32 {
+    let mut score = 0;
     let mut prev: Option<usize> = None;
-    for q in query
-        .chars()
-        .map(|c| c.to_ascii_lowercase())
-        .filter(|c| !c.is_whitespace())
-    {
-        let found = (at..lower.len()).find(|&k| lower[k].1 == q)?;
+    for &found in hits {
         let word_start = found == 0 || !lower[found - 1].1.is_alphanumeric();
         score += 1
             + if word_start { 8 } else { 0 }
@@ -185,12 +219,9 @@ pub fn fuzzy(query: &str, text: &str) -> Option<(i32, Vec<usize>)> {
             } else {
                 0
             };
-        positions.push(lower[found].0);
         prev = Some(found);
-        at = found + 1;
     }
-    // Shorter labels win ties.
-    Some((score * 10 - text.len() as i32 / 4, positions))
+    score
 }
 
 impl CommandPalette {
@@ -288,8 +319,9 @@ impl CommandPalette {
                 crate::theme::Look::Tiles => Box::new(ThemeTiles),
                 crate::theme::Look::Command => Box::new(ThemeCommand),
             };
+            // An action, named as one; the theme's character beside it.
             out.push(act(
-                &format!("Theme: {} · {}", look.name(), look.blurb()),
+                &format!("Use the {} theme", look.name()),
                 if look == current {
                     "icons/check.svg"
                 } else {
@@ -298,6 +330,9 @@ impl CommandPalette {
                 None,
                 action,
             ));
+            if let Some(last) = out.last_mut() {
+                last.detail = Some(look.blurb().into());
+            }
         }
         out.extend([
             act(
@@ -773,7 +808,8 @@ impl CommandPalette {
             .filter(|m| *m != ModeId::Bypass || s.bypass_allowed)
         {
             out.push(Command {
-                label: format!("Mode: {}", m.label()).into(),
+                // A control names its action.
+                label: format!("Switch to {}", m.label()).into(),
                 group: "Modes",
                 icon: m.icon(),
                 hint: (m == s.mode).then(|| "current".into()),
@@ -822,7 +858,12 @@ impl CommandPalette {
         let mut scored: Vec<(i32, Command, Vec<usize>)> = self
             .commands(cx)
             .into_iter()
-            .filter_map(|c| fuzzy(q, &c.label).map(|(score, pos)| (score, c, pos)))
+            .filter_map(|c| match fuzzy(q, &c.label) {
+                Some((score, pos)) => Some((score, c, pos)),
+                // "mode" still finds the modes: the group name counts too,
+                // below any match in the label itself.
+                None => group_match(q, c.group).map(|score| (score, c, vec![])),
+            })
             .collect();
         // With nothing typed, Files lists the project's first files.
         if !q.is_empty() || scope == Scope::Files {
@@ -1141,8 +1182,9 @@ pub fn highlighted(label: &SharedString, positions: &[usize], t: &Theme) -> Styl
         runs.push(TextRun {
             len,
             font: f,
+            // A match reads by weight, in the strong ink, not in the accent.
             color: if hit {
-                t.colors.primary
+                t.colors.text_strong
             } else {
                 t.colors.text
             },
@@ -1292,7 +1334,7 @@ impl CommandPalette {
                             p,
                             t.size.icon_xs,
                             if on {
-                                t.colors.primary
+                                t.colors.text
                             } else {
                                 t.colors.text_subtle
                             },
@@ -1303,11 +1345,7 @@ impl CommandPalette {
                         d.child(
                             div()
                                 .font_weight(FontWeight::NORMAL)
-                                .text_color(if on {
-                                    t.colors.primary
-                                } else {
-                                    t.colors.text_subtle
-                                })
+                                .text_color(t.colors.text_subtle)
                                 .child(found.counts[i].to_string()),
                         )
                     })
@@ -1346,13 +1384,13 @@ impl CommandPalette {
                         .text_color(t.colors.text_subtle)
                         .child(cmd.group)
                         .children(more.map(|n| {
-                            let ink = t.colors.text_strong;
+                            let ink = t.colors.text;
                             div()
                                 .id(("palette-more", i))
                                 .cursor_pointer()
-                                .text_color(t.colors.primary)
+                                .text_color(t.colors.text_muted)
                                 .hover(move |st| st.text_color(ink))
-                                .child(format!("All {n} ›"))
+                                .child(format!("Show all {n}"))
                                 .on_click(cx.listener(move |this, _, window, cx| {
                                     this.set_scope(to, window, cx)
                                 }))
@@ -1366,6 +1404,7 @@ impl CommandPalette {
             child += 1;
             let row = div()
                 .id(("cmd", i))
+                .group("cmd-row")
                 .flex()
                 .items_center()
                 .gap(t.space.md)
@@ -1385,7 +1424,7 @@ impl CommandPalette {
                     cmd.icon,
                     t.size.icon_sm,
                     if on {
-                        t.colors.primary
+                        t.colors.text
                     } else {
                         t.colors.text_muted
                     },
@@ -1408,7 +1447,16 @@ impl CommandPalette {
                         .flex()
                         .items_baseline(),
                 )
-                .children(cmd.hint.as_ref().map(|h| keys(&t, h)))
+                // Its keys on the row you are on (or point at), not on every row.
+                .children(cmd.hint.as_ref().map(|h| {
+                    div()
+                        .flex_none()
+                        // "current" is state, not a key: always shown.
+                        .when(!on && h.as_ref() != "current", |d| {
+                            d.invisible().group_hover("cmd-row", |st| st.visible())
+                        })
+                        .child(keys(&t, h))
+                }))
                 .on_mouse_move(cx.listener(move |this, _, _, cx| {
                     if this.selected != i {
                         this.selected = i;
@@ -1460,7 +1508,10 @@ impl CommandPalette {
             .child(hint(keys(&t, "Enter"), "open"))
             .child(hint(keys(&t, "Esc"), "close"))
             .child(div().flex_1())
-            .child(hint(keys(&t, "Tab"), "next scope"));
+            // Tab moves between scopes: said only while they show.
+            .when(found.typed || found.scope != Scope::All, |d| {
+                d.child(hint(keys(&t, "Tab"), "next scope"))
+            });
 
         div()
             .absolute()
@@ -1477,7 +1528,9 @@ impl CommandPalette {
                     .overflow_hidden()
                     .cursor(CursorStyle::Arrow)
                     .on_click(|_, _, cx| cx.stop_propagation())
-                    .child(tabs)
+                    // Scopes once there is something to narrow: you typed, or
+                    // picked one (Tab, or a prefix).
+                    .when(found.typed || found.scope != Scope::All, |d| d.child(tabs))
                     .child(list)
                     .child(footer)
                     .relative(),
@@ -1519,7 +1572,6 @@ fn keys(t: &Theme, text: &str) -> Div {
                 .px(px(5.))
                 .rounded(t.radius.small)
                 .border_1()
-                .border_b_2()
                 .border_color(t.colors.border)
                 .bg(t.extra.stage)
                 .text_size(t.text.caption)
@@ -1606,5 +1658,10 @@ mod tests {
         assert!(word > mid, "word starts win: {word} vs {mid}");
         assert_eq!(fuzzy("ch", "New chat").unwrap().1, vec![4, 5]);
         assert_eq!(fuzzy("", "anything").unwrap().1, Vec::<usize>::new());
+        // A whole-word hit beats letters scattered across earlier words.
+        assert_eq!(
+            fuzzy("theme", "Use the Ink theme").unwrap().1,
+            vec![12, 13, 14, 15, 16]
+        );
     }
 }

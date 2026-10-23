@@ -68,7 +68,7 @@ fn render() -> String {
     let _ = writeln!(w, "**Foundation:** sun-bleached cream. The window is Cream Canvas (#e3d7cd), the session a sheet of Warm White (#f0e9e5) on it, cards white on that: paper on paper. One ink (#1e1e1e) carries the type. One colour, dusty blue (#41608a; #9db7d9 at night), where the reference has terracotta: the decisive action, links, a switch that is on, the mark's top, a waiting dot. Everything else is neutral; colour otherwise only for meaning (modes, status).\n");
     let _ = writeln!(w, "**Depth:** nearly flat. Hairlines inside cards; the session and the user's message lift on paper grain (three 1px shadows at 6/4/1% ink); popovers and the permission card a touch more.\n");
     let _ = writeln!(w, "**Shape:** two shapes. Everything you press is a pill (buttons, chips, icon buttons, the new-chat and needs-you pills); everything that holds content is 4px (cards, rows, menus, fields, the composer, the session).\n");
-    let _ = writeln!(w, "**Type:** Archivo only, in two cuts: 400 for text, 600 for headings, buttons and labels. Small uppercase kickers in 600 at 11px (\"Needs you\"). Code in JetBrains Mono.\n");
+    let _ = writeln!(w, "**Type:** Archivo only, in two cuts: 400 for text, 600 for headings, buttons and labels. Small labels in sentence case, never uppercase and never above a heading. Code in JetBrains Mono.\n");
 
     let _ = writeln!(w, "## Tokens\n");
     let sp = &l.space;
@@ -181,7 +181,6 @@ fn render() -> String {
         ),
         ("rail", z.rail, "the collapsed sidebar"),
         ("dot_gap", z.dot_gap, "the home screen's dot grid"),
-        ("mark_turn", z.mark_turn, "Forge's mark heading each reply"),
         (
             "mark_home",
             z.mark_home,
@@ -522,6 +521,9 @@ fn render() -> String {
         ("Ink pills for the loud neutrals", "New chat and needs-you are ink pills; the accent is kept for the one decision in front of you (Allow once, Send).", "2026-10-18"),
         ("Archivo for everything", "A single face set in two weights reads as set type; headings in 600 replace the display serif.", "2026-10-18"),
         ("Composer at 620px", "A comfortable measure for a prompt, the same in a chat and on the welcome page.", "2026-10-11"),
+        ("Composer on the reading column", "In a chat the composer takes the 720px column the reply is read in, so the two line up; on the welcome page it keeps its own measure.", "2026-10-23"),
+        ("No name over a reply", "The user's bubble already separates the turns; a name and mark over every reply only repeated it.", "2026-10-23"),
+        ("Deny is quiet", "A permission has one filled action, Allow once; Deny is a ghost button, a way out rather than an alarm.", "2026-10-23"),
         ("Icons on a 12/14/16/20 scale", "Desktop density: 14 in rows, 16 in controls, 20 for the composer's +; 12 inside captions.", "2026-10-12"),
     ] {
         let _ = writeln!(w, "| {what} | {why} | {when} |");

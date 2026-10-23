@@ -24,3 +24,13 @@ Priority issues:
 - P1: accent colour on "All N ›" links that are neither primary, selected nor state (Operate: restrained accent).
 - P2: keycaps on nearly every row; tabs shown before anything is typed.
 - P2: "Mode: Expert" reads as a setting dump; "Expert mode".
+
+## Polish pass 2 (pal3/pal4 screenshots, light and dark)
+
+- Whole-word matches win over letters scattered across earlier words
+  ("Use the Ink **theme**", not "Use **the** Ink the**me**").
+- Typing a group name ("mode") finds that group again, ranked under label hits.
+- Theme rows read "Use the Ink theme" with the theme's blurb as detail.
+- Tab hint in the footer only when the tabs show; keycaps flat.
+
+Mark: 8.5/10. Left (P3): arrow keycap glyphs look faintly accent-tinted in dark.

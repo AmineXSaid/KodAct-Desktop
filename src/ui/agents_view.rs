@@ -588,11 +588,7 @@ pub fn render(
 }
 
 fn section(t: &Theme, text: &str) -> gpui::Div {
-    div()
-        .text_size(t.text.caption)
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(t.colors.text_muted)
-        .child(text.to_uppercase())
+    crate::theme::section_label(t, text)
 }
 
 fn clip(s: &str, max: usize) -> String {

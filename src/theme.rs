@@ -1239,7 +1239,6 @@ pub struct Sizes {
     pub side_shade: Pixels, // 12: the sidebar's shadow across the session's left edge
     pub edge_fade: Pixels, // 40: the transcript fading out where the composer meets it
     pub home_heading: Pixels, // 36: the home screen's heading, Archivo 600
-    pub mark_turn: Pixels, // 28: Forge's mark heading each reply, and while it works
     pub mark_home: Pixels, // 44: the mark beside the home screen's greeting
     pub dot_gap: Pixels,   // 14: the background field's grid
     pub dot: Pixels,       // 2: one dot's diameter
@@ -1305,7 +1304,6 @@ impl Default for Sizes {
             side_shade: px(12.),
             edge_fade: px(40.),
             home_heading: px(36.),
-            mark_turn: px(28.),
             mark_home: px(44.),
             dot_gap: px(14.),
             dot: px(2.),
@@ -1396,16 +1394,6 @@ fn styled_button(t: &Theme, variant: crate::ui::button::Variant, label: SharedSt
         .child(label)
 }
 
-/// The small uppercase label above a heading or a card's title, as a
-/// printed kicker: 11px, the heavier cut, muted.
-pub fn eyebrow(t: &Theme, text: &str) -> Div {
-    div()
-        .text_size(px(11.))
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(t.colors.text_muted)
-        .child(text.to_uppercase())
-}
-
 /// The one filled action per surface: the ink pill.
 pub fn primary_button(t: &Theme, label: impl Into<SharedString>) -> Div {
     styled_button(t, crate::ui::button::Variant::Primary, label.into())
@@ -1425,6 +1413,16 @@ pub fn ghost_button(t: &Theme, label: impl Into<SharedString>) -> Div {
 pub fn text_button(t: &Theme, label: impl Into<SharedString>) -> Div {
     styled_button(t, crate::ui::button::Variant::Ghost, label.into())
         .text_color(t.colors.text_muted)
+}
+
+/// A section's small label ("Recent runs", "Knowledge"): sentence case,
+/// muted, the medium cut. Never uppercase, and never above a heading.
+pub fn section_label(t: &Theme, text: &str) -> Div {
+    div()
+        .text_size(t.text.caption)
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(t.colors.text_muted)
+        .child(text.to_string())
 }
 
 /// Status / tag pill.

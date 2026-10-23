@@ -24,7 +24,7 @@ pub fn render(
     let open = s.approvals_open;
     let n = pending.len();
     let toggle = state.clone();
-    let fill_hover = t.extra.fill_hover;
+    let fill_hover = t.colors.text.opacity(0.12);
     let badge = div()
         .id("approvals")
         // Occludes the title bar's drag area (see workspace.rs).
@@ -35,11 +35,12 @@ pub fn render(
         .h(t.size.control)
         .px(t.space.sm)
         .rounded(t.radius.pill)
-        // The ink pill, its dot the accent: the one thing waiting on you.
-        .bg(t.extra.fill)
-        .text_color(t.extra.fill_fg)
+        // A quiet badge: the accent dot says it waits on you; the words
+        // stay in the ink, on a soft ground, never the loudest thing.
+        .bg(t.colors.text.opacity(0.07))
+        .text_color(t.colors.text)
         .text_size(t.text.body_sm)
-        .font_weight(FontWeight::SEMIBOLD)
+        .font_weight(FontWeight::MEDIUM)
         .cursor_pointer()
         .hover(move |d| d.bg(fill_hover))
         .child(div().size(px(7.)).rounded_full().bg(t.extra.accent))

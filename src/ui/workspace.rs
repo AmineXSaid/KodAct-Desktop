@@ -409,47 +409,6 @@ impl Workspace {
                             .children(switcher),
                     )
                 })
-                // The branch, when the folder is a repository.
-                .when(!s.branch.is_empty() && !s.sidebar_open, |d| {
-                    let branch = s.branch.clone();
-                    let copier = self.state.clone();
-                    let strong = t.colors.text;
-                    d.child(
-                        div()
-                            .id("branch")
-                            .occlude()
-                            .flex()
-                            .items_center()
-                            .gap(t.space.xs)
-                            .px(t.space.sm)
-                            .py(px(2.))
-                            .rounded(t.radius.pill)
-                            .bg(t.colors.hover)
-                            .cursor_pointer()
-                            .hover(move |st| st.text_color(strong))
-                            .tooltip(|window, cx| {
-                                gpui::component::tooltip::Tooltip::new("Copy the branch name")
-                                    .build(window, cx)
-                            })
-                            .on_click(move |_, _, cx| {
-                                cx.write_to_clipboard(gpui::ClipboardItem::new_string(
-                                    branch.to_string(),
-                                ));
-                                copier.update(cx, |s, cx| {
-                                    s.show_toast(format!("Copied {branch}"), cx)
-                                });
-                            })
-                            .text_size(t.text.caption)
-                            .font_family(t.font_mono.clone())
-                            .text_color(t.colors.text_muted)
-                            .child(icon(
-                                "icons/git-branch.svg",
-                                t.size.icon_xs,
-                                t.colors.text_muted,
-                            ))
-                            .child(s.branch.clone()),
-                    )
-                })
                 .child(div().flex_1())
                 .child(field)
                 .child(div().flex_1())

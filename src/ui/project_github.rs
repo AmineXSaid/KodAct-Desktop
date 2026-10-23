@@ -212,14 +212,7 @@ impl Render for ProjectGithub {
             div()
                 .flex()
                 .items_center()
-                .child(
-                    div()
-                        .flex_1()
-                        .text_size(t.text.caption)
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(t.colors.text_muted)
-                        .child(label.to_uppercase()),
-                )
+                .child(crate::theme::section_label(&t, &label).flex_1())
                 .child(
                     super::button::Button::icon("gh-refresh", "icons/refresh-cw.svg", "Read it again")
                         .compact()

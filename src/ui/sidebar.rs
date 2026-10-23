@@ -210,11 +210,12 @@ impl Sidebar {
                     .rounded(t.radius.small)
                     .cursor_pointer()
                     .hover(move |st| st.bg(hover))
-                    .when(open || all, |d| d.bg(hover))
+                    .when(open, |d| d.bg(hover))
+                    // All projects is the default; only a narrowed list is marked.
                     .child(icon(
                         "icons/sliders-horizontal.svg",
                         t.size.icon_sm,
-                        if all {
+                        if !all {
                             t.colors.primary
                         } else {
                             t.colors.text_subtle
@@ -298,8 +299,8 @@ impl Render for Sidebar {
                     .text_size(t.text.caption)
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(t.colors.text_muted)
-                    .child(div().flex_none().child(group))
-                    .child(div().flex_1().h(px(1.)).mx(t.space.sm).bg(t.colors.border))
+                    // A quiet label, no rule beside it; the filter at the end.
+                    .child(div().flex_1().child(group))
                     .when(first, |d| d.children(filter.take())),
             );
             for p in projects_here {
@@ -331,7 +332,7 @@ impl Render for Sidebar {
                                 .child(icon(
                                     "icons/folder-open.svg",
                                     t.size.icon_xs,
-                                    t.colors.primary,
+                                    t.colors.text_muted,
                                 )),
                         )
                         .child(
@@ -360,14 +361,13 @@ impl Render for Sidebar {
                 let pinned = c.pinned;
                 let state = self.state.clone();
                 let state_pin = self.state.clone();
-                let ago: SharedString = match (s.all_chats && c.project != s.current_project)
+                // Listing every project's chats: whose each one is. The date
+                // groups already say when.
+                let place: Option<SharedString> = (s.all_chats && c.project != s.current_project)
                     .then(|| s.project(c.project))
                     .flatten()
                     .filter(|p| !p.scratch)
-                {
-                    Some(p) => format!("{} · {}", p.name, ago(c.minutes_ago)).into(),
-                    None => ago(c.minutes_ago).into(),
-                };
+                    .map(|p| p.name.clone().into());
                 let status = s.status(c);
                 let unread = status == ChatStatus::Unread;
                 let editing = s.renaming == Some(id);
@@ -388,17 +388,11 @@ impl Render for Sidebar {
                         .text_color(if selected {
                             t.colors.text_strong
                         } else {
-                            t.colors.text_muted
+                            t.colors.text_body
                         })
                         .relative()
-                        .when(selected, |d| {
-                            crate::theme::selected(&t, d).child(super::motion::active_bar(
-                                ("chat-bar", id),
-                                t.extra.accent,
-                                t.size.icon,
-                                &t,
-                            ))
-                        })
+                        // The open chat: a soft fill, no coloured edge.
+                        .when(selected, |d| crate::theme::selected(&t, d))
                         .when(!selected && row_hover == Some(id), |d| {
                             d.child(super::motion::hover_wash(("chat-wash", id), hover, &t))
                         })
@@ -413,7 +407,6 @@ impl Render for Sidebar {
                                 cx.notify();
                             }
                         }))
-                        .child(status_mark(status, id, &t))
                         .map(|d| {
                             if editing {
                                 // The title, editable: Enter or a click away keeps it, Esc puts it back.
@@ -454,15 +447,31 @@ impl Render for Sidebar {
                                         })
                                         .child(c.title.clone()),
                                 )
-                                .child(
+                                // At the row's end, only when there is something to
+                                // say: whose chat, and working, waiting on you,
+                                // unread, or an error. Hover shows the actions there.
+                                .children(place.map(|p| {
                                     div()
                                         .flex_none()
+                                        .max_w(px(96.))
+                                        .overflow_hidden()
+                                        .whitespace_nowrap()
+                                        .text_ellipsis()
                                         .text_size(t.text.caption)
-                                        .text_color(t.colors.text_muted)
+                                        .text_color(t.colors.text_subtle)
                                         .group_hover("row", |st| st.invisible())
                                         .when(menu_open, |d| d.invisible())
-                                        .child(ago),
-                                )
+                                        .child(p)
+                                }))
+                                .when(status != ChatStatus::Idle, |d| {
+                                    d.child(
+                                        div()
+                                            .flex_none()
+                                            .group_hover("row", |st| st.invisible())
+                                            .when(menu_open, |d| d.invisible())
+                                            .child(status_mark(status, id, &t)),
+                                    )
+                                })
                                 .child(
                                     // On hover: pin, and the chat's menu.
                                     div()
@@ -643,12 +652,11 @@ impl Render for Sidebar {
             ))
             .with_priority(1)
         });
+        // Where the project lives, when it is remote (WSL, SSH, a
+        // container); the branch is the status bar's.
         let place = s
             .current_remote()
-            .map(|r| (r.target.icon(), SharedString::from(r.target.label()), false))
-            .or_else(|| {
-                (!s.branch.is_empty()).then(|| ("icons/git-branch.svg", s.branch.clone(), true))
-            });
+            .map(|r| (r.target.icon(), SharedString::from(r.target.label())));
         let (closer, opener) = (self.state.clone(), self.state.clone());
         let header = div()
             .relative()
@@ -670,8 +678,6 @@ impl Render for Sidebar {
                     .px(t.space.md)
                     // A set height, so it can unfold and fold (below).
                     .h(PROJECT_ROW)
-                    .border_b_1()
-                    .border_color(t.colors.border)
                     .cursor_pointer()
                     .hover(move |st| st.bg(hover))
                     .when(switcher_open, |d| d.bg(hover))
@@ -697,7 +703,7 @@ impl Render for Sidebar {
                                     .text_ellipsis()
                                     .child(s.project.clone()),
                             )
-                            .children(place.map(|(glyph, label, mono)| {
+                            .children(place.map(|(glyph, label)| {
                                 div()
                                     .flex()
                                     .items_center()
@@ -705,7 +711,6 @@ impl Render for Sidebar {
                                     .min_w_0()
                                     .text_size(t.text.caption)
                                     .text_color(t.colors.text_muted)
-                                    .when(mono, |d| d.font_family(t.font_mono.clone()))
                                     .child(icon(glyph, t.size.icon_xs, t.colors.text_muted))
                                     .child(
                                         div()
@@ -735,9 +740,8 @@ impl Render for Sidebar {
             .items_center()
             .h(px(34.) + t.space.md * 2.)
             .px(t.space.md)
-            .border_b_1()
-            .border_color(t.colors.border)
-            .child(super::ingot::wordmark(20., &t));
+            // The name, set smaller than any heading: the work is the loud thing.
+            .child(super::ingot::wordmark(17., &t));
         // A plain chat has no folder: Forge's name alone. Moving between a
         // chat in a folder and one without, the project unfolds or folds,
         // and the list under it slides instead of jumping.
@@ -969,8 +973,7 @@ impl Render for Sidebar {
                             .px(t.space.sm)
                             .rounded(t.radius.button)
                             .cursor_pointer()
-                            // You, in a recessed well at the foot of the sheet.
-                            .bg(t.extra.sunk)
+                            // You, a plain row at the foot of the sheet.
                             .hover(move |st| st.bg(hover))
                             .child(super::avatar_image(&avatar, 32., window))
                             .child(

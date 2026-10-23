@@ -36,8 +36,6 @@ pub struct ItemContext {
     pub copied: Option<SharedString>,
     pub busy: bool,
     pub last: bool,
-    /// The first reply after your message: it carries the turn's header.
-    pub first_in_turn: bool,
     /// The file open beside the chat, so its card shows it is open.
     pub open_doc: Option<crate::state::FileRef>,
     /// Device pixels per logical pixel, for diagrams drawn to exact size.
@@ -668,23 +666,6 @@ fn user_parts(text: &SharedString, key: &str, cx: &ItemContext, t: &Theme) -> Ve
     out
 }
 
-/// The head of a turn: Forge's logo and name. The logo stays still: the
-/// working line under the reply carries the motion (`activity.rs`), so only
-/// one mark moves at a time.
-fn turn_header(_cx: &ItemContext, t: &Theme) -> AnyElement {
-    let mark = super::logo(f32::from(t.size.mark_turn)).into_any_element();
-    div()
-        .flex()
-        .items_center()
-        .gap(t.space.snug)
-        .text_size(t.size.chat_text)
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(t.colors.text_strong)
-        .child(mark)
-        .child("Forge")
-        .into_any_element()
-}
-
 fn assistant(blocks: &[Block], cx: &ItemContext, t: &Theme) -> AnyElement {
     // Answers in a row that say the same thing show as one row.
     let mut rows = vec![];
@@ -708,7 +689,6 @@ fn assistant(blocks: &[Block], cx: &ItemContext, t: &Theme) -> AnyElement {
         .flex()
         .flex_col()
         .gap(t.space.md)
-        .when(cx.first_in_turn, |d| d.child(turn_header(cx, t)))
         .children(rows)
         .into_any_element()
 }
@@ -2113,14 +2093,7 @@ fn permission(
                         .flex()
                         .flex_col()
                         .gap(px(3.))
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(t.space.xs)
-                                .child(icon("icons/hand.svg", t.size.icon_xs, t.extra.accent))
-                                .child(theme::eyebrow(t, "Needs you")),
-                        )
+                        // The question is the heading: no label above it.
                         .child(
                             div()
                                 .text_size(t.text.body + px(2.))
@@ -2171,13 +2144,12 @@ fn permission(
                             .on_click(answer(Verdict::PlanAutoAccept)),
                     )
                 })
-                // A tool: deny it (framed in red), allow it this once (the
+                // A tool: deny it (a quiet way out), allow it this once (the
                 // filled action), or always, named for what it allows. The
                 // broad grant is never the loudest button.
                 .when(!is_plan, |d| {
                     d.child(
-                        Button::danger_outline(id("deny"), "Deny")
-                            .with_icon("icons/x.svg")
+                        Button::ghost(id("deny"), "Deny")
                             .on_click(answer(Verdict::Denied)),
                     )
                     .child(div().flex_1())
@@ -2194,16 +2166,9 @@ fn permission(
                             .on_click(answer(Verdict::Allowed)),
                     )
                 }),
-        )
-        .when(!is_plan, |d| {
-            d.child(
-                div()
-                    .text_size(t.text.caption)
-                    .text_color(t.colors.text_muted)
-                    .child("Or type in the box below to tell Forge what to do instead."),
-            )
-        });
-    // A card lifted like the others, its accent edge saying it waits on you.
+        );
+    // A lifted card: its lift and its one accent button say it waits on
+    // you; no coloured edge.
     div()
         .flex()
         .overflow_hidden()
@@ -2212,7 +2177,6 @@ fn permission(
         .border_color(t.colors.border)
         .rounded(t.radius.card)
         .shadow(t.elevation_grain())
-        .child(div().w(px(3.)).flex_none().bg(t.extra.accent))
         .child(body)
         .into_any_element()
 }

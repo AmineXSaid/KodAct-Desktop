@@ -27,3 +27,12 @@ Priority issues:
 - P2: every row carries a time; the dot shows on every row; together with the edge, three signals.
 - P2: dividers between every section; the account as a filled card.
 - P3: wordmark weight and letter-spacing louder than any content.
+
+## Polish pass 2 (side2 screenshots, light and dark)
+
+- The chat filter no longer looks switched on by default: "All projects" is
+  the resting state; only a list narrowed to one project tints the icon.
+- Hover swaps a row's status dot for pin and more, nothing else moves.
+
+Mark: 8.5/10. Left (P3): the needs-you dot reads grey-blue in the Ink theme;
+it matches the title-bar badge, but is faint at a glance.

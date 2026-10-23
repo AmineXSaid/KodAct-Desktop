@@ -18,7 +18,7 @@
 
 use gpui::component::input::TextareaState;
 use gpui::{
-    div, prelude::*, px, relative, AnyElement, Context, Entity, FontWeight, Hsla, IntoElement, Render,
+    div, prelude::*, px, relative, AnyElement, Context, Entity, Hsla, IntoElement, Render,
     SharedString, Subscription, Window,
 };
 
@@ -103,13 +103,7 @@ fn card(t: &Theme, title: &str) -> gpui::Div {
         .bg(t.colors.surface)
         .border_1()
         .border_color(t.colors.border)
-        .child(
-            div()
-                .text_size(t.text.caption)
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(t.colors.text_muted)
-                .child(title.to_uppercase()),
-        )
+        .child(crate::theme::section_label(t, title))
 }
 
 /// The colour a part of the brief takes in the bar and its legend.

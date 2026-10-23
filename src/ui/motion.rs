@@ -267,33 +267,6 @@ pub fn hover_wash(
         .into_any_element()
 }
 
-/// The open chat's mark: an accent bar at the row's left edge that grows
-/// from its middle each time another chat is opened (keyed by `id`).
-pub fn active_bar(
-    id: impl Into<gpui::ElementId>,
-    color: gpui::Hsla,
-    height: gpui::Pixels,
-    t: &crate::theme::Theme,
-) -> gpui::AnyElement {
-    use gpui::{div, prelude::*, px, AnimationExt as _};
-    div()
-        .absolute()
-        .top_0()
-        .bottom_0()
-        .left(px(2.))
-        .flex()
-        .items_center()
-        .child(
-            div()
-                .w(px(3.))
-                .h(height)
-                .rounded_full()
-                .bg(color)
-                .with_animation(id, once(t.size.panel_in_ms), move |d, k| d.h(height * k)),
-        )
-        .into_any_element()
-}
-
 /// An icon turning a quarter as the pointer arrives (New chat's plus).
 pub fn quarter_turn(
     icon: gpui::Svg,

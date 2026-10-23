@@ -14,7 +14,7 @@
 
 **Shape:** two shapes. Everything you press is a pill (buttons, chips, icon buttons, the new-chat and needs-you pills); everything that holds content is 4px (cards, rows, menus, fields, the composer, the session).
 
-**Type:** Archivo only, in two cuts: 400 for text, 600 for headings, buttons and labels. Small uppercase kickers in 600 at 11px ("Needs you"). Code in JetBrains Mono.
+**Type:** Archivo only, in two cuts: 400 for text, 600 for headings, buttons and labels. Small labels in sentence case, never uppercase and never above a heading. Code in JetBrains Mono.
 
 ## Tokens
 
@@ -61,7 +61,6 @@ Lucide, 2px stroke as drawn. Sizes: 12 / 14 / 16 / 20 only.
 - `switch_w`: 36px, a switch's track (20px tall, 14px thumb)
 - `rail`: 52px, the collapsed sidebar
 - `dot_gap`: 14px, the home screen's dot grid
-- `mark_turn`: 28px, Forge's mark heading each reply
 - `mark_home`: 44px, the mark beside the home greeting
 
 ### Surfaces
@@ -233,4 +232,7 @@ One family; every control takes keyboard focus (a `primary` edge shows for the k
 | Ink pills for the loud neutrals | New chat and needs-you are ink pills; the accent is kept for the one decision in front of you (Allow once, Send). | 2026-10-18 |
 | Archivo for everything | A single face set in two weights reads as set type; headings in 600 replace the display serif. | 2026-10-18 |
 | Composer at 620px | A comfortable measure for a prompt, the same in a chat and on the welcome page. | 2026-10-11 |
+| Composer on the reading column | In a chat the composer takes the 720px column the reply is read in, so the two line up; on the welcome page it keeps its own measure. | 2026-10-23 |
+| No name over a reply | The user's bubble already separates the turns; a name and mark over every reply only repeated it. | 2026-10-23 |
+| Deny is quiet | A permission has one filled action, Allow once; Deny is a ghost button, a way out rather than an alarm. | 2026-10-23 |
 | Icons on a 12/14/16/20 scale | Desktop density: 14 in rows, 16 in controls, 20 for the composer's +; 12 inside captions. | 2026-10-12 |

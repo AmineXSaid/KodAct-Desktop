@@ -537,8 +537,6 @@ impl Render for ChatView {
             };
             let body = match chat.messages.get(ix) {
                 Some(m) => {
-                    let after_user =
-                        ix == 0 || matches!(chat.messages.get(ix - 1), Some(Message::User { .. }));
                     let ctx = ItemContext {
                         state: state.clone(),
                         marks: match m {
@@ -555,7 +553,6 @@ impl Render for ChatView {
                         copied: s.copied.clone(),
                         busy: s.busy(),
                         last: ix + 1 == chat.messages.len(),
-                        first_in_turn: after_user && matches!(m, Message::Assistant { .. }),
                         open_doc: s.doc.clone(),
                         scale: window.scale_factor(),
                         rating: s.ratings.get(&(chat.id, ix)).copied(),
