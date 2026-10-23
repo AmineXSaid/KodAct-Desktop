@@ -24,3 +24,13 @@ Priority issues:
 - P1: the placeholder speaks to a new chat inside an ongoing one.
 - P1: the endpoint warning is a chip in the box; it should be a quiet link where it matters.
 - P2: one surface: + and folder left, mode and model right, send filled only with text to send.
+
+## 2026-10-23: one line, controls under it (e/e2/e3 screenshots)
+
+- In the box, one line as Claude Code's: +, the text ("Reply to Forge, or
+  type / for commands"), send; it grows with the text, + and send level
+  with the last line.
+- Under the box, quiet: the mode and the folder left, the model and its
+  effort right, the context ring alone (its numbers in the tooltip).
+- Fixes the send button that spilled out of the box beside an open panel.
+- First pass 8.0 (+ above the text, a wide gap after it); after: 8.5.

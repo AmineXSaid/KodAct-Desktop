@@ -28,7 +28,7 @@ fn placeholder(in_folder: bool, asking: Option<bool>, busy: bool, in_chat: bool)
     } else if busy {
         "Add to the task, or steer Forge…"
     } else if in_chat {
-        "Reply to Forge…"
+        "Reply to Forge, or type / for commands"
     } else if in_folder {
         "What should we build today?"
     } else {
@@ -853,13 +853,13 @@ impl Render for Composer {
                 },
             )
             .into();
+            // The ring alone, as Claude Code's; its numbers in the tooltip.
             div()
                 .id("context-meter")
                 .flex()
                 .items_center()
-                .gap(px(5.))
-                .h(t.size.button_sm)
-                .px(px(6.))
+                .justify_center()
+                .size(t.size.button_sm)
                 .text_size(t.text.caption)
                 .text_color(colour)
                 .child(super::context_ring::ring(
@@ -868,13 +868,6 @@ impl Render for Composer {
                     f,
                     t.colors.border,
                     if f > 0.8 { colour } else { t.colors.primary },
-                ))
-                // How much of the model's window the chat fills, in tokens.
-                .child(format!(
-                    "{}{} of {}",
-                    if m.estimated { "~" } else { "" },
-                    crate::context::short(m.used),
-                    crate::context::short(m.window)
                 ))
                 .rounded(t.radius.compact)
                 .cursor_pointer()
@@ -1002,36 +995,20 @@ impl Render for Composer {
                             }))
                             .children(add_tray)
                             .children(pending)
-                            .child(
-                                // The text starts where the + under it starts
-                                // (the textarea adds 10px of its own).
-                                div()
-                                    .px(px(4.))
-                                    .pt(t.space.md)
-                                    .pb(t.space.xs)
-                                    .text_size(t.text.body)
-                                    .line_height(relative(1.5))
-                                    .child(
-                                        Editor::new(&self.input)
-                                            .appearance(false)
-                                            .font_family(t.font_sans.clone())
-                                            .text_size(t.text.body)
-                                            .line_height(relative(1.5))
-                                            .h(box_height),
-                                    ),
-                            )
+                            // One line, as Claude Code's box: +, what you
+                            // write, send. They keep to the bottom as it grows.
                             .child(
                                 div()
                                     .flex()
-                                    .items_center()
+                                    .items_end()
                                     .gap(t.space.xs)
-                                    // Equal insets right and below, so send sits
-                                    // square in the box's corner.
-                                    .p(t.space.snug)
+                                    .min_h(t.size.composer_line)
+                                    .p(t.space.xs)
                                     // "+": what to add, and the tools a reply may use.
                                     .child(
                                         div()
                                             .relative()
+                                            .mb(px(2.))
                                             .child(
                                                 super::button::Button::icon(
                                                     "attach",
@@ -1061,14 +1038,44 @@ impl Render for Composer {
                                             )
                                             .children(add_menu),
                                     )
-                                    .child(project_button)
-                                    .child(div().flex_1().relative().children(context_popover))
-                                    .children(meter)
-                                    .child(model_button)
-                                    // Modes: the button and its menu above it.
-                                    .child(div().relative().child(mode_trigger).children(modes_menu))
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w_0()
+                                            // One line sits level with + and send;
+                                            // the textarea's own inset is the gap
+                                            // after the +.
+                                            .pt(px(0.))
+                                            .pb(px(8.))
+                                            .ml(-t.space.xs)
+                                            .text_size(t.text.body)
+                                            .line_height(relative(1.5))
+                                            .child(
+                                                Editor::new(&self.input)
+                                                    .appearance(false)
+                                                    .font_family(t.font_sans.clone())
+                                                    .text_size(t.text.body)
+                                                    .line_height(relative(1.5))
+                                                    .h(box_height),
+                                            ),
+                                    )
                                     .child(send),
                             ),
+                    )
+                    // Under the box, quiet: the mode and the folder on the
+                    // left; the model, its effort and the context ring on the
+                    // right.
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(t.space.xs)
+                            .pt(t.space.xs)
+                            .child(div().relative().child(mode_trigger).children(modes_menu))
+                            .child(project_button)
+                            .child(div().flex_1().relative().children(context_popover))
+                            .child(model_button)
+                            .children(meter),
                     ),
             );
         // Never wider than its own measure, centred wherever it sits.

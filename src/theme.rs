@@ -1221,6 +1221,7 @@ pub struct Sizes {
     pub icon_lg: Pixels,            // 20: the composer's +
     pub composer_max: Pixels,       // the composer's tallest input
     pub composer_radius: Pixels,    // 4: the composer box's corners, a card's
+    pub composer_line: Pixels,      // 46: the composer box with one line in it
     pub composer_width: Pixels,     // 560: the composer's widest, wherever it sits
     pub palette: Pixels,            // command palette width
     pub hairline: Pixels,           // 1
@@ -1293,6 +1294,7 @@ impl Default for Sizes {
             composer_max: px(240.),
             composer_radius: px(4.),
             composer_width: px(560.),
+            composer_line: px(46.),
             palette: px(560.),
             hairline: px(1.),
             line_height_chat: 23. / 15.,
