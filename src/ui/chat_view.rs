@@ -700,12 +700,32 @@ impl Render for ChatView {
         })
         .size_full()
         .flex_1();
+        // Scrolled off its top, the transcript fades out under the head, as
+        // Claude Code's does, rather than ending on a cut line.
+        let top = self.list.logical_scroll_top();
+        let scrolled = top.item_ix > 0 || top.offset_in_item > px(0.);
+        let t = cx.theme().clone();
         div()
             .relative()
             .size_full()
             .flex()
             .flex_col()
             .child(list)
+            .when(scrolled, |d| {
+                d.child(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .left_0()
+                        .right_0()
+                        .h(t.size.edge_fade)
+                        .bg(gpui::linear_gradient(
+                            180.,
+                            gpui::linear_color_stop(t.extra.stage, 0.),
+                            gpui::linear_color_stop(t.extra.stage.opacity(0.), 1.),
+                        )),
+                )
+            })
             // The transcript's scrollbar, over its right edge.
             .child(
                 div().absolute().inset_0().child(

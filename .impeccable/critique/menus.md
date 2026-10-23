@@ -37,3 +37,11 @@ Priority issues:
   a dimmed window: 8.5.
 - Archive (A) and the archived filter; an empty list says why: 8.5.
 - Transcript view Detailed opens every run and thought: 8.5.
+
+## 2026-10-23: one top row, as Claude Code's (t/t2 screenshots)
+
+- Over the sidebar: ☰, Forge's name and Chat | Code (moved up from the
+  sidebar, which now opens with Search); at the chat's edge, ← → and the
+  title ⌄, level with the name; the icons and window controls right.
+- Scrolled, the transcript fades out under the head.
+- First pass: the switch ran into the sidebar's edge; after: 8.5.

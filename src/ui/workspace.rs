@@ -380,16 +380,39 @@ impl Workspace {
                 .w_full()
                 .h_full()
                 .pr(t.space.sm)
-                .child(
-                    button(
+                .map(|d| {
+                    let toggle = button(
                         "toggle-sidebar",
                         "icons/panel-left.svg",
                         "Show or hide the sidebar (Ctrl+B)",
                     )
                     .on_click(cx.listener(|_, _, window, cx| {
                         window.dispatch_action(Box::new(ToggleSidebar), cx)
-                    })),
-                )
+                    }));
+                    if sidebar_open {
+                        // Over the sidebar, its head, as Claude Code's: the
+                        // toggle, Forge's name, then Chat | Code; the chat's
+                        // title starts where the chat does.
+                        d.child(
+                            // The title bar insets its row by the sidebar's
+                            // own padding, so the switch ends where the
+                            // sidebar's search field does.
+                            div()
+                                .flex_none()
+                                .w(t.size.sidebar - t.space.md)
+                                .flex()
+                                .items_center()
+                                .gap(t.space.sm)
+                                .pr(t.space.sm)
+                                .child(toggle)
+                                .child(super::ingot::wordmark(15., &t))
+                                .child(div().flex_1())
+                                .child(super::sidebar::kind_switch(&t, &self.state, s.sidebar_kind)),
+                        )
+                    } else {
+                        d.child(toggle)
+                    }
+                })
                 // Back and forward through the places you were, dimmed when
                 // there's nowhere to go.
                 .child(nav_button(
@@ -480,24 +503,9 @@ impl Workspace {
                             .children(switcher),
                     )
                 })
-                // The open chat's name, as Claude Code heads a session: over
-                // the chat's own column while the sidebar shows, and a click
-                // opens its menu under it.
-                .children(chat_title.map(|title| {
-                    if sidebar_open {
-                        div()
-                            .absolute()
-                            .top_0()
-                            .bottom_0()
-                            .left(t.size.sidebar + t.space.xs)
-                            .flex()
-                            .items_center()
-                            .child(title)
-                            .into_any_element()
-                    } else {
-                        title.into_any_element()
-                    }
-                }))
+                // The open chat's name, as Claude Code heads a session, level
+                // with Forge's name; a click opens its menu under it.
+                .children(chat_title)
                 .child(div().flex_1())
                 .children(super::tasks::render(&t, &self.state, window, cx))
                 .children(super::approvals::render(&t, &self.state, window, cx))

@@ -666,51 +666,6 @@ impl Render for Sidebar {
                 );
         }
 
-        // The sheet's head, as Claude Code's: the name, then Chat and Code,
-        // the two kinds of chat the list can show.
-        let kind = s.sidebar_kind;
-        let segment = |id: &'static str, path: &'static str, tip: &'static str, k: SidebarKind| {
-            let on = kind == k;
-            let state = self.state.clone();
-            div()
-                .id(id)
-                .flex()
-                .items_center()
-                .justify_center()
-                .w(t.size.control + t.space.xs)
-                .h(t.size.control - t.space.xs)
-                .rounded(t.radius.small)
-                .cursor_pointer()
-                .when(on, |d| d.bg(t.colors.surface).shadow(t.elevation_grain()))
-                .when(!on, |d| d.hover(move |st| st.bg(hover)))
-                .child(icon(path, t.size.icon_sm, if on { t.colors.text_strong } else { t.colors.text_muted }))
-                .tooltip(move |w, cx| gpui::component::tooltip::Tooltip::new(tip).build(w, cx))
-                .on_click(move |_, _, cx| state.update(cx, |s, cx| s.set_sidebar_kind(k, cx)))
-        };
-        let header = div()
-            .flex_none()
-            .flex()
-            .items_center()
-            .justify_between()
-            .h(px(34.) + t.space.md * 2.)
-            .px(t.space.md)
-            // The name, set smaller than any heading: the work is the loud thing.
-            .child(super::ingot::wordmark(17., &t))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(2.))
-                    .p(px(2.))
-                    .rounded(t.radius.button)
-                    .bg(t.extra.sunk)
-                    .border_1()
-                    .border_color(t.colors.border)
-                    .child(segment("kind-chat", "icons/message-square.svg", "Chats", SidebarKind::Chat))
-                    .child(segment("kind-code", "icons/code-xml.svg", "Code: chats in a folder", SidebarKind::Code)),
-            )
-            .into_any_element();
-
         // A row of the nav: its icon in a fixed slot, its name, its key on hover.
         let nav = |key: &'static str, path: &'static str, label: &'static str, on: bool, keys: Option<SharedString>| {
             div()
@@ -755,13 +710,15 @@ impl Render for Sidebar {
                 // Part of the window, not a card on it: the window's own
                 // colour, flush to its edges; the chat is the raised sheet.
                 .overflow_hidden()
-                .child(header)
+                // Its head (the name, Chat and Code) is in the window's top
+                // row (`workspace::title_bar`), level with the chat's title.
                 .child(
                     div()
                         .flex()
                         .flex_col()
                         .gap(px(2.))
                         .px(t.space.sm)
+                        .pt(t.space.xs)
                         .pb(t.space.sm)
                         // Search, as Claude Code's sidebar opens with it: a
                         // field that opens the palette over the window.
@@ -962,6 +919,47 @@ impl Render for Sidebar {
             .h_full()
             .child(sheet)
     }
+}
+
+/// Chat | Code, as Claude Code's: which kind of chat the sidebar lists
+/// (plain chats, or chats in a folder), the active one raised. It sits in
+/// the window's top row, over the sidebar.
+pub fn kind_switch(
+    t: &crate::theme::Theme,
+    state: &Entity<AppState>,
+    kind: SidebarKind,
+) -> impl IntoElement {
+    let hover = t.colors.hover;
+    let segment = |id: &'static str, path: &'static str, tip: &'static str, k: SidebarKind| {
+        let on = kind == k;
+        let state = state.clone();
+        div()
+            .id(id)
+            .occlude()
+            .flex()
+            .items_center()
+            .justify_center()
+            .w(t.size.control + t.space.xs)
+            .h(t.size.control - t.space.xs)
+            .rounded(t.radius.small)
+            .cursor_pointer()
+            .when(on, |d| d.bg(t.colors.surface).shadow(t.elevation_grain()))
+            .when(!on, |d| d.hover(move |st| st.bg(hover)))
+            .child(icon(path, t.size.icon_sm, if on { t.colors.text_strong } else { t.colors.text_muted }))
+            .tooltip(move |w, cx| gpui::component::tooltip::Tooltip::new(tip).build(w, cx))
+            .on_click(move |_, _, cx| state.update(cx, |s, cx| s.set_sidebar_kind(k, cx)))
+    };
+    div()
+        .flex()
+        .items_center()
+        .gap(px(2.))
+        .p(px(2.))
+        .rounded(t.radius.button)
+        .bg(t.extra.sunk)
+        .border_1()
+        .border_color(t.colors.border)
+        .child(segment("kind-chat", "icons/message-square.svg", "Chats", SidebarKind::Chat))
+        .child(segment("kind-code", "icons/code-xml.svg", "Code: chats in a folder", SidebarKind::Code))
 }
 
 /// The sidebar collapsed (Ctrl+B): a narrow rail of the same actions as
