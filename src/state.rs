@@ -114,6 +114,47 @@ pub struct DiffLine {
     pub text: SharedString,
 }
 
+/// A picture a call returned (an image it read, a screenshot a tool took),
+/// shown as a thumbnail at the end of its line.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ToolImage {
+    /// The file it came from, or what the tool called it.
+    pub name: SharedString,
+    /// Where the file is, so a saved chat finds the picture again.
+    pub path: Option<SharedString>,
+    pub image: std::sync::Arc<gpui::Image>,
+}
+
+impl ToolImage {
+    /// The picture in a file, if it is one Forge can show and not too big
+    /// to keep in a chat.
+    pub fn from_file(path: &str) -> Option<Self> {
+        use gpui::ImageFormat;
+        let ext = path.rsplit_once('.')?.1.to_ascii_lowercase();
+        let format = match ext.as_str() {
+            "png" => ImageFormat::Png,
+            "jpg" | "jpeg" => ImageFormat::Jpeg,
+            "gif" => ImageFormat::Gif,
+            "webp" => ImageFormat::Webp,
+            _ => return None,
+        };
+        if std::fs::metadata(path).ok()?.len() > 5 * 1024 * 1024 {
+            return None;
+        }
+        let bytes = std::fs::read(path).ok()?;
+        Some(Self {
+            name: path
+                .rsplit(['/', '\\'])
+                .next()
+                .unwrap_or(path)
+                .to_string()
+                .into(),
+            path: Some(path.to_string().into()),
+            image: std::sync::Arc::new(gpui::Image::from_bytes(format, bytes)),
+        })
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ToolCall {
     pub kind: ToolKind,
@@ -129,6 +170,8 @@ pub struct ToolCall {
     pub full: bool,
     /// What you did about the change it made (Keep / Revert).
     pub review: Review,
+    /// The pictures it returned.
+    pub images: Vec<ToolImage>,
 }
 
 /// A command and what it printed, for a read-only tab in the terminal dock.
@@ -4325,6 +4368,7 @@ impl AppState {
                 id,
                 output,
                 is_error,
+                ..
             } => {
                 // A run you stopped here (no engine, in the demo) has already ended.
                 if let Some(r) = runs.iter_mut().find(|r| &r.id == id && !r.stopped) {
@@ -7117,6 +7161,7 @@ impl AppState {
                 id,
                 output,
                 is_error,
+                images,
             } => {
                 let started = self.command_started.remove(&(chat, id.clone()));
                 if let Some(&(m, b)) = self.tool_rows.get(&(chat, id)) {
@@ -7144,6 +7189,7 @@ impl AppState {
                                 ToolStatus::Done
                             };
                             t.output = output.into();
+                            t.images = images;
                             if !is_error && t.kind == ToolKind::Write {
                                 written = Some(t.target.to_string());
                             }
@@ -8629,11 +8675,21 @@ impl AppState {
                     open: false,
                     full: false,
                     review: Review::Open,
+                    images: vec![],
                 }))
             }
             (Step::ToolDiff(diff), Some(blocks)) => {
                 if let Some(Block::Tool(t)) = blocks.iter_mut().rev().find(|b| matches!(b, Block::Tool(_))) {
                     t.diff = diff;
+                }
+            }
+            (Step::ToolImages(images), Some(blocks)) => {
+                if let Some(Block::Tool(t)) = blocks
+                    .iter_mut()
+                    .rev()
+                    .find(|b| matches!(b, Block::Tool(_)))
+                {
+                    t.images = images;
                 }
             }
             (Step::ToolDone(output, diff), Some(blocks)) => {
@@ -8807,6 +8863,8 @@ enum Step {
     Remember(String),
     /// The running call's change, before it is made.
     ToolDiff(Vec<DiffLine>),
+    /// The pictures the last call returned.
+    ToolImages(Vec<ToolImage>),
     /// The running call failed, with this error.
     Failed(String),
     /// AskUserQuestion with this input: its card waits on your answers.
@@ -8818,7 +8876,7 @@ impl Step {
         match self {
             Step::Think(_) | Step::Say(_) => 45,
             Step::ToolStart(..) => 350,
-            Step::ToolDiff(_) => 0,
+            Step::ToolDiff(_) | Step::ToolImages(_) => 0,
             Step::ToolDone(..) => 900,
             Step::Ask(..) | Step::Question(_) => 300,
             Step::Failed(_) => 600,
@@ -8893,6 +8951,48 @@ fn demo_approvals() -> Vec<Step> {
     ]);
     s.extend(words(
         "The survey is done; I left the build folder alone, as you asked.",
+        Step::Say,
+    ));
+    s
+}
+
+/// A command that takes screenshots, then the two pictures read back: the
+/// run folds to one line with their thumbnails at its end.
+fn demo_screenshots() -> Vec<Step> {
+    let shot = |name: &str, bytes: &'static [u8]| ToolImage {
+        name: name.to_string().into(),
+        path: None,
+        image: std::sync::Arc::new(gpui::Image::from_bytes(
+            gpui::ImageFormat::Jpeg,
+            bytes.to_vec(),
+        )),
+    };
+    let mut s = words("I'll take both themes and look at them.", Step::Say);
+    s.extend([
+        Step::ToolStart(
+            ToolKind::Bash,
+            "scripts/screenshots.sh home".into(),
+            Some("Capture the home screen in light and dark".into()),
+        ),
+        Step::ToolDone(
+            "wrote shots/home-light.jpg\nwrote shots/home-dark.jpg".into(),
+            vec![],
+        ),
+        Step::ToolStart(ToolKind::Read, "shots/home-light.jpg".into(), None),
+        Step::ToolDone(String::new(), vec![]),
+        Step::ToolImages(vec![shot(
+            "home-light.jpg",
+            include_bytes!("../assets/docs/samples/forge-light.jpg"),
+        )]),
+        Step::ToolStart(ToolKind::Read, "shots/home-dark.jpg".into(), None),
+        Step::ToolDone(String::new(), vec![]),
+        Step::ToolImages(vec![shot(
+            "home-dark.jpg",
+            include_bytes!("../assets/docs/samples/forge-dark.jpg"),
+        )]),
+    ]);
+    s.extend(words(
+        "Both read well. In dark, the Deny button now sits back as it should; in light, the sidebar's filter no longer looks switched on.",
         Step::Say,
     ));
     s
@@ -9001,6 +9101,7 @@ fn demo_agents() -> Vec<Step> {
             id: id.into(),
             output: out.into(),
             is_error: false,
+            images: vec![],
         })
     };
     let mut s = words(
@@ -9190,6 +9291,11 @@ fn script(prompt: &str) -> Vec<Step> {
     if lower.contains("question") {
         s.extend(demo_questions());
         s.push(Step::End { seconds: 38.6 });
+        return s;
+    }
+    if lower.contains("screenshot") {
+        s.extend(demo_screenshots());
+        s.push(Step::End { seconds: 6.1 });
         return s;
     }
     if lower.contains("approv") {
@@ -9483,7 +9589,7 @@ fn mock_chats() -> Vec<Chat> {
                     open: false,
                 },
                 Block::Text("I'll move the greeting into a small function so it can be tested, then update `main`.".into()),
-                Block::Tool(ToolCall { kind: ToolKind::Read, target: "src/main.rs".into(), note: None, status: ToolStatus::Done, output: "fn main() {\n    println!(\"Hello, world\");\n}\n".into(), diff: vec![], open: false, full: false, review: Review::Open }),
+                Block::Tool(ToolCall { kind: ToolKind::Read, target: "src/main.rs".into(), note: None, status: ToolStatus::Done, output: "fn main() {\n    println!(\"Hello, world\");\n}\n".into(), diff: vec![], open: false, full: false, review: Review::Open, images: vec![] }),
                 Block::Tool(ToolCall {
                     kind: ToolKind::Edit,
                     target: "src/main.rs".into(),
@@ -9501,7 +9607,7 @@ fn mock_chats() -> Vec<Chat> {
                         (DiffKind::Same, "}"),
                     ]),
                     open: true,
-                    full: false, review: Review::Open,
+                    full: false, review: Review::Open, images: vec![],
                 }),
                 Block::Tool(ToolCall {
                     kind: ToolKind::Bash,
@@ -9511,7 +9617,7 @@ fn mock_chats() -> Vec<Chat> {
                     output: "   \x1b[1;32mCompiling\x1b[0m hello v0.1.0 (/home/amine/dev/kryptonite)\n    \x1b[1;32mFinished\x1b[0m `test` profile [unoptimized + debuginfo] target(s) in 1.84s\n     \x1b[1;32mRunning\x1b[0m unittests src/main.rs (target/debug/deps/hello-3f2a9c1e)\n\nrunning 3 tests\ntest tests::greets_by_name ... \x1b[32mok\x1b[0m\ntest tests::greeting_is_static ... \x1b[32mok\x1b[0m\ntest tests::main_prints_the_greeting ... \x1b[32mok\x1b[0m\n\ntest result: \x1b[32mok\x1b[0m. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n   \x1b[1;32mDoc-tests\x1b[0m hello\n\nrunning 0 tests\n\ntest result: \x1b[32mok\x1b[0m. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s".into(),
                     diff: vec![],
                     open: true,
-                    full: false, review: Review::Open,
+                    full: false, review: Review::Open, images: vec![],
                 }),
             ],
         },
@@ -9524,10 +9630,10 @@ fn mock_chats() -> Vec<Chat> {
         Message::user("Can you also check the hermes review pipeline for unused imports?".into(), minutes_ago(4)),
         Message::Assistant {
             blocks: vec![
-                Block::Tool(ToolCall { kind: ToolKind::Web, target: "https://eslint.org/docs/latest/rules/no-unused-vars".into(), note: None, status: ToolStatus::Done, output: "no-unused-vars: disallow unused variables, including imports.".into(), diff: vec![], open: false, full: false, review: Review::Open }),
-                Block::Tool(ToolCall { kind: ToolKind::Write, target: "docs/lint-notes.md".into(), note: None, status: ToolStatus::Done, output: "".into(), diff: diff(&[(DiffKind::Add, "# Lint notes"), (DiffKind::Add, ""), (DiffKind::Add, "Run `pnpm lint --filter hermes` before pushing.")]), open: false, full: false, review: Review::Open }),
-                Block::Tool(ToolCall { kind: ToolKind::Search, target: "^use .*;$ in src/hermes".into(), note: None, status: ToolStatus::Done, output: "src/hermes/review.ts:3\nsrc/hermes/store.ts:1".into(), diff: vec![], open: false, full: false, review: Review::Open }),
-                Block::Tool(ToolCall { kind: ToolKind::Bash, target: "pnpm lint --filter hermes".into(), note: Some("Lint the package".into()), status: ToolStatus::Failed, output: "\x1b[4msrc/hermes/review.ts\x1b[24m\n  \x1b[2m3:10\x1b[22m  \x1b[31merror\x1b[39m  'diffLines' is defined but never used  \x1b[2m@typescript-eslint/no-unused-vars\x1b[22m\n\n\x1b[31m\x1b[1m✖ 1 problem (1 error, 0 warnings)\x1b[22m\x1b[39m\n\x1b[2m ELIFECYCLE \x1b[22m Command failed with exit code 1.".into(), diff: vec![], open: true, full: false, review: Review::Open }),
+                Block::Tool(ToolCall { kind: ToolKind::Web, target: "https://eslint.org/docs/latest/rules/no-unused-vars".into(), note: None, status: ToolStatus::Done, output: "no-unused-vars: disallow unused variables, including imports.".into(), diff: vec![], open: false, full: false, review: Review::Open, images: vec![] }),
+                Block::Tool(ToolCall { kind: ToolKind::Write, target: "docs/lint-notes.md".into(), note: None, status: ToolStatus::Done, output: "".into(), diff: diff(&[(DiffKind::Add, "# Lint notes"), (DiffKind::Add, ""), (DiffKind::Add, "Run `pnpm lint --filter hermes` before pushing.")]), open: false, full: false, review: Review::Open, images: vec![] }),
+                Block::Tool(ToolCall { kind: ToolKind::Search, target: "^use .*;$ in src/hermes".into(), note: None, status: ToolStatus::Done, output: "src/hermes/review.ts:3\nsrc/hermes/store.ts:1".into(), diff: vec![], open: false, full: false, review: Review::Open, images: vec![] }),
+                Block::Tool(ToolCall { kind: ToolKind::Bash, target: "pnpm lint --filter hermes".into(), note: Some("Lint the package".into()), status: ToolStatus::Failed, output: "\x1b[4msrc/hermes/review.ts\x1b[24m\n  \x1b[2m3:10\x1b[22m  \x1b[31merror\x1b[39m  'diffLines' is defined but never used  \x1b[2m@typescript-eslint/no-unused-vars\x1b[22m\n\n\x1b[31m\x1b[1m✖ 1 problem (1 error, 0 warnings)\x1b[22m\x1b[39m\n\x1b[2m ELIFECYCLE \x1b[22m Command failed with exit code 1.".into(), diff: vec![], open: true, full: false, review: Review::Open, images: vec![] }),
                 Block::Text("One unused import: `diffLines` in `src/hermes/review.ts`. Want me to remove it?".into()),
             ],
         },
@@ -9575,7 +9681,7 @@ fn mock_chats() -> Vec<Chat> {
                 done(crate::backend::tool_call("mcp__forge-browser__state", &serde_json::json!({}))),
                 done(crate::backend::tool_call("mcp__forge-browser__click", &serde_json::json!({"index": 12}))),
                 done(crate::backend::tool_call("mcp__forge-browser__text", &serde_json::json!({"query": "how #[serde(alias)] works"}))),
-                Block::Tool(ToolCall { kind: ToolKind::Read, target: "src/settings.rs".into(), note: None, status: ToolStatus::Done, output: "pub struct Settings { pub theme: String, pub model: String, pub permissions: Vec<String> }".into(), diff: vec![], open: false, full: false, review: Review::Open }),
+                Block::Tool(ToolCall { kind: ToolKind::Read, target: "src/settings.rs".into(), note: None, status: ToolStatus::Done, output: "pub struct Settings { pub theme: String, pub model: String, pub permissions: Vec<String> }".into(), diff: vec![], open: false, full: false, review: Review::Open, images: vec![] }),
                 Block::Tool(ToolCall {
                     kind: ToolKind::Write,
                     target: "docs/settings-migration-plan.md".into(),
@@ -9584,7 +9690,7 @@ fn mock_chats() -> Vec<Chat> {
                     output: "".into(),
                     diff: diff(&PLAN.lines().take(6).map(|l| (DiffKind::Add, l)).collect::<Vec<_>>()),
                     open: false,
-                    full: false, review: Review::Open,
+                    full: false, review: Review::Open, images: vec![],
                 }),
                 Block::Text("Here is the plan. It moves every setting to the v2 schema without losing anything, and keeps a backup for one release. Two checklist items are still open: the round-trip test and a Windows run with a read-only file.".into()),
                 Block::File(FileRef { name: "settings-migration-plan.md".into(), path: Some("docs/settings-migration-plan.md".into()), content: PLAN.into(), bytes: None }),
@@ -9606,7 +9712,7 @@ fn mock_chats() -> Vec<Chat> {
                     output: "".into(),
                     diff: diff(&[(DiffKind::Add, "<!DOCTYPE html>"), (DiffKind::Add, "<title>How a chat reaches a model</title>"), (DiffKind::Add, "<svg viewBox=\"0 0 960 480\" …>")]),
                     open: false,
-                    full: false, review: Review::Open,
+                    full: false, review: Review::Open, images: vec![],
                 }),
                 Block::Text("Here it is. The gateway is the one accent: it is the only piece that ever holds a key, and it reads it from Credential Manager on the way out.".into()),
                 Block::File(FileRef { name: "chat-path.html".into(), path: Some("docs/chat-path.html".into()), content: CHAT_PATH.into(), bytes: None }),
@@ -9634,7 +9740,7 @@ fn mock_chats() -> Vec<Chat> {
             diff: vec![],
             open: false,
             full: false,
-            review: Review::Open,
+            review: Review::Open, images: vec![],
         })
     };
     let budget = vec![

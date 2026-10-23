@@ -295,7 +295,7 @@ mod tests {
             diff: vec![],
             open: false,
             full: false,
-            review: Review::Open,
+            review: Review::Open, images: vec![],
         })
     }
 

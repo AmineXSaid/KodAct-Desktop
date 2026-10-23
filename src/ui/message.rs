@@ -1,25 +1,25 @@
 //! One transcript item, as Forge draws it:
 //! - your message: a white card on the right;
-//! - a reply: flush with the column, under a small "Forge" header on the
-//!   first reply of a turn; it holds text (markdown), thinking (a
-//!   disclosure), tool calls (one row each; Bash as a terminal block) and
-//!   permission prompts;
+//! - a reply: flush with the column, with no header (your message above it
+//!   already starts the turn); it holds text (markdown), thinking (a
+//!   disclosure), tool calls (one row each; Bash as a terminal block, a
+//!   picture as a thumbnail) and permission prompts;
 //! - the end of a turn: how long it took;
 //! - a notice (interrupted, an error).
 
 use std::time::{Duration, SystemTime};
 
 use gpui::{
-    div, percentage, prelude::*, px, relative, Animation, AnimationExt, AnyElement, ClipboardItem,
-    Entity, FontWeight, SharedString, Transformation,
+    div, img, percentage, prelude::*, px, relative, Animation, AnimationExt, AnyElement,
+    ClipboardItem, Entity, FontWeight, ObjectFit, SharedString, Transformation,
 };
 
 use super::icon;
 use super::markdown::{self, CopyContext};
 use super::terminal;
 use crate::state::{
-    AppState, Block, Decider, DiffKind, Message, PermInfo, Rating, Review, ToolCall, ToolKind,
-    ToolStatus, Verdict,
+    AppState, Block, Decider, DiffKind, Message, PermInfo, Rating, Review, ToolCall, ToolImage,
+    ToolKind, ToolStatus, Verdict,
 };
 use crate::theme::{self, Theme};
 
@@ -1108,7 +1108,74 @@ pub(super) fn failure_line(call: &ToolCall) -> Option<SharedString> {
 
 /// The call has something to open: a command's terminal, a change, output.
 pub(super) fn has_body(call: &ToolCall) -> bool {
-    call.kind == ToolKind::Bash || !call.diff.is_empty() || !call.output.is_empty()
+    call.kind == ToolKind::Bash
+        || !call.diff.is_empty()
+        || !call.output.is_empty()
+        || !call.images.is_empty()
+}
+
+/// The pictures calls returned, as thumbnails pushed to the end of their
+/// line: three at most, then how many more. The line opens to them.
+pub(super) fn thumbs<'a>(
+    images: impl Iterator<Item = &'a ToolImage>,
+    t: &Theme,
+) -> Option<gpui::Div> {
+    const SHOWN: usize = 3;
+    let all: Vec<&ToolImage> = images.collect();
+    if all.is_empty() {
+        return None;
+    }
+    Some(
+        div()
+            .flex()
+            .flex_none()
+            .items_center()
+            .gap(t.space.xs)
+            .pl(t.space.sm)
+            .children(all.iter().take(SHOWN).map(|i| {
+                div()
+                    .flex_none()
+                    .w(t.size.thumb_w)
+                    .h(t.size.thumb_h)
+                    .rounded(t.radius.small)
+                    .overflow_hidden()
+                    .border_1()
+                    .border_color(t.colors.border)
+                    .bg(t.colors.surface)
+                    .child(
+                        img(i.image.clone())
+                            .size_full()
+                            .object_fit(ObjectFit::Cover),
+                    )
+            }))
+            .when(all.len() > SHOWN, |d| {
+                d.child(
+                    div()
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_subtle)
+                        .child(format!("+{}", all.len() - SHOWN)),
+                )
+            }),
+    )
+}
+
+/// The pictures a call returned, opened: each whole, letterboxed in a frame
+/// of one size (the path bar above already names a file's).
+fn pictures(call: &ToolCall, t: &Theme) -> gpui::Div {
+    div()
+        .flex()
+        .flex_wrap()
+        .gap(t.space.md)
+        .p(t.space.md)
+        .children(call.images.iter().map(|i| {
+            div()
+                .w(t.size.tool_image)
+                .h(t.size.tool_image * 0.625)
+                .rounded(t.radius.button)
+                .overflow_hidden()
+                .bg(t.colors.canvas)
+                .child(img(i.image.clone()).size_full().object_fit(ObjectFit::Contain))
+        }))
 }
 
 /// What a call's line names: a file by its name (its folder is in the
@@ -1246,6 +1313,10 @@ pub(super) fn tool_header(
                 t.colors.text_subtle,
             ))
         })
+        // Opened, the pictures show whole below instead.
+        .when_some(thumbs(call.images.iter(), t).filter(|_| !call.open), |d, th| {
+            d.child(div().flex_1()).child(th)
+        })
         .on_click(toggle(cx, b))
 }
 
@@ -1307,6 +1378,14 @@ pub(super) fn tool_body(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) 
             )
             .children(review_controls(call, b, cx, t))
     });
+    if !call.images.is_empty() {
+        return Some(
+            frame()
+                .children(path_bar)
+                .child(pictures(call, t))
+                .into_any_element(),
+        );
+    }
     if matches!(call.status, ToolStatus::Failed | ToolStatus::Interrupted) {
         let stopped = call.status == ToolStatus::Interrupted;
         return Some(

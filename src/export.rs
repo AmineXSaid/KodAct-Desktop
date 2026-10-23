@@ -235,7 +235,7 @@ mod tests {
                         diff: vec![],
                         open: true,
                         full: false,
-                        review: Review::Open,
+                        review: Review::Open, images: vec![],
                     }),
                     Block::Tool(ToolCall {
                         kind: ToolKind::Edit,
@@ -249,7 +249,7 @@ mod tests {
                         }],
                         open: false,
                         full: false,
-                        review: Review::Open,
+                        review: Review::Open, images: vec![],
                     }),
                 ],
             },

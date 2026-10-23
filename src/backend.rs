@@ -61,6 +61,7 @@ pub enum Event {
         id: String,
         output: String,
         is_error: bool,
+        images: Vec<crate::state::ToolImage>,
     },
     /// Forge asks before running a tool.
     Ask {
@@ -801,6 +802,10 @@ impl Parser {
                             id: b["tool_use_id"].as_str().unwrap_or_default().into(),
                             output: result_text(&b["content"]),
                             is_error: b["is_error"].as_bool().unwrap_or(false),
+                            images: result_images(
+                                &b["content"],
+                                v["tool_use_result"]["file"]["filePath"].as_str(),
+                            ),
                         });
                     }
                 }
@@ -887,6 +892,35 @@ fn result_text(c: &Value) -> String {
         Value::Null => String::new(),
         other => other.to_string(),
     }
+}
+
+/// The pictures in a tool result: base64 image blocks, named after the file
+/// they were read from when the result says which.
+pub fn result_images(c: &Value, path: Option<&str>) -> Vec<crate::state::ToolImage> {
+    use gpui::ImageFormat;
+    let name = path
+        .and_then(|p| p.rsplit(['/', '\\']).next())
+        .unwrap_or("image");
+    c.as_array()
+        .into_iter()
+        .flatten()
+        .filter(|b| b["type"] == "image" && b["source"]["type"] == "base64")
+        .filter_map(|b| {
+            let format = match b["source"]["media_type"].as_str()? {
+                "image/png" => ImageFormat::Png,
+                "image/jpeg" => ImageFormat::Jpeg,
+                "image/gif" => ImageFormat::Gif,
+                "image/webp" => ImageFormat::Webp,
+                _ => return None,
+            };
+            let bytes = crate::browser::decode_base64(b["source"]["data"].as_str()?)?;
+            Some(crate::state::ToolImage {
+                name: name.to_string().into(),
+                path: path.map(|p| p.to_string().into()),
+                image: std::sync::Arc::new(gpui::Image::from_bytes(format, bytes)),
+            })
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------- tool rows
@@ -1017,6 +1051,7 @@ pub fn tool_call(name: &str, input: &Value) -> ToolCall {
         open: false,
         full: false,
         review: Review::Open,
+        images: vec![],
     }
 }
 
@@ -1145,7 +1180,7 @@ mod tests {
             Event::ToolResult {
                 id: "t1".into(),
                 output: "a\nb".into(),
-                is_error: false,
+                is_error: false, images: vec![],
             }
         );
         assert!(
@@ -1360,6 +1395,21 @@ mod tests {
             "FORGE_OPENAI_BASE_URL".into(),
             "http://127.0.0.1:11434/v1".into()
         )));
+    }
+
+    #[test]
+    fn a_read_picture_comes_back_as_an_image() {
+        let content = json!([
+            {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "aGk="}},
+            {"type": "image", "source": {"type": "base64", "media_type": "image/bmp", "data": "aGk="}},
+            {"type": "text", "text": "x"}
+        ]);
+        let found = result_images(&content, Some("/p/shots/a.png"));
+        assert_eq!(found.len(), 1, "a format Forge can't show is skipped");
+        assert_eq!(found[0].name.as_ref(), "a.png");
+        assert_eq!(found[0].path.as_deref(), Some("/p/shots/a.png"));
+        assert_eq!(found[0].image.bytes(), b"hi");
+        assert!(result_images(&json!("text"), None).is_empty());
     }
 
     #[test]

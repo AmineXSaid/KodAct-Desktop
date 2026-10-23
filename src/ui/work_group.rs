@@ -65,7 +65,9 @@ pub fn runs(blocks: &[Block], streaming: bool) -> Vec<Range<usize>> {
             end -= 1;
         }
         let calls = (start..end)
-            .filter(|&i| matches!(blocks[i], Block::Tool(_)) && part(blocks, i, streaming) == Part::Step)
+            .filter(|&i| {
+                matches!(blocks[i], Block::Tool(_)) && part(blocks, i, streaming) == Part::Step
+            })
             .count();
         if calls >= MIN_CALLS {
             out.push(start..end);
@@ -76,7 +78,11 @@ pub fn runs(blocks: &[Block], streaming: bool) -> Vec<Range<usize>> {
 }
 
 /// The calls a run shows, with their block index.
-fn calls<'a>(blocks: &'a [Block], run: &Range<usize>, streaming: bool) -> Vec<(usize, &'a ToolCall)> {
+fn calls<'a>(
+    blocks: &'a [Block],
+    run: &Range<usize>,
+    streaming: bool,
+) -> Vec<(usize, &'a ToolCall)> {
     run.clone()
         .filter(|&i| part(blocks, i, streaming) == Part::Step)
         .filter_map(|i| match &blocks[i] {
@@ -93,7 +99,12 @@ pub fn summary(calls: &[&ToolCall]) -> String {
     use std::collections::HashSet;
     let ok: Vec<&&ToolCall> = calls
         .iter()
-        .filter(|c| !matches!(c.status, ToolStatus::Failed | ToolStatus::Declined | ToolStatus::Interrupted))
+        .filter(|c| {
+            !matches!(
+                c.status,
+                ToolStatus::Failed | ToolStatus::Declined | ToolStatus::Interrupted
+            )
+        })
         .collect();
     let files = |kinds: &[ToolKind]| {
         ok.iter()
@@ -167,8 +178,14 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
     let calls = calls(blocks, &run, streaming);
     let all: Vec<&ToolCall> = calls.iter().map(|(_, c)| *c).collect();
     let open = cx.open_groups.contains(&run.start);
-    let failed = all.iter().filter(|c| c.status == ToolStatus::Failed).count();
-    let stopped = all.iter().filter(|c| c.status == ToolStatus::Interrupted).count();
+    let failed = all
+        .iter()
+        .filter(|c| c.status == ToolStatus::Failed)
+        .count();
+    let stopped = all
+        .iter()
+        .filter(|c| c.status == ToolStatus::Interrupted)
+        .count();
     let (adds, dels) = all
         .iter()
         .filter(|c| c.status != ToolStatus::Failed)
@@ -185,6 +202,15 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
     let (state, chat, msg, start) = (cx.state.clone(), cx.chat, cx.index, run.start);
     let strong = t.colors.text;
     let live_step = running.filter(|_| live);
+    let pictures = message::thumbs(
+        run.clone()
+            .filter_map(|i| match &blocks[i] {
+                Block::Tool(c) => Some(c.images.iter()),
+                _ => None,
+            })
+            .flatten(),
+        t,
+    );
 
     // One quiet line, as Claude shows its work: "Edited 7 files, ran 2
     // commands (1 failed) ›". While it works, the step in progress.
@@ -193,8 +219,16 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
         .role(gpui::accesskit::Role::Button)
         .aria_label(SharedString::from(format!(
             "{words}{}{}, {}",
-            if failed > 0 { format!(", {failed} failed") } else { String::new() },
-            if stopped > 0 { format!(", {stopped} stopped") } else { String::new() },
+            if failed > 0 {
+                format!(", {failed} failed")
+            } else {
+                String::new()
+            },
+            if stopped > 0 {
+                format!(", {stopped} stopped")
+            } else {
+                String::new()
+            },
             if open { "hide steps" } else { "show steps" }
         )))
         .flex()
@@ -206,7 +240,11 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
         .cursor_pointer()
         .hover(move |s| s.text_color(strong))
         .children(live_step.map(|_| {
-            super::tasks::status_icon(ToolStatus::Running, t, format!("work-spin-{chat}-{msg}-{start}").into())
+            super::tasks::status_icon(
+                ToolStatus::Running,
+                t,
+                format!("work-spin-{chat}-{msg}-{start}").into(),
+            )
         }))
         .child(
             div()
@@ -220,11 +258,21 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
                 }),
         )
         .when(failed > 0, |d| {
-            d.child(div().flex_none().text_color(t.extra.danger).child(format!("({failed} failed)")))
+            d.child(
+                div()
+                    .flex_none()
+                    .text_color(t.extra.danger)
+                    .child(format!("({failed} failed)")),
+            )
         })
         // Stopped mid-way: their outcome is unknown, so they are counted apart.
         .when(stopped > 0, |d| {
-            d.child(div().flex_none().text_color(t.extra.warning).child(format!("({stopped} stopped)")))
+            d.child(
+                div()
+                    .flex_none()
+                    .text_color(t.extra.warning)
+                    .child(format!("({stopped} stopped)")),
+            )
         })
         .when(adds + dels > 0 && live_step.is_none(), |d| {
             d.child(
@@ -234,8 +282,16 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
                     .gap(t.space.xs)
                     .font_family(t.font_mono.clone())
                     .text_size(t.text.caption)
-                    .child(div().text_color(t.extra.success.opacity(0.85)).child(format!("+{adds}")))
-                    .child(div().text_color(t.extra.danger.opacity(0.85)).child(format!("−{dels}"))),
+                    .child(
+                        div()
+                            .text_color(t.extra.success.opacity(0.85))
+                            .child(format!("+{adds}")),
+                    )
+                    .child(
+                        div()
+                            .text_color(t.extra.danger.opacity(0.85))
+                            .child(format!("−{dels}")),
+                    ),
             )
         })
         .child(icon(
@@ -247,44 +303,60 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
             t.size.icon_xs,
             t.colors.text_subtle,
         ))
-        .on_click(move |_, _, app| {
-            state.update(app, |s, cx| s.toggle_group(chat, msg, start, cx))
-        });
+        // The pictures the run's calls returned, at the end of the line.
+        // Opened, the rows show their own.
+        .when_some(pictures.filter(|_| !open), |d, th| {
+            d.child(div().flex_1()).child(th)
+        })
+        .on_click(move |_, _, app| state.update(app, |s, cx| s.toggle_group(chat, msg, start, cx)));
 
-    // Opened: the steps, indented under a quiet rule, a line each.
+    // Opened: the steps in one framed list, a row each between hairlines;
+    // a row opens in place to its change, output or pictures.
     let steps = open.then(|| {
         div()
             .flex()
             .flex_col()
-            .mt(px(2.))
-            .ml(t.size.icon_xs / 2.)
-            .pl(t.space.md)
-            .border_l_2()
+            .mt(t.space.xs)
+            .rounded(t.radius.card)
+            .border_1()
             .border_color(t.colors.border)
-            .children(run.clone().filter_map(|i| {
-                if part(blocks, i, streaming) != Part::Step {
-                    return None;
-                }
-                Some(match &blocks[i] {
-                    Block::Tool(c) => {
-                        let answer = message::answer_for(blocks, i);
-                        let step = message::flash(
+            .overflow_hidden()
+            .children(
+                run.clone()
+                    .filter(|&i| part(blocks, i, streaming) == Part::Step)
+                    .enumerate()
+                    .filter_map(|(n, i)| {
+                        let row = match &blocks[i] {
+                            Block::Tool(c) => {
+                                let answer = message::answer_for(blocks, i);
+                                let step = message::flash(
+                                    div()
+                                        .flex()
+                                        .flex_col()
+                                        .child(message::tool_header(c, i, blocks, cx, t))
+                                        .children(message::tool_body(c, i, cx, t))
+                                        .children(
+                                            answer
+                                                .map(|p| message::approval_line(&blocks[p], cx, t)),
+                                        ),
+                                    i,
+                                    cx,
+                                    t,
+                                );
+                                message::mark(step, i, cx)
+                            }
+                            Block::Thinking { .. } => message::block(blocks, i, cx, t),
+                            _ => return None,
+                        };
+                        Some(
                             div()
-                                .flex()
-                                .flex_col()
-                                .child(message::tool_header(c, i, blocks, cx, t))
-                                .children(message::tool_body(c, i, cx, t))
-                                .children(answer.map(|p| message::approval_line(&blocks[p], cx, t))),
-                            i,
-                            cx,
-                            t,
-                        );
-                        message::mark(step, i, cx)
-                    }
-                    Block::Thinking { .. } => message::block(blocks, i, cx, t),
-                    _ => return None,
-                })
-            }))
+                                .px(t.space.md)
+                                .py(px(3.))
+                                .when(n > 0, |d| d.border_t_1().border_color(t.colors.border))
+                                .child(row),
+                        )
+                    }),
+            )
     });
 
     div()
@@ -315,7 +387,7 @@ mod tests {
             diff: vec![],
             open: false,
             full: false,
-            review: Review::Open,
+            review: Review::Open, images: vec![],
         }
     }
 
@@ -372,7 +444,11 @@ mod tests {
 
     #[test]
     fn the_thought_being_written_stays_in_view() {
-        let blocks = vec![tool(ToolKind::Read, "a.rs"), tool(ToolKind::Read, "b.rs"), think()];
+        let blocks = vec![
+            tool(ToolKind::Read, "a.rs"),
+            tool(ToolKind::Read, "b.rs"),
+            think(),
+        ];
         assert_eq!(runs(&blocks, true), vec![0..2]);
         assert_eq!(runs(&blocks, false), vec![0..3]);
     }
@@ -394,7 +470,10 @@ mod tests {
             summary(&refs),
             "Edited 2 files, read a file, ran 2 commands, searched once"
         );
-        let failed = [call(ToolKind::Write, "a", ToolStatus::Failed), call(ToolKind::Write, "b", ToolStatus::Failed)];
+        let failed = [
+            call(ToolKind::Write, "a", ToolStatus::Failed),
+            call(ToolKind::Write, "b", ToolStatus::Failed),
+        ];
         let refs: Vec<&ToolCall> = failed.iter().collect();
         assert_eq!(summary(&refs), "Tried 2 steps");
     }

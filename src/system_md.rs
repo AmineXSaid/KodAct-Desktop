@@ -129,6 +129,21 @@ fn render() -> String {
         ("titlebar", z.titlebar, "the title bar's height"),
         ("sidebar", z.sidebar, "the sidebar's width"),
         ("column", z.column, "the reading column"),
+        (
+            "thumb_w",
+            z.thumb_w,
+            "a picture a call returned, as a thumbnail at the end of its line",
+        ),
+        (
+            "thumb_h",
+            z.thumb_h,
+            "that thumbnail's height, inside the quiet line",
+        ),
+        (
+            "tool_image",
+            z.tool_image,
+            "that picture's widest, in the call's opened body",
+        ),
         ("composer_width", z.composer_width, "the composer's widest"),
         ("row", z.row, "sidebar rows, menu items"),
         (

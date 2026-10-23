@@ -664,13 +664,16 @@ impl Theme {
         self.font_display = face(f.display, crate::fonts::display());
         self.font_mono = f.mono.into();
         self.font_reading = face(f.reading, self.font_sans.clone());
-        // Anthropic Sans, when installed, sets all the text but code, in
-        // every theme.
+        // Anthropic Sans, when installed, sets every face in every theme,
+        // code included: nothing else draws.
         if let Some((text, display)) = crate::fonts::brand() {
             self.font_sans = text.clone();
             self.font_display = display;
             self.font_serif = text.clone();
-            self.font_reading = text;
+            self.font_reading = text.clone();
+            let mono = crate::fonts::brand_mono().unwrap_or(text);
+            self.font_mono = mono.clone();
+            self.font_code_inline = mono;
         }
         self.display_weight = f.display_weight;
         let (button, card, field, composer, pressed) = f.corners;
@@ -1180,13 +1183,16 @@ const BRAND_STEP: f32 = 1.;
 /// The app's fixed dimensions.
 #[derive(Clone, Copy)]
 pub struct Sizes {
-    pub titlebar: Pixels, // 36
-    pub sidebar: Pixels,  // 288
-    pub column: Pixels,   // 720: the reading column, and the composer under it
+    pub titlebar: Pixels,     // 36
+    pub sidebar: Pixels,      // 288
+    pub column: Pixels,       // 720: the reading column, and the composer under it
     pub thinking_max: Pixels, // 240: an opened thought's tallest; longer ones scroll
-    pub row: Pixels,      // 30: sidebar rows, menu items
-    pub quiet_line: Pixels, // 26: a quiet line in a reply: a call, a thought, a run of work
-    pub control: Pixels,  // 26: pills, small buttons
+    pub row: Pixels,          // 30: sidebar rows, menu items
+    pub quiet_line: Pixels,   // 26: a quiet line in a reply: a call, a thought, a run of work
+    pub thumb_w: Pixels,      // 34: a picture a call returned, at the end of its line
+    pub thumb_h: Pixels,      // 22: the same, short enough for the quiet line
+    pub tool_image: Pixels,   // 360: that picture's widest, in the call's opened body
+    pub control: Pixels,      // 26: pills, small buttons
     // Icons: one scale, 12 / 14 / 16 / 20, and Lucide's own 2px stroke.
     pub icon_xs: Pixels,            // 12: inside captions and chips
     pub icon_sm: Pixels,            // 14
@@ -1253,6 +1259,9 @@ impl Default for Sizes {
             thinking_max: px(240.),
             row: px(30.),
             quiet_line: px(26.),
+            thumb_w: px(34.),
+            thumb_h: px(22.),
+            tool_image: px(360.),
             control: px(26.),
             icon_xs: px(12.),
             icon_sm: px(14.),

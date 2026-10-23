@@ -134,6 +134,9 @@ pub enum SavedBlock {
         /// `kept` or `reverted` once you chose.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         review: Option<String>,
+        /// The files of the pictures it returned; read again on load.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        images: Vec<String>,
     },
     Permission {
         title: String,
@@ -309,6 +312,11 @@ fn save_messages(chat: &Chat, project: &Path) -> SavedChat {
                 Review::Kept => Some("kept".into()),
                 Review::Reverted => Some("reverted".into()),
             },
+            images: c
+                .images
+                .iter()
+                .filter_map(|i| i.path.as_ref().map(|p| p.to_string()))
+                .collect(),
         },
         Block::Permission {
             title,
@@ -429,6 +437,7 @@ pub fn messages_of(saved: &SavedChat) -> Vec<Message> {
             output,
             diff,
             review,
+            images,
         } => Block::Tool(ToolCall {
             kind: kind_of(kind),
             target: target.clone().into(),
@@ -458,6 +467,10 @@ pub fn messages_of(saved: &SavedChat) -> Vec<Message> {
                 Some("reverted") => Review::Reverted,
                 _ => Review::Open,
             },
+            images: images
+                .iter()
+                .filter_map(|p| crate::state::ToolImage::from_file(p))
+                .collect(),
         }),
         SavedBlock::Permission {
             title,
@@ -718,6 +731,7 @@ mod tests {
                         open: true,
                         full: false,
                         review: Review::Open,
+                        images: vec![],
                     }),
                     Block::Permission {
                         title: "Edit?".into(),

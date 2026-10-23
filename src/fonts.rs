@@ -3,8 +3,9 @@
 //! The app bundles only openly licensed fonts: each theme sets its own
 //! (Archivo for Calmly smooth, Inter, Geist, IBM Plex…), code in a mono.
 //!
-//! Anthropic Sans, when this computer has it, sets every theme's interface,
-//! replies and headings (its Text cut, and its Display cut for headings).
+//! Anthropic Sans, when this computer has it, sets every face in every
+//! theme: interface, replies, headings (its Display cut), and code, in
+//! Anthropic Mono when that cut is there, else in the Text cut.
 //! Fonts are read from Forge's `fonts` folder next to its settings and from
 //! the `fonts` folder beside the app, where a personal build's installer
 //! puts them (`installer/private-fonts`), as well as from the system. It is
@@ -36,6 +37,8 @@ pub const BRAND_DISPLAY: &[&str] = &[
     "Anthropic Sans Text",
     "Anthropic Sans",
 ];
+/// Code, with Anthropic Sans: its own mono, when there is one.
+pub const BRAND_MONO: &[&str] = &["Anthropic Mono", "Anthropic Sans Mono"];
 
 struct Faces {
     sans: SharedString,
@@ -43,6 +46,8 @@ struct Faces {
     /// Anthropic Sans, as the text system names it, when it is available:
     /// (text, headings).
     brand: Option<(SharedString, SharedString)>,
+    /// Code's face with Anthropic Sans: its mono, else its text cut.
+    brand_mono: Option<SharedString>,
 }
 
 static FACES: OnceLock<Faces> = OnceLock::new();
@@ -57,6 +62,11 @@ pub fn sans() -> SharedString {
 /// Anthropic Sans, when this computer has it: (text, headings).
 pub fn brand() -> Option<(SharedString, SharedString)> {
     FACES.get().and_then(|f| f.brand.clone())
+}
+
+/// Code's face when Anthropic Sans sets the app, so nothing else draws.
+pub fn brand_mono() -> Option<SharedString> {
+    FACES.get().and_then(|f| f.brand_mono.clone())
 }
 
 /// The display serif.
@@ -133,10 +143,24 @@ pub fn choose(cx: &App) {
         }
     }
     let available = cx.text_system().all_font_names();
+    let brand = brand_faces(&available);
+    let brand_mono = brand
+        .as_ref()
+        .map(|(text, _)| find(&available, BRAND_MONO).unwrap_or_else(|| text.clone()));
+    // Which of Anthropic Sans's families the app found, so a build can be
+    // checked against the files it was given.
+    let found: Vec<&String> = available
+        .iter()
+        .filter(|n| n.to_ascii_lowercase().contains("anthropic"))
+        .collect();
+    if !found.is_empty() {
+        eprintln!("fonts: Anthropic families found: {found:?}; code in {brand_mono:?}");
+    }
     let _ = FACES.set(Faces {
         sans: pick(&available, SANS_PREFERRED, SANS_BUNDLED),
         display: pick(&available, DISPLAY_PREFERRED, DISPLAY_BUNDLED),
-        brand: brand_faces(&available),
+        brand,
+        brand_mono,
     });
 }
 
