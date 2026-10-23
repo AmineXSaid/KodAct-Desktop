@@ -384,6 +384,12 @@ impl CommandPalette {
                 Box::new(OpenProjects),
             ),
             act(
+                "Documents: every file Forge made",
+                "icons/file-text.svg",
+                None,
+                Box::new(OpenDocuments),
+            ),
+            act(
                 "The project map",
                 "icons/map.svg",
                 Some(shortcut("Shift M")),

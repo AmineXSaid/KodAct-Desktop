@@ -8,13 +8,13 @@
 
 **Personality:** calmly smooth: a warm editorial workspace, confident and unhurried, closer to a printed quarterly than a dashboard (after the Anchor style reference).
 
-**Foundation:** sun-bleached cream. The window is Cream Canvas (#e3d7cd), the session a sheet of Warm White (#f0e9e5) on it, cards white on that: paper on paper. One ink (#1e1e1e) carries the type. One colour, dusty blue (#41608a; #9db7d9 at night), where the reference has terracotta: the decisive action, links, a switch that is on, the mark's top, a waiting dot. Everything else is neutral; colour otherwise only for meaning (modes, status).
+**Foundation:** Forge Ember. Warm paper by day: the window and sidebar #ebe8e1, the session a sheet of #f7f5f1 on it, cards white on that. Warm graphite at night: #1b1a19, #242322, cards #2e2d2b. One ink carries the type. One colour, ember copper (#b4532a; #e2895b at night): the decisive action, links, a switch that is on, the mark's top, a waiting dot. Inline code in coral on a faint wash. Everything else is neutral; colour otherwise only for meaning (modes, status).
 
 **Depth:** nearly flat. Hairlines inside cards; the session and the user's message lift on paper grain (three 1px shadows at 6/4/1% ink); popovers and the permission card a touch more.
 
 **Shape:** two shapes. Everything you press is a pill (buttons, chips, icon buttons, the new-chat and needs-you pills); everything that holds content is 4px (cards, rows, menus, fields, the composer, the session).
 
-**Type:** Archivo only, in two cuts: 400 for text, 600 for headings, buttons and labels. Small labels in sentence case, never uppercase and never above a heading. Code in JetBrains Mono.
+**Type:** Hanken Grotesk only (Anthropic Sans where it is installed): 400 for text, 500 for labels, 600 for headings and buttons. Small labels in sentence case, never uppercase and never above a heading. Code in JetBrains Mono.
 
 ## Tokens
 
@@ -73,18 +73,18 @@ The cream stack: the title bar and the sidebar share the canvas, the session ste
 
 | Token | Light | L | Dark | L | Role |
 |---|---|---|---|---|---|
-| `chrome` | `#e3d7cd` | 0.886 | `#171513` | 0.197 | the title bar |
-| `pane` | `#e3d7cd` | 0.886 | `#171513` | 0.197 | the sidebar |
-| `stage` | `#f0e9e5` | 0.938 | `#1e1c1a` | 0.228 | the session: chat, welcome, Rules, Projects |
-| `surface` | `#ffffff` | 1.000 | `#2b2825` | 0.279 | cards, the composer, popovers |
-| `selected` | `#f0e9e5` | 0.938 | `#262321` | 0.259 | the selected sidebar row |
+| `chrome` | `#ebe8e1` | 0.931 | `#1b1a19` | 0.219 | the title bar |
+| `pane` | `#ebe8e1` | 0.931 | `#1b1a19` | 0.219 | the sidebar |
+| `stage` | `#f7f5f1` | 0.971 | `#242322` | 0.257 | the session: chat, welcome, Rules, Projects |
+| `surface` | `#ffffff` | 1.000 | `#2e2d2b` | 0.297 | cards, the composer, popovers |
+| `selected` | `#f7f5f1` | 0.971 | `#242322` | 0.257 | the selected sidebar row |
 
 ### Themes
 Picked in Settings > General > Theme and kept in `window.json`. Each is a whole look: its surfaces and one colour, and its form (faces, corners, density, depth, how a selected row shows). Calmly smooth is the system's own form; every theme passes `palette_check.rs` in both modes.
 
 | Theme | Light canvas / session / accent | Dark canvas / session / accent |
 |---|---|---|
-| Calmly smooth (Cream and dusty blue, Archivo) | `#e3d7cd` / `#f0e9e5` / `#41608a` | `#171513` / `#1e1c1a` / `#9db7d9` |
+| Calmly smooth (Cream and dusty blue, Archivo) | `#ebe8e1` / `#f7f5f1` / `#b4532a` | `#1b1a19` / `#242322` / `#e2895b` |
 | Terracotta (Warm paper, replies in a serif) | `#e3d7cd` / `#f0e9e5` / `#b85a2a` | `#171513` / `#1e1c1a` / `#ee884f` |
 | Patina (Ivory and teal, Inter, flat) | `#e9e6df` / `#f9f8f5` / `#216d70` | `#141312` / `#232321` / `#529a9d` |
 | Ink (Greys and Geist, nothing else) | `#e2e2df` / `#f1f1ef` / `#1e1e1e` | `#121212` / `#1b1b1a` / `#f0f0ee` |
@@ -98,7 +98,7 @@ Picked in Settings > General > Theme and kept in `window.json`. Each is a whole 
 
 | Theme | Faces (UI / display / code / replies) | Corners button · card · field · composer · pressed | Row · title bar · chat | Depth | Selected row |
 |---|---|---|---|---|---|
-| Calmly smooth | Archivo / Archivo / JetBrains Mono / Archivo | 4 · 4 · 4 · 4 · pill | 30 · 36 · 16 | Grain | Soft |
+| Calmly smooth | Hanken Grotesk / Hanken Grotesk / JetBrains Mono / Hanken Grotesk | 4 · 4 · 4 · 4 · pill | 30 · 36 · 16 | Grain | Wash |
 | Terracotta | Hanken Grotesk / Source Serif 4 Display / JetBrains Mono / Source Serif 4 | 8 · 12 · 10 · 16 · pill | 32 · 40 · 16 | Lift | Card |
 | Patina | Inter / Inter / JetBrains Mono / Inter | 6 · 8 · 6 · 12 · 6 | 30 · 36 · 15 | Flat | Tint |
 | Ink | Geist / Geist / Geist Mono / Geist | 6 · 8 · 8 · 12 · 8 | 30 · 36 · 15 | Flat | Wash |
@@ -137,32 +137,32 @@ Contrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of w
 
 | Token | Light | Contrast | Dark | Contrast | Role |
 |---|---|---|---|---|---|
-| `text_strong` | `#1e1e1e` | 13.9:1 | `#f5f2f0` | 15.2:1 | headings, names |
-| `text` | `#1e1e1e` | 13.9:1 | `#f0e9e5` | 14.1:1 | body text |
-| `text_body` | `#2b2825` | 12.2:1 | `#d9d1cb` | 11.3:1 | secondary prose |
-| `text_muted` | `#5a554f` | 6.1:1 | `#a8a29b` | 6.7:1 | labels, captions, icons |
-| `text_subtle` | `#7d776f` | 3.7:1 | `#857f77` | 4.3:1 | placeholders and disabled only |
+| `text_strong` | `#1e1e1e` | 15.3:1 | `#f5f2f0` | 14.1:1 | headings, names |
+| `text` | `#1e1e1e` | 15.3:1 | `#f0e9e5` | 13.1:1 | body text |
+| `text_body` | `#2b2825` | 13.5:1 | `#d9d1cb` | 10.4:1 | secondary prose |
+| `text_muted` | `#5a554f` | 6.8:1 | `#a8a29b` | 6.2:1 | labels, captions, icons |
+| `text_subtle` | `#7d776f` | 4.1:1 | `#857f77` | 4.0:1 | placeholders and disabled only |
 | `border` | `#1e1e1e @ 13.0%` | 1.3:1 | `#f2e9e3 @ 12.0%` | 1.4:1 | hairlines |
 | `border_strong` | `#c9c9c7` | 1.7:1 | `#4a4540` | 1.5:1 | outlined buttons, a switch at rest |
-| `primary` | `#41608a` | 6.4:1 | `#9db7d9` | 7.1:1 | links, selected text, the focus edge |
-| `accent` | `#41608a` | 6.4:1 | `#9db7d9` | 8.9:1 | send, the new-chat mark, accent dots (white icon on it) |
+| `primary` | `#a44a24` | 5.9:1 | `#eb9d74` | 6.3:1 | links, selected text, the focus edge |
+| `accent` | `#b4532a` | 5.0:1 | `#e2895b` | 6.6:1 | send, the new-chat mark, accent dots (white icon on it) |
 | `fill` | `#1e1e1e` | 13.9:1 | `#f0e9e5` | 15.2:1 | filled buttons: ink on paper, paper on charcoal |
-| `toggle_on` | `#41608a` | 6.4:1 | `#9db7d9` | 7.1:1 | a switch that is on |
-| `mark_top` | `#41608a` | 5.4:1 | `#9db7d9` | 8.3:1 | the ingot mark's top face (`ui/ingot.rs`) |
-| `mark_left` | `#1e1e1e` | 13.9:1 | `#f0e9e5` | 14.1:1 | the ingot's left face |
-| `mark_right` | `#8b857e` | 3.0:1 | `#7d776f` | 3.8:1 | the ingot's right face |
-| `mark_heat_white` | `#fff2cc` | 1.1:1 | `#fff2cc` | 15.2:1 | the ingot white hot from the forge (onboarding); never at rest |
-| `mark_heat` | `#f5892c` | 2.1:1 | `#f5892c` | 6.9:1 | the ingot's orange glow as it cools, and a strike's flare |
-| `mark_heat_ember` | `#a3311c` | 5.8:1 | `#a3311c` | 2.4:1 | the ingot's ember red as it cools |
-| `mark_heat_iron` | `#3b3633` | 9.9:1 | `#3b3633` | 1.4:1 | the ingot's dark iron, last before its own colours |
-| `fill_danger` | `#a3402c` | 6.3:1 | `#e98a72` | 7.2:1 | destructive confirms |
-| `success` | `#3f6b4b` | 6.1:1 | `#8fbf9b` | 7.0:1 | done, passed |
-| `danger` | `#a3402c` | 6.3:1 | `#e98a72` | 5.8:1 | failed, errors |
-| `warning` | `#8a5600` | 6.2:1 | `#ffc85a` | 9.5:1 | needs you |
+| `toggle_on` | `#a44a24` | 5.9:1 | `#eb9d74` | 6.3:1 | a switch that is on |
+| `mark_top` | `#93401c` | 6.4:1 | `#e2895b` | 5.9:1 | the ingot mark's top face (`ui/ingot.rs`) |
+| `mark_left` | `#1e1e1e` | 15.3:1 | `#f0e9e5` | 13.1:1 | the ingot's left face |
+| `mark_right` | `#8b857e` | 3.4:1 | `#7d776f` | 3.5:1 | the ingot's right face |
+| `mark_heat_white` | `#fff2cc` | 1.0:1 | `#fff2cc` | 14.1:1 | the ingot white hot from the forge (onboarding); never at rest |
+| `mark_heat` | `#f5892c` | 2.3:1 | `#f5892c` | 6.3:1 | the ingot's orange glow as it cools, and a strike's flare |
+| `mark_heat_ember` | `#a3311c` | 6.4:1 | `#a3311c` | 2.3:1 | the ingot's ember red as it cools |
+| `mark_heat_iron` | `#3b3633` | 10.9:1 | `#3b3633` | 1.3:1 | the ingot's dark iron, last before its own colours |
+| `fill_danger` | `#a3402c` | 6.3:1 | `#e98a72` | 6.9:1 | destructive confirms |
+| `success` | `#3f6b4b` | 6.1:1 | `#8fbf9b` | 6.6:1 | done, passed |
+| `danger` | `#a3402c` | 6.3:1 | `#e98a72` | 5.5:1 | failed, errors |
+| `warning` | `#8a5600` | 6.2:1 | `#ffc85a` | 9.0:1 | needs you |
 | `memory` | `#75591a` | 5.6:1 | `#e5c77a` | 7.7:1 | memory and rules, on its tint |
-| `skill` | `#7a3fb0` | 6.6:1 | `#c3a3ec` | 6.8:1 | a skill named in the composer, bold |
-| `mode_plan` | `#1f75cb` | 4.7:1 | `#428fdc` | 4.3:1 | Plan mode |
-| `mode_bypass` | `#a32c12` | 7.2:1 | `#ec5941` | 4.2:1 | Bypass permissions |
+| `skill` | `#7a3fb0` | 6.6:1 | `#c3a3ec` | 6.4:1 | a skill named in the composer, bold |
+| `mode_plan` | `#1f75cb` | 4.7:1 | `#428fdc` | 4.1:1 | Plan mode |
+| `mode_bypass` | `#a32c12` | 7.2:1 | `#ec5941` | 4.0:1 | Bypass permissions |
 
 ### Contrast floors
 - Meaningful text: 4.5:1 on every surface and hover wash.
@@ -236,6 +236,9 @@ One family; every control takes keyboard focus (a `primary` edge shows for the k
 | Pills to press, 4px to hold | The contrast between the two shapes is the system: it says at a glance what acts and what holds. | 2026-10-18 |
 | Ink pills for the loud neutrals | New chat and needs-you are ink pills; the accent is kept for the one decision in front of you (Allow once, Send). | 2026-10-18 |
 | Archivo for everything | A single face set in two weights reads as set type; headings in 600 replace the display serif. | 2026-10-18 |
+| Hanken Grotesk, not Archivo | Archivo read boxy and wide as prose; Hanken Grotesk is a warm humanist grotesk, close in spirit to Anthropic Sans, and ships an italic. | 2026-10-23 |
+| Forge Ember | Warm paper and warm graphite, the sidebar a step deeper than the session, and one copper heat for the action, the current state and links: the forge's own colour, as calm as Claude Code's. | 2026-10-23 |
+| A neutral wash for the open row | The accent stays for the action; the open chat and the open screen lift by a grey wash. | 2026-10-23 |
 | Composer at 620px | A comfortable measure for a prompt, the same in a chat and on the welcome page. | 2026-10-11 |
 | Composer on the reading column | In a chat the composer takes the 720px column the reply is read in, so the two line up; on the welcome page it keeps its own measure. | 2026-10-23 |
 | No name over a reply | The user's bubble already separates the turns; a name and mark over every reply only repeated it. | 2026-10-23 |

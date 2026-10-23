@@ -10,6 +10,7 @@ pub mod autocomplete;
 pub mod browser_view;
 pub mod button;
 pub mod chat_menu;
+pub mod documents;
 pub mod title_menus;
 pub mod chat_view;
 pub mod command_palette;
@@ -78,11 +79,9 @@ pub mod tasks;
 pub mod terminal;
 pub mod terminal_dock;
 pub mod versions;
-pub mod voxels;
 pub mod workbench;
 pub mod workspace;
 pub mod work_group;
-pub mod writing_hand;
 
 use gpui::{div, prelude::*, svg, App, Div, Hsla, Pixels, SharedString, Svg};
 
@@ -170,6 +169,7 @@ gpui::actions!(
         ExportChat,
         DeleteChat,
         ArchiveChat,
+        OpenDocuments,
         ToggleDetailedView,
         ContinueInNewChat,
         CopyChatMarkdown,

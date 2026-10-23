@@ -267,19 +267,6 @@ pub fn hover_wash(
         .into_any_element()
 }
 
-/// An icon turning a quarter as the pointer arrives (New chat's plus).
-pub fn quarter_turn(
-    icon: gpui::Svg,
-    id: impl Into<gpui::ElementId>,
-    t: &crate::theme::Theme,
-) -> gpui::AnyElement {
-    use gpui::{prelude::*, AnimationExt as _};
-    icon.with_animation(id, once(t.size.panel_in_ms), |s, k| {
-        s.with_transformation(gpui::Transformation::rotate(gpui::percentage(0.25 * k)))
-    })
-    .into_any_element()
-}
-
 /// The sidebar's shadow falling across the session's left edge (put it last
 /// in the session, which is `relative` and clips to its corners). Nothing in
 /// a flat theme.
@@ -302,39 +289,3 @@ pub fn side_shade(t: &crate::theme::Theme) -> Option<gpui::AnyElement> {
     )
 }
 
-/// Something appearing in a column: it unfolds from nothing to `height`
-/// while it fades in, so what is below slides down instead of jumping.
-/// Clipped only while it unfolds (a menu it opens may overflow it after).
-pub fn unfold(
-    el: impl gpui::IntoElement + 'static,
-    id: impl Into<gpui::ElementId>,
-    height: gpui::Pixels,
-    t: &crate::theme::Theme,
-) -> gpui::AnyElement {
-    use gpui::{div, prelude::*, AnimationExt as _};
-    div()
-        .flex_none()
-        .child(el)
-        .with_animation(id, once(t.size.panel_in_ms), move |d, k| {
-            if k < 1. {
-                d.h(height * k).overflow_hidden().opacity(k)
-            } else {
-                d
-            }
-        })
-        .into_any_element()
-}
-
-/// The space something left as it went: it closes from `height` to nothing,
-/// so what was below slides up instead of jumping.
-pub fn fold(
-    id: impl Into<gpui::ElementId>,
-    height: gpui::Pixels,
-    t: &crate::theme::Theme,
-) -> gpui::AnyElement {
-    use gpui::{div, prelude::*, AnimationExt as _};
-    div()
-        .flex_none()
-        .with_animation(id, once(t.size.panel_in_ms), move |d, k| d.h(height * (1. - k)))
-        .into_any_element()
-}

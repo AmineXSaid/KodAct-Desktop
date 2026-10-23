@@ -641,9 +641,14 @@ impl Render for ChatView {
                     let line = match &step {
                         // The card says it waits on you: no second line.
                         Some((Activity::AwaitingYou, ..)) => div().into_any_element(),
-                        Some((activity, label, detail, since)) => {
-                            working_line(&t, *activity, label, detail.clone(), *since)
-                        }
+                        Some((activity, label, detail, since)) => working_line(
+                            &t,
+                            *activity,
+                            label,
+                            detail.clone(),
+                            *since,
+                            written(chat.messages.last()),
+                        ),
                         None => div().into_any_element(),
                     };
                     let queued = s.queued.get(&chat.id).map(Vec::as_slice).unwrap_or_default();
@@ -760,15 +765,44 @@ fn mix(a: gpui::Hsla, b: gpui::Hsla, k: f32) -> gpui::Hsla {
     .into()
 }
 
-/// Forge's working line: the mark for the kind of work (`activity.rs`: a
-/// page being read, a prompt's cursor, the quill for a plan), then the step
-/// in words and for how long. A light sweeps across the words.
+/// About how many tokens the reply in progress has written: its words,
+/// thoughts and what its calls returned, at four characters a token (the
+/// engine reports the true count when the turn ends).
+fn written(last: Option<&Message>) -> usize {
+    let Some(Message::Assistant { blocks }) = last else {
+        return 0;
+    };
+    let chars: usize = blocks
+        .iter()
+        .map(|b| match b {
+            Block::Text(t) => t.len(),
+            Block::Thinking { text, .. } => text.len(),
+            Block::Tool(c) => c.output.len() + c.target.len(),
+            _ => 0,
+        })
+        .sum();
+    chars / 4
+}
+
+/// `11.5k`, `840`.
+fn tokens(n: usize) -> String {
+    if n >= 1000 {
+        format!("{:.1}k", n as f32 / 1000.)
+    } else {
+        n.to_string()
+    }
+}
+
+/// Forge's working line, as Claude Code's: the ember mark (`activity.rs`),
+/// the step in words with a light sweeping across them, then for how long
+/// and about how much it has written.
 fn working_line(
     t: &crate::theme::Theme,
     activity: Activity,
     label: &str,
     detail: Option<String>,
     since: Instant,
+    written: usize,
 ) -> gpui::AnyElement {
     let theme = t.clone();
     let text = label.to_string();
@@ -795,6 +829,13 @@ fn working_line(
                 .text_color(t.colors.text_subtle)
                 .child(elapsed(since.elapsed().as_secs())),
         )
+        .when(written > 0, |d| {
+            d.child(
+                div()
+                    .text_color(t.colors.text_subtle)
+                    .child(format!("· ~{} tokens", tokens(written))),
+            )
+        })
         .when_some(detail, |d, step| {
             let step: SharedString = step.into();
             d.tooltip(move |w, cx| gpui::component::tooltip::Tooltip::new(step.clone()).build(w, cx))
@@ -813,6 +854,12 @@ mod tests {
             "create issue (github)"
         );
         assert_eq!(super::tool_name("TodoWrite"), "TodoWrite");
+    }
+
+    #[test]
+    fn token_counts_read_short() {
+        assert_eq!(super::tokens(840), "840");
+        assert_eq!(super::tokens(11_540), "11.5k");
     }
 
     #[test]

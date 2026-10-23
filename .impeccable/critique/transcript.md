@@ -35,3 +35,10 @@ picture). After: 8.5/10.
   permission card: 8.5.
 - Jump to latest: a round arrow button, words and key in its tooltip, a
   dot while Forge replies: 8.5.
+
+## 2026-10-23: the working line's strike mark
+
+Four ember dots as a diamond (Forge's ◆); each beat a blow squashes it flat,
+the struck dots flash white-hot, and it rings back; the next blow comes from
+the side. Then the step with its light sweep, the time, and "· ~N tokens".
+Like Claude Code's in rhythm, Forge's own in shape and meaning: 8.5.

@@ -37,7 +37,6 @@ icons!(
     "chevron-down",
     "chevron-right",
     "chevron-up",
-    "chevrons-up-down",
     "circle-check",
     "circle-pause",
     "code-xml",
@@ -74,10 +73,6 @@ icons!(
     "git-branch",
     "globe",
     "hand",
-    // Forge writing a plan or a document (original drawings).
-    "writing-hand",
-    "writing-quill",
-    "ink-line",
     "image",
     "info",
     "keyboard",

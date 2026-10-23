@@ -1,6 +1,8 @@
-//! The title bar's two menus, drawn as the chat menu is (plain rows, the
-//! key on the right): Share (copy or export the chat) and ⋮ (the terminal,
-//! the theme, the shortcuts, settings).
+//! The small menus drawn as the chat menu is (plain rows, the key on the
+//! right): the title bar's Share (copy or export the chat) and ⋮ (the
+//! terminal, the theme, the shortcuts, settings), and the sidebar's More
+//! (shortcuts, the guide, settings) and your name (settings, models, the
+//! theme, your name and picture).
 
 use gpui::{div, prelude::*, AnimationExt, AnyElement, Entity, SharedString};
 
@@ -71,6 +73,26 @@ pub fn render(
             theme::rule(t).my(t.space.xs).mx(t.space.xs).into_any_element(),
             on_chat("export-md", "Export as Markdown", |s, id, cx| s.export_chat(id, cx)).into_any_element(),
             on_chat("export-json", "Export as JSON", |s, id, cx| s.export_chat_json(id, cx)).into_any_element(),
+        ],
+        TitleMenu::Help => vec![
+            action("shortcuts", "Keyboard shortcuts".into(), "F1".into(), || Box::new(crate::ShowShortcuts)).into_any_element(),
+            action("guide", "Guide".into(), "".into(), || Box::new(crate::OpenGuide)).into_any_element(),
+            theme::rule(t).my(t.space.xs).mx(t.space.xs).into_any_element(),
+            action("settings", "Settings".into(), super::shortcut(","), || Box::new(crate::OpenSettings)).into_any_element(),
+        ],
+        TitleMenu::Account => vec![
+            action("settings", "Settings".into(), super::shortcut(","), || Box::new(crate::OpenSettings)).into_any_element(),
+            action("models", "Models and endpoints".into(), "".into(), || Box::new(crate::OpenProfiles)).into_any_element(),
+            action(
+                "theme",
+                if t.is_dark { "Light theme" } else { "Dark theme" }.into(),
+                super::shortcut("Shift L"),
+                || Box::new(crate::ToggleTheme),
+            )
+            .into_any_element(),
+            theme::rule(t).my(t.space.xs).mx(t.space.xs).into_any_element(),
+            action("name", "Change your name".into(), "".into(), || Box::new(crate::ChangeName)).into_any_element(),
+            action("avatar", "Change your picture".into(), "".into(), || Box::new(crate::ChangeAvatar)).into_any_element(),
         ],
         TitleMenu::More => vec![
             action("terminal", "Terminal".into(), super::shortcut("`"), || Box::new(crate::ToggleTerminal)).into_any_element(),

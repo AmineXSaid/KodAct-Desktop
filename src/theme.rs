@@ -189,12 +189,21 @@ impl Look {
             chat: (16., 26.),
             heading: (32., 36.),
             depth: Depth::Grain,
-            selection: Selection::Soft,
+            // A neutral wash, as Claude Code marks the open row: the accent
+            // stays for the action.
+            selection: Selection::Wash,
             motion_ms: 200,
             add_menu: AddMenu::List,
         };
         match self {
-            Look::Calm => base,
+            // Forge Ember: Hanken Grotesk, a warm humanist grotesk that reads
+            // like a letter at reply size (Anthropic Sans takes over where it
+            // is installed, `fonts.rs`).
+            Look::Calm => Form {
+                sans: Some("Hanken Grotesk"),
+                display: Some("Hanken Grotesk"),
+                ..base
+            },
             // Claude's school: a warm grotesk, replies set like a letter in
             // Source Serif, soft corners, room to breathe, a soft lift.
             Look::Terracotta => Form {
@@ -363,13 +372,15 @@ impl Look {
             mark_top,
         };
         match (self, dark) {
+            // Forge Ember: warm paper and warm graphite, one copper heat for
+            // the action, the current row and state (`.impeccable`, 2026-10-23).
             (Look::Calm, false) => t(
-                0xe3d7cd, 0xf0e9e5, 0xffffff, 0xf5f2f0, 0x41608a, 0xffffff, 0xdde3ec, 0x41608a,
-                0x334d70, 0x41608a,
+                0xebe8e1, 0xf7f5f1, 0xffffff, 0xf1eee8, 0xb4532a, 0xffffff, 0xf5e2d7, 0xa44a24,
+                0x86391a, 0x93401c,
             ),
             (Look::Calm, true) => t(
-                0x171513, 0x1e1c1a, 0x2b2825, 0x262321, 0x9db7d9, 0x171513, 0x27303c, 0x9db7d9,
-                0xb9cce6, 0x9db7d9,
+                0x1b1a19, 0x242322, 0x2e2d2b, 0x1f1e1d, 0xe2895b, 0x1b1a19, 0x3e2b22, 0xeb9d74,
+                0xf3b694, 0xe2895b,
             ),
             (Look::Terracotta, false) => t(
                 0xe3d7cd, 0xf0e9e5, 0xffffff, 0xf5f2f0, 0xb85a2a, 0xffffff, 0xf6dccb, 0xa8492a,
@@ -702,10 +713,10 @@ impl Theme {
         Self::base(
             false,
             Colors {
-                // Warm White: the session, and the window behind cards.
-                canvas: rgb(0xf0e9e5).into(),
+                // Forge Ember by day: warm paper, the session a sheet on it.
+                canvas: rgb(0xf7f5f1).into(),
                 surface: rgb(0xffffff).into(),
-                sidebar: rgb(0xe3d7cd).into(),
+                sidebar: rgb(0xebe8e1).into(),
                 // One ink, #1e1e1e, carries the type; Stone for what is secondary.
                 text: rgb(0x1e1e1e).into(),
                 text_strong: rgb(0x1e1e1e).into(),
@@ -714,11 +725,11 @@ impl Theme {
                 text_subtle: rgb(0x7d776f).into(),
                 border: hsla(0., 0., 0.118, 0.13),
                 hover: hsla(0., 0., 0.118, 0.05),
-                // Links and selected text: dusty blue, the one colour (6.4:1 on white).
-                primary: rgb(0x41608a).into(),
-                primary_hover: rgb(0x334d70).into(),
+                // Links and selected text: ember copper, the one colour.
+                primary: rgb(0xa44a24).into(),
+                primary_hover: rgb(0x86391a).into(),
                 primary_fg: rgb(0xffffff).into(),
-                primary_tint: hsla(215. / 360., 0.36, 0.40, 0.12),
+                primary_tint: hsla(18. / 360., 0.64, 0.39, 0.12),
                 marigold: rgb(0xffb110).into(),
                 coral: rgb(0xc84b55).into(),
                 sky: rgb(0x62aef0).into(),
@@ -728,14 +739,14 @@ impl Theme {
         )
     }
 
-    /// The same room at night: warm umber surfaces, the blue lifted to read on them.
+    /// The same room at night: warm graphite, the ember lifted to read on it.
     pub fn dark() -> Self {
         Self::base(
             true,
             Colors {
-                canvas: rgb(0x1e1c1a).into(),
-                surface: rgb(0x2b2825).into(),
-                sidebar: rgb(0x171513).into(),
+                canvas: rgb(0x242322).into(),
+                surface: rgb(0x2e2d2b).into(),
+                sidebar: rgb(0x1b1a19).into(),
                 text: rgb(0xf0e9e5).into(),
                 text_strong: rgb(0xf5f2f0).into(),
                 text_body: rgb(0xd9d1cb).into(),
@@ -743,10 +754,10 @@ impl Theme {
                 text_subtle: rgb(0x857f77).into(),
                 border: hsla(22. / 360., 0.37, 0.92, 0.12),
                 hover: hsla(22. / 360., 0.37, 0.92, 0.06),
-                primary: rgb(0x9db7d9).into(),
-                primary_hover: rgb(0xb9cce6).into(),
-                primary_fg: rgb(0x171513).into(),
-                primary_tint: hsla(214. / 360., 0.45, 0.73, 0.16),
+                primary: rgb(0xeb9d74).into(),
+                primary_hover: rgb(0xf3b694).into(),
+                primary_fg: rgb(0x1b1a19).into(),
+                primary_tint: hsla(20. / 360., 0.74, 0.69, 0.16),
                 marigold: rgb(0xffb110).into(),
                 coral: rgb(0xd8646d).into(),
                 sky: rgb(0x62aef0).into(),
@@ -929,22 +940,22 @@ impl ExtraColors {
                 diff_add: hsla(135. / 360., 0.27, 0.65, 0.12),
                 diff_del: hsla(12. / 360., 0.73, 0.68, 0.12),
                 scrim: ink(0.55),
-                selected: rgb(0x262321).into(),
+                selected: rgb(0x242322).into(),
                 // The cream stack at night: the canvas under the title bar
                 // and the sidebar, the session a step up, cards above it.
-                chrome: rgb(0x171513).into(),
-                pane: rgb(0x171513).into(),
-                stage: rgb(0x1e1c1a).into(),
+                chrome: rgb(0x1b1a19).into(),
+                pane: rgb(0x1b1a19).into(),
+                stage: rgb(0x242322).into(),
                 // The filled action is cream on umber, as ink on cream in light.
                 fill: rgb(0xf0e9e5).into(),
                 fill_hover: rgb(0xf5f2f0).into(),
                 // Brick, lifted for the night, under the dark label.
                 fill_danger: rgb(0xe98a72).into(),
                 fill_fg: rgb(0x171513).into(),
-                accent: rgb(0x9db7d9).into(),
-                accent_soft: rgb(0x27303c).into(),
-                accent_fg: rgb(0x171513).into(),
-                mark_top: rgb(0x9db7d9).into(),
+                accent: rgb(0xe2895b).into(),
+                accent_soft: rgb(0x3e2b22).into(),
+                accent_fg: rgb(0x1b1a19).into(),
+                mark_top: rgb(0xe2895b).into(),
                 mark_left: rgb(0xf0e9e5).into(),
                 mark_right: rgb(0x7d776f).into(),
                 mark_heat_white: rgb(0xfff2cc).into(),
@@ -952,8 +963,8 @@ impl ExtraColors {
                 mark_heat_ember: rgb(0xa3311c).into(),
                 mark_heat_iron: rgb(0x3b3633).into(),
                 border_strong: rgb(0x4a4540).into(),
-                sunk: rgb(0x262321).into(),
-                toggle_on: rgb(0x9db7d9).into(),
+                sunk: rgb(0x1f1e1d).into(),
+                toggle_on: rgb(0xeb9d74).into(),
                 memory: rgb(0xe5c77a).into(),
                 memory_tint: rgb(0x3a3220).into(),
                 code_inline_fg: rgb(0xef968b).into(),
@@ -1001,22 +1012,22 @@ impl ExtraColors {
                 diff_add: hsla(137. / 360., 0.26, 0.33, 0.10),
                 diff_del: hsla(10. / 360., 0.57, 0.41, 0.09),
                 scrim: hsla(25. / 360., 0.2, 0.08, 0.38), // the dialog stands clear of the chat
-                selected: rgb(0xf0e9e5).into(),
+                selected: rgb(0xf7f5f1).into(),
                 // Cream Canvas under the title bar and the sidebar, Warm
                 // White for the session, white for the cards on it.
-                chrome: rgb(0xe3d7cd).into(),
-                pane: rgb(0xe3d7cd).into(),
-                stage: rgb(0xf0e9e5).into(),
+                chrome: rgb(0xebe8e1).into(),
+                pane: rgb(0xebe8e1).into(),
+                stage: rgb(0xf7f5f1).into(),
                 // The filled action is the ink pill: quiet, never the accent.
                 fill: rgb(0x1e1e1e).into(),
                 fill_hover: rgb(0x34322f).into(),
                 fill_danger: rgb(0xa3402c).into(),
                 fill_fg: rgb(0xf0e9e5).into(),
                 // Dusty blue, where the reference has terracotta: the one colour.
-                accent: rgb(0x41608a).into(),
-                accent_soft: rgb(0xdde3ec).into(),
+                accent: rgb(0xb4532a).into(),
+                accent_soft: rgb(0xf5e2d7).into(),
                 accent_fg: rgb(0xffffff).into(),
-                mark_top: rgb(0x41608a).into(),
+                mark_top: rgb(0x93401c).into(),
                 mark_left: rgb(0x1e1e1e).into(),
                 mark_right: rgb(0x8b857e).into(),
                 mark_heat_white: rgb(0xfff2cc).into(),
@@ -1024,8 +1035,8 @@ impl ExtraColors {
                 mark_heat_ember: rgb(0xa3311c).into(),
                 mark_heat_iron: rgb(0x3b3633).into(),
                 border_strong: rgb(0xc9c9c7).into(),
-                sunk: rgb(0xf5f2f0).into(),
-                toggle_on: rgb(0x41608a).into(),
+                sunk: rgb(0xf1eee8).into(),
+                toggle_on: rgb(0xa44a24).into(),
                 memory: rgb(0x75591a).into(),
                 memory_tint: rgb(0xf6ecd2).into(),
                 code_inline_fg: rgb(0xa13430).into(),

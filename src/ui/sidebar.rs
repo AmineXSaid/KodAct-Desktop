@@ -12,7 +12,7 @@ use gpui::{
 };
 
 use super::*;
-use crate::state::{AppState, ChatStatus, Screen};
+use crate::state::{AppState, ChatStatus, Screen, SidebarKind, TitleMenu};
 use crate::theme;
 use crate::theme::ActiveTheme;
 
@@ -22,15 +22,8 @@ pub struct Sidebar {
     /// The title being edited (F2, or Rename in a chat's menu).
     rename: Entity<InputState>,
     renaming: Option<usize>,
-    /// The nav row under the pointer: only it shows its shortcut, so the
-    /// labels keep their width (the tooltips name the shortcuts too).
-    nav_hover: Option<&'static str>,
     /// The chat row under the pointer: its wash eases in (`motion::hover_wash`).
     row_hover: Option<usize>,
-    /// Whether the project header showed last time, and how many times it
-    /// came or went: each change unfolds or folds it (`motion::unfold`).
-    head_shown: Option<bool>,
-    head_turns: u32,
     /// Each chat row's place last time, and how often it moved up: a chat
     /// that rises to the top of its group rises into its new place.
     places: std::collections::HashMap<usize, usize>,
@@ -38,24 +31,11 @@ pub struct Sidebar {
     _subs: Vec<Subscription>,
 }
 
-/// The project row's height, under Forge's name.
-const PROJECT_ROW: gpui::Pixels = px(52.);
-
-const GROUPS: [&str; 5] = ["Pinned", "Today", "Yesterday", "Previous 7 days", "Older"];
+/// The list's two groups, as Claude Code's: what you pinned, then the rest
+/// by when it last changed.
+const GROUPS: [&str; 2] = ["Pinned", "Recents"];
 
 impl Sidebar {
-    fn hover_nav(&mut self, row: &'static str, on: bool, cx: &mut Context<Self>) {
-        let next = match (on, self.nav_hover) {
-            (true, _) => Some(row),
-            (false, Some(r)) if r == row => None,
-            (false, other) => other,
-        };
-        if next != self.nav_hover {
-            self.nav_hover = next;
-            cx.notify();
-        }
-    }
-
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search chats"));
         let rename = cx.new(|cx| InputState::new(window, cx).placeholder("Chat title"));
@@ -114,10 +94,7 @@ impl Sidebar {
             search,
             rename,
             renaming: None,
-            nav_hover: None,
             row_hover: None,
-            head_shown: None,
-            head_turns: 0,
             places: Default::default(),
             bumps: Default::default(),
             _subs: subs,
@@ -260,13 +237,14 @@ impl Sidebar {
 
 impl Render for Sidebar {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let nav_hover = self.nav_hover;
         let row_hover = self.row_hover;
         let t = cx.theme().clone();
         let mut filter = Some(self.filter(&t, cx).into_any_element());
         let s = self.state.read(cx);
         let q = s.search.to_lowercase();
         let name: SharedString = s.user_name.clone().unwrap_or_else(|| "Welcome".into());
+        // The endpoint you work on, as Claude Code shows your plan.
+        let endpoint: Option<SharedString> = s.active_profile().map(|p| p.name.clone().into());
         let avatar = s.avatar.clone();
         let hover = t.colors.hover;
         let rules_open = s.screen == Screen::Rules;
@@ -282,8 +260,14 @@ impl Render for Sidebar {
             .pb(t.space.md);
         // Chats of this project (or of every project, by the filter).
         let shown = |c: &&crate::state::Chat| {
-            (s.all_chats || c.project == s.current_project)
-                && (q.is_empty() || c.title.to_lowercase().contains(&q))
+            let plain = s.project(c.project).is_some_and(|p| p.scratch);
+            // Chat lists plain chats; Code, chats in a folder (this one's,
+            // or every one's, by the filter).
+            let kind = match s.sidebar_kind {
+                SidebarKind::Chat => plain,
+                SidebarKind::Code => !plain && (s.all_chats || c.project == s.current_project),
+            };
+            kind && (q.is_empty() || c.title.to_lowercase().contains(&q))
                 // Archived chats only when the filter asks for them.
                 && c.archived == s.show_archived
         };
@@ -292,13 +276,14 @@ impl Render for Sidebar {
             .iter()
             .filter(|p| p.pinned && q.is_empty())
             .collect();
+        let narrowed = (s.sidebar_kind == SidebarKind::Code && !s.all_chats) || s.show_archived;
         let mut any = false;
         let mut place = 0usize;
         for group in GROUPS {
             let rows: Vec<_> = s
                 .chats
                 .iter()
-                .filter(|c| c.group() == group)
+                .filter(|c| c.pinned == (group == "Pinned"))
                 .filter(shown)
                 .collect();
             // The chat you last wrote in, or that last answered, first;
@@ -307,7 +292,7 @@ impl Render for Sidebar {
             if group != "Pinned" {
                 rows.sort_by(|a, b| b.updated.cmp(&a.updated));
             }
-            let projects_here = if group == "Pinned" {
+            let projects_here = if group == "Pinned" && s.sidebar_kind == SidebarKind::Code {
                 pinned_projects.as_slice()
             } else {
                 &[]
@@ -327,9 +312,32 @@ impl Render for Sidebar {
                     .text_size(t.text.caption)
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(t.colors.text_muted)
-                    // A quiet label, no rule beside it; the filter at the end.
+                    .group("group-head")
+                    // A quiet label, no rule beside it; the filter (shown on
+                    // hover, or while it narrows the list), and on Recents a
+                    // + for a new chat, as Claude Code's.
                     .child(div().flex_1().child(group))
-                    .when(first, |d| d.children(filter.take())),
+                    .when(first, |d| {
+                        d.children(filter.take().map(|f| {
+                            div()
+                                .when(!narrowed, |d| d.invisible().group_hover("group-head", |st| st.visible()))
+                                .child(f)
+                        }))
+                    })
+                    .when(group == "Recents", |d| {
+                        d.child(
+                            div()
+                                .id("recents-new")
+                                .ml(px(2.))
+                                .p(px(3.))
+                                .rounded(t.radius.small)
+                                .cursor_pointer()
+                                .hover(move |st| st.bg(hover))
+                                .tooltip(|w, cx| gpui::component::tooltip::Tooltip::new("New chat (Ctrl+N)").build(w, cx))
+                                .child(icon("icons/plus.svg", t.size.icon_sm, t.colors.text_muted))
+                                .on_click(|_, window, cx| window.dispatch_action(Box::new(NewChat), cx)),
+                        )
+                    }),
             );
             for p in projects_here {
                 let (state, id) = (self.state.clone(), p.id);
@@ -397,6 +405,7 @@ impl Render for Sidebar {
                     .filter(|p| !p.scratch)
                     .map(|p| p.name.clone().into());
                 let status = s.status(c);
+                let remote = s.chat_remote(id).map(|r| r.target.icon());
                 let unread = status == ChatStatus::Unread;
                 let editing = s.renaming == Some(id);
                 let menu_open = s.chat_menu == Some(id);
@@ -409,6 +418,7 @@ impl Render for Sidebar {
                         .gap(t.space.sm)
                         .h(t.size.row)
                         .px(t.space.md)
+                        .text_size(t.text.body)
                         .rounded(t.radius.button)
                         .cursor_pointer()
                         .text_color(if selected {
@@ -496,6 +506,17 @@ impl Render for Sidebar {
                                             .group_hover("row", |st| st.invisible())
                                             .when(menu_open, |d| d.invisible())
                                             .child(status_mark(status, id, &t)),
+                                    )
+                                })
+                                // At rest, a chat on another machine shows where,
+                                // as Claude Code marks a cloud session.
+                                .when_some(remote.filter(|_| status == ChatStatus::Idle), |d, glyph| {
+                                    d.child(
+                                        div()
+                                            .flex_none()
+                                            .group_hover("row", |st| st.invisible())
+                                            .when(menu_open, |d| d.invisible())
+                                            .child(icon(glyph, t.size.icon_sm, t.colors.text_subtle)),
                                     )
                                 })
                                 .child(
@@ -645,139 +666,86 @@ impl Render for Sidebar {
                 );
         }
 
-        // Forge's name heads the sheet, always. Working in a folder, the
-        // project sits under it: its tile, its name and where it stands (the
-        // branch, or where a remote one lives); a click opens the switcher.
-        let switcher_open = s.switcher_open;
-        let switcher = switcher_open.then(|| {
-            gpui::deferred(super::workspace::project_switcher(
-                &self.state,
-                window,
-                cx,
-                px(28.) + t.space.sm * 2. + t.space.xs,
-            ))
-            .with_priority(1)
-        });
-        // Where the project lives, when it is remote (WSL, SSH, a
-        // container); the branch is the status bar's.
-        let place = s
-            .current_remote()
-            .map(|r| (r.target.icon(), SharedString::from(r.target.label())));
-        let (closer, opener) = (self.state.clone(), self.state.clone());
+        // The sheet's head, as Claude Code's: the name, then Chat and Code,
+        // the two kinds of chat the list can show.
+        let kind = s.sidebar_kind;
+        let segment = |id: &'static str, path: &'static str, tip: &'static str, k: SidebarKind| {
+            let on = kind == k;
+            let state = self.state.clone();
+            div()
+                .id(id)
+                .flex()
+                .items_center()
+                .justify_center()
+                .w(t.size.control + t.space.xs)
+                .h(t.size.control - t.space.xs)
+                .rounded(t.radius.small)
+                .cursor_pointer()
+                .when(on, |d| d.bg(t.colors.surface).shadow(t.elevation_grain()))
+                .when(!on, |d| d.hover(move |st| st.bg(hover)))
+                .child(icon(path, t.size.icon_sm, if on { t.colors.text_strong } else { t.colors.text_muted }))
+                .tooltip(move |w, cx| gpui::component::tooltip::Tooltip::new(tip).build(w, cx))
+                .on_click(move |_, _, cx| state.update(cx, |s, cx| s.set_sidebar_kind(k, cx)))
+        };
         let header = div()
-            .relative()
-            .flex_none()
-            .on_mouse_down_out(move |_, _, cx| {
-                if closer.read(cx).switcher_open {
-                    closer.update(cx, |s, cx| {
-                        s.switcher_open = false;
-                        cx.notify();
-                    })
-                }
-            })
-            .child(
-                div()
-                    .id("sidebar-project")
-                    .flex()
-                    .items_center()
-                    .gap(t.space.sm)
-                    .px(t.space.md)
-                    // A set height, so it can unfold and fold (below).
-                    .h(PROJECT_ROW)
-                    .cursor_pointer()
-                    .hover(move |st| st.bg(hover))
-                    .when(switcher_open, |d| d.bg(hover))
-                    .child(super::projects::project_tile(
-                        &t,
-                        &s.project,
-                        &s.project_dir,
-                        px(28.),
-                    ))
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .flex_col()
-                            .gap(px(1.))
-                            .child(
-                                div()
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(t.colors.text_strong)
-                                    .overflow_hidden()
-                                    .whitespace_nowrap()
-                                    .text_ellipsis()
-                                    .child(s.project.clone()),
-                            )
-                            .children(place.map(|(glyph, label)| {
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap(t.space.xs)
-                                    .min_w_0()
-                                    .text_size(t.text.caption)
-                                    .text_color(t.colors.text_muted)
-                                    .child(icon(glyph, t.size.icon_xs, t.colors.text_muted))
-                                    .child(
-                                        div()
-                                            .overflow_hidden()
-                                            .whitespace_nowrap()
-                                            .text_ellipsis()
-                                            .child(label),
-                                    )
-                            })),
-                    )
-                    .child(icon(
-                        "icons/chevrons-up-down.svg",
-                        t.size.icon_sm,
-                        t.colors.text_subtle,
-                    ))
-                    .on_click(move |_, _, cx| {
-                        opener.update(cx, |s, cx| {
-                            s.switcher_open = !s.switcher_open;
-                            cx.notify();
-                        })
-                    }),
-            )
-            .children(switcher);
-        let brand = div()
             .flex_none()
             .flex()
             .items_center()
+            .justify_between()
             .h(px(34.) + t.space.md * 2.)
             .px(t.space.md)
             // The name, set smaller than any heading: the work is the loud thing.
-            .child(super::ingot::wordmark(17., &t));
-        // A plain chat has no folder: Forge's name alone. Moving between a
-        // chat in a folder and one without, the project unfolds or folds,
-        // and the list under it slides instead of jumping.
-        let in_folder = s.in_folder();
-        if self.head_shown.is_some_and(|was| was != in_folder) {
-            self.head_turns += 1;
-        }
-        self.head_shown = Some(in_folder);
-        let turn = self.head_turns;
-        let header = div()
-            .flex_none()
-            .flex()
-            .flex_col()
-            .child(brand)
-            .map(|d| match (in_folder, turn) {
-                (true, 0) => d.child(header),
-                (true, n) => d.child(super::motion::unfold(
-                    header,
-                    SharedString::from(format!("project-in-{n}")),
-                    PROJECT_ROW,
-                    &t,
-                )),
-                (false, 0) => d,
-                (false, n) => d.child(super::motion::fold(
-                    SharedString::from(format!("project-out-{n}")),
-                    PROJECT_ROW,
-                    &t,
-                )),
-            })
+            .child(super::ingot::wordmark(17., &t))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(2.))
+                    .p(px(2.))
+                    .rounded(t.radius.button)
+                    .bg(t.extra.sunk)
+                    .border_1()
+                    .border_color(t.colors.border)
+                    .child(segment("kind-chat", "icons/message-square.svg", "Chats", SidebarKind::Chat))
+                    .child(segment("kind-code", "icons/code-xml.svg", "Code: chats in a folder", SidebarKind::Code)),
+            )
             .into_any_element();
+
+        // A row of the nav: its icon in a fixed slot, its name, its key on hover.
+        let nav = |key: &'static str, path: &'static str, label: &'static str, on: bool, keys: Option<SharedString>| {
+            div()
+                .id(SharedString::from(format!("nav-{key}")))
+                .group("nav")
+                .flex()
+                .items_center()
+                .gap(t.space.sm)
+                .h(t.size.row)
+                .px(t.space.sm)
+                .rounded(t.radius.button)
+                .cursor_pointer()
+                .text_size(t.text.body)
+                .text_color(if on { t.colors.text_strong } else { t.colors.text_body })
+                .when(on, |d| crate::theme::selected(&t, d))
+                .when(!on, |d| d.hover(move |st| st.bg(hover)))
+                .child(
+                    div()
+                        .w(t.size.icon_lg)
+                        .flex_none()
+                        .flex()
+                        .justify_center()
+                        .child(icon(path, t.size.icon, if on { t.colors.text_strong } else { t.colors.text_muted })),
+                )
+                .child(div().flex_1().child(label))
+                .children(keys.map(|k| {
+                    div()
+                        .invisible()
+                        .group_hover("nav", |st| st.visible())
+                        .child(kbd(&t, k))
+                }))
+        };
+        let documents_open = s.screen == Screen::Documents;
+        let help_open = s.title_menu.is_some_and(|(m, _)| m == TitleMenu::Help);
+        let (help, account) = (self.state.clone(), self.state.clone());
 
         let sheet =
             div()
@@ -792,8 +760,9 @@ impl Render for Sidebar {
                     div()
                         .flex()
                         .flex_col()
-                        .gap(t.space.xs)
-                        .p(t.space.sm)
+                        .gap(px(2.))
+                        .px(t.space.sm)
+                        .pb(t.space.sm)
                         // Search, as Claude Code's sidebar opens with it: a
                         // field that opens the palette over the window.
                         .child(
@@ -804,27 +773,36 @@ impl Render for Sidebar {
                                 .flex()
                                 .items_center()
                                 .gap(t.space.sm)
-                                .h(t.size.row)
-                                .px(t.space.md)
-                                .mb(t.space.xs)
+                                .h(t.size.row + px(2.))
+                                .px(t.space.sm)
+                                .mb(t.space.sm)
                                 .rounded(t.radius.field)
                                 .border_1()
                                 .border_color(t.colors.border)
                                 .bg(t.extra.sunk)
                                 .cursor_pointer()
-                                .text_size(t.text.body_sm)
+                                .text_size(t.text.body)
                                 .text_color(t.colors.text_muted)
                                 .hover(move |d| d.border_color(t.extra.border_strong))
-                                .child(icon("icons/search.svg", t.size.icon_sm, t.colors.text_muted))
+                                .child(
+                                    div()
+                                        .w(t.size.icon_lg)
+                                        .flex_none()
+                                        .flex()
+                                        .justify_center()
+                                        .child(icon("icons/search.svg", t.size.icon, t.colors.text_muted)),
+                                )
                                 .child(div().flex_1().child("Search"))
                                 .child(super::kbd(&t, super::shortcut("K")))
                                 .on_click(|_, window, cx| {
                                     window.dispatch_action(Box::new(ToggleCommandPalette), cx)
                                 }),
                         )
+                        // New: a plus in a ring, as Claude Code's, never a fill.
                         .child(
                             div()
                                 .id("new-chat")
+                                .group("nav")
                                 .role(gpui::accesskit::Role::Button)
                                 .aria_label("New chat")
                                 .flex()
@@ -834,119 +812,53 @@ impl Render for Sidebar {
                                 .px(t.space.sm)
                                 .rounded(t.radius.button)
                                 .cursor_pointer()
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(t.colors.text_strong)
-                                .relative()
-                                .when(nav_hover == Some("New chat"), |d| {
-                                    d.child(super::motion::hover_wash("nav-wash-new", hover, &t))
-                                })
-                                // The sidebar's one filled mark: the accent disc.
+                                .text_size(t.text.body)
+                                .text_color(t.colors.text_body)
+                                .hover(move |st| st.bg(hover))
                                 .child(
                                     div()
-                                        .size(t.size.icon_lg)
+                                        .w(t.size.icon_lg)
                                         .flex_none()
                                         .flex()
-                                        .items_center()
                                         .justify_center()
-                                        .rounded(t.radius.pill)
-                                        .bg(t.extra.accent)
-                                        // Lifts on hover, and its plus turns a quarter.
-                                        .when(nav_hover == Some("New chat"), |d| {
-                                            d.shadow(t.elevation_popover())
-                                        })
-                                        .map(|d| {
-                                            let plus = icon(
-                                                "icons/plus.svg",
-                                                t.size.icon_xs,
-                                                t.extra.accent_fg,
-                                            );
-                                            if nav_hover == Some("New chat") {
-                                                d.child(super::motion::quarter_turn(
-                                                    plus, "new-chat-turn", &t,
-                                                ))
-                                            } else {
-                                                d.child(plus)
-                                            }
-                                        }),
+                                        .child(
+                                            div()
+                                                .size(t.size.icon_lg)
+                                                .flex()
+                                                .items_center()
+                                                .justify_center()
+                                                .rounded(t.radius.pill)
+                                                .border_1()
+                                                .border_color(t.extra.border_strong)
+                                                .child(icon("icons/plus.svg", t.size.icon_xs, t.colors.text_body)),
+                                        ),
                                 )
-                                .child(nav_label("New chat"))
-                                .when(nav_hover == Some("New chat"), |d| d.child(kbd(&t, shortcut("N"))))
-                                .on_hover(cx.listener(|this, on: &bool, _, cx| this.hover_nav("New chat", *on, cx)))
-                                .on_click(|_, window, cx| {
-                                    window.dispatch_action(Box::new(NewChat), cx)
-                                }),
+                                .child(div().flex_1().child("New"))
+                                .child(
+                                    div()
+                                        .invisible()
+                                        .group_hover("nav", |st| st.visible())
+                                        .child(kbd(&t, shortcut("N"))),
+                                )
+                                .on_click(|_, window, cx| window.dispatch_action(Box::new(NewChat), cx)),
                         )
                         .child(
-                            div()
-                                .id("nav-projects")
-                                .flex()
-                                .items_center()
-                                .gap(t.space.sm)
-                                .h(t.size.row)
-                                .px(t.space.md)
-                                .rounded(t.radius.button)
-                                .cursor_pointer()
-                                .text_color(if projects_open {
-                                    t.colors.text_strong
-                                } else {
-                                    t.colors.text_muted
-                                })
-                                .when(projects_open, |d| crate::theme::selected(&t, d))
-                                .relative()
-                                .when(!projects_open && nav_hover == Some("Projects"), |d| {
-                                    d.child(super::motion::hover_wash("nav-wash-projects", hover, &t))
-                                })
-                                .child(icon(
-                                    "icons/folder-open.svg",
-                                    t.size.icon_sm,
-                                    if projects_open {
-                                        t.colors.text_strong
-                                    } else {
-                                        t.colors.text_muted
-                                    },
-                                ))
-                                .child(nav_label("Projects"))
-                                .when(nav_hover == Some("Projects"), |d| d.child(kbd(&t, shortcut("Shift P"))))
-                                .on_hover(cx.listener(|this, on: &bool, _, cx| this.hover_nav("Projects", *on, cx)))
-                                .on_click(|_, window, cx| {
-                                    window.dispatch_action(Box::new(OpenProjects), cx)
-                                }),
+                            nav("projects", "icons/folder-open.svg", "Projects", projects_open, Some(shortcut("Shift P")))
+                                .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenProjects), cx)),
                         )
                         .child(
-                            div()
-                                .id("nav-rules")
-                                .flex()
-                                .items_center()
-                                .gap(t.space.sm)
-                                .h(t.size.row)
-                                .px(t.space.md)
-                                .rounded(t.radius.button)
-                                .cursor_pointer()
-                                .text_color(if rules_open {
-                                    t.colors.text_strong
-                                } else {
-                                    t.colors.text_muted
-                                })
-                                .when(rules_open, |d| crate::theme::selected(&t, d))
-                                .relative()
-                                .when(!rules_open && nav_hover == Some("Rules and memory"), |d| {
-                                    d.child(super::motion::hover_wash("nav-wash-rules", hover, &t))
-                                })
-                                .child(icon(
-                                    "icons/list-todo.svg",
-                                    t.size.icon_sm,
-                                    if rules_open {
-                                        t.colors.text_strong
-                                    } else {
-                                        t.colors.text_muted
-                                    },
-                                ))
-                                .child(nav_label("Rules and memory"))
-                                .when(nav_hover == Some("Rules and memory"), |d| d.child(kbd(&t, shortcut("Shift R"))))
-                                .on_hover(cx.listener(|this, on: &bool, _, cx| this.hover_nav("Rules and memory", *on, cx)))
-                                .on_click(|_, window, cx| {
-                                    window.dispatch_action(Box::new(OpenRules), cx)
-                                }),
+                            nav("documents", "icons/file-text.svg", "Documents", documents_open, None)
+                                .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenDocuments), cx)),
+                        )
+                        .child(
+                            nav("customize", "icons/sliders-horizontal.svg", "Customize", rules_open, Some(shortcut("Shift R")))
+                                .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenRules), cx)),
+                        )
+                        .child(
+                            nav("more", "icons/ellipsis.svg", "More", help_open, None).on_click(move |ev, _, cx| {
+                                let at = ev.position();
+                                help.update(cx, |s, cx| s.toggle_title_menu(TitleMenu::Help, at, cx))
+                            }),
                         ),
                 )
                 .map(|d| {
@@ -973,51 +885,76 @@ impl Render for Sidebar {
                         )
                     }
                 })
+                // You, on one line at the foot: your picture, your name and
+                // the endpoint you work on; it opens your menu. Settings on
+                // the right.
                 .child(
-                    div().relative().p(t.space.sm).child(
-                        div()
-                            .id("sidebar-settings")
-                            .flex()
-                            .items_center()
-                            .gap(t.space.sm)
-                            .h(t.size.row + px(14.))
-                            .px(t.space.sm)
-                            .rounded(t.radius.button)
-                            .cursor_pointer()
-                            // You, a plain row at the foot of the sheet.
-                            .hover(move |st| st.bg(hover))
-                            .child(super::avatar_image(&avatar, 32., window))
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .flex()
-                                    .flex_col()
-                                    .child(
-                                        div()
-                                            .font_weight(FontWeight::MEDIUM)
-                                            .text_color(t.colors.text_strong)
-                                            .overflow_hidden()
-                                            .whitespace_nowrap()
-                                            .text_ellipsis()
-                                            .child(name),
-                                    )
-                                    .child(
-                                        div()
-                                            .text_size(t.text.caption)
-                                            .text_color(t.colors.text_muted)
-                                            .child("Settings and providers"),
-                                    ),
-                            )
-                            .child(icon(
-                                "icons/settings.svg",
-                                t.size.icon,
-                                t.colors.text_subtle,
-                            ))
-                            .on_click(|_, window, cx| {
-                                window.dispatch_action(Box::new(OpenSettings), cx)
-                            }),
-                    ),
+                    div()
+                        .flex_none()
+                        .flex()
+                        .items_center()
+                        .gap(t.space.xs)
+                        .p(t.space.sm)
+                        .border_t_1()
+                        .border_color(t.colors.border)
+                        .child(
+                            div()
+                                .id("sidebar-account")
+                                .flex_1()
+                                .min_w_0()
+                                .flex()
+                                .items_center()
+                                .gap(t.space.sm)
+                                .h(t.size.row + px(2.))
+                                .px(t.space.sm)
+                                .rounded(t.radius.button)
+                                .cursor_pointer()
+                                .hover(move |st| st.bg(hover))
+                                .child(super::avatar_image(&avatar, 24., window))
+                                .child(
+                                    div()
+                                        .flex_shrink_0()
+                                        .min_w_0()
+                                        .overflow_hidden()
+                                        .whitespace_nowrap()
+                                        .text_ellipsis()
+                                        .text_size(t.text.body)
+                                        .child(
+                                            div()
+                                                .flex()
+                                                .gap(t.space.xs)
+                                                .child(
+                                                    div()
+                                                        .font_weight(FontWeight::MEDIUM)
+                                                        .text_color(t.colors.text_strong)
+                                                        .child(name),
+                                                )
+                                                .children(endpoint.map(|e| {
+                                                    div().text_color(t.colors.text_muted).child(format!("· {e}"))
+                                                })),
+                                        ),
+                                )
+                                .child(icon("icons/chevron-down.svg", t.size.icon_sm, t.colors.text_subtle))
+                                .child(div().flex_1())
+                                .on_click(move |ev, _, cx| {
+                                    let at = ev.position();
+                                    account.update(cx, |s, cx| s.toggle_title_menu(TitleMenu::Account, at, cx))
+                                }),
+                        )
+                        .child(
+                            div()
+                                .id("sidebar-settings")
+                                .size(t.size.control)
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .rounded(t.radius.button)
+                                .cursor_pointer()
+                                .hover(move |st| st.bg(hover))
+                                .tooltip(|w, cx| gpui::component::tooltip::Tooltip::new("Settings (Ctrl+,)").build(w, cx))
+                                .child(icon("icons/settings.svg", t.size.icon, t.colors.text_muted))
+                                .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenSettings), cx)),
+                        ),
                 );
         div()
             .w(t.size.sidebar)
@@ -1120,13 +1057,16 @@ pub fn rail(t: &crate::theme::Theme, screen: Screen) -> impl IntoElement {
         )
 }
 
-/// A chat's status, in a fixed slot before its title: a voxel stepping
-/// round while it works, a breathing amber dot when it needs you, a warning when it
-/// ended on an error, a blue dot when a reply is unread, a faint ring at rest.
+/// A chat's status, in a fixed slot at its row's end: the strike mark
+/// turning while it works, a breathing accent dot when it needs you, a
+/// warning when it ended on an error, the link colour's dot when a reply is
+/// unread, a faint ring at rest.
 pub fn status_mark(status: ChatStatus, id: usize, t: &crate::theme::Theme) -> gpui::AnyElement {
     let dot = || div().size(px(7.)).rounded(t.radius.pill);
     let inner: gpui::AnyElement = match status {
-        ChatStatus::Working => super::voxels::running(t.colors.sky, ("chat-working", id)),
+        ChatStatus::Working => {
+            super::activity::strike(t.extra.accent, t.extra.mark_heat_white, 12., ("chat-working", id))
+        }
         ChatStatus::NeedsYou => dot()
             .bg(t.extra.accent)
             .with_animation(
@@ -1165,14 +1105,3 @@ pub fn ago(minutes: u32) -> String {
     }
 }
 
-/// A nav row's words: they give way (with an ellipsis) to the shortcut
-/// beside them in a narrow sidebar.
-fn nav_label(text: &'static str) -> gpui::Div {
-    div()
-        .flex_1()
-        .min_w_0()
-        .overflow_hidden()
-        .whitespace_nowrap()
-        .text_ellipsis()
-        .child(text)
-}

@@ -136,7 +136,7 @@ fn surfaces_stack_like_paper_on_the_cream() {
 }
 
 /// One colour per theme: the accent, the links, the switches and the
-/// mark's top are one hue (Ink has none), and the system's own theme is dusty blue.
+/// mark's top are one hue (Ink has none); the system's own theme is ember copper.
 #[test]
 fn each_theme_has_one_colour() {
     let hue = |c: Hsla| {
@@ -196,7 +196,7 @@ fn each_theme_has_one_colour() {
         );
     }
     let calm = Theme::light();
-    assert_eq!(rgba(calm.extra.accent), rgba(gpui::rgb(0x41608a).into()));
+    assert_eq!(rgba(calm.extra.accent), rgba(gpui::rgb(0xb4532a).into()));
 }
 
 #[test]

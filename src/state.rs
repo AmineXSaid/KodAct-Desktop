@@ -808,11 +808,24 @@ pub struct Chat {
     pub detailed: bool,
 }
 
-/// The title bar's menus.
+/// The title bar's menus, and the sidebar's (its More row, your name).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TitleMenu {
     Share,
     More,
+    /// The sidebar's More: shortcuts, the guide, settings.
+    Help,
+    /// Your name at the sidebar's foot: settings, models, the theme.
+    Account,
+}
+
+/// Which chats the sidebar lists, as Claude Code's Chat and Code: plain
+/// chats, or chats that work in a folder.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum SidebarKind {
+    Chat,
+    #[default]
+    Code,
 }
 
 /// The chat menu's submenus.
@@ -978,6 +991,8 @@ pub enum Screen {
     Projects,
     /// One project: its chats, and a composer to start another.
     Project(usize),
+    /// Every file Forge made, across chats (`ui/documents.rs`).
+    Documents,
 }
 
 /// The Settings window's sections.
@@ -1540,6 +1555,8 @@ pub struct AppState {
     pub all_chats: bool,
     /// The sidebar lists archived chats instead of the others.
     pub show_archived: bool,
+    /// The sidebar lists plain chats or chats in a folder.
+    pub sidebar_kind: SidebarKind,
     /// The title bar's project switcher, and the sidebar's chat filter, are open.
     pub switcher_open: bool,
     pub filter_open: bool,
@@ -1892,6 +1909,7 @@ impl AppState {
             projects,
             all_chats: true,
             show_archived: false,
+            sidebar_kind: SidebarKind::default(),
             switcher_open: false,
             filter_open: false,
             screen: Screen::Chat,
@@ -2549,7 +2567,7 @@ impl AppState {
         match p.screen {
             Screen::Chat => p.chat.is_none_or(|id| self.chats.iter().any(|c| c.id == id)),
             Screen::Project(id) => self.project(id).is_some(),
-            Screen::Rules | Screen::Projects => true,
+            Screen::Rules | Screen::Projects | Screen::Documents => true,
         }
     }
 
@@ -3214,10 +3232,55 @@ impl AppState {
         }
         self.current = Some(id);
         self.sync_mode();
+        self.follow_kind();
         if let Some(c) = self.chat_mut(id) {
             c.unread = false;
         }
         cx.notify();
+    }
+
+    /// The sidebar shows the kind of chat now open (plain, or in a folder).
+    fn follow_kind(&mut self) {
+        self.sidebar_kind = if self.in_folder() {
+            SidebarKind::Code
+        } else {
+            SidebarKind::Chat
+        };
+    }
+
+    /// Switch the sidebar between plain chats and chats in a folder.
+    pub fn set_sidebar_kind(&mut self, kind: SidebarKind, cx: &mut Context<Self>) {
+        self.sidebar_kind = kind;
+        cx.notify();
+    }
+
+    /// New, as the sidebar's kind says: a plain chat, or a chat in the
+    /// folder you're in (else the one you worked in last; with none, the
+    /// Projects page, to open one).
+    pub fn new_in_kind(&mut self, cx: &mut Context<Self>) {
+        if self.sidebar_kind == SidebarKind::Chat {
+            return self.new_plain_chat(cx);
+        }
+        let folder = if self.in_folder() {
+            Some(self.current_project)
+        } else {
+            self.chats
+                .iter()
+                .filter(|c| self.project(c.project).is_some_and(|p| !p.scratch))
+                .max_by_key(|c| c.updated)
+                .map(|c| c.project)
+                .or_else(|| self.projects.iter().find(|p| !p.scratch && p.saved).map(|p| p.id))
+        };
+        match folder {
+            Some(id) => {
+                self.select_project(id, cx);
+                self.new_chat(cx);
+            }
+            None => {
+                self.screen = Screen::Projects;
+                self.show_toast("Open a folder to start a chat that works in it.", cx);
+            }
+        }
     }
 
     /// Plain chats' place.
@@ -3243,6 +3306,7 @@ impl AppState {
     pub fn new_chat(&mut self, cx: &mut Context<Self>) {
         self.screen = Screen::Chat;
         self.current = None;
+        self.follow_kind();
         self.doc = None;
         self.find = None;
         self.greeting_seed = self.greeting_seed.wrapping_add(1);

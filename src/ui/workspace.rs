@@ -821,6 +821,21 @@ impl Render for Workspace {
         };
         let main = if screen == Screen::Rules {
             main.child(self.rules.clone())
+        } else if screen == Screen::Documents {
+            // A card opens its file beside the list, as from a chat.
+            let page = {
+                let s = self.state.read(cx);
+                super::documents::render(&t, &self.state, s, window.scale_factor())
+            };
+            main.child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .flex()
+                    .when(below, |d| d.flex_col())
+                    .child(div().flex_1().min_w_0().min_h_0().flex().child(page))
+                    .children(pane),
+            )
         } else if matches!(screen, Screen::Projects | Screen::Project(_)) {
             // A project page opens its knowledge files in the side panel too.
             let doc_open = matches!(screen, Screen::Project(_)) && self.state.read(cx).doc.is_some();
@@ -962,8 +977,14 @@ impl Render for Workspace {
             .relative()
             .flex()
             .flex_col()
+            .on_action(cx.listener(|this, _: &OpenDocuments, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.screen = crate::state::Screen::Documents;
+                    cx.notify();
+                })
+            }))
             .on_action(cx.listener(|this, _: &NewChat, window, cx| {
-                this.state.update(cx, |s, cx| s.new_plain_chat(cx));
+                this.state.update(cx, |s, cx| s.new_in_kind(cx));
                 this.focus_composer(window, cx);
             }))
             .on_action(cx.listener(|this, _: &ShowProjectMap, _, cx| {
@@ -1503,17 +1524,27 @@ impl Render for Workspace {
 }
 
 impl Workspace {
-    /// The title bar's Share or ⋮ menu, its right edge under the button.
+    /// A small menu: the title bar's Share or ⋮, the sidebar's More or your name.
     fn title_menu(&self, window: &Window, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
         let t = cx.theme().clone();
         let s = self.state.read(cx);
         let (which, at) = s.title_menu?;
         let chat = s.current;
         let close = self.state.clone();
-        let at = gpui::point(at.x - t.size.menu_width + t.space.lg, t.size.titlebar - px(2.));
+        // The title bar's open under their button, right edges level; the
+        // sidebar's where they were asked for, your name's rising from it.
+        let (at, corner) = match which {
+            TitleMenu::Share | TitleMenu::More => (
+                gpui::point(at.x - t.size.menu_width + t.space.lg, t.size.titlebar - px(2.)),
+                gpui::Anchor::TopLeft,
+            ),
+            TitleMenu::Help => (at, gpui::Anchor::TopLeft),
+            TitleMenu::Account => (at, gpui::Anchor::BottomLeft),
+        };
         Some(
             gpui::deferred(
                 gpui::anchored()
+                    .anchor(corner)
                     .position(at)
                     .snap_to_window_with_margin(t.space.sm)
                     .child(

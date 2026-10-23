@@ -36,3 +36,20 @@ Priority issues:
 
 Mark: 8.5/10. Left (P3): the needs-you dot reads grey-blue in the Ink theme;
 it matches the title-bar badge, but is faint at a glance.
+
+## 2026-10-23: rebuilt on Claude Code's sidebar (d/d2 screenshots)
+
+- Head: the wordmark and a Chat | Code switch (plain chats, or chats in a
+  folder); New follows it. The project block is gone.
+- A bordered Search field opening the palette; New in a ring; Projects,
+  Documents (every file Forge made), Customize, More (a menu).
+- Pinned and Recents, + on Recents, the filter on hover (or while it
+  narrows); a remote chat shows its place's icon at rest; a working one
+  the strike mark.
+- One-line account row (picture, name · endpoint, ⌄ menu, settings).
+- First pass 8.0 (⌄ pushed to the gear, rows a size small, a sky-blue
+  working mark); after: 8.5.
+
+Palette: Forge Ember (warm paper / warm graphite, one ember copper), every
+pair at its floor in all eleven themes: 8.5. Face: Hanken Grotesk for the
+system's theme (Anthropic Sans where installed): 8.5.

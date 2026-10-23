@@ -1,45 +1,21 @@
 //! What Forge is doing right now, as the working line under a reply shows
-//! it: a small animated mark for the kind of work, then the step in words
-//! ("Reading src/main.rs", "Running cargo test"). One mark moves per reply;
-//! the reply's own header mark stays still.
+//! it: the strike mark, then the step in words ("Reading src/main.rs",
+//! "Running cargo test"), how long, and how much it has written.
 //!
-//! Each mark is a Lucide icon in the muted ink with one moving part in the
-//! accent, so it reads at a glance and never competes with the words:
-//!
-//! | Activity | Mark |
-//! |---|---|
-//! | Waiting for the model | the cube turning |
-//! | Thinking | sparkles, a spark lighting round them in turn |
-//! | Reading a file | a page, a highlight sweeping down its lines |
-//! | Editing a file | a pencil drawing a short line |
-//! | Writing code | brackets, a caret blinking between them |
-//! | Writing a document or the plan | the hand with the quill (`writing_hand.rs`) |
-//! | Running a command | a prompt, its cursor blinking |
-//! | Searching the project | a magnifier circling |
-//! | Searching the web | a globe turning |
-//! | Fetching a page | an arrow dropping into a tray |
-//! | One agent | a bot nodding as it works |
-//! | Several agents | three cubes lighting in turn |
-//! | Another tool (MCP) | a plug sliding into its socket |
-//! | Writing the reply | a bubble with typing dots |
-//! | Waiting for you | a hand raised, gently waving |
-//! | Compacting | layers pressing together |
-//!
-//! Reduced motion: each mark at rest.
+//! The mark is Forge's own: four ember dots standing as a diamond, the ◆ of
+//! Forge's mark. On each beat a blow lands, as a hammer on hot metal: the
+//! diamond squashes flat, the struck dots flash white-hot, then it springs
+//! back and they cool to ember. The next blow comes from the side, as a
+//! smith turns the work between strikes. One mark for every kind of work;
+//! the words say which. Reduced motion: the diamond at rest.
 
-use std::f32::consts::TAU;
 use std::time::Duration;
 
-use gpui::{
-    div, point, prelude::*, px, radians, size, svg, Animation, AnimationExt, AnyElement, Div,
-    ElementId, Hsla, Transformation,
-};
+use gpui::{div, prelude::*, px, Animation, AnimationExt, AnyElement, Div, ElementId, Hsla};
 
 use crate::theme::Theme;
 
-/// The mark's box.
-const BOX: f32 = 18.;
-
+/// The kinds of work the working line names.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Activity {
     Waiting,
@@ -60,272 +36,121 @@ pub enum Activity {
     Compacting,
 }
 
-impl Activity {
-    /// One lap of its motion.
-    fn lap_ms(self) -> u64 {
-        match self {
-            Activity::Running | Activity::WritingCode => 1000,
-            Activity::Replying | Activity::Agents => 1200,
-            Activity::Searching | Activity::SearchingWeb => 1800,
-            Activity::Fetching | Activity::Tool => 1400,
-            _ => 1600,
-        }
+/// Two beats: a blow from above, then one from the side.
+const LAP: Duration = Duration::from_millis(1800);
+/// Within a beat (0..1): at rest, the hammer falling, held on the anvil,
+/// springing back.
+const BLOW: (f32, f32, f32, f32) = (0.40, 0.52, 0.60, 0.86);
+/// The diamond's points, (x, y) in 0..1 of the box: top, right, bottom, left.
+const DIAMOND: [(f32, f32); 4] = [(0.5, 0.13), (0.87, 0.5), (0.5, 0.87), (0.13, 0.5)];
+/// Struck flat: how much the struck axis gives, and the other spreads.
+const SQUASH: f32 = 0.55;
+const SPREAD: f32 = 0.18;
+
+/// A quick fall: slow at the top, fast at the anvil.
+fn fall(x: f32) -> f32 {
+    x * x
+}
+
+/// Back up with a small overshoot, as struck metal rings.
+fn spring(x: f32) -> f32 {
+    let c = 1.7;
+    1. + (c + 1.) * (x - 1.).powi(3) + c * (x - 1.).powi(2)
+}
+
+/// How hard the blow has landed at `h` (0..1) of a beat: 0 at rest, 1 on
+/// the anvil, a little below 0 as it rings back.
+fn struck(h: f32) -> f32 {
+    let (rest, down, held, back) = BLOW;
+    if h < rest {
+        0.
+    } else if h < down {
+        fall((h - rest) / (down - rest))
+    } else if h < held {
+        1.
+    } else if h < back {
+        1. - spring((h - held) / (back - held))
+    } else {
+        0.
     }
 }
 
-/// An icon `size_px` square, in `color`.
-fn glyph(path: &'static str, size_px: f32, color: Hsla) -> gpui::Svg {
-    svg()
-        .path(path)
-        .size(px(size_px))
-        .flex_none()
-        .text_color(color)
-}
-
-/// A piece placed at `(x, y)` inside the box.
-fn at(x: f32, y: f32, child: impl IntoElement) -> Div {
-    div().absolute().left(px(x)).top(px(y)).child(child)
-}
-
-/// A dot of `d` px.
-fn dot(d: f32, color: Hsla) -> Div {
-    div().size(px(d)).rounded(px(d / 2.)).bg(color)
-}
-
-/// 0 → 1 → 0 over the lap, smoothly.
-fn swell(k: f32) -> f32 {
-    0.5 - 0.5 * (k * TAU).cos()
-}
-
-/// The mark for `activity`, `id` naming its animation.
-pub fn mark(activity: Activity, t: &Theme, id: impl Into<ElementId>) -> AnyElement {
-    if activity == Activity::WritingDoc {
-        return super::writing_hand::writing(t, id);
+/// `a` moved `k` (0..1) of the way to `b`.
+fn mix(a: Hsla, b: Hsla, k: f32) -> Hsla {
+    let (a, b) = (a.to_rgb(), b.to_rgb());
+    let l = |x: f32, y: f32| x + (y - x) * k;
+    gpui::Rgba {
+        r: l(a.r, b.r),
+        g: l(a.g, b.g),
+        b: l(a.b, b.b),
+        a: l(a.a, b.a),
     }
-    if activity == Activity::Waiting {
-        return super::turning_logo(BOX, id);
+    .into()
+}
+
+/// The four dots at `k` (0..1) of a lap, in a box `size` px square.
+fn dots(ember: Hsla, heat: Hsla, size: f32, k: f32) -> Div {
+    let mut d = div().relative().size(px(size)).flex_none();
+    let dot = size * 0.22;
+    // From above on the first beat, from the side on the second.
+    let side = k >= 0.5;
+    let f = struck((k * 2.).fract());
+    let (sx, sy) = if side {
+        (1. - SQUASH * f, 1. + SPREAD * f)
+    } else {
+        (1. + SPREAD * f, 1. - SQUASH * f)
+    };
+    for (i, (x, y)) in DIAMOND.iter().enumerate() {
+        let (x, y) = (0.5 + (x - 0.5) * sx, 0.5 + (y - 0.5) * sy);
+        // The dots the hammer meets glow white-hot, and cool as it lifts.
+        let hit = if side { i % 2 == 1 } else { i % 2 == 0 };
+        let glow = if hit { f.clamp(0., 1.) * 0.75 } else { 0. };
+        d = d.child(
+            div()
+                .absolute()
+                .left(px(x * size - dot / 2.))
+                .top(px(y * size - dot / 2.))
+                .size(px(dot))
+                .rounded(px(dot / 2.))
+                .bg(mix(ember, heat, glow)),
+        );
     }
-    let base = div().relative().size(px(BOX)).flex_none();
-    let theme = t.clone();
+    d
+}
+
+/// The strike mark, `size` px square: dots in `ember` that flash toward
+/// `heat` when struck; `id` names its animation.
+pub fn strike(ember: Hsla, heat: Hsla, size: f32, id: impl Into<ElementId>) -> AnyElement {
     if super::motion::reduced_motion() {
-        return base.child(frame(activity, &theme, 0.)).into_any_element();
+        return dots(ember, heat, size, 0.).into_any_element();
     }
-    base.with_animation(
-        id,
-        Animation::new(Duration::from_millis(activity.lap_ms())).repeat(),
-        move |d, k| d.child(frame(activity, &theme, k)),
-    )
-    .into_any_element()
+    div()
+        .size(px(size))
+        .flex_none()
+        .with_animation(id, Animation::new(LAP).repeat(), move |d, k| {
+            d.child(dots(ember, heat, size, k))
+        })
+        .into_any_element()
 }
 
-/// The mark at `k` of its lap (0..1).
-fn frame(activity: Activity, t: &Theme, k: f32) -> Div {
-    let (ink, accent) = (t.colors.text_muted, t.colors.primary);
-    let layer = div().absolute().size(px(BOX));
-    match activity {
-        Activity::Thinking => {
-            // Three sparks round the sparkles, each lighting in its third.
-            let spots = [(13.5, 0.5), (15., 9.), (0.5, 4.)];
-            let mut l = layer.child(at(2., 2., glyph("icons/sparkles.svg", 14., ink)));
-            for (i, (x, y)) in spots.into_iter().enumerate() {
-                let phase = (k * 3. - i as f32).clamp(0., 1.);
-                l = l.child(at(x, y, dot(3., accent).opacity(swell(phase))));
-            }
-            l
-        }
-        Activity::Reading => {
-            // A highlight sweeping down the page's lines.
-            let y = 7. + 7. * swell(k * 0.5);
-            layer
-                .child(at(1., 1., glyph("icons/file-text.svg", 16., ink)))
-                .child(at(
-                    5.5,
-                    y,
-                    div()
-                        .w(px(7.))
-                        .h(px(2.))
-                        .rounded(px(1.))
-                        .bg(accent.opacity(0.7)),
-                ))
-        }
-        Activity::Editing => {
-            // The pencil drawing a short line, then lifting back.
-            let p = swell(k);
-            let x = 1. + 8. * p;
-            layer
-                .child(at(
-                    1.,
-                    15.,
-                    div().w(px(x)).h(px(1.5)).rounded(px(1.)).bg(accent),
-                ))
-                .child(at(
-                    x - 1.,
-                    1. - 1.5 * (k * TAU * 2.).sin().abs(),
-                    glyph("icons/pencil.svg", 13., ink),
-                ))
-        }
-        Activity::WritingCode => {
-            let on = k < 0.55;
-            layer
-                .child(at(1., 1., glyph("icons/code-xml.svg", 16., ink)))
-                .child(at(
-                    8.25,
-                    5.,
-                    div()
-                        .w(px(1.5))
-                        .h(px(8.))
-                        .rounded(px(1.))
-                        .bg(accent)
-                        .opacity(if on { 1. } else { 0. }),
-                ))
-        }
-        Activity::Running => {
-            let on = k < 0.55;
-            layer
-                .child(at(1., 1., glyph("icons/terminal.svg", 16., ink)))
-                .child(at(
-                    10.,
-                    12.,
-                    div()
-                        .w(px(5.))
-                        .h(px(2.5))
-                        .rounded(px(0.5))
-                        .bg(accent)
-                        .opacity(if on { 1. } else { 0.15 }),
-                ))
-        }
-        Activity::Searching => {
-            // The magnifier circling, as an eye scans a page.
-            let a = k * TAU;
-            layer.child(at(
-                2.5 + 2.5 * a.cos(),
-                2.5 + 2.5 * a.sin(),
-                glyph("icons/search.svg", 13., accent),
-            ))
-        }
-        Activity::SearchingWeb => {
-            // A meridian narrowing and widening: the globe turns.
-            let w = 2. + 12. * (k * TAU / 2.).cos().abs();
-            layer
-                .child(at(1., 1., glyph("icons/globe.svg", 16., ink)))
-                .child(at(
-                    9. - w / 2.,
-                    2.,
-                    div()
-                        .w(px(w))
-                        .h(px(14.))
-                        .rounded(px(7.))
-                        .border_1()
-                        .border_color(accent),
-                ))
-        }
-        Activity::Fetching => {
-            // An arrow dropping into a tray, fading only as it lands.
-            let p = (k * 1.2).min(1.);
-            let fade = if p > 0.7 { 1. - (p - 0.7) / 0.3 } else { 1. };
-            layer
-                .child(at(
-                    2.,
-                    15.,
-                    div().w(px(14.)).h(px(1.5)).rounded(px(1.)).bg(ink),
-                ))
-                .child(
-                    at(4., 1. + 6. * p, glyph("icons/arrow-down.svg", 10., accent)).opacity(fade),
-                )
-        }
-        Activity::Agent => {
-            let bob = -1.5 * (k * TAU).sin();
-            layer
-                .child(at(1., 1. + bob, glyph("icons/bot.svg", 16., ink)))
-                .child(at(8., 0.5 + bob, dot(2.5, accent).opacity(swell(k * 2.))))
-        }
-        Activity::Agents => {
-            // Three cubes lighting in turn: agents working side by side.
-            let mut l = layer;
-            for i in 0..3 {
-                let lit = ((k * 3.).floor() as usize) == i;
-                l = l.child(at(
-                    i as f32 * 6.,
-                    6.,
-                    div().size(px(5.)).rounded(px(1.)).bg(if lit {
-                        accent
-                    } else {
-                        ink.opacity(0.35)
-                    }),
-                ));
-            }
-            l
-        }
-        Activity::Tool => {
-            // The plug sliding into its socket, a spark as it meets.
-            let p = swell(k);
-            layer
-                .child(at(
-                    14.,
-                    4.,
-                    div().w(px(2.)).h(px(10.)).rounded(px(1.)).bg(ink),
-                ))
-                .child(at(
-                    -2. + 3. * p,
-                    2.,
-                    glyph("icons/plug.svg", 14., ink)
-                        .with_transformation(Transformation::rotate(radians(TAU / 4.))),
-                ))
-                .child(at(
-                    12.,
-                    7.5,
-                    dot(2.5, accent).opacity(if p > 0.85 { 1. } else { 0. }),
-                ))
-        }
-        Activity::Replying => {
-            // Typing dots in a bubble, each rising in turn.
-            let mut l = layer.child(at(1., 1., glyph("icons/message-square.svg", 16., ink)));
-            for i in 0..3 {
-                let phase = (k * 2. - i as f32 * 0.25).rem_euclid(2.).min(1.);
-                l = l.child(at(
-                    5. + i as f32 * 3.,
-                    6.5 - 1.5 * swell(phase),
-                    dot(2., accent),
-                ));
-            }
-            l
-        }
-        Activity::AwaitingYou => {
-            // A hand raised, waving gently: your turn.
-            let a = 0.22 * (k * TAU).sin();
-            layer.child(at(
-                2.,
-                2.,
-                glyph("icons/hand.svg", 14., accent)
-                    .with_transformation(Transformation::rotate(radians(a))),
-            ))
-        }
-        Activity::Compacting => {
-            // Layers pressing together and easing apart.
-            let s = 1. - 0.35 * swell(k);
-            layer
-                .child(at(
-                    1.,
-                    1.,
-                    glyph("icons/layers.svg", 16., ink).with_transformation(
-                        Transformation::scale(size(1., s)).with_translation(point(px(0.), px(0.))),
-                    ),
-                ))
-                .child(at(7.5, 8., dot(3., accent).opacity(swell(k))))
-        }
-        // Drawn by their own elements above.
-        Activity::Waiting | Activity::WritingDoc => layer,
-    }
+/// The working line's mark: the strike, in the accent and the mark's heat.
+pub fn mark(_activity: Activity, t: &Theme, id: impl Into<ElementId>) -> AnyElement {
+    strike(t.extra.accent, t.extra.mark_heat_white, f32::from(t.size.icon), id)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{struck, BLOW};
 
     #[test]
-    fn swell_starts_and_ends_at_rest() {
-        assert!(swell(0.).abs() < 1e-6);
-        assert!((swell(0.5) - 1.).abs() < 1e-6);
-        assert!(swell(1.).abs() < 1e-5);
+    fn a_beat_rests_then_strikes_and_rings_back() {
+        assert_eq!(struck(0.), 0.);
+        assert_eq!(struck(BLOW.0 - 0.01), 0.);
+        assert_eq!(struck((BLOW.1 + BLOW.2) / 2.), 1.);
+        assert!(struck(BLOW.3 + 0.01).abs() < 1e-6);
+        // Lifting, it rings past rest a little before it settles.
+        assert!((0..100)
+            .map(|i| BLOW.2 + (BLOW.3 - BLOW.2) * i as f32 / 100.)
+            .any(|h| struck(h) < 0.));
     }
 }
