@@ -57,8 +57,11 @@ pub struct ItemContext {
     pub zooms: std::sync::Arc<std::collections::HashMap<SharedString, f32>>,
     /// What the newest turn changed in the project's memory, under its reply.
     pub memory: Option<crate::state::MemoryChange>,
-    /// The runs of calls opened to their steps, by their first block.
+    /// The runs of calls opened to their steps, by their first block (in
+    /// the detailed view, the ones closed).
     pub open_groups: Vec<usize>,
+    /// The chat's transcript view is Detailed: runs and thoughts open.
+    pub detailed: bool,
     /// The block a jump just landed on, to mark it for a moment.
     pub flash: Option<usize>,
     /// A jump to a block of this message: where the block sits in it.
@@ -678,7 +681,7 @@ fn assistant(blocks: &[Block], cx: &ItemContext, t: &Theme) -> AnyElement {
         // A jump's block inside the row just made: note the row. An open
         // run's steps note themselves, closer.
         if let Some(r) = &cx.reveal {
-            let opened = group && cx.open_groups.contains(&from);
+            let opened = group && (cx.detailed != cx.open_groups.contains(&from));
             if rows.len() > before && (from..b).contains(&r.block) && !opened {
                 let last = rows.pop().expect("a row was pushed");
                 rows.push(noted(last, r.clone(), false));
@@ -861,7 +864,7 @@ pub(super) fn block(blocks: &[Block], b: usize, cx: &ItemContext, t: &Theme) -> 
                 streaming: cx.busy && cx.last && newest,
             },
         ),
-        Block::Thinking { text, open } => thinking(text, *open, newest, b, cx, t),
+        Block::Thinking { text, open } => thinking(text, *open != cx.detailed, newest, b, cx, t),
         Block::Tool(call) => tool(call, b, blocks, cx, t),
         Block::Permission { verdict, info, .. } if !info.questions.is_empty() => {
             super::question_card::render(*verdict, info, b, cx, t)

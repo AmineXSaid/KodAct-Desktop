@@ -22,8 +22,6 @@ pub struct Sidebar {
     /// The title being edited (F2, or Rename in a chat's menu).
     rename: Entity<InputState>,
     renaming: Option<usize>,
-    /// Where the open chat menu sits: under the ⋯ button, or at the click.
-    menu_at: gpui::Point<gpui::Pixels>,
     /// The nav row under the pointer: only it shows its shortcut, so the
     /// labels keep their width (the tooltips name the shortcuts too).
     nav_hover: Option<&'static str>,
@@ -116,7 +114,6 @@ impl Sidebar {
             search,
             rename,
             renaming: None,
-            menu_at: Default::default(),
             nav_hover: None,
             row_hover: None,
             head_shown: None,
@@ -132,7 +129,8 @@ impl Sidebar {
     /// Which chats the list shows: this project's, or every project's.
     fn filter(&self, t: &crate::theme::Theme, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let s = self.state.read(cx);
-        let (open, all, name) = (s.filter_open, s.all_chats, s.project.clone());
+        let (open, all, name, archived) =
+            (s.filter_open, s.all_chats, s.project.clone(), s.show_archived);
         let hover = t.colors.hover;
         let option = |id: &'static str,
                       label: SharedString,
@@ -191,7 +189,35 @@ impl Sidebar {
                 all,
                 true,
                 self.state.clone(),
-            ));
+            ))
+            .child(theme::rule(t).my(t.space.xs))
+            // Archived chats (a chat menu's Archive) wait here.
+            .child({
+                let st = self.state.clone();
+                div()
+                    .id("filter-archived")
+                    .flex()
+                    .items_center()
+                    .gap(t.space.sm)
+                    .px(t.space.md)
+                    .py(t.space.sm)
+                    .rounded(t.radius.button)
+                    .cursor_pointer()
+                    .text_size(t.text.body_sm)
+                    .text_color(t.colors.text)
+                    .hover(move |d| d.bg(hover))
+                    .child(div().flex_1().child("Archived chats"))
+                    .child(div().w(t.size.icon).when(archived, |d| {
+                        d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.primary))
+                    }))
+                    .on_click(move |_, _, cx| {
+                        st.update(cx, |s, cx| {
+                            s.show_archived = !s.show_archived;
+                            s.filter_open = false;
+                            cx.notify();
+                        })
+                    })
+            });
         let (toggle, close) = (self.state.clone(), self.state.clone());
         div()
             .relative()
@@ -215,7 +241,7 @@ impl Sidebar {
                     .child(icon(
                         "icons/sliders-horizontal.svg",
                         t.size.icon_sm,
-                        if !all {
+                        if !all || archived {
                             t.colors.primary
                         } else {
                             t.colors.text_subtle
@@ -258,6 +284,8 @@ impl Render for Sidebar {
         let shown = |c: &&crate::state::Chat| {
             (s.all_chats || c.project == s.current_project)
                 && (q.is_empty() || c.title.to_lowercase().contains(&q))
+                // Archived chats only when the filter asks for them.
+                && c.archived == s.show_archived
         };
         let pinned_projects: Vec<_> = s
             .projects
@@ -373,8 +401,6 @@ impl Render for Sidebar {
                 let editing = s.renaming == Some(id);
                 let menu_open = s.chat_menu == Some(id);
                 let (state_menu, state_right) = (self.state.clone(), self.state.clone());
-                let me = cx.entity().downgrade();
-                let me_right = me.clone();
                 let row = div()
                         .id(("chat", id))
                         .group("row")
@@ -519,17 +545,8 @@ impl Render for Sidebar {
                                                 .on_click(move |ev, _, cx| {
                                                     cx.stop_propagation();
                                                     let at = ev.position();
-                                                    let _ =
-                                                        me.update(cx, |this, _| this.menu_at = at);
                                                     state_menu.update(cx, |s, cx| {
-                                                        s.open_chat_menu(
-                                                            if s.chat_menu == Some(id) {
-                                                                None
-                                                            } else {
-                                                                Some(id)
-                                                            },
-                                                            cx,
-                                                        )
+                                                        s.chat_menu_from(id, at, cx)
                                                     });
                                                 }),
                                         ),
@@ -540,8 +557,10 @@ impl Render for Sidebar {
                         .on_mouse_down(gpui::MouseButton::Right, move |ev, _, cx| {
                             cx.stop_propagation();
                             let at = ev.position;
-                            let _ = me_right.update(cx, |this, _| this.menu_at = at);
-                            state_right.update(cx, |s, cx| s.open_chat_menu(Some(id), cx));
+                            state_right.update(cx, |s, cx| {
+                                s.chat_menu_at = at;
+                                s.open_chat_menu(Some(id), cx)
+                            });
                         })
                         .on_click(move |_, _, cx| state.update(cx, |s, cx| s.open_chat(id, cx)));
                 list = list.child(if bump > 0 {
@@ -553,13 +572,27 @@ impl Render for Sidebar {
         }
         if !any {
             // Headed like the groups that replace it, then what to do.
-            let (title, hint): (&str, SharedString) = if q.is_empty() {
+            let put_away = s
+                .chats
+                .iter()
+                .any(|c| c.archived && (s.all_chats || c.project == s.current_project));
+            let (title, hint): (&str, SharedString) = if !q.is_empty() {
+                ("No chat matches", "Try fewer or other words.".into())
+            } else if s.show_archived {
+                (
+                    "No archived chats",
+                    "Archive a chat from its menu, or press A while the menu is open.".into(),
+                )
+            } else if put_away {
+                (
+                    "Every chat here is archived",
+                    "The filter beside Chats shows them again.".into(),
+                )
+            } else {
                 (
                     "No chats yet",
                     format!("Ask anything in the box, or press {} for a new chat.", shortcut("N")).into(),
                 )
-            } else {
-                ("No chat matches", "Try fewer or other words.".into())
             };
             list = list
                 .child(
@@ -572,8 +605,9 @@ impl Render for Sidebar {
                         .text_size(t.text.caption)
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(t.colors.text_muted)
-                        .child(div().flex_none().child("Chats"))
-                        .child(div().flex_1().h(px(1.)).mx(t.space.sm).bg(t.colors.border)),
+                        .child(div().flex_1().child(if s.show_archived { "Archived" } else { "Chats" }))
+                        // The filter rides the first header; here, this one.
+                        .children(filter.take()),
                 )
                 .child(
                     div()
@@ -610,34 +644,6 @@ impl Render for Sidebar {
                         ),
                 );
         }
-
-        // The open chat menu, anchored where it was asked for, over everything.
-        let menu = s
-            .chat_menu
-            .and_then(|id| s.chats.iter().find(|c| c.id == id))
-            .map(|c| {
-                let close = self.state.clone();
-                gpui::deferred(
-                    gpui::anchored()
-                        .position(self.menu_at)
-                        .snap_to_window_with_margin(t.space.sm)
-                        .child(
-                            div()
-                                .on_mouse_down_out(move |_, _, cx| {
-                                    close.update(cx, |s, cx| s.open_chat_menu(None, cx))
-                                })
-                                .child(super::chat_menu::render(
-                                    &t,
-                                    &self.state,
-                                    c.id,
-                                    c.pinned,
-                                    s.chat_menu_moving.then(|| s.move_targets(c.id)),
-                                    window,
-                                )),
-                        ),
-                )
-                .with_priority(2)
-            });
 
         // Forge's name heads the sheet, always. Working in a folder, the
         // project sits under it: its tile, its name and where it stands (the
@@ -788,6 +794,34 @@ impl Render for Sidebar {
                         .flex_col()
                         .gap(t.space.xs)
                         .p(t.space.sm)
+                        // Search, as Claude Code's sidebar opens with it: a
+                        // field that opens the palette over the window.
+                        .child(
+                            div()
+                                .id("sidebar-search")
+                                .role(gpui::accesskit::Role::Button)
+                                .aria_label("Search files, chats and commands")
+                                .flex()
+                                .items_center()
+                                .gap(t.space.sm)
+                                .h(t.size.row)
+                                .px(t.space.md)
+                                .mb(t.space.xs)
+                                .rounded(t.radius.field)
+                                .border_1()
+                                .border_color(t.colors.border)
+                                .bg(t.extra.sunk)
+                                .cursor_pointer()
+                                .text_size(t.text.body_sm)
+                                .text_color(t.colors.text_muted)
+                                .hover(move |d| d.border_color(t.extra.border_strong))
+                                .child(icon("icons/search.svg", t.size.icon_sm, t.colors.text_muted))
+                                .child(div().flex_1().child("Search"))
+                                .child(super::kbd(&t, super::shortcut("K")))
+                                .on_click(|_, window, cx| {
+                                    window.dispatch_action(Box::new(ToggleCommandPalette), cx)
+                                }),
+                        )
                         .child(
                             div()
                                 .id("new-chat")
@@ -841,29 +875,6 @@ impl Render for Sidebar {
                                 .on_click(|_, window, cx| {
                                     window.dispatch_action(Box::new(NewChat), cx)
                                 }),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(t.space.sm)
-                                .h(t.size.row)
-                                .px(t.space.md)
-                                .rounded(t.radius.button)
-                                .child(icon(
-                                    "icons/search.svg",
-                                    t.size.icon_sm,
-                                    t.colors.text_muted,
-                                ))
-                                // In line with the rows around it: their text
-                                // size, no inset of its own.
-                                .child(div().flex_1().child(
-                                    Input::new(&self.search)
-                                        .appearance(false)
-                                        .cleanable(true)
-                                        .px_0()
-                                        .text_size(t.text.body_sm),
-                                )),
                         )
                         .child(
                             div()
@@ -1013,7 +1024,6 @@ impl Render for Sidebar {
             .flex_none()
             .h_full()
             .child(sheet)
-            .children(menu)
     }
 }
 

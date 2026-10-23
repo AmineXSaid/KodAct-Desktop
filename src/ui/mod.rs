@@ -10,6 +10,7 @@ pub mod autocomplete;
 pub mod browser_view;
 pub mod button;
 pub mod chat_menu;
+pub mod title_menus;
 pub mod chat_view;
 pub mod command_palette;
 pub mod composer;
@@ -168,6 +169,12 @@ gpui::actions!(
         DuplicateChat,
         ExportChat,
         DeleteChat,
+        ArchiveChat,
+        ToggleDetailedView,
+        ContinueInNewChat,
+        CopyChatMarkdown,
+        OpenInVsCode,
+        OpenChatFolder,
         RegenerateReply,
         ContinueReply,
         Quit,

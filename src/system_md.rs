@@ -129,6 +129,8 @@ fn render() -> String {
         ("titlebar", z.titlebar, "the title bar's height"),
         ("sidebar", z.sidebar, "the sidebar's width"),
         ("column", z.column, "the reading column"),
+        ("menu_row", z.menu_row, "a row in a chat's menu"),
+        ("menu_width", z.menu_width, "a chat menu's width, and its flyouts' least"),
         (
             "thumb_w",
             z.thumb_w,

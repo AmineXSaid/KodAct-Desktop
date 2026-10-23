@@ -1196,6 +1196,8 @@ pub struct Sizes {
     pub column: Pixels,       // 720: the reading column, and the composer under it
     pub thinking_max: Pixels, // 240: an opened thought's tallest; longer ones scroll
     pub row: Pixels,          // 30: sidebar rows, menu items
+    pub menu_row: Pixels,     // 26: a row in a session menu, as Claude Code's
+    pub menu_width: Pixels,   // 200: a session menu's width
     pub quiet_line: Pixels,   // 26: a quiet line in a reply: a call, a thought, a run of work
     pub thumb_w: Pixels,      // 34: a picture a call returned, at the end of its line
     pub thumb_h: Pixels,      // 22: the same, short enough for the quiet line
@@ -1266,6 +1268,8 @@ impl Default for Sizes {
             column: px(720.),
             thinking_max: px(240.),
             row: px(30.),
+            menu_row: px(26.),
+            menu_width: px(200.),
             quiet_line: px(26.),
             thumb_w: px(34.),
             thumb_h: px(22.),

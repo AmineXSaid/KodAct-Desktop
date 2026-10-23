@@ -20,7 +20,7 @@ use super::settings::Settings;
 use super::side_chat::SideChat;
 use super::sidebar::Sidebar;
 use super::*;
-use crate::state::{AppState, Screen};
+use crate::state::{AppState, PanelTab, Screen, TitleMenu};
 use crate::theme::Look;
 use crate::theme::{self, ActiveTheme};
 
@@ -277,10 +277,78 @@ impl Workspace {
             ))
             .with_priority(1)
         });
-        // The search field: you type in it, the palette drops below.
-        let field = self.palette.update(cx, |p, cx| p.field(window, cx));
+        let unseen = !self.state.read(cx).terminal_open && self.terminal.read(cx).unseen;
         let s = self.state.read(cx);
         let hover = t.colors.hover;
+        let (tint, ink) = (t.colors.primary_tint, t.colors.primary);
+        let side = s.doc.is_none().then_some(s.panel).flatten();
+        let (plan_on, files_on) = (side == Some(PanelTab::Plan), side == Some(PanelTab::Files));
+        let menu = s.title_menu.map(|(m, _)| m);
+        let (share_on, more_on) = (menu == Some(TitleMenu::Share), menu == Some(TitleMenu::More));
+        // A pane's button shows it is open: the accent's wash and ink.
+        let toggle = |id: &'static str, path: &'static str, tip: &'static str, on: bool| {
+            div()
+                .id(id)
+                .occlude()
+                // No tooltip over its own open menu or pane.
+                .when(!on, |d| {
+                    d.tooltip(move |window, cx| {
+                        gpui::component::tooltip::Tooltip::new(tip).build(window, cx)
+                    })
+                })
+                .size(t.size.control)
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(t.radius.small)
+                .cursor_pointer()
+                .when(on, |d| d.bg(tint))
+                .when(!on, |d| d.hover(move |st| st.bg(hover)))
+                .child(icon(path, t.size.icon, if on { ink } else { t.colors.text_muted }))
+        };
+        let chat = (s.screen == Screen::Chat)
+            .then(|| s.current.and_then(|id| s.chats.iter().find(|c| c.id == id)))
+            .flatten()
+            .filter(|c| !c.messages.is_empty());
+        let chat_open = chat.is_some();
+        let menu_open = chat.is_some_and(|c| s.chat_menu == Some(c.id));
+        let chat_title = chat.map(|c| {
+            let id = c.id;
+            let state = self.state.clone();
+            let titlebar = t.size.titlebar;
+            div()
+                .id("chat-title")
+                .occlude()
+                .flex()
+                .items_center()
+                .gap(t.space.xs)
+                .min_w_0()
+                .max_w(t.size.column)
+                .h(t.size.control)
+                .pl(t.space.sm)
+                .pr(t.space.xs)
+                .rounded(t.radius.small)
+                .cursor_pointer()
+                .text_size(t.text.body)
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(t.colors.text_strong)
+                .hover(move |st| st.bg(hover))
+                .when(menu_open, |d| d.bg(hover))
+                .child(
+                    div()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .child(c.title.clone()),
+                )
+                .child(icon("icons/chevron-down.svg", t.size.icon_sm, t.colors.text_muted))
+                .on_click(move |ev, _, cx| {
+                    cx.stop_propagation();
+                    let at = gpui::point(ev.position().x - t.space.lg, titlebar - px(2.));
+                    state.update(cx, |s, cx| s.chat_menu_from(id, at, cx));
+                })
+        });
         // Icon-only: each says what it does, with its key.
         // Every control in the bar occludes it: on Windows the bar is the
         // window's drag area, and a click on anything not occluding it is
@@ -302,12 +370,15 @@ impl Workspace {
                 .child(icon(path, t.size.icon, t.colors.text_muted))
         };
         // A flat chrome: the component's own background is a gradient.
+        let sidebar_open = s.sidebar_open;
         TitleBar::new().h(t.size.titlebar).bg(t.extra.chrome).child(
             div()
+                .relative()
                 .flex()
                 .items_center()
                 .gap(t.space.xs)
                 .w_full()
+                .h_full()
                 .pr(t.space.sm)
                 .child(
                     button(
@@ -409,37 +480,57 @@ impl Workspace {
                             .children(switcher),
                     )
                 })
-                .child(div().flex_1())
-                .child(field)
+                // The open chat's name, as Claude Code heads a session: over
+                // the chat's own column while the sidebar shows, and a click
+                // opens its menu under it.
+                .children(chat_title.map(|title| {
+                    if sidebar_open {
+                        div()
+                            .absolute()
+                            .top_0()
+                            .bottom_0()
+                            .left(t.size.sidebar + t.space.xs)
+                            .flex()
+                            .items_center()
+                            .child(title)
+                            .into_any_element()
+                    } else {
+                        title.into_any_element()
+                    }
+                }))
                 .child(div().flex_1())
                 .children(super::tasks::render(&t, &self.state, window, cx))
                 .children(super::approvals::render(&t, &self.state, window, cx))
-                .child({
-                    let open = s.terminal_open;
-                    let unseen = !open && self.terminal.read(cx).unseen;
-                    div()
-                        .id("toggle-terminal")
-                        .occlude()
-                        .relative()
-                        .size(t.size.control)
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .rounded(t.radius.pill)
-                        .cursor_pointer()
-                        .when(open, |d| d.bg(t.colors.primary_tint))
-                        .when(!open, |d| d.hover(move |st| st.bg(hover)))
-                        .child(icon(
-                            "icons/terminal.svg",
-                            t.size.icon,
-                            if open {
-                                t.colors.primary
-                            } else {
-                                t.colors.text_muted
-                            },
-                        ))
+                .child(
+                    toggle("show-plan", "icons/list-todo.svg", "Plan (Ctrl+Shift+E)", plan_on)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.state.update(cx, |s, cx| s.toggle_panel_tab(PanelTab::Plan, cx))
+                        })),
+                )
+                .child(
+                    toggle("show-files", "icons/folder.svg", "Files", files_on).on_click(
+                        cx.listener(|this, _, _, cx| {
+                            this.state.update(cx, |s, cx| s.toggle_panel_tab(PanelTab::Files, cx))
+                        }),
+                    ),
+                )
+                .when(chat_open, |d| {
+                    d.child(
+                        toggle("share-chat", "icons/share.svg", "Share", share_on).on_click(
+                            cx.listener(|this, ev: &gpui::ClickEvent, _, cx| {
+                                let at = gpui::point(ev.position().x, ev.position().y);
+                                this.state.update(cx, |s, cx| {
+                                    s.toggle_title_menu(TitleMenu::Share, at, cx)
+                                })
+                            }),
+                        ),
+                    )
+                })
+                .child(
+                    toggle("more", "icons/ellipsis-vertical.svg", "More", more_on)
+                        // New output in a closed terminal: a dot, as before.
                         .when(unseen, |d| {
-                            d.child(
+                            d.relative().child(
                                 div()
                                     .absolute()
                                     .top(px(4.))
@@ -449,52 +540,10 @@ impl Workspace {
                                     .bg(t.colors.primary),
                             )
                         })
-                        .tooltip(move |window, cx| {
-                            gpui::component::tooltip::Tooltip::new(if unseen {
-                                "Terminal: new output (Ctrl+`)"
-                            } else {
-                                "Terminal (Ctrl+`)"
-                            })
-                            .build(window, cx)
-                        })
-                        .on_click(cx.listener(|_, _, window, cx| {
-                            window.dispatch_action(Box::new(ToggleTerminal), cx)
-                        }))
-                })
-                .child(
-                    button(
-                        "toggle-panel",
-                        "icons/panel-right.svg",
-                        "Side panel: plan, files, browser (Ctrl+Shift+E)",
-                    )
-                    .on_click(cx.listener(|_, _, window, cx| {
-                        window.dispatch_action(Box::new(TogglePanel), cx)
-                    })),
-                )
-                .child(
-                    button(
-                        "toggle-theme",
-                        if t.is_dark {
-                            "icons/sun.svg"
-                        } else {
-                            "icons/moon.svg"
-                        },
-                        if t.is_dark {
-                            "Light theme (Ctrl+Shift+L)"
-                        } else {
-                            "Dark theme (Ctrl+Shift+L)"
-                        },
-                    )
-                    .on_click(cx.listener(|_, _, window, cx| {
-                        window.dispatch_action(Box::new(ToggleTheme), cx)
-                    })),
-                )
-                .child(
-                    button("settings", "icons/settings.svg", "Settings (Ctrl+,)").on_click(
-                        cx.listener(|_, _, window, cx| {
-                            window.dispatch_action(Box::new(OpenSettings), cx)
-                        }),
-                    ),
+                        .on_click(cx.listener(|this, ev: &gpui::ClickEvent, _, cx| {
+                            let at = gpui::point(ev.position().x, ev.position().y);
+                            this.state.update(cx, |s, cx| s.toggle_title_menu(TitleMenu::More, at, cx))
+                        })),
                 ),
         )
     }
@@ -897,6 +946,19 @@ impl Render for Workspace {
             .id("workspace")
             .key_context("Workspace")
             .track_focus(&self.focus)
+            // While a chat's menu shows, its letters run its rows, wherever
+            // the focus is (Claude Code's session menu works the same).
+            .capture_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, _, cx| {
+                let k = &ev.keystroke;
+                if k.modifiers.modified() {
+                    return;
+                }
+                let Some(id) = this.state.read(cx).chat_menu else { return };
+                if let Some(f) = super::chat_menu::letter(&k.key) {
+                    cx.stop_propagation();
+                    this.state.update(cx, |s, cx| f(s, id, cx));
+                }
+            }))
             .relative()
             .flex()
             .flex_col()
@@ -1059,6 +1121,7 @@ impl Render for Workspace {
                         s.toggle_map(cx);
                     } else if s.shortcuts_open
                         || s.chat_menu.is_some()
+                        || s.title_menu.is_some()
                         || s.approvals_open
                         || s.context_open
                         || s.tasks_open
@@ -1066,6 +1129,7 @@ impl Render for Workspace {
                     {
                         s.shortcuts_open = false;
                         s.chat_menu = None;
+                        s.title_menu = None;
                         s.approvals_open = false;
                         s.context_open = false;
                         s.tasks_open = false;
@@ -1272,6 +1336,39 @@ impl Render for Workspace {
                     this.state.update(cx, |s, cx| s.ask_delete(id, cx));
                 }
             }))
+            .on_action(cx.listener(|this, _: &ArchiveChat, _, cx| {
+                if let Some(id) = this.current_chat(cx) {
+                    this.state.update(cx, |s, cx| s.toggle_archive(id, cx));
+                }
+            }))
+            .on_action(cx.listener(|this, _: &ToggleDetailedView, _, cx| {
+                if let Some(id) = this.current_chat(cx) {
+                    this.state.update(cx, |s, cx| {
+                        let on = s.chats.iter().any(|c| c.id == id && c.detailed);
+                        s.set_detailed(id, !on, cx)
+                    });
+                }
+            }))
+            .on_action(cx.listener(|this, _: &ContinueInNewChat, _, cx| {
+                if let Some(id) = this.current_chat(cx) {
+                    this.state.update(cx, |s, cx| s.continue_in_new_chat(id, cx));
+                }
+            }))
+            .on_action(cx.listener(|this, _: &CopyChatMarkdown, _, cx| {
+                if let Some(id) = this.current_chat(cx) {
+                    this.state.update(cx, |s, cx| s.copy_chat_markdown(id, cx));
+                }
+            }))
+            .on_action(cx.listener(|this, _: &OpenInVsCode, _, cx| {
+                if let Some(id) = this.current_chat(cx) {
+                    this.state.update(cx, |s, cx| s.open_chat_in_vscode(id, cx));
+                }
+            }))
+            .on_action(cx.listener(|this, _: &OpenChatFolder, _, cx| {
+                if let Some(id) = this.current_chat(cx) {
+                    this.state.update(cx, |s, cx| s.open_chat_folder(id, cx));
+                }
+            }))
             .on_action(cx.listener(|this, _: &RegenerateReply, _, cx| {
                 this.state.update(cx, |s, cx| s.regenerate_last(cx))
             }))
@@ -1396,10 +1493,87 @@ impl Render for Workspace {
             .when(shortcuts_open, |d| {
                 d.child(super::shortcuts::render(&t, &self.state))
             })
+            .children(self.chat_menu(window, cx))
+            .children(self.title_menu(window, cx))
             .child(self.confirm.clone())
             .child(self.askpass.clone())
             .children(self.toast(cx))
             .children(self.opener.clone())
+    }
+}
+
+impl Workspace {
+    /// The title bar's Share or ⋮ menu, its right edge under the button.
+    fn title_menu(&self, window: &Window, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
+        let t = cx.theme().clone();
+        let s = self.state.read(cx);
+        let (which, at) = s.title_menu?;
+        let chat = s.current;
+        let close = self.state.clone();
+        let at = gpui::point(at.x - t.size.menu_width + t.space.lg, t.size.titlebar - px(2.));
+        Some(
+            gpui::deferred(
+                gpui::anchored()
+                    .position(at)
+                    .snap_to_window_with_margin(t.space.sm)
+                    .child(
+                        div()
+                            .on_mouse_down_out(move |_, _, cx| {
+                                close.update(cx, |s, cx| {
+                                    s.title_menu = None;
+                                    cx.notify();
+                                })
+                            })
+                            .child(super::title_menus::render(&t, &self.state, which, chat, window)),
+                    ),
+            )
+            .with_priority(2)
+            .into_any_element(),
+        )
+    }
+
+    /// The open chat menu, anchored where it was asked for (under the
+    /// title bar's chat name, or at a sidebar row), over everything.
+    fn chat_menu(&self, window: &Window, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
+        let t = cx.theme().clone();
+        let s = self.state.read(cx);
+        let c = s.chat_menu.and_then(|id| s.chats.iter().find(|c| c.id == id))?;
+        let info = super::chat_menu::MenuChat {
+            id: c.id,
+            pinned: c.pinned,
+            archived: c.archived,
+            detailed: c.detailed,
+            remote: s.chat_remote(c.id).is_some(),
+        };
+        let targets = if s.chat_sub == Some(crate::state::ChatSub::Move) {
+            s.move_targets(c.id)
+        } else {
+            vec![]
+        };
+        let close = self.state.clone();
+        Some(
+            gpui::deferred(
+                gpui::anchored()
+                    .position(s.chat_menu_at)
+                    .snap_to_window_with_margin(t.space.sm)
+                    .child(
+                        div()
+                            .on_mouse_down_out(move |_, _, cx| {
+                                close.update(cx, |s, cx| s.open_chat_menu(None, cx))
+                            })
+                            .child(super::chat_menu::render(
+                                &t,
+                                &self.state,
+                                info,
+                                s.chat_sub,
+                                targets,
+                                window,
+                            )),
+                    ),
+            )
+            .with_priority(2)
+            .into_any_element(),
+        )
     }
 }
 

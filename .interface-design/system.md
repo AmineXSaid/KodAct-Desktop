@@ -41,6 +41,8 @@ Lucide, 2px stroke as drawn. Sizes: 12 / 14 / 16 / 20 only.
 - `titlebar`: 36px, the title bar's height
 - `sidebar`: 288px, the sidebar's width
 - `column`: 720px, the reading column
+- `menu_row`: 26px, a row in a chat's menu
+- `menu_width`: 200px, a chat menu's width, and its flyouts' least
 - `thumb_w`: 34px, a picture a call returned, as a thumbnail at the end of its line
 - `thumb_h`: 22px, that thumbnail's height, inside the quiet line
 - `tool_image`: 360px, that picture's widest, in the call's opened body

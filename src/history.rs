@@ -38,6 +38,12 @@ pub struct SavedChat {
     pub title: String,
     #[serde(default)]
     pub pinned: bool,
+    /// Put away from the sidebar's list.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub archived: bool,
+    /// The transcript shown in detail.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub detailed: bool,
     /// Seconds since the Unix epoch.
     pub updated: u64,
     pub messages: Vec<SavedMessage>,
@@ -369,6 +375,8 @@ fn save_messages(chat: &Chat, project: &Path) -> SavedChat {
         project: project.to_path_buf(),
         title: chat.title.to_string(),
         pinned: chat.pinned,
+        archived: chat.archived,
+        detailed: chat.detailed,
         updated: secs(chat.updated),
         versions: vec![],
         messages: chat

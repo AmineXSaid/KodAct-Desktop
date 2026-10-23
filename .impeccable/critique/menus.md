@@ -23,3 +23,17 @@ Cognitive load: 1 failure (the + menu's 6 rows sit at the edge).
 Priority issues:
 - P1: a button's tooltip stays over its open menu (the + button).
 - P2: no shared menu style: radius, padding, row height and labels differ per menu.
+
+## 2026-10-23: step C, the title bar and the chat menu (c-* screenshots)
+
+- The chat's name with ⌄ heads the main column; its menu is Claude Code's:
+  plain rows, letter keys (R C P A D), three groups, flyouts (Open in,
+  Transcript view, Move to project, Export), Delete in red. First pass 8.0
+  (flyouts clipped by the menu's scroll); after: 8.5.
+- Right side: Plan, Files, Share, ⋮ with the pane's open state; Terminal,
+  theme, shortcuts and settings in ⋮. First pass 7.5 (tooltip over its own
+  menu, mixed key styles); after: 8.5.
+- Search: a bordered field atop the sidebar opens the palette centred over
+  a dimmed window: 8.5.
+- Archive (A) and the archived filter; an empty list says why: 8.5.
+- Transcript view Detailed opens every run and thought: 8.5.

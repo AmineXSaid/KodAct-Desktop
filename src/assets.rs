@@ -135,6 +135,9 @@ icons!(
     "hash",
     "text-quote",
     "share-2",
+    // The title bar: share the chat, and its ⋮ menu.
+    "share",
+    "ellipsis-vertical",
     // The title bar's minimize / maximize / restore / close (gpui-kit-assets, Apache-2.0).
     "window-close",
     "window-maximize",

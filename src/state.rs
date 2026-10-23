@@ -802,6 +802,26 @@ pub struct Chat {
     pub updated: SystemTime,
     /// Earlier versions of the conversation, replaced by an edit or a retry.
     pub versions: Vec<Version>,
+    /// Put away: out of the sidebar's list, until its filter shows archived chats.
+    pub archived: bool,
+    /// The transcript in detail: every run of work and every thought opened.
+    pub detailed: bool,
+}
+
+/// The title bar's menus.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TitleMenu {
+    Share,
+    More,
+}
+
+/// The chat menu's submenus.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChatSub {
+    OpenIn,
+    View,
+    Move,
+    Export,
 }
 
 /// The remote indicator's menu (`ui/remote_menu.rs`): which page shows and
@@ -911,6 +931,8 @@ impl Chat {
             resumable: false,
             updated: SystemTime::now(),
             versions: vec![],
+            archived: false,
+            detailed: false,
         }
     }
 
@@ -1516,6 +1538,8 @@ pub struct AppState {
     pub current_project: usize,
     /// The sidebar lists every project's chats, not only this project's.
     pub all_chats: bool,
+    /// The sidebar lists archived chats instead of the others.
+    pub show_archived: bool,
     /// The title bar's project switcher, and the sidebar's chat filter, are open.
     pub switcher_open: bool,
     pub filter_open: bool,
@@ -1649,8 +1673,12 @@ pub struct AppState {
     repo_reads: u64,
     /// The Projects page's New project sheet is open.
     pub new_project_open: bool,
-    /// The chat menu shows the projects to move the chat to.
-    pub chat_menu_moving: bool,
+    /// The chat menu's submenu that is open (Open in, Transcript view…).
+    pub chat_sub: Option<ChatSub>,
+    /// The title bar's Share or ⋮ menu, and where it opens.
+    pub title_menu: Option<(TitleMenu, gpui::Point<gpui::Pixels>)>,
+    /// Where the chat menu opens: under the title, or where it was asked for.
+    pub chat_menu_at: gpui::Point<gpui::Pixels>,
     /// The panel's find bar is open (`ui/doc_find.rs`).
     pub doc_finding: bool,
     /// The panel's body: its pages are its items, so the keyboard and a
@@ -1863,6 +1891,7 @@ impl AppState {
             current_project: first.id,
             projects,
             all_chats: true,
+            show_archived: false,
             switcher_open: false,
             filter_open: false,
             screen: Screen::Chat,
@@ -1920,7 +1949,9 @@ impl AppState {
             repo: None,
             repo_reads: 0,
             new_project_open: false,
-            chat_menu_moving: false,
+            chat_sub: None,
+            title_menu: None,
+            chat_menu_at: Default::default(),
             doc_scroll: gpui::ScrollHandle::new(),
             next_comment: 1,
             doc_page_pick: None,
@@ -2321,6 +2352,8 @@ impl AppState {
             self.chats.push(Chat {
                 minutes_ago: minutes_since(updated),
                 pinned: c.pinned,
+                archived: c.archived,
+                detailed: c.detailed,
                 messages,
                 session: c.session,
                 resumable: c.resumable,
@@ -2862,7 +2895,7 @@ impl AppState {
     /// so and goes on as a new conversation.
     pub fn move_chat(&mut self, chat: usize, to: usize, cx: &mut Context<Self>) {
         self.chat_menu = None;
-        self.chat_menu_moving = false;
+        self.chat_sub = None;
         if self.replies.contains_key(&chat) {
             return self.show_toast("Wait for the reply to finish, then move the chat.", cx);
         }
@@ -4571,6 +4604,16 @@ impl AppState {
         }
     }
 
+    /// Show the side panel on `tab`, or close it when that tab is showing.
+    pub fn toggle_panel_tab(&mut self, tab: PanelTab, cx: &mut Context<Self>) {
+        if self.doc.is_none() && self.panel == Some(tab) {
+            self.panel = None;
+            cx.notify();
+        } else {
+            self.show_panel(tab, cx);
+        }
+    }
+
     /// Open or close the side panel (on the plan when it opens).
     pub fn toggle_panel(&mut self, cx: &mut Context<Self>) {
         if self.doc.is_some() || self.panel.is_some() {
@@ -5592,8 +5635,33 @@ impl AppState {
 
     pub fn open_chat_menu(&mut self, id: Option<usize>, cx: &mut Context<Self>) {
         self.chat_menu = id;
-        self.chat_menu_moving = false;
+        self.chat_sub = None;
         cx.notify();
+    }
+
+    /// Open chat `id`'s menu at `at` (a toggle when it's open already).
+    pub fn chat_menu_from(&mut self, id: usize, at: gpui::Point<gpui::Pixels>, cx: &mut Context<Self>) {
+        self.chat_menu_at = at;
+        let open = self.chat_menu != Some(id);
+        self.open_chat_menu(open.then_some(id), cx);
+    }
+
+    /// Open or close one of the title bar's menus, at `at`.
+    pub fn toggle_title_menu(&mut self, which: TitleMenu, at: gpui::Point<gpui::Pixels>, cx: &mut Context<Self>) {
+        self.title_menu = match self.title_menu {
+            Some((open, _)) if open == which => None,
+            _ => Some((which, at)),
+        };
+        self.chat_menu = None;
+        cx.notify();
+    }
+
+    /// Show one of the chat menu's submenus (another closes).
+    pub fn show_chat_sub(&mut self, sub: Option<ChatSub>, cx: &mut Context<Self>) {
+        if self.chat_sub != sub {
+            self.chat_sub = sub;
+            cx.notify();
+        }
     }
 
     /// Where chat `chat` can move: your other projects, and plain chats.
@@ -5742,6 +5810,121 @@ impl AppState {
         self.touch(new_id, cx);
         self.open_chat(new_id, cx);
         self.show_toast("Duplicated the chat.", cx);
+    }
+
+    /// Put a chat away from the sidebar's list, or bring it back. It stays
+    /// open if it is; the sidebar's filter shows archived chats.
+    pub fn toggle_archive(&mut self, id: usize, cx: &mut Context<Self>) {
+        self.chat_menu = None;
+        let Some(c) = self.chat_mut(id) else { return };
+        c.archived = !c.archived;
+        let (archived, title) = (c.archived, c.title.clone());
+        self.mark_dirty(id, cx);
+        self.show_toast(
+            if archived {
+                format!("Archived “{title}”. The chat filter shows archived chats.")
+            } else {
+                format!("“{title}” is back in the list.")
+            },
+            cx,
+        );
+    }
+
+    /// Show a chat's transcript in detail (every run and thought opened),
+    /// or as usual.
+    pub fn set_detailed(&mut self, id: usize, detailed: bool, cx: &mut Context<Self>) {
+        self.chat_menu = None;
+        if let Some(c) = self.chat_mut(id) {
+            c.detailed = detailed;
+            c.version += 1;
+        }
+        self.mark_dirty(id, cx);
+        cx.notify();
+    }
+
+    /// The whole chat as Markdown, on the clipboard.
+    pub fn copy_chat_markdown(&mut self, id: usize, cx: &mut Context<Self>) {
+        self.chat_menu = None;
+        let Some(c) = self.chats.iter().find(|c| c.id == id) else {
+            return;
+        };
+        let project = self
+            .project(c.project)
+            .map(|p| p.name.to_string())
+            .unwrap_or_default();
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(crate::export::markdown(
+            c, &project,
+        )));
+        self.show_toast("Copied the chat as Markdown.", cx);
+    }
+
+    /// A new chat in the same project that picks up where this one got to:
+    /// its last reply, in the box, ready for you to add to and send.
+    pub fn continue_in_new_chat(&mut self, id: usize, cx: &mut Context<Self>) {
+        self.chat_menu = None;
+        let Some(c) = self.chats.iter().find(|c| c.id == id) else {
+            return;
+        };
+        let last = c
+            .messages
+            .iter()
+            .rev()
+            .find_map(|m| match m {
+                Message::Assistant { blocks, .. } => {
+                    let text: Vec<String> = blocks
+                        .iter()
+                        .filter_map(|b| match b {
+                            Block::Text(t) => Some(t.to_string()),
+                            _ => None,
+                        })
+                        .collect();
+                    (!text.is_empty()).then(|| text.join("\n\n"))
+                }
+                _ => None,
+            })
+            .unwrap_or_default();
+        let (project, title) = (c.project, c.title.clone());
+        self.select_project(project, cx);
+        self.new_chat(cx);
+        let mut draft = format!("Continuing from the chat “{title}”.");
+        if !last.trim().is_empty() {
+            draft.push_str("\n\nWhere it got to:\n\n");
+            draft.push_str(last.trim());
+        }
+        self.draft = Some(draft);
+        cx.notify();
+    }
+
+    /// The folder a chat works in, opened in the system's file manager.
+    pub fn open_chat_folder(&mut self, id: usize, cx: &mut Context<Self>) {
+        self.chat_menu = None;
+        match self.chat_project_dir(id) {
+            Some(dir) => cx.open_with_system(&dir),
+            None => self.show_toast("This chat works on another machine: open its folder there.", cx),
+        }
+    }
+
+    /// The folder a chat works in, opened in VS Code (`code` on the PATH).
+    pub fn open_chat_in_vscode(&mut self, id: usize, cx: &mut Context<Self>) {
+        self.chat_menu = None;
+        let Some(dir) = self.chat_project_dir(id) else {
+            return self.show_toast("This chat works on another machine: open its folder there.", cx);
+        };
+        cx.spawn(async move |this, cx| {
+            let started = cx
+                .background_spawn(async move {
+                    let mut cmd = std::process::Command::new(if cfg!(windows) { "code.cmd" } else { "code" });
+                    cmd.arg(&dir);
+                    cmd.spawn().map(|_| ())
+                })
+                .await;
+            if started.is_err() {
+                let _ = this.update(cx, |s, cx| {
+                    s.show_toast("VS Code isn't on this computer's PATH (the `code` command).", cx)
+                });
+            }
+        })
+        .detach();
     }
 
     /// Write a chat to Downloads as Markdown, off the UI thread, and say where.

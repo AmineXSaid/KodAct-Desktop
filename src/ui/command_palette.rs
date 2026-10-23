@@ -684,6 +684,46 @@ impl CommandPalette {
                     Box::new(DuplicateChat),
                 ),
                 act(
+                    if c.detailed {
+                        "Show the transcript as usual"
+                    } else {
+                        "Show the transcript in detail"
+                    },
+                    "icons/list-todo.svg",
+                    None,
+                    Box::new(ToggleDetailedView),
+                ),
+                act(
+                    "Continue in a new chat",
+                    "icons/message-square.svg",
+                    None,
+                    Box::new(ContinueInNewChat),
+                ),
+                act(
+                    "Copy this chat as Markdown",
+                    "icons/copy.svg",
+                    None,
+                    Box::new(CopyChatMarkdown),
+                ),
+                act(
+                    "Open the chat's folder",
+                    "icons/folder-open.svg",
+                    None,
+                    Box::new(OpenChatFolder),
+                ),
+                act(
+                    "Open the chat's folder in VS Code",
+                    "icons/code-xml.svg",
+                    None,
+                    Box::new(OpenInVsCode),
+                ),
+                act(
+                    if c.archived { "Unarchive this chat" } else { "Archive this chat" },
+                    "icons/archive.svg",
+                    None,
+                    Box::new(ArchiveChat),
+                ),
+                act(
                     "Export this chat as Markdown",
                     "icons/file-text.svg",
                     None,
@@ -1200,10 +1240,8 @@ pub fn highlighted(label: &SharedString, positions: &[usize], t: &Theme) -> Styl
 impl CommandPalette {
     /// The title bar's search field. Closed, it shows what it searches and
     /// opens on a click; open, you type in it and the results drop below.
-    pub fn field(&mut self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
+    fn field(&mut self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         let t = cx.theme().clone();
-        let open = self.state.read(cx).palette_open;
-        // Every control in the title bar occludes it (see `title_bar`).
         let field = div()
             .id("palette-field")
             .occlude()
@@ -1217,38 +1255,7 @@ impl CommandPalette {
             .rounded(t.radius.field)
             .border_1()
             .text_size(t.text.body)
-            .child(icon(
-                "icons/search.svg",
-                t.size.icon_sm,
-                if open {
-                    t.colors.text_muted
-                } else {
-                    t.colors.text_subtle
-                },
-            ));
-        if !open {
-            let (edge, ink, fill) = (t.colors.border, t.colors.text_muted, t.colors.surface);
-            return field
-                .bg(t.colors.hover)
-                .border_color(t.colors.hover)
-                .cursor(CursorStyle::IBeam)
-                .text_color(t.colors.text_subtle)
-                .hover(move |st| st.bg(fill).border_color(edge).text_color(ink))
-                .child(
-                    div()
-                        .flex_1()
-                        .whitespace_nowrap()
-                        .overflow_hidden()
-                        .text_ellipsis()
-                        .text_size(t.text.caption)
-                        .child("Search files, chats and commands"),
-                )
-                .child(keys(&t, &shortcut("K")))
-                .on_click(|_, window, cx| {
-                    window.dispatch_action(Box::new(ToggleCommandPalette), cx)
-                })
-                .into_any_element();
-        }
+            .child(icon("icons/search.svg", t.size.icon_sm, t.colors.text_muted));
         let dropdown = self.dropdown(window, cx);
         field
             .w(t.size.palette)
@@ -1584,26 +1591,47 @@ fn keys(t: &Theme, text: &str) -> Div {
 /// Behind the open palette: the window under the title bar, dimmed. A click
 /// on it closes the palette.
 impl Render for CommandPalette {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    /// Over a dimmed window, the search field near the top, centred, with its
+    /// results hung below: opened from the sidebar's Search or Ctrl+K.
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let fade = std::time::Duration::from_millis(t.motion_ms);
+        let field = self.field(window, cx);
         div()
-            .id("palette-scrim")
-            .occlude()
             .absolute()
-            .top(t.size.titlebar)
+            .top_0()
             .left_0()
             .right_0()
             .bottom_0()
-            .bg(t.extra.scrim)
-            .on_click(cx.listener(|this, _, window, cx| {
-                this.close(cx);
-                window.dispatch_action(Box::new(FocusComposer), cx);
-            }))
-            .with_animation(
-                "palette-scrim-in",
-                gpui::Animation::new(fade).with_easing(gpui::ease_in_out),
-                |d, delta| d.opacity(delta),
+            .child(
+                div()
+                    .id("palette-scrim")
+                    .occlude()
+                    .absolute()
+                    .top(t.size.titlebar)
+                    .left_0()
+                    .right_0()
+                    .bottom_0()
+                    .bg(t.extra.scrim)
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.close(cx);
+                        window.dispatch_action(Box::new(FocusComposer), cx);
+                    }))
+                    .with_animation(
+                        "palette-scrim-in",
+                        gpui::Animation::new(fade).with_easing(gpui::ease_in_out),
+                        |d, delta| d.opacity(delta),
+                    ),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .top(t.size.titlebar + t.space.xxxl)
+                    .left_0()
+                    .right_0()
+                    .flex()
+                    .justify_center()
+                    .child(field),
             )
     }
 }

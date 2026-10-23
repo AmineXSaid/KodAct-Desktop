@@ -602,6 +602,7 @@ impl Render for ChatView {
                         versions_open: s.versions_open == Some((chat.id, ix)),
                         sources: s.diagram_code.clone(),
                         zooms: s.diagram_zoom.clone(),
+                        detailed: chat.detailed,
                         open_groups: s
                             .open_groups
                             .iter()

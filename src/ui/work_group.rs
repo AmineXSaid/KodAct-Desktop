@@ -177,7 +177,8 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
     let streaming = cx.busy && cx.last;
     let calls = calls(blocks, &run, streaming);
     let all: Vec<&ToolCall> = calls.iter().map(|(_, c)| *c).collect();
-    let open = cx.open_groups.contains(&run.start);
+    // Detailed, a run starts open and a click closes it.
+    let open = cx.detailed != cx.open_groups.contains(&run.start);
     let failed = all
         .iter()
         .filter(|c| c.status == ToolStatus::Failed)
