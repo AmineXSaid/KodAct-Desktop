@@ -13,6 +13,9 @@ use crate::palette_check::{contrast, oklab, rgba};
 use crate::theme::Theme;
 
 const PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/.interface-design/system.md");
+/// `DESIGN.md` (the DESIGN.md format, read by the impeccable skill), from the
+/// same tokens: frontmatter for machines, eight sections for people.
+const DESIGN: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/DESIGN.md");
 
 fn hex(c: Hsla) -> String {
     let c = rgba(c);
@@ -22,6 +25,17 @@ fn hex(c: Hsla) -> String {
         base
     } else {
         format!("{base} @ {:.1}%", c.a * 100.)
+    }
+}
+
+/// A colour as CSS: hex when opaque, `rgba()` when not (DESIGN.md wants CSS).
+fn css(c: Hsla) -> String {
+    let c = rgba(c);
+    let b = |v: f32| (v.clamp(0., 1.) * 255.).round() as u8;
+    if c.a >= 0.999 {
+        format!("#{:02x}{:02x}{:02x}", b(c.r), b(c.g), b(c.b))
+    } else {
+        format!("rgba({}, {}, {}, {:.2})", b(c.r), b(c.g), b(c.b), c.a)
     }
 }
 
@@ -515,17 +529,82 @@ fn render() -> String {
     s
 }
 
+/// DESIGN.md: the default theme's tokens as frontmatter, then the system
+/// in words, in the format's eight sections.
+fn render_design() -> String {
+    let (l, d) = (Theme::light(), Theme::dark());
+    let mut s = String::new();
+    let w = &mut s;
+    let q = |c: Hsla| format!("\"{}\"", css(c));
+    let _ = writeln!(w, "---");
+    let _ = writeln!(w, "name: Forge");
+    let _ = writeln!(w, "description: The desktop app for ForgeCLI: a calm workspace for long agent sessions");
+    let _ = writeln!(w, "colors:");
+    for (name, light, dark) in [
+        ("canvas", l.colors.canvas, d.colors.canvas),
+        ("surface", l.colors.surface, d.colors.surface),
+        ("sidebar", l.colors.sidebar, d.colors.sidebar),
+        ("ink-strong", l.colors.text_strong, d.colors.text_strong),
+        ("ink", l.colors.text, d.colors.text),
+        ("ink-body", l.colors.text_body, d.colors.text_body),
+        ("ink-muted", l.colors.text_muted, d.colors.text_muted),
+        ("ink-subtle", l.colors.text_subtle, d.colors.text_subtle),
+        ("border", l.colors.border, d.colors.border),
+        ("accent", l.extra.accent, d.extra.accent),
+        ("link", l.colors.primary, d.colors.primary),
+        ("success", l.extra.success, d.extra.success),
+        ("danger", l.extra.danger, d.extra.danger),
+        ("warning", l.extra.warning, d.extra.warning),
+    ] {
+        let _ = writeln!(w, "  {name}: {}", q(light));
+        let _ = writeln!(w, "  {name}-dark: {}", q(dark));
+    }
+    let z = &l.size;
+    let tx = &l.text;
+    let _ = writeln!(w, "typography:");
+    let _ = writeln!(w, "  prose:\n    fontFamily: \"{}\"\n    fontSize: \"{}px\"\n    fontWeight: 400\n    lineHeight: {:.3}", l.font_reading, px(z.chat_text), z.line_height_chat);
+    let _ = writeln!(w, "  ui:\n    fontFamily: \"{}\"\n    fontSize: \"{}px\"\n    fontWeight: 400", l.font_sans, px(tx.body_sm));
+    let _ = writeln!(w, "  caption:\n    fontFamily: \"{}\"\n    fontSize: \"{}px\"\n    fontWeight: 400", l.font_sans, px(tx.caption));
+    let _ = writeln!(w, "  code:\n    fontFamily: \"{}\"", l.font_mono);
+    let _ = writeln!(w, "  code-inline:\n    fontFamily: \"{}\"", l.font_code_inline);
+    let r = &l.radius;
+    let _ = writeln!(w, "rounded:\n  button: \"{}px\"\n  card: \"{}px\"\n  field: \"{}px\"\n  composer: \"{}px\"", px(r.button), px(r.card), px(r.field), px(z.composer_radius));
+    let sp = &l.space;
+    let _ = writeln!(w, "spacing:\n  xs: \"{}px\"\n  sm: \"{}px\"\n  md: \"{}px\"\n  lg: \"{}px\"\n  xl: \"{}px\"\n  xxl: \"{}px\"", px(sp.xs), px(sp.sm), px(sp.md), px(sp.lg), px(sp.xl), px(sp.xxl));
+    let _ = writeln!(w, "components:");
+    let _ = writeln!(w, "  button-primary:\n    backgroundColor: \"{{colors.accent}}\"\n    rounded: \"{{rounded.button}}\"");
+    let _ = writeln!(w, "  user-message:\n    backgroundColor: \"{{colors.surface}}\"\n    rounded: \"{{rounded.card}}\"\n    padding: \"{}px {}px\"", px(sp.sm + gpui::px(2.)), px(sp.lg));
+    let _ = writeln!(w, "  quiet-line:\n    textColor: \"{{colors.ink-muted}}\"\n    typography: \"{{typography.ui}}\"\n    height: \"{}px\"", px(z.quiet_line));
+    let _ = writeln!(w, "---\n");
+    let _ = writeln!(w, "# Design: Forge\n");
+    let _ = writeln!(w, "> Generated from `src/theme.rs` by `src/system_md.rs`, with `.interface-design/system.md`. Change a token in theme.rs, then run `UPDATE_SYSTEM_MD=1 cargo test system_md`. The product record is `PRODUCT.md`; the theme above is the default one, light and dark, and every other theme keeps the same roles.\n");
+    let _ = writeln!(w, "## Overview\n\nAn Operate surface: an app for long agent sessions, judged against Claude Desktop's calm. The reply is the hero; everything around it (the agent's activity, the chrome, the menus) is quieter than the words. Restraint, precision and one accent, not decoration.\n");
+    let _ = writeln!(w, "## Colors\n\n- **Neutrals** carry everything: a canvas, a slightly different sidebar layer, a surface for the few things that hold content (your messages, an opened change, a card that needs you), and five inks from strong to subtle.\n- **The accent** is only for the primary action, the current selection and state (a waiting dot, a switch that is on). Never for decoration or an inactive control.\n- **Status colours** (success, danger, warning) only mean status: a failed call, a stopped one, a change's size.\n- Text holds 4.5:1 against its ground in every theme (`src/palette_check.rs`).\n");
+    let _ = writeln!(w, "## Typography\n\nOne sans for interface and prose ({}), in regular and semibold; replies at {}px on {:.0}px lines. Code in {}; a name in prose (a file, a command) in {} on a faint neutral wash, never coloured. Small text is sentence case: no uppercase labels and no label above a heading.\n", l.font_sans, px(z.chat_text), f32::from(z.chat_text) * z.line_height_chat, l.font_mono, l.font_code_inline);
+    let _ = writeln!(w, "## Layout\n\nThe transcript and the composer share one {}px column and one edge. Paragraphs {}px apart; tight groups, generous separation. The sidebar is {}px.\n", px(z.column), px(sp.md), px(z.sidebar));
+    let _ = writeln!(w, "## Elevation & Depth\n\nNearly flat. Lift (`elevation_grain`) only for what holds content you act on: the composer, a card that needs you; popovers a touch more. No glows, no hard offset shadows.\n");
+    let _ = writeln!(w, "## Shapes\n\nCorners from the tokens above; one radius per role. No coloured edge over 1px on cards or rows: a selected row is a soft fill.\n");
+    let _ = writeln!(w, "## Components\n\n- **Activity** (tool calls, runs of calls, thinking, answers): quiet lines in the muted ink, {}px high, no icons for what worked; opened, steps indent under a 2px neutral rule.\n- **Your message:** a filled bubble without a frame.\n- **Cards that need you** (permission, question): a lifted card; the primary action in the accent, the rest quiet.\n- **Menus and popovers:** one style (radius, padding, row height, shadow) from the tokens.\n", px(z.quiet_line));
+    let _ = writeln!(w, "## Do's and Don'ts\n\n- Do let the reply be the loudest thing on screen.\n- Do say what happened in words (\"Couldn't write Cargo.toml\"), not only with an icon.\n- Don't put a kicker or eyebrow above a heading.\n- Don't use mono as a technical costume: mono is for code, paths in changes, and data.\n- Don't use colour for what isn't primary, selected or a state.\n- Don't add motion that isn't a state change; transitions stay within 150 to 250ms.");
+    s
+}
+
 #[test]
 fn system_md_matches_the_theme() {
-    let want = render();
+    let (want, design) = (render(), render_design());
     if std::env::var_os("UPDATE_SYSTEM_MD").is_some() {
         std::fs::create_dir_all(std::path::Path::new(PATH).parent().unwrap()).unwrap();
         std::fs::write(PATH, &want).unwrap();
+        std::fs::write(DESIGN, &design).unwrap();
         return;
     }
     let have = std::fs::read_to_string(PATH).unwrap_or_default();
     assert!(
         have == want,
         ".interface-design/system.md is stale; run `UPDATE_SYSTEM_MD=1 cargo test system_md`"
+    );
+    assert!(
+        std::fs::read_to_string(DESIGN).unwrap_or_default() == design,
+        "DESIGN.md is stale; run `UPDATE_SYSTEM_MD=1 cargo test system_md`"
     );
 }

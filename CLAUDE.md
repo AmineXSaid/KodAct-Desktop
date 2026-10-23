@@ -37,3 +37,8 @@ views), `theme.md` (the tokens).
   stroke stays Lucide's 2px.
 - Before finishing any UI change, run `/visual-critique:critique-screen` on a
   screenshot and fix the high-priority items.
+- The quality bar is Impeccable (`.claude/skills/impeccable`): `PRODUCT.md` is
+  the product record, `DESIGN.md` is generated with system.md. Read its
+  `reference/craft-floor.md` before a UI edit; Forge is an Operate surface
+  (`reference/operate.md`). Critiques are design reviews of screenshots,
+  saved in `.impeccable/critique/` (its web detector does not apply here).
