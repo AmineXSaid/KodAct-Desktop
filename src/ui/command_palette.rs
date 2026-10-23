@@ -748,6 +748,12 @@ impl CommandPalette {
                     Box::new(ShareChat),
                 ),
                 act(
+                    "Show the session: where it runs, its context, its changes",
+                    "icons/panel-right.svg",
+                    None,
+                    Box::new(ToggleSession),
+                ),
+                act(
                     "Show the context window",
                     "icons/cpu.svg",
                     None,

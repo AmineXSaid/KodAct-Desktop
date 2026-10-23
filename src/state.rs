@@ -1512,6 +1512,8 @@ pub enum Request {
     StopAgents { chat: usize, ids: Vec<String> },
     /// Take back a queued message; `edit` puts it back in the box.
     CancelQueued { chat: usize, uuid: String, edit: bool },
+    /// What fills the chat's context, for the Session column.
+    ContextUsage { chat: usize },
 }
 
 /// The queued messages a replayed message of yours carries, taken out of
@@ -1555,6 +1557,12 @@ pub struct AppState {
     pub all_chats: bool,
     /// The sidebar lists archived chats instead of the others.
     pub show_archived: bool,
+    /// The Session column beside the chat (`ui/session_panel.rs`) is open.
+    pub session_open: bool,
+    /// Its cards folded shut, by name ("Environment", "Context", "Changes").
+    pub session_folded: Vec<&'static str>,
+    /// What fills each chat's context, as ForgeCLI last counted it.
+    pub context_usage: std::collections::HashMap<usize, crate::context::ContextUsage>,
     /// The sidebar lists plain chats or chats in a folder.
     pub sidebar_kind: SidebarKind,
     /// The title bar's project switcher, and the sidebar's chat filter, are open.
@@ -1909,6 +1917,9 @@ impl AppState {
             projects,
             all_chats: true,
             show_archived: false,
+            session_open: false,
+            session_folded: vec![],
+            context_usage: Default::default(),
             sidebar_kind: SidebarKind::default(),
             switcher_open: false,
             filter_open: false,
@@ -5547,6 +5558,15 @@ impl AppState {
         if let Request::StopAgents { chat, ids } = req {
             return self.on_stop_reply(chat, &ids, result, cx);
         }
+        if let Request::ContextUsage { chat } = req {
+            // An older ForgeCLI doesn't know the request: the card keeps
+            // the composer's measure.
+            if let Some(u) = result.ok().as_ref().and_then(crate::context::ContextUsage::from_json) {
+                self.context_usage.insert(chat, u);
+                cx.notify();
+            }
+            return;
+        }
         if let Request::CancelQueued { chat, uuid, edit } = req {
             match result {
                 Ok(v) if v["cancelled"] == true => self.unqueue(chat, &uuid, edit, cx),
@@ -5608,7 +5628,10 @@ impl AppState {
                 );
                 self.touch(chat, cx);
             }
-            (Request::StopAgents { .. } | Request::CancelQueued { .. }, _) => {}
+            (
+                Request::StopAgents { .. } | Request::CancelQueued { .. } | Request::ContextUsage { .. },
+                _,
+            ) => {}
             (_, Err(e)) => self.show_toast(format!("Couldn't revert: {e}"), cx),
         }
         cx.notify();
@@ -5708,6 +5731,36 @@ impl AppState {
         self.chat_menu_at = at;
         let open = self.chat_menu != Some(id);
         self.open_chat_menu(open.then_some(id), cx);
+    }
+
+    /// Ask chat `chat`'s ForgeCLI what fills its context; the answer lands
+    /// in `context_usage`. Nothing to ask without a running session.
+    pub fn ask_context_usage(&mut self, chat: usize) {
+        if let Some(Ok(id)) = self.sessions.get(&chat).map(|l| l.session.context_usage()) {
+            self.requests.insert(id, Request::ContextUsage { chat });
+        }
+    }
+
+    /// Show or hide the Session column; opening it asks for fresh numbers.
+    pub fn toggle_session(&mut self, cx: &mut Context<Self>) {
+        self.session_open = !self.session_open;
+        if self.session_open {
+            if let Some(chat) = self.current {
+                self.ask_context_usage(chat);
+            }
+        }
+        cx.notify();
+    }
+
+    /// Fold or unfold one of the Session column's cards.
+    pub fn fold_session_card(&mut self, card: &'static str, cx: &mut Context<Self>) {
+        match self.session_folded.iter().position(|c| *c == card) {
+            Some(i) => {
+                self.session_folded.remove(i);
+            }
+            None => self.session_folded.push(card),
+        }
+        cx.notify();
     }
 
     /// Open or close one of the title bar's menus, at `at`.
@@ -7595,6 +7648,8 @@ impl AppState {
                 if let Some(e) = error {
                     self.notice(chat, e, true);
                 }
+                // The turn changed what fills the context: ask again.
+                self.ask_context_usage(chat);
                 let seconds = if ms > 0 {
                     ms as f32 / 1000.
                 } else {
@@ -9056,6 +9111,8 @@ impl AppState {
                     seconds,
                     usage: Some(usage),
                 });
+                self.context_usage
+                    .insert(chat, crate::context::ContextUsage::demo(usage.total()));
                 self.touch(chat, cx);
                 self.check_memory(chat, cx);
             }

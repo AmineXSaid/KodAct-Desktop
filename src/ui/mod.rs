@@ -11,6 +11,7 @@ pub mod browser_view;
 pub mod button;
 pub mod chat_menu;
 pub mod documents;
+pub mod session_panel;
 pub mod title_menus;
 pub mod chat_view;
 pub mod command_palette;
@@ -170,6 +171,7 @@ gpui::actions!(
         DeleteChat,
         ArchiveChat,
         OpenDocuments,
+        ToggleSession,
         ToggleDetailedView,
         ContinueInNewChat,
         CopyChatMarkdown,

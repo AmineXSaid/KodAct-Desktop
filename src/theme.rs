@@ -1209,6 +1209,7 @@ pub struct Sizes {
     pub row: Pixels,          // 30: sidebar rows, menu items
     pub menu_row: Pixels,     // 26: a row in a session menu, as Claude Code's
     pub menu_width: Pixels,   // 200: a session menu's width
+    pub session_panel: Pixels, // 300: the Session column beside a chat
     pub quiet_line: Pixels,   // 26: a quiet line in a reply: a call, a thought, a run of work
     pub thumb_w: Pixels,      // 34: a picture a call returned, at the end of its line
     pub thumb_h: Pixels,      // 22: the same, short enough for the quiet line
@@ -1282,6 +1283,7 @@ impl Default for Sizes {
             row: px(30.),
             menu_row: px(26.),
             menu_width: px(200.),
+            session_panel: px(300.),
             quiet_line: px(26.),
             thumb_w: px(34.),
             thumb_h: px(22.),

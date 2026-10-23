@@ -42,3 +42,14 @@ Four ember dots as a diamond (Forge's ◆); each beat a blow squashes it flat,
 the struck dots flash white-hot, and it rings back; the next blow comes from
 the side. Then the step with its light sweep, the time, and "· ~N tokens".
 Like Claude Code's in rhythm, Forge's own in shape and meaning: 8.5.
+
+## 2026-10-23: the Session column (g screenshots)
+
+Environment (where it runs ⚙, the folder +, the branch), Context (ForgeCLI's
+own count: N% used, used / window, a bar in a colour per part, each part in
+tokens and %, the autocompact buffer, free space, and the tools, memory
+files and skills behind them), Changes (the chat's total, a row per file
+that jumps to its edit, Create PR). Cards fold. 8.5.
+
+Bullets are drawn (a dot, a ring, a dash), not typed: Hanken Grotesk's • is
+square. 8.5.

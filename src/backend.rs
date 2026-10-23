@@ -401,6 +401,12 @@ impl Session {
         self.control(json!({ "subtype": "cancel_queued", "uuid": uuid }))
     }
 
+    /// Ask what fills the context (ForgeCLI's `/context` numbers); the answer
+    /// arrives as `Event::ControlReply` (`context::ContextUsage::from_json`).
+    pub fn context_usage(&self) -> Result<String, String> {
+        self.control(json!({ "subtype": "get_context_usage" }))
+    }
+
     /// Your message with its attachments (`attach::content_blocks`).
     pub fn send_content(&self, content: Value) -> Result<(), String> {
         self.write(json!({ "type": "user", "message": { "role": "user", "content": content }, "parent_tool_use_id": null, "session_id": "" }))

@@ -927,16 +927,33 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                         ))
                         .into_any_element(),
                     // Step numbers carry meaning, so they read at 4.5:1.
-                    None => div()
-                        .flex_none()
-                        .min_w(t.space.lg)
-                        .text_color(t.colors.text_muted)
-                        .child(match number {
-                            Some(n) => format!("{n}."),
-                            // A bullet per level, as a written outline: • ◦ –.
-                            None => ["•", "◦", "–"][depth.min(2)].to_string(),
-                        })
-                        .into_any_element(),
+                    None => match number {
+                        Some(n) => div()
+                            .flex_none()
+                            .min_w(t.space.lg)
+                            .text_color(t.colors.text_muted)
+                            .child(format!("{n}."))
+                            .into_any_element(),
+                        // A bullet per level, as a written outline: a dot, a
+                        // ring, a dash. Drawn, not typed, so every face
+                        // shows it round (some draw • square).
+                        None => {
+                            let ink = t.colors.text_muted;
+                            let mark = match depth.min(2) {
+                                0 => div().size(px(5.)).rounded(px(2.5)).bg(ink),
+                                1 => div().size(px(6.)).rounded(px(3.)).border_1().border_color(ink),
+                                _ => div().w(px(6.)).h(px(1.5)).rounded(px(1.)).bg(ink),
+                            };
+                            div()
+                                .flex_none()
+                                .w(t.space.lg)
+                                .h(px(f32::from(size) * leading))
+                                .flex()
+                                .items_center()
+                                .child(mark)
+                                .into_any_element()
+                        }
+                    },
                 })
                 .child(div().flex_1().min_w_0().child(runs(
                     id,

@@ -130,6 +130,7 @@ fn render() -> String {
         ("sidebar", z.sidebar, "the sidebar's width"),
         ("column", z.column, "the reading column"),
         ("menu_row", z.menu_row, "a row in a chat's menu"),
+        ("session_panel", z.session_panel, "the Session column beside a chat: environment, context, changes"),
         ("composer_line", z.composer_line, "the composer box with one line in it: +, the text, send"),
         ("menu_width", z.menu_width, "a chat menu's width, and its flyouts' least"),
         (

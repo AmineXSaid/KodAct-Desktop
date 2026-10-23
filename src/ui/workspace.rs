@@ -285,6 +285,7 @@ impl Workspace {
         let (plan_on, files_on) = (side == Some(PanelTab::Plan), side == Some(PanelTab::Files));
         let menu = s.title_menu.map(|(m, _)| m);
         let (share_on, more_on) = (menu == Some(TitleMenu::Share), menu == Some(TitleMenu::More));
+        let session_on = s.session_open;
         // A pane's button shows it is open: the accent's wash and ink.
         let toggle = |id: &'static str, path: &'static str, tip: &'static str, on: bool| {
             div()
@@ -509,6 +510,15 @@ impl Workspace {
                 .child(div().flex_1())
                 .children(super::tasks::render(&t, &self.state, window, cx))
                 .children(super::approvals::render(&t, &self.state, window, cx))
+                // The Session column: where it runs, its context, its changes.
+                .when(chat_open, |d| {
+                    d.child(
+                        toggle("show-session", "icons/panel-right.svg", "Session", session_on)
+                            .on_click(cx.listener(|_, _, window, cx| {
+                                window.dispatch_action(Box::new(ToggleSession), cx)
+                            })),
+                    )
+                })
                 .child(
                     toggle("show-plan", "icons/list-todo.svg", "Plan (Ctrl+Shift+E)", plan_on)
                         .on_click(cx.listener(|this, _, _, cx| {
@@ -954,6 +964,15 @@ impl Render for Workspace {
                                 .child(self.composer.clone()),
                         ),
                 );
+            // The Session column, between the chat and any pane, as Claude
+            // Code's: environment, context and changes at a glance.
+            let session = {
+                let s = self.state.read(cx);
+                s.session_open
+                    .then_some(s.current)
+                    .flatten()
+                    .map(|chat| super::session_panel::render(&t, &self.state, s, chat))
+            };
             main.child(
                 div()
                     .flex_1()
@@ -961,6 +980,7 @@ impl Render for Workspace {
                     .flex()
                     .when(below, |d| d.flex_col())
                     .child(conversation)
+                    .children(session)
                     .children(pane),
             )
         };
@@ -985,6 +1005,9 @@ impl Render for Workspace {
             .relative()
             .flex()
             .flex_col()
+            .on_action(cx.listener(|this, _: &ToggleSession, _, cx| {
+                this.state.update(cx, |s, cx| s.toggle_session(cx))
+            }))
             .on_action(cx.listener(|this, _: &OpenDocuments, _, cx| {
                 this.state.update(cx, |s, cx| {
                     s.screen = crate::state::Screen::Documents;
