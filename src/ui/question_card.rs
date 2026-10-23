@@ -341,7 +341,8 @@ fn pending(info: &PermInfo, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement
         .into_any_element()
 }
 
-/// The answered card: a line saying so, then each question and its answer.
+/// The answered card, as quiet as a run of calls: a muted line saying so,
+/// then each question and your answer under a rule.
 fn answered(verdict: Verdict, info: &PermInfo, cx: &ItemContext, t: &Theme) -> AnyElement {
     let n = info.questions.len();
     let noun = if n == 1 { "question" } else { "questions" };
@@ -352,100 +353,56 @@ fn answered(verdict: Verdict, info: &PermInfo, cx: &ItemContext, t: &Theme) -> A
         (_, false) => format!("Answered {n} {noun}"),
     };
     let mut meta = vec![];
-    if !skipped {
-        meta.push("by you".to_string());
+    if let Some((label, _)) = &cx.place {
+        meta.push(format!("on {label}"));
     }
-    meta.push(match &cx.place {
-        Some((label, _)) => format!("on {label}"),
-        None => "on this computer".into(),
-    });
     meta.extend(info.at.map(super::versions::ago));
     div()
         .flex()
-        .items_start()
-        .gap(t.space.sm)
-        .px(t.space.md)
-        .py(t.space.sm)
-        .rounded(t.radius.button)
-        .border_1()
-        .border_color(t.colors.border)
-        .bg(t.colors.surface)
-        .child(div().pt(px(1.)).child(icon(
-            "icons/circle-help.svg",
-            t.size.icon_sm,
-            if skipped {
-                t.colors.text_subtle
-            } else {
-                t.extra.success
-            },
-        )))
+        .flex_col()
         .child(
             div()
-                .flex_1()
-                .min_w_0()
                 .flex()
-                .flex_col()
-                .gap(px(2.))
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .flex_wrap()
-                        .gap(t.space.sm)
-                        .child(
-                            div()
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(t.colors.text_strong)
-                                .child(head),
-                        )
-                        .child(
-                            div()
-                                .text_size(t.text.caption)
-                                .text_color(t.colors.text_muted)
-                                .child(meta.join(" · ")),
-                        ),
-                )
-                .children(info.questions.iter().map(|q| {
-                    let asked = if q.header.is_empty() {
-                        q.text.clone()
-                    } else {
-                        q.header.clone()
-                    };
-                    let said = match q.answer() {
-                        Some(a) if !skipped => recommended(&a).0.to_string(),
-                        _ => "—".into(),
-                    };
-                    div()
-                        .flex()
-                        .items_start()
-                        .gap(t.space.sm)
-                        .min_w_0()
-                        .text_size(t.text.body_sm)
-                        .child(
-                            div()
-                                .flex_none()
-                                .max_w(px(220.))
-                                .overflow_hidden()
-                                .whitespace_nowrap()
-                                .text_ellipsis()
-                                .text_color(t.colors.text_muted)
-                                .child(asked),
-                        )
-                        .child(
-                            div()
-                                .flex_none()
-                                .text_color(t.colors.text_subtle)
-                                .child("→"),
-                        )
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .text_color(t.colors.text)
-                                .child(said),
-                        )
-                })),
+                .items_center()
+                .gap(t.space.xs + px(2.))
+                .min_h(t.size.quiet_line)
+                .text_size(t.text.body_sm)
+                .text_color(t.colors.text_muted)
+                .child(head)
+                .when(!meta.is_empty(), |d| {
+                    d.child(div().text_color(t.colors.text_subtle).child(format!("· {}", meta.join(" · "))))
+                }),
         )
+        .when(!skipped, |d| {
+            d.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.))
+                    .mt(px(2.))
+                    .ml(t.size.icon_xs / 2.)
+                    .pl(t.space.md)
+                    .border_l_2()
+                    .border_color(t.colors.border)
+                    .children(info.questions.iter().map(|q| {
+                        let asked = if q.header.is_empty() {
+                            q.text.clone()
+                        } else {
+                            q.header.clone()
+                        };
+                        let said = q.answer().map(|a| recommended(&a).0.to_string()).unwrap_or_default();
+                        div()
+                            .flex()
+                            .items_start()
+                            .gap(t.space.sm)
+                            .min_w_0()
+                            .text_size(t.text.body_sm)
+                            .child(div().flex_none().text_color(t.colors.text_muted).child(asked))
+                            .child(div().flex_none().text_color(t.colors.text_subtle).child("→"))
+                            .child(div().flex_1().min_w_0().text_color(t.colors.text).child(said))
+                    })),
+            )
+        })
         .into_any_element()
 }
 

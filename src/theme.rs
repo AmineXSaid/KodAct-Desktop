@@ -186,7 +186,7 @@ impl Look {
             corners: (4., 4., 4., 4., 9999.),
             row: 30.,
             titlebar: 36.,
-            chat: (15., 23.),
+            chat: (16., 26.),
             heading: (32., 36.),
             depth: Depth::Grain,
             selection: Selection::Soft,
@@ -205,7 +205,7 @@ impl Look {
                 corners: (8., 12., 10., 16., 9999.),
                 row: 32.,
                 titlebar: 40.,
-                chat: (16., 26.),
+                chat: (16., 27.),
                 heading: (34., 38.),
                 depth: Depth::Lift,
                 selection: Selection::Card,
@@ -218,7 +218,7 @@ impl Look {
                 sans: Some("Inter"),
                 display: Some("Inter"),
                 corners: (6., 8., 6., 12., 6.),
-                chat: (14., 22.),
+                chat: (15., 24.),
                 heading: (28., 32.),
                 depth: Depth::Flat,
                 selection: Selection::Tint,
@@ -232,7 +232,7 @@ impl Look {
                 display: Some("Geist"),
                 mono: "Geist Mono",
                 corners: (6., 8., 8., 12., 8.),
-                chat: (14., 22.),
+                chat: (15., 24.),
                 heading: (28., 32.),
                 depth: Depth::Flat,
                 selection: Selection::Wash,
@@ -248,7 +248,7 @@ impl Look {
                 corners: (3., 4., 3., 6., 4.),
                 row: 26.,
                 titlebar: 32.,
-                chat: (13., 20.),
+                chat: (14., 23.),
                 heading: (24., 28.),
                 depth: Depth::Flat,
                 selection: Selection::Tint,
@@ -302,7 +302,7 @@ impl Look {
             Look::Studio => Form {
                 sans: Some("Hanken Grotesk"),
                 corners: (8., 10., 8., 18., 8.),
-                chat: (14., 22.),
+                chat: (15., 24.),
                 depth: Depth::Lift,
                 selection: Selection::Soft,
                 motion_ms: 180,
@@ -329,7 +329,7 @@ impl Look {
             Look::Command => Form {
                 sans: Some("Hanken Grotesk"),
                 corners: (8., 10., 9., 16., 10.),
-                chat: (14., 22.),
+                chat: (15., 24.),
                 depth: Depth::Grain,
                 selection: Selection::Wash,
                 motion_ms: 160,
@@ -551,6 +551,7 @@ pub struct Theme {
     pub motion_ms: u64,          // 200ms ease for hovers/transitions
     // Forge additions (see the section at the end of the tokens).
     pub font_mono: SharedString, // JetBrains Mono: code, paths, commands
+    pub font_code_inline: SharedString, // IBM Plex Mono: a name in prose; its small x-height sits level with the text
     pub font_display: SharedString, // large lines (the greeting, headings): Archivo, as everything is
     pub display_weight: FontWeight, // 600: headings are set in the heavier of the two cuts
     pub font_reading: SharedString, // a reply's prose: the interface face, or a serif (Terracotta)
@@ -615,6 +616,7 @@ impl Theme {
             font_serif: "Source Serif 4".into(),
             motion_ms: 200,
             font_mono: "JetBrains Mono".into(),
+            font_code_inline: "IBM Plex Mono".into(),
             font_display: crate::fonts::display(),
             display_weight: FontWeight::SEMIBOLD,
             font_reading: crate::fonts::sans(),
@@ -1180,8 +1182,10 @@ const BRAND_STEP: f32 = 1.;
 pub struct Sizes {
     pub titlebar: Pixels, // 36
     pub sidebar: Pixels,  // 288
-    pub column: Pixels,   // 760: the reading column
+    pub column: Pixels,   // 720: the reading column, and the composer under it
+    pub thinking_max: Pixels, // 240: an opened thought's tallest; longer ones scroll
     pub row: Pixels,      // 30: sidebar rows, menu items
+    pub quiet_line: Pixels, // 26: a quiet line in a reply: a call, a thought, a run of work
     pub control: Pixels,  // 26: pills, small buttons
     // Icons: one scale, 12 / 14 / 16 / 20, and Lucide's own 2px stroke.
     pub icon_xs: Pixels,            // 12: inside captions and chips
@@ -1246,8 +1250,10 @@ impl Default for Sizes {
         Self {
             titlebar: px(36.),
             sidebar: px(288.),
-            column: px(760.),
+            column: px(720.),
+            thinking_max: px(240.),
             row: px(30.),
+            quiet_line: px(26.),
             control: px(26.),
             icon_xs: px(12.),
             icon_sm: px(14.),

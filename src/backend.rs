@@ -1012,7 +1012,9 @@ pub fn tool_call(name: &str, input: &Value) -> ToolCall {
         status: ToolStatus::Running,
         output: "".into(),
         diff,
-        open: kind == ToolKind::Bash,
+        // Every call starts closed, a command too: the working line says what
+        // runs, and its terminal block is a click away.
+        open: false,
         full: false,
         review: Review::Open,
     }

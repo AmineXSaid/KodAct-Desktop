@@ -7,12 +7,12 @@
 
 use std::ops::Range;
 
-use gpui::{div, prelude::*, px, AnyElement, FontWeight, SharedString};
+use gpui::{div, prelude::*, px, AnyElement, SharedString};
 
 use super::icon;
 use super::message::{self, ItemContext};
 use crate::state::{Block, DiffKind, ToolCall, ToolKind, ToolStatus};
-use crate::theme::{self, Theme};
+use crate::theme::Theme;
 
 /// How many calls a run needs to fold into one line.
 const MIN_CALLS: usize = 2;
@@ -181,76 +181,52 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
     // Still growing: the reply runs and nothing has come after it yet.
     let live = streaming && run.end == blocks.len();
     let running = all.iter().rev().find(|c| c.status == ToolStatus::Running);
-    let latest = all.last().copied();
     let words = summary(&all);
     let (state, chat, msg, start) = (cx.state.clone(), cx.chat, cx.index, run.start);
-    let hover = t.colors.hover;
-    let steps_word = format!("{} steps", all.len());
+    let strong = t.colors.text;
+    let live_step = running.filter(|_| live);
 
+    // One quiet line, as Claude shows its work: "Edited 7 files, ran 2
+    // commands (1 failed) ›". While it works, the step in progress.
     let header = div()
         .id(SharedString::from(format!("work-{chat}-{msg}-{start}")))
         .role(gpui::accesskit::Role::Button)
         .aria_label(SharedString::from(format!(
-            "{words}{}, {}",
+            "{words}{}{}, {}",
             if failed > 0 { format!(", {failed} failed") } else { String::new() },
+            if stopped > 0 { format!(", {stopped} stopped") } else { String::new() },
             if open { "hide steps" } else { "show steps" }
         )))
         .flex()
         .items_center()
-        .gap(t.space.sm)
-        .px(t.space.md)
-        .h(t.size.row + px(4.))
+        .gap(t.space.xs + px(2.))
+        .min_h(t.size.quiet_line)
+        .text_size(t.text.body_sm)
+        .text_color(t.colors.text_muted)
         .cursor_pointer()
-        .hover(move |s| s.bg(hover))
-        .child(match (live, running) {
-            (true, Some(_)) => {
-                super::tasks::status_icon(ToolStatus::Running, t, format!("work-spin-{chat}-{msg}-{start}").into())
-            }
-            _ => icon(
-                latest.map_or("icons/layers.svg", |c| c.kind.icon()),
-                t.size.icon_sm,
-                t.colors.text_muted,
-            )
-            .into_any_element(),
-        })
+        .hover(move |s| s.text_color(strong))
+        .children(live_step.map(|_| {
+            super::tasks::status_icon(ToolStatus::Running, t, format!("work-spin-{chat}-{msg}-{start}").into())
+        }))
         .child(
             div()
                 .min_w_0()
                 .overflow_hidden()
                 .whitespace_nowrap()
                 .text_ellipsis()
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(t.colors.text)
-                .child(match (live, running) {
-                    // While it works: the step in progress.
-                    (true, Some(c)) => step_label(c),
-                    _ => words.clone(),
+                .child(match live_step {
+                    Some(c) => step_label(c),
+                    None => words.clone(),
                 }),
         )
-        .child(
-            div()
-                .flex_none()
-                .text_size(t.text.caption)
-                .text_color(t.colors.text_subtle)
-                .child(steps_word),
-        )
-        .child(div().flex_1())
         .when(failed > 0, |d| {
-            d.child(
-                theme::pill(t, t.extra.danger_tint, t.extra.danger, format!("{failed} failed"))
-                    .flex_none()
-                    .text_size(t.text.caption),
-            )
+            d.child(div().flex_none().text_color(t.extra.danger).child(format!("({failed} failed)")))
         })
         // Stopped mid-way: their outcome is unknown, so they are counted apart.
         .when(stopped > 0, |d| {
-            d.child(
-                theme::pill(t, t.extra.warning_tint, t.extra.warning, format!("{stopped} stopped"))
-                    .flex_none()
-                    .text_size(t.text.caption),
-            )
+            d.child(div().flex_none().text_color(t.extra.warning).child(format!("({stopped} stopped)")))
         })
-        .when(adds + dels > 0, |d| {
+        .when(adds + dels > 0 && live_step.is_none(), |d| {
             d.child(
                 div()
                     .flex()
@@ -258,8 +234,8 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
                     .gap(t.space.xs)
                     .font_family(t.font_mono.clone())
                     .text_size(t.text.caption)
-                    .child(div().text_color(t.extra.success).child(format!("+{adds}")))
-                    .child(div().text_color(t.extra.danger).child(format!("−{dels}"))),
+                    .child(div().text_color(t.extra.success.opacity(0.85)).child(format!("+{adds}")))
+                    .child(div().text_color(t.extra.danger.opacity(0.85)).child(format!("−{dels}"))),
             )
         })
         .child(icon(
@@ -268,59 +244,44 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
             } else {
                 "icons/chevron-right.svg"
             },
-            t.size.icon_sm,
+            t.size.icon_xs,
             t.colors.text_subtle,
         ))
         .on_click(move |_, _, app| {
             state.update(app, |s, cx| s.toggle_group(chat, msg, start, cx))
         });
 
+    // Opened: the steps, indented under a quiet rule, a line each.
     let steps = open.then(|| {
         div()
             .flex()
             .flex_col()
-            .border_t_1()
+            .mt(px(2.))
+            .ml(t.size.icon_xs / 2.)
+            .pl(t.space.md)
+            .border_l_2()
             .border_color(t.colors.border)
-            .py(t.space.xs)
             .children(run.clone().filter_map(|i| {
                 if part(blocks, i, streaming) != Part::Step {
                     return None;
                 }
                 Some(match &blocks[i] {
                     Block::Tool(c) => {
-                        let c = &as_step(c);
                         let answer = message::answer_for(blocks, i);
                         let step = message::flash(
                             div()
                                 .flex()
                                 .flex_col()
                                 .child(message::tool_header(c, i, blocks, cx, t))
-                                .children(message::tool_body(c, i, cx, t).map(|body| {
-                                    div()
-                                        .mx(t.space.md)
-                                        .mb(t.space.xs)
-                                        .rounded(t.radius.button)
-                                        .border_1()
-                                        .border_color(t.colors.border)
-                                        .overflow_hidden()
-                                        .child(body)
-                                }))
-                                .children(answer.map(|p| {
-                                    div()
-                                        .pb(t.space.xs)
-                                        .child(message::approval_line(&blocks[p], cx, t))
-                                })),
+                                .children(message::tool_body(c, i, cx, t))
+                                .children(answer.map(|p| message::approval_line(&blocks[p], cx, t))),
                             i,
                             cx,
                             t,
                         );
                         message::mark(step, i, cx)
                     }
-                    Block::Thinking { .. } => div()
-                        .px(t.space.md)
-                        .py(t.space.xs)
-                        .child(message::block(blocks, i, cx, t))
-                        .into_any_element(),
+                    Block::Thinking { .. } => message::block(blocks, i, cx, t),
                     _ => return None,
                 })
             }))
@@ -329,31 +290,9 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
     div()
         .flex()
         .flex_col()
-        .bg(t.colors.surface)
-        .border_1()
-        .border_color(if live && running.is_some() {
-            t.extra.border_strong
-        } else {
-            t.colors.border
-        })
-        .rounded(t.radius.card)
-        .overflow_hidden()
         .child(header)
         .children(steps)
         .into_any_element()
-}
-
-/// A call as a step of a run. A command's terminal block opens with it on
-/// its own (`backend::tool_call`); in a run every step starts closed, so
-/// its `open` reads the other way round there.
-pub fn as_step(c: &ToolCall) -> std::borrow::Cow<'_, ToolCall> {
-    if c.kind == ToolKind::Bash {
-        let mut step = c.clone();
-        step.open = !c.open;
-        std::borrow::Cow::Owned(step)
-    } else {
-        std::borrow::Cow::Borrowed(c)
-    }
 }
 
 /// The run holding block `b`, if one folds it.

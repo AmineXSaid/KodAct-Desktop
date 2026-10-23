@@ -453,6 +453,7 @@ impl Workspace {
                 .child(div().flex_1())
                 .child(field)
                 .child(div().flex_1())
+                .children(super::tasks::render(&t, &self.state, window, cx))
                 .children(super::approvals::render(&t, &self.state, window, cx))
                 .child({
                     let open = s.terminal_open;
@@ -677,6 +678,7 @@ impl Render for Workspace {
         let chat_key = s.chat().map_or(usize::MAX, |c| c.id);
         let empty = s.chat().is_none_or(|c| c.messages.is_empty());
         self.dots.read(cx).set_backdrop(!empty, s.busy());
+        let chat_pattern = s.chat_pattern;
         let below = s.doc_below;
         let terminal_open = s.terminal_open;
         let side_open = s.doc.is_some() || s.panel.is_some();
@@ -870,9 +872,9 @@ impl Render for Workspace {
                 .flex()
                 .flex_col()
                 .relative()
-                // The home screen's field stays behind the whole chat, the
-                // composer's corners too, faint, with a soft wave through it.
-                .child(self.dots.clone())
+                // Behind a chat the stage is plain, as the text wants it;
+                // the home screen's field follows only if you asked for it.
+                .when(chat_pattern, |d| d.child(self.dots.clone()))
                 .when(find_open, |d| d.child(self.find.clone()))
                 .child(
                     div()
@@ -897,7 +899,6 @@ impl Render for Workspace {
                                     gpui::linear_color_stop(t.extra.stage, 1.),
                                 )),
                         )
-                        .children(super::tasks::render(&t, &self.state, cx))
                         // Each chat opened fades and rises in, its task pill
                         // with it.
                         .with_animation(

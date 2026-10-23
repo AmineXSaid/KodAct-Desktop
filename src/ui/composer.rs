@@ -884,12 +884,15 @@ impl Render for Composer {
         });
         let context_popover = super::context_menu::render(&t, &state, window, cx);
 
+        // In a chat the box is as wide as the text above it, on the same
+        // edges; on the new-chat screen it keeps its own width.
+        let in_chat = self.state.read(cx).chat().is_some_and(|c| !c.messages.is_empty());
         let composer = div()
             .key_context("Composer")
             .track_focus(&self.menu_focus)
             .relative()
             .w_full()
-            .max_w(t.size.composer_width)
+            .max_w(if in_chat { t.size.column } else { t.size.composer_width })
             .flex()
             .flex_col()
             .gap(px(6.))

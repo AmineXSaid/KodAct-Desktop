@@ -65,6 +65,8 @@ pub enum Look {
     Chat,
     /// A document in the side panel.
     Document,
+    /// Text beside the reply (the model's thinking): smaller and muted.
+    Aside,
 }
 
 #[derive(Default)]
@@ -589,7 +591,7 @@ fn run_list(
         }
         text.push_str(&s.text);
         let mut f = font(if s.code {
-            t.font_mono.clone()
+            t.font_code_inline.clone()
         } else {
             family.clone()
         });
@@ -608,16 +610,17 @@ fn run_list(
         runs.push(TextRun {
             len: s.text.len(),
             font: f,
-            // Inline code (a file, a command) in coral on a faint wash of
-            // it, so it reads as a name without weighing on the line.
+            // Inline code (a file, a command) in the strong ink on a faint
+            // wash: a name set apart by its face and ground, not by a colour
+            // that turns a list of names into noise.
             color: if s.link.is_some() {
                 t.colors.primary
             } else if s.code {
-                t.colors.coral
+                t.colors.text_strong
             } else {
                 color
             },
-            background_color: s.code.then(|| t.colors.coral.opacity(0.1)),
+            background_color: s.code.then(|| t.colors.text.opacity(if t.is_dark { 0.09 } else { 0.06 })),
             underline: s.link.is_some().then(|| UnderlineStyle {
                 thickness: px(1.),
                 color: Some(t.colors.primary),
@@ -698,12 +701,15 @@ pub fn render(src: &str, t: &Theme, copy: &CopyContext) -> AnyElement {
 
 pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyElement {
     let doc = look == Look::Document;
+    let aside = look == Look::Aside;
     let blocks = parse(src);
-    let (size, leading) = if doc {
-        (t.size.doc_text, t.size.line_height_doc)
-    } else {
-        (t.size.chat_text, t.size.line_height_chat)
+    let (size, leading) = match look {
+        Look::Document => (t.size.doc_text, t.size.line_height_doc),
+        Look::Aside => (t.text.body_sm, t.size.line_height_chat),
+        Look::Chat => (t.size.chat_text, t.size.line_height_chat),
     };
+    // Prose in the warm body ink, a shade under headings; an aside quieter.
+    let prose = if aside { t.colors.text_muted } else { t.colors.text_body };
     let mut col = div()
         .flex()
         .flex_col()
@@ -723,25 +729,26 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
         };
         let gap = match (prev, kind, doc) {
             (None, _, _) => px(0.),
-            (Some("item"), "item", false) => px(2.),
+            (Some("item"), "item", false) => t.space.xs,
             (Some("item"), "item", true) => px(6.),
-            (_, "heading", false) => t.space.md,
+            (_, "heading", false) => t.space.lg + t.space.xs,
             (_, "heading", true) => t.space.xl + t.space.xs,
-            (Some("heading"), _, false) => t.space.xs,
+            (Some("heading"), _, false) => t.space.sm,
             (Some("heading"), _, true) => t.space.sm + px(2.),
-            (_, "code", false) | (Some("code"), _, false) => t.space.sm,
+            (_, "code", false) | (Some("code"), _, false) => t.space.md,
             (_, "code", true) | (Some("code"), _, true) => t.space.lg,
-            (_, _, false) => t.space.sm - px(2.),
+            // Paragraphs breathe apart, as a page's do.
+            (_, _, false) => t.space.md,
             (_, _, true) => t.space.md,
         };
         prev = Some(kind);
         let id = ElementId::Name(format!("md-{}-{n}", copy.key).into());
         let el: AnyElement = match b {
             Block::Para(spans) if copy.streaming && n == last => div()
-                .child(runs_streaming(id, &spans, t, t.colors.text))
+                .child(runs_streaming(id, &spans, t, prose))
                 .into_any_element(),
             Block::Para(spans) => div()
-                .child(runs(id, &spans, t, FontWeight::NORMAL, t.colors.text))
+                .child(runs(id, &spans, t, FontWeight::NORMAL, prose))
                 .into_any_element(),
             // A document's title is set in the display serif, as the greeting is.
             Block::Heading(1, spans) if doc => div()
@@ -823,7 +830,7 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                     if task == Some(true) {
                         t.colors.text_muted
                     } else {
-                        t.colors.text
+                        prose
                     },
                 )))
                 .into_any_element(),
@@ -831,7 +838,7 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                 .border_l_2()
                 .border_color(t.colors.border)
                 .pl(t.space.md)
-                .child(runs(id, &spans, t, FontWeight::NORMAL, t.colors.text))
+                .child(runs(id, &spans, t, FontWeight::NORMAL, prose))
                 .into_any_element(),
             Block::Rule => crate::theme::rule(t).mx_0().into_any_element(),
             Block::Code { lang, code } => {

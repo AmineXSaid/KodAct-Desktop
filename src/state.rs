@@ -1745,6 +1745,11 @@ pub struct AppState {
     pub open_groups: std::collections::HashSet<(usize, usize, usize)>,
     /// The row a jump landed on, marked for a moment: (chat, message, block).
     pub flash: Option<(usize, usize, usize)>,
+    /// The home screen's dots also behind a chat (off: a chat sits on a
+    /// plain stage, its text the only thing that moves). `chat-pattern.txt`.
+    pub chat_pattern: bool,
+    /// When each thought began and ended: (chat, message, block).
+    thought: std::collections::HashMap<(usize, usize, usize), (std::time::Instant, Option<std::time::Instant>)>,
     /// The task panel and the approvals list are open.
     pub tasks_open: bool,
     pub approvals_open: bool,
@@ -1937,6 +1942,10 @@ impl AppState {
             jump_seq: 0,
             open_groups: Default::default(),
             flash: None,
+            thought: Default::default(),
+            chat_pattern: crate::profile::dir()
+                .and_then(|d| std::fs::read_to_string(d.join("chat-pattern.txt")).ok())
+                .is_some_and(|s| s.trim() == "on"),
             tasks_open: false,
             approvals_open: false,
             compacting: Default::default(),
@@ -4793,6 +4802,16 @@ impl AppState {
         cx.notify();
     }
 
+    /// The dots behind chats, on or off, kept in the config folder.
+    pub fn set_chat_pattern(&mut self, on: bool, cx: &mut Context<Self>) {
+        self.chat_pattern = on;
+        if let Some(dir) = crate::profile::dir() {
+            let _ = std::fs::create_dir_all(&dir);
+            let _ = std::fs::write(dir.join("chat-pattern.txt"), if on { "on" } else { "off" });
+        }
+        cx.notify();
+    }
+
     /// Open or close a run of calls (`work_group`), by its first block.
     pub fn toggle_group(&mut self, chat: usize, msg: usize, start: usize, cx: &mut Context<Self>) {
         let key = (chat, msg, start);
@@ -4817,9 +4836,7 @@ impl AppState {
             if let Some(Message::Assistant { blocks }) = c.messages.get_mut(msg) {
                 start = crate::ui::work_group::run_of(blocks, block, streaming && last).map(|r| r.start);
                 if let Some(Block::Tool(t)) = blocks.get_mut(block) {
-                    // A command in a run shows its block when `open` is off
-                    // (`work_group::as_step`).
-                    t.open = !(start.is_some() && t.kind == ToolKind::Bash);
+                    t.open = true;
                 }
             }
             c.version += 1;
@@ -8159,7 +8176,32 @@ impl AppState {
         blocks.push(block);
         let b = blocks.len() - 1;
         c.version += 1;
+        self.time_thinking(chat);
         Some((m, b))
+    }
+
+    /// When each thought of the newest reply began and ended (it ends when
+    /// anything follows it), for its "Thought for 12s".
+    fn time_thinking(&mut self, chat: usize) {
+        let Some(c) = self.chats.iter().find(|c| c.id == chat) else { return };
+        let m = c.messages.len().saturating_sub(1);
+        let Some(Message::Assistant { blocks }) = c.messages.get(m) else { return };
+        let now = std::time::Instant::now();
+        for (b, blk) in blocks.iter().enumerate() {
+            if !matches!(blk, Block::Thinking { .. }) {
+                continue;
+            }
+            let span = self.thought.entry((chat, m, b)).or_insert((now, None));
+            if span.1.is_none() && b + 1 < blocks.len() {
+                span.1 = Some(now);
+            }
+        }
+    }
+
+    /// How long thought `block` of message `msg` took, once it is over.
+    pub fn thought_secs(&self, chat: usize, msg: usize, block: usize) -> Option<u64> {
+        let (start, end) = self.thought.get(&(chat, msg, block))?;
+        Some(end.as_ref()?.duration_since(*start).as_secs())
     }
 
     fn tool_at(&self, chat: usize, msg: usize, block: usize) -> Option<&ToolCall> {
@@ -8584,8 +8626,7 @@ impl AppState {
                     status: ToolStatus::Running,
                     output: "".into(),
                     diff: vec![],
-                    // A command's terminal block is open from the start, as in Forge.
-                    open: kind == ToolKind::Bash,
+                    open: false,
                     full: false,
                     review: Review::Open,
                 }))
@@ -8730,6 +8771,7 @@ impl AppState {
         if let Some(c) = self.chat_mut(chat) {
             c.version += 1;
         }
+        self.time_thinking(chat);
         cx.notify();
     }
 }
@@ -8917,7 +8959,7 @@ fn demo_questions() -> Vec<Step> {
         "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.12s".into(),
     ));
     s.extend(words(
-        "The core builds. **Stack**: Tauri v2 with a Rust core; **storage**: JSON files, written atomically.",
+        "The core builds, and the layout follows your two answers.\n\n**What is in place**\n- `folio-core`: the document model (`Sheet`, `Sticker`, `Stroke`) with stable ids.\n- `store.rs`: each sheet is one JSON file, written to a temporary file and renamed, so a crash never leaves half a sheet.\n- `backup.rs`: a zip of the workspace on demand.\n\nThe first write failed because `cargo init` had already made `Cargo.toml`; I read it and edited it instead. The build then stopped on a missing `From<ZipError>`, which now has its own error variant.\n\nNext I'll put the Tauri shell on top and wire the board's drag and drop to `store::save`.",
         Step::Say,
     ));
     s

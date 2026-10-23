@@ -126,8 +126,13 @@ command ask, in every mode.
   Cargo.toml") with its reason, and its change is marked Not applied. A
   call cut off by Stop reads "Stopped": it may have taken effect, so check
   before running it again.
-- **This turn's tasks** (Ctrl/⌘ Shift T): a click on a task scrolls to its
+- **This turn's tasks** (Ctrl/⌘ Shift T): a quiet button in the title bar
+  while work runs or something failed; a click on a task scrolls to its
   row, opens it and marks it for a moment.
+- **Thinking** folds to "Thought for 12s"; opened, it is set small and muted
+  and a long one scrolls in place.
+- **Background.** A chat sits on a plain background; Settings → General →
+  "Pattern behind chats" brings the new-chat screen's dots behind it too.
 
 ## Projects
 

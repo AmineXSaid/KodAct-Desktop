@@ -986,6 +986,9 @@ impl Settings {
                     cx.notify();
                 })
             });
+        let (state, pattern) = (self.state.clone(), self.state.read(cx).chat_pattern);
+        let pattern_row = super::button::Switch::new("chat-pattern", pattern, "Pattern behind chats")
+            .on_toggle(move |on, _, cx| state.update(cx, |s, cx| s.set_chat_pattern(on, cx)));
         let browser_row = super::button::Switch::new("browser", browser, "Web browser")
             .on_toggle(|_, window, cx| window.dispatch_action(Box::new(super::ToggleBrowser), cx));
         // Each group is one white card with hairline rows: the setting on
@@ -1015,6 +1018,13 @@ impl Settings {
                         Some("The surfaces and the one colour; every theme comes in light and dark."),
                         theme_picker,
                         true,
+                    ),
+                    Self::row(
+                        t,
+                        "Pattern behind chats",
+                        Some("The new-chat screen's dots, also behind a conversation. Off, a chat sits on a plain background."),
+                        pattern_row.into_any_element(),
+                        false,
                     ),
                 ],
             ),

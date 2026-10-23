@@ -40,7 +40,7 @@ Lucide, 2px stroke as drawn. Sizes: 12 / 14 / 16 / 20 only.
 ### Sizes
 - `titlebar`: 36px, the title bar's height
 - `sidebar`: 288px, the sidebar's width
-- `column`: 760px, the reading column
+- `column`: 720px, the reading column
 - `composer_width`: 560px, the composer's widest
 - `row`: 30px, sidebar rows, menu items
 - `control`: 26px, small buttons, pills, title-bar controls
@@ -94,17 +94,17 @@ Picked in Settings > General > Theme and kept in `window.json`. Each is a whole 
 
 | Theme | Faces (UI / display / code / replies) | Corners button · card · field · composer · pressed | Row · title bar · chat | Depth | Selected row |
 |---|---|---|---|---|---|
-| Calmly smooth | Archivo / Archivo / JetBrains Mono / Archivo | 4 · 4 · 4 · 4 · pill | 30 · 36 · 15 | Grain | Soft |
+| Calmly smooth | Archivo / Archivo / JetBrains Mono / Archivo | 4 · 4 · 4 · 4 · pill | 30 · 36 · 16 | Grain | Soft |
 | Terracotta | Hanken Grotesk / Source Serif 4 Display / JetBrains Mono / Source Serif 4 | 8 · 12 · 10 · 16 · pill | 32 · 40 · 16 | Lift | Card |
-| Patina | Inter / Inter / JetBrains Mono / Inter | 6 · 8 · 6 · 12 · 6 | 30 · 36 · 14 | Flat | Tint |
-| Ink | Geist / Geist / Geist Mono / Geist | 6 · 8 · 8 · 12 · 8 | 30 · 36 · 14 | Flat | Wash |
-| Slate | IBM Plex Sans / IBM Plex Sans / IBM Plex Mono / IBM Plex Sans | 3 · 4 · 3 · 6 · 4 | 26 · 32 · 13 | Flat | Tint |
+| Patina | Inter / Inter / JetBrains Mono / Inter | 6 · 8 · 6 · 12 · 6 | 30 · 36 · 15 | Flat | Tint |
+| Ink | Geist / Geist / Geist Mono / Geist | 6 · 8 · 8 · 12 · 8 | 30 · 36 · 15 | Flat | Wash |
+| Slate | IBM Plex Sans / IBM Plex Sans / IBM Plex Mono / IBM Plex Sans | 3 · 4 · 3 · 6 · 4 | 26 · 32 · 14 | Flat | Tint |
 | Plum | Instrument Sans / Instrument Serif / JetBrains Mono / Instrument Sans | 12 · 16 · 14 · 22 · pill | 32 · 38 · 15 | Lift | Soft |
-| Layers | Hanken Grotesk / Archivo / JetBrains Mono / Hanken Grotesk | 8 · 14 · 10 · 18 · pill | 32 · 40 · 15 | Lift | Card |
-| Tray | Hanken Grotesk / Archivo / JetBrains Mono / Hanken Grotesk | 9999 · 12 · 10 · 20 · pill | 32 · 38 · 15 | Lift | Card |
-| Studio | Hanken Grotesk / Archivo / JetBrains Mono / Hanken Grotesk | 8 · 10 · 8 · 18 · 8 | 30 · 36 · 14 | Lift | Soft |
+| Layers | Hanken Grotesk / Archivo / JetBrains Mono / Hanken Grotesk | 8 · 14 · 10 · 18 · pill | 32 · 40 · 16 | Lift | Card |
+| Tray | Hanken Grotesk / Archivo / JetBrains Mono / Hanken Grotesk | 9999 · 12 · 10 · 20 · pill | 32 · 38 · 16 | Lift | Card |
+| Studio | Hanken Grotesk / Archivo / JetBrains Mono / Hanken Grotesk | 8 · 10 · 8 · 18 · 8 | 30 · 36 · 15 | Lift | Soft |
 | Tiles | Hanken Grotesk / Archivo / JetBrains Mono / Hanken Grotesk | 12 · 18 · 12 · 22 · 12 | 34 · 40 · 15 | Lift | Wash |
-| Command | Hanken Grotesk / Archivo / JetBrains Mono / Hanken Grotesk | 8 · 10 · 9 · 16 · 10 | 30 · 36 · 14 | Grain | Wash |
+| Command | Hanken Grotesk / Archivo / JetBrains Mono / Hanken Grotesk | 8 · 10 · 9 · 16 · 10 | 30 · 36 · 15 | Grain | Wash |
 
 ### Terminal
 The dock's 16 colours, on `stage` (`palette_check.rs` holds them to AA).

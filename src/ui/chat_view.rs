@@ -454,7 +454,7 @@ impl ChatView {
         match (r.root.get(), r.row.get()) {
             (Some(root), Some(row)) => {
                 let t = cx.theme();
-                let margin = t.size.control + t.space.lg;
+                let margin = t.space.lg;
                 self.list.scroll_to(gpui::ListOffset {
                     item_ix: *ix,
                     offset_in_item: (row - root - margin).max(px(0.)),
@@ -604,6 +604,15 @@ impl Render for ChatView {
                             .filter(|(c, m, _)| *c == chat.id && *m == ix)
                             .map(|(_, _, b)| b),
                         other: other.clone().filter(|_| other_msg == Some(ix)),
+                        thoughts: match m {
+                            Message::Assistant { blocks } => blocks
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, b)| matches!(b, Block::Thinking { .. }))
+                                .filter_map(|(b, _)| Some((b, s.thought_secs(chat.id, ix, b)?)))
+                                .collect(),
+                            _ => vec![],
+                        },
                         reveal: reveal
                             .as_ref()
                             .filter(|(m, _)| *m == ix)
@@ -653,16 +662,7 @@ impl Render for ChatView {
                 .flex()
                 .justify_center()
                 .px(t.space.xl)
-                // The task pill sits over the top of the transcript: the first
-                // message starts below it.
-                .when(ix == 0, |d| {
-                    let pill = !super::tasks::tasks(&chat.messages).is_empty();
-                    d.pt(if pill {
-                        t.space.xl + t.size.control
-                    } else {
-                        t.space.xl
-                    })
-                })
+                .when(ix == 0, |d| d.pt(t.space.xl))
                 .child(
                     div()
                         .relative()
@@ -703,7 +703,7 @@ impl Render for ChatView {
 }
 
 /// `12s`, `1m 7s`, `1h 3m`.
-fn elapsed(seconds: u64) -> String {
+pub(super) fn elapsed(seconds: u64) -> String {
     match seconds {
         0..=59 => format!("{seconds}s"),
         60..=3599 => format!("{}m {}s", seconds / 60, seconds % 60),
