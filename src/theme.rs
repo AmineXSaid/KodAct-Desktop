@@ -202,6 +202,8 @@ impl Look {
             Look::Calm => Form {
                 sans: Some("Hanken Grotesk"),
                 display: Some("Hanken Grotesk"),
+                // Denser, as Claude Code sets a reply: a third more on screen.
+                chat: (15., 24.),
                 ..base
             },
             // Claude's school: a warm grotesk, replies set like a letter in

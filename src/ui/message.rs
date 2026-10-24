@@ -695,10 +695,11 @@ fn assistant(blocks: &[Block], cx: &ItemContext, t: &Theme) -> AnyElement {
     if !edited.is_empty() && !(cx.busy && cx.last) {
         rows.push(super::changed_files::render(&edited, cx.edited_open, cx, t));
     }
+    // Rows inside a reply sit closer than paragraphs do.
     div()
         .flex()
         .flex_col()
-        .gap(t.space.md)
+        .gap(t.space.sm)
         .children(rows)
         .into_any_element()
 }
