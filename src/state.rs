@@ -1474,6 +1474,9 @@ fn same_file(full: &str, target: &str) -> bool {
 /// What Continue sends: Forge picks up where Stop cut it off.
 const CONTINUE_PROMPT: &str = "Continue from where you stopped.";
 
+/// The largest file the Files pane's viewer shows, in bytes.
+const FILES_VIEW_MAX: usize = 1 << 20;
+
 /// `FORGE_DEMO=1`: replies are the scripted demo instead of ForgeCLI.
 pub(crate) fn demo_mode() -> bool {
     std::env::var("FORGE_DEMO").is_ok_and(|v| v == "1")
@@ -1833,6 +1836,12 @@ pub struct AppState {
     pub context_open: bool,
     /// The versions list open under your message: (chat, message).
     pub versions_open: Option<(usize, usize)>,
+    /// The Files pane (`ui/files_pane.rs`) is open: the project's tree
+    /// beside a viewer, under any file open in the side panel.
+    pub files_open: bool,
+    /// The file in its viewer (project-relative) and its text once read, or
+    /// why it can't show.
+    pub files_view: Option<(String, Option<Result<SharedString, String>>)>,
     /// Replies whose "Edited N files" card shows every file, by (chat, message).
     pub edited_open: Vec<(usize, usize)>,
     /// A jump to show: its number, the message, and the block in it to
@@ -2044,6 +2053,8 @@ impl AppState {
             context_open: false,
             versions_open: None,
             edited_open: vec![],
+            files_open: false,
+            files_view: None,
             jump: None,
             jump_seq: 0,
             open_groups: Default::default(),
@@ -5752,6 +5763,90 @@ impl AppState {
                 self.ask_context_usage(chat);
             }
         }
+        cx.notify();
+    }
+
+    /// Open or close the Files pane; opening reads the project's tree.
+    pub fn toggle_files(&mut self, cx: &mut Context<Self>) {
+        self.files_open = !self.files_open;
+        if self.files_open {
+            self.ensure_completions(cx);
+        }
+        cx.notify();
+    }
+
+    /// Read the project's tree again, for the Files pane.
+    pub fn refresh_files(&mut self, cx: &mut Context<Self>) {
+        self.file_index = None;
+        self.ensure_completions(cx);
+        if let Some((rel, _)) = self.files_view.clone() {
+            self.open_in_files(rel, cx);
+        }
+        cx.notify();
+    }
+
+    /// Open a project file from the Files pane: a document in the side
+    /// panel above it, text in the pane's own viewer, anything else in the
+    /// app the system opens it with. Read off the UI thread.
+    pub fn open_in_files(&mut self, rel: String, cx: &mut Context<Self>) {
+        let ext = rel
+            .rsplit_once('.')
+            .map(|(_, e)| e.to_ascii_lowercase())
+            .unwrap_or_default();
+        if matches!(
+            ext.as_str(),
+            "md" | "markdown" | "svg" | "html" | "htm" | "docx" | "xlsx" | "pptx" | "pdf"
+        ) {
+            return self.open_project_file(rel, cx);
+        }
+        let remote = self
+            .current_remote()
+            .map(|r| (self.remote_extra(&r.target), r));
+        let local = self.project_dir.join(&rel);
+        self.files_view = Some((rel.clone(), None));
+        cx.notify();
+        let read = cx.background_spawn(async move {
+            match remote {
+                Some((extra, r)) => {
+                    let full = format!("{}/{rel}", r.path.trim_end_matches('/'));
+                    crate::remote::read_file(&r.target, &full, FILES_VIEW_MAX as u64, &extra)
+                        .map_err(|e| e.to_string())
+                }
+                None => match std::fs::metadata(&local) {
+                    Ok(m) if m.len() > FILES_VIEW_MAX as u64 => Err(format!(
+                        "This file is {} KB; the viewer shows files up to {} KB.",
+                        m.len() / 1024,
+                        FILES_VIEW_MAX / 1024
+                    )),
+                    _ => std::fs::read(&local).map_err(|e| e.to_string()),
+                },
+            }
+        });
+        cx.spawn(async move |this, cx| {
+            let read = read.await;
+            let _ = this.update(cx, |s, cx| {
+                let Some((rel, text)) = s.files_view.as_mut() else {
+                    return;
+                };
+                match read.map(String::from_utf8) {
+                    Ok(Ok(t)) => *text = Some(Ok(t.into())),
+                    // Not text: the system's app for it.
+                    Ok(Err(_)) => {
+                        let rel = rel.clone();
+                        s.files_view = None;
+                        s.open_project_file(rel, cx);
+                    }
+                    Err(e) => *text = Some(Err(e)),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Close the file in the Files pane's viewer.
+    pub fn close_files_view(&mut self, cx: &mut Context<Self>) {
+        self.files_view = None;
         cx.notify();
     }
 

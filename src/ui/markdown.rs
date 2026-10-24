@@ -173,6 +173,26 @@ fn fence_ascii_art(src: &str) -> std::borrow::Cow<'_, str> {
     }
 }
 
+/// A file's YAML front matter (`---` lines around it, at the very top) as a
+/// `yaml` code block: Markdown would read it as a rule and one big heading.
+pub fn fence_front_matter(src: &str) -> std::borrow::Cow<'_, str> {
+    let Some(rest) = src
+        .strip_prefix("---\n")
+        .or_else(|| src.strip_prefix("---\r\n"))
+    else {
+        return src.into();
+    };
+    let mut at = 0;
+    for line in rest.split_inclusive('\n') {
+        if matches!(line.trim_end(), "---" | "...") {
+            let (yaml, after) = (&rest[..at], &rest[at + line.len()..]);
+            return format!("```yaml\n{yaml}```\n{after}").into();
+        }
+        at += line.len();
+    }
+    src.into()
+}
+
 fn parse(src: &str) -> Vec<Block> {
     let mut out = vec![];
     let mut spans: Vec<Span> = vec![];
@@ -209,7 +229,8 @@ fn parse(src: &str) -> Vec<Block> {
         }
     };
 
-    let src = fence_ascii_art(src);
+    let src = fence_front_matter(src);
+    let src = fence_ascii_art(&src);
     for ev in Parser::new_ext(
         &src,
         Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS,
@@ -1424,6 +1445,16 @@ pub fn lang_of(path: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn front_matter_reads_as_yaml_not_a_heading() {
+        let out = super::fence_front_matter("---\nname: Forge\ncolors: x\n---\n# Title\n");
+        assert_eq!(out, "```yaml\nname: Forge\ncolors: x\n```\n# Title\n");
+        // A rule later on, or an unclosed block, stays as written.
+        assert_eq!(super::fence_front_matter("Hi\n---\n"), "Hi\n---\n");
+        assert_eq!(super::fence_front_matter("---\nno end"), "---\nno end");
+    }
+
     use super::*;
 
     #[test]

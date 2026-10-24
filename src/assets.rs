@@ -57,6 +57,7 @@ icons!(
     // Attachment chips and the @ list: a file's kind (any file attaches).
     "file",
     "folder",
+    "list-tree",
     "file-code",
     "file-json",
     "file-cog",

@@ -748,6 +748,18 @@ impl CommandPalette {
                     Box::new(ShareChat),
                 ),
                 act(
+                    "Show the project's files",
+                    "icons/folder.svg",
+                    None,
+                    Box::new(ToggleFiles),
+                ),
+                act(
+                    "Show the files this chat made",
+                    "icons/file-text.svg",
+                    None,
+                    Box::new(ShowChatFiles),
+                ),
+                act(
                     "Show the session: where it runs, its context, its changes",
                     "icons/panel-right.svg",
                     None,

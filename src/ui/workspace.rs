@@ -9,6 +9,9 @@ use gpui::{
 };
 
 use super::chat_view::ChatView;
+
+/// The Files pane's share of the side column, under a file open above it.
+const FILES_SHARE: f32 = 0.5;
 use super::command_palette::CommandPalette;
 use super::composer::Composer;
 use super::confirm::ConfirmWindow;
@@ -50,6 +53,8 @@ pub struct Workspace {
     doc_comments: Entity<super::doc_comments::DocComments>,
     /// Find in the file in the side panel (`doc_find.rs`).
     doc_find: Entity<super::doc_find::DocFind>,
+    /// The project's tree and a viewer, under the side panel (`files_pane.rs`).
+    files: Entity<super::files_pane::FilesPane>,
     /// The film as Forge opens, while it plays (`opener.rs`).
     opener: Option<Entity<super::opener::Opener>>,
     _opener_sub: Option<gpui::Subscription>,
@@ -109,6 +114,7 @@ impl Workspace {
         let doc_comments =
             cx.new(|cx| super::doc_comments::DocComments::new(state.clone(), window, cx));
         let doc_find = cx.new(|cx| super::doc_find::DocFind::new(state.clone(), window, cx));
+        let files = cx.new(|cx| super::files_pane::FilesPane::new(state.clone(), window, cx));
         let composer_focus = composer.read(cx).focus_handle(cx);
         let dots = cx.new(|cx| super::dot_field::DotField::new(Some(composer_focus), window, cx));
         let first_run = state.read(cx).onboarding;
@@ -161,6 +167,7 @@ impl Workspace {
             dots,
             doc_comments,
             doc_find,
+            files,
             opener,
             _opener_sub: opener_sub,
             focus: cx.focus_handle(),
@@ -282,7 +289,7 @@ impl Workspace {
         let hover = t.colors.hover;
         let (tint, ink) = (t.colors.primary_tint, t.colors.primary);
         let side = s.doc.is_none().then_some(s.panel).flatten();
-        let (plan_on, files_on) = (side == Some(PanelTab::Plan), side == Some(PanelTab::Files));
+        let (plan_on, files_on) = (side == Some(PanelTab::Plan), s.files_open);
         let menu = s.title_menu.map(|(m, _)| m);
         let (share_on, more_on) = (menu == Some(TitleMenu::Share), menu == Some(TitleMenu::More));
         let session_on = s.session_open;
@@ -528,7 +535,7 @@ impl Workspace {
                 .child(
                     toggle("show-files", "icons/folder.svg", "Files", files_on).on_click(
                         cx.listener(|this, _, _, cx| {
-                            this.state.update(cx, |s, cx| s.toggle_panel_tab(PanelTab::Files, cx))
+                            this.state.update(cx, |s, cx| s.toggle_files(cx))
                         }),
                     ),
                 )
@@ -705,9 +712,11 @@ impl Render for Workspace {
         let empty = s.chat().is_none_or(|c| c.messages.is_empty());
         self.dots.read(cx).set_backdrop(!empty, s.busy());
         let chat_pattern = s.chat_pattern;
-        let below = s.doc_below;
+        let files_open = s.files_open;
+        // With Files open the side column stands beside the chat.
+        let below = s.doc_below && !files_open;
         let terminal_open = s.terminal_open;
-        let side_open = s.doc.is_some() || s.panel.is_some();
+        let side_open = s.doc.is_some() || s.panel.is_some() || files_open;
         // What is left of the window beside the sidebar is shared by the
         // chat, the side panel and the dock; the chat keeps its narrowest.
         let beside = f32::from(window.viewport_size().width)
@@ -753,10 +762,10 @@ impl Render for Workspace {
             let s = self.state.read(cx);
             let main_width = beside - if terminal_open { dock_w } else { 0. };
             let fit = super::doc_pane::Fit {
-                width: if s.doc_below { main_width } else { panel_w },
+                width: if below { main_width } else { panel_w },
                 scale: window.scale_factor(),
                 fit: s.doc_fit,
-                below: s.doc_below,
+                below,
                 from_panel: s.panel.is_some(),
                 text: s.doc_text,
                 version: {
@@ -810,14 +819,15 @@ impl Render for Workspace {
                         working: s.busy(),
                         copied: s.copied.clone(),
                         width: fit.width,
-                        below: s.doc_below,
+                        below,
                         scale: fit.scale,
                     },
                     self.state.clone(),
                     &t,
                 )
             });
-            s.doc
+            let has_top = s.doc.is_some() || s.panel.is_some();
+            let top = s.doc
                 .as_ref()
                 .map(|f| {
                     super::doc_pane::render(
@@ -835,7 +845,39 @@ impl Render for Workspace {
                     )
                 })
                 .or(panel)
-                .map(|p| super::motion::slide_in(p, pane_width, pane_below, &t))
+                .map(|p| match files_open {
+                    // A file or tab above, the Files pane under it.
+                    true => div()
+                        .flex_1()
+                        .min_h_0()
+                        .flex()
+                        .child(p)
+                        .into_any_element(),
+                    false => p,
+                });
+            let column = match (top, files_open) {
+                (top, true) => Some(
+                    div()
+                        .w(px(pane_width))
+                        .h_full()
+                        .flex()
+                        .flex_col()
+                        .border_l_1()
+                        .border_color(t.colors.border)
+                        .children(top)
+                        .child(
+                            div()
+                                .when(has_top, |d| d.h(gpui::relative(FILES_SHARE)).border_t_1())
+                                .when(!has_top, |d| d.flex_1())
+                                .min_h_0()
+                                .border_color(t.colors.border)
+                                .child(self.files.clone()),
+                        )
+                        .into_any_element(),
+                ),
+                (top, false) => top,
+            };
+            column.map(|p| super::motion::slide_in(p, pane_width, pane_below, &t))
         };
         let main = if screen == Screen::Rules {
             main.child(self.rules.clone())
@@ -1007,6 +1049,12 @@ impl Render for Workspace {
             .flex_col()
             .on_action(cx.listener(|this, _: &ToggleSession, _, cx| {
                 this.state.update(cx, |s, cx| s.toggle_session(cx))
+            }))
+            .on_action(cx.listener(|this, _: &ToggleFiles, _, cx| {
+                this.state.update(cx, |s, cx| s.toggle_files(cx))
+            }))
+            .on_action(cx.listener(|this, _: &ShowChatFiles, _, cx| {
+                this.state.update(cx, |s, cx| s.toggle_panel_tab(PanelTab::Files, cx))
             }))
             .on_action(cx.listener(|this, _: &OpenDocuments, _, cx| {
                 this.state.update(cx, |s, cx| {

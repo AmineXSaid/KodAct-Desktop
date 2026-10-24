@@ -475,7 +475,7 @@ fn selectable(name: &str, text: &str, t: &Theme) -> AnyElement {
         .child(
             gpui::component::text::TextView::markdown(
                 SharedString::from(format!("doc-text-{name}")),
-                text.to_string(),
+                super::markdown::fence_front_matter(text).into_owned(),
             )
             .selectable(true),
         )

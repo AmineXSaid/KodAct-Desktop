@@ -43,6 +43,7 @@ pub mod select;
 pub mod file_icon;
 pub mod file_icon_map;
 pub mod file_mark;
+pub mod files_pane;
 pub mod find_bar;
 pub mod guide;
 pub mod hooks_editor;
@@ -173,6 +174,8 @@ gpui::actions!(
         ArchiveChat,
         OpenDocuments,
         ToggleSession,
+        ToggleFiles,
+        ShowChatFiles,
         ToggleDetailedView,
         ContinueInNewChat,
         CopyChatMarkdown,
