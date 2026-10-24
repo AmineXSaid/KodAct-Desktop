@@ -600,6 +600,7 @@ impl Render for ChatView {
                             vec![]
                         },
                         versions_open: s.versions_open == Some((chat.id, ix)),
+                        edited_open: s.edited_open.contains(&(chat.id, ix)),
                         sources: s.diagram_code.clone(),
                         zooms: s.diagram_zoom.clone(),
                         detailed: chat.detailed,

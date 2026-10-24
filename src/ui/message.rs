@@ -70,6 +70,8 @@ pub struct ItemContext {
     pub other: Option<gpui::Entity<gpui::component::input::InputState>>,
     /// How long each finished thought here took, in seconds, by block.
     pub thoughts: Vec<(usize, u64)>,
+    /// This reply's "Edited N files" card shows every file.
+    pub edited_open: bool,
 }
 
 /// Where a jump's block is drawn, so the list can scroll it into view: the
@@ -687,6 +689,11 @@ fn assistant(blocks: &[Block], cx: &ItemContext, t: &Theme) -> AnyElement {
                 rows.push(noted(last, r.clone(), false));
             }
         }
+    }
+    // A finished reply that changed files ends on what it changed.
+    let edited = super::changed_files::changed(blocks);
+    if !edited.is_empty() && !(cx.busy && cx.last) {
+        rows.push(super::changed_files::render(&edited, cx.edited_open, cx, t));
     }
     div()
         .flex()

@@ -1833,6 +1833,8 @@ pub struct AppState {
     pub context_open: bool,
     /// The versions list open under your message: (chat, message).
     pub versions_open: Option<(usize, usize)>,
+    /// Replies whose "Edited N files" card shows every file, by (chat, message).
+    pub edited_open: Vec<(usize, usize)>,
     /// A jump to show: its number, the message, and the block in it to
     /// bring into view (None: the message's top).
     pub jump: Option<(u64, usize, Option<usize>)>,
@@ -2041,6 +2043,7 @@ impl AppState {
             completions_loading: false,
             context_open: false,
             versions_open: None,
+            edited_open: vec![],
             jump: None,
             jump_seq: 0,
             open_groups: Default::default(),
@@ -5752,6 +5755,17 @@ impl AppState {
         cx.notify();
     }
 
+    /// Show every file in a reply's "Edited N files" card, or five again.
+    pub fn toggle_edited(&mut self, chat: usize, msg: usize, cx: &mut Context<Self>) {
+        match self.edited_open.iter().position(|k| *k == (chat, msg)) {
+            Some(i) => {
+                self.edited_open.remove(i);
+            }
+            None => self.edited_open.push((chat, msg)),
+        }
+        cx.notify();
+    }
+
     /// Fold or unfold one of the Session column's cards.
     pub fn fold_session_card(&mut self, card: &'static str, cx: &mut Context<Self>) {
         match self.session_folded.iter().position(|c| *c == card) {
@@ -9218,6 +9232,45 @@ fn diff(lines: &[(DiffKind, &str)]) -> Vec<DiffLine> {
         .collect()
 }
 
+/// A reply that changes nine files in one run, so it ends on the "Edited 9
+/// files" card: each file with its lines added and removed.
+fn demo_refactor() -> Vec<Step> {
+    let mut s = words(
+        "I'll move the sync settings into their own module and wire the installer to it.",
+        Step::Say,
+    );
+    let files: [(&str, usize, usize); 9] = [
+        ("config/sync.toml", 5, 0),
+        ("scripts/sync_open_design.py", 12, 0),
+        ("installer/forge.nsi", 3, 0),
+        ("installer/build.sh", 4, 1),
+        ("installer/README.md", 4, 2),
+        ("src/sync.rs", 16, 1),
+        ("src/main.rs", 2, 0),
+        ("README.md", 4, 1),
+        ("docs/endpoints.md", 9, 1),
+    ];
+    for (path, adds, dels) in files {
+        let mut change: Vec<DiffLine> = (0..dels)
+            .map(|i| DiffLine {
+                kind: DiffKind::Del,
+                text: format!("old sync line {}", i + 1).into(),
+            })
+            .collect();
+        change.extend((0..adds).map(|i| DiffLine {
+            kind: DiffKind::Add,
+            text: format!("sync setting {}", i + 1).into(),
+        }));
+        s.push(Step::ToolStart(ToolKind::Edit, path.into(), None));
+        s.push(Step::ToolDone("The file was updated.".into(), change));
+    }
+    s.extend(words(
+        "Done: the sync settings live in `config/sync.toml`, and the installer reads them.",
+        Step::Say,
+    ));
+    s
+}
+
 /// The demo's drawn answer: a flowchart and a sequence, in Mermaid.
 const DEMO_DIAGRAM: &str = "Here is how a message travels through Forge.\n\n```mermaid\nflowchart TD\n  A[You type a message] --> B{Endpoint set up?}\n  B -->|no| C[Settings › Models]\n  C --> D\n  B -->|yes| D[ForgeCLI process]\n  D -.->|stream-json| E([Reply in the chat])\n  D --> F[(Session log)]\n```\n\nAnd the turn itself, step by step:\n\n```mermaid\nsequenceDiagram\n  autonumber\n  participant U as You\n  participant D as Forge\n  participant C as ForgeCLI\n  U->>D: Send\n  D->>C: user turn\n  loop each tool call\n    C-->>D: tool_use / tool_result\n  end\n  C-->>D: result\n  D-->>U: Reply\n```";
 
@@ -9555,6 +9608,7 @@ fn demo_title(prompt: &str) -> Option<&'static str> {
         ("plan", "Settings migration plan"),
         ("chart", "Test times by crate"),
         ("ascii", "Window layout sketch"),
+        ("refactor", "Refactor the sync settings"),
     ]
     .into_iter()
     .find(|(key, _)| lower.contains(key))
@@ -9631,6 +9685,11 @@ fn script(prompt: &str) -> Vec<Step> {
     if lower.contains("plan") {
         s.extend(demo_plan());
         s.push(Step::End { seconds: 5.2 });
+        return s;
+    }
+    if lower.contains("refactor") {
+        s.extend(demo_refactor());
+        s.push(Step::End { seconds: 12.7 });
         return s;
     }
     if lower.contains("chart") {

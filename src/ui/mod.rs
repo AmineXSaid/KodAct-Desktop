@@ -9,6 +9,7 @@ pub mod attachments;
 pub mod autocomplete;
 pub mod browser_view;
 pub mod button;
+pub mod changed_files;
 pub mod chat_menu;
 pub mod documents;
 pub mod session_panel;
