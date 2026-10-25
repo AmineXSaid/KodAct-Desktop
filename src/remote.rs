@@ -785,6 +785,44 @@ cd "$(x "$1")" 2>/dev/null || exit 3
         .collect())
 }
 
+/// The skills ForgeCLI on the remote loads, from its folders there (yours,
+/// `$FORGE_HOME` or `~/.config/forge`, then the project's `.agents` and
+/// `.forge`): each skill's folder name and its SKILL.md frontmatter.
+pub fn skill_heads(target: &Target, path: &str, extra: &Extra) -> Result<Vec<(String, String)>, Error> {
+    let script = format!(
+        r#"{TILDE}
+d=$(x "$1")
+u=${{FORGE_HOME:-${{XDG_CONFIG_HOME:-$HOME/.config}}/forge}}
+for r in "$u/skills" "$d/.agents/skills" "$d/.forge/skills"; do
+  for f in "$r"/*/SKILL.md; do
+    [ -f "$f" ] || continue
+    printf '\036%s\n' "$(basename "$(dirname "$f")")"
+    head -n 80 "$f" | awk 'NR==1 && !/^---/ {{exit}} {{print}} NR>1 && /^---/ {{exit}}'
+  done
+done
+true"#
+    );
+    let out = run(
+        target,
+        &script,
+        &[path.to_string()],
+        b"",
+        Duration::from_secs(30),
+        extra,
+    )?;
+    Ok(parse_skill_heads(&String::from_utf8_lossy(&out)))
+}
+
+/// [`skill_heads`]' output: a record separator, the folder, then its frontmatter.
+fn parse_skill_heads(out: &str) -> Vec<(String, String)> {
+    out.split('\u{1e}')
+        .filter_map(|rec| {
+            let (folder, head) = rec.split_once('\n')?;
+            (!folder.is_empty()).then(|| (folder.to_string(), head.to_string()))
+        })
+        .collect()
+}
+
 // ---------------------------------------------------------------- discovery
 
 /// A WSL distro, from `wsl.exe -l -v`.
@@ -1675,6 +1713,15 @@ pub fn browser_mcp_config(port: u16, token: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_remote_s_skills_are_read_from_their_frontmatter() {
+        let out = "\u{1e}tls\n---\nname: tls\ndescription: TLS\n---\n\u{1e}empty\n";
+        let heads = super::parse_skill_heads(out);
+        assert_eq!(heads[0], ("tls".to_string(), "---\nname: tls\ndescription: TLS\n---\n".to_string()));
+        assert_eq!(heads[1], ("empty".to_string(), String::new()));
+        assert!(super::parse_skill_heads("").is_empty());
+    }
+
     use super::*;
 
     #[test]

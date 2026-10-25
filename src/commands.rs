@@ -265,15 +265,11 @@ const BUNDLED_SKILLS: &[(&str, &str)] = &[
 /// A skill marked `user-invocable: false` is the model's alone. Reads
 /// files: call it off the UI thread.
 pub fn skills(project: &std::path::Path) -> Vec<Command> {
-    let mut out: Vec<Command> = crate::forge_files::skills(project)
+    let own = crate::forge_files::skills(project)
         .into_iter()
         .filter(|s| s.enabled && s.problem.is_none())
         .filter(|s| {
-            !std::fs::read_to_string(s.dir.join("SKILL.md")).is_ok_and(|md| {
-                md.lines()
-                    .take_while(|l| !l.is_empty())
-                    .any(|l| l.replace(' ', "") == "user-invocable:false")
-            })
+            std::fs::read_to_string(s.dir.join("SKILL.md")).map_or(true, |md| invocable(&md))
         })
         .map(|s| Command {
             name: s.name,
@@ -281,10 +277,58 @@ pub fn skills(project: &std::path::Path) -> Vec<Command> {
             description: s.description,
         })
         .collect();
+    with_shipped(own)
+}
+
+/// The skills a remote's ForgeCLI loads: its own folders' (each SKILL.md's
+/// frontmatter, read over the connection: `remote::skill_heads`), then
+/// Forge's plugin and ForgeCLI's own, as [`skills`] lists them here.
+pub fn remote_skills(heads: &[(String, String)]) -> Vec<Command> {
+    let own = heads
+        .iter()
+        .filter(|(_, md)| invocable(md))
+        .filter_map(|(folder, md)| {
+            let doc = crate::forge_files::Doc::parse(md);
+            let description = doc.get("description").filter(|d| !d.is_empty())?;
+            Some(Command {
+                name: doc.get("name").filter(|n| !n.is_empty()).unwrap_or_else(|| folder.clone()),
+                args: String::new(),
+                description,
+            })
+        })
+        .collect();
+    with_shipped(own)
+}
+
+/// A skill you may run yourself: not marked `user-invocable: false`.
+fn invocable(md: &str) -> bool {
+    !md.lines()
+        .take_while(|l| !l.is_empty())
+        .any(|l| l.replace(' ', "") == "user-invocable:false")
+}
+
+/// Your skills, sorted, then the ones that come with Forge: its plugin's
+/// (`forge:diagram-design`) and ForgeCLI's own.
+fn with_shipped(mut out: Vec<Command>) -> Vec<Command> {
     out.sort_by(|a, b| a.name.cmp(&b.name));
     out.dedup_by(|a, b| a.name == b.name);
-    out.extend(bundled_skills().filter(|b| !out.iter().any(|c| c.name == b.name)).collect::<Vec<_>>());
+    let shipped: Vec<Command> = plugin_skills()
+        .chain(bundled_skills())
+        .filter(|b| !out.iter().any(|c| c.name == b.name))
+        .collect();
+    out.extend(shipped);
     out
+}
+
+/// Forge's plugin's skills, as ForgeCLI names them (`forge:diagram-design`).
+pub fn plugin_skills() -> impl Iterator<Item = Command> {
+    crate::plugin::skills()
+        .into_iter()
+        .map(|(name, description)| Command {
+            name,
+            args: String::new(),
+            description,
+        })
 }
 
 /// ForgeCLI's own skills, which every project has.
@@ -308,6 +352,21 @@ pub fn is_immediate(text: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_remote_lists_its_own_skills_and_forge_s() {
+        let heads = vec![
+            ("tls-notes".to_string(), "---\nname: tls-notes\ndescription: Explain TLS\n---\n".to_string()),
+            ("nameless".to_string(), "---\ndescription: Folder-named\n---\n".to_string()),
+            ("model-only".to_string(), "---\nname: model-only\ndescription: x\nuser-invocable: false\n---\n".to_string()),
+            ("broken".to_string(), "---\nname: broken\n---\n".to_string()),
+        ];
+        let names: Vec<String> = remote_skills(&heads).into_iter().map(|c| c.name).collect();
+        assert_eq!(names[..2], ["nameless", "tls-notes"]);
+        assert!(!names.iter().any(|n| n == "model-only" || n == "broken"));
+        assert!(names.iter().any(|n| n == "forge:diagram-design"), "{names:?}");
+        assert!(names.iter().any(|n| n == "init"));
+    }
 
     #[test]
     fn immediate_commands_are_known() {

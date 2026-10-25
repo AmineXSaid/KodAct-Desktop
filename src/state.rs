@@ -932,6 +932,25 @@ pub enum ChatStatus {
 }
 
 impl Chat {
+    /// Brings `file`'s card in the reply being written up to date; the file
+    /// back when it needs a card of its own (`AppState::place_card`).
+    fn update_card(&mut self, file: FileRef, edit: bool) -> Option<FileRef> {
+        if let Some(Message::Assistant { blocks }) = self.messages.last_mut() {
+            let shown = blocks.iter_mut().find_map(|b| match b {
+                Block::File(f) if crate::doc_versions::same_file(f, &file) => Some(f),
+                _ => None,
+            });
+            if let Some(f) = shown {
+                if *f != file {
+                    *f = file;
+                    self.version += 1;
+                }
+                return None;
+            }
+        }
+        (!edit || file.is_diagram()).then_some(file)
+    }
+
     /// A new, empty chat with a fresh conversation id.
     pub fn new(id: usize, project: usize, title: SharedString) -> Self {
         Self {
@@ -4951,14 +4970,18 @@ impl AppState {
             let (files, commands, skills) = cx
                 .background_spawn(async move {
                     match remote {
-                        // A remote project's files come over the connection;
-                        // its skills are ForgeCLI's own.
+                        // A remote project's files and skills come over the
+                        // connection: ForgeCLI there reads its own folders,
+                        // not this computer's.
                         Some((extra, r)) => (
                             crate::remote::project_files(&r.target, &r.path, 20_000, &extra)
                                 .map(crate::rules::entries_of)
                                 .unwrap_or_default(),
                             vec![],
-                            crate::commands::bundled_skills().collect(),
+                            crate::commands::remote_skills(
+                                &crate::remote::skill_heads(&r.target, &r.path, &extra)
+                                    .unwrap_or_default(),
+                            ),
                         ),
                         None => (
                             crate::rules::project_entries(&d, 20_000),
@@ -7773,19 +7796,19 @@ impl AppState {
                             };
                             t.output = output.into();
                             t.images = images;
-                            if !is_error && t.kind == ToolKind::Write {
-                                written = Some(t.target.to_string());
+                            if !is_error && matches!(t.kind, ToolKind::Write | ToolKind::Edit) {
+                                written = Some((t.target.to_string(), t.kind == ToolKind::Edit));
                             }
                         }
                     });
-                    // A document Forge wrote gets its card in the reply.
-                    if let Some(remote) = self.chat_remote(chat) {
-                        if let Some(p) = written {
-                            self.remote_written_file(chat, remote, p, cx);
+                    // A document Forge wrote gets its card in the reply; one
+                    // it edited, the card brought up to date.
+                    if let Some((p, edit)) = written {
+                        if let Some(remote) = self.chat_remote(chat) {
+                            self.remote_written_file(chat, remote, p, edit, cx);
+                        } else if let Some(file) = self.written_file(chat, &p) {
+                            self.place_card(chat, file, edit, cx);
                         }
-                    } else if let Some(file) = written.and_then(|p| self.written_file(chat, &p)) {
-                        self.follow_doc(chat, &file, cx);
-                        self.push_block(chat, Block::File(file));
                     }
                 }
             }
@@ -8042,7 +8065,8 @@ impl AppState {
     }
 
     /// Documents a command may have made: the `.docx`, `.xlsx`, `.pptx` and
-/// `.pdf` paths in its command line and what it printed (at most eight).
+/// `.pdf` paths in its command line and what it printed, and the `.html` and
+/// `.svg` ones (a diagram copied from its template; at most eight).
 pub fn document_paths(command: &str, output: &str) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     for word in command.split_whitespace().chain(output.split_whitespace()) {
@@ -8051,7 +8075,7 @@ pub fn document_paths(command: &str, output: &str) -> Vec<String> {
             .trim_end_matches(['.', ':']);
         let w = w.rsplit_once('=').map_or(w, |(_, v)| v);
         let lower = w.to_ascii_lowercase();
-        let doc = [".docx", ".xlsx", ".pptx", ".pdf"].iter().any(|e| lower.ends_with(e));
+        let doc = [".docx", ".xlsx", ".pptx", ".pdf", ".html", ".htm", ".svg"].iter().any(|e| lower.ends_with(e));
         if doc && w.len() > 5 && !out.iter().any(|o| o == w) {
             out.push(w.to_string());
         }
@@ -8069,6 +8093,7 @@ pub fn document_paths(command: &str, output: &str) -> Vec<String> {
         chat: usize,
         remote: crate::remote::Remote,
         path: String,
+        edit: bool,
         cx: &mut Context<Self>,
     ) {
         let Some(name) = path.rsplit('/').next().map(str::to_string) else {
@@ -8097,8 +8122,7 @@ pub fn document_paths(command: &str, output: &str) -> Vec<String> {
         cx.spawn(async move |this, cx| {
             if let Some(file) = task.await {
                 let _ = this.update(cx, |s, cx| {
-                    s.follow_doc(chat, &file, cx);
-                    s.push_block(chat, Block::File(file));
+                    s.place_card(chat, file, edit, cx);
                     s.mark_dirty(chat, cx);
                     cx.notify();
                 });
@@ -8853,22 +8877,6 @@ impl AppState {
     fn documents_made(&mut self, chat: usize, paths: Vec<String>, since: SystemTime, cx: &mut Context<Self>) {
         // A little slack: file times and this clock can differ by a beat.
         let since = since - std::time::Duration::from_secs(2);
-        let shown: Vec<String> = self
-            .chats
-            .iter()
-            .find(|c| c.id == chat)
-            .and_then(|c| c.messages.last())
-            .map(|m| match m {
-                Message::Assistant { blocks } => blocks
-                    .iter()
-                    .filter_map(|b| match b {
-                        Block::File(f) => f.path.as_ref().map(|p| p.to_string()),
-                        _ => None,
-                    })
-                    .collect(),
-                _ => vec![],
-            })
-            .unwrap_or_default();
         if let Some(remote) = self.chat_remote(chat) {
             let extra = self.remote_extra(&remote.target);
             let secs = since.duration_since(SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_secs());
@@ -8878,9 +8886,9 @@ impl AppState {
             cx.spawn(async move |this, cx| {
                 let fresh = task.await;
                 let _ = this.update(cx, |s, cx| {
-                    for full in fresh.into_iter().filter(|f| !shown.contains(f)) {
+                    for full in fresh {
                         if let Some(r) = s.chat_remote(chat) {
-                            s.remote_written_file(chat, r, full, cx);
+                            s.remote_written_file(chat, r, full, false, cx);
                         }
                     }
                 });
@@ -8894,10 +8902,21 @@ impl AppState {
             let fresh = std::fs::metadata(&path)
                 .and_then(|m| m.modified())
                 .is_ok_and(|t| t >= since);
-            if fresh && !shown.contains(&path) {
-                self.follow_doc(chat, &file, cx);
-                self.push_block(chat, Block::File(file));
+            if fresh {
+                self.place_card(chat, file, false, cx);
             }
+        }
+    }
+
+    /// A file Forge made or changed, as a card in the reply. A file the
+    /// reply already shows has that card brought up to date, so it ends on
+    /// the final version. An edit adds a card only for a diagram (Diagram
+    /// Design copies its template, then edits it); editing a README doesn't.
+    fn place_card(&mut self, chat: usize, file: FileRef, edit: bool, cx: &mut Context<Self>) {
+        self.follow_doc(chat, &file, cx);
+        let Some(c) = self.chat_mut(chat) else { return };
+        if let Some(file) = c.update_card(file, edit) {
+            self.push_block(chat, Block::File(file));
         }
     }
 
@@ -10698,6 +10717,33 @@ mod tests {
     }
 
     #[test]
+    fn a_reply_shows_a_diagram_s_final_version_once() {
+        use super::{Block, Chat, FileRef, Message};
+        let card = |name: &str, content: &str| FileRef {
+            name: name.to_string().into(),
+            path: Some(format!("docs/{name}").into()),
+            content: content.to_string().into(),
+            bytes: None,
+        };
+        let page = |h1: &str| format!("<html><h1>{h1}</h1><svg viewBox=\"0 0 10 10\"><rect/></svg></html>");
+        let mut chat = Chat::new(1, 1, "t".into());
+        chat.messages = vec![Message::Assistant { blocks: vec![] }];
+        // Copied from the template, then edited: the edit brings its card.
+        let v1 = card("tls.html", &page("Template"));
+        assert_eq!(chat.update_card(v1.clone(), true), Some(v1.clone()));
+        chat.messages = vec![Message::Assistant { blocks: vec![Block::File(v1)] }];
+        // Edited again: the same card, now showing the last version.
+        let v2 = card("tls.html", &page("TLS 1.3 handshake"));
+        assert_eq!(chat.update_card(v2.clone(), true), None);
+        let Message::Assistant { blocks } = &chat.messages[0] else { panic!() };
+        assert!(matches!(&blocks[..], [Block::File(f)] if f == &v2));
+        // Editing a README brings no card; writing one still does.
+        let readme = card("README.md", "# Forge");
+        assert_eq!(chat.update_card(readme.clone(), true), None);
+        assert_eq!(chat.update_card(readme.clone(), false), Some(readme));
+    }
+
+    #[test]
     fn a_command_s_documents_are_found_in_its_line_and_output() {
         let found = super::AppState::document_paths(
             "python scripts/docx_tool.py create memo.md out/Q3-memo.docx && echo done",
@@ -10705,6 +10751,12 @@ mod tests {
         );
         assert_eq!(found, ["out/Q3-memo.docx", "deck.pptx", "budget.XLSX", "report.pdf"]);
         assert!(super::AppState::document_paths("ls -la", "a.txt b.md").is_empty());
+        // Diagram Design starts a diagram by copying its template.
+        let found = super::AppState::document_paths(
+            "cp ~/.forge/plugin/forge/skills/diagram-design/assets/template.html docs/diagrams/tls.html",
+            "",
+        );
+        assert_eq!(found.last().map(String::as_str), Some("docs/diagrams/tls.html"));
     }
 
     #[test]
