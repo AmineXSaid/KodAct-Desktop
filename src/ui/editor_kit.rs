@@ -503,17 +503,32 @@ pub fn save_button(t: &Theme, id: &'static str, saving: bool) -> gpui::Stateful<
         .when(saving, |d| d.opacity(0.6))
 }
 
-/// "← Back" above a form.
+/// The way back above a form: a quiet button, an arrow and the page it
+/// returns to ("Endpoints"), that lifts to full ink on hover.
 pub fn back(t: &Theme, id: &'static str, label: &str) -> gpui::Stateful<gpui::Div> {
+    let (hover, strong) = (t.colors.hover, t.colors.text_strong);
     div()
         .id(id)
         .flex()
+        .flex_none()
+        .self_start()
         .items_center()
-        .gap(px(4.))
+        .gap(t.space.xs + px(2.))
+        .h(t.size.row)
+        .pl(t.space.sm)
+        .pr(t.space.md)
+        .rounded(t.radius.button)
+        .border_1()
+        .border_color(t.colors.border)
+        .bg(t.colors.surface)
         .cursor_pointer()
-        .text_size(t.text.caption)
-        .text_color(t.colors.primary)
-        .child(format!("← {label}"))
+        .text_size(t.text.body_sm)
+        .font_weight(gpui::FontWeight::MEDIUM)
+        .text_color(t.colors.text_muted)
+        .hover(move |d| d.bg(hover).text_color(strong))
+        .child(icon("icons/arrow-left.svg", t.size.icon_sm, t.colors.text_muted))
+        .child(label.to_string())
+        .tooltip(|window, cx| gpui::component::tooltip::Tooltip::new("Back (Esc)").build(window, cx))
 }
 
 /// A small link-style action ("Open the folder", "Check again").

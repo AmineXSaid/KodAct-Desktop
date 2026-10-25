@@ -282,6 +282,11 @@ impl Settings {
             SettingsTab::Skills => self.skills.update(cx, |e, cx| e.back(cx)),
             SettingsTab::Hooks => self.hooks.update(cx, |e, cx| e.back(cx)),
             SettingsTab::Mcp => self.mcp.update(cx, |e, cx| e.back(cx)),
+            SettingsTab::Models if self.form => {
+                self.form = false;
+                cx.notify();
+                true
+            }
             SettingsTab::Models if self.state.read(cx).diagnosis.is_some() => {
                 self.state.update(cx, |s, cx| {
                     s.diagnosis = None;
@@ -1404,7 +1409,7 @@ impl Settings {
             .flex()
             .flex_col()
             .gap(px(16.))
-            .child(div().id("back").flex().items_center().gap(px(4.)).cursor_pointer().text_size(t.text.caption).text_color(t.colors.primary).child("← Endpoints").on_click(cx.listener(|this, _, _, cx| {
+            .child(super::editor_kit::back(t, "back", "Endpoints").on_click(cx.listener(|this, _, _, cx| {
                 this.form = false;
                 cx.notify();
             })))
