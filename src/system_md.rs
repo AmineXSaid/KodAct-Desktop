@@ -546,6 +546,7 @@ fn render() -> String {
         ("Composer on the reading column", "In a chat the composer takes the 720px column the reply is read in, so the two line up; on the welcome page it keeps its own measure.", "2026-10-23"),
         ("No name over a reply", "The user's bubble already separates the turns; a name and mark over every reply only repeated it.", "2026-10-23"),
         ("Deny is quiet", "A permission has one filled action, Allow once; Deny is a ghost button, a way out rather than an alarm.", "2026-10-23"),
+        ("Every window leaves as it came", "Each group has its own motion, in and out (`ui/motion.rs`): dialogs rise 14px over a dimming backdrop and sink away (240/170ms); the palette drops from above and lifts away; menus at an anchor unfold and fade back toward it (110ms); the composer's menus draw their jewel edge and fade back down; questions draw their edge in their colour and sink away; side panels and the dock slide in and back out (280/200ms); a notice springs up and drops away. A window that closes is kept a beat (`Presence`) so it leaves rather than vanishes.", "2026-10-25"),
         ("Replies at 15/24, rows 8 apart", "Calm sets a reply at 15px on 24px lines and keeps a reply's rows (text, tool lines, cards) 8px apart, as Claude Code does: a third more on screen, read as a tool rather than a document. Paragraphs keep their own gap.", "2026-10-24"),
         ("Icons on a 12/14/16/20 scale", "Desktop density: 14 in rows, 16 in controls, 20 for the composer's +; 12 inside captions.", "2026-10-12"),
     ] {

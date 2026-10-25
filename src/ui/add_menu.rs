@@ -155,6 +155,7 @@ pub fn menu(
     state: &Entity<AppState>,
     cx: &App,
     hooks: Hooks,
+    leaving: bool,
 ) -> Option<AnyElement> {
     let browser = state.read(cx).browser;
     let card = match t.add_menu {
@@ -186,7 +187,13 @@ pub fn menu(
                     gpui::anchored()
                         .anchor(gpui::Anchor::BottomLeft)
                         .snap_to_window_with_margin(t.size.viewport_margin)
-                        .child(div().pb(px(8.)).child(card)),
+                        .child(div().pb(px(8.)).child(super::motion::composer_menu(
+                            card.relative(),
+                            "add-menu",
+                            0.,
+                            leaving,
+                            t,
+                        ))),
                 )
                 .with_priority(2),
             )

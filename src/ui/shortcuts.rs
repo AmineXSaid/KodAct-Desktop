@@ -3,7 +3,7 @@
 //! for this platform. A test reads `main.rs` and fails when a binding is
 //! missing here, so the sheet can't drift from the keymap.
 
-use gpui::{div, prelude::*, px, AnimationExt, Entity, FontWeight, IntoElement, SharedString};
+use gpui::{div, prelude::*, px, Entity, FontWeight, IntoElement, SharedString};
 
 use super::icon;
 use crate::state::AppState;
@@ -107,7 +107,7 @@ pub fn keycap(t: &Theme, text: String) -> impl IntoElement {
 }
 
 /// The sheet, over a scrim; a click outside or Esc closes it.
-pub fn render(t: &Theme, state: &Entity<AppState>) -> impl IntoElement {
+pub fn render(t: &Theme, state: &Entity<AppState>, leaving: bool) -> impl IntoElement {
     let mut groups = div().flex().flex_col().gap(t.space.lg);
     for g in GROUPS {
         let mut rows = div().flex().flex_col();
@@ -147,6 +147,7 @@ pub fn render(t: &Theme, state: &Entity<AppState>) -> impl IntoElement {
     let (close, close_btn) = (state.clone(), state.clone());
     let hover = t.colors.hover;
     let title: SharedString = "Keyboard shortcuts".into();
+    super::motion::backdrop(
     div()
         .id("shortcuts-scrim")
         .absolute()
@@ -161,7 +162,7 @@ pub fn render(t: &Theme, state: &Entity<AppState>) -> impl IntoElement {
                 cx.notify();
             })
         })
-        .child(
+        .child(super::motion::dialog(
             theme::popover(t)
                 .id("shortcuts")
                 .occlude()
@@ -219,14 +220,13 @@ pub fn render(t: &Theme, state: &Entity<AppState>) -> impl IntoElement {
                         .text_size(t.text.caption)
                         .text_color(t.colors.text_subtle)
                         .child("Every command is also in the palette, with or without a shortcut."),
-                )
-                .with_animation(
-                    "shortcuts-in",
-                    gpui::Animation::new(std::time::Duration::from_millis(t.motion_ms))
-                        .with_easing(gpui::ease_in_out),
-                    |d, delta| d.opacity(delta),
-                ),
-        )
+                ), "shortcuts", leaving, t),
+),
+        "shortcuts",
+        t.extra.scrim,
+        leaving,
+        t,
+    )
 }
 
 #[cfg(test)]

@@ -15,6 +15,8 @@ pub struct ConfirmWindow {
     state: Entity<AppState>,
     focus: FocusHandle,
     shown: Option<Confirm>,
+    /// Kept while it sinks away after an answer.
+    presence: super::motion::Presence<Confirm>,
     _subs: Vec<Subscription>,
 }
 
@@ -32,6 +34,7 @@ impl ConfirmWindow {
             state,
             focus: cx.focus_handle(),
             shown: None,
+            presence: Default::default(),
             _subs: subs,
         }
     }
@@ -57,9 +60,16 @@ impl ConfirmWindow {
 }
 
 impl Render for ConfirmWindow {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let s = self.state.read(cx);
+        // Answered or dismissed: it stays a beat while it sinks away.
+        let Some((asked, leaving)) =
+            self.presence
+                .frame(s.confirm.clone(), t.size.window_out_ms, window)
+        else {
+            return div().into_any_element();
+        };
         let home = crate::rules::home_dir();
         let (title, subject, body, files, action): (
             &str,
@@ -67,8 +77,8 @@ impl Render for ConfirmWindow {
             &str,
             Vec<String>,
             &str,
-        ) = match &s.confirm {
-            Some(Confirm::Delete(id)) => {
+        ) = match &asked {
+            Confirm::Delete(id) => {
                 let Some(chat) = s.chats.iter().find(|c| c.id == *id) else {
                     return div().into_any_element();
                 };
@@ -86,7 +96,7 @@ impl Render for ConfirmWindow {
                     "Delete",
                 )
             }
-            Some(Confirm::Revert { chat, files, .. }) => {
+            Confirm::Revert { chat, files, .. } => {
                 // Paths read from the chat's project, as the tool rows show them.
                 let root = s
                     .chats
@@ -114,7 +124,6 @@ impl Render for ConfirmWindow {
                 "Revert",
                 )
             }
-            None => return div().into_any_element(),
         };
         let mut list = div()
             .id("confirm-files")
@@ -138,88 +147,93 @@ impl Render for ConfirmWindow {
                     .child(f.clone()),
             );
         }
-        div()
-            .id("confirm-scrim")
-            .track_focus(&self.focus)
-            .key_context("Confirm")
-            .absolute()
-            .inset_0()
-            .flex()
-            .items_center()
-            .justify_center()
-            .bg(t.extra.scrim)
-            .on_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| {
-                match ev.keystroke.key.as_str() {
-                    "escape" => this.cancel(window, cx),
-                    "enter" => this.confirm(window, cx),
-                    _ => return,
-                }
-                cx.stop_propagation();
-            }))
-            .on_mouse_down(
-                gpui::MouseButton::Left,
-                cx.listener(|this, _, window, cx| this.cancel(window, cx)),
-            )
-            .child(super::motion::edge_draw(
-                theme::popover(&t)
-                    .id("confirm")
-                    .relative()
-                    .occlude()
-                    .w(px(440.))
-                    .p(t.space.xl)
-                    .flex()
-                    .flex_col()
-                    .gap(t.space.md)
-                    .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                    .child(
-                        div()
-                            .text_size(t.text.subheading)
-                            .font_family(t.font_display.clone())
-                            .font_weight(t.display_weight)
-                            .text_color(t.colors.text_strong)
-                            .child(title),
-                    )
-                    .child(
-                        div()
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(t.colors.text)
-                            .overflow_hidden()
-                            .whitespace_nowrap()
-                            .text_ellipsis()
-                            .child(subject),
-                    )
-                    .when(!files.is_empty(), |d| d.child(list))
-                    .child(
-                        div()
-                            .text_color(t.colors.text_muted)
-                            .line_height(gpui::relative(1.45))
-                            .child(body),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .justify_end()
-                            .gap(t.space.sm)
-                            .pt(t.space.sm)
-                            .child(
-                                super::button::Button::secondary("confirm-cancel", "Cancel")
-                                    .on_click(
-                                        cx.listener(|this, _, window, cx| this.cancel(window, cx)),
-                                    ),
-                            )
-                            .child(
-                                super::button::Button::danger("confirm-delete", action)
-                                    .with_icon("icons/trash.svg")
-                                    .on_click(
-                                        cx.listener(|this, _, window, cx| this.confirm(window, cx)),
-                                    ),
-                            ),
-                    ),
-                "confirm-in",
-                t.extra.danger,
-                0.,
-                &t,
-            ))
-            .into_any_element()
+        super::motion::backdrop(
+            div()
+                .id("confirm-scrim")
+                .track_focus(&self.focus)
+                .key_context("Confirm")
+                .absolute()
+                .inset_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(t.extra.scrim)
+                .on_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| {
+                    match ev.keystroke.key.as_str() {
+                        "escape" => this.cancel(window, cx),
+                        "enter" => this.confirm(window, cx),
+                        _ => return,
+                    }
+                    cx.stop_propagation();
+                }))
+                .on_mouse_down(
+                    gpui::MouseButton::Left,
+                    cx.listener(|this, _, window, cx| this.cancel(window, cx)),
+                )
+                .child(super::motion::alert(
+                    theme::popover(&t)
+                        .id("confirm")
+                        .relative()
+                        .occlude()
+                        .w(px(440.))
+                        .p(t.space.xl)
+                        .flex()
+                        .flex_col()
+                        .gap(t.space.md)
+                        .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                        .child(
+                            div()
+                                .text_size(t.text.subheading)
+                                .font_family(t.font_display.clone())
+                                .font_weight(t.display_weight)
+                                .text_color(t.colors.text_strong)
+                                .child(title),
+                        )
+                        .child(
+                            div()
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(t.colors.text)
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .child(subject),
+                        )
+                        .when(!files.is_empty(), |d| d.child(list))
+                        .child(
+                            div()
+                                .text_color(t.colors.text_muted)
+                                .line_height(gpui::relative(1.45))
+                                .child(body),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .justify_end()
+                                .gap(t.space.sm)
+                                .pt(t.space.sm)
+                                .child(
+                                    super::button::Button::secondary("confirm-cancel", "Cancel")
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.cancel(window, cx)
+                                        })),
+                                )
+                                .child(
+                                    super::button::Button::danger("confirm-delete", action)
+                                        .with_icon("icons/trash.svg")
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.confirm(window, cx)
+                                        })),
+                                ),
+                        ),
+                    "confirm",
+                    t.extra.danger,
+                    leaving,
+                    &t,
+                )),
+            "confirm",
+            t.extra.scrim,
+            leaving,
+            &t,
+        )
     }
 }

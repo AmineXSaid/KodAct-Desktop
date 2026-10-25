@@ -47,6 +47,10 @@ pub struct Composer {
     filter: Entity<InputState>,
     active: Option<String>,
     picker_was_open: bool,
+    /// The model, mode and + menus, kept while each leaves.
+    model_presence: super::motion::Presence<()>,
+    modes_presence: super::motion::Presence<()>,
+    add_presence: super::motion::Presence<()>,
     /// Where the press that just closed a menu happened: the click it ends
     /// in, on that menu's own button, must not open it again.
     dismissed_at: Option<gpui::Point<gpui::Pixels>>,
@@ -187,6 +191,9 @@ impl Composer {
             filter,
             active: None,
             picker_was_open: false,
+            model_presence: Default::default(),
+            modes_presence: Default::default(),
+            add_presence: Default::default(),
             dismissed_at: None,
             add_open: false,
             styling,
@@ -610,18 +617,27 @@ impl Render for Composer {
 
         // The pieces that read the state are built first.
         let mode_trigger = super::mode_menu::trigger(&t, &state, cx, skip);
-        let modes_menu = self.state.read(cx).modes_open.then(|| {
-            super::mode_menu::menu(&t, &state, window, cx, move |pos, cx| {
-                dismiss_modes(pos, false, cx)
-            })
+        let out = t.size.menu_out_ms;
+        let modes_now = self.state.read(cx).modes_open.then_some(());
+        let modes_menu = self.modes_presence.frame(modes_now, out, window).map(|(_, leaving)| {
+            super::mode_menu::menu(
+                &t,
+                &state,
+                window,
+                cx,
+                move |pos, cx| dismiss_modes(pos, false, cx),
+                leaving,
+            )
         });
         // The "+": a menu above it in the theme's style, or the tray inside
         // the box (`add_menu`).
         let add_hooks = self.add_hooks(cx);
         let add_menu = self
-            .add_open
-            .then(|| super::add_menu::menu(&t, &state, cx, add_hooks.clone()))
-            .flatten();
+            .add_presence
+            .frame(self.add_open.then_some(()), out, window)
+            .and_then(|(_, leaving)| {
+                super::add_menu::menu(&t, &state, cx, add_hooks.clone(), leaving)
+            });
         let add_tray = (self.add_open && t.add_menu == crate::theme::AddMenu::Tray)
             .then(|| super::add_menu::tray(&t, &state, cx, &add_hooks));
         let query = self.filter.read(cx).value().to_string();
@@ -646,9 +662,14 @@ impl Render for Composer {
                 }
             });
         };
+        let model_frame = self.model_presence.frame(
+            self.state.read(cx).picker_open.then_some(()),
+            out,
+            window,
+        );
         let s = self.state.read(cx);
         let (busy, mode, picker_open) = (s.busy(), s.mode, s.picker_open);
-        let model_menu = picker_open.then(|| {
+        let model_menu = model_frame.map(|(_, leaving)| {
             super::model_menu::render(
                 &t,
                 &state,
@@ -659,6 +680,7 @@ impl Render for Composer {
                 window,
                 on_hover,
                 move |pos, cx| dismiss_models(pos, true, cx),
+                leaving,
             )
         });
         let model_name: SharedString = match (&s.endpoints, s.active_profile()) {

@@ -57,6 +57,8 @@ pub struct Workspace {
     files: Entity<super::files_pane::FilesPane>,
     /// The film as Forge opens, while it plays (`opener.rs`).
     opener: Option<Entity<super::opener::Opener>>,
+    /// The windows drawn here, kept for the beat each takes to leave.
+    presence: Presences,
     _opener_sub: Option<gpui::Subscription>,
     focus: FocusHandle,
 }
@@ -169,6 +171,7 @@ impl Workspace {
             doc_find,
             files,
             opener,
+            presence: Presences::default(),
             _opener_sub: opener_sub,
             focus: cx.focus_handle(),
         };
@@ -239,7 +242,7 @@ impl Workspace {
     }
 
     /// The dock beside the session, `width` wide, with a grip on its left edge.
-    fn dock(&self, width: f32, cx: &mut Context<Self>) -> gpui::AnyElement {
+    fn dock(&self, width: f32, leaving: bool, cx: &mut Context<Self>) -> gpui::AnyElement {
         let t = cx.theme().clone();
         let grip = self.state.clone();
         let line = t.colors.primary;
@@ -269,7 +272,10 @@ impl Workspace {
                     }),
             )
             .into_any_element();
-        super::motion::slide_in(pane, width, false, &t)
+        match leaving {
+            true => super::motion::slide_out(pane, width, "terminal-dock", &t),
+            false => super::motion::slide_in(pane, width, false, &t),
+        }
     }
 
     fn title_bar(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -670,9 +676,10 @@ impl Workspace {
 
     /// The title bar's project switcher: every project, then All projects
     /// and Open folder….
-    fn toast(&self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
+    fn toast(&self, frame: Frame<SharedString>, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         let t = cx.theme().clone();
-        let text: SharedString = self.state.read(cx).toast.clone()?;
+        let (text, leaving) = frame?;
+        let id = format!("toast-{}", text);
         Some(
             div()
                 .absolute()
@@ -681,7 +688,7 @@ impl Workspace {
                 .right_0()
                 .flex()
                 .justify_center()
-                .child(
+                .child(super::motion::notice(
                     theme::popover(&t)
                         .px(t.space.lg)
                         .py(t.space.sm)
@@ -689,8 +696,8 @@ impl Workspace {
                         .items_center()
                         .gap(t.space.sm)
                         .child(icon("icons/info.svg", t.size.icon_sm, t.colors.text_muted))
-                        .child(text),
-                ),
+                        .child(text), &id, leaving, &t),
+),
         )
     }
 }
@@ -698,25 +705,60 @@ impl Workspace {
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
+        // Each window that just closed leaves over a beat of its own.
+        let (palette_now, shortcuts_now, map_now, title_now, chat_now, toast_now) = {
+            let s = self.state.read(cx);
+            (
+                s.palette_open.then_some(()),
+                s.shortcuts_open.then_some(()),
+                s.map_open.then_some(()),
+                s.title_menu,
+                s.chat_menu,
+                s.toast.clone(),
+            )
+        };
+        let p = &mut self.presence;
+        let palette_f = p.palette.frame(palette_now, t.size.menu_out_ms, window);
+        let shortcuts_f = p.shortcuts.frame(shortcuts_now, t.size.window_out_ms, window);
+        let map_f = p.map.frame(map_now, t.size.window_out_ms, window);
+        let title_f = p.title.frame(title_now, t.size.menu_out_ms, window);
+        let chat_f = p.chat.frame(chat_now, t.size.menu_out_ms, window);
+        let toast_f = p.toast.frame(toast_now, t.size.window_out_ms, window);
         let s = self.state.read(cx);
-        let (sidebar_open, palette_open, onboarding, screen, loading) = (
+        let (sidebar_open, onboarding, screen, loading) = (
             s.sidebar_open,
-            s.palette_open,
             s.onboarding,
             s.screen,
             s.loading,
         );
-        let (find_open, shortcuts_open) = (s.find.is_some(), s.shortcuts_open);
+        let find_open = s.find.is_some();
         // Which chat shows: its transcript animates in when it changes.
         let chat_key = s.chat().map_or(usize::MAX, |c| c.id);
         let empty = s.chat().is_none_or(|c| c.messages.is_empty());
         self.dots.read(cx).set_backdrop(!empty, s.busy());
         let chat_pattern = s.chat_pattern;
-        let files_open = s.files_open;
+        // The side column: the file or tab in it and the Files pane, kept
+        // while it slides back out after it closes.
+        let side_now = (s.doc.is_some() || s.panel.is_some() || s.files_open)
+            .then(|| (s.doc.clone(), s.panel, s.files_open));
+        let side_f = self
+            .presence
+            .side
+            .frame(side_now, t.size.panel_out_ms, window);
+        let side_leaving = side_f.as_ref().is_some_and(|(_, leaving)| *leaving);
+        let side_open = side_f.is_some();
+        let (side_doc, side_panel, files_open) =
+            side_f.map(|(k, _)| k).unwrap_or((None, None, false));
         // With Files open the side column stands beside the chat.
         let below = s.doc_below && !files_open;
-        let terminal_open = s.terminal_open;
-        let side_open = s.doc.is_some() || s.panel.is_some() || files_open;
+        // The terminal dock, kept while it slides back out.
+        let dock_f = self.presence.dock.frame(
+            s.terminal_open.then_some(()),
+            t.size.panel_out_ms,
+            window,
+        );
+        let dock_leaving = dock_f.is_some_and(|(_, leaving)| leaving);
+        let terminal_open = dock_f.is_some();
         // What is left of the window beside the sidebar is shared by the
         // chat, the side panel and the dock; the chat keeps its narrowest.
         let beside = f32::from(window.viewport_size().width)
@@ -726,8 +768,7 @@ impl Render for Workspace {
                 f32::from(t.size.rail)
             };
         let dock_want = self.dock_want(window, cx);
-        let wide = s
-            .doc
+        let wide = side_doc
             .as_ref()
             .is_some_and(|f| f.is_diagram() || f.office() == Some(crate::office::Kind::Xlsx));
         let (panel_w, dock_w) = share_out(
@@ -742,7 +783,7 @@ impl Render for Workspace {
             terminal_open.then(|| (dock_want, f32::from(t.size.terminal_min))),
             f32::from(t.size.chat_min),
         );
-        let dock = self.dock(dock_w, cx);
+        let dock = self.dock(dock_w, dock_leaving, cx);
 
         // The session is a sheet on the cream: 4px corners, paper grain,
         // a gutter to its right and below.
@@ -766,7 +807,7 @@ impl Render for Workspace {
                 scale: window.scale_factor(),
                 fit: s.doc_fit,
                 below,
-                from_panel: s.panel.is_some(),
+                from_panel: side_panel.is_some(),
                 text: s.doc_text,
                 version: {
                     let (all, at) = s.doc_versions();
@@ -780,7 +821,7 @@ impl Render for Workspace {
                 .doc_changes
                 .as_ref()
                 .filter(|(k, _)| {
-                    s.doc
+                    side_doc
                         .as_ref()
                         .is_some_and(|f| crate::state::doc_version_key(f) == *k)
                 })
@@ -790,12 +831,12 @@ impl Render for Workspace {
                 .doc_preview
                 .as_ref()
                 .filter(|(k, _)| {
-                    s.doc
+                    side_doc
                         .as_ref()
                         .is_some_and(|f| k.split_once('#').map(|(n, _)| n) == Some(f.name.as_ref()))
                 })
                 .map(|(_, r)| r);
-            let panel = s.panel.map(|tab| {
+            let panel = side_panel.map(|tab| {
                 super::workbench::render(
                     super::workbench::View {
                         tab,
@@ -826,8 +867,8 @@ impl Render for Workspace {
                     &t,
                 )
             });
-            let has_top = s.doc.is_some() || s.panel.is_some();
-            let top = s.doc
+            let has_top = side_doc.is_some() || side_panel.is_some();
+            let top = side_doc
                 .as_ref()
                 .map(|f| {
                     super::doc_pane::render(
@@ -877,7 +918,11 @@ impl Render for Workspace {
                 ),
                 (top, false) => top,
             };
-            column.map(|p| super::motion::slide_in(p, pane_width, pane_below, &t))
+            column.and_then(|p| match side_leaving {
+                // Leaving: back out to the edge (below the chat, gone at once).
+                true => (!pane_below).then(|| super::motion::slide_out(p, pane_width, "side-panel", &t)),
+                false => Some(super::motion::slide_in(p, pane_width, pane_below, &t)),
+            })
         };
         let main = if screen == Screen::Rules {
             main.child(self.rules.clone())
@@ -1008,13 +1053,22 @@ impl Render for Workspace {
                 );
             // The Session column, between the chat and any pane, as Claude
             // Code's: environment, context and changes at a glance.
-            let session = {
+            let session_now = {
                 let s = self.state.read(cx);
-                s.session_open
-                    .then_some(s.current)
-                    .flatten()
-                    .map(|chat| super::session_panel::render(&t, &self.state, s, chat))
+                s.session_open.then_some(s.current).flatten()
             };
+            let session = self
+                .presence
+                .session
+                .frame(session_now, t.size.panel_out_ms, window)
+                .map(|(chat, leaving)| {
+                    let w = f32::from(t.size.session_panel);
+                    let col = super::session_panel::render(&t, &self.state, self.state.read(cx), chat);
+                    match leaving {
+                        true => super::motion::slide_out(col, w, "session-column", &t),
+                        false => super::motion::slide_in(col, w, false, &t),
+                    }
+                });
             main.child(
                 div()
                     .flex_1()
@@ -1584,30 +1638,52 @@ impl Render for Workspace {
                     &t,
                 ))
             })
-            .when(palette_open, |d| d.child(self.palette.clone()))
+            .when(palette_f.is_some(), |d| d.child(self.palette.clone()))
             .child(self.side.clone())
             .child(self.settings.clone())
-            .when(self.state.read(cx).map_open, |d| {
-                d.child(super::project_map::render(&t, &self.state, cx))
-            })
-            .when(shortcuts_open, |d| {
-                d.child(super::shortcuts::render(&t, &self.state))
-            })
-            .children(self.chat_menu(window, cx))
-            .children(self.title_menu(window, cx))
+            .children(map_f.map(|(_, leaving)| super::project_map::render(&t, &self.state, leaving, cx)))
+            .children(shortcuts_f.map(|(_, leaving)| super::shortcuts::render(&t, &self.state, leaving)))
+            .children(self.chat_menu(chat_f, window, cx))
+            .children(self.title_menu(title_f, window, cx))
             .child(self.confirm.clone())
             .child(self.askpass.clone())
-            .children(self.toast(cx))
+            .children(self.toast(toast_f, cx))
             .children(self.opener.clone())
     }
 }
 
+/// What each window the workspace draws last showed, so it can leave.
+#[derive(Default)]
+struct Presences {
+    palette: super::motion::Presence<()>,
+    shortcuts: super::motion::Presence<()>,
+    map: super::motion::Presence<()>,
+    title: super::motion::Presence<(TitleMenu, gpui::Point<gpui::Pixels>)>,
+    chat: super::motion::Presence<usize>,
+    toast: super::motion::Presence<SharedString>,
+    session: super::motion::Presence<usize>,
+    dock: super::motion::Presence<()>,
+    side: super::motion::Presence<(
+        Option<crate::state::FileRef>,
+        Option<crate::state::PanelTab>,
+        bool,
+    )>,
+}
+
+/// A window to draw (its key), and whether it is leaving.
+type Frame<K> = Option<(K, bool)>;
+
 impl Workspace {
     /// A small menu: the title bar's Share or ⋮, the sidebar's More or your name.
-    fn title_menu(&self, window: &Window, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
+    fn title_menu(
+        &self,
+        frame: Frame<(TitleMenu, gpui::Point<gpui::Pixels>)>,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
         let t = cx.theme().clone();
         let s = self.state.read(cx);
-        let (which, at) = s.title_menu?;
+        let ((which, at), leaving) = frame?;
         let chat = s.current;
         let close = self.state.clone();
         // The title bar's open under their button, right edges level; the
@@ -1634,7 +1710,19 @@ impl Workspace {
                                     cx.notify();
                                 })
                             })
-                            .child(super::title_menus::render(&t, &self.state, which, chat, window)),
+                            .child(super::motion::unfold(
+                                div().child(super::title_menus::render(
+                                    &t,
+                                    &self.state,
+                                    which,
+                                    chat,
+                                    window,
+                                )),
+                                &format!("title-menu-{which:?}"),
+                                which == TitleMenu::Account,
+                                leaving,
+                                &t,
+                            )),
                     ),
             )
             .with_priority(2)
@@ -1644,10 +1732,16 @@ impl Workspace {
 
     /// The open chat menu, anchored where it was asked for (under the
     /// title bar's chat name, or at a sidebar row), over everything.
-    fn chat_menu(&self, window: &Window, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
+    fn chat_menu(
+        &self,
+        frame: Frame<usize>,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
         let t = cx.theme().clone();
         let s = self.state.read(cx);
-        let c = s.chat_menu.and_then(|id| s.chats.iter().find(|c| c.id == id))?;
+        let (id, leaving) = frame?;
+        let c = s.chats.iter().find(|c| c.id == id)?;
         let info = super::chat_menu::MenuChat {
             id: c.id,
             pinned: c.pinned,
@@ -1671,14 +1765,14 @@ impl Workspace {
                             .on_mouse_down_out(move |_, _, cx| {
                                 close.update(cx, |s, cx| s.open_chat_menu(None, cx))
                             })
-                            .child(super::chat_menu::render(
+                            .child(super::motion::unfold(div().child(super::chat_menu::render(
                                 &t,
                                 &self.state,
                                 info,
                                 s.chat_sub,
                                 targets,
                                 window,
-                            )),
+                            )), &format!("chat-menu-{id}"), false, leaving, &t)),
                     ),
             )
             .with_priority(2)

@@ -218,6 +218,7 @@ pub fn render(
     window: &gpui::Window,
     on_hover: impl Fn(String, &mut gpui::App) + Clone + 'static,
     on_out: impl Fn(gpui::Point<gpui::Pixels>, &mut gpui::App) + 'static,
+    leaving: bool,
 ) -> impl IntoElement {
     let (rows, total) = rows(s, query);
     let checking = s.checking();
@@ -511,7 +512,7 @@ pub fn render(
         )
         .children(effort)
         .child(setup_links(t));
-    super::motion::edge_draw(menu, "models-in", t.colors.primary, 8., t)
+    super::motion::composer_menu(menu, "models", 8., leaving, t)
 }
 
 /// Under the list: the setup guide and the file, one click each.

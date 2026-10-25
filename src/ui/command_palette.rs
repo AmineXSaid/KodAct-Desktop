@@ -9,7 +9,7 @@
 use gpui::component::input::{self, Input, InputEvent, InputState};
 use gpui::component::Sizable as _;
 use gpui::{
-    div, font, prelude::*, px, Action, AnimationExt, AnyElement, Context, CursorStyle, Div, Entity,
+    div, font, prelude::*, px, Action, AnyElement, Context, CursorStyle, Div, Entity,
     FontWeight, IntoElement, Render, ScrollHandle, SharedString, StyledText,
     Subscription, TextRun, Window,
 };
@@ -1557,7 +1557,7 @@ impl CommandPalette {
             .top(t.size.control + t.space.xs)
             .left_0()
             .right_0()
-            .child(super::motion::edge_draw(
+            .child(super::motion::spotlight(
                 theme::popover(&t)
                     .id("palette")
                     .occlude()
@@ -1573,9 +1573,9 @@ impl CommandPalette {
                     .child(list)
                     .child(footer)
                     .relative(),
-                "palette-in",
-                t.colors.primary,
-                0.,
+                "palette",
+                // Closed this frame: drawn once more while it lifts away.
+                !self.state.read(cx).palette_open,
                 &t,
             ))
             .into_any_element()
@@ -1627,7 +1627,7 @@ impl Render for CommandPalette {
     /// results hung below: opened from the sidebar's Search or Ctrl+K.
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
-        let fade = std::time::Duration::from_millis(t.motion_ms);
+        let leaving = !self.state.read(cx).palette_open;
         let field = self.field(window, cx);
         div()
             .absolute()
@@ -1635,7 +1635,7 @@ impl Render for CommandPalette {
             .left_0()
             .right_0()
             .bottom_0()
-            .child(
+            .child(super::motion::backdrop(
                 div()
                     .id("palette-scrim")
                     .occlude()
@@ -1648,12 +1648,7 @@ impl Render for CommandPalette {
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.close(cx);
                         window.dispatch_action(Box::new(FocusComposer), cx);
-                    }))
-                    .with_animation(
-                        "palette-scrim-in",
-                        gpui::Animation::new(fade).with_easing(gpui::ease_in_out),
-                        |d, delta| d.opacity(delta),
-                    ),
+                    })), "palette-scrim", t.extra.scrim, leaving, &t),
             )
             .child(
                 div()

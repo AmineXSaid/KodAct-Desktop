@@ -306,7 +306,7 @@ impl Settings {
         }
         self.closing = true;
         cx.notify();
-        let ms = super::motion::out_ms(cx.theme());
+        let ms = super::motion::played(cx.theme().size.window_out_ms);
         cx.spawn(async move |this, cx| {
             cx.background_executor()
                 .timer(std::time::Duration::from_millis(ms))
@@ -1813,17 +1813,8 @@ impl Render for Settings {
                     panel.on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation());
                 // The window rises and fades in as it opens; it sinks and
                 // fades out as it closes, and the backdrop clears with it.
-                if self.closing {
-                    super::motion::sink_out(panel, "settings-out", 8., &t)
-                } else {
-                    super::motion::rise_in(panel, "settings-in", 12., &t)
-                }
+                super::motion::dialog(panel, "settings", self.closing, &t)
             });
-        let scrim_id = if self.closing {
-            "settings-scrim-out"
-        } else {
-            "settings-scrim-in"
-        };
-        super::motion::scrim(scrim, scrim_id, t.extra.scrim, self.closing, &t)
+        super::motion::backdrop(scrim, "settings-scrim", t.extra.scrim, self.closing, &t)
     }
 }

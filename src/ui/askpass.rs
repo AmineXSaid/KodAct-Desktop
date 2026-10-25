@@ -17,6 +17,8 @@ pub struct AskpassDialog {
     input: Entity<InputState>,
     /// The prompt on screen: a new one starts with an empty box.
     shown: Option<String>,
+    /// Kept while it sinks away after an answer.
+    presence: super::motion::Presence<String>,
     /// What had the keyboard before the dialog took it: it gets it back.
     before: Option<gpui::FocusHandle>,
     _subs: Vec<Subscription>,
@@ -63,6 +65,7 @@ impl AskpassDialog {
             state,
             input,
             shown: None,
+            presence: Default::default(),
             before: None,
             _subs: subs,
         }
@@ -86,13 +89,14 @@ impl AskpassDialog {
 impl Render for AskpassDialog {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
-        let Some(prompt) = self
+        let now = self
             .state
             .read(cx)
             .askpass
             .front()
-            .map(|r| r.prompt.clone())
-        else {
+            .map(|r| r.prompt.clone());
+        // Answered: it stays a beat while it sinks away.
+        let Some((prompt, leaving)) = self.presence.frame(now, t.size.window_out_ms, window) else {
             return div().into_any_element();
         };
         let card = theme::fit_window(
@@ -158,31 +162,36 @@ impl Render for AskpassDialog {
                         .on_click(cx.listener(|this, _, window, cx| this.answer(true, window, cx))),
                 ),
         );
-        div()
-            .id("askpass-scrim")
-            .key_context("Askpass")
-            .absolute()
-            .inset_0()
-            .flex()
-            .items_center()
-            .justify_center()
-            .bg(t.extra.scrim)
-            .capture_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| {
-                match ev.keystroke.key.as_str() {
-                    "enter" => this.answer(true, window, cx),
-                    "escape" => this.answer(false, window, cx),
-                    _ => return,
-                }
-                cx.stop_propagation();
-            }))
-            .child(super::motion::edge_draw(
-                card,
-                "askpass-in",
-                t.colors.primary,
-                0.,
-                &t,
-            ))
-            .into_any_element()
+        super::motion::backdrop(
+            div()
+                .id("askpass-scrim")
+                .key_context("Askpass")
+                .absolute()
+                .inset_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(t.extra.scrim)
+                .capture_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| {
+                    match ev.keystroke.key.as_str() {
+                        "enter" => this.answer(true, window, cx),
+                        "escape" => this.answer(false, window, cx),
+                        _ => return,
+                    }
+                    cx.stop_propagation();
+                }))
+                .child(super::motion::alert(
+                    card,
+                    "askpass",
+                    t.colors.primary,
+                    leaving,
+                    &t,
+                )),
+            "askpass",
+            t.extra.scrim,
+            leaving,
+            &t,
+        )
     }
 }
 

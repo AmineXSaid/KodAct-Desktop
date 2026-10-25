@@ -1236,6 +1236,11 @@ pub struct Sizes {
     pub pop_in_ms: u64,             // 160: a menu or dialog rising into place
     pub stagger_ms: u64,            // 18: each row of an opening list starting after the one above
     pub edge_draw_ms: u64,          // 140: a window's jewel edge drawing down as it opens
+    pub window_in_ms: u64,          // 240: a dialog rising into place over its dimmed backdrop
+    pub window_out_ms: u64,         // 170: a dialog sinking away
+    pub menu_out_ms: u64,           // 110: a menu or the palette fading back toward its anchor
+    pub panel_out_ms: u64,          // 200: a side panel sliding back out
+    pub toast_in_ms: u64,           // 260: a notice springing up from the foot
     pub edge_bar: Pixels,           // 3: that jewel edge's width
     pub remote_menu: Pixels,        // 288: the remote quick pick's width
     pub terminal_text: Pixels,      // 13: the terminal dock's monospace
@@ -1309,6 +1314,11 @@ impl Default for Sizes {
             pop_in_ms: 160,
             stagger_ms: 18,
             edge_draw_ms: 140,
+            window_in_ms: 240,
+            window_out_ms: 170,
+            menu_out_ms: 110,
+            panel_out_ms: 200,
+            toast_in_ms: 260,
             edge_bar: px(3.),
             remote_menu: px(288.),
             terminal_text: px(13.),
