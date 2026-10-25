@@ -1269,6 +1269,7 @@ pub struct Sizes {
     pub chat_text: Pixels,          // 15: replies and your messages, Archivo's body size
     pub greeting: Pixels,           // 32: the new-chat greeting, Archivo 600
     pub statusbar: Pixels,          // 26: the status bar at the foot of the window
+    pub figure: Pixels,             // 28: one figure that leads a view (agents finished)
     pub panel_in_ms: u64,           // 280: the side panel sliding in
     pub pop_in_ms: u64,             // 160: a menu or dialog rising into place
     pub stagger_ms: u64,            // 18: each row of an opening list starting after the one above
@@ -1351,6 +1352,7 @@ impl Default for Sizes {
             chat_text: px(15.),
             greeting: px(32.),
             statusbar: px(26.),
+            figure: px(28.),
             panel_in_ms: 280,
             pop_in_ms: 160,
             stagger_ms: 18,
