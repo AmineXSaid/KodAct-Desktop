@@ -599,12 +599,54 @@ pub struct Info {
 
 /// Connect and ask what the target is. Fails with the reason if it can't.
 pub fn probe(target: &Target, extra: &Extra) -> Result<Info, Error> {
+    probe_within(target, extra, Duration::from_secs(30))
+}
+
+/// A failure that a target still waking up gives: no answer in time, WSL's
+/// own errors while its VM boots, Docker's daemon not up yet. Not a missing
+/// distro, a refused sign-in or a deleted container: those stay failures.
+fn waking(target: &Target, e: &Error) -> bool {
+    match e {
+        Error::Timeout(_) => true,
+        Error::UnknownHostKey { .. } => false,
+        Error::Other(m) => match target {
+            Target::Wsl(_) => {
+                !(m.contains("There's no WSL distro") || m.contains("isn't installed") || m.contains("Forge runs remotely"))
+            }
+            Target::Container { .. } => m.contains("Docker isn't running") || m.contains("failed"),
+            Target::Ssh(_) => false,
+        },
+    }
+}
+
+/// [`probe`] for a first connect: a target that was asleep (WSL's VM
+/// stopped, Docker still starting) can fail or hang the first time while it
+/// boots, and answer a moment later. It gets a minute and a half, then two
+/// more tries, as a second click would, saying so meanwhile.
+pub fn probe_waking(target: &Target, extra: &Extra, progress: &dyn Fn(&str)) -> Result<Info, Error> {
+    let limits = [90, 45, 45].map(Duration::from_secs);
+    let mut last = None;
+    for (i, limit) in limits.into_iter().enumerate() {
+        if i > 0 {
+            progress(&format!("Waiting for {} to start…", target.label()));
+            std::thread::sleep(Duration::from_secs(2 * i as u64));
+        }
+        match probe_within(target, extra, limit) {
+            Ok(info) => return Ok(info),
+            Err(e) if waking(target, &e) => last = Some(e),
+            Err(e) => return Err(e),
+        }
+    }
+    Err(last.unwrap_or_else(|| Error::Timeout(target.label())))
+}
+
+fn probe_within(target: &Target, extra: &Extra, limit: Duration) -> Result<Info, Error> {
     let out = run(
         target,
         r#"uname -sm; printf '%s\n' "$HOME""#,
         &[],
         b"",
-        Duration::from_secs(30),
+        limit,
         extra,
     )?;
     let text = String::from_utf8_lossy(&out);
@@ -1059,6 +1101,32 @@ fn docker(wsl: Option<&str>, args: &[&str]) -> Result<String, Error> {
     }
 }
 
+/// Wait until Docker's daemon answers (up to a minute and a half): WSL's VM
+/// boots on the first call, and its dockerd (or Docker Desktop's) starts
+/// after. Any other failure is said at once.
+fn wait_for_docker(wsl: Option<&str>, progress: &dyn Fn(&str)) -> Result<(), Error> {
+    let start = Instant::now();
+    let mut said = false;
+    loop {
+        match docker(wsl, &["version", "--format", "{{.Server.Version}}"]) {
+            Ok(_) => return Ok(()),
+            Err(e) if start.elapsed() < Duration::from_secs(90)
+                && waking(&Target::Container { name: String::new(), user: None, wsl: wsl.map(str::to_string) }, &e) =>
+            {
+                if !said {
+                    progress(match wsl {
+                        Some(_) => "Waiting for WSL and Docker to start…",
+                        None => "Waiting for Docker to start…",
+                    });
+                    said = true;
+                }
+                std::thread::sleep(Duration::from_secs(2));
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
 /// Reopen a local folder in its dev container: build or pull the image,
 /// start (or reuse) a container with the folder mounted, run
 /// `postCreateCommand` once, and return the remote project.
@@ -1231,6 +1299,9 @@ pub fn wsl_has_devcontainer(distro: &str, path: &str) -> bool {
 /// without cache, and the image is pulled again; postCreateCommand runs again.
 pub fn devcontainer_up(src: &DevSource, fresh: bool, progress: &dyn Fn(&str)) -> Result<Remote, Error> {
     // The folder (absolute), the definition's folder, and the definition.
+    // Docker first: a WSL distro just booted, or Docker Desktop just
+    // started, has no daemon for a while, and the first build failed on it.
+    wait_for_docker(src.wsl().as_deref(), progress)?;
     let (dir, folder, dc) = match src {
         DevSource::Local(dir) => {
             let (file, dc) = find_devcontainer(dir).ok_or_else(|| {
@@ -1402,7 +1473,7 @@ pub fn provision(
     progress: &dyn Fn(&str),
 ) -> Result<Provisioned, Error> {
     progress(&format!("Connecting to {}…", target.label()));
-    let info = probe(target, extra)?;
+    let info = probe_waking(target, extra, progress)?;
     let local = local_forge(&info.arch).ok_or_else(|| {
         Error::Other(format!(
             "This Forge has no ForgeCLI for Linux {} to put on {}.",
@@ -1605,6 +1676,19 @@ pub fn browser_mcp_config(port: u16, token: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_target_waking_up_is_tried_again_and_a_real_failure_is_not() {
+        let wsl = Target::Wsl("Fedora".into());
+        let docker = Target::Container { name: "x".into(), user: None, wsl: None };
+        let ssh = Target::Ssh("box".into());
+        assert!(waking(&wsl, &Error::Timeout("WSL: Fedora".into())));
+        assert!(waking(&wsl, &Error::Other("WSL: Fedora: Wsl/Service/CreateInstance/E_FAIL".into())));
+        assert!(!waking(&wsl, &Error::Other("There's no WSL distro named Fedora.".into())));
+        assert!(waking(&docker, &Error::Other("Docker isn't running. Start Docker Desktop (or the docker service).".into())));
+        assert!(!waking(&docker, &Error::Other("There's no container named x.".into())));
+        assert!(!waking(&ssh, &Error::Other("box refused the connection: is its SSH server running?".into())));
+    }
 
     // A dev container that stopped, or was deleted, comes back as VS Code's
     // does. These need a Docker daemon and alpine:3.20, so they're ignored:
