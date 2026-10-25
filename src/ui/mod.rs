@@ -48,6 +48,7 @@ pub mod find_bar;
 pub mod guide;
 pub mod hooks_editor;
 pub mod ingot;
+mod forge_cube;
 pub mod markdown;
 pub mod mcp_editor;
 pub mod memory_view;
@@ -207,7 +208,9 @@ pub fn turning_logo(size: f32, id: impl Into<gpui::ElementId>) -> gpui::AnyEleme
 /// The Forge logo turning, painted in `color` (lit from above): the mark of
 /// work in progress in the conversation, in the theme's live colour.
 pub fn turning_logo_in(size: f32, id: impl Into<gpui::ElementId>, color: gpui::Hsla) -> gpui::AnyElement {
-    ingot::turning_with(size, id, Some(ingot::tinted(color)))
+    // Forge for VS Code's working cube: stock struck true, a quarter turn a
+    // beat, drawn a little larger than an icon so its voxels read.
+    forge_cube::working(size * 1.25, id, color)
 }
 
 /// Your avatar, drawn `size` px square at this screen's density.
