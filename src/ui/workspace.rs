@@ -1167,6 +1167,18 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &TogglePanel, _, cx| {
                 this.state.update(cx, |s, cx| s.toggle_panel(cx))
             }))
+            .on_action(cx.listener(|this, _: &ShowPlanView, _, cx| {
+                this.state.update(cx, |s, cx| s.show_panel(PanelTab::Plan, cx))
+            }))
+            .on_action(cx.listener(|this, _: &ShowAgentsView, _, cx| {
+                this.state.update(cx, |s, cx| s.show_panel(PanelTab::Agents, cx))
+            }))
+            .on_action(cx.listener(|this, _: &ShowFilesView, _, cx| {
+                this.state.update(cx, |s, cx| s.show_panel(PanelTab::Files, cx))
+            }))
+            .on_action(cx.listener(|this, _: &ShowBrowserView, _, cx| {
+                this.state.update(cx, |s, cx| s.show_panel(PanelTab::Browser, cx))
+            }))
             .on_action(cx.listener(|this, _: &ToggleSplit, _, cx| {
                 this.state.update(cx, |s, cx| {
                     s.doc_below = !s.doc_below;

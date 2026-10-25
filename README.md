@@ -67,6 +67,10 @@ table in step.
 | Ctrl/⌘ U | Attach files and images |
 | Ctrl/⌘ Shift T | This turn's tasks |
 | Ctrl/⌘ Shift E | Side panel: plan, files, browser |
+| Ctrl/⌘ 1 | Side panel: Plan |
+| Ctrl/⌘ 2 | Side panel: Agents |
+| Ctrl/⌘ 3 | Side panel: Files |
+| Ctrl/⌘ 4 | Side panel: Browser |
 | Ctrl/⌘ \ | Side panel beside or below the chat |
 | Ctrl/⌘ F | Find in the conversation |
 | Ctrl/⌘ Shift F | Find in the file beside the chat |

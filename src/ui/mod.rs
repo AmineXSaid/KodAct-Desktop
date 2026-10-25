@@ -48,6 +48,7 @@ pub mod find_bar;
 pub mod guide;
 pub mod hooks_editor;
 pub mod ingot;
+mod lens;
 mod forge_cube;
 pub mod markdown;
 pub mod mcp_editor;
@@ -145,6 +146,10 @@ gpui::actions!(
         OpenGuide,
         ToggleSplit,
         TogglePanel,
+        ShowPlanView,
+        ShowAgentsView,
+        ShowFilesView,
+        ShowBrowserView,
         ShowProjectMap,
         CopyLastReply,
         ChangeName,

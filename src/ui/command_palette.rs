@@ -402,6 +402,10 @@ impl CommandPalette {
                 Some(shortcut("Shift E")),
                 Box::new(TogglePanel),
             ),
+            act("Side panel: Plan", "icons/route.svg", Some(shortcut("1")), Box::new(ShowPlanView)),
+            act("Side panel: Agents", "icons/bot.svg", Some(shortcut("2")), Box::new(ShowAgentsView)),
+            act("Side panel: Files", "icons/folder.svg", Some(shortcut("3")), Box::new(ShowFilesView)),
+            act("Side panel: Browser", "icons/globe.svg", Some(shortcut("4")), Box::new(ShowBrowserView)),
             act(
                 if s.doc_below {
                     "Put the side panel beside the chat"

@@ -84,41 +84,6 @@ fn tools(messages: &[Message]) -> impl Iterator<Item = &crate::state::ToolCall> 
         })
 }
 
-fn tab(
-    t: &Theme,
-    state: &Entity<AppState>,
-    which: PanelTab,
-    label: String,
-    on: bool,
-) -> AnyElement {
-    let state = state.clone();
-    let hover = t.colors.hover;
-    div()
-        .id(SharedString::from(format!("panel-tab-{which:?}")))
-        .px(t.space.md)
-        .h(t.size.control)
-        .flex()
-        .items_center()
-        .rounded(t.radius.button)
-        .cursor_pointer()
-        .text_size(t.text.body_sm)
-        .font_weight(if on {
-            FontWeight::SEMIBOLD
-        } else {
-            FontWeight::NORMAL
-        })
-        .text_color(if on {
-            t.colors.text_strong
-        } else {
-            t.colors.text_muted
-        })
-        .when(on, |d| d.bg(t.colors.hover))
-        .when(!on, |d| d.hover(move |s| s.bg(hover)))
-        .child(label)
-        .on_click(move |_, _, cx| state.update(cx, |s, cx| s.show_panel(which, cx)))
-        .into_any_element()
-}
-
 fn icon_button(
     t: &Theme,
     id: &'static str,
@@ -201,14 +166,6 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
     let files = files(v.messages);
     let plan = plan(v.messages);
     let todos = todos(v.messages);
-    let count = |n: usize| {
-        if n == 0 {
-            String::new()
-        } else {
-            format!(" {n}")
-        }
-    };
-
     let closer = state.clone();
     let header = div()
         .flex_none()
@@ -220,34 +177,23 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
         .pr(t.space.sm)
         .border_b_1()
         .border_color(t.colors.border)
-        .child(tab(
-            t,
-            &state,
-            PanelTab::Plan,
-            "Plan".into(),
-            v.tab == PanelTab::Plan,
-        ))
-        .child(tab(
-            t,
-            &state,
-            PanelTab::Agents,
-            format!("Agents{}", count(v.agents.len())),
-            v.tab == PanelTab::Agents,
-        ))
-        .child(tab(
-            t,
-            &state,
-            PanelTab::Files,
-            format!("Files{}", count(files.len())),
-            v.tab == PanelTab::Files,
-        ))
-        .child(tab(
-            t,
-            &state,
-            PanelTab::Browser,
-            "Browser".into(),
-            v.tab == PanelTab::Browser,
-        ))
+        .child({
+            // Each view's one figure: tasks done, agents finished, files made.
+            let done = todos.iter().filter(|(s, _)| *s == ToolStatus::Done).count();
+            let running = v.agents.iter().filter(|r| r.ended.is_none()).count();
+            let of = |a: usize, b: usize| (b > 0).then(|| format!("{a}/{b}"));
+            let item = |which, label, icon, readout, live, key| super::lens::Item { which, label, icon, readout, live, key };
+            super::lens::Lens::new(
+                vec![
+                    item(PanelTab::Plan, "Plan", "icons/route.svg", of(done, todos.len()), false, "1"),
+                    item(PanelTab::Agents, "Agents", "icons/bot.svg", of(v.agents.len() - running, v.agents.len()), running > 0, "2"),
+                    item(PanelTab::Files, "Files", "icons/folder.svg", (!files.is_empty()).then(|| files.len().to_string()), false, "3"),
+                    item(PanelTab::Browser, "Browser", "icons/globe.svg", None, false, "4"),
+                ],
+                v.tab,
+                state.clone(),
+            )
+        })
         .child(div().flex_1())
         .child(
             icon_button(
@@ -439,7 +385,14 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
                 .min_h_0()
                 .bg(ground)
                 .overflow_y_scroll()
-                .child(body),
+                // Each view arrives as the capsule lands on it: it fades in
+                // and rises a few pixels into place.
+                .child(super::motion::rise_in(
+                    div().child(body),
+                    SharedString::from(format!("panel-view-{:?}", v.tab)),
+                    6.,
+                    t,
+                )),
         )
         .into_any_element()
 }
