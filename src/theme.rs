@@ -104,10 +104,14 @@ pub enum Look {
     Tiles,
     /// Keyboard first, violet; the "+" is a list you type to filter.
     Command,
+    /// Calmly smooth's surfaces and form, untouched; the colour used
+    /// sparingly: Electric Blue for the action and focus, Teal only for
+    /// what runs, Royal Purple only for agents.
+    Premium,
 }
 
 impl Look {
-    pub const ALL: [Look; 11] = [
+    pub const ALL: [Look; 12] = [
         Look::Calm,
         Look::Terracotta,
         Look::Patina,
@@ -119,6 +123,7 @@ impl Look {
         Look::Studio,
         Look::Tiles,
         Look::Command,
+        Look::Premium,
     ];
 
     /// How it is saved (`window.json`).
@@ -135,6 +140,7 @@ impl Look {
             Look::Studio => "studio",
             Look::Tiles => "tiles",
             Look::Command => "command",
+            Look::Premium => "premium",
         }
     }
 
@@ -155,6 +161,7 @@ impl Look {
             Look::Studio => "Studio",
             Look::Tiles => "Tiles",
             Look::Command => "Command",
+            Look::Premium => "Premium",
         }
     }
 
@@ -171,6 +178,7 @@ impl Look {
             Look::Studio => "Cool greys, a split + menu",
             Look::Tiles => "Round and roomy, + as tiles",
             Look::Command => "Violet, a + you type to filter",
+            Look::Premium => "Graphite, electric blue, a touch of teal",
         }
     }
 
@@ -199,7 +207,7 @@ impl Look {
             // Forge Ember: Hanken Grotesk, a warm humanist grotesk that reads
             // like a letter at reply size (Anthropic Sans takes over where it
             // is installed, `fonts.rs`).
-            Look::Calm => Form {
+            Look::Calm | Look::Premium => Form {
                 sans: Some("Hanken Grotesk"),
                 display: Some("Hanken Grotesk"),
                 // Denser, as Claude Code sets a reply: a third more on screen.
@@ -462,6 +470,16 @@ impl Look {
                 0xe3d7cd, 0xf0e9e5, 0xffffff, 0xf5f2f0, 0x6a4fa3, 0xffffff, 0xe7dff3, 0x6a4fa3,
                 0x553d86, 0x6a4fa3,
             ),
+            // Forge Premium: Calm's paper and graphite to the hex, the
+            // copper swapped for one blue (deeper by day, for its label).
+            (Look::Premium, false) => t(
+                0xebe8e1, 0xf7f5f1, 0xffffff, 0xf1eee8, 0x2563eb, 0xffffff, 0xdbe6fb, 0x2563eb,
+                0x1d4ed8, 0x1d4ed8,
+            ),
+            (Look::Premium, true) => t(
+                0x1b1a19, 0x242322, 0x2e2d2b, 0x1f1e1d, 0x3b82f6, 0x0b0f1a, 0x1e2a44, 0x7aa7f8,
+                0xa5c4fa, 0x7aa7f8,
+            ),
             (Look::Command, true) => t(
                 0x171513, 0x1e1c1a, 0x2b2825, 0x262321, 0xc2adf0, 0x171513, 0x30283f, 0xc2adf0,
                 0xd6c8f5, 0xc2adf0,
@@ -664,6 +682,13 @@ impl Theme {
         self.extra.accent_fg = c(k.accent_fg);
         self.extra.accent_soft = c(k.accent_soft);
         self.extra.toggle_on = c(k.link);
+        // Live activity and agents take the accent and the theme's spread,
+        // unless the theme names their own.
+        (self.extra.live, self.extra.agent) = match (look, self.is_dark) {
+            (Look::Premium, true) => (c(0x14b8a6), Some(c(0x8b5cf6))),
+            (Look::Premium, false) => (c(0x0f766e), Some(c(0x7c3aed))),
+            _ => (c(k.accent), None),
+        };
         self.extra.mark_top = c(k.mark_top);
         self.colors.primary = c(k.link);
         self.colors.primary_hover = c(k.link_hover);
@@ -895,6 +920,14 @@ pub struct ExtraColors {
     pub border_strong: Hsla, // outlined buttons, switch tracks at rest, fields
     pub sunk: Hsla,          // a recessed track: segmented controls, the composer's tray
     pub toggle_on: Hsla,     // a switch that is on
+    // What is running right now (a tool's spinner, the working line's
+    // mark, an agent at work): the accent, except where a theme gives
+    // live activity its own colour (Premium: teal).
+    pub live: Hsla,
+    // Sub-agents' own mark (their kind in the Agents panel): the theme's
+    // spread of colours, except where a theme gives agents one (Premium:
+    // purple).
+    pub agent: Option<Hsla>,
     // Memory and rules: the reference's ochre.
     pub memory: Hsla,
     pub memory_tint: Hsla,
@@ -967,6 +1000,8 @@ impl ExtraColors {
                 border_strong: rgb(0x4a4540).into(),
                 sunk: rgb(0x1f1e1d).into(),
                 toggle_on: rgb(0xeb9d74).into(),
+                live: rgb(0xeb9d74).into(),
+                agent: None,
                 memory: rgb(0xe5c77a).into(),
                 memory_tint: rgb(0x3a3220).into(),
                 code_inline_fg: rgb(0xef968b).into(),
@@ -1039,6 +1074,8 @@ impl ExtraColors {
                 border_strong: rgb(0xc9c9c7).into(),
                 sunk: rgb(0xf1eee8).into(),
                 toggle_on: rgb(0xa44a24).into(),
+                live: rgb(0xa44a24).into(),
+                agent: None,
                 memory: rgb(0x75591a).into(),
                 memory_tint: rgb(0xf6ecd2).into(),
                 code_inline_fg: rgb(0xa13430).into(),

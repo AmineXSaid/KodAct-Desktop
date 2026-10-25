@@ -135,7 +135,7 @@ pub fn strike(ember: Hsla, heat: Hsla, size: f32, id: impl Into<ElementId>) -> A
 
 /// The working line's mark: the strike, in the accent and the mark's heat.
 pub fn mark(_activity: Activity, t: &Theme, id: impl Into<ElementId>) -> AnyElement {
-    strike(t.extra.accent, t.extra.mark_heat_white, f32::from(t.size.icon), id)
+    strike(t.extra.live, t.extra.mark_heat_white, f32::from(t.size.icon), id)
 }
 
 #[cfg(test)]

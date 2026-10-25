@@ -1258,6 +1258,7 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &ThemeStudio, _, cx| this.pick_look(Look::Studio, cx)))
             .on_action(cx.listener(|this, _: &ThemeTiles, _, cx| this.pick_look(Look::Tiles, cx)))
             .on_action(cx.listener(|this, _: &ThemeCommand, _, cx| this.pick_look(Look::Command, cx)))
+            .on_action(cx.listener(|this, _: &ThemePremium, _, cx| this.pick_look(Look::Premium, cx)))
             .on_action(
                 cx.listener(|this, _: &FocusComposer, window, cx| this.focus_composer(window, cx)),
             )

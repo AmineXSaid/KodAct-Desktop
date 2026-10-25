@@ -32,6 +32,10 @@ pub fn elapsed(d: Duration) -> String {
 
 /// A colour per agent kind, from the theme's own colours, the same each time.
 fn kind_color(kind: &str, t: &Theme) -> Hsla {
+    // A theme with one colour for agents gives every kind that one.
+    if let Some(c) = t.extra.agent {
+        return c;
+    }
     let all = [
         t.colors.primary,
         t.colors.marigold,
@@ -300,8 +304,8 @@ pub fn render(
             .saturating_duration_since(run.started);
         let (status_icon, status_color): (AnyElement, Hsla) = match status {
             ToolStatus::Running => (
-                spinner(t, t.colors.primary, format!("agent-{i}")),
-                t.colors.primary,
+                spinner(t, t.extra.live, format!("agent-{i}")),
+                t.extra.live,
             ),
             ToolStatus::Failed => (
                 icon("icons/circle-x.svg", t.size.icon_sm, t.extra.danger).into_any_element(),
@@ -326,7 +330,7 @@ pub fn render(
             .gap(px(3.))
             .children(run.steps.iter().take(60).map(|s| {
                 div().size(px(8.)).rounded(px(2.)).bg(match s.status {
-                    ToolStatus::Running => t.colors.primary,
+                    ToolStatus::Running => t.extra.live,
                     ToolStatus::Done => t.extra.success.opacity(0.75),
                     ToolStatus::Failed => t.extra.danger,
                     ToolStatus::Declined => t.colors.text_subtle,

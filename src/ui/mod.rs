@@ -108,6 +108,7 @@ gpui::actions!(
         ThemeStudio,
         ThemeTiles,
         ThemeCommand,
+        ThemePremium,
         ToggleBrowser,
         OpenRemoteMenu,
         ConnectWsl,

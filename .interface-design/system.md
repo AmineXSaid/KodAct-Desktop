@@ -97,6 +97,7 @@ Picked in Settings > General > Theme and kept in `window.json`. Each is a whole 
 | Studio (Cool greys, a split + menu) | `#dcdde3` / `#eeeff3` / `#4a4fa0` | `#131417` / `#1a1b1f` / `#b3b6f0` |
 | Tiles (Round and roomy, + as tiles) | `#e3d7cd` / `#f0e9e5` / `#3f6b4f` | `#171513` / `#1e1c1a` / `#9fcfae` |
 | Command (Violet, a + you type to filter) | `#e3d7cd` / `#f0e9e5` / `#6a4fa3` | `#171513` / `#1e1c1a` / `#c2adf0` |
+| Premium (Graphite, electric blue, a touch of teal) | `#ebe8e1` / `#f7f5f1` / `#2563eb` | `#1b1a19` / `#242322` / `#3b82f6` |
 
 | Theme | Faces (UI / display / code / replies) | Corners button · card · field · composer · pressed | Row · title bar · chat | Depth | Selected row |
 |---|---|---|---|---|---|
@@ -111,6 +112,7 @@ Picked in Settings > General > Theme and kept in `window.json`. Each is a whole 
 | Studio | Hanken Grotesk / Archivo / JetBrains Mono / Hanken Grotesk | 8 · 10 · 8 · 18 · 8 | 30 · 36 · 15 | Lift | Soft |
 | Tiles | Hanken Grotesk / Archivo / JetBrains Mono / Hanken Grotesk | 12 · 18 · 12 · 22 · 12 | 34 · 40 · 15 | Lift | Wash |
 | Command | Hanken Grotesk / Archivo / JetBrains Mono / Hanken Grotesk | 8 · 10 · 9 · 16 · 10 | 30 · 36 · 15 | Grain | Wash |
+| Premium | Hanken Grotesk / Hanken Grotesk / JetBrains Mono / Hanken Grotesk | 4 · 4 · 4 · 4 · pill | 30 · 36 · 15 | Grain | Wash |
 
 ### Terminal
 The dock's 16 colours, on `stage` (`palette_check.rs` holds them to AA).

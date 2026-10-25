@@ -1036,7 +1036,7 @@ fn diff_lines(diff: &[crate::state::DiffLine], lang: &str, t: &Theme) -> gpui::D
 
 fn status_icon(status: ToolStatus, t: &Theme) -> AnyElement {
     match status {
-        ToolStatus::Running => icon("icons/loader-circle.svg", t.size.icon_sm, t.extra.accent)
+        ToolStatus::Running => icon("icons/loader-circle.svg", t.size.icon_sm, t.extra.live)
             .with_animation(
                 "tool-running",
                 Animation::new(Duration::from_millis(900)).repeat(),

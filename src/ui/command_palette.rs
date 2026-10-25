@@ -318,6 +318,7 @@ impl CommandPalette {
                 crate::theme::Look::Studio => Box::new(ThemeStudio),
                 crate::theme::Look::Tiles => Box::new(ThemeTiles),
                 crate::theme::Look::Command => Box::new(ThemeCommand),
+                crate::theme::Look::Premium => Box::new(ThemePremium),
             };
             // An action, named as one; the theme's character beside it.
             out.push(act(
