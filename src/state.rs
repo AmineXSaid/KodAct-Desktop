@@ -1615,6 +1615,9 @@ pub struct AppState {
     pub endpoints: Option<crate::endpoints::Endpoints>,
     /// Each profile's last check (`health.rs`).
     pub health: crate::health::Store,
+    /// Each gateway profile's model list (`capabilities.catalog`), as it
+    /// last answered, for the model menu.
+    pub catalogs: std::collections::HashMap<String, Vec<crate::endpoints::ModelInfo>>,
     /// The effort level, when the model takes one; None is Auto.
     pub effort: Option<crate::endpoints::Effort>,
     /// Checks waiting for a slot, and how many are running.
@@ -1945,6 +1948,7 @@ impl AppState {
             search: "".into(),
             endpoints: None,
             health: Default::default(),
+            catalogs: Default::default(),
             effort: None,
             check_queue: Default::default(),
             checks_running: 0,
@@ -2187,6 +2191,7 @@ impl AppState {
                 let minutes = endpoints.sync_interval_minutes;
                 s.endpoints = Some(endpoints);
                 s.health = health;
+                s.load_catalogs(cx);
                 if check_all {
                     s.sync_all(cx);
                 } else {
@@ -2205,6 +2210,67 @@ impl AppState {
             });
         })
         .detach();
+    }
+
+    /// Read every gateway's model list again, off the UI thread; each
+    /// lands in `catalogs` as it answers (one that fails keeps its last).
+    pub fn load_catalogs(&mut self, cx: &mut Context<Self>) {
+        let Some(e) = &self.endpoints else { return };
+        let gateways: Vec<_> = e
+            .profiles
+            .iter()
+            .filter(|p| p.capabilities.catalog)
+            .cloned()
+            .collect();
+        self.catalogs
+            .retain(|name, _| gateways.iter().any(|p| &p.name == name));
+        for p in gateways {
+            cx.spawn(async move |this, cx| {
+                let name = p.name.clone();
+                let listed = cx
+                    .background_spawn(async move {
+                        let key = crate::health::token(&p.auth).ok().flatten();
+                        crate::endpoints::list_catalog(&p.base_url, p.wire, key.as_deref(), &p.headers)
+                    })
+                    .await;
+                if let Ok(models) = listed {
+                    let _ = this.update(cx, |s, cx| {
+                        s.catalogs.insert(name, models);
+                        cx.notify();
+                    });
+                }
+            })
+            .detach();
+        }
+    }
+
+    /// Switch gateway profile `name` to model `id` from its list (its name
+    /// and context window with it), save it, and use it.
+    pub fn pick_catalog_model(&mut self, name: &str, id: &str, cx: &mut Context<Self>) {
+        let info = self
+            .catalogs
+            .get(name)
+            .and_then(|c| c.iter().find(|m| m.id == id))
+            .cloned()
+            .unwrap_or_else(|| crate::endpoints::ModelInfo {
+                id: id.to_string(),
+                ..Default::default()
+            });
+        let Some(e) = self.endpoints.as_mut() else { return };
+        let Some(p) = e.profiles.iter_mut().find(|p| p.name == name) else {
+            return;
+        };
+        p.model = info.id.clone();
+        p.display_name = info.name.clone();
+        p.capabilities.context_window = info.context;
+        let saved = p.clone();
+        cx.background_spawn(async move {
+            let _ = crate::endpoints::save_profile(&saved, Some(&saved.name));
+        })
+        .detach();
+        self.select_profile(name, cx);
+        // The new model is checked as the others are.
+        self.sync_all(cx);
     }
 
     /// The profile in use.

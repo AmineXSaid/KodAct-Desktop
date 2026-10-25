@@ -42,6 +42,8 @@ pub struct Settings {
     ep_key: Entity<InputState>,
     ep_model: Entity<InputState>,
     wire: Wire,
+    /// A gateway: its model list goes in the model menu.
+    catalog: bool,
     models: Vec<String>,
     /// Narrows the endpoint's model list as you type (`endpoints::find_models`).
     model_search: Entity<InputState>,
@@ -245,6 +247,7 @@ impl Settings {
             model_search,
             model_scroll: gpui::ScrollHandle::new(),
             wire: Wire::Openai,
+            catalog: false,
             models: vec![],
             status: Status::Idle,
             save_anyway: false,
@@ -347,6 +350,7 @@ impl Settings {
             capabilities: Default::default(),
         });
         self.wire = p.wire;
+        self.catalog = p.capabilities.catalog;
         Self::set(&self.ep_name, &p.name, window, cx);
         Self::set(&self.ep_url, &p.base_url, window, cx);
         Self::set(&self.ep_model, &p.model, window, cx);
@@ -382,6 +386,7 @@ impl Settings {
         };
         self.preset = Some(id);
         self.wire = p.wire;
+        self.catalog = p.catalog;
         self.models.clear();
         self.status = Status::Idle;
         Self::set(&self.ep_url, p.base_url, window, cx);
@@ -493,8 +498,12 @@ impl Settings {
             return cx.notify();
         }
         let key = self.key(cx);
-        let needs_key = self.wire == Wire::Anthropic
-            || PRESETS.iter().any(|p| Some(p.id) == self.preset && p.key);
+        // A preset knows; else Anthropic's format wants one, unless the
+        // server is on this machine (a local gateway such as OmniRoute).
+        let needs_key = match PRESETS.iter().find(|p| Some(p.id) == self.preset) {
+            Some(p) => p.key,
+            None => self.wire == Wire::Anthropic && !crate::endpoints::is_loopback(&url),
+        };
         if key.is_none() && needs_key {
             self.status = Status::Failed("This endpoint needs a key.".into());
             return cx.notify();
@@ -528,10 +537,13 @@ impl Settings {
             } else {
                 crate::endpoints::Auth::None
             },
-            capabilities: old
-                .as_ref()
-                .map(|p| p.capabilities.clone())
-                .unwrap_or_default(),
+            capabilities: crate::endpoints::Capabilities {
+                catalog: self.catalog,
+                ..old
+                    .as_ref()
+                    .map(|p| p.capabilities.clone())
+                    .unwrap_or_default()
+            },
         };
         let replaces = self.editing.clone();
         self.status = Status::Working(if skip_check {
@@ -1471,6 +1483,31 @@ impl Settings {
             .child(div().flex().flex_col().gap(px(6.)).child(div().text_size(t.text.caption).font_weight(FontWeight::MEDIUM).text_color(t.colors.text_muted).child("Start from")).child(presets).children(found_note.map(|n| div().text_size(t.text.caption).text_color(t.extra.success).child(n))))
             .child(div().flex().gap(px(10.)).child(div().w(px(170.)).child(Self::field(t, "Name", &self.ep_name))).child(div().flex_1().child(Self::field(t, "Base URL", &self.ep_url))))
             .child(div().flex().flex_col().gap(px(6.)).child(div().text_size(t.text.caption).font_weight(FontWeight::MEDIUM).text_color(t.colors.text_muted).child("Protocol")).child(wire_row))
+            .child(
+                div()
+                    .flex()
+                    .items_start()
+                    .gap(px(10.))
+                    .child(super::button::Switch::new("ep-catalog", self.catalog, "List all its models in the model menu").on_toggle({
+                        let this = cx.entity().downgrade();
+                        move |on, _, cx| {
+                            let _ = this.update(cx, |this, cx| {
+                                this.catalog = on;
+                                cx.notify();
+                            });
+                        }
+                    }))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.))
+                            .child(div().text_size(t.text.body_sm).text_color(t.colors.text).child("A gateway: list all its models in the model menu"))
+                            .child(div().text_size(t.text.caption).text_color(t.colors.text_muted).child("As Claude Code's /model lists a gateway's models. For OmniRoute, OpenRouter and the like.")),
+                    ),
+            )
             .child(
                 div()
                     .flex()

@@ -888,7 +888,11 @@ impl CommandPalette {
             }
             let hint = (current.as_deref() == Some(row.name.as_str())).then(|| "current".into());
             out.push(Command {
-                label: format!("Model: {} · {}", row.display, row.name).into(),
+                label: match &row.pick {
+                    Some((profile, id)) => format!("Model: {} · {profile} · {id}", row.display),
+                    None => format!("Model: {} · {}", row.display, row.name),
+                }
+                .into(),
                 group: "Models",
                 icon: "icons/cpu.svg",
                 hint,
@@ -1101,7 +1105,11 @@ impl CommandPalette {
         match cmd.target {
             Target::Action(a) => window.dispatch_action(a, cx),
             Target::Chat(id) => self.state.update(cx, |s, cx| s.open_chat(id, cx)),
-            Target::Model(name) => self.state.update(cx, |s, cx| s.select_profile(&name, cx)),
+            // A gateway's model is "profile\u{1}id".
+            Target::Model(name) => self.state.update(cx, |s, cx| match name.split_once('\u{1}') {
+                Some((profile, id)) => s.pick_catalog_model(profile, id, cx),
+                None => s.select_profile(&name, cx),
+            }),
             Target::Mode(m) => self.state.update(cx, |s, cx| s.set_mode(m, cx)),
             Target::File(rel) => self.state.update(cx, |s, cx| s.open_project_file(rel, cx)),
             Target::Message(id, q) => {

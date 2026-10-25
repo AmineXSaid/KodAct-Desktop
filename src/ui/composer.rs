@@ -117,7 +117,8 @@ impl Composer {
                 // The model window opening: an empty search, the current row active.
                 let s = state.read(cx);
                 let (open, current) = (s.picker_open, s.active_profile().map(|p| p.name.clone()));
-                let rows = s.endpoints.as_ref().map(|e| e.profiles.len()).unwrap_or(0);
+                // As the menu decides whether it shows its search box.
+                let rows = super::model_menu::rows(s, "").1;
                 if open && !this.picker_was_open {
                     this.active = current;
                     this.filter.update(cx, |f, cx| f.set_value("", window, cx));
@@ -518,12 +519,15 @@ impl Composer {
                                 .unwrap_or_default();
                             s.effort = super::model_menu::next_effort(&levels, s.effort);
                             cx.notify();
-                        } else if super::model_menu::rows(s, &query)
+                        } else if let Some(r) = super::model_menu::rows(s, &query)
                             .0
-                            .iter()
-                            .any(|r| r.name == key && !r.disabled)
+                            .into_iter()
+                            .find(|r| r.name == key && !r.disabled)
                         {
-                            s.select_profile(&key, cx);
+                            match r.pick {
+                                Some((profile, id)) => s.pick_catalog_model(&profile, &id, cx),
+                                None => s.select_profile(&key, cx),
+                            }
                         }
                     });
                 }

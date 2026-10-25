@@ -34,6 +34,23 @@ pub struct Row {
     /// Failed or unreachable: shown greyed (only when it's the one in use).
     pub disabled: bool,
     pub current: bool,
+    /// A model from a gateway's list: its profile and the model's id.
+    /// Picking it switches that profile to the model.
+    pub pick: Option<(String, String)>,
+    /// The first of a gateway's models: the heading above them.
+    pub group: Option<String>,
+}
+
+/// The most of a gateway's models listed before a search narrows them.
+const CATALOG_SHOWN: usize = 300;
+
+/// A context window as people say it: "200K", "1M".
+fn window_text(tokens: u64) -> String {
+    match tokens {
+        t if t >= 1_000_000 && t % 1_000_000 == 0 => format!("{}M", t / 1_000_000),
+        t if t >= 1_000_000 => format!("{:.1}M", t as f64 / 1_000_000.),
+        t => format!("{}K", (t as f64 / 1000.).round() as u64),
+    }
 }
 
 /// The menu's rows: every pair that answers or hasn't been measured, plus
@@ -74,6 +91,8 @@ pub fn rows(s: &AppState, query: &str) -> (Vec<Row>, usize) {
             ping,
             disabled: !health::is_offered(&check),
             current: current.as_deref() == Some(&p.name),
+            pick: None,
+            group: None,
         };
         if row.disabled {
             unavailable.push(row);
@@ -82,7 +101,6 @@ pub fn rows(s: &AppState, query: &str) -> (Vec<Row>, usize) {
         }
     }
     offered.extend(unavailable.into_iter().filter(|r| r.current));
-    let total = offered.len();
     let q = query.trim().to_lowercase();
     if !q.is_empty() {
         offered.retain(|r| {
@@ -90,6 +108,44 @@ pub fn rows(s: &AppState, query: &str) -> (Vec<Row>, usize) {
                 .iter()
                 .any(|f| f.to_lowercase().contains(&q))
         });
+    }
+    // Then each gateway's own models, as Claude Code's `/model` lists a
+    // gateway's: best match first while searching, else by id.
+    let mut total = offered.len();
+    for p in e.profiles.iter().filter(|p| p.capabilities.catalog) {
+        let Some(models) = s.catalogs.get(&p.name) else {
+            continue;
+        };
+        total += models.len();
+        let ids: Vec<String> = models.iter().map(|m| m.id.clone()).collect();
+        let found = endpoints::find_models(&ids, query);
+        let mut first = true;
+        for id in found.into_iter().take(CATALOG_SHOWN) {
+            let Some(m) = models.iter().find(|m| &m.id == id) else {
+                continue;
+            };
+            let in_use = current.as_deref() == Some(&p.name) && p.model == m.id;
+            let description = [
+                Some(m.id.clone()),
+                m.context.map(|c| format!("{} context", window_text(c))),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" · ");
+            offered.push(Row {
+                name: format!("{}\u{1}{}", p.name, m.id),
+                display: m.name.clone().unwrap_or_else(|| m.id.clone()),
+                description,
+                chips: if m.reasoning { vec!["Thinks"] } else { vec![] },
+                ping: None,
+                disabled: false,
+                current: in_use,
+                pick: Some((p.name.clone(), m.id.clone())),
+                group: first.then(|| format!("{} · {} models", p.name, models.len())),
+            });
+            first = false;
+        }
     }
     (offered, total)
 }
@@ -246,6 +302,18 @@ pub fn render(
     } else {
         list = list.child(heading);
         for row in rows {
+            if let Some(g) = &row.group {
+                list = list.child(
+                    div()
+                        .px(px(12.))
+                        .pt(px(8.))
+                        .pb(px(2.))
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_subtle)
+                        .child(g.clone()),
+                );
+            }
+            let pick = row.pick.clone();
             let key = row.name.clone();
             let is_active = active == Some(key.as_str());
             let (st, hover) = (state.clone(), on_hover.clone());
@@ -344,7 +412,10 @@ pub fn render(
                     .when(!row.disabled, |d| {
                         let name = key.clone();
                         d.on_click(move |_, _, cx| {
-                            st.update(cx, |s, cx| s.select_profile(&name, cx))
+                            st.update(cx, |s, cx| match &pick {
+                                Some((profile, id)) => s.pick_catalog_model(profile, id, cx),
+                                None => s.select_profile(&name, cx),
+                            })
                         })
                     }),
             );
