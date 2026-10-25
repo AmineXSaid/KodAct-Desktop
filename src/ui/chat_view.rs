@@ -313,7 +313,7 @@ fn step_of(c: &Chat, mode: crate::modes::ModeId) -> Option<(Activity, String)> {
         // A step just ended, or a question was answered: the model thinks
         // about the result and picks what comes next.
         Some(_) => (Activity::Thinking, "Thinking about the result".into()),
-        None => (Activity::Waiting, "Waiting for the model to answer".into()),
+        None => (Activity::Waiting, "Waiting…".into()),
     })
 }
 

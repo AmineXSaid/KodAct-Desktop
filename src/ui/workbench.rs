@@ -84,37 +84,53 @@ fn tools(messages: &[Message]) -> impl Iterator<Item = &crate::state::ToolCall> 
         })
 }
 
+/// A tab in the panel's bar: its name, its count dimmer beside it, and
+/// under the open one a thin line in full ink. No fill: the line says
+/// where you are.
 fn tab(
     t: &Theme,
     state: &Entity<AppState>,
     which: PanelTab,
-    label: String,
+    label: &'static str,
+    count: usize,
     on: bool,
 ) -> AnyElement {
     let state = state.clone();
-    let hover = t.colors.hover;
+    let strong = t.colors.text_strong;
     div()
         .id(SharedString::from(format!("panel-tab-{which:?}")))
-        .px(t.space.md)
-        .h(t.size.control)
+        .relative()
+        .h_full()
+        .px(t.space.sm)
         .flex()
         .items_center()
-        .rounded(t.radius.button)
+        .gap(t.space.xs + px(1.))
         .cursor_pointer()
         .text_size(t.text.body_sm)
-        .font_weight(if on {
-            FontWeight::SEMIBOLD
-        } else {
-            FontWeight::NORMAL
-        })
-        .text_color(if on {
-            t.colors.text_strong
-        } else {
-            t.colors.text_muted
-        })
-        .when(on, |d| d.bg(t.colors.hover))
-        .when(!on, |d| d.hover(move |s| s.bg(hover)))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(if on { strong } else { t.colors.text_muted })
+        .when(!on, |d| d.hover(move |s| s.text_color(strong)))
         .child(label)
+        .when(count > 0, |d| {
+            d.child(
+                div()
+                    .text_size(t.text.caption)
+                    .text_color(t.colors.text_subtle)
+                    .child(count.to_string()),
+            )
+        })
+        .when(on, |d| {
+            d.child(
+                div()
+                    .absolute()
+                    .left(t.space.sm)
+                    .right(t.space.sm)
+                    .bottom(-t.size.hairline)
+                    .h(px(2.))
+                    .rounded(t.radius.line)
+                    .bg(strong),
+            )
+        })
         .on_click(move |_, _, cx| state.update(cx, |s, cx| s.show_panel(which, cx)))
         .into_any_element()
 }
@@ -201,14 +217,6 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
     let files = files(v.messages);
     let plan = plan(v.messages);
     let todos = todos(v.messages);
-    let count = |n: usize| {
-        if n == 0 {
-            String::new()
-        } else {
-            format!(" {n}")
-        }
-    };
-
     let closer = state.clone();
     let header = div()
         .flex_none()
@@ -220,34 +228,10 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
         .pr(t.space.sm)
         .border_b_1()
         .border_color(t.colors.border)
-        .child(tab(
-            t,
-            &state,
-            PanelTab::Plan,
-            "Plan".into(),
-            v.tab == PanelTab::Plan,
-        ))
-        .child(tab(
-            t,
-            &state,
-            PanelTab::Agents,
-            format!("Agents{}", count(v.agents.len())),
-            v.tab == PanelTab::Agents,
-        ))
-        .child(tab(
-            t,
-            &state,
-            PanelTab::Files,
-            format!("Files{}", count(files.len())),
-            v.tab == PanelTab::Files,
-        ))
-        .child(tab(
-            t,
-            &state,
-            PanelTab::Browser,
-            "Browser".into(),
-            v.tab == PanelTab::Browser,
-        ))
+        .child(tab(t, &state, PanelTab::Plan, "Plan", 0, v.tab == PanelTab::Plan))
+        .child(tab(t, &state, PanelTab::Agents, "Agents", v.agents.len(), v.tab == PanelTab::Agents))
+        .child(tab(t, &state, PanelTab::Files, "Files", files.len(), v.tab == PanelTab::Files))
+        .child(tab(t, &state, PanelTab::Browser, "Browser", 0, v.tab == PanelTab::Browser))
         .child(div().flex_1())
         .child(
             icon_button(

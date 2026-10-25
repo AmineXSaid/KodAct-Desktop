@@ -100,33 +100,6 @@ fn spinner(t: &Theme, color: Hsla, key: String) -> AnyElement {
         .into_any_element()
 }
 
-fn stat(t: &Theme, value: String, label: &str, color: Hsla) -> gpui::Div {
-    div()
-        .flex_1()
-        .flex()
-        .flex_col()
-        .gap(px(2.))
-        .px(t.space.md)
-        .py(t.space.sm)
-        .rounded(t.radius.button)
-        .border_1()
-        .border_color(t.colors.border)
-        .bg(t.colors.surface)
-        .child(
-            div()
-                .text_size(t.text.subheading)
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(color)
-                .child(value),
-        )
-        .child(
-            div()
-                .text_size(t.text.caption)
-                .text_color(t.colors.text_muted)
-                .child(label.to_string()),
-        )
-}
-
 pub struct View<'a> {
     pub runs: &'a [AgentRun],
     /// What you asked, which Forge split across its agents.
@@ -186,32 +159,54 @@ pub fn render(
         v.runs.iter().filter_map(|r| r.ended).max().unwrap_or(now)
     };
 
+    // One quiet line, not four boxes: how many, how many still at work, the
+    // steps and the time; under it a hairline that fills as agents finish.
+    let finished = v.runs.len() - running;
+    let fraction = finished as f32 / v.runs.len().max(1) as f32;
+    let part = |text: String, color: Hsla| div().text_color(color).child(text);
+    let dot = || div().text_color(t.colors.text_subtle).child("·");
     let summary = div()
         .flex()
+        .flex_col()
         .gap(t.space.sm)
-        .child(stat(
-            t,
-            v.runs.len().to_string(),
-            "agents",
-            t.colors.text_strong,
-        ))
-        .child(stat(
-            t,
-            running.to_string(),
-            "running",
-            if running > 0 {
-                t.colors.primary
-            } else {
-                t.colors.text_muted
-            },
-        ))
-        .child(stat(t, steps.to_string(), "steps", t.colors.text_strong))
-        .child(stat(
-            t,
-            elapsed(last.saturating_duration_since(first)),
-            "elapsed",
-            t.colors.text_strong,
-        ));
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(t.space.sm)
+                .text_size(t.text.body_sm)
+                .child(part(
+                    format!("{} {}", v.runs.len(), if v.runs.len() == 1 { "agent" } else { "agents" }),
+                    t.colors.text_strong,
+                ))
+                .child(dot())
+                .child(match (running, failed) {
+                    (r, _) if r > 0 => part(format!("{r} running"), t.extra.live),
+                    (_, f) if f > 0 => part(format!("{f} failed"), t.extra.danger),
+                    _ => part("all done".into(), t.colors.text_muted),
+                })
+                .child(dot())
+                .child(part(
+                    format!("{steps} {}", if steps == 1 { "step" } else { "steps" }),
+                    t.colors.text_muted,
+                ))
+                .child(div().flex_1())
+                .child(part(elapsed(last.saturating_duration_since(first)), t.colors.text_subtle)),
+        )
+        .child(
+            div()
+                .h(px(2.))
+                .w_full()
+                .rounded(t.radius.line)
+                .bg(t.colors.border)
+                .child(
+                    div()
+                        .h_full()
+                        .w(gpui::relative(fraction))
+                        .rounded(t.radius.line)
+                        .bg(if running > 0 { t.extra.live } else { t.colors.text_subtle }),
+                ),
+        );
 
     // Forge at the root of the tree.
     let root = div()

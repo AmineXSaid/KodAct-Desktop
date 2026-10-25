@@ -157,26 +157,57 @@ pub fn render(
         return None;
     }
     let summary = summary(list.len(), running, failed, denied, stopped);
-    // A quiet title-bar button, never floating over the conversation.
+    let all = list.len();
+    let finished = all - running;
+    // A quiet chip in the title bar, never floating over the conversation:
+    // while work runs, Forge's cube, how many run, and a short line that
+    // fills as tasks finish; after, what they came to.
     let pill = div()
         .id("tasks-pill")
         .occlude()
         .flex()
         .items_center()
-        .gap(t.space.xs)
-        .h(t.size.control)
-        .px(t.space.sm)
-        .rounded(t.radius.button)
+        .gap(t.space.sm)
+        .h(t.size.control - px(4.))
+        .pl(t.space.sm)
+        .pr(t.space.xs + px(2.))
+        .rounded(t.radius.pill)
+        .border_1()
+        .border_color(t.colors.border)
         .cursor_pointer()
+        .when(open, |d| d.bg(hover))
         .hover(move |d| d.bg(hover))
         .text_size(t.text.caption)
         .text_color(if failed > 0 { t.extra.danger } else { t.colors.text_muted })
-        .child(if running > 0 {
-            status_icon(ToolStatus::Running, t, "tasks-pill-spin".into())
-        } else {
-            icon("icons/list-todo.svg", t.size.icon_sm, t.colors.text_muted).into_any_element()
+        .map(|d| {
+            if running > 0 {
+                d.child(super::turning_logo_in(f32::from(t.size.icon_sm), "tasks-pill-cube", t.extra.live))
+                    .child(
+                        div()
+                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .text_color(t.colors.text)
+                            .child(format!("{running} running")),
+                    )
+                    .child(
+                        div()
+                            .w(px(36.))
+                            .h(px(3.))
+                            .rounded(t.radius.line)
+                            .bg(t.colors.border)
+                            .child(
+                                div()
+                                    .h_full()
+                                    .w(gpui::relative(finished as f32 / all.max(1) as f32))
+                                    .rounded(t.radius.line)
+                                    .bg(t.extra.live),
+                            ),
+                    )
+                    .child(div().text_color(t.colors.text_subtle).child(format!("{finished}/{all}")))
+            } else {
+                d.child(icon("icons/list-todo.svg", t.size.icon_sm, t.colors.text_muted))
+                    .child(summary)
+            }
         })
-        .child(summary)
         .child(icon(
             if open {
                 "icons/chevron-up.svg"
@@ -270,11 +301,15 @@ pub fn render(
         )
         .with_priority(2)
     });
+    // A hairline parts it from the pane buttons after it.
     Some(
         div()
-            .relative()
-            .child(pill)
-            .children(panel)
+            .flex()
+            .items_center()
+            .gap(t.space.sm)
+            .mr(t.space.xs)
+            .child(div().relative().child(pill).children(panel))
+            .child(div().w(t.size.hairline).h(t.size.icon).bg(t.colors.border))
             .into_any_element(),
     )
 }

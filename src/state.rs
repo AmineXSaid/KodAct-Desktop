@@ -9764,6 +9764,78 @@ fn demo_agents() -> Vec<Step> {
     s
 }
 
+/// Six agents at once ("6 agents" in the demo): different kinds, steps
+/// landing out of order, one that fails, for the agents' own UI.
+fn demo_six_agents() -> Vec<Step> {
+    use crate::backend::Event;
+    use serde_json::json;
+    let start = |id: &str, kind: &str, task: &str| {
+        Step::Agent(Event::ToolUse {
+            id: id.into(),
+            name: "Task".into(),
+            input: json!({ "subagent_type": kind, "description": task, "prompt": task }),
+        })
+    };
+    let tool = |parent: &str, id: &str, name: &str, input: serde_json::Value| {
+        Step::Agent(Event::SubTool { parent: parent.into(), id: id.into(), name: name.into(), input })
+    };
+    let done = |parent: &str, id: &str| {
+        Step::Agent(Event::SubResult { parent: parent.into(), id: id.into(), is_error: false })
+    };
+    let end = |id: &str, out: &str, failed: bool| {
+        Step::Agent(Event::ToolResult { id: id.into(), output: out.into(), is_error: failed, images: vec![] })
+    };
+    let mut s = words("I'll survey the repository with six agents working side by side.", Step::Say);
+    s.extend([
+        start("b1", "Explore", "Find Rust files"),
+        start("b2", "Explore", "Count Python files"),
+        start("b3", "Explore", "Find README files"),
+        start("b4", "general-purpose", "List directories"),
+        start("b5", "code-reviewer", "Check sticker HTML"),
+        start("b6", "Explore", "Find Cargo projects"),
+        tool("b1", "b1a", "Glob", json!({ "pattern": "**/*.rs" })),
+        tool("b2", "b2a", "Glob", json!({ "pattern": "**/*.py" })),
+        tool("b3", "b3a", "Glob", json!({ "pattern": "**/README*" })),
+        tool("b4", "b4a", "Bash", json!({ "command": "ls -la", "description": "List the top folder" })),
+        tool("b5", "b5a", "Read", json!({ "file_path": "web/sticker.html" })),
+        tool("b6", "b6a", "Glob", json!({ "pattern": "**/Cargo.toml" })),
+        done("b1", "b1a"),
+        tool("b1", "b1b", "Grep", json!({ "pattern": "fn main", "path": "src" })),
+        done("b4", "b4a"),
+        tool("b4", "b4b", "Bash", json!({ "command": "ls services", "description": "List the services" })),
+        done("b2", "b2a"),
+        tool("b2", "b2b", "Bash", json!({ "command": "wc -l $(git ls-files '*.py')", "description": "Count Python lines" })),
+        done("b3", "b3a"),
+        tool("b3", "b3b", "Read", json!({ "file_path": "docs/README.md" })),
+        done("b6", "b6a"),
+        tool("b6", "b6b", "Read", json!({ "file_path": "Cargo.toml" })),
+        done("b1", "b1b"),
+        tool("b1", "b1c", "Read", json!({ "file_path": "src/main.rs" })),
+        done("b5", "b5a"),
+        tool("b5", "b5b", "Grep", json!({ "pattern": "<script", "path": "web" })),
+        done("b2", "b2b"),
+        end("b2", "12 Python files, 1,840 lines, all under scripts/.", false),
+        done("b4", "b4b"),
+        tool("b4", "b4c", "Bash", json!({ "command": "ls -la services/api", "description": "Look inside services/api" })),
+        done("b3", "b3b"),
+        tool("b3", "b3c", "Read", json!({ "file_path": "README.md" })),
+        done("b6", "b6b"),
+        tool("b6", "b6c", "Grep", json!({ "pattern": "\\[workspace\\]", "path": "." })),
+        done("b5", "b5b"),
+        end("b5", "web/sticker.html could not be read: the file is not in this checkout.", true),
+        done("b1", "b1c"),
+        end("b1", "23 .rs files in 4 crates; the entry point is src/main.rs.", false),
+        done("b3", "b3c"),
+        end("b3", "Two READMEs: the root one and docs/README.md.", false),
+        done("b4", "b4c"),
+        end("b4", "Top level: src, docs, scripts, services (api, worker), web.", false),
+        done("b6", "b6c"),
+        end("b6", "One Cargo workspace with 4 members.", false),
+    ]);
+    s.extend(words("Five of six agents finished: 23 Rust files in 4 crates, 12 Python files, two READMEs, one Cargo workspace. The sticker HTML isn't in this checkout.", Step::Say));
+    s
+}
+
 /// The demo's planned task: a plan, its task list, a look in the browser
 /// and the files it made, which the side panel's tabs show.
 /// The demo plan, reworked: a sentence reworded, a step changed, one added.
@@ -9872,6 +9944,7 @@ fn demo_plan() -> Vec<Step> {
 fn demo_title(prompt: &str) -> Option<&'static str> {
     let lower = prompt.to_lowercase();
     [
+        ("6 agents", "Repository survey"),
         ("agent", "Chat pipeline review"),
         ("approv", "Repo survey"),
         ("plan", "Settings migration plan"),
@@ -9908,6 +9981,11 @@ fn script(prompt: &str) -> Vec<Step> {
         s.extend(words("Noted. I'll keep that in this project's memory.", Step::Say));
         s.push(Step::Remember(fact));
         s.push(Step::End { seconds: 1.4 });
+        return s;
+    }
+    if lower.contains("6 agents") || lower.contains("six agents") {
+        s.extend(demo_six_agents());
+        s.push(Step::End { seconds: 31.4 });
         return s;
     }
     if lower.contains("agent") {
