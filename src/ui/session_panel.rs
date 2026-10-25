@@ -413,6 +413,12 @@ fn changed(t: &Theme, state: &Entity<AppState>, files: &[Changed], pr: bool) -> 
                 .hover(move |d| d.bg(hover))
                 .text_size(t.text.body_sm)
                 .text_color(t.colors.text)
+                // The file's own icon, as the VS Code extension shows it.
+                .child(
+                    gpui::img(super::file_icon::asset(&f.name, false, &f.name))
+                        .flex_none()
+                        .size(t.size.icon),
+                )
                 .child(
                     div()
                         .flex_1()

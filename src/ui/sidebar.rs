@@ -947,22 +947,36 @@ pub fn kind_switch(
     kind: SidebarKind,
 ) -> impl IntoElement {
     let hover = t.colors.hover;
-    let segment = |id: &'static str, path: &'static str, tip: &'static str, k: SidebarKind| {
+    // Each segment names what it lists, so the switch says what it does.
+    let segment = |id: &'static str,
+                   path: &'static str,
+                   label: &'static str,
+                   tip: &'static str,
+                   k: SidebarKind| {
         let on = kind == k;
         let state = state.clone();
+        let ink = if on { t.colors.text_strong } else { t.colors.text_muted };
         div()
             .id(id)
             .occlude()
             .flex()
             .items_center()
             .justify_center()
-            .w(t.size.control + t.space.xs)
+            .gap(t.space.xs)
+            .px(t.space.sm)
             .h(t.size.control - t.space.xs)
             .rounded(t.radius.small)
             .cursor_pointer()
-            .when(on, |d| d.bg(t.colors.surface).shadow(t.elevation_grain()))
+            .text_size(t.text.caption)
+            .text_color(ink)
+            .when(on, |d| {
+                d.bg(t.colors.surface)
+                    .shadow(t.elevation_grain())
+                    .font_weight(FontWeight::MEDIUM)
+            })
             .when(!on, |d| d.hover(move |st| st.bg(hover)))
-            .child(icon(path, t.size.icon_sm, if on { t.colors.text_strong } else { t.colors.text_muted }))
+            .child(icon(path, t.size.icon_xs, ink))
+            .child(label)
             .tooltip(move |w, cx| gpui::component::tooltip::Tooltip::new(tip).build(w, cx))
             .on_click(move |_, _, cx| state.update(cx, |s, cx| s.set_sidebar_kind(k, cx)))
     };
@@ -975,8 +989,20 @@ pub fn kind_switch(
         .bg(t.extra.sunk)
         .border_1()
         .border_color(t.colors.border)
-        .child(segment("kind-chat", "icons/message-square.svg", "Chats", SidebarKind::Chat))
-        .child(segment("kind-code", "icons/code-xml.svg", "Code: chats in a folder", SidebarKind::Code))
+        .child(segment(
+            "kind-chat",
+            "icons/message-square.svg",
+            "Chats",
+            "Plain chats: the sidebar lists them, and New starts one",
+            SidebarKind::Chat,
+        ))
+        .child(segment(
+            "kind-code",
+            "icons/code-xml.svg",
+            "Code",
+            "Chats in a project folder: the sidebar lists them, and New starts one in your folder",
+            SidebarKind::Code,
+        ))
 }
 
 /// The sidebar collapsed (Ctrl+B): a narrow rail of the same actions as
