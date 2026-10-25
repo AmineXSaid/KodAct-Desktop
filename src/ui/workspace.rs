@@ -1366,6 +1366,12 @@ impl Render for Workspace {
                     s.open_settings(crate::state::SettingsTab::Skills, cx)
                 })
             }))
+            .on_action(cx.listener(|this, _: &InstallSkill, _, cx| {
+                this.state.update(cx, |s, cx| s.install_skill(cx))
+            }))
+            .on_action(cx.listener(|this, _: &OpenMarketplaces, _, cx| {
+                this.state.update(cx, |s, cx| s.open_marketplaces(cx))
+            }))
             .on_action(cx.listener(|this, _: &OpenHooks, _, cx| {
                 this.state.update(cx, |s, cx| {
                     s.open_settings(crate::state::SettingsTab::Hooks, cx)

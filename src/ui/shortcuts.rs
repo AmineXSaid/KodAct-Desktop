@@ -21,6 +21,7 @@ pub const SHORTCUTS: &[(&str, &str, &str)] = &[
     ("f2", "Rename this chat", "Chats"),
     ("secondary-shift-p", "Projects", "Chats"),
     ("secondary-shift-r", "Rules and memory", "Chats"),
+    ("secondary-shift-i", "Install a skill", "General"),
     ("secondary-l", "Focus the composer", "Conversation"),
     ("secondary-u", "Attach files and images", "Conversation"),
     ("secondary-shift-t", "This turn's tasks", "Conversation"),

@@ -442,6 +442,18 @@ impl CommandPalette {
                 Box::new(OpenSkills),
             ),
             act(
+                "Install a skill…",
+                "icons/download.svg",
+                Some(shortcut("Shift I")),
+                Box::new(InstallSkill),
+            ),
+            act(
+                "Browse plugin marketplaces…",
+                "icons/puzzle.svg",
+                None,
+                Box::new(OpenMarketplaces),
+            ),
+            act(
                 "Open Hooks…",
                 "icons/webhook.svg",
                 None,

@@ -1786,6 +1786,10 @@ pub struct AppState {
     pub settings_tab: SettingsTab,
     /// Settings should open the Add endpoint form (taken by the view).
     pub settings_add: bool,
+    /// Settings > Skills shows its Install panel (`ui/skill_install.rs`).
+    pub skills_install: bool,
+    /// Settings > Plugins shows its marketplaces (`ui/marketplaces.rs`).
+    pub plugins_market: bool,
     /// Each chat's side questions (`/btw`).
     pub side: std::collections::HashMap<usize, Side>,
     /// The side card's input should take focus (it was just opened).
@@ -2049,6 +2053,8 @@ impl AppState {
             settings_open: false,
             settings_tab: SettingsTab::General,
             settings_add: false,
+            skills_install: false,
+            plugins_market: false,
             side: Default::default(),
             side_focus: false,
             draft: None,
@@ -4091,6 +4097,18 @@ impl AppState {
             });
             r
         })
+    }
+
+    /// Settings > Skills, on its Install panel.
+    pub fn install_skill(&mut self, cx: &mut Context<Self>) {
+        self.skills_install = true;
+        self.open_settings(SettingsTab::Skills, cx);
+    }
+
+    /// Settings > Plugins, on its marketplaces.
+    pub fn open_marketplaces(&mut self, cx: &mut Context<Self>) {
+        self.plugins_market = true;
+        self.open_settings(SettingsTab::Plugins, cx);
     }
 
     /// Settings > Models, on the Add endpoint form.
@@ -8238,7 +8256,7 @@ impl AppState {
         self.remote_ready.contains_key(target)
     }
 
-    fn remote_extra(&self, target: &crate::remote::Target) -> crate::remote::Extra {
+    pub(crate) fn remote_extra(&self, target: &crate::remote::Target) -> crate::remote::Extra {
         crate::remote::Extra {
             accept_new_host_key: matches!(target, crate::remote::Target::Ssh(h) if self.trusted_hosts.contains(h)),
             reverse: vec![],

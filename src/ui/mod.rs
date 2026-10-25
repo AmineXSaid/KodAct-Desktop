@@ -76,6 +76,8 @@ pub mod shortcuts;
 pub mod side_chat;
 pub mod sidebar;
 pub mod skeleton;
+pub mod marketplaces;
+pub mod skill_install;
 pub mod skills_editor;
 pub mod slash_commands;
 pub mod starters;
@@ -138,6 +140,8 @@ gpui::actions!(
         OpenSlashCommands,
         OpenAgents,
         OpenSkills,
+        InstallSkill,
+        OpenMarketplaces,
         OpenHooks,
         OpenPlugins,
         OpenMcpServers,

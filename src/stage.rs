@@ -304,7 +304,7 @@ impl Budget {
     }
 }
 
-fn zip(file: &Path, dest: &Path) -> Result<(Vec<String>, usize), String> {
+pub(crate) fn zip(file: &Path, dest: &Path) -> Result<(Vec<String>, usize), String> {
     let f = std::fs::File::open(file).map_err(|e| e.to_string())?;
     let mut z = zip::ZipArchive::new(f).map_err(|e| format!("not a zip it can read ({e})"))?;
     if z.len() > MAX_ENTRIES {

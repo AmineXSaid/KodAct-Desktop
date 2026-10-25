@@ -50,6 +50,7 @@ mod rules;
 mod secrets;
 mod setting_profiles;
 mod shell_prompt;
+mod skill_install;
 mod stage;
 mod state;
 mod stubs;
@@ -95,6 +96,7 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("secondary-shift-c", CopyLastReply, None),
         KeyBinding::new("secondary-,", OpenSettings, None),
         KeyBinding::new("secondary-shift-r", OpenRules, None),
+        KeyBinding::new("secondary-shift-i", InstallSkill, None),
         KeyBinding::new("secondary-shift-p", OpenProjects, None),
         KeyBinding::new("secondary-q", Quit, None),
         KeyBinding::new("f1", ShowShortcuts, None),

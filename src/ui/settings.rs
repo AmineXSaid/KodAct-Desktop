@@ -282,6 +282,13 @@ impl Settings {
             SettingsTab::Skills => self.skills.update(cx, |e, cx| e.back(cx)),
             SettingsTab::Hooks => self.hooks.update(cx, |e, cx| e.back(cx)),
             SettingsTab::Mcp => self.mcp.update(cx, |e, cx| e.back(cx)),
+            SettingsTab::Plugins if self.state.read(cx).plugins_market => {
+                self.state.update(cx, |s, cx| {
+                    s.plugins_market = false;
+                    cx.notify();
+                });
+                true
+            }
             SettingsTab::Models if self.form => {
                 self.form = false;
                 cx.notify();

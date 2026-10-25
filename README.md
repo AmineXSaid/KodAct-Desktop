@@ -58,6 +58,7 @@ table in step.
 | F2 | Rename this chat |
 | Ctrl/⌘ Shift P | Projects |
 | Ctrl/⌘ Shift R | Rules and memory |
+| Ctrl/⌘ Shift I | Install a skill |
 | Ctrl/⌘ Shift A | Chats that need you |
 | Ctrl/⌘ Shift M | The project map |
 | Ctrl/⌘ Alt O | Remote: WSL, SSH host or container |
@@ -219,6 +220,29 @@ and dev containers from an image and from a Dockerfile, each with the real
 ForgeCLI and the scripted model (`cargo test real_ -- --include-ignored`,
 see `src/remote.rs`). WSL runs the same way through `wsl.exe` but has only
 been checked by its unit tests (no Windows machine here).
+
+## Skills and plugins
+
+Skills and plugins made for Claude Code work in Forge unchanged. ForgeCLI
+reads Claude Code's folders (`~/.claude/skills`, a project's `.claude/skills`,
+and `.claude-plugin/plugin.json` in a plugin) and acts on a skill's
+frontmatter as Claude Code does: `$ARGUMENTS`, `${CLAUDE_SKILL_DIR}`,
+`` !`command` `` lines, `allowed-tools`, `model`, `context: fork`, `hooks`.
+This needs a ForgeCLI with that support (its branch `ccr-02a743e1-1gmu4f`,
+built on `forge-gpui-steering`).
+
+- **Install a skill** (Ctrl/⌘ Shift I, or Settings > Skills > Install skill):
+  from a GitHub repository (`owner/repo`, or a link to one folder in it), a git
+  URL, a folder, or a `.zip` / `.skill` file. Forge shows what each skill
+  would run and allow before installing it into `~/.claude/skills` or the
+  project's `.claude/skills`, where Claude Code finds it too. Nothing runs
+  while it installs. An installed skill has Update, which fetches it again.
+- **Plugins** (Settings > Plugins > Marketplaces): add a Claude Code
+  marketplace (a repository with `.claude-plugin/marketplace.json`) and
+  install its plugins. Each goes under ForgeCLI's config folder
+  (`plugins/<marketplace>/<plugin>`) and into your `pluginDirs`.
+- **WSL and SSH**: in a remote project, skills install on that machine, and
+  your own skills have "Copy to this project's machine".
 
 ## Terminal
 

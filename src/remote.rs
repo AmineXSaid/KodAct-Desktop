@@ -785,15 +785,61 @@ cd "$(x "$1")" 2>/dev/null || exit 3
         .collect())
 }
 
-/// The skills ForgeCLI on the remote loads, from its folders there (yours,
-/// `$FORGE_HOME` or `~/.config/forge`, then the project's `.agents` and
-/// `.forge`): each skill's folder name and its SKILL.md frontmatter.
+/// Put `files` (paths inside the folder, and their bytes) on the remote as the
+/// folder `dest`, whole: unpacked beside it first, then swapped in. With
+/// `replace` false, a folder already there is left alone and that is an error.
+pub fn put_dir(
+    target: &Target,
+    dest: &str,
+    files: &[(String, Vec<u8>)],
+    replace: bool,
+    extra: &Extra,
+) -> Result<(), Error> {
+    let refs: Vec<(&str, &[u8])> = files.iter().map(|(p, b)| (p.as_str(), b.as_slice())).collect();
+    let mode = if replace { "replace" } else { "keep" };
+    run(
+        target,
+        &put_dir_script(),
+        &[dest.to_string(), mode.to_string()],
+        &tar(&refs),
+        Duration::from_secs(300),
+        extra,
+    )
+    .map(|_| ())
+}
+
+/// [`put_dir`]'s script: `$1` the folder, `$2` `keep` or `replace`, the tar on stdin.
+fn put_dir_script() -> String {
+    format!(
+        r#"{TILDE}
+d=$(x "$1"); t="$d.forge-tmp"
+if [ "$2" = keep ] && [ -e "$d" ]; then echo "$1 is already there" >&2; exit 3; fi
+mkdir -p "$(dirname "$d")" && rm -rf "$t" && mkdir -p "$t" && tar -xf - -C "$t" && rm -rf "$d" && mv "$t" "$d""#
+    )
+}
+
+/// The skills ForgeCLI on the remote loads, from its folders there (Claude
+/// Code's `~/.claude/skills`, yours in `$FORGE_HOME` or `~/.config/forge`,
+/// then the project's `.claude/skills` from its repository root down,
+/// `.agents` and `.forge`): each skill's folder name and its SKILL.md frontmatter.
 pub fn skill_heads(target: &Target, path: &str, extra: &Extra) -> Result<Vec<(String, String)>, Error> {
     let script = format!(
         r#"{TILDE}
 d=$(x "$1")
 u=${{FORGE_HOME:-${{XDG_CONFIG_HOME:-$HOME/.config}}/forge}}
-for r in "$u/skills" "$d/.agents/skills" "$d/.forge/skills"; do
+c=${{CLAUDE_CONFIG_DIR:-$HOME/.claude}}
+chain=""; p=$d; found=""
+while [ -n "$p" ]; do
+  chain="$p/.claude/skills
+$chain"
+  if [ -e "$p/.git" ]; then found=1; break; fi
+  [ "$p" = / ] && break
+  p=$(dirname "$p")
+done
+[ -n "$found" ] || chain="$d/.claude/skills"
+IFS='
+'
+for r in "$c/skills" "$u/skills" $chain "$d/.agents/skills" "$d/.forge/skills"; do
   for f in "$r"/*/SKILL.md; do
     [ -f "$f" ] || continue
     printf '\036%s\n' "$(basename "$(dirname "$f")")"
@@ -1713,6 +1759,34 @@ pub fn browser_mcp_config(port: u16, token: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_folder_goes_up_whole_and_stays_unless_replaced() {
+        use std::io::Write;
+        let home = std::env::temp_dir().join(format!("forge-put-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(&home).unwrap();
+        let put = |files: &[(&str, &[u8])], mode: &str| {
+            let mut child = std::process::Command::new("sh")
+                .args(["-c", &super::put_dir_script(), "_", "~/.claude/skills/pdf", mode])
+                .env("HOME", &home)
+                .stdin(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .unwrap();
+            child.stdin.take().unwrap().write_all(&super::tar(files)).unwrap();
+            child.wait_with_output().unwrap()
+        };
+        let dir = home.join(".claude/skills/pdf");
+        assert!(put(&[("SKILL.md", b"v1"), ("scripts/x.py", b"print(1)")], "keep").status.success());
+        assert_eq!(std::fs::read(dir.join("scripts/x.py")).unwrap(), b"print(1)");
+        let again = put(&[("SKILL.md", b"v2")], "keep");
+        assert!(!again.status.success() && String::from_utf8_lossy(&again.stderr).contains("already there"));
+        assert!(put(&[("SKILL.md", b"v2")], "replace").status.success());
+        assert_eq!(std::fs::read(dir.join("SKILL.md")).unwrap(), b"v2");
+        assert!(!dir.join("scripts").exists(), "replaced whole");
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
     #[test]
     fn a_remote_s_skills_are_read_from_their_frontmatter() {
         let out = "\u{1e}tls\n---\nname: tls\ndescription: TLS\n---\n\u{1e}empty\n";
