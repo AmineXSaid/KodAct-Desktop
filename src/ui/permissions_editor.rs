@@ -231,7 +231,12 @@ impl Render for PermissionsEditor {
             .flex()
             .items_center()
             .gap(px(8.))
-            .child(div().flex_1().child(kit::line(&t, &self.rule, true)))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .child(kit::line(&t, &self.rule, true)),
+            )
             .child(
                 theme::primary_button(&t, "Add rule")
                     .id("add-rule")

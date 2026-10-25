@@ -419,6 +419,7 @@ impl Render for FilesPane {
             .child(
                 div()
                     .flex_1()
+                    .min_w_0()
                     .font_weight(FontWeight::SEMIBOLD)
                     .text_size(t.text.body_sm)
                     .text_color(t.colors.text_strong)

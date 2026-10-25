@@ -302,7 +302,7 @@ impl Onboarding {
             })
             .text_size(t.text.body)
             .child(
-                div().flex_1().child(
+                div().flex_1().min_w_0().child(
                     Input::new(&self.input)
                         .appearance(false)
                         .text_size(t.text.body),

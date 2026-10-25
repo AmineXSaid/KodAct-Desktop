@@ -45,6 +45,8 @@ pub struct Settings {
     /// A gateway: its model list goes in the model menu.
     catalog: bool,
     models: Vec<String>,
+    /// What the list says about each model: its name and context window.
+    infos: Vec<crate::endpoints::ModelInfo>,
     /// Narrows the endpoint's model list as you type (`endpoints::find_models`).
     model_search: Entity<InputState>,
     model_scroll: gpui::ScrollHandle,
@@ -148,8 +150,8 @@ impl Settings {
                 .placeholder("Paste the key")
                 .masked(true)
         });
-        let ep_model = input("Type a model id, or load the list", window, cx);
-        let model_search = input("Search the models: gpt 5, coder, auto…", window, cx);
+        let ep_model = input("Type the model id, such as qwen3-coder:30b", window, cx);
+        let model_search = input("Search by name or id, or type any id", window, cx);
         let subs = vec![
             cx.observe_in(&state, window, |this, state, window, cx| {
                 let (open, add) = (state.read(cx).settings_open, state.read(cx).settings_add);
@@ -249,6 +251,7 @@ impl Settings {
             wire: Wire::Openai,
             catalog: false,
             models: vec![],
+            infos: vec![],
             status: Status::Idle,
             save_anyway: false,
             detected: vec![],
@@ -430,7 +433,7 @@ impl Settings {
         cx.spawn(async move |this, cx| {
             let listed = cx
                 .background_spawn(async move {
-                    crate::endpoints::list_models(&url, wire, key.as_deref(), &Default::default())
+                    crate::endpoints::list_catalog(&url, wire, key.as_deref(), &Default::default())
                 })
                 .await;
             let _ = this.update(cx, |s, cx| {
@@ -449,7 +452,8 @@ impl Settings {
                             )
                             .into(),
                         );
-                        s.models = m;
+                        s.models = m.iter().map(|m| m.id.clone()).collect();
+                        s.infos = m;
                     }
                     Err(e) => {
                         s.status = Status::Failed(
@@ -563,7 +567,7 @@ impl Settings {
                         let h = crate::health::probe(&profile, std::time::Duration::from_secs(30))?;
                         if !h.servable {
                             return Err(format!(
-                                "the model didn't answer: {}",
+                                "The model didn't answer: {}",
                                 h.detail.unwrap_or_default()
                             ));
                         }
@@ -1362,103 +1366,7 @@ impl Settings {
                     cx.notify();
                 })),
             );
-        let picked = Self::val(&self.ep_model, cx);
-        let model_row = div()
-            .flex()
-            .items_end()
-            .gap(px(8.))
-            .child(
-                div()
-                    .flex_1()
-                    .child(Self::field(t, "Model", &self.ep_model)),
-            )
-            .child(
-                theme::ghost_button(t, "Load models")
-                    .id("load-models")
-                    .on_click(cx.listener(|this, _, _, cx| this.load_models(cx))),
-            );
-        // The endpoint's models, narrowed by what you type: one row each,
-        // in a box that keeps the wheel (the page behind stays put).
-        let query = Self::val(&self.model_search, cx);
-        let found = crate::endpoints::find_models(&self.models, &query);
-        const SHOWN: usize = 200;
-        let hover = t.colors.hover;
-        let mut rows = div().flex().flex_col().p(px(4.));
-        for m in found.iter().take(SHOWN) {
-            let (id, on) = (m.to_string(), picked == **m);
-            rows = rows.child(
-                div()
-                    .id(SharedString::from(format!("m-{m}")))
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .h(px(28.))
-                    .px(px(8.))
-                    .rounded(t.radius.button)
-                    .font_family(t.font_mono.clone())
-                    .text_size(t.text.caption)
-                    .text_color(if on {
-                        t.colors.text_strong
-                    } else {
-                        t.colors.text
-                    })
-                    .when(on, |d| d.bg(t.colors.primary_tint))
-                    .when(!on, |d| d.hover(move |st| st.bg(hover)))
-                    .cursor_pointer()
-                    .child(div().flex_1().min_w_0().truncate().child(id.clone()))
-                    .when(on, |d| {
-                        d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.primary))
-                    })
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        Self::set(&this.ep_model, &id, window, cx);
-                        cx.notify();
-                    })),
-            );
-        }
-        let count = match (query.trim().is_empty(), found.len()) {
-            (true, n) => format!("{n} {}", if n == 1 { "model" } else { "models" }),
-            (false, 0) => "No model matches: you can still type the id above.".to_string(),
-            (false, n) => format!("{n} of {} match", self.models.len()),
-        };
-        let more = found.len().saturating_sub(SHOWN);
-        let list = (!self.models.is_empty()).then(|| {
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(6.))
-                .child(Self::boxed(
-                    t,
-                    Input::new(&self.model_search)
-                        .appearance(false)
-                        .text_size(t.text.body_sm)
-                        .into_any_element(),
-                ))
-                .child(
-                    div()
-                        .flex()
-                        .text_size(t.text.caption)
-                        .text_color(t.colors.text_muted)
-                        .child(div().flex_1().child(count))
-                        .when(more > 0, |d| {
-                            d.child(format!("{more} more: type to narrow"))
-                        }),
-                )
-                .when(!found.is_empty(), |d| {
-                    d.child(
-                        super::hold_scroll(
-                            div()
-                                .id("model-list")
-                                .max_h(px(220.))
-                                .rounded(t.radius.field)
-                                .border_1()
-                                .border_color(t.colors.border)
-                                .bg(t.colors.surface),
-                            &self.model_scroll,
-                        )
-                        .child(rows),
-                    )
-                })
-        });
+        let model_section = self.model_picker(t, cx);
         let status = match &self.status {
             Status::Idle => None,
             Status::Working(s) => Some((t.colors.text_muted, "icons/loader-circle.svg", s.clone())),
@@ -1481,7 +1389,7 @@ impl Settings {
             })))
             .child(Self::section(t, title, Some("Start from a preset or fill it in. Forge lists the models with your key, checks the one you pick with a short request, then saves it and uses it.")))
             .child(div().flex().flex_col().gap(px(6.)).child(div().text_size(t.text.caption).font_weight(FontWeight::MEDIUM).text_color(t.colors.text_muted).child("Start from")).child(presets).children(found_note.map(|n| div().text_size(t.text.caption).text_color(t.extra.success).child(n))))
-            .child(div().flex().gap(px(10.)).child(div().w(px(170.)).child(Self::field(t, "Name", &self.ep_name))).child(div().flex_1().child(Self::field(t, "Base URL", &self.ep_url))))
+            .child(div().flex().gap(px(10.)).child(div().w(px(170.)).child(Self::field(t, "Name", &self.ep_name))).child(div().flex_1().min_w_0().child(Self::field(t, "Base URL", &self.ep_url))))
             .child(div().flex().flex_col().gap(px(6.)).child(div().text_size(t.text.caption).font_weight(FontWeight::MEDIUM).text_color(t.colors.text_muted).child("Protocol")).child(wire_row))
             .child(
                 div()
@@ -1516,8 +1424,8 @@ impl Settings {
                     .child(Self::field(t, "API key", &self.ep_key))
                     .child(div().text_size(t.text.caption).text_color(t.colors.text_muted).child(if cfg!(windows) { "Kept in Windows Credential Manager, never in a file. Local servers need none." } else { "Kept in a private file in Forge's config folder, never in endpoints.json. Local servers need none." })),
             )
-            .child(div().flex().flex_col().gap(px(8.)).child(model_row).children(list))
-            .children(status.map(|(c, i, s)| div().flex().items_start().gap(px(6.)).text_size(t.text.caption).text_color(c).line_height(relative(1.4)).child(div().pt(px(1.)).child(icon(i, t.size.icon_xs, c))).child(div().flex_1().child(s))))
+            .child(model_section)
+            .children(status.map(|(c, i, s)| Self::status_line(t, c, i, s)))
             .child(
                 div()
                     .flex()
@@ -1529,6 +1437,348 @@ impl Settings {
                     })))
                     .when(self.save_anyway && !working, |d| d.child(theme::ghost_button(t, "Save anyway").id("save-anyway").on_click(cx.listener(|this, _, window, cx| this.check_and_save(true, window, cx)))))
                     .child(super::button::Button::primary("check-save", if working { "Checking…" } else { "Check and save" }).loading(working).on_click(cx.listener(|this, _, window, cx| this.check_and_save(false, window, cx)))),
+            )
+            .into_any_element()
+    }
+
+    /// A status under the form: its icon, then the message, wrapped inside
+    /// the form however long it is (a gateway's error can be a paragraph
+    /// with a URL in it), at most four lines; the whole of it in the tooltip.
+    fn status_line(t: &Theme, color: gpui::Hsla, path: &'static str, text: SharedString) -> AnyElement {
+        let tip = text.clone();
+        div()
+            .id("form-status")
+            .w_full()
+            .flex()
+            .items_start()
+            .gap(px(6.))
+            .p(t.space.sm)
+            .rounded(t.radius.field)
+            .bg(color.opacity(0.08))
+            .text_size(t.text.caption)
+            .text_color(color)
+            .line_height(relative(1.4))
+            .child(div().flex_none().pt(px(1.)).child(icon(path, t.size.icon_xs, color)))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .line_clamp(4)
+                    .child(text),
+            )
+            .tooltip(move |w, cx| gpui::component::tooltip::Tooltip::new(tip.clone()).build(w, cx))
+            .into_any_element()
+    }
+
+    /// The model: the one picked, as a card (its name, id and window), then
+    /// one field that searches the endpoint's list or takes any id typed,
+    /// then the list, grouped by provider: each model's name, id, context
+    /// window and whether it thinks. Before the list is loaded, the field
+    /// takes the id and offers to load the list.
+    fn model_picker(&self, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
+        let picked = Self::val(&self.ep_model, cx);
+        let query = Self::val(&self.model_search, cx);
+        let loaded = !self.models.is_empty();
+        let info = |id: &str| self.infos.iter().find(|m| m.id == id);
+        let hover = t.colors.hover;
+        let window_text = |c: u64| {
+            if c >= 1_000_000 {
+                format!("{}M", (c as f64 / 1_000_000.).round() as u64)
+            } else {
+                format!("{}K", (c as f64 / 1000.).round() as u64)
+            }
+        };
+        let chip = |text: String, fg: gpui::Hsla| {
+            div()
+                .flex_none()
+                .px(px(6.))
+                .rounded(t.radius.small)
+                .bg(fg.opacity(0.1))
+                .text_size(t.text.caption)
+                .text_color(fg)
+                .child(text)
+        };
+        let loading = matches!(&self.status, Status::Working(s) if s.contains("models"));
+        // The heading: "Model", how many the endpoint lists, and reload.
+        let heading = div()
+            .flex()
+            .items_center()
+            .gap(t.space.sm)
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .text_size(t.text.caption)
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(t.colors.text_muted)
+                    .child("Model"),
+            )
+            .when(loaded, |d| {
+                d.child(
+                    div()
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_subtle)
+                        .child(format!("{} models", self.models.len())),
+                )
+            })
+            .child(
+                super::button::Button::icon(
+                    "load-models",
+                    "icons/refresh-cw.svg",
+                    if loaded { "Load the list again" } else { "Load the endpoint's models" },
+                )
+                .compact()
+                .loading(loading)
+                .on_click(cx.listener(|this, _, _, cx| this.load_models(cx))),
+            );
+        // The model picked: a card, or how to pick one.
+        let picked_card = {
+            let m = info(&picked);
+            let empty = picked.is_empty();
+            div()
+                .flex()
+                .items_center()
+                .gap(t.space.sm)
+                .min_h(px(44.))
+                .px(t.space.md)
+                .py(t.space.xs)
+                .rounded(t.radius.field)
+                .border_1()
+                .border_color(if empty { t.colors.border } else { t.colors.primary.opacity(0.5) })
+                .bg(if empty { t.colors.canvas } else { t.colors.primary_tint })
+                .child(icon(
+                    if empty { "icons/cpu.svg" } else { "icons/circle-check.svg" },
+                    t.size.icon_sm,
+                    if empty { t.colors.text_subtle } else { t.colors.primary },
+                ))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .child(
+                            div()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .text_size(t.text.body_sm)
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(if empty { t.colors.text_muted } else { t.colors.text_strong })
+                                .child(if empty {
+                                    "No model picked yet".to_string()
+                                } else {
+                                    m.and_then(|m| m.name.clone()).unwrap_or_else(|| picked.clone())
+                                }),
+                        )
+                        .child(
+                            div()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .text_size(t.text.caption)
+                                .text_color(t.colors.text_subtle)
+                                .child(if empty {
+                                    if loaded {
+                                        "Pick one below, or type its id.".to_string()
+                                    } else {
+                                        "Type its id below, or load the list.".to_string()
+                                    }
+                                } else {
+                                    picked.clone()
+                                }),
+                        ),
+                )
+                .children(m.and_then(|m| m.context).map(|c| chip(window_text(c), t.colors.text_muted)))
+                .when(m.is_some_and(|m| m.reasoning), |d| d.child(chip("Thinks".into(), t.colors.primary)))
+        };
+        // Before the list: the field takes the id itself.
+        if !loaded {
+            return div()
+                .flex()
+                .flex_col()
+                .gap(t.space.sm)
+                .child(heading)
+                .child(picked_card)
+                .child(Self::boxed(
+                    t,
+                    Input::new(&self.ep_model)
+                        .appearance(false)
+                        .text_size(t.text.body_sm)
+                        .into_any_element(),
+                ))
+                .into_any_element();
+        }
+        // The list, narrowed by the field, grouped by the provider before
+        // the `/` ("cc", "kimi"); a typed id the list lacks can still be used.
+        let found = crate::endpoints::find_models(&self.models, &query);
+        const SHOWN: usize = 200;
+        let typed = query.trim().to_string();
+        let custom = !typed.is_empty() && !self.models.iter().any(|m| *m == typed);
+        let searching = !typed.is_empty();
+        let mut rows = div().flex().flex_col().p(px(4.));
+        if custom {
+            let id = typed.clone();
+            rows = rows.child(
+                div()
+                    .id("model-custom")
+                    .flex()
+                    .items_center()
+                    .gap(t.space.sm)
+                    .h(px(36.))
+                    .px(t.space.sm)
+                    .rounded(t.radius.button)
+                    .cursor_pointer()
+                    .hover(move |st| st.bg(hover))
+                    .text_size(t.text.body_sm)
+                    .text_color(t.colors.text)
+                    .child(icon("icons/pencil.svg", t.size.icon_sm, t.colors.text_muted))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .child(format!("Use “{id}” as the model id")),
+                    )
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        Self::set(&this.ep_model, &id, window, cx);
+                        cx.notify();
+                    })),
+            );
+        }
+        let mut group = None::<String>;
+        for (i, m) in found.iter().take(SHOWN).enumerate() {
+            let id = m.to_string();
+            let provider = id.split_once('/').map(|(p, _)| p.to_string()).unwrap_or_default();
+            // Provider headings while browsing; a search ranks across them.
+            if !searching && group.as_deref() != Some(provider.as_str()) {
+                rows = rows.child(
+                    div()
+                        .px(t.space.sm)
+                        .pt(if i == 0 { px(4.) } else { t.space.sm })
+                        .pb(px(2.))
+                        .text_size(t.text.caption)
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(t.colors.text_subtle)
+                        .child(if provider.is_empty() { "Models".to_string() } else { provider.clone() }),
+                );
+                group = Some(provider);
+            }
+            let mi = info(&id);
+            let on = picked == id;
+            let name = mi.and_then(|m| m.name.clone());
+            let pick = id.clone();
+            rows = rows.child(
+                div()
+                    .id(SharedString::from(format!("m-{id}")))
+                    .flex()
+                    .items_center()
+                    .gap(t.space.sm)
+                    .min_h(px(36.))
+                    .px(t.space.sm)
+                    .py(px(3.))
+                    .rounded(t.radius.button)
+                    .cursor_pointer()
+                    .when(on, |d| d.bg(t.colors.primary_tint))
+                    .when(!on, |d| d.hover(move |st| st.bg(hover)))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .child(
+                                div()
+                                    .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .text_ellipsis()
+                                    .text_size(t.text.body_sm)
+                                    .text_color(if on { t.colors.text_strong } else { t.colors.text })
+                                    .when(on, |d| d.font_weight(FontWeight::MEDIUM))
+                                    .child(name.clone().unwrap_or_else(|| id.clone())),
+                            )
+                            .when(name.is_some(), |d| {
+                                d.child(
+                                    div()
+                                        .overflow_hidden()
+                                        .whitespace_nowrap()
+                                        .text_ellipsis()
+                                        .text_size(t.text.caption)
+                                        .text_color(t.colors.text_subtle)
+                                        .child(id.clone()),
+                                )
+                            }),
+                    )
+                    .when(mi.is_some_and(|m| m.reasoning), |d| d.child(chip("Thinks".into(), t.colors.primary)))
+                    .children(mi.and_then(|m| m.context).map(|c| chip(window_text(c), t.colors.text_muted)))
+                    .child(div().flex_none().w(t.size.icon_sm).when(on, |d| {
+                        d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.primary))
+                    }))
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        Self::set(&this.ep_model, &pick, window, cx);
+                        cx.notify();
+                    })),
+            );
+        }
+        let more = found.len().saturating_sub(SHOWN);
+        if more > 0 {
+            rows = rows.child(
+                div()
+                    .px(t.space.sm)
+                    .py(t.space.xs)
+                    .text_size(t.text.caption)
+                    .text_color(t.colors.text_subtle)
+                    .child(format!("{more} more: type to narrow")),
+            );
+        }
+        if found.is_empty() && !custom {
+            rows = rows.child(
+                div()
+                    .px(t.space.sm)
+                    .py(t.space.sm)
+                    .text_size(t.text.caption)
+                    .text_color(t.colors.text_muted)
+                    .child("No model matches."),
+            );
+        }
+        div()
+            .flex()
+            .flex_col()
+            .gap(t.space.sm)
+            .child(heading)
+            .child(picked_card)
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .rounded(t.radius.field)
+                    .border_1()
+                    .border_color(t.colors.border)
+                    .bg(t.colors.surface)
+                    .overflow_hidden()
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(t.space.sm)
+                            .h(px(36.))
+                            .px(t.space.md)
+                            .border_b_1()
+                            .border_color(t.colors.border)
+                            .bg(t.colors.canvas)
+                            .child(icon("icons/search.svg", t.size.icon_sm, t.colors.text_subtle))
+                            .child(
+                                div().flex_1().min_w_0().child(
+                                    Input::new(&self.model_search)
+                                        .appearance(false)
+                                        .text_size(t.text.body_sm),
+                                ),
+                            ),
+                    )
+                    .child(super::hold_scroll(div().id("model-list").max_h(px(264.)), &self.model_scroll).child(rows)),
             )
             .into_any_element()
     }

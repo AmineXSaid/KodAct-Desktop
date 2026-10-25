@@ -300,6 +300,7 @@ impl Render for ProjectRail {
                         .child(
                             div()
                                 .flex_1()
+                                .min_w_0()
                                 .text_size(t.text.caption)
                                 .text_color(t.colors.text_subtle)
                                 .child(format!(
@@ -426,7 +427,7 @@ impl Render for ProjectRail {
                     .text_color(t.colors.text)
                     .hover(|st| st.underline())
                     .child(icon("icons/list-todo.svg", t.size.icon_sm, t.colors.text_muted))
-                    .child(div().flex_1().child("Rules and memory files"))
+                    .child(div().flex_1().min_w_0().child("Rules and memory files"))
                     .child(
                         div()
                             .text_size(t.text.caption)

@@ -48,7 +48,7 @@ fn bubble(t: &Theme, state: &Entity<AppState>, chat: usize, q: &Queued) -> AnyEl
                 .text_size(t.text.caption)
                 .text_color(t.colors.text_muted)
                 .child(icon("icons/clock.svg", t.size.icon_xs, t.colors.text_muted))
-                .child(div().flex_1().child("Queued · reaches Forge at its next step"))
+                .child(div().flex_1().min_w_0().child("Queued · reaches Forge at its next step"))
                 .child(
                     Button::icon(id("edit"), "icons/pencil.svg", "Edit")
                         .compact()

@@ -656,7 +656,7 @@ impl Render for BrowserView {
                             .on_click(move |_, _, cx| cx.open_with_system(&folder))
                     }))
                     .child(icon("icons/bot.svg", t.size.icon_xs, t.colors.text_subtle))
-                    .child(div().flex_1().child(if s.browser {
+                    .child(div().flex_1().min_w_0().child(if s.browser {
                         "Forge can use this browser. Each step asks first."
                     } else {
                         "Only you use this browser. Turn it on for Forge in Settings."

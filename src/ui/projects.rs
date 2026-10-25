@@ -257,7 +257,7 @@ impl ProjectsView {
                     .border_color(t.colors.border)
                     .bg(t.colors.surface)
                     .child(icon("icons/search.svg", t.size.icon_sm, t.colors.text_subtle))
-                    .child(div().flex_1().child(Input::new(&self.search).appearance(false))),
+                    .child(div().flex_1().min_w_0().child(Input::new(&self.search).appearance(false))),
             )
     }
 }
@@ -933,6 +933,7 @@ impl ProjectsView {
                                     .child(
                                         div()
                                             .flex_1()
+                                            .min_w_0()
                                             .text_size(t.text.caption)
                                             .font_weight(FontWeight::MEDIUM)
                                             .text_color(t.colors.text_subtle)
@@ -952,7 +953,7 @@ impl ProjectsView {
                                                 .bg(t.colors.surface)
                                                 .text_size(t.text.caption)
                                                 .child(icon("icons/search.svg", t.size.icon_xs, t.colors.text_subtle))
-                                                .child(div().flex_1().child(Input::new(&self.chat_search).appearance(false))),
+                                                .child(div().flex_1().min_w_0().child(Input::new(&self.chat_search).appearance(false))),
                                         )
                                     }),
                             )

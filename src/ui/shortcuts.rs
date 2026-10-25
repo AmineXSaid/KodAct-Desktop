@@ -182,6 +182,7 @@ pub fn render(t: &Theme, state: &Entity<AppState>, leaving: bool) -> impl IntoEl
                         .child(
                             div()
                                 .flex_1()
+                                .min_w_0()
                                 .text_size(t.text.subheading)
                                 .font_family(t.font_display.clone())
                                 .font_weight(t.display_weight)

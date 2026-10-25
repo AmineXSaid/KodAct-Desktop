@@ -81,11 +81,12 @@ pub fn chat_list(t: &Theme) -> AnyElement {
                 .items_center()
                 .gap(t.space.sm)
                 .child(bar(t, format!("sk-dot-{i}"), px(8.), px(8.)))
-                .child(
-                    div()
-                        .flex_1()
-                        .child(bar(t, format!("sk-row-{i}"), relative(*w), px(11.))),
-                )
+                .child(div().flex_1().min_w_0().child(bar(
+                    t,
+                    format!("sk-row-{i}"),
+                    relative(*w),
+                    px(11.),
+                )))
                 .child(bar(t, format!("sk-ago-{i}"), px(18.), px(8.))),
         );
     }

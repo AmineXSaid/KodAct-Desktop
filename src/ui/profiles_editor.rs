@@ -98,7 +98,7 @@ impl Render for ProfilesEditor {
                     .flex()
                     .items_center()
                     .gap(px(8.))
-                    .child(div().flex_1().child(kit::line(&t, &self.name, true)))
+                    .child(div().flex_1().min_w_0().child(kit::line(&t, &self.name, true)))
                     .child(
                         theme::primary_button(&t, "New profile")
                             .id("new-profile")

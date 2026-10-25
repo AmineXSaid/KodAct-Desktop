@@ -182,7 +182,7 @@ pub fn status(t: &Theme, error: &Option<SharedString>) -> Option<gpui::Div> {
                 t.size.icon_xs,
                 t.extra.danger,
             )))
-            .child(div().flex_1().child(e.clone()))
+            .child(div().flex_1().min_w_0().child(e.clone()))
     })
 }
 

@@ -299,6 +299,7 @@ impl Render for ProjectKnowledge {
                     .child(
                         div()
                             .flex_1()
+                            .min_w_0()
                             .text_size(t.text.caption)
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(t.colors.text_muted)

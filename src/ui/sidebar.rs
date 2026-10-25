@@ -136,7 +136,7 @@ impl Sidebar {
                 .text_size(t.text.body_sm)
                 .text_color(t.colors.text)
                 .hover(move |st| st.bg(hover))
-                .child(div().flex_1().child(label))
+                .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label))
                 .child(div().w(t.size.icon).when(on, |d| {
                     d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.primary))
                 }))
@@ -192,7 +192,7 @@ impl Sidebar {
                     .text_size(t.text.body_sm)
                     .text_color(t.colors.text)
                     .hover(move |d| d.bg(hover))
-                    .child(div().flex_1().child("Archived chats"))
+                    .child(div().flex_1().min_w_0().child("Archived chats"))
                     .child(div().w(t.size.icon).when(archived, |d| {
                         d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.primary))
                     }))
@@ -333,7 +333,7 @@ impl Render for Sidebar {
                     // A quiet label, no rule beside it; the filter (shown on
                     // hover, or while it narrows the list), and on Recents a
                     // + for a new chat, as Claude Code's.
-                    .child(div().flex_1().child(group))
+                    .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(group))
                     .when(first, |d| {
                         d.children(filter.take().map(|f| {
                             div()
@@ -643,7 +643,7 @@ impl Render for Sidebar {
                         .text_size(t.text.caption)
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(t.colors.text_muted)
-                        .child(div().flex_1().child(if s.show_archived { "Archived" } else { "Chats" }))
+                        .child(div().flex_1().min_w_0().child(if s.show_archived { "Archived" } else { "Chats" }))
                         // The filter rides the first header; here, this one.
                         .children(filter.take()),
                 )
@@ -707,7 +707,7 @@ impl Render for Sidebar {
                         .justify_center()
                         .child(icon(path, t.size.icon, if on { t.colors.text_strong } else { t.colors.text_muted })),
                 )
-                .child(div().flex_1().child(label))
+                .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label))
                 .children(keys.map(|k| {
                     div()
                         .invisible()
@@ -766,7 +766,7 @@ impl Render for Sidebar {
                                         .justify_center()
                                         .child(icon("icons/search.svg", t.size.icon, t.colors.text_muted)),
                                 )
-                                .child(div().flex_1().child("Search"))
+                                .child(div().flex_1().min_w_0().child("Search"))
                                 .child(super::kbd(&t, super::shortcut("K")))
                                 .on_click(|_, window, cx| {
                                     window.dispatch_action(Box::new(ToggleCommandPalette), cx)
@@ -807,7 +807,7 @@ impl Render for Sidebar {
                                                 .child(icon("icons/plus.svg", t.size.icon_xs, t.colors.text_body)),
                                         ),
                                 )
-                                .child(div().flex_1().child("New"))
+                                .child(div().flex_1().min_w_0().child("New"))
                                 .child(
                                     div()
                                         .invisible()

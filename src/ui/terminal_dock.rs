@@ -347,7 +347,15 @@ impl TerminalDock {
                         t.colors.text_subtle
                     },
                 ))
-                .child(div().flex_1().child(label))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .child(label),
+                )
                 .child(
                     div()
                         .text_size(t.text.caption)
@@ -832,6 +840,7 @@ impl TerminalDock {
         let Some(s) = self.session().cloned() else {
             return div()
                 .flex_1()
+                .min_w_0()
                 .p(t.space.lg)
                 .text_color(t.colors.text_muted)
                 .child(

@@ -380,7 +380,7 @@ impl AgentsEditor {
                     .flex()
                     .gap(px(10.))
                     .child(div().w(px(220.)).child(kit::field(t, "Name", None, kit::line(t, &self.name, true))))
-                    .child(div().flex_1().child(kit::field(t, "Model", None, kit::line(t, &self.model, true)))),
+                    .child(div().flex_1().min_w_0().child(kit::field(t, "Model", None, kit::line(t, &self.model, true)))),
             )
             .child(kit::field(t, "When to use it", None, kit::line(t, &self.description, false)))
             .child(kit::field(

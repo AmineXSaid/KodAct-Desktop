@@ -892,6 +892,7 @@ impl Render for RulesView {
                         .child(
                             div()
                                 .flex_1()
+                                .min_w_0()
                                 .child(Input::new(&self.tester).appearance(false).cleanable(true)),
                         ),
                 )

@@ -90,7 +90,7 @@ pub fn render(
                         .text_color(t.colors.text)
                         .child(label),
                 )
-                .child(div().flex_1().child(bar(f, t.colors.text_subtle)))
+                .child(div().flex_1().min_w_0().child(bar(f, t.colors.text_subtle)))
                 .child(
                     div()
                         .w(px(56.))
@@ -150,7 +150,7 @@ pub fn render(
                             asked.clone()
                         }),
                 )
-                .child(div().flex_1().child(bar(
+                .child(div().flex_1().min_w_0().child(bar(
                     u.total() as f32 / peak.max(1) as f32,
                     t.colors.primary.opacity(0.55),
                 )))

@@ -540,7 +540,7 @@ impl McpEditor {
                         .flex()
                         .gap(px(10.))
                         .child(div().w(px(180.)).child(kit::field(t, "Command", None, kit::line(t, &self.command, true))))
-                        .child(div().flex_1().child(kit::field(t, "Arguments", None, kit::line(t, &self.args, true)))),
+                        .child(div().flex_1().min_w_0().child(kit::field(t, "Arguments", None, kit::line(t, &self.args, true)))),
                 )
             })
             .when(!stdio, |d| d.child(kit::field(t, "URL", None, kit::line(t, &self.url, true))))

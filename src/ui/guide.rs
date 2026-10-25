@@ -130,6 +130,7 @@ pub fn render(t: &Theme) -> impl IntoElement {
                     .child(
                         div()
                             .flex_1()
+                            .min_w_0()
                             .text_size(t.text.body_sm)
                             .text_color(t.colors.text)
                             .child(*what),

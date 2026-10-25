@@ -206,6 +206,7 @@ impl Render for NewProject {
                     .child(
                         div()
                             .flex_1()
+                            .min_w_0()
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(t.colors.text_strong)
                             .child("New project"),

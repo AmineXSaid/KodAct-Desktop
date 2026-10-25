@@ -31,7 +31,7 @@ pub fn render(
             .text_size(t.text.body_sm)
             .text_color(t.colors.text)
             .hover(move |d| d.bg(hover))
-            .child(div().flex_1().child(label))
+            .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label))
             .children(hint.map(|h| {
                 div()
                     .flex_none()

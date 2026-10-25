@@ -170,7 +170,7 @@ pub fn render(files: &[Changed], open: bool, cx: &ItemContext, t: &Theme) -> Any
                     .hover(move |d| d.bg(hover))
                     .text_size(t.text.body_sm)
                     .text_color(t.colors.text)
-                    .child(div().flex_1().child(if open {
+                    .child(div().flex_1().min_w_0().child(if open {
                         "Show less".to_string()
                     } else {
                         format!("Show all {n}")

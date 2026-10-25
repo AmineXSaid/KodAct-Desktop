@@ -560,7 +560,7 @@ fn search(
                 .border_b_1()
                 .border_color(t.colors.border)
                 .child(icon("icons/search.svg", t.size.icon_sm, t.colors.text_muted))
-                .child(div().flex_1().child(Input::new(&hooks.filter).appearance(false))),
+                .child(div().flex_1().min_w_0().child(Input::new(&hooks.filter).appearance(false))),
         )
         .child(rows)
         .child(

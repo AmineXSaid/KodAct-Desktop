@@ -531,11 +531,12 @@ pub fn probe(profile: &Profile, timeout: Duration) -> Result<ModelHealth, String
                         .and_then(|m| m.as_str())
                         .map(str::to_string)
                 });
-            let detail: String = message
-                .unwrap_or_else(|| format!("HTTP {code}"))
-                .chars()
-                .take(160)
-                .collect();
+            let full = message.unwrap_or_else(|| format!("HTTP {code}"));
+            let mut detail: String = full.chars().take(160).collect();
+            // Cut short: said so.
+            if detail.len() < full.len() {
+                detail.push('…');
+            }
             verdict(false, Some(detail))
         }
         Reply::Unsent(t) => {

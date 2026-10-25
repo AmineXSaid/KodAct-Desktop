@@ -191,7 +191,15 @@ impl Render for DocComments {
                                 t.size.icon_xs,
                                 t.colors.primary,
                             ))
-                            .child(div().flex_1().child(format!("Comment on {}", a.place)))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .text_ellipsis()
+                                    .child(format!("Comment on {}", a.place)),
+                            )
                             .child(
                                 div()
                                     .id("comment-cancel")

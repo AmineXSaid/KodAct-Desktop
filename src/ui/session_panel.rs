@@ -271,7 +271,7 @@ fn context(t: &Theme, state: &Entity<AppState>, s: &AppState, u: &ContextUsage) 
                         t.size.icon_xs,
                         t.colors.text_subtle,
                     ))
-                    .child(div().flex_1().child(label))
+                    .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label))
                     .child(div().text_size(t.text.caption).child(rows.len().to_string()))
                     .on_click(move |_, _, cx| st.update(cx, |s, cx| s.fold_session_card(key, cx))),
             )

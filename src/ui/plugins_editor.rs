@@ -230,7 +230,12 @@ impl Render for PluginsEditor {
                         .flex()
                         .items_center()
                         .gap(px(8.))
-                        .child(div().flex_1().child(kit::line(&t, &self.path, true)))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .child(kit::line(&t, &self.path, true)),
+                        )
                         .child(
                             theme::primary_button(&t, "Add folder")
                                 .id("add-plugin")
