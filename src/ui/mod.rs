@@ -296,8 +296,8 @@ pub fn sync_component_theme(cx: &mut App) {
 /// A scroll box inside something that scrolls (a list in Settings, a
 /// tool's output in a reply). GPUI hands each wheel tick to every scroll
 /// box under the pointer, so the page behind moved with the list. This one
-/// keeps the wheel while it has more than it shows; one that fits lets the
-/// page scroll as usual. `handle` is the box's own, kept by its view.
+/// keeps the wheel while it has more to show that way; one that fits, or
+/// is at its end, lets the page scroll as usual. `handle` is the box's own, kept by its view.
 pub fn hold_scroll(
     d: gpui::Stateful<gpui::Div>,
     handle: &gpui::ScrollHandle,
@@ -305,8 +305,17 @@ pub fn hold_scroll(
     let h = handle.clone();
     d.overflow_y_scroll()
         .track_scroll(handle)
-        .on_scroll_wheel(move |_, _, cx| {
-            if h.max_offset().y > gpui::px(0.) {
+        .on_scroll_wheel(move |ev, window, cx| {
+            // At its end the wheel goes on to the page around it, so a list
+            // that fills the view never traps the page.
+            let dy = ev.delta.pixel_delta(window.line_height()).y;
+            let (y, max) = (h.offset().y, h.max_offset().y);
+            let can = if dy < gpui::px(0.) {
+                y > -max + gpui::px(0.5)
+            } else {
+                y < gpui::px(-0.5)
+            };
+            if max > gpui::px(0.) && can {
                 cx.stop_propagation();
             }
         })

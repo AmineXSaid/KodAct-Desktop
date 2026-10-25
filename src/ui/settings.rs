@@ -1395,7 +1395,6 @@ impl Settings {
             Status::Ok(s) => Some((t.extra.success, "icons/circle-check.svg", s.clone())),
             Status::Failed(s) => Some((t.extra.danger, "icons/circle-x.svg", s.clone())),
         };
-        let working = matches!(self.status, Status::Working(_));
         let title = if self.editing.is_some() {
             "Edit endpoint"
         } else {
@@ -1448,8 +1447,14 @@ impl Settings {
             )
             .child(model_section)
             .children(status.map(|(c, i, s)| Self::status_line(t, c, i, s)))
-            .child(
-                div()
+            .into_any_element()
+    }
+
+    /// The form's actions, pinned under the page so a long model list never
+    /// hides them.
+    fn form_actions(&self, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
+        let working = matches!(self.status, Status::Working(_));
+        div()
                     .flex()
                     .justify_end()
                     .gap(px(8.))
@@ -1458,8 +1463,7 @@ impl Settings {
                         cx.notify();
                     })))
                     .when(self.save_anyway && !working, |d| d.child(theme::ghost_button(t, "Save anyway").id("save-anyway").on_click(cx.listener(|this, _, window, cx| this.check_and_save(true, window, cx)))))
-                    .child(super::button::Button::primary("check-save", if working { "Checking…" } else { "Check and save" }).loading(working).on_click(cx.listener(|this, _, window, cx| this.check_and_save(false, window, cx)))),
-            )
+                    .child(super::button::Button::primary("check-save", if working { "Checking…" } else { "Check and save" }).loading(working).on_click(cx.listener(|this, _, window, cx| this.check_and_save(false, window, cx))))
             .into_any_element()
     }
 
@@ -2146,6 +2150,7 @@ impl Render for Settings {
                 SettingsTab::Guide => super::guide::render(&t).into_any_element(),
                 SettingsTab::About => self.about(&t),
             };
+        let actions = (tab == SettingsTab::Models && self.form).then(|| self.form_actions(&t, cx));
         let close = div().absolute().top(px(12.)).right(px(12.)).child(
             super::button::Button::icon("settings-close", "icons/x.svg", "Close settings (Esc)")
                 .compact()
@@ -2192,12 +2197,17 @@ impl Render for Settings {
             )
             .child(
                 div()
-                    .id("settings-body")
                     .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
                     .bg(t.colors.canvas)
                     .rounded_tr(PANEL_RADIUS - t.size.hairline)
                     .rounded_br(PANEL_RADIUS - t.size.hairline)
-                    .min_w_0()
+                    .child(div()
+                    .id("settings-body")
+                    .flex_1()
+                    .min_h_0()
                     .overflow_y_scroll()
                     .pl(px(40.))
                     .pr(px(56.))
@@ -2214,7 +2224,17 @@ impl Render for Settings {
                         )),
                         6.,
                         &t,
-                    )),
+                    )))
+                    .children(actions.map(|a| {
+                        div()
+                            .flex_none()
+                            .pl(px(40.))
+                            .pr(px(56.))
+                            .py(t.space.md)
+                            .border_t_1()
+                            .border_color(t.colors.border)
+                            .child(a)
+                    })),
             )
             .child(close);
         let scrim = div()
