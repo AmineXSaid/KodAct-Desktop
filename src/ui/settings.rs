@@ -1486,7 +1486,7 @@ impl Settings {
                     .flex_1()
                     .min_w_0()
                     .overflow_hidden()
-                    .line_clamp(4)
+                    .line_clamp(6)
                     .child(text),
             )
             .tooltip(move |w, cx| gpui::component::tooltip::Tooltip::new(tip.clone()).build(w, cx))
@@ -1522,6 +1522,27 @@ impl Settings {
                 .child(text)
         };
         let loading = matches!(&self.status, Status::Working(s) if s.contains("models"));
+        // What a test of this endpoint's models found, and one running.
+        let url_key = crate::health::tests_key(&Self::val(&self.ep_url, cx));
+        let (tests, running, show_failed) = {
+            let s = self.state.read(cx);
+            (
+                s.model_tests.get(&url_key).cloned().unwrap_or_default(),
+                s.tests_running.get(&url_key).copied(),
+                s.show_failed_models,
+            )
+        };
+        let verdict = |id: &str| tests.get(id);
+        let working = self
+            .models
+            .iter()
+            .filter(|m| verdict(m).is_some_and(|v| v.servable))
+            .count();
+        let failed_ids: Vec<&String> = self
+            .models
+            .iter()
+            .filter(|m| verdict(m).is_some_and(|v| !v.servable))
+            .collect();
         // The heading: "Model", how many the endpoint lists, and reload.
         let heading = div()
             .flex()
@@ -1541,7 +1562,11 @@ impl Settings {
                     div()
                         .text_size(t.text.caption)
                         .text_color(t.colors.text_subtle)
-                        .child(format!("{} models", self.models.len())),
+                        .child(match running {
+                            Some((done, total)) => format!("Testing {done} of {total}…"),
+                            None if tests.is_empty() => format!("{} models", self.models.len()),
+                            None => format!("{working} working / {} models", self.models.len()),
+                        }),
                 )
             })
             .child(
@@ -1639,6 +1664,17 @@ impl Settings {
         let typed = query.trim().to_string();
         let custom = !typed.is_empty() && !self.models.iter().any(|m| *m == typed);
         let searching = !typed.is_empty();
+        // What a test tries: the models the search shows, all of them.
+        let to_test: Vec<String> = found.iter().map(|m| m.to_string()).collect();
+        let hidden = if show_failed {
+            0
+        } else {
+            found.iter().filter(|m| failed_ids.contains(m)).count()
+        };
+        let found: Vec<&String> = found
+            .into_iter()
+            .filter(|m| show_failed || !failed_ids.contains(m) || **m == picked)
+            .collect();
         let mut rows = div().flex().flex_col().p(px(4.));
         if custom {
             let id = typed.clone();
@@ -1693,6 +1729,25 @@ impl Settings {
             let on = picked == id;
             let name = mi.and_then(|m| m.name.clone());
             let pick = id.clone();
+            let tested = verdict(&id);
+            let why = tested
+                .filter(|v| !v.servable)
+                .map(|v| v.detail.clone().unwrap_or_else(|| "No reply".into()));
+            let ping = tested.filter(|v| v.servable).map(|v| {
+                let (bg, fg) = match crate::health::ping_tone(v.ms) {
+                    crate::health::Tone::Fast => (t.extra.ping_fast_bg, t.extra.ping_fast_fg),
+                    crate::health::Tone::Fair => (t.extra.ping_fair_bg, t.extra.ping_fair_fg),
+                    crate::health::Tone::Slow => (t.extra.ping_slow_bg, t.extra.ping_slow_fg),
+                };
+                div()
+                    .flex_none()
+                    .px(px(6.))
+                    .rounded(t.radius.small)
+                    .bg(bg)
+                    .text_size(t.text.caption)
+                    .text_color(fg)
+                    .child(crate::health::ping_text(v.ms))
+            });
             rows = rows.child(
                 div()
                     .id(SharedString::from(format!("m-{id}")))
@@ -1732,8 +1787,19 @@ impl Settings {
                                         .text_color(t.colors.text_subtle)
                                         .child(id.clone()),
                                 )
+                            })
+                            // Failed its test: why, as the server said it.
+                            .when_some(why, |d, why| {
+                                d.child(
+                                    div()
+                                        .line_clamp(2)
+                                        .text_size(t.text.caption)
+                                        .text_color(t.extra.danger)
+                                        .child(why),
+                                )
                             }),
                     )
+                    .children(ping)
                     .when(mi.is_some_and(|m| m.reasoning), |d| d.child(chip("Thinks".into(), t.colors.primary)))
                     .children(mi.and_then(|m| m.context).map(|c| chip(window_text(c), t.colors.text_muted)))
                     .child(div().flex_none().w(t.size.icon_sm).when(on, |d| {
@@ -1743,6 +1809,16 @@ impl Settings {
                         Self::set(&this.ep_model, &pick, window, cx);
                         cx.notify();
                     })),
+            );
+        }
+        if hidden > 0 && found.is_empty() {
+            rows = rows.child(
+                div()
+                    .px(t.space.sm)
+                    .py(t.space.sm)
+                    .text_size(t.text.caption)
+                    .text_color(t.colors.text_muted)
+                    .child("Every model that matches failed its test."),
             );
         }
         let more = found.len().saturating_sub(SHOWN);
@@ -1756,7 +1832,7 @@ impl Settings {
                     .child(format!("{more} more: type to narrow")),
             );
         }
-        if found.is_empty() && !custom {
+        if found.is_empty() && !custom && hidden == 0 {
             rows = rows.child(
                 div()
                     .px(t.space.sm)
@@ -1800,9 +1876,93 @@ impl Settings {
                                 ),
                             ),
                     )
+                    .child(self.test_bar(t, to_test, failed_ids.len(), running.is_some(), show_failed, cx))
                     .child(super::hold_scroll(div().id("model-list").max_h(px(264.)), &self.model_scroll).child(rows)),
             )
             .into_any_element()
+    }
+
+    /// Under the search: test the models it shows, and show or hide the
+    /// ones that failed.
+    fn test_bar(
+        &self,
+        t: &Theme,
+        ids: Vec<String>,
+        failed: usize,
+        running: bool,
+        show_failed: bool,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let count = ids.len();
+        div()
+            .flex()
+            .items_center()
+            .gap(t.space.sm)
+            .px(t.space.md)
+            .py(t.space.xs)
+            .border_b_1()
+            .border_color(t.colors.border)
+            .child(
+                super::button::Button::secondary(
+                    "test-models",
+                    if count == 1 { "Test 1 model".to_string() } else { format!("Test {count} models") },
+                )
+                .with_icon("icons/flask-conical.svg")
+                .compact()
+                .loading(running)
+                .disabled(running || count == 0)
+                .describe("Send each model the search shows one short request; the ones that fail are hidden")
+                .on_click(cx.listener(move |this, _, _, cx| this.test_models(ids.clone(), cx))),
+            )
+            .child(div().flex_1())
+            .when(failed > 0, |d| {
+                let label = format!("Show {failed} that failed");
+                let st = self.state.clone();
+                d.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(t.space.sm)
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_muted)
+                        .child(label.clone())
+                        .child(super::button::Switch::new("show-failed", show_failed, label).on_toggle(
+                            move |_, _, cx| st.update(cx, |s, cx| s.toggle_failed_models(cx)),
+                        )),
+                )
+            })
+    }
+
+    /// Test `ids` on the endpoint the form describes, with the key typed.
+    fn test_models(&mut self, ids: Vec<String>, cx: &mut Context<Self>) {
+        let url = Self::val(&self.ep_url, cx);
+        if let Err(e) = crate::endpoints::validate_url(&url) {
+            self.status = Status::Failed(e.into());
+            return cx.notify();
+        }
+        let headers = self
+            .editing
+            .as_ref()
+            .and_then(|n| {
+                let s = self.state.read(cx);
+                let e = s.endpoints.as_ref()?;
+                e.profiles.iter().find(|p| &p.name == n).map(|p| (p.headers.clone(), p.chat_path.clone()))
+            })
+            .unwrap_or_default();
+        let base = Profile {
+            base_url: url,
+            wire: self.wire,
+            headers: headers.0,
+            chat_path: headers.1,
+            name: String::new(),
+            model: String::new(),
+            display_name: None,
+            // The key goes with each try, as typed.
+            auth: crate::endpoints::Auth::None,
+            capabilities: Default::default(),
+        };
+        let key = self.key(cx);
+        self.state.update(cx, |s, cx| s.test_models(base, key, ids, cx));
     }
 
     fn about(&self, t: &Theme) -> AnyElement {

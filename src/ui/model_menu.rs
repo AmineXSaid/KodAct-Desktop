@@ -38,7 +38,16 @@ pub struct Row {
     /// Picking it switches that profile to the model.
     pub pick: Option<(String, String)>,
     /// The first of a gateway's models: the heading above them.
-    pub group: Option<String>,
+    pub group: Option<Group>,
+    /// Failed its test (listed only while failed models are shown): why.
+    pub failed: Option<String>,
+}
+
+/// The heading above a gateway's models.
+pub struct Group {
+    pub title: String,
+    /// How many of its models failed a test (behind the Show switch).
+    pub failed: usize,
 }
 
 /// The most of a gateway's models listed before a search narrows them.
@@ -93,6 +102,7 @@ pub fn rows(s: &AppState, query: &str) -> (Vec<Row>, usize) {
             current: current.as_deref() == Some(&p.name),
             pick: None,
             group: None,
+            failed: None,
         };
         if row.disabled {
             unavailable.push(row);
@@ -117,14 +127,38 @@ pub fn rows(s: &AppState, query: &str) -> (Vec<Row>, usize) {
             continue;
         };
         total += models.len();
+        let tests = s.model_tests.get(&health::tests_key(&p.base_url));
+        let verdict = |id: &str| tests.and_then(|t| t.get(id));
+        let failed = models
+            .iter()
+            .filter(|m| verdict(&m.id).is_some_and(|v| !v.servable))
+            .count();
+        let title = match failed {
+            0 => format!("{} · {} models", p.name, models.len()),
+            n => format!(
+                "{} · {} working / {} models",
+                p.name,
+                models.len() - n,
+                models.len()
+            ),
+        };
         let ids: Vec<String> = models.iter().map(|m| m.id.clone()).collect();
         let found = endpoints::find_models(&ids, query);
-        let mut first = true;
+        let matched = !found.is_empty();
+        let mut group = Some(Group { title, failed });
         for id in found.into_iter().take(CATALOG_SHOWN) {
             let Some(m) = models.iter().find(|m| &m.id == id) else {
                 continue;
             };
             let in_use = current.as_deref() == Some(&p.name) && p.model == m.id;
+            let tested = verdict(&m.id);
+            let why = tested
+                .filter(|v| !v.servable)
+                .map(|v| v.detail.clone().unwrap_or_else(|| "no reply".into()));
+            // A model that failed its test stays out, unless asked for or in use.
+            if why.is_some() && !s.show_failed_models && !in_use {
+                continue;
+            }
             let description = [
                 Some(m.id.clone()),
                 m.context.map(|c| format!("{} context", window_text(c))),
@@ -138,13 +172,38 @@ pub fn rows(s: &AppState, query: &str) -> (Vec<Row>, usize) {
                 display: m.name.clone().unwrap_or_else(|| m.id.clone()),
                 description,
                 chips: if m.reasoning { vec!["Thinks"] } else { vec![] },
-                ping: None,
+                ping: tested.filter(|v| v.servable).map(|v| {
+                    (
+                        health::ping_text(v.ms),
+                        health::ping_tone(v.ms),
+                        format!(
+                            "Answered a test in {} {}",
+                            health::ping_text(v.ms),
+                            health::ago_text(v.checked_at, now)
+                        ),
+                    )
+                }),
                 disabled: false,
                 current: in_use,
                 pick: Some((p.name.clone(), m.id.clone())),
-                group: first.then(|| format!("{} · {} models", p.name, models.len())),
+                group: group.take(),
+                failed: why,
             });
-            first = false;
+        }
+        // Every match failed its test: the heading still offers to show them.
+        if let Some(g) = group.filter(|g| g.failed > 0 && matched) {
+            offered.push(Row {
+                name: format!("{}\u{1}", p.name),
+                display: "Every match failed its test".into(),
+                description: String::new(),
+                chips: vec![],
+                ping: None,
+                disabled: true,
+                current: false,
+                pick: None,
+                group: Some(g),
+                failed: None,
+            });
         }
     }
     (offered, total)
@@ -304,14 +363,45 @@ pub fn render(
         list = list.child(heading);
         for row in rows {
             if let Some(g) = &row.group {
+                let toggle = (g.failed > 0).then(|| {
+                    let st = state.clone();
+                    div()
+                        .id(SharedString::from(format!("failed-{}", row.name)))
+                        .flex_none()
+                        .px(px(4.))
+                        .rounded(px(4.))
+                        .cursor_pointer()
+                        .text_color(t.colors.text_muted)
+                        .hover(move |d| d.bg(active_bg))
+                        .child(if s.show_failed_models {
+                            format!("Hide {} that failed", g.failed)
+                        } else {
+                            format!("Show {} that failed", g.failed)
+                        })
+                        .on_click(move |_, _, cx| {
+                            st.update(cx, |s, cx| s.toggle_failed_models(cx))
+                        })
+                });
                 list = list.child(
                     div()
                         .px(px(12.))
                         .pt(px(8.))
                         .pb(px(2.))
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap(px(8.))
                         .text_size(t.text.caption)
                         .text_color(t.colors.text_subtle)
-                        .child(g.clone()),
+                        .child(
+                            div()
+                                .min_w_0()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .child(g.title.clone()),
+                        )
+                        .children(toggle),
                 );
             }
             let pick = row.pick.clone();
@@ -340,7 +430,7 @@ pub fn render(
                     .flex()
                     .items_center()
                     .rounded(px(4.))
-                    .when(row.disabled, |d| d.opacity(0.5))
+                    .when(row.disabled || row.failed.is_some(), |d| d.opacity(0.5))
                     .when(!row.disabled, |d| d.cursor_pointer())
                     .when(is_active, |d| d.bg(active_bg))
                     .when(row.current, |d| {
@@ -394,10 +484,14 @@ pub fn render(
                                     .text_size(t.text.caption)
                                     .text_color(t.colors.text_subtle)
                                     .when(row.disabled, |d| d.text_color(t.colors.text))
+                                    .when(row.failed.is_some(), |d| d.text_color(t.extra.danger))
                                     .overflow_hidden()
                                     .whitespace_nowrap()
                                     .text_ellipsis()
-                                    .child(row.description),
+                                    .child(match &row.failed {
+                                        Some(why) => format!("{} · {why}", row.description),
+                                        None => row.description,
+                                    }),
                             ),
                     )
                     .child(

@@ -1618,6 +1618,12 @@ pub struct AppState {
     /// Each gateway profile's model list (`capabilities.catalog`), as it
     /// last answered, for the model menu.
     pub catalogs: std::collections::HashMap<String, Vec<crate::endpoints::ModelInfo>>,
+    /// Gateway models put to the test, by address (`health::ModelTests`).
+    pub model_tests: crate::health::ModelTests,
+    /// A test running, by address: models done, and how many it tries.
+    pub tests_running: std::collections::HashMap<String, (usize, usize)>,
+    /// Models that failed a test are listed (greyed, with why) rather than hidden.
+    pub show_failed_models: bool,
     /// The effort level, when the model takes one; None is Auto.
     pub effort: Option<crate::endpoints::Effort>,
     /// Checks waiting for a slot, and how many are running.
@@ -1949,6 +1955,9 @@ impl AppState {
             endpoints: None,
             health: Default::default(),
             catalogs: Default::default(),
+            model_tests: Default::default(),
+            tests_running: Default::default(),
+            show_failed_models: false,
             effort: None,
             check_queue: Default::default(),
             checks_running: 0,
@@ -2180,17 +2189,24 @@ impl AppState {
     /// model, as refresh does after you edit the file.
     pub fn load_endpoints(&mut self, check_all: bool, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
-            let (endpoints, health) = cx
+            let (endpoints, health, tests) = cx
                 .background_spawn(async move {
                     let e = crate::endpoints::load();
                     let h = crate::health::load(&e.profiles);
-                    (e, h)
+                    (e, h, crate::health::load_tests())
                 })
                 .await;
             let _ = this.update(cx, |s, cx| {
                 let minutes = endpoints.sync_interval_minutes;
                 s.endpoints = Some(endpoints);
                 s.health = health;
+                // Results that came in while the file was read win.
+                for (url, models) in tests {
+                    let kept = s.model_tests.entry(url).or_default();
+                    for (id, verdict) in models {
+                        kept.entry(id).or_insert(verdict);
+                    }
+                }
                 s.load_catalogs(cx);
                 if check_all {
                     s.sync_all(cx);
@@ -2408,6 +2424,87 @@ impl AppState {
             })
             .detach();
         }
+    }
+
+    /// Try each of `ids` on the gateway `base` describes (its address,
+    /// format and headers; the model is set per try) with one short
+    /// request, a few at a time, and keep the verdicts. A model already
+    /// being tried is not tried twice.
+    pub fn test_models(
+        &mut self,
+        base: crate::endpoints::Profile,
+        key: Option<String>,
+        ids: Vec<String>,
+        cx: &mut Context<Self>,
+    ) {
+        let url = crate::health::tests_key(&base.base_url);
+        if ids.is_empty() || self.tests_running.contains_key(&url) {
+            return;
+        }
+        self.tests_running.insert(url.clone(), (0, ids.len()));
+        let queue = std::sync::Arc::new(std::sync::Mutex::new(
+            ids.into_iter().collect::<std::collections::VecDeque<_>>(),
+        ));
+        let (tx, rx) = async_channel::unbounded::<(String, crate::health::ModelHealth)>();
+        for _ in 0..crate::health::TEST_PARALLELISM {
+            let (queue, tx, base, key) = (queue.clone(), tx.clone(), base.clone(), key.clone());
+            cx.background_spawn(async move {
+                loop {
+                    let Some(id) = queue.lock().ok().and_then(|mut q| q.pop_front()) else {
+                        break;
+                    };
+                    let profile = crate::endpoints::Profile {
+                        model: id.clone(),
+                        ..base.clone()
+                    };
+                    let verdict = crate::health::probe_with(&profile, key.clone(), crate::health::TEST_TIMEOUT)
+                        .unwrap_or_else(|e| crate::health::ModelHealth {
+                            id: id.clone(),
+                            servable: false,
+                            ms: 0,
+                            detail: Some(e),
+                            checked_at: crate::health::now_ms(),
+                        });
+                    if tx.send_blocking((id, verdict)).is_err() {
+                        break;
+                    }
+                }
+            })
+            .detach();
+        }
+        drop(tx);
+        cx.spawn(async move |this, cx| {
+            while let Ok((id, verdict)) = rx.recv().await {
+                let url = url.clone();
+                let alive = this.update(cx, |s, cx| {
+                    s.model_tests
+                        .entry(url.clone())
+                        .or_default()
+                        .insert(id, verdict);
+                    if let Some((done, _)) = s.tests_running.get_mut(&url) {
+                        *done += 1;
+                    }
+                    cx.notify();
+                });
+                if alive.is_err() {
+                    return;
+                }
+            }
+            let _ = this.update(cx, |s, cx| {
+                s.tests_running.remove(&url);
+                let tests = s.model_tests.clone();
+                cx.background_spawn(async move { crate::health::save_tests(&tests) })
+                    .detach();
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
+    pub fn toggle_failed_models(&mut self, cx: &mut Context<Self>) {
+        self.show_failed_models = !self.show_failed_models;
+        cx.notify();
     }
 
     // ------------------------------------------------------------ history

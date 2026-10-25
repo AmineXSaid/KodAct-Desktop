@@ -224,6 +224,44 @@ pub fn save(store: &Store) {
     }
 }
 
+/// A gateway's models put to the test (Settings' Test button): by the
+/// endpoint's address, then by model id. Kept, so a model that failed stays
+/// hidden until it is tested again.
+pub type ModelTests = HashMap<String, HashMap<String, ModelHealth>>;
+
+/// How many of a gateway's models are tried at once.
+pub const TEST_PARALLELISM: usize = 8;
+/// How long one of them may take to answer before it counts as failed.
+pub const TEST_TIMEOUT: Duration = Duration::from_secs(20);
+
+fn tests_path() -> Option<std::path::PathBuf> {
+    crate::profile::dir().map(|d| d.join("model-tests.json"))
+}
+
+pub fn load_tests() -> ModelTests {
+    tests_path()
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default()
+}
+
+pub fn save_tests(tests: &ModelTests) {
+    if let Some(path) = tests_path() {
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if let Ok(text) = serde_json::to_string(tests) {
+            let _ = std::fs::write(path, text);
+        }
+    }
+}
+
+/// The key a gateway's test results go under: its address, without a
+/// trailing slash.
+pub fn tests_key(base_url: &str) -> String {
+    base_url.trim().trim_end_matches('/').to_string()
+}
+
 /// Fold a finished check into the record. A check that could not be sent
 /// keeps the old verdicts and records why; a model list that couldn't be
 /// read keeps the context window read before.
@@ -489,7 +527,15 @@ fn start_hint(base_url: &str) -> String {
 /// Check one pair: Ok with its verdict (answered or not), or Err when the
 /// request could not be sent at all. Blocking; run it off the UI thread.
 pub fn probe(profile: &Profile, timeout: Duration) -> Result<ModelHealth, String> {
-    let token = token(&profile.auth)?;
+    probe_with(profile, token(&profile.auth)?, timeout)
+}
+
+/// `probe` with the key given, as Settings has it before it is saved.
+pub fn probe_with(
+    profile: &Profile,
+    token: Option<String>,
+    timeout: Duration,
+) -> Result<ModelHealth, String> {
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(CONNECT_TIMEOUT)
         .timeout(timeout)
@@ -545,7 +591,9 @@ pub fn probe(profile: &Profile, timeout: Duration) -> Result<ModelHealth, String
                         .map(str::to_string)
                 });
             let full = message.unwrap_or_else(|| format!("HTTP {code}"));
-            let mut detail: String = full.chars().take(160).collect();
+            // Long enough for a gateway's whole explanation (and its fix);
+            // what shows it clamps the lines and carries the rest in a tooltip.
+            let mut detail: String = full.chars().take(600).collect();
             // Cut short: said so.
             if detail.len() < full.len() {
                 detail.push('…');
@@ -584,7 +632,7 @@ pub fn probe(profile: &Profile, timeout: Duration) -> Result<ModelHealth, String
                     )),
                 );
             }
-            verdict(false, Some(text.chars().take(160).collect()))
+            verdict(false, Some(text.chars().take(600).collect()))
         }
     }
 }
