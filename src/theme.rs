@@ -1259,7 +1259,11 @@ pub struct Sizes {
     pub attach_chip: Pixels,        // 220: an attachment chip's widest
     pub popover_list: Pixels,       // 300: the tallest an autocomplete or context list grows
     pub completion_width: Pixels,   // 460: the / and @ lists, opened at the caret
-    pub settings_nav: Pixels,       // 200: the Settings window's section list
+    pub settings_nav: Pixels,       // 216: the Settings window's section list
+    pub settings_width: Pixels,     // 960: the Settings window, as wide as the screen allows
+    pub settings_height: Pixels,    // 760: and as tall: every section in the list at once
+    pub settings_measure: Pixels,   // 680: a Settings page's reading width
+    pub field_h: Pixels,            // 34: a text field in a form
     pub prompt_box: Pixels,         // 180: a prompt or instructions box in a Settings editor
     pub viewport_margin: Pixels, // 12: the gap a menu or dialog keeps from the window's edge; past it, it scrolls
     // Controls (`ui/button.rs`): hit areas and the switch's parts.
@@ -1337,7 +1341,11 @@ impl Default for Sizes {
             attach_chip: px(220.),
             popover_list: px(300.),
             completion_width: px(460.),
-            settings_nav: px(200.),
+            settings_nav: px(216.),
+            settings_width: px(960.),
+            settings_height: px(760.),
+            settings_measure: px(680.),
+            field_h: px(34.),
             prompt_box: px(180.),
             viewport_margin: px(12.),
             hit_sm: px(28.),

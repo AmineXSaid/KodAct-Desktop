@@ -675,13 +675,13 @@ impl Settings {
             .gap(px(8.))
             .child(
                 div()
-                    .px(px(4.))
-                    .text_size(t.text.caption)
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(t.colors.text_muted)
+                    .px(px(2.))
+                    .text_size(t.text.body_sm)
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(t.colors.text_strong)
                     .child(heading.to_string()),
             )
-            .child(card)
+            .child(card.shadow(t.elevation_grain()))
     }
 
     /// One setting: its name and hint, and its control beside them, or
@@ -740,14 +740,14 @@ impl Settings {
 
     fn boxed(t: &Theme, child: AnyElement) -> gpui::Div {
         div()
-            .h(px(32.))
-            .px(px(2.))
+            .h(t.size.field_h)
+            .px(px(4.))
             .flex()
             .items_center()
             .rounded(t.radius.field)
-            .bg(t.colors.canvas)
+            .bg(t.colors.surface)
             .border_1()
-            .border_color(t.colors.border)
+            .border_color(t.extra.border_strong)
             .child(div().flex_1().min_w_0().child(child))
     }
 
@@ -1078,10 +1078,11 @@ impl Settings {
             .flex()
             .flex_col()
             .gap(t.space.loose)
-            .child(Self::section(
+            .child(super::editor_kit::header(
                 t,
                 "General",
-                Some("Who you are, how Forge looks, and how new chats start."),
+                "Who you are, how Forge looks, and how new chats start.",
+                None,
             ));
         for (i, (heading, rows)) in groups.into_iter().enumerate() {
             page = page.child(super::motion::row_in_full(
@@ -1104,28 +1105,33 @@ impl Settings {
         let active = s.active_profile().map(|p| p.name.clone());
         let mut list = div().flex().flex_col().gap(px(8.));
         if profiles.is_empty() {
-            list = list.child(
-                div()
-                    .p(px(18.))
-                    .rounded(t.radius.card)
-                    .border_1()
-                    .border_color(t.colors.border)
-                    .text_size(t.text.body_sm)
-                    .text_color(t.colors.text_muted)
-                    .child("No endpoints yet. Add one: a cloud API with its key, or a model server running on this PC."),
-            );
+            list = list.child(super::editor_kit::empty(
+                t,
+                "No endpoints yet. Add one: a cloud API with its key, or a model server running on this PC.",
+            ));
         }
         for p in profiles {
             let (check, syncing) = crate::health::pair_check(&p.model, s.health.get(&p.name));
-            let (dot, text): (Hsla, String) = match &check {
-                crate::health::Check::Answered { ms, .. } => (
-                    t.extra.success,
-                    format!("answered in {}", crate::health::ping_text(*ms)),
-                ),
+            // The check, as a badge: how fast it answered (its tone the ping's),
+            // or that it didn't, with why on a line of its own.
+            let (badge_bg, badge_fg, badge, why): (Hsla, Hsla, String, Option<String>) = match &check {
+                crate::health::Check::Answered { ms, .. } => {
+                    let (bg, fg) = match crate::health::ping_tone(*ms) {
+                        crate::health::Tone::Fast => (t.extra.ping_fast_bg, t.extra.ping_fast_fg),
+                        crate::health::Tone::Fair => (t.extra.ping_fair_bg, t.extra.ping_fair_fg),
+                        crate::health::Tone::Slow => (t.extra.ping_slow_bg, t.extra.ping_slow_fg),
+                    };
+                    (bg, fg, format!("Answered · {}", crate::health::ping_text(*ms)), None)
+                }
                 crate::health::Check::Failed { detail }
-                | crate::health::Check::Unreachable { detail } => (t.extra.danger, detail.clone()),
-                _ if syncing => (t.colors.text_muted, "checking…".into()),
-                _ => (t.colors.text_muted, "not checked yet".into()),
+                | crate::health::Check::Unreachable { detail } => (
+                    t.extra.danger_tint,
+                    t.extra.danger,
+                    "Didn't answer".into(),
+                    Some(detail.clone()),
+                ),
+                _ if syncing => (t.colors.hover, t.colors.text_muted, "Checking…".into(), None),
+                _ => (t.colors.hover, t.colors.text_muted, "Not checked".into(), None),
             };
             let in_use = active.as_deref() == Some(p.name.as_str());
             let (use_state, edit_p, rm_name) = (self.state.clone(), p.clone(), p.name.clone());
@@ -1135,8 +1141,8 @@ impl Settings {
                     .flex()
                     .items_center()
                     .gap(px(12.))
-                    .px(px(14.))
-                    .py(px(11.))
+                    .px(t.space.lg)
+                    .py(px(12.))
                     .rounded(t.radius.card)
                     .border_1()
                     .border_color(if in_use {
@@ -1145,15 +1151,29 @@ impl Settings {
                         t.colors.border
                     })
                     .bg(t.colors.surface)
-                    .child(icon(
-                        if p.wire == Wire::Anthropic {
-                            "icons/sparkles.svg"
-                        } else {
-                            "icons/cpu.svg"
-                        },
-                        t.size.icon,
-                        t.colors.text_muted,
-                    ))
+                    .shadow(t.elevation_grain())
+                    // The protocol as a tile, so endpoints scan as a column.
+                    .child(
+                        div()
+                            .flex_none()
+                            .size(px(36.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded(t.radius.card)
+                            .bg(t.extra.sunk)
+                            .border_1()
+                            .border_color(t.colors.border)
+                            .child(icon(
+                                if p.wire == Wire::Anthropic {
+                                    "icons/sparkles.svg"
+                                } else {
+                                    "icons/cpu.svg"
+                                },
+                                t.size.icon,
+                                t.colors.text_muted,
+                            )),
+                    )
                     .child(
                         div()
                             .flex_1()
@@ -1200,36 +1220,35 @@ impl Settings {
                                         }
                                     )),
                             )
-                            .child(
+                            .children(why.map(|w| {
+                                // The reason, as a sentence.
+                                let mut c = w.chars();
+                                let w: String = c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default();
                                 div()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(6.))
-                                    .child(div().size(px(6.)).rounded(t.radius.pill).bg(dot))
-                                    .child(
-                                        div()
-                                            .overflow_hidden()
-                                            .whitespace_nowrap()
-                                            .text_ellipsis()
-                                            .text_size(t.text.caption)
-                                            .text_color(t.colors.text_muted)
-                                            .child(text),
-                                    ),
-                            ),
+                                    .pt(px(2.))
+                                    .line_clamp(2)
+                                    .text_size(t.text.caption)
+                                    .text_color(t.extra.danger)
+                                    .line_height(relative(1.4))
+                                    .child(w)
+                            })),
                     )
+                    .child(theme::pill(t, badge_bg, badge_fg, badge).flex_none())
                     .when(!in_use, |d| {
                         d.child(
-                            Self::chip(t, SharedString::from(format!("use-{name}")), "Use", false)
+                            super::button::Button::secondary(SharedString::from(format!("use-{name}")), "Use")
+                                .compact()
                                 .on_click(move |_, _, cx| {
                                     use_state.update(cx, |s, cx| s.select_profile(&name, cx))
                                 }),
                         )
                     })
                     .child(
-                        Self::chip(
+                        super::editor_kit::icon_button(
                             t,
                             SharedString::from(format!("edit-{}", p.name)),
-                            "Edit",
+                            "icons/pencil.svg",
+                            "Edit this endpoint",
                             false,
                         )
                         .on_click(cx.listener(
@@ -1280,14 +1299,17 @@ impl Settings {
             .flex()
             .flex_col()
             .gap(px(14.))
-            .child(
-                div()
-                    .flex()
-                    .items_start()
-                    .gap(px(12.))
-                    .child(div().flex_1().min_w_0().child(Self::section(t, "Endpoints", Some("Each endpoint is a URL and the model it runs. Forge checks each one with a tiny request; the one in use answers your chats."))))
-                    .child(theme::primary_button(t, "Add endpoint").id("add-endpoint").on_click(cx.listener(|this, _, window, cx| this.open_form(None, window, cx)))),
-            )
+            .child(super::editor_kit::header(
+                t,
+                "Models",
+                "Each endpoint is a URL and the model it runs. Forge checks each one with a tiny request; the one in use answers your chats.",
+                Some(
+                    super::button::Button::primary("add-endpoint", "Add endpoint")
+                        .with_icon("icons/plus.svg")
+                        .on_click(cx.listener(|this, _, window, cx| this.open_form(None, window, cx)))
+                        .into_any_element(),
+                ),
+            ))
             .child(list)
             .child(
                 div()
@@ -1387,7 +1409,7 @@ impl Settings {
                 this.form = false;
                 cx.notify();
             })))
-            .child(Self::section(t, title, Some("Start from a preset or fill it in. Forge lists the models with your key, checks the one you pick with a short request, then saves it and uses it.")))
+            .child(super::editor_kit::header(t, title, "Start from a preset or fill it in. Forge lists the models with your key, checks the one you pick with a short request, then saves it and uses it.", None))
             .child(div().flex().flex_col().gap(px(6.)).child(div().text_size(t.text.caption).font_weight(FontWeight::MEDIUM).text_color(t.colors.text_muted).child("Start from")).child(presets).children(found_note.map(|n| div().text_size(t.text.caption).text_color(t.extra.success).child(n))))
             .child(div().flex().gap(px(10.)).child(div().w(px(170.)).child(Self::field(t, "Name", &self.ep_name))).child(div().flex_1().min_w_0().child(Self::field(t, "Base URL", &self.ep_url))))
             .child(div().flex().flex_col().gap(px(6.)).child(div().text_size(t.text.caption).font_weight(FontWeight::MEDIUM).text_color(t.colors.text_muted).child("Protocol")).child(wire_row))
@@ -1973,10 +1995,10 @@ impl Render for Settings {
             .id("settings-panel")
             .occlude()
             .relative()
-            .w(px(820.))
-            .max_w(relative(0.94))
-            .h(px(600.))
-            .max_h(relative(0.9))
+            .w(t.size.settings_width)
+            .max_w(relative(0.92))
+            .h(t.size.settings_height)
+            .max_h(relative(0.88))
             .flex()
             .bg(t.colors.surface)
             .border_1()
@@ -2017,9 +2039,10 @@ impl Render for Settings {
                     .rounded_br(PANEL_RADIUS - t.size.hairline)
                     .min_w_0()
                     .overflow_y_scroll()
-                    .pl(px(28.))
-                    .pr(px(52.))
-                    .py(px(24.))
+                    .pl(px(40.))
+                    .pr(px(56.))
+                    .pt(px(32.))
+                    .pb(px(40.))
                     // A new section arrives: it fades in and rises into place
                     // while the frame and the nav stay where they are.
                     .child(super::motion::rise_in(

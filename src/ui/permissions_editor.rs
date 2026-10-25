@@ -193,25 +193,11 @@ impl Render for PermissionsEditor {
         if self.rules.is_none() {
             self.read(cx);
         }
-        let mut layers = div().flex().flex_wrap().gap(px(6.));
-        for (layer, label) in [
-            (Layer::Local, "This project, this PC"),
-            (Layer::Project, "This project, shared"),
-            (Layer::User, "Every project"),
-        ] {
-            layers = layers.child(
-                kit::chip(
-                    &t,
-                    SharedString::from(format!("perm-layer-{layer:?}")),
-                    label,
-                    self.layer == layer,
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.layer = layer;
-                    cx.notify();
-                })),
-            );
-        }
+        // Which file: one of three, as everywhere in Settings.
+        let layers = kit::layer_chips(&t, "perm-layer", self.layer, cx, |this, l, cx| {
+            this.layer = l;
+            cx.notify();
+        });
         let mut kinds = div().flex().gap(px(6.));
         for (kind, label) in KINDS {
             kinds = kinds.child(
