@@ -121,6 +121,8 @@ pub fn render(
     t: &Theme,
     state: &Entity<AppState>,
     window: &gpui::Window,
+    // The list: Some(leaving) while it shows or leaves.
+    shown: Option<bool>,
     cx: &gpui::App,
 ) -> Option<AnyElement> {
     let s = state.read(cx);
@@ -185,7 +187,7 @@ pub fn render(
             t.colors.text_subtle,
         ))
         .on_click(move |_, _, cx| toggle.update(cx, |s, cx| s.toggle_tasks(cx)));
-    let panel = open.then(|| {
+    let panel = shown.map(|leaving| {
         let mut rows = div()
             .id("tasks-list")
             .flex()
@@ -228,7 +230,8 @@ pub fn render(
             );
         }
         let close = state.clone();
-        gpui::deferred(
+        gpui::deferred(super::motion::unfold(
+
         theme::fit_window(
             theme::popover(t).id("tasks-popover"),
             window,
@@ -259,6 +262,11 @@ pub fn render(
                     .child("This turn's tasks · click one to see it"),
             )
             .child(rows),
+            "tasks-popover",
+            false,
+            leaving,
+            t,
+        ),
         )
         .with_priority(2)
     });

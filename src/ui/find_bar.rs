@@ -15,6 +15,8 @@ use crate::theme::{self, ActiveTheme};
 pub struct FindBar {
     state: Entity<AppState>,
     query: Entity<InputState>,
+    /// The bar, kept while it leaves.
+    presence: super::motion::Presence<crate::state::Find>,
     _subs: Vec<Subscription>,
 }
 
@@ -42,6 +44,7 @@ impl FindBar {
         Self {
             state,
             query,
+            presence: Default::default(),
             _subs: subs,
         }
     }
@@ -69,9 +72,11 @@ impl FindBar {
 }
 
 impl Render for FindBar {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
-        let Some(find) = self.state.read(cx).find.clone() else {
+        // Closed: it stays a beat while it lifts away, as the palette does.
+        let now = self.state.read(cx).find.clone();
+        let Some((find, leaving)) = self.presence.frame(now, t.size.menu_out_ms, window) else {
             return div().into_any_element();
         };
         let hover = t.colors.hover;
@@ -108,7 +113,7 @@ impl Render for FindBar {
             .justify_center()
             .px(t.space.xl)
             .pt(t.space.sm)
-            .child(
+            .child(super::motion::spotlight(
                 theme::popover(&t)
                     .key_context("FindBar")
                     .capture_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| {
@@ -162,7 +167,10 @@ impl Render for FindBar {
                         button("find-close", "icons/x.svg", true)
                             .on_click(cx.listener(|this, _, window, cx| this.close(window, cx))),
                     ),
-            )
+                "find-bar",
+                leaving,
+                &t,
+            ))
             .into_any_element()
     }
 }

@@ -42,9 +42,8 @@ pub fn render(
         })
         .child(div().flex_1())
         .children(model.map(|m| div().pr(t.space.md).child(format!("Model: {m}"))))
-        .when(s.remote_menu.is_some(), |d| {
-            d.child(gpui::deferred(picker).with_priority(3))
-        })
+        // Always there: the picker draws itself while open and as it leaves.
+        .child(gpui::deferred(picker).with_priority(3))
         .into_any_element()
 }
 

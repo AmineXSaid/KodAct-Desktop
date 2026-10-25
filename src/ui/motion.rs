@@ -218,6 +218,22 @@ pub fn alert(
     }
 }
 
+/// A menu that hangs below what opened it (the terminal's shell list, a
+/// right-click menu): it draws its jewel edge as it opens; leaving, it
+/// fades and drifts back up toward its anchor.
+pub fn drop_menu(
+    body: gpui::Stateful<gpui::Div>,
+    id: &str,
+    leaving: bool,
+    t: &crate::theme::Theme,
+) -> gpui::AnyElement {
+    if leaving {
+        unfold(body, id, false, true, t)
+    } else {
+        edge_draw(body, format!("{id}-in"), t.colors.primary, 0., t)
+    }
+}
+
 /// A menu over the composer (the model, the mode, the +): it opens by
 /// drawing its jewel edge (`edge_draw`); leaving, it fades and drifts back
 /// down toward the composer. `lift` is its bottom margin at rest.

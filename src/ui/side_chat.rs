@@ -16,6 +16,8 @@ use crate::theme::ActiveTheme;
 pub struct SideChat {
     state: Entity<AppState>,
     input: Entity<InputState>,
+    /// The card, kept while it leaves.
+    presence: super::motion::Presence<crate::state::Side>,
     _subs: Vec<Subscription>,
 }
 
@@ -39,6 +41,7 @@ impl SideChat {
         Self {
             state,
             input,
+            presence: Default::default(),
             _subs: subs,
         }
     }
@@ -54,9 +57,11 @@ impl SideChat {
 }
 
 impl Render for SideChat {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
-        let Some(side) = self.state.read(cx).side_shown().cloned() else {
+        // Closed: it stays a beat while it drops away, as a notice does.
+        let now = self.state.read(cx).side_shown().cloned();
+        let Some((side, leaving)) = self.presence.frame(now, t.size.window_out_ms, window) else {
             return div().into_any_element();
         };
         let hover = t.colors.hover;
@@ -295,7 +300,7 @@ impl Render for SideChat {
             .absolute()
             .right(px(20.))
             .bottom(px(150.))
-            .child(card)
+            .child(super::motion::notice(card, "side-chat", leaving, &t))
             .into_any_element()
     }
 }

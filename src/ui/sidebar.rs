@@ -24,6 +24,8 @@ pub struct Sidebar {
     renaming: Option<usize>,
     /// The chat row under the pointer: its wash eases in (`motion::hover_wash`).
     row_hover: Option<usize>,
+    /// The filter menu, kept while it leaves.
+    filter_presence: super::motion::Presence<()>,
     /// Each chat row's place last time, and how often it moved up: a chat
     /// that rises to the top of its group rises into its new place.
     places: std::collections::HashMap<usize, usize>,
@@ -95,6 +97,7 @@ impl Sidebar {
             rename,
             renaming: None,
             row_hover: None,
+            filter_presence: Default::default(),
             places: Default::default(),
             bumps: Default::default(),
             _subs: subs,
@@ -104,7 +107,13 @@ impl Sidebar {
 
 impl Sidebar {
     /// Which chats the list shows: this project's, or every project's.
-    fn filter(&self, t: &crate::theme::Theme, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    fn filter(
+        &self,
+        t: &crate::theme::Theme,
+        // The menu: Some(leaving) while it shows or leaves.
+        shown: Option<bool>,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
         let s = self.state.read(cx);
         let (open, all, name, archived) =
             (s.filter_open, s.all_chats, s.project.clone(), s.show_archived);
@@ -231,7 +240,10 @@ impl Sidebar {
                         })
                     }),
             )
-            .when(open, |d| d.child(gpui::deferred(menu).with_priority(1)))
+            .children(shown.map(|leaving| {
+                gpui::deferred(super::motion::unfold(menu, "chat-filter", false, leaving, t))
+                    .with_priority(1)
+            }))
     }
 }
 
@@ -239,7 +251,12 @@ impl Render for Sidebar {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let row_hover = self.row_hover;
         let t = cx.theme().clone();
-        let mut filter = Some(self.filter(&t, cx).into_any_element());
+        let filter_now = self.state.read(cx).filter_open.then_some(());
+        let shown = self
+            .filter_presence
+            .frame(filter_now, t.size.menu_out_ms, window)
+            .map(|f| f.1);
+        let mut filter = Some(self.filter(&t, shown, cx).into_any_element());
         let s = self.state.read(cx);
         let q = s.search.to_lowercase();
         let name: SharedString = s.user_name.clone().unwrap_or_else(|| "Welcome".into());

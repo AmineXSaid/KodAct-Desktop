@@ -51,6 +51,7 @@ pub struct Composer {
     model_presence: super::motion::Presence<()>,
     modes_presence: super::motion::Presence<()>,
     add_presence: super::motion::Presence<()>,
+    context_presence: super::motion::Presence<()>,
     /// Where the press that just closed a menu happened: the click it ends
     /// in, on that menu's own button, must not open it again.
     dismissed_at: Option<gpui::Point<gpui::Pixels>>,
@@ -194,6 +195,7 @@ impl Composer {
             model_presence: Default::default(),
             modes_presence: Default::default(),
             add_presence: Default::default(),
+            context_presence: Default::default(),
             dismissed_at: None,
             add_open: false,
             styling,
@@ -906,7 +908,11 @@ impl Render for Composer {
                 })
                 .on_click(|_, window, cx| window.dispatch_action(Box::new(super::ShowContext), cx))
         });
-        let context_popover = super::context_menu::render(&t, &state, window, cx);
+        let context_shown = self
+            .context_presence
+            .frame(self.state.read(cx).context_open.then_some(()), out, window)
+            .map(|f| f.1);
+        let context_popover = super::context_menu::render(&t, &state, window, context_shown, cx);
 
         // In a chat the box is as wide as the text above it, on the same
         // edges; on the new-chat screen it keeps its own width.
@@ -920,6 +926,12 @@ impl Render for Composer {
             .flex()
             .flex_col()
             .gap(px(6.))
+            // Ctrl+F finds in the chat (`find_bar.rs`), not in the text box:
+            // the editor's own search bar would open inside the composer.
+            .capture_action(cx.listener(|_, _: &gpui::component::input::Search, window, cx| {
+                cx.stop_propagation();
+                window.dispatch_action(Box::new(super::ToggleFind), cx);
+            }))
             // The text box's own Escape closes the autocomplete first, keeping the focus.
             .capture_action(
                 cx.listener(|this, _: &gpui::component::input::Escape, _, cx| {

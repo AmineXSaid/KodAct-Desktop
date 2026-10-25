@@ -278,15 +278,21 @@ impl Workspace {
         }
     }
 
-    fn title_bar(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn title_bar(&self, frames: BarFrames, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         // Deferred so it paints above the page under the title bar.
-        let switcher = self.state.read(cx).switcher_open.then(|| {
-            gpui::deferred(project_switcher(
-                &self.state,
-                window,
-                cx,
-                t.size.control + t.space.xs,
+        let switcher = frames.switcher.map(|leaving| {
+            gpui::deferred(super::motion::unfold(
+                div().child(project_switcher(
+                    &self.state,
+                    window,
+                    cx,
+                    t.size.control + t.space.xs,
+                )),
+                "project-switcher",
+                false,
+                leaving,
+                &t,
             ))
             .with_priority(1)
         });
@@ -521,8 +527,8 @@ impl Workspace {
                 // with Forge's name; a click opens its menu under it.
                 .children(chat_title)
                 .child(div().flex_1())
-                .children(super::tasks::render(&t, &self.state, window, cx))
-                .children(super::approvals::render(&t, &self.state, window, cx))
+                .children(super::tasks::render(&t, &self.state, window, frames.tasks, cx))
+                .children(super::approvals::render(&t, &self.state, window, frames.approvals, cx))
                 // The Session column: where it runs, its context, its changes.
                 .when(chat_open, |d| {
                     d.child(
@@ -724,6 +730,17 @@ impl Render for Workspace {
         let title_f = p.title.frame(title_now, t.size.menu_out_ms, window);
         let chat_f = p.chat.frame(chat_now, t.size.menu_out_ms, window);
         let toast_f = p.toast.frame(toast_now, t.size.window_out_ms, window);
+        let bar = {
+            let s = self.state.read(cx);
+            let (sw, ta, ap) = (s.switcher_open, s.tasks_open, s.approvals_open);
+            let p = &mut self.presence;
+            let out = t.size.menu_out_ms;
+            BarFrames {
+                switcher: p.switcher.frame(sw.then_some(()), out, window).map(|f| f.1),
+                tasks: p.tasks.frame(ta.then_some(()), out, window).map(|f| f.1),
+                approvals: p.approvals.frame(ap.then_some(()), out, window).map(|f| f.1),
+            }
+        };
         let s = self.state.read(cx);
         let (sidebar_open, onboarding, screen, loading) = (
             s.sidebar_open,
@@ -731,7 +748,6 @@ impl Render for Workspace {
             s.screen,
             s.loading,
         );
-        let find_open = s.find.is_some();
         // Which chat shows: its transcript animates in when it changes.
         let chat_key = s.chat().map_or(usize::MAX, |c| c.id);
         let empty = s.chat().is_none_or(|c| c.messages.is_empty());
@@ -1003,7 +1019,8 @@ impl Render for Workspace {
                 // Behind a chat the stage is plain, as the text wants it;
                 // the home screen's field follows only if you asked for it.
                 .when(chat_pattern, |d| d.child(self.dots.clone()))
-                .when(find_open, |d| d.child(self.find.clone()))
+                // Always there: the bar draws itself while open and as it leaves.
+                .child(self.find.clone())
                 .child(
                     div()
                         .flex_1()
@@ -1593,7 +1610,7 @@ impl Render for Workspace {
                 }),
             )
             .on_action(cx.listener(|_, _: &Quit, _, cx| cx.quit()))
-            .child(self.title_bar(window, cx))
+            .child(self.title_bar(bar, window, cx))
             .children(super::status_bar::banner(
                 self.state.read(cx),
                 self.state.clone(),
@@ -1663,11 +1680,22 @@ struct Presences {
     toast: super::motion::Presence<SharedString>,
     session: super::motion::Presence<usize>,
     dock: super::motion::Presence<()>,
+    switcher: super::motion::Presence<()>,
+    tasks: super::motion::Presence<()>,
+    approvals: super::motion::Presence<()>,
     side: super::motion::Presence<(
         Option<crate::state::FileRef>,
         Option<crate::state::PanelTab>,
         bool,
     )>,
+}
+
+/// The title bar's popovers: Some(leaving) while each shows or leaves.
+#[derive(Clone, Copy)]
+struct BarFrames {
+    switcher: Option<bool>,
+    tasks: Option<bool>,
+    approvals: Option<bool>,
 }
 
 /// A window to draw (its key), and whether it is leaving.

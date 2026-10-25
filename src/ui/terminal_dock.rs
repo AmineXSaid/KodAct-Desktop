@@ -57,6 +57,9 @@ pub struct TerminalDock {
     selecting: bool,
     /// The right-click menu, open at this window position.
     menu_at: Option<Point<Pixels>>,
+    /// The shell list and the right-click menu, kept while each leaves.
+    shell_presence: super::motion::Presence<()>,
+    menu_presence: super::motion::Presence<Point<Pixels>>,
     /// Wheel movement not yet a whole line.
     wheel: f32,
     _intercept: Subscription,
@@ -116,6 +119,8 @@ impl TerminalDock {
             grid: Rc::new(Cell::new(Bounds::default())),
             selecting: false,
             menu_at: None,
+            shell_presence: Default::default(),
+            menu_presence: Default::default(),
             wheel: 0.,
             _intercept: intercept,
         }
@@ -302,6 +307,7 @@ impl TerminalDock {
     fn context_menu(
         &self,
         at: Point<Pixels>,
+        leaving: bool,
         window: &Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -399,11 +405,10 @@ impl TerminalDock {
             gpui::anchored()
                 .position(at)
                 .snap_to_window_with_margin(t.space.sm)
-                .child(super::motion::edge_draw(
+                .child(super::motion::drop_menu(
                     menu,
-                    "terminal-context-menu-in",
-                    t.colors.primary,
-                    0.,
+                    "terminal-context-menu",
+                    leaving,
                     &t,
                 )),
         )
@@ -774,7 +779,7 @@ impl TerminalDock {
         )
     }
 
-    fn shell_menu(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
+    fn shell_menu(&self, leaving: bool, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         let t = cx.theme().clone();
         let hover = t.colors.hover;
         let mut list = div().flex().flex_col();
@@ -816,7 +821,7 @@ impl TerminalDock {
         .occlude()
         .text_size(t.text.body_sm)
         .child(list);
-        super::motion::edge_draw(menu, "terminal-shell-menu-in", t.colors.primary, 0., &t)
+        super::motion::drop_menu(menu, "terminal-shell-menu", leaving, &t)
     }
 
     /// The active terminal's screen.
@@ -1085,8 +1090,16 @@ impl Render for TerminalDock {
         if self.state.read(cx).terminal_open {
             self.unseen = false;
         }
-        let picker = self.picker.then(|| self.shell_menu(window, cx));
-        let menu = self.menu_at.map(|at| self.context_menu(at, window, cx));
+        // Each menu is kept a beat after it closes, while it leaves.
+        let out = cx.theme().size.menu_out_ms;
+        let picker = self
+            .shell_presence
+            .frame(self.picker.then_some(()), out, window)
+            .map(|(_, leaving)| self.shell_menu(leaving, window, cx));
+        let menu = self
+            .menu_presence
+            .frame(self.menu_at, out, window)
+            .map(|(at, leaving)| self.context_menu(at, leaving, window, cx));
         div()
             .id("terminal-dock")
             .key_context("Terminal")

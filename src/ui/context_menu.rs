@@ -16,12 +16,12 @@ pub fn render(
     t: &Theme,
     state: &Entity<AppState>,
     win: &gpui::Window,
+    // Some(leaving) while it shows or leaves.
+    shown: Option<bool>,
     cx: &gpui::App,
 ) -> Option<AnyElement> {
+    let leaving = shown?;
     let s = state.read(cx);
-    if !s.context_open {
-        return None;
-    }
     let chat = s.chat()?;
     let profile = s.active_profile();
     let window = profile.and_then(|p| p.context_window(s.health.get(&p.name)));
@@ -175,14 +175,13 @@ pub fn render(
             .child(title)
     };
     let hover = t.colors.hover;
-    Some(
+    Some(super::motion::composer_menu(
         theme::popover(t)
             .id("context-window")
             .occlude()
             .absolute()
             .bottom_full()
             .left_0()
-            .mb(px(8.))
             .w(px(420.))
             .p(t.space.lg)
             .flex()
@@ -246,6 +245,10 @@ pub fn render(
                             .on_click(move |_, _, cx| compact.update(cx, |s, cx| s.compact(cx))),
                     ),
             )
-            .into_any_element(),
-    )
+            .relative(),
+        "context-window",
+        8.,
+        leaving,
+        t,
+    ))
 }

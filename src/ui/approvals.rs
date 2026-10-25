@@ -14,6 +14,8 @@ pub fn render(
     t: &Theme,
     state: &Entity<AppState>,
     window: &gpui::Window,
+    // The list: Some(leaving) while it shows or leaves.
+    shown: Option<bool>,
     cx: &gpui::App,
 ) -> Option<AnyElement> {
     let s = state.read(cx);
@@ -21,7 +23,6 @@ pub fn render(
     if pending.is_empty() {
         return None;
     }
-    let open = s.approvals_open;
     let n = pending.len();
     let toggle = state.clone();
     let fill_hover = t.colors.text.opacity(0.12);
@@ -55,7 +56,7 @@ pub fn render(
             |d, delta| d.opacity(delta),
         );
     let hover = t.colors.hover;
-    let list = open.then(|| {
+    let list = shown.map(|leaving| {
         let mut rows = div().flex().flex_col();
         for (i, (chat, title, asks, msg)) in pending.iter().cloned().enumerate() {
             let st = state.clone();
@@ -118,7 +119,7 @@ pub fn render(
             );
         }
         let close = state.clone();
-        gpui::deferred(
+        gpui::deferred(super::motion::unfold(
             theme::fit_window(
                 theme::popover(t).id("approvals-list"),
                 window,
@@ -149,7 +150,11 @@ pub fn render(
                     .child(SharedString::from("Waiting on your answer")),
             )
             .child(rows),
-        )
+            "approvals-list",
+            false,
+            leaving,
+            t,
+        ))
         .with_priority(2)
     });
     Some(

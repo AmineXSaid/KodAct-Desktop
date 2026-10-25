@@ -92,6 +92,8 @@ pub struct RemotePicker {
     page: Option<(RemotePage, Option<String>)>,
     /// Counts pages shown, so each new page's rows play their opening.
     opening: usize,
+    /// The menu, kept while it leaves.
+    presence: super::motion::Presence<crate::state::RemoteMenu>,
     _subs: Vec<Subscription>,
 }
 
@@ -143,15 +145,13 @@ impl RemotePicker {
             selected: 0,
             page: None,
             opening: 0,
+            presence: Default::default(),
             _subs: subs,
         }
     }
 
     /// The rows for the page showing, filtered by the box.
-    fn rows(&self, s: &AppState, q: &str) -> Vec<Row> {
-        let Some(m) = &s.remote_menu else {
-            return vec![];
-        };
+    fn rows(&self, s: &AppState, m: &crate::state::RemoteMenu, q: &str) -> Vec<Row> {
         let matches =
             |label: &str| q.is_empty() || super::command_palette::fuzzy(q, label).is_some();
         let mut rows = vec![];
@@ -490,11 +490,15 @@ impl Render for RemotePicker {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let s = self.state.read(cx);
-        let Some(m) = s.remote_menu.clone() else {
+        // Closed: drawn a beat longer while it fades back down.
+        let Some((m, leaving)) =
+            self.presence
+                .frame(s.remote_menu.clone(), t.size.menu_out_ms, window)
+        else {
             return div().into_any_element();
         };
         let q = self.query.read(cx).value().to_string();
-        let rows = self.rows(s, &q);
+        let rows = self.rows(s, &m, &q);
         let enabled: Vec<usize> = rows
             .iter()
             .enumerate()
@@ -891,7 +895,7 @@ impl Render for RemotePicker {
                 })
             }))
             .child(body);
-        super::motion::edge_draw(menu, "remote-menu-in", t.colors.primary, lift, &t)
+        super::motion::composer_menu(menu, "remote-menu", lift, leaving, &t)
     }
 }
 
