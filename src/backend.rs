@@ -660,9 +660,84 @@ fn browser_subject(input: &Value) -> Option<String> {
 #[derive(Default)]
 pub struct Parser {
     streamed: bool,
+    /// Inside a `<think>` / `<thought>` span a model wrote into its reply
+    /// text (Gemma, Qwen, DeepSeek behind an OpenAI-compatible route).
+    in_thought: bool,
+    /// The end of the last delta, held back while it could be the start
+    /// of a tag cut across two deltas ("<tho").
+    held: String,
 }
 
+/// The tags a model wraps its reasoning in when it has no thinking block.
+const THOUGHT_OPEN: [&str; 2] = ["<think>", "<thought>"];
+const THOUGHT_CLOSE: [&str; 2] = ["</think>", "</thought>"];
+
 impl Parser {
+    /// Reply text, with any reasoning a model wrapped in tags split out as
+    /// thinking, so it folds away instead of reading as the answer.
+    fn text(&mut self, text: &str, out: &mut Vec<Event>) {
+        let mut rest = std::mem::take(&mut self.held) + text;
+        loop {
+            let tags: &[&str] = if self.in_thought {
+                &THOUGHT_CLOSE
+            } else {
+                &THOUGHT_OPEN
+            };
+            let found = tags
+                .iter()
+                .filter_map(|t| rest.find(t).map(|i| (i, t.len())))
+                .min_by_key(|(i, _)| *i);
+            match found {
+                Some((i, len)) => {
+                    self.emit(&rest[..i], out);
+                    self.in_thought = !self.in_thought;
+                    out.push(Event::Break);
+                    rest = rest[i + len..].to_string();
+                }
+                None => {
+                    // Hold back a tail that could begin a tag.
+                    let keep = rest
+                        .char_indices()
+                        .rev()
+                        .take(10)
+                        .map(|(i, _)| i)
+                        .filter(|&i| {
+                            let tail = &rest[i..];
+                            tail.starts_with('<') && tags.iter().any(|t| t.starts_with(tail))
+                        })
+                        .min();
+                    match keep {
+                        Some(i) => {
+                            self.held = rest[i..].to_string();
+                            self.emit(&rest[..i], out);
+                        }
+                        None => self.emit(&rest, out),
+                    }
+                    return;
+                }
+            }
+        }
+    }
+
+    fn emit(&self, text: &str, out: &mut Vec<Event>) {
+        if text.is_empty() {
+            return;
+        }
+        out.push(if self.in_thought {
+            Event::Thinking(text.into())
+        } else {
+            Event::Text(text.into())
+        });
+    }
+
+    /// The turn ended: what was held back is said, and a span left open
+    /// closes.
+    fn end_turn(&mut self, out: &mut Vec<Event>) {
+        let held = std::mem::take(&mut self.held);
+        self.emit(&held, out);
+        self.in_thought = false;
+    }
+
     pub fn line(&mut self, line: &str) -> Vec<Event> {
         let Ok(v) = serde_json::from_str::<Value>(line) else {
             return vec![];
@@ -730,7 +805,7 @@ impl Parser {
                     match d["type"].as_str() {
                         Some("text_delta") => {
                             self.streamed = true;
-                            out.push(Event::Text(d["text"].as_str().unwrap_or_default().into()));
+                            self.text(d["text"].as_str().unwrap_or_default(), &mut out);
                         }
                         Some("thinking_delta") => {
                             self.streamed = true;
@@ -749,10 +824,10 @@ impl Parser {
                 }
                 for b in v["message"]["content"].as_array().into_iter().flatten() {
                     match b["type"].as_str() {
-                        Some("text") if !streamed => out.extend([
-                            Event::Break,
-                            Event::Text(b["text"].as_str().unwrap_or_default().into()),
-                        ]),
+                        Some("text") if !streamed => {
+                            out.push(Event::Break);
+                            self.text(b["text"].as_str().unwrap_or_default(), &mut out);
+                        }
                         Some("thinking") if !streamed => out.extend([
                             Event::Break,
                             Event::Thinking(b["thinking"].as_str().unwrap_or_default().into()),
@@ -832,6 +907,7 @@ impl Parser {
                 request_id: v["request_id"].as_str().unwrap_or_default().into(),
             }),
             Some("result") if !nested => {
+                self.end_turn(&mut out);
                 // An immediate command's answer (`/status`...) is not a turn.
                 if v["immediate"] == true {
                     out.push(Event::Immediate {
@@ -1165,6 +1241,25 @@ mod tests {
     fn parse(lines: &[Value]) -> Vec<Event> {
         let mut p = Parser::default();
         lines.iter().flat_map(|l| p.line(&l.to_string())).collect()
+    }
+
+    #[test]
+    fn reasoning_in_thought_tags_becomes_thinking_even_cut_across_deltas() {
+        let delta = |t: &str| json!({"type":"stream_event","parent_tool_use_id":null,"event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":t}}});
+        let ev = parse(&[
+            delta("<thou"),
+            delta("ght>The user said hi. I'll respond naturally.</tho"),
+            delta("ught>Hi there!"),
+            json!({"type":"result","is_error":false,"duration_ms":10,"usage":{}}),
+        ]);
+        let thinking: String = ev.iter().filter_map(|e| match e { Event::Thinking(t) => Some(t.as_str()), _ => None }).collect();
+        let text: String = ev.iter().filter_map(|e| match e { Event::Text(t) => Some(t.as_str()), _ => None }).collect();
+        assert_eq!(thinking, "The user said hi. I'll respond naturally.");
+        assert_eq!(text, "Hi there!");
+        // A plain "<" in a reply is not held back for ever.
+        let ev = parse(&[delta("if a <"), json!({"type":"result","is_error":false,"duration_ms":10,"usage":{}})]);
+        let text: String = ev.iter().filter_map(|e| match e { Event::Text(t) => Some(t.as_str()), _ => None }).collect();
+        assert_eq!(text, "if a <");
     }
 
     #[test]

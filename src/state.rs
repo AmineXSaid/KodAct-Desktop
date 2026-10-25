@@ -583,6 +583,9 @@ pub struct AgentRun {
     pub prompt: String,
     pub started: std::time::Instant,
     pub ended: Option<std::time::Instant>,
+    /// When it last did anything (started, a step, a step's end, words):
+    /// long quiet while it runs, it looks stuck.
+    pub heard: std::time::Instant,
     pub failed: bool,
     pub steps: Vec<AgentStep>,
     /// Its latest words; once it ends, its answer.
@@ -4639,12 +4642,15 @@ impl AppState {
                     prompt: s("prompt"),
                     started: now,
                     ended: None,
+                    heard: now,
                     failed: false,
                     steps: vec![],
                     said: String::new(),
                     stopping: false,
                     stopped: false,
                 });
+                // The Agents panel opens with the first agent; each also has
+                // its row in the conversation.
                 if self.doc.is_none() && self.current == Some(chat) {
                     self.panel = Some(PanelTab::Agents);
                 }
@@ -4689,6 +4695,7 @@ impl AppState {
                         (Some(n), ToolKind::Bash) => (n.to_string(), true),
                         _ => (call.shown_target().to_string(), false),
                     };
+                    r.heard = now;
                     r.steps.push(AgentStep {
                         id: id.clone(),
                         kind: call.kind,
@@ -4703,6 +4710,9 @@ impl AppState {
                 id,
                 is_error,
             } => {
+                if let Some(r) = runs.iter_mut().find(|r| &r.id == parent) {
+                    r.heard = now;
+                }
                 if let Some(s) = runs
                     .iter_mut()
                     .find(|r| &r.id == parent)
@@ -4720,6 +4730,7 @@ impl AppState {
                     .iter_mut()
                     .find(|r| &r.id == parent && r.ended.is_none())
                 {
+                    r.heard = now;
                     r.said = text.clone();
                 }
             }

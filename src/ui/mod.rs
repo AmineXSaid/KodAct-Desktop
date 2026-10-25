@@ -204,6 +204,12 @@ pub fn turning_logo(size: f32, id: impl Into<gpui::ElementId>) -> gpui::AnyEleme
     ingot::turning(size, id)
 }
 
+/// The Forge logo turning, painted in `color` (lit from above): the mark of
+/// work in progress in the conversation, in the theme's live colour.
+pub fn turning_logo_in(size: f32, id: impl Into<gpui::ElementId>, color: gpui::Hsla) -> gpui::AnyElement {
+    ingot::turning_with(size, id, Some(ingot::tinted(color)))
+}
+
 /// Your avatar, drawn `size` px square at this screen's density.
 pub fn avatar_image(name: &str, size: f32, window: &gpui::Window) -> gpui::Img {
     let px = (size * window.scale_factor()).round() as u32;

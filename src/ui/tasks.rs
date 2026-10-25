@@ -64,7 +64,7 @@ pub fn tasks(messages: &[Message]) -> Vec<Task> {
 
 pub(super) fn status_icon(status: ToolStatus, t: &Theme, key: SharedString) -> AnyElement {
     match status {
-        ToolStatus::Running => icon("icons/loader-circle.svg", t.size.icon_sm, t.colors.sky)
+        ToolStatus::Running => icon("icons/loader-circle.svg", t.size.icon_sm, t.extra.live)
             .with_animation(
                 key,
                 Animation::new(Duration::from_millis(900)).repeat(),

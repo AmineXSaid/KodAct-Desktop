@@ -48,6 +48,8 @@ pub struct ItemContext {
     pub can_continue: bool,
     /// Nothing you sent comes after this item: it belongs to the newest turn.
     pub in_last_turn: bool,
+    /// The item just before is an error: a turn's footer says it failed.
+    pub after_error: bool,
     /// Earlier versions from your message here on (edits and retries), and
     /// whether their list is open.
     pub versions: Vec<super::versions::Row>,
@@ -72,6 +74,8 @@ pub struct ItemContext {
     pub thoughts: Vec<(usize, u64)>,
     /// This reply's "Edited N files" card shows every file.
     pub edited_open: bool,
+    /// The chat's sub-agents, for their rows' details.
+    pub agents: std::rc::Rc<Vec<crate::state::AgentRun>>,
 }
 
 /// Where a jump's block is drawn, so the list can scroll it into view: the
@@ -254,19 +258,26 @@ fn turn_footer(
         .flex()
         .items_center()
         .gap(t.space.sm)
-        .child(actions)
+        // The time first, so the actions that show on hover sit after it
+        // rather than leave a gap before it.
         .child(
             div()
                 .id(SharedString::from(format!("turn-took-{key}")))
                 .text_size(t.text.caption)
                 .text_color(t.colors.text_subtle)
-                .child(took(seconds, usage))
+                .child(if cx.after_error {
+                    // A failed turn made no reply to count.
+                    format!("Failed after {}", took(seconds, None).trim_start_matches("Took "))
+                } else {
+                    took(seconds, usage)
+                })
                 .when_some(usage.map(read_and_wrote), |d, tip| {
                     d.tooltip(move |w, cx| {
                         gpui::component::tooltip::Tooltip::new(tip.clone()).build(w, cx)
                     })
                 }),
-        );
+        )
+        .child(actions);
     match memory {
         Some(line) => div()
             .flex()
@@ -425,14 +436,37 @@ fn notice(text: &SharedString, error: bool, cx: &ItemContext, t: &Theme) -> AnyE
             t.size.icon_sm,
             fg,
         )))
-        // Long errors (a proxy's whole response) wrap rather than run off the card.
-        .child(
-            div()
+        // A known error in words, the server's reply under it; else the
+        // reply itself, wrapped rather than run off the card.
+        .child(match crate::error_words::explain(text).filter(|_| error) {
+            Some((headline, todo)) => div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .line_height(relative(1.45))
+                .child(div().font_weight(FontWeight::SEMIBOLD).child(headline))
+                .child(div().text_color(t.colors.text).child(todo))
+                .child({
+                    let full = text.clone();
+                    div()
+                        .id(SharedString::from(format!("notice-raw-{key}")))
+                        .mt(t.space.xs)
+                        .line_clamp(2)
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_subtle)
+                        .child(text.clone())
+                        .tooltip(move |w, cx| gpui::component::tooltip::Tooltip::new(full.clone()).build(w, cx))
+                })
+                .into_any_element(),
+            None => div()
                 .flex_1()
                 .min_w_0()
                 .line_height(relative(1.45))
-                .child(text.clone()),
-        )
+                .child(text.clone())
+                .into_any_element(),
+        })
         .when(interrupted && cx.last && cx.can_continue, |d| {
             d.child(
                 link(format!("continue-{key}"), "Continue", "icons/play.svg").on_click(
@@ -1234,6 +1268,9 @@ pub(super) fn tool_header(
     cx: &ItemContext,
     t: &Theme,
 ) -> gpui::Stateful<gpui::Div> {
+    if crate::state::is_agent_tool(&call.target) {
+        return agent_header(call, b, cx, t);
+    }
     let strong = t.colors.text;
     let failed = call.status == ToolStatus::Failed;
     // A failed change was never made, a stopped one may not have been: no
@@ -1340,6 +1377,102 @@ pub(super) fn tool_header(
             d.child(div().flex_1()).child(th)
         })
         .on_click(toggle(cx, b))
+}
+
+/// Quiet this long while it runs, an agent looks stuck and says so.
+const AGENT_STALLED: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// A sub-agent's line: its state, its kind, its task, what it is doing
+/// now (or what it found), and its steps and time. A click opens the
+/// Agents panel, where it has its whole story and a Stop.
+fn agent_header(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> gpui::Stateful<gpui::Div> {
+    let task = call.note.clone().unwrap_or_else(|| "A sub-task".into());
+    let run = cx.agents.iter().find(|r| r.task == task.as_ref());
+    let now = std::time::Instant::now();
+    let stalled = run.is_some_and(|r| {
+        r.ended.is_none() && call.status == ToolStatus::Running && now.duration_since(r.heard) >= AGENT_STALLED
+    });
+    let agent_ink = t.extra.agent.unwrap_or(t.colors.text_muted);
+    let (detail, detail_ink) = match run {
+        _ if stalled => (
+            format!(
+                "No word from it for {}",
+                super::chat_view::elapsed(run.map_or(0, |r| now.duration_since(r.heard).as_secs()))
+            ),
+            t.extra.warning,
+        ),
+        Some(r) => match (r.ended, r.steps.last()) {
+            (None, Some(step)) => (step.label(), t.colors.text_subtle),
+            (None, None) => ("Starting".into(), t.colors.text_subtle),
+            (Some(_), _) => (
+                r.said.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or_default().to_string(),
+                t.colors.text_subtle,
+            ),
+        },
+        None => (String::new(), t.colors.text_subtle),
+    };
+    let meta = run.map(|r| {
+        let steps = match r.steps.len() {
+            1 => "1 step".to_string(),
+            n => format!("{n} steps"),
+        };
+        let took = r.ended.unwrap_or(now).saturating_duration_since(r.started).as_secs();
+        format!("{steps} · {}", super::chat_view::elapsed(took))
+    });
+    let strong = t.colors.text;
+    let state = cx.state.clone();
+    let one_line = |d: gpui::Div| d.min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis();
+    div()
+        .id(SharedString::from(format!("tool-{}-{}-{b}", cx.chat, cx.index)))
+        .role(gpui::accesskit::Role::Button)
+        .aria_label(SharedString::from(format!("Agent: {task}. {detail}. Open the Agents panel")))
+        .flex()
+        .items_center()
+        .gap(t.space.sm)
+        .min_h(t.size.quiet_line)
+        .text_size(t.text.body_sm)
+        .text_color(t.colors.text_muted)
+        .cursor_pointer()
+        .hover(move |s| s.text_color(strong))
+        // At work, Forge's cube turns; stuck, a warning; else how it ended.
+        .child(div().flex_none().child(if stalled {
+            icon("icons/triangle-alert.svg", t.size.icon_sm, t.extra.warning).into_any_element()
+        } else if call.status == ToolStatus::Running {
+            super::turning_logo_in(
+                f32::from(t.size.icon_sm),
+                SharedString::from(format!("agent-turn-{}-{}-{b}", cx.chat, cx.index)),
+                t.extra.live,
+            )
+        } else {
+            status_icon(call.status, t)
+        }))
+        .children(run.map(|r| {
+            div()
+                .flex_none()
+                .px(t.space.xs + px(2.))
+                .rounded(t.radius.small)
+                .bg(agent_ink.opacity(0.12))
+                .text_size(t.text.caption)
+                .text_color(agent_ink)
+                .child(r.kind.clone())
+        }))
+        .child(
+            one_line(div())
+                .flex_none()
+                .max_w(px(260.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(t.colors.text)
+                .child(task),
+        )
+        .child(one_line(div()).flex_1().text_color(detail_ink).child(detail))
+        .children(meta.map(|m| div().flex_none().text_size(t.text.caption).text_color(t.colors.text_subtle).child(m)))
+        .child(icon("icons/chevron-right.svg", t.size.icon_xs, t.colors.text_subtle))
+        .on_click(move |_, _, app| {
+            state.update(app, |s, cx| {
+                s.show_panel(crate::state::PanelTab::Agents, cx);
+                cx.notify();
+            })
+        })
 }
 
 /// What a tool call's line opens to, in one quiet frame: a file change

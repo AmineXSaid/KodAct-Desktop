@@ -547,6 +547,7 @@ impl Render for ChatView {
             let Some(chat) = s.chat() else {
                 return div().into_any_element();
             };
+            let agents = std::rc::Rc::new(s.agents.get(&chat.id).cloned().unwrap_or_default());
             let body = match chat.messages.get(ix) {
                 Some(m) => {
                     let ctx = ItemContext {
@@ -581,6 +582,8 @@ impl Render for ChatView {
                                     matches!(m, Message::TurnEnd { .. } | Message::User { .. })
                                 })
                             }),
+                        after_error: ix > 0
+                            && matches!(chat.messages.get(ix - 1), Some(Message::Notice { error: true, .. })),
                         in_last_turn: !chat.messages[ix + 1..]
                             .iter()
                             .any(|m| matches!(m, Message::User { .. })),
@@ -601,6 +604,7 @@ impl Render for ChatView {
                         },
                         versions_open: s.versions_open == Some((chat.id, ix)),
                         edited_open: s.edited_open.contains(&(chat.id, ix)),
+                        agents: agents.clone(),
                         sources: s.diagram_code.clone(),
                         zooms: s.diagram_zoom.clone(),
                         detailed: chat.detailed,
@@ -727,6 +731,24 @@ impl Render for ChatView {
                         )),
                 )
             })
+            // Scrolled up, the words fade out where the composer starts, so
+            // text running under it reads as "there's more". At the end
+            // nothing covers the newest lines.
+            .when(self.away, |d| {
+                d.child(
+                    div()
+                        .absolute()
+                        .left_0()
+                        .right_0()
+                        .bottom_0()
+                        .h(t.size.edge_fade)
+                        .bg(gpui::linear_gradient(
+                            180.,
+                            gpui::linear_color_stop(t.extra.stage.opacity(0.), 0.),
+                            gpui::linear_color_stop(t.extra.stage, 1.),
+                        )),
+                )
+            })
             // The transcript's scrollbar, over its right edge.
             .child(
                 div().absolute().inset_0().child(
@@ -751,7 +773,7 @@ pub(super) fn elapsed(seconds: u64) -> String {
 /// working line: the words rest in the muted ink, and a narrow band of
 /// light runs left to right, each letter catching it as it passes: white
 /// at night, a pale shine on paper.
-fn shimmer(label: &str, sweep: f32, t: &crate::theme::Theme) -> StyledText {
+pub(super) fn shimmer(label: &str, sweep: f32, t: &crate::theme::Theme) -> StyledText {
     let n = label.chars().count().max(1) as f32;
     let base = t.colors.text_muted;
     let strength = if t.is_dark { 1. } else { 0.6 };
@@ -834,10 +856,12 @@ fn working_line(
         .gap(t.space.tight)
         .h(px(24.))
         .mt(px(4.))
-        .child(super::activity::mark(
-            activity,
-            t,
+        // Forge's cube turning in the theme's live colour, as on agent rows;
+        // the words say what kind of step it is.
+        .child(super::turning_logo_in(
+            f32::from(t.size.icon),
             SharedString::from(format!("working-mark-{activity:?}")),
+            t.extra.live,
         ))
         .child(div().font_weight(FontWeight::MEDIUM).with_animation(
             SharedString::from(format!("working-{label}")),

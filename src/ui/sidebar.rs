@@ -496,7 +496,23 @@ impl Render for Sidebar {
                                             d.font_weight(FontWeight::SEMIBOLD)
                                                 .text_color(t.colors.text_strong)
                                         })
-                                        .child(c.title.clone()),
+                                        // Working, as Claude marks it: a band of
+                                        // light runs along the title.
+                                        .map(|d| {
+                                            if status == ChatStatus::Working {
+                                                let (title, theme) = (c.title.to_string(), t.clone());
+                                                d.with_animation(
+                                                    ("chat-shine", id),
+                                                    Animation::new(Duration::from_millis(2200)).repeat(),
+                                                    move |d, k| {
+                                                        d.child(super::chat_view::shimmer(&title, -0.3 + k * 1.6, &theme))
+                                                    },
+                                                )
+                                                .into_any_element()
+                                            } else {
+                                                d.child(c.title.clone()).into_any_element()
+                                            }
+                                        }),
                                 )
                                 // At the row's end, only when there is something to
                                 // say: whose chat, and working, waiting on you,
@@ -514,7 +530,7 @@ impl Render for Sidebar {
                                         .when(menu_open, |d| d.invisible())
                                         .child(p)
                                 }))
-                                .when(status != ChatStatus::Idle, |d| {
+                                .when(!matches!(status, ChatStatus::Idle | ChatStatus::Working), |d| {
                                     d.child(
                                         div()
                                             .flex_none()
@@ -725,8 +741,8 @@ impl Render for Sidebar {
                 // Part of the window, not a card on it: the window's own
                 // colour, flush to its edges; the chat is the raised sheet.
                 .overflow_hidden()
-                // Its head (the name, Chat and Code) is in the window's top
-                // row (`workspace::title_bar`), level with the chat's title.
+                // Forge's name is in the window's top row; the sidebar opens
+                // with Chat | Code, across its width, then search.
                 .child(
                     div()
                         .flex()
@@ -735,6 +751,7 @@ impl Render for Sidebar {
                         .px(t.space.sm)
                         .pt(t.space.xs)
                         .pb(t.space.sm)
+                        .child(div().mb(t.space.sm).child(kind_switch(&t, &self.state, s.sidebar_kind)))
                         // Search, as Claude Code's sidebar opens with it: a
                         // field that opens the palette over the window.
                         .child(
@@ -953,7 +970,7 @@ pub fn kind_switch(
         let ink = if on { t.colors.text_strong } else { t.colors.text_muted };
         div()
             .id(id)
-            .occlude()
+            .flex_1()
             .flex()
             .items_center()
             .justify_center()
@@ -976,6 +993,7 @@ pub fn kind_switch(
             .on_click(move |_, _, cx| state.update(cx, |s, cx| s.set_sidebar_kind(k, cx)))
     };
     div()
+        .w_full()
         .flex()
         .items_center()
         .gap(px(2.))

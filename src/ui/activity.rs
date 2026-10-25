@@ -13,7 +13,6 @@ use std::time::Duration;
 
 use gpui::{div, prelude::*, px, Animation, AnimationExt, AnyElement, Div, ElementId, Hsla};
 
-use crate::theme::Theme;
 
 /// The kinds of work the working line names.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -131,11 +130,6 @@ pub fn strike(ember: Hsla, heat: Hsla, size: f32, id: impl Into<ElementId>) -> A
             d.child(dots(ember, heat, size, k))
         })
         .into_any_element()
-}
-
-/// The working line's mark: the strike, in the accent and the mark's heat.
-pub fn mark(_activity: Activity, t: &Theme, id: impl Into<ElementId>) -> AnyElement {
-    strike(t.extra.live, t.extra.mark_heat_white, f32::from(t.size.icon), id)
 }
 
 #[cfg(test)]

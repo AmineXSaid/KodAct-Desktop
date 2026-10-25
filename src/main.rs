@@ -15,6 +15,7 @@ mod assets;
 mod attach;
 mod avatars;
 mod backend;
+mod error_words;
 mod browser;
 mod browser_mcp;
 mod commands;

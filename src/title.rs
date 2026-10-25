@@ -58,15 +58,21 @@ as a phrase starting with a verb in -ing form, in the message's language, senten
     )
 }
 
-/// A reply without its reasoning: what is between `<think>` tags, and all
-/// of it when the tag never closes (the budget ran out mid-thought).
+/// A reply without its reasoning: what is between `<think>` or `<thought>`
+/// tags, and all of it when the tag never closes (the budget ran out
+/// mid-thought).
 pub fn without_thinking(reply: &str) -> String {
     let mut out = String::new();
     let mut rest = reply;
-    while let Some(start) = rest.find("<think>") {
+    loop {
+        let open = [("<think>", "</think>"), ("<thought>", "</thought>")]
+            .into_iter()
+            .filter_map(|(o, c)| rest.find(o).map(|i| (i, o, c)))
+            .min_by_key(|(i, ..)| *i);
+        let Some((start, open, close)) = open else { break };
         out.push_str(&rest[..start]);
-        match rest[start..].find("</think>") {
-            Some(end) => rest = &rest[start + end + "</think>".len()..],
+        match rest[start + open.len()..].find(close) {
+            Some(end) => rest = &rest[start + open.len() + end + close.len()..],
             None => return out,
         }
     }
@@ -79,10 +85,12 @@ pub fn without_thinking(reply: &str) -> String {
 /// usable is left.
 pub fn clean(reply: &str) -> Option<String> {
     let reply = without_thinking(reply);
+    // A line that echoes the request back ("Input: <message>…") is not
+    // the answer.
     let line = reply
         .lines()
         .map(str::trim)
-        .find(|l| !l.is_empty())?
+        .find(|l| !l.is_empty() && !l.contains("<message>") && !l.contains("</message>"))?
         .trim_start_matches(['#', '*', '-', ' '])
         .trim_start_matches("Title:")
         .trim()
@@ -171,5 +179,12 @@ mod tests {
             Some("Security folder branch")
         );
         assert_eq!(clean("<think>Let me consider the request and"), None);
+        // Gemma's tag, and a line echoing the prompt, are not the answer.
+        assert_eq!(
+            clean("<thought>The user greets me.</thought>\nGreeting the user back").as_deref(),
+            Some("Greeting the user back")
+        );
+        assert_eq!(clean("<thought>* Input: `<message>HI Gemma</message>`"), None);
+        assert_eq!(clean("Input: `<message>HI Gemma</message>`\nAnswering a greeting").as_deref(), Some("Answering a greeting"));
     }
 }

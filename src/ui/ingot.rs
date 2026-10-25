@@ -354,8 +354,27 @@ pub fn struck(size: f32, k: f32) -> Ingot {
 
 /// The mark turning while Forge works. Reduced motion: [`mark`].
 pub fn turning(size: f32, id: impl Into<ElementId>) -> AnyElement {
+    turning_with(size, id, None)
+}
+
+/// The faces of a cube painted in one colour, lit from above: the top the
+/// palest, the side toward the light a little paler, the far side deeper.
+pub fn tinted(color: Hsla) -> [Hsla; 3] {
+    let (white, black) = (gpui::white(), gpui::black());
+    [mix(color, white, 0.48), mix(color, white, 0.14), mix(color, black, 0.32)]
+}
+
+/// [`turning`], its faces in `marks` (top, left, right) when given.
+pub fn turning_with(size: f32, id: impl Into<ElementId>, marks: Option<[Hsla; 3]>) -> AnyElement {
+    let base = move |size| {
+        let m = mark(size);
+        match marks {
+            Some(c) => m.marks(c),
+            None => m,
+        }
+    };
     if motion::reduced_motion() {
-        return mark(size).into_any_element();
+        return base(size).into_any_element();
     }
     let beat = TURN_MS + REST_MS;
     let lap = Duration::from_millis((beat * 4.) as u64);
@@ -365,7 +384,7 @@ pub fn turning(size: f32, id: impl Into<ElementId>) -> AnyElement {
         .with_animation(id, Animation::new(lap).repeat(), move |d, k| {
             d.child(Ingot {
                 frame: frame_of(yaw_at(k * beat * 4., beat)),
-                ..mark(size)
+                ..base(size)
             })
         })
         .into_any_element()

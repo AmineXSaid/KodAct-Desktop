@@ -148,7 +148,12 @@ pub fn summary(calls: &[&ToolCall]) -> String {
             n => format!("used the web {n} times"),
         });
     }
-    let other = count(&[ToolKind::Other]);
+    // Sub-agents are named as agents, not as "a tool".
+    let agents = ok.iter().filter(|c| crate::state::is_agent_tool(&c.target)).count();
+    if agents > 0 {
+        parts.push(format!("ran {}", plural(agents, "an agent", "agents")));
+    }
+    let other = count(&[ToolKind::Other]) - agents;
     if other > 0 {
         parts.push(format!("used {}", plural(other, "a tool", "tools")));
     }
@@ -166,6 +171,9 @@ pub fn summary(calls: &[&ToolCall]) -> String {
 /// A call as the live line says it: "Editing src/store.rs", or a command's
 /// description.
 fn step_label(c: &ToolCall) -> String {
+    if crate::state::is_agent_tool(&c.target) {
+        return format!("Agent: {}", c.note.as_deref().unwrap_or("a sub-task"));
+    }
     match (&c.note, c.kind) {
         (Some(n), ToolKind::Bash) => n.to_string(),
         _ => format!("{} {}", c.kind.verb(c.status), c.shown_target()),
@@ -177,8 +185,12 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
     let streaming = cx.busy && cx.last;
     let calls = calls(blocks, &run, streaming);
     let all: Vec<&ToolCall> = calls.iter().map(|(_, c)| *c).collect();
-    // Detailed, a run starts open and a click closes it.
-    let open = cx.detailed != cx.open_groups.contains(&run.start);
+    // Detailed, a run starts open and a click closes it. So does a run with
+    // agents at work: what each is doing shows without a click.
+    let agents_at_work = calls
+        .iter()
+        .any(|(_, c)| c.status == ToolStatus::Running && crate::state::is_agent_tool(&c.target));
+    let open = (cx.detailed || agents_at_work) != cx.open_groups.contains(&run.start);
     let failed = all
         .iter()
         .filter(|c| c.status == ToolStatus::Failed)
@@ -203,6 +215,10 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
     let (state, chat, msg, start) = (cx.state.clone(), cx.chat, cx.index, run.start);
     let strong = t.colors.text;
     let live_step = running.filter(|_| live);
+    let agents_running = all
+        .iter()
+        .filter(|c| c.status == ToolStatus::Running && crate::state::is_agent_tool(&c.target))
+        .count();
     let pictures = message::thumbs(
         run.clone()
             .filter_map(|i| match &blocks[i] {
@@ -240,12 +256,17 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
         .text_color(t.colors.text_muted)
         .cursor_pointer()
         .hover(move |s| s.text_color(strong))
-        .children(live_step.map(|_| {
-            super::tasks::status_icon(
-                ToolStatus::Running,
-                t,
-                format!("work-spin-{chat}-{msg}-{start}").into(),
-            )
+        .children(live_step.map(|c| {
+            // Agents at work: Forge's cube turning, as on each agent's row.
+            if crate::state::is_agent_tool(&c.target) {
+                super::turning_logo_in(f32::from(t.size.icon_sm), format!("work-turn-{chat}-{msg}-{start}"), t.extra.live)
+            } else {
+                super::tasks::status_icon(
+                    ToolStatus::Running,
+                    t,
+                    format!("work-spin-{chat}-{msg}-{start}").into(),
+                )
+            }
         }))
         .child(
             div()
@@ -254,6 +275,10 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
                 .whitespace_nowrap()
                 .text_ellipsis()
                 .child(match live_step {
+                    // Several agents at once: how many, not the newest one's task.
+                    Some(c) if crate::state::is_agent_tool(&c.target) && agents_running > 1 => {
+                        format!("{agents_running} agents working")
+                    }
                     Some(c) => step_label(c),
                     None => words.clone(),
                 }),

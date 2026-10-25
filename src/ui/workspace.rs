@@ -278,6 +278,70 @@ impl Workspace {
         }
     }
 
+    /// The open chat's name, heading the conversation under the title bar
+    /// (the bar keeps only the app and the window's controls); a click
+    /// opens its menu under it.
+    fn chat_header(&self, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
+        let t = cx.theme().clone();
+        let s = self.state.read(cx);
+        let c = (s.screen == Screen::Chat)
+            .then(|| s.current.and_then(|id| s.chats.iter().find(|c| c.id == id)))
+            .flatten()
+            .filter(|c| !c.messages.is_empty())?;
+        let (id, hover) = (c.id, t.colors.hover);
+        let menu_open = s.chat_menu == Some(id);
+        let state = self.state.clone();
+        let title = div()
+            .id("chat-title")
+            .flex()
+            .items_center()
+            .gap(t.space.xs)
+            .min_w_0()
+            .h(t.size.control)
+            .pl(t.space.sm)
+            .pr(t.space.xs)
+            .ml(-t.space.sm)
+            .rounded(t.radius.small)
+            .cursor_pointer()
+            .text_size(t.text.body)
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(t.colors.text_strong)
+            .hover(move |st| st.bg(hover))
+            .when(menu_open, |d| d.bg(hover))
+            .child(
+                div()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
+                    .child(c.title.clone()),
+            )
+            .child(icon("icons/chevron-down.svg", t.size.icon_sm, t.colors.text_muted))
+            .on_click(move |ev, _, cx| {
+                cx.stop_propagation();
+                // Under the title, its left edge.
+                let at = gpui::point(
+                    ev.position().x - t.space.lg,
+                    ev.position().y + t.size.control / 2. + t.space.xs,
+                );
+                state.update(cx, |s, cx| s.chat_menu_from(id, at, cx));
+            });
+        Some(
+            // From the chat's left edge, one control tall: the title, not
+            // a band of empty room.
+            div()
+                .flex_none()
+                .flex()
+                .items_center()
+                .h(t.size.control + t.space.sm)
+                .px(t.space.lg)
+                .border_b_1()
+                .border_color(t.colors.border)
+                .child(title)
+                .into_any_element(),
+        )
+    }
+
     fn title_bar(&self, frames: BarFrames, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         // Deferred so it paints above the page under the title bar.
@@ -331,44 +395,6 @@ impl Workspace {
             .flatten()
             .filter(|c| !c.messages.is_empty());
         let chat_open = chat.is_some();
-        let menu_open = chat.is_some_and(|c| s.chat_menu == Some(c.id));
-        let chat_title = chat.map(|c| {
-            let id = c.id;
-            let state = self.state.clone();
-            let titlebar = t.size.titlebar;
-            div()
-                .id("chat-title")
-                .occlude()
-                .flex()
-                .items_center()
-                .gap(t.space.xs)
-                .min_w_0()
-                .max_w(t.size.column)
-                .h(t.size.control)
-                .pl(t.space.sm)
-                .pr(t.space.xs)
-                .rounded(t.radius.small)
-                .cursor_pointer()
-                .text_size(t.text.body)
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(t.colors.text_strong)
-                .hover(move |st| st.bg(hover))
-                .when(menu_open, |d| d.bg(hover))
-                .child(
-                    div()
-                        .min_w_0()
-                        .overflow_hidden()
-                        .whitespace_nowrap()
-                        .text_ellipsis()
-                        .child(c.title.clone()),
-                )
-                .child(icon("icons/chevron-down.svg", t.size.icon_sm, t.colors.text_muted))
-                .on_click(move |ev, _, cx| {
-                    cx.stop_propagation();
-                    let at = gpui::point(ev.position().x - t.space.lg, titlebar - px(2.));
-                    state.update(cx, |s, cx| s.chat_menu_from(id, at, cx));
-                })
-        });
         // Icon-only: each says what it does, with its key.
         // Every control in the bar occludes it: on Windows the bar is the
         // window's drag area, and a click on anything not occluding it is
@@ -410,9 +436,8 @@ impl Workspace {
                         window.dispatch_action(Box::new(ToggleSidebar), cx)
                     }));
                     if sidebar_open {
-                        // Over the sidebar, its head, as Claude Code's: the
-                        // toggle, Forge's name, then Chat | Code; the chat's
-                        // title starts where the chat does.
+                        // Over the sidebar, its head: the toggle and Forge's
+                        // name (Chat | Code heads the sidebar itself).
                         d.child(
                             // The title bar insets its row by the sidebar's
                             // own padding, so the switch ends where the
@@ -425,9 +450,7 @@ impl Workspace {
                                 .gap(t.space.sm)
                                 .pr(t.space.sm)
                                 .child(toggle)
-                                .child(super::ingot::wordmark(15., &t))
-                                .child(div().flex_1())
-                                .child(super::sidebar::kind_switch(&t, &self.state, s.sidebar_kind)),
+                                .child(super::ingot::wordmark(15., &t)),
                         )
                     } else {
                         d.child(toggle)
@@ -523,9 +546,6 @@ impl Workspace {
                             .children(switcher),
                     )
                 })
-                // The open chat's name, as Claude Code heads a session, level
-                // with Forge's name; a click opens its menu under it.
-                .children(chat_title)
                 .child(div().flex_1())
                 .children(super::tasks::render(&t, &self.state, window, frames.tasks, cx))
                 .children(super::approvals::render(&t, &self.state, window, frames.approvals, cx))
@@ -1019,6 +1039,7 @@ impl Render for Workspace {
                 // Behind a chat the stage is plain, as the text wants it;
                 // the home screen's field follows only if you asked for it.
                 .when(chat_pattern, |d| d.child(self.dots.clone()))
+                .children(self.chat_header(cx))
                 // Always there: the bar draws itself while open and as it leaves.
                 .child(self.find.clone())
                 .child(
@@ -1029,21 +1050,6 @@ impl Render for Workspace {
                         .flex_col()
                         .relative()
                         .child(self.chat.clone())
-                        // The words fade out where the composer starts, so
-                        // text running under it reads as "there's more".
-                        .child(
-                            div()
-                                .absolute()
-                                .left_0()
-                                .right_0()
-                                .bottom_0()
-                                .h(t.size.edge_fade)
-                                .bg(gpui::linear_gradient(
-                                    180.,
-                                    gpui::linear_color_stop(t.extra.stage.opacity(0.), 0.),
-                                    gpui::linear_color_stop(t.extra.stage, 1.),
-                                )),
-                        )
                         // Each chat opened fades and rises in, its task pill
                         // with it.
                         .with_animation(
