@@ -571,13 +571,23 @@ pub fn list_catalog(
                         .map(str::to_string)
                 });
             let keyless = key.is_none_or(|k| k.is_empty());
-            return Err(match (code, msg) {
-                (401 | 403, _) if keyless => {
-                    "it lists models only with a key (HTTP 401): paste one".to_string()
-                }
-                (401 | 403, _) => "the endpoint refused the key (HTTP 401/403)".to_string(),
-                (_, Some(m)) => m,
-                (c, None) => format!("HTTP {c}"),
+            // OmniRoute wants one of its own keys (made in its dashboard),
+            // never a provider's: say where to get one.
+            let omni = host_of(base_url).ends_with(":20128");
+            let said = msg
+                .as_ref()
+                .map(|m| format!(" (it said: {m})"))
+                .unwrap_or_default();
+            return Err(match code {
+                401 | 403 if keyless && omni => format!(
+                    "OmniRoute asks for a key{said}: create one in its dashboard (http://127.0.0.1:20128, API Keys) and paste it, or turn Require API key off there"
+                ),
+                401 | 403 if keyless => format!("it lists models only with a key (HTTP {code}){said}: paste one"),
+                401 | 403 if omni => format!(
+                    "OmniRoute refused this key{said}: use a key from its dashboard (http://127.0.0.1:20128, API Keys), not a provider's key or the dashboard password"
+                ),
+                401 | 403 => format!("the endpoint refused the key (HTTP {code}){said}"),
+                c => msg.unwrap_or_else(|| format!("HTTP {c}")),
             });
         }
         Err(e) => return Err(format!("could not connect: {e}")),
@@ -924,6 +934,38 @@ mod tests {
         // Ollama's own list.
         let ollama = serde_json::json!({ "models": [{ "name": "qwen3-coder:30b" }] });
         assert_eq!(parse_catalog(&ollama)[0].id, "qwen3-coder:30b");
+    }
+
+    #[test]
+    fn a_refused_key_says_what_the_server_said() {
+        use std::io::{Read, Write};
+        // A server that refuses every key as OmniRoute does.
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for s in l.incoming().take(1) {
+                let mut s = s.unwrap();
+                let mut buf = [0u8; 2048];
+                let _ = s.read(&mut buf);
+                let body = r#"{"error":{"message":"Invalid API key","code":"AUTH_002"}}"#;
+                let _ = write!(
+                    s,
+                    "HTTP/1.1 401 Unauthorized\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+            }
+        });
+        let e = list_models(
+            &format!("http://127.0.0.1:{port}"),
+            Wire::Anthropic,
+            Some("sk-not-omniroutes"),
+            &Default::default(),
+        )
+        .unwrap_err();
+        assert!(
+            e.contains("Invalid API key") && e.contains("HTTP 401"),
+            "{e}"
+        );
     }
 
     #[test]

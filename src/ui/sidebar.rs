@@ -260,8 +260,6 @@ impl Render for Sidebar {
         let s = self.state.read(cx);
         let q = s.search.to_lowercase();
         let name: SharedString = s.user_name.clone().unwrap_or_else(|| "Welcome".into());
-        // The endpoint you work on, as Claude Code shows your plan.
-        let endpoint: Option<SharedString> = s.active_profile().map(|p| p.name.clone().into());
         let avatar = s.avatar.clone();
         let hover = t.colors.hover;
         let rules_open = s.screen == Screen::Rules;
@@ -859,9 +857,9 @@ impl Render for Sidebar {
                         )
                     }
                 })
-                // You, on one line at the foot: your picture, your name and
-                // the endpoint you work on; it opens your menu. Settings on
-                // the right.
+                // You, on one line at the foot: your picture and your name
+                // (the model shows under the composer, not here); it opens
+                // your menu. Settings on the right.
                 .child(
                     div()
                         .flex_none()
@@ -902,10 +900,7 @@ impl Render for Sidebar {
                                                         .font_weight(FontWeight::MEDIUM)
                                                         .text_color(t.colors.text_strong)
                                                         .child(name),
-                                                )
-                                                .children(endpoint.map(|e| {
-                                                    div().text_color(t.colors.text_muted).child(format!("· {e}"))
-                                                })),
+                                                ),
                                         ),
                                 )
                                 .child(icon("icons/chevron-down.svg", t.size.icon_sm, t.colors.text_subtle))

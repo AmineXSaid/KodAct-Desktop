@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forge identity options</title>
+<style>
+  @font-face { font-family: "Geist"; src: url("../assets/fonts/Geist-Regular.ttf"); font-weight: 400; }
+  @font-face { font-family: "Geist"; src: url("../assets/fonts/Geist-Medium.ttf"); font-weight: 500; }
+  @font-face { font-family: "Geist"; src: url("../assets/fonts/Geist-SemiBold.ttf"); font-weight: 600; }
+  @font-face { font-family: "Hanken"; src: url("../assets/fonts/HankenGrotesk-Regular.ttf"); font-weight: 400; }
+  @font-face { font-family: "Hanken"; src: url("../assets/fonts/HankenGrotesk-SemiBold.ttf"); font-weight: 600; }
+  @font-face { font-family: "Mono"; src: url("../assets/fonts/JetBrainsMono-Regular.ttf"); }
+
+  :root { --page: #ededeb; --ink: #17181a; --muted: #5d5f63; --rule: rgba(23,24,26,.12); }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--page); color: var(--ink); font: 14px/1.5 "Geist", system-ui, sans-serif; padding: 48px 56px 72px; }
+  h1 { font-size: 28px; font-weight: 600; letter-spacing: -.01em; }
+  h2 { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+  .lede { color: var(--muted); max-width: 760px; margin: 8px 0 32px; }
+  section { margin-top: 40px; }
+  .section-head { display: flex; align-items: baseline; gap: 16px; border-bottom: 1px solid var(--rule); padding-bottom: 10px; margin-bottom: 20px; }
+  .section-head span { color: var(--muted); }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .card { background: #fff; border-radius: 10px; border: 1px solid var(--rule); padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+  .card .k { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .card .thesis { color: var(--muted); font-size: 13px; }
+  .risk { font-size: 12px; color: var(--muted); border-top: 1px dashed var(--rule); padding-top: 8px; }
+  .risk b { color: var(--ink); font-weight: 600; }
+  .pick { outline: 2px solid var(--ink); }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 99px; background: var(--ink); color: #fff; margin-left: 8px; vertical-align: 2px; }
+
+  /* A miniature Forge window, painted from a palette's variables. */
+  .app { display: grid; grid-template-columns: 74px 1fr; height: 168px; border-radius: 8px; overflow: hidden; background: var(--ground); border: 1px solid var(--border); font-family: "Hanken", sans-serif; }
+  .app .side { background: var(--side); padding: 10px 8px; display: flex; flex-direction: column; gap: 5px; }
+  .app .row { height: 8px; border-radius: 3px; background: var(--muted); opacity: .35; }
+  .app .row.on { background: var(--surface); opacity: 1; box-shadow: 0 0 0 1px var(--border); }
+  .app .main { padding: 10px 12px; display: flex; flex-direction: column; gap: 7px; font-size: 10px; color: var(--ink); }
+  .app .you { align-self: flex-end; background: var(--surface); border: 1px solid var(--border); padding: 3px 8px; border-radius: 4px; }
+  .app .line { color: var(--ink); }
+  .app .muted { color: var(--muted); }
+  .app code { font-family: "Mono"; color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); padding: 0 3px; border-radius: 3px; font-size: 9px; }
+  .app .chips { display: flex; gap: 5px; flex-wrap: wrap; }
+  .chip { font-size: 9px; padding: 1px 6px; border-radius: 99px; border: 1px solid currentColor; }
+  .app .bar { margin-top: auto; display: flex; align-items: center; gap: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; }
+  .app .bar .f { flex: 1; color: var(--muted); }
+  .app .send { width: 16px; height: 16px; border-radius: 99px; background: var(--accent); }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+  .sw { height: 30px; border-radius: 4px; border: 1px solid var(--rule); }
+  .sw-l { font: 10px/1.3 "Mono"; color: var(--muted); margin-top: 3px; word-break: break-all; }
+
+  /* Marks */
+  .marks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+  .tiles { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+  .tile { width: 72px; height: 72px; border-radius: 17px; display: grid; place-items: center; }
+  .tile svg { width: 46px; height: 46px; }
+  .tile.l { background: #fbfbfa; box-shadow: inset 0 0 0 1px var(--rule); }
+  .tile.d { background: #17181a; }
+  .small { display: flex; align-items: center; gap: 10px; }
+  .small .s32 svg { width: 32px; height: 32px; }
+  .small .s16 svg { width: 16px; height: 16px; }
+  .small .dark { background: #17181a; padding: 6px; border-radius: 6px; display: flex; gap: 8px; align-items: center; }
+  .lockup { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; }
+  .lockup svg { width: 26px; height: 26px; }
+  .lockup .wm { font: 600 21px/1 "Geist"; letter-spacing: -.02em; }
+  .lockup.l { background: #f6f6f5; } .lockup.d { background: #17181a; color: #eeeeec; }
+  .current { opacity: .9; }
+  footer { margin-top: 40px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+  <h1>Forge: palette and mark, three and four ways</h1>
+  <p class="lede">Each palette is drawn on a miniature Forge window in light and dark, with the colours the app would actually use. Every text colour passes 4.5:1 on its ground in both modes (measured). The marks are shown where they live: the app icon, the title bar at 32px, the tab at 16px, and beside the name.</p>
+
+  <section>
+    <div class="section-head"><h2>Palette</h2><span>A screen people work in all day: neutral grounds, one accent with a job, states that mean something.</span></div>
+    <div class="grid3">
+
+      <div class="card pick" style="--x:0">
+        <div class="k">A · Tempered steel <span class="badge">My pick</span></div>
+        <div class="thesis">Cool steel greys with one temper blue. When steel is heated it shows a fixed run of colours, straw, then bronze, then blue: Forge's states follow that run, so working is straw, needs-you is bronze, done is blue.</div>
+        <div class="pair">
+          <div class="app" style="--ground:#f3f4f6;--surface:#ffffff;--side:#e7e9ec;--ink:#15181c;--muted:#59606a;--accent:#2a5b99;--border:rgba(21,24,28,.12)">
+            <div class="side"><div class="row on"></div><div class="row"></div><div class="row"></div><div class="row"></div></div>
+            <div class="main"><div class="you">Refactor the sync settings</div><div class="line">Done: settings live in <code>config/sync.toml</code>.</div><div class="chips"><span class="chip" style="color:#8c6514">working</span><span class="chip" style="color:#9b4f22">needs you</span><span class="chip" style="color:#2a5b99">done</span></div><div class="bar"><span class="f">Reply to Forge…</span><span class="send"></span></div></div>
+          </div>
+          <div class="app" style="--ground:#16181b;--surface:#1f2226;--side:#101214;--ink:#eceef1;--muted:#9aa1ab;--accent:#7fa9df;--border:rgba(236,238,241,.1)">
+            <div class="side"><div class="row on"></div><div class="row"></div><div class="row"></div><div class="row"></div></div>
+            <div class="main"><div class="you">Refactor the sync settings</div><div class="line">Done: settings live in <code>config/sync.toml</code>.</div><div class="chips"><span class="chip" style="color:#e0b862">working</span><span class="chip" style="color:#e09a6c">needs you</span><span class="chip" style="color:#7fa9df">done</span></div><div class="bar"><span class="f">Reply to Forge…</span><span class="send"></span></div></div>
+          </div>
+        </div>
+        <div class="swatches">
+          <div><div class="sw" style="background:#f3f4f6"></div><div class="sw-l">#f3f4f6 ground</div></div>
+          <div><div class="sw" style="background:#15181c"></div><div class="sw-l">#15181c ink</div></div>
+          <div><div class="sw" style="background:#2a5b99"></div><div class="sw-l">#2a5b99 temper blue</div></div>
+          <div><div class="sw" style="background:#8c6514"></div><div class="sw-l">#8c6514 straw</div></div>
+          <div><div class="sw" style="background:#9b4f22"></div><div class="sw-l">#9b4f22 bronze</div></div>
+          <div><div class="sw" style="background:#16181b"></div><div class="sw-l">#16181b dark</div></div>
+        </div>
+        <div class="risk"><b>Risk:</b> blue is the most common accent in developer tools; what keeps it Forge's own is the straw-and-bronze state run, which has to show everywhere states do.</div>
+      </div>
+
+      <div class="card">
+        <div class="k">B · Ember, off the cream</div>
+        <div class="thesis">Today's copper, kept: it is Forge's heat. The cream ground goes, for a neutral stone grey, and dark becomes charcoal rather than brown, so the copper is the only warm thing on screen.</div>
+        <div class="pair">
+          <div class="app" style="--ground:#f2f1ef;--surface:#ffffff;--side:#e5e3df;--ink:#1b1a19;--muted:#5d5852;--accent:#a94b25;--border:rgba(27,26,25,.12)">
+            <div class="side"><div class="row on"></div><div class="row"></div><div class="row"></div><div class="row"></div></div>
+            <div class="main"><div class="you">Refactor the sync settings</div><div class="line">Done: settings live in <code>config/sync.toml</code>.</div><div class="chips"><span class="chip" style="color:#5d5852">working</span><span class="chip" style="color:#a94b25">needs you</span><span class="chip" style="color:#3f6b4b">done</span></div><div class="bar"><span class="f">Reply to Forge…</span><span class="send"></span></div></div>
+          </div>
+          <div class="app" style="--ground:#1a1918;--surface:#242221;--side:#121110;--ink:#f1ece8;--muted:#a7a09a;--accent:#e88f61;--border:rgba(241,236,232,.1)">
+            <div class="side"><div class="row on"></div><div class="row"></div><div class="row"></div><div class="row"></div></div>
+            <div class="main"><div class="you">Refactor the sync settings</div><div class="line">Done: settings live in <code>config/sync.toml</code>.</div><div class="chips"><span class="chip" style="color:#a7a09a">working</span><span class="chip" style="color:#e88f61">needs you</span><span class="chip" style="color:#8fbf9b">done</span></div><div class="bar"><span class="f">Reply to Forge…</span><span class="send"></span></div></div>
+          </div>
+        </div>
+        <div class="swatches">
+          <div><div class="sw" style="background:#f2f1ef"></div><div class="sw-l">#f2f1ef ground</div></div>
+          <div><div class="sw" style="background:#1b1a19"></div><div class="sw-l">#1b1a19 ink</div></div>
+          <div><div class="sw" style="background:#a94b25"></div><div class="sw-l">#a94b25 copper</div></div>
+          <div><div class="sw" style="background:#e88f61"></div><div class="sw-l">#e88f61 copper dk</div></div>
+          <div><div class="sw" style="background:#3f6b4b"></div><div class="sw-l">#3f6b4b done</div></div>
+          <div><div class="sw" style="background:#1a1918"></div><div class="sw-l">#1a1918 dark</div></div>
+        </div>
+        <div class="risk"><b>Risk:</b> the smallest change. Copper on a near-white ground still sits close to the warm-paper-and-terracotta look many AI tools share.</div>
+      </div>
+
+      <div class="card">
+        <div class="k">C · Graphite and brass</div>
+        <div class="thesis">A machinist's bench: graphite neutrals and a brass accent. Warm metal without terracotta; the dark mode is the strongest of the three, brass on near-black.</div>
+        <div class="pair">
+          <div class="app" style="--ground:#f4f4f3;--surface:#ffffff;--side:#e8e8e6;--ink:#18191a;--muted:#5a5c60;--accent:#7d5f12;--border:rgba(24,25,26,.12)">
+            <div class="side"><div class="row on"></div><div class="row"></div><div class="row"></div><div class="row"></div></div>
+            <div class="main"><div class="you">Refactor the sync settings</div><div class="line">Done: settings live in <code>config/sync.toml</code>.</div><div class="chips"><span class="chip" style="color:#5a5c60">working</span><span class="chip" style="color:#7d5f12">needs you</span><span class="chip" style="color:#356b4c">done</span></div><div class="bar"><span class="f">Reply to Forge…</span><span class="send"></span></div></div>
+          </div>
+          <div class="app" style="--ground:#141517;--surface:#1d1e21;--side:#0e0f10;--ink:#eeeeec;--muted:#a0a2a6;--accent:#d8b35a;--border:rgba(238,238,236,.1)">
+            <div class="side"><div class="row on"></div><div class="row"></div><div class="row"></div><div class="row"></div></div>
+            <div class="main"><div class="you">Refactor the sync settings</div><div class="line">Done: settings live in <code>config/sync.toml</code>.</div><div class="chips"><span class="chip" style="color:#a0a2a6">working</span><span class="chip" style="color:#d8b35a">needs you</span><span class="chip" style="color:#8cc7a2">done</span></div><div class="bar"><span class="f">Reply to Forge…</span><span class="send"></span></div></div>
+          </div>
+        </div>
+        <div class="swatches">
+          <div><div class="sw" style="background:#f4f4f3"></div><div class="sw-l">#f4f4f3 ground</div></div>
+          <div><div class="sw" style="background:#18191a"></div><div class="sw-l">#18191a ink</div></div>
+          <div><div class="sw" style="background:#7d5f12"></div><div class="sw-l">#7d5f12 brass</div></div>
+          <div><div class="sw" style="background:#d8b35a"></div><div class="sw-l">#d8b35a brass dk</div></div>
+          <div><div class="sw" style="background:#356b4c"></div><div class="sw-l">#356b4c done</div></div>
+          <div><div class="sw" style="background:#141517"></div><div class="sw-l">#141517 dark</div></div>
+        </div>
+        <div class="risk"><b>Risk:</b> in light mode brass has to darken to olive to be legible as text, so it reads less like metal there than in dark.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>Mark</h2><span>Shown in temper blue (palette A); each takes whichever accent you pick.</span></div>
+    <div class="marks">
+
+      <div class="card pick">
+        <div class="k">1 · The ingot, true to form <span class="badge">My pick</span></div>
+        <div class="thesis">A real ingot is a tapered bar, not a cube. Its top face carries the accent, the front stays ink: one silhouette that holds at 16px and says "made here".</div>
+        <div class="tiles">
+          <div class="tile l"><svg viewBox="0 0 64 64"><path d="M10 44 L54 44 L48 26 L16 26 Z" fill="#15181c"/><path d="M16 26 L48 26 L42 17 L22 17 Z" fill="#2a5b99"/></svg></div>
+          <div class="tile d"><svg viewBox="0 0 64 64"><path d="M10 44 L54 44 L48 26 L16 26 Z" fill="#eceef1"/><path d="M16 26 L48 26 L42 17 L22 17 Z" fill="#7fa9df"/></svg></div>
+        </div>
+        <div class="small"><span class="s32"><svg viewBox="0 0 64 64"><path d="M10 44 L54 44 L48 26 L16 26 Z" fill="#15181c"/><path d="M16 26 L48 26 L42 17 L22 17 Z" fill="#2a5b99"/></svg></span><span class="s16"><svg viewBox="0 0 64 64"><path d="M6 46 L58 46 L50 24 L14 24 Z" fill="#15181c"/><path d="M14 24 L50 24 L43 13 L21 13 Z" fill="#2a5b99"/></svg></span><span class="dark"><span class="s32"><svg viewBox="0 0 64 64"><path d="M10 44 L54 44 L48 26 L16 26 Z" fill="#eceef1"/><path d="M16 26 L48 26 L42 17 L22 17 Z" fill="#7fa9df"/></svg></span><span class="s16"><svg viewBox="0 0 64 64"><path d="M6 46 L58 46 L50 24 L14 24 Z" fill="#eceef1"/><path d="M14 24 L50 24 L43 13 L21 13 Z" fill="#7fa9df"/></svg></span></span></div>
+        <div class="lockup l"><svg viewBox="0 0 64 64"><path d="M10 44 L54 44 L48 26 L16 26 Z" fill="#15181c"/><path d="M16 26 L48 26 L42 17 L22 17 Z" fill="#2a5b99"/></svg><span class="wm">Forge</span></div>
+        <div class="lockup d"><svg viewBox="0 0 64 64"><path d="M10 44 L54 44 L48 26 L16 26 Z" fill="#eceef1"/><path d="M16 26 L48 26 L42 17 L22 17 Z" fill="#7fa9df"/></svg><span class="wm">Forge</span></div>
+        <div class="risk"><b>Risk:</b> close to a "loading bar" or a gold-bar emoji if the proportions drift; the 16px cut is drawn separately, deeper, to hold.</div>
+      </div>
+
+      <div class="card">
+        <div class="k">2 · The struck F</div>
+        <div class="thesis">An F built from three forged slabs; the top arm, the one just struck, is the hot one. A monogram that reads as a letter first.</div>
+        <div class="tiles">
+          <div class="tile l"><svg viewBox="0 0 64 64"><rect x="16" y="12" width="10" height="40" rx="1.5" fill="#15181c"/><rect x="16" y="12" width="32" height="10" rx="1.5" fill="#2a5b99"/><rect x="16" y="29" width="22" height="9" rx="1.5" fill="#15181c"/></svg></div>
+          <div class="tile d"><svg viewBox="0 0 64 64"><rect x="16" y="12" width="10" height="40" rx="1.5" fill="#eceef1"/><rect x="16" y="12" width="32" height="10" rx="1.5" fill="#7fa9df"/><rect x="16" y="29" width="22" height="9" rx="1.5" fill="#eceef1"/></svg></div>
+        </div>
+        <div class="small"><span class="s32"><svg viewBox="0 0 64 64"><rect x="16" y="12" width="10" height="40" rx="1.5" fill="#15181c"/><rect x="16" y="12" width="32" height="10" rx="1.5" fill="#2a5b99"/><rect x="16" y="29" width="22" height="9" rx="1.5" fill="#15181c"/></svg></span><span class="s16"><svg viewBox="0 0 64 64"><rect x="14" y="8" width="13" height="48" fill="#15181c"/><rect x="14" y="8" width="36" height="13" fill="#2a5b99"/><rect x="14" y="28" width="26" height="12" fill="#15181c"/></svg></span><span class="dark"><span class="s32"><svg viewBox="0 0 64 64"><rect x="16" y="12" width="10" height="40" rx="1.5" fill="#eceef1"/><rect x="16" y="12" width="32" height="10" rx="1.5" fill="#7fa9df"/><rect x="16" y="29" width="22" height="9" rx="1.5" fill="#eceef1"/></svg></span></span></div>
+        <div class="lockup l"><svg viewBox="0 0 64 64"><rect x="16" y="12" width="10" height="40" rx="1.5" fill="#15181c"/><rect x="16" y="12" width="32" height="10" rx="1.5" fill="#2a5b99"/><rect x="16" y="29" width="22" height="9" rx="1.5" fill="#15181c"/></svg><span class="wm">Forge</span></div>
+        <div class="lockup d"><svg viewBox="0 0 64 64"><rect x="16" y="12" width="10" height="40" rx="1.5" fill="#eceef1"/><rect x="16" y="12" width="32" height="10" rx="1.5" fill="#7fa9df"/><rect x="16" y="29" width="22" height="9" rx="1.5" fill="#eceef1"/></svg><span class="wm">Forge</span></div>
+        <div class="risk"><b>Risk:</b> lettermarks are everywhere; with the wordmark beside it, it says "F" twice.</div>
+      </div>
+
+      <div class="card">
+        <div class="k">3 · Tempered bar</div>
+        <div class="thesis">A slanted bar in the temper run, straw to bronze to blue: the mark is palette A's state colours, so the app's states and its logo are one idea.</div>
+        <div class="tiles">
+          <div class="tile l"><svg viewBox="0 0 64 64"><path d="M20 46 L28 18 L36 18 L28 46Z" fill="#c99a3b"/><path d="M30 46 L38 18 L46 18 L38 46Z" fill="#a85a2a"/><path d="M40 46 L48 18 L56 18 L48 46Z" fill="#2a5b99"/><path d="M10 46 L18 18 L26 18 L18 46Z" fill="#15181c"/></svg></div>
+          <div class="tile d"><svg viewBox="0 0 64 64"><path d="M20 46 L28 18 L36 18 L28 46Z" fill="#e0b862"/><path d="M30 46 L38 18 L46 18 L38 46Z" fill="#e09a6c"/><path d="M40 46 L48 18 L56 18 L48 46Z" fill="#7fa9df"/><path d="M10 46 L18 18 L26 18 L18 46Z" fill="#eceef1"/></svg></div>
+        </div>
+        <div class="small"><span class="s32"><svg viewBox="0 0 64 64"><path d="M20 46 L28 18 L36 18 L28 46Z" fill="#c99a3b"/><path d="M30 46 L38 18 L46 18 L38 46Z" fill="#a85a2a"/><path d="M40 46 L48 18 L56 18 L48 46Z" fill="#2a5b99"/><path d="M10 46 L18 18 L26 18 L18 46Z" fill="#15181c"/></svg></span><span class="s16"><svg viewBox="0 0 64 64"><path d="M20 50 L28 14 L37 14 L29 50Z" fill="#c99a3b"/><path d="M31 50 L39 14 L48 14 L40 50Z" fill="#a85a2a"/><path d="M42 50 L50 14 L59 14 L51 50Z" fill="#2a5b99"/><path d="M5 50 L13 14 L22 14 L14 50Z" fill="#15181c"/></svg></span></div>
+        <div class="lockup l"><svg viewBox="0 0 64 64"><path d="M20 46 L28 18 L36 18 L28 46Z" fill="#c99a3b"/><path d="M30 46 L38 18 L46 18 L38 46Z" fill="#a85a2a"/><path d="M40 46 L48 18 L56 18 L48 46Z" fill="#2a5b99"/><path d="M10 46 L18 18 L26 18 L18 46Z" fill="#15181c"/></svg><span class="wm">Forge</span></div>
+        <div class="lockup d"><svg viewBox="0 0 64 64"><path d="M20 46 L28 18 L36 18 L28 46Z" fill="#e0b862"/><path d="M30 46 L38 18 L46 18 L38 46Z" fill="#e09a6c"/><path d="M40 46 L48 18 L56 18 L48 46Z" fill="#7fa9df"/><path d="M10 46 L18 18 L26 18 L18 46Z" fill="#eceef1"/></svg><span class="wm">Forge</span></div>
+        <div class="risk"><b>Risk:</b> four colours; it only makes sense with palette A, and stripes can read as a progress bar or a flag.</div>
+      </div>
+
+      <div class="card current">
+        <div class="k">Today · The cube</div>
+        <div class="thesis">For comparison: the isometric cube, top face hot. It is the "box" icon every package manager uses, and at 16px it becomes a hexagon.</div>
+        <div class="tiles">
+          <div class="tile l"><svg viewBox="0 0 64 64"><path d="M32 10 L51 21 L32 32 L13 21Z" fill="#b4532a"/><path d="M13 21 L32 32 L32 54 L13 43Z" fill="#3b3733"/><path d="M51 21 L32 32 L32 54 L51 43Z" fill="#6b645d"/></svg></div>
+          <div class="tile d"><svg viewBox="0 0 64 64"><path d="M32 10 L51 21 L32 32 L13 21Z" fill="#e2895b"/><path d="M13 21 L32 32 L32 54 L13 43Z" fill="#d9d1cb"/><path d="M51 21 L32 32 L32 54 L51 43Z" fill="#8a837c"/></svg></div>
+        </div>
+        <div class="small"><span class="s32"><svg viewBox="0 0 64 64"><path d="M32 10 L51 21 L32 32 L13 21Z" fill="#b4532a"/><path d="M13 21 L32 32 L32 54 L13 43Z" fill="#3b3733"/><path d="M51 21 L32 32 L32 54 L51 43Z" fill="#6b645d"/></svg></span><span class="s16"><svg viewBox="0 0 64 64"><path d="M32 10 L51 21 L32 32 L13 21Z" fill="#b4532a"/><path d="M13 21 L32 32 L32 54 L13 43Z" fill="#3b3733"/><path d="M51 21 L32 32 L32 54 L51 43Z" fill="#6b645d"/></svg></span></div>
+        <div class="lockup l"><span class="wm">F<svg viewBox="0 0 64 64" style="width:19px;height:19px;vertical-align:-2px"><path d="M32 10 L51 21 L32 32 L13 21Z" fill="#b4532a"/><path d="M13 21 L32 32 L32 54 L13 43Z" fill="#3b3733"/><path d="M51 21 L32 32 L32 54 L51 43Z" fill="#6b645d"/></svg>RGE</span></div>
+        <div class="risk"><b>Kept as the reference</b>, not proposed.</div>
+      </div>
+    </div>
+  </section>
+  <footer>Measured contrast, text on ground, light / dark. A: ink 16.2/15.3, muted 5.8/6.8, accent 6.2/7.3, straw 4.8/9.5, bronze 5.4/7.6. B: accent 5.0/7.1, muted 6.2/6.8. C: accent 5.4/9.1, muted 6.1/7.1.</footer>
+</body>
+</html>
