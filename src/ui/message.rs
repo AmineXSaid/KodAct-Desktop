@@ -1392,7 +1392,6 @@ fn agent_header(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> gpui:
     let stalled = run.is_some_and(|r| {
         r.ended.is_none() && call.status == ToolStatus::Running && now.duration_since(r.heard) >= AGENT_STALLED
     });
-    let agent_ink = t.extra.agent.unwrap_or(t.colors.text_muted);
     let (detail, detail_ink) = match run {
         _ if stalled => (
             format!(
@@ -1446,14 +1445,11 @@ fn agent_header(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> gpui:
         } else {
             status_icon(call.status, t)
         }))
+        // Its kind as quiet text: the task is what reads.
         .children(run.map(|r| {
             div()
                 .flex_none()
-                .px(t.space.xs + px(2.))
-                .rounded(t.radius.small)
-                .bg(agent_ink.opacity(0.12))
-                .text_size(t.text.caption)
-                .text_color(agent_ink)
+                .text_color(t.colors.text_subtle)
                 .child(r.kind.clone())
         }))
         .child(

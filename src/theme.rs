@@ -104,9 +104,8 @@ pub enum Look {
     Tiles,
     /// Keyboard first, violet; the "+" is a list you type to filter.
     Command,
-    /// Calmly smooth's surfaces and form, untouched; the colour used
-    /// sparingly: Electric Blue for the action and focus, Teal only for
-    /// what runs, Royal Purple only for agents.
+    /// Calmly smooth's surfaces and form, untouched; one colour, used
+    /// sparingly: Electric Blue for the action, focus and what runs.
     Premium,
 }
 
@@ -178,7 +177,7 @@ impl Look {
             Look::Studio => "Cool greys, a split + menu",
             Look::Tiles => "Round and roomy, + as tiles",
             Look::Command => "Violet, a + you type to filter",
-            Look::Premium => "Graphite, electric blue, a touch of teal",
+            Look::Premium => "Graphite and one electric blue",
         }
     }
 
@@ -685,8 +684,9 @@ impl Theme {
         // Live activity and agents take the accent and the theme's spread,
         // unless the theme names their own.
         (self.extra.live, self.extra.agent) = match (look, self.is_dark) {
-            (Look::Premium, true) => (c(0x14b8a6), Some(c(0x8b5cf6))),
-            (Look::Premium, false) => (c(0x0f766e), Some(c(0x7c3aed))),
+            // One blue, used once: what runs takes the accent's blue; agents
+            // carry no colour of their own.
+            (Look::Premium, _) => (c(k.link), Some(self.colors.text_muted)),
             _ => (c(k.accent), None),
         };
         self.extra.mark_top = c(k.mark_top);
@@ -922,11 +922,11 @@ pub struct ExtraColors {
     pub toggle_on: Hsla,     // a switch that is on
     // What is running right now (a tool's spinner, the working line's
     // mark, an agent at work): the accent, except where a theme gives
-    // live activity its own colour (Premium: teal).
+    // live activity its own colour (Premium: the link's blue).
     pub live: Hsla,
     // Sub-agents' own mark (their kind in the Agents panel): the theme's
     // spread of colours, except where a theme gives agents one (Premium:
-    // purple).
+    // quiet grey, no colour of their own).
     pub agent: Option<Hsla>,
     // Memory and rules: the reference's ochre.
     pub memory: Hsla,

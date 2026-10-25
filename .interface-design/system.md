@@ -97,7 +97,7 @@ Picked in Settings > General > Theme and kept in `window.json`. Each is a whole 
 | Studio (Cool greys, a split + menu) | `#dcdde3` / `#eeeff3` / `#4a4fa0` | `#131417` / `#1a1b1f` / `#b3b6f0` |
 | Tiles (Round and roomy, + as tiles) | `#e3d7cd` / `#f0e9e5` / `#3f6b4f` | `#171513` / `#1e1c1a` / `#9fcfae` |
 | Command (Violet, a + you type to filter) | `#e3d7cd` / `#f0e9e5` / `#6a4fa3` | `#171513` / `#1e1c1a` / `#c2adf0` |
-| Premium (Graphite, electric blue, a touch of teal) | `#ebe8e1` / `#f7f5f1` / `#2563eb` | `#1b1a19` / `#242322` / `#3b82f6` |
+| Premium (Graphite and one electric blue) | `#ebe8e1` / `#f7f5f1` / `#2563eb` | `#1b1a19` / `#242322` / `#3b82f6` |
 
 | Theme | Faces (UI / display / code / replies) | Corners button · card · field · composer · pressed | Row · title bar · chat | Depth | Selected row |
 |---|---|---|---|---|---|

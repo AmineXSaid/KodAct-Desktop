@@ -6,9 +6,8 @@
 //! block (they fly back in before the next blow) and bring it closer to
 //! true, until the last leaves a perfect cube. It then roughens back into
 //! stock and the loop begins again. 26 voxels, painted far to near, on a
-//! canvas. The finished faces are tints of one colour (the theme's live
-//! colour), lit from above; the stock is graphite; the chunks glow like
-//! sparks.
+//! canvas. Graphite, lit from above; the finished top takes the theme's
+//! live colour; the chunks glow like sparks.
 
 use std::f32::consts::{FRAC_PI_2, FRAC_PI_4};
 use std::sync::OnceLock;
@@ -180,8 +179,8 @@ fn frame_at(ms: f32) -> Frame {
     }
 }
 
-/// The cube's inks: finished faces as tints of `color`, the stock graphite
-/// with a trace of it, the sparks forge orange.
+/// The cube's inks: graphite, its finished top in `color` (the one colour
+/// on screen is the thing at work), the sparks forge orange.
 #[derive(Clone, Copy)]
 struct Inks {
     top: Hsla,
@@ -207,11 +206,11 @@ fn mix(a: Hsla, b: Hsla, k: f32) -> Hsla {
 fn inks(color: Hsla) -> Inks {
     let light: Hsla = gpui::rgb(0xffffff).into();
     let dark: Hsla = gpui::rgb(0x050408).into();
-    let stock = mix(gpui::rgb(0x646163).into(), color, 0.12);
+    let stock: Hsla = gpui::rgb(0x646163).into();
     Inks {
-        top: mix(color, light, 0.48),
-        lit: mix(color, light, 0.14),
-        shade: mix(color, dark, 0.32),
+        top: mix(color, light, 0.12),
+        lit: mix(stock, light, 0.25),
+        shade: mix(stock, dark, 0.15),
         stock_top: mix(stock, light, 0.30),
         stock_lit: stock,
         stock_shade: mix(stock, dark, 0.38),
