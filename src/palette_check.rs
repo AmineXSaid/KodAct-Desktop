@@ -285,7 +285,6 @@ fn coloured_text_reads_on_its_tint() {
             ("edit", x.mode_edit),
             ("plan", x.mode_plan),
             ("bypass", x.mode_bypass),
-            ("expert", x.mode_expert),
         ] {
             let r = contrast(c, card);
             assert!(r >= AA_UI, "{mode}: mode {name} is {r:.2}:1 on a card");

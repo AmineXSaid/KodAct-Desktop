@@ -1315,8 +1315,6 @@ struct Live {
     profile: crate::endpoints::Profile,
     /// Which process this is: events from one that was replaced are dropped.
     generation: u64,
-    /// Started with Expert's output style, which is fixed for a process.
-    expert: bool,
     /// Relays carrying the remote's ports back here (WSL, containers):
     /// they end with the session.
     _relays: Vec<std::sync::Arc<crate::relay::Relay>>,
@@ -1684,7 +1682,7 @@ pub struct AppState {
     /// chat, and every few minutes while the greeting shows.
     pub greeting_seed: u64,
     greeting_timer: Option<Task<()>>,
-    /// The current chat's mode (Expert, Manual, Edit automatically, Plan, Bypass).
+    /// The current chat's mode (Manual, Edit automatically, Plan, Bypass).
     pub mode: ModeId,
     /// Modes chats keep when reopened (see `ModeId::kept`), by chat.
     kept_modes: std::collections::HashMap<usize, ModeId>,
@@ -3648,19 +3646,8 @@ impl AppState {
 
     /// A chat's mode as ForgeCLI now runs it (it changed it itself, or a
     /// plan's answer did): the mode chip follows, and the mode is kept for
-    /// the chat's next session. Expert stays Expert while the CLI is in its
-    /// own default mode.
+    /// the chat's next session.
     fn mode_reported(&mut self, chat: usize, mode: ModeId) {
-        let current_here = if self.current == Some(chat) {
-            self.mode
-        } else {
-            self.kept_modes.get(&chat).copied().unwrap_or(self.mode)
-        };
-        let mode = if mode == ModeId::Manual && current_here == ModeId::Expert {
-            ModeId::Expert
-        } else {
-            mode
-        };
         if self.current == Some(chat) {
             self.mode = mode;
             self.keep_mode();
@@ -7760,14 +7747,6 @@ impl AppState {
                 }
             }
         }
-        // Expert's output style is part of the process's system prompt: going
-        // into or out of Expert restarts the chat's ForgeCLI, resuming the
-        // conversation.
-        let expert = self.mode == ModeId::Expert;
-        let resumable = self.chats.iter().any(|c| c.id == id && c.resumable);
-        if resumable && self.sessions.get(&id).is_some_and(|l| l.expert != expert) {
-            self.sessions.remove(&id);
-        }
         // A remote project's first message connects (and installs ForgeCLI
         // there if needed) in the background, then sends.
         if !self.sessions.contains_key(&id) {
@@ -7784,6 +7763,7 @@ impl AppState {
         }
         // A new conversation's first message carries the project's knowledge
         // ahead of your words (`knowledge.rs`); a command doesn't.
+        let resumable = self.chats.iter().any(|c| c.id == id && c.resumable);
         let dir = self.chat_project_dir(id);
         let memory_on = self
             .chats
@@ -7886,13 +7866,12 @@ impl AppState {
                 ]);
             }
         }
-        // The settings profile, layered above the other settings files, and
-        // Expert's output style on top of it.
+        // The settings profile, layered above the other settings files.
         let profile_path = self
             .settings_profile
             .as_deref()
             .and_then(crate::setting_profiles::path_of);
-        if let Some(mut flag) = crate::modes::flag_settings(self.mode, profile_path.as_deref()) {
+        if let Some(mut flag) = crate::modes::flag_settings(profile_path.as_deref()) {
             // A remote ForgeCLI can't read this machine's file: send its settings.
             if remote.is_some() && !flag.trim_start().starts_with('{') {
                 flag = std::fs::read_to_string(&flag).unwrap_or_else(|_| "{}".into());
@@ -8000,7 +7979,6 @@ impl AppState {
                 _pump: pump,
                 profile,
                 generation,
-                expert: self.mode == ModeId::Expert,
                 _relays: relays,
             },
         );

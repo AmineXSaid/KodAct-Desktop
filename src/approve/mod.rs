@@ -269,7 +269,7 @@ fn non_blank(command: Option<&str>) -> Option<&str> {
 
 /// Whether Forge answers this permission request itself, with allow.
 ///
-/// Every mode (Manual, Expert, Plan, Edit automatically): a command the risk
+/// Every mode (Manual, Plan, Edit automatically): a command the risk
 /// check finds read-only runs unasked. Edit automatically also runs commands
 /// that only write or move files inside the project. Deletions always ask.
 pub fn auto_approves_command(request: &AutoApproveInput) -> bool {

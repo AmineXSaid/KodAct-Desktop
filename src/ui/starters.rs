@@ -52,7 +52,9 @@ pub const CHAT_STARTERS: [Starter; 4] = [
         icon: "icons/graduation-cap.svg",
         title: "Teach me something",
         hint: "Step by step, checking as we go",
-        prompt: "Teach me how a topic I pick works, step by step. Start by asking what I already know, then explain one idea at a time and check that I follow before going on. The topic: ",
+        // The teaching skill: it finds your level, teaches by example and checks
+        // you can do it yourself, and stays on for the conversation.
+        prompt: "/forge:expert I want to learn how this works: ",
     },
     Starter {
         icon: "icons/pencil.svg",

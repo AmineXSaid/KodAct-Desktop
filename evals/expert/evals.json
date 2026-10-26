@@ -1,0 +1,37 @@
+{
+  "skill_name": "expert",
+  "note": "Run each prompt twice: once with the old Expert output style (git show HEAD~:assets/forge-plugin/output-styles/expert.md, as the system style) and once with /forge:expert. Grade both against rubric.md, blind to which is which. Needs a model key.",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/forge:expert what is a mutex and why would I need one?",
+      "expected_output": "Places the level (or asks one short question), names one objective, starts from a concrete race (two threads incrementing a counter), then states the idea, names the misconception (a mutex makes code faster / is only for threads), ends with 1-3 retrieval questions with answers collapsed."
+    },
+    {
+      "id": 2,
+      "prompt": "/forge:expert walk me through how src/attach.rs decides a paste becomes a card",
+      "files": ["src/attach.rs"],
+      "expected_output": "Code-walkthrough shape: one line on what it does, follows one real input (a 14-line paste) through is_long_paste and pasted_text, names the design choice (no fencing, sent as <pasted_text>), ends with a predict question."
+    },
+    {
+      "id": 3,
+      "prompt": "/forge:expert my test fails with 'assertion left == right failed: left: 9, right: 10' in a loop over range(10). Teach me how to debug this, don't just fix it.",
+      "expected_output": "Debugging-lesson shape: symptom, how to narrow it down (the reasoning), root cause (off by one: range ends before 10), fix, the habit for next time, a similar bug to spot."
+    },
+    {
+      "id": 4,
+      "prompt": "/forge:expert guide me, don't tell me the answer: why does my React component re-render on every keystroke?",
+      "expected_output": "Socratic: asks one guiding question at a time, hints in increasing strength, does not give the answer in the first reply."
+    },
+    {
+      "id": 5,
+      "prompt": "/forge:expert just the answer please: what flag makes grep case-insensitive?",
+      "expected_output": "Just the answer (-i), no lesson, no questions."
+    },
+    {
+      "id": 6,
+      "prompt": "(follow-up after eval 1) I think a mutex makes the program run faster because threads don't wait.",
+      "expected_output": "Feedback: says what is right (it coordinates threads), names the exact misconception (a mutex makes threads wait, it trades speed for correctness), gives one targeted next step or question."
+    }
+  ]
+}

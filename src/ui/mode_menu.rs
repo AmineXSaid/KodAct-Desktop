@@ -16,7 +16,6 @@ use crate::theme::Theme;
 pub fn tint(t: &Theme, mode: ModeId) -> Option<Hsla> {
     match mode {
         ModeId::Manual => None,
-        ModeId::Expert => Some(t.extra.mode_expert),
         ModeId::AcceptEdits => Some(t.extra.mode_edit),
         ModeId::Plan => Some(t.extra.mode_plan),
         ModeId::Bypass => Some(t.extra.mode_bypass),
