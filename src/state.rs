@@ -1777,6 +1777,10 @@ pub struct AppState {
     pub doc_sheet: usize,
     /// A document in the panel shows its text, not its pages.
     pub doc_text: bool,
+    /// The panel's file or plan shows its source, not its preview.
+    pub source_view: bool,
+    /// The plan version the Plan tab shows (from 0); None, the latest.
+    pub plan_version: Option<usize>,
     /// The cells picked in a workbook in the panel (anchor, other end).
     pub doc_pick: crate::ui::sheet_view::Pick,
     /// The panel shows what its version changed from the one before.
@@ -2100,6 +2104,8 @@ impl AppState {
             doc_below: false,
             doc_preview: None,
             doc_text: false,
+            source_view: false,
+            plan_version: None,
             doc_pick: None,
             doc_show_changes: false,
             doc_comments: vec![],
@@ -4676,6 +4682,7 @@ impl AppState {
             }
         }
         self.doc = Some(file);
+        self.source_view = false;
         if self.doc_show_changes {
             self.load_doc_changes(cx);
         }
@@ -4986,6 +4993,18 @@ impl AppState {
 
     /// Show the side panel on `tab`, closing any file open in it. The
     /// browser starts when its tab first shows.
+    /// Preview or Source, in the panel.
+    pub fn set_source_view(&mut self, on: bool, cx: &mut Context<Self>) {
+        self.source_view = on;
+        cx.notify();
+    }
+
+    /// Show plan version `at` of `total` in the Plan tab; the last is live.
+    pub fn show_plan_version(&mut self, at: usize, total: usize, cx: &mut Context<Self>) {
+        self.plan_version = (at + 1 < total).then_some(at);
+        cx.notify();
+    }
+
     pub fn show_panel(&mut self, tab: PanelTab, cx: &mut Context<Self>) {
         self.doc = None;
         self.panel = Some(tab);

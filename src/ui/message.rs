@@ -393,13 +393,90 @@ fn read_and_wrote(u: &crate::context::Usage) -> String {
 
 /// Something the app says: Stop (with Continue on the last one), or an error
 /// (wrapped in full, with Retry and Copy).
+/// A notice that is not an error: an event in the chat's course (a goal
+/// checked or met, the reply stopped, the context compacted). A quiet line,
+/// as Claude's: a tinted mark, the event in a few strong words, then the rest.
+fn event_line(
+    text: &SharedString,
+    interrupted: bool,
+    key: &str,
+    cx: &ItemContext,
+    t: &Theme,
+    link: impl Fn(String, &'static str, &'static str) -> gpui::Stateful<gpui::Div>,
+) -> AnyElement {
+    let words = text.as_ref();
+    let (path, accent, tint) = if words.starts_with("Goal achieved") {
+        ("icons/target.svg", t.extra.success, t.extra.success_tint)
+    } else if words.starts_with("Goal") {
+        ("icons/target.svg", t.colors.primary, t.colors.primary_tint)
+    } else if interrupted {
+        (
+            "icons/circle-pause.svg",
+            t.colors.text_muted,
+            t.colors.hover,
+        )
+    } else if words.starts_with("Compact") {
+        ("icons/layers.svg", t.colors.text_muted, t.colors.hover)
+    } else {
+        ("icons/info.svg", t.colors.text_muted, t.colors.hover)
+    };
+    // "Goal not met yet: what is missing" leads with its event.
+    let (lead, rest) = match words.split_once(": ") {
+        Some((lead, rest)) if lead.len() <= 32 => (format!("{lead}:"), Some(rest.to_string())),
+        _ => (words.to_string(), None),
+    };
+    div()
+        .flex()
+        .items_start()
+        .gap(t.space.sm)
+        .py(t.space.xs)
+        .text_size(t.text.body_sm)
+        .child(
+            div()
+                .flex_none()
+                .size(t.size.icon + px(4.))
+                .rounded_full()
+                .bg(tint)
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(icon(path, t.size.icon_xs, accent)),
+        )
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .pt(px(1.))
+                .line_height(relative(1.5))
+                .text_color(t.colors.text_muted)
+                .child(
+                    gpui::StyledText::new(match &rest {
+                        Some(r) => format!("{lead} {r}"),
+                        None => lead.clone(),
+                    })
+                    .with_highlights([(
+                        0..lead.len(),
+                        gpui::HighlightStyle {
+                            color: Some(t.colors.text_strong),
+                            font_weight: Some(FontWeight::MEDIUM),
+                            ..Default::default()
+                        },
+                    )]),
+                ),
+        )
+        .when(interrupted && cx.last && cx.can_continue, |d| {
+            d.child(
+                link(format!("continue-{key}"), "Continue", "icons/play.svg").on_click(
+                    |_, window, app| window.dispatch_action(Box::new(super::ContinueReply), app),
+                ),
+            )
+        })
+        .into_any_element()
+}
+
 fn notice(text: &SharedString, error: bool, cx: &ItemContext, t: &Theme) -> AnyElement {
     let key = format!("{}-{}", cx.chat, cx.index);
-    let (fg, bg) = if error {
-        (t.extra.danger, t.extra.danger_tint)
-    } else {
-        (t.colors.text_muted, t.colors.hover)
-    };
+    let (fg, bg) = (t.extra.danger, t.extra.danger_tint);
     let interrupted = !error && text.as_ref() == crate::state::INTERRUPTED;
     let copy_key: SharedString = format!("notice-{key}").into();
     let copied = cx.copied.as_ref() == Some(&copy_key);
@@ -424,6 +501,9 @@ fn notice(text: &SharedString, error: bool, cx: &ItemContext, t: &Theme) -> AnyE
             .child(icon(path, t.size.icon_xs, fg))
             .child(label)
     };
+    if !error {
+        return event_line(text, interrupted, &key, cx, t, link);
+    }
     div()
         .flex()
         .items_start()
@@ -474,13 +554,6 @@ fn notice(text: &SharedString, error: bool, cx: &ItemContext, t: &Theme) -> AnyE
                 .line_height(relative(1.45))
                 .child(text.clone())
                 .into_any_element(),
-        })
-        .when(interrupted && cx.last && cx.can_continue, |d| {
-            d.child(
-                link(format!("continue-{key}"), "Continue", "icons/play.svg").on_click(
-                    |_, window, app| window.dispatch_action(Box::new(super::ContinueReply), app),
-                ),
-            )
         })
         .when(error && cx.in_last_turn && !cx.busy, |d| {
             d.child(
@@ -2038,6 +2111,33 @@ fn answered(
     } else {
         detail.clone()
     };
+    // A plan is named by its heading, in words, not by the call's note.
+    let plan_name = (title.as_ref() == crate::backend::PLAN_ASK_TITLE)
+        .then(|| match info.row.and_then(|r| blocks.get(r)) {
+            Some(Block::Tool(c)) => c
+                .diff
+                .iter()
+                .map(|l| l.text.trim())
+                .find(|l| l.starts_with('#'))
+                .map(|l| l.trim_start_matches('#').trim().to_string()),
+            _ => None,
+        })
+        .map(|n| n.unwrap_or_else(|| "The plan".into()));
+    let subject_row: AnyElement = match plan_name {
+        Some(name) => div()
+            .min_w_0()
+            .truncate()
+            .text_size(t.text.body_sm)
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(t.colors.text_strong)
+            .child(name)
+            .into_any_element(),
+        None => subject(
+            &what,
+            SharedString::from(format!("perm-what-{}-{}-{b}", cx.chat, cx.index)),
+            t,
+        ),
+    };
     div()
         .flex()
         .items_start()
@@ -2074,11 +2174,7 @@ fn answered(
                             info.kind
                                 .map(|k| icon(k.icon(), t.size.icon_xs, t.colors.text_muted)),
                         )
-                        .child(subject(
-                            &what,
-                            SharedString::from(format!("perm-what-{}-{}-{b}", cx.chat, cx.index)),
-                            t,
-                        ))
+                        .child(subject_row)
                         .children(call_note(info, blocks).map(|n| {
                             div()
                                 .flex_none()
@@ -2333,8 +2429,9 @@ fn permission(
             .items_center()
             .gap(t.space.sm)
             .text_color(t.colors.text_muted)
-            .child(theme::pill(t, bg, fg, label))
-            .child(title.clone())
+            .min_w_0()
+            .child(theme::pill(t, bg, fg, label).flex_none())
+            .child(div().min_w_0().truncate().child(title.clone()))
             .into_any_element();
     }
     let id = |name: &str| SharedString::from(format!("perm-{name}-{}-{}-{b}", cx.chat, cx.index));

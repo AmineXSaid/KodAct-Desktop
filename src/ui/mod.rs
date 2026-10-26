@@ -81,6 +81,7 @@ pub mod skeleton;
 pub mod skill_install;
 pub mod skills_editor;
 pub mod slash_commands;
+pub mod source_view;
 pub mod starters;
 pub mod status_bar;
 pub mod tasks;

@@ -896,6 +896,7 @@ impl Render for Workspace {
                 below,
                 from_panel: side_panel.is_some(),
                 text: s.doc_text,
+                source: s.source_view,
                 version: {
                     let (all, at) = s.doc_versions();
                     (at, all.len().max(1))
@@ -949,6 +950,8 @@ impl Render for Workspace {
                         width: fit.width,
                         below,
                         scale: fit.scale,
+                        plan_version: s.plan_version,
+                        source: s.source_view,
                     },
                     self.state.clone(),
                     &t,

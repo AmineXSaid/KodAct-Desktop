@@ -763,11 +763,15 @@ impl Render for Composer {
 
         // In the tray: quiet selectors, washed while open or hovered.
         let quiet = |id: &'static str, open: bool| super::button::selector(&t, id, open);
+        // Narrow (a panel open beside the chat), the names give way first.
         let model_button = quiet("model", picker_open)
+            .min_w_0()
+            .flex_shrink(1.)
             .aria_label("Model")
             .child(icon("icons/cpu.svg", t.size.icon_sm, t.colors.text_muted))
             .child(
                 div()
+                    .min_w_0()
                     .max_w(px(220.))
                     .overflow_hidden()
                     .whitespace_nowrap()
@@ -805,6 +809,8 @@ impl Render for Composer {
             .map(|r| r.target.label());
         let remote = host.is_some();
         let project_button = quiet("project", false)
+            .min_w_0()
+            .flex_shrink(1.)
             .aria_label("Project")
             .text_color(t.colors.text_muted)
             .child(icon(
@@ -814,6 +820,7 @@ impl Render for Composer {
             ))
             .child(
                 div()
+                    .min_w_0()
                     .max_w(px(180.))
                     .overflow_hidden()
                     .whitespace_nowrap()
@@ -1114,9 +1121,22 @@ impl Render for Composer {
                             .items_center()
                             .gap(t.space.xs)
                             .pt(t.space.xs)
-                            .child(div().relative().child(mode_trigger).children(modes_menu))
+                            .min_w_0()
+                            .child(
+                                div()
+                                    .flex_none()
+                                    .relative()
+                                    .child(mode_trigger)
+                                    .children(modes_menu),
+                            )
                             .child(project_button)
-                            .child(div().flex_1().relative().children(context_popover))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w(t.space.xs)
+                                    .relative()
+                                    .children(context_popover),
+                            )
                             .child(model_button)
                             .children(meter),
                     ),

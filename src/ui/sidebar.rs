@@ -445,13 +445,6 @@ impl Render for Sidebar {
                 let pinned = c.pinned;
                 let state = self.state.clone();
                 let state_pin = self.state.clone();
-                // Listing every project's chats: whose each one is. The date
-                // groups already say when.
-                let place: Option<SharedString> = (s.all_chats && c.project != s.current_project)
-                    .then(|| s.project(c.project))
-                    .flatten()
-                    .filter(|p| !p.scratch)
-                    .map(|p| p.name.clone().into());
                 let status = s.status(c);
                 let remote = s.chat_remote(id).map(|r| r.target.icon());
                 let unread = status == ChatStatus::Unread;
@@ -548,21 +541,8 @@ impl Render for Sidebar {
                                     }),
                             )
                             // At the row's end, only when there is something to
-                            // say: whose chat, and working, waiting on you,
+                            // say: working, waiting on you,
                             // unread, or an error. Hover shows the actions there.
-                            .children(place.map(|p| {
-                                div()
-                                    .flex_none()
-                                    .max_w(px(96.))
-                                    .overflow_hidden()
-                                    .whitespace_nowrap()
-                                    .text_ellipsis()
-                                    .text_size(t.text.caption)
-                                    .text_color(t.colors.text_subtle)
-                                    .group_hover("row", |st| st.invisible())
-                                    .when(menu_open, |d| d.invisible())
-                                    .child(p)
-                            }))
                             .when(
                                 !matches!(status, ChatStatus::Idle | ChatStatus::Working),
                                 |d| {
