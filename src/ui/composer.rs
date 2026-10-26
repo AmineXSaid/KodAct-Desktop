@@ -942,6 +942,14 @@ impl Render for Composer {
                     }
                 },
             ))
+            // Shift+Tab cycles the mode, as in Claude Code. The text box binds
+            // it to outdent, and its binding wins over ours: take it here.
+            .capture_action(cx.listener(
+                |_, _: &gpui::component::input::OutdentInline, window, cx| {
+                    window.dispatch_action(Box::new(super::CycleMode), cx);
+                    cx.stop_propagation();
+                },
+            ))
             .capture_action(cx.listener(
                 |this, _: &gpui::component::input::IndentInline, window, cx| {
                     if this.completion_nav("tab", window, cx) {
