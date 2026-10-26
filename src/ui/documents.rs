@@ -41,17 +41,28 @@ pub fn render(t: &Theme, state: &Entity<AppState>, s: &AppState, scale: f32) -> 
             .as_ref()
             .is_some_and(|(n, p)| *n == f.name && *p == f.path);
         let st = state.clone();
+        // A diagram reads where it is listed, as in a reply: drawn at its
+        // size with zoom, Open and Download, not a thumbnail to open first.
+        let key = format!("documents-{i}");
+        let view = super::file_card::DiagramView {
+            zoom: s
+                .diagram_zoom
+                .get(&super::file_card::zoom_key(&key))
+                .copied()
+                .unwrap_or(1.),
+            text_open: s.diagram_code.contains(&super::file_card::text_key(&key)),
+        };
         div()
             .flex()
             .flex_col()
             .gap(t.space.xs)
             .child(super::file_card::render(
                 &f,
-                &format!("documents-{i}"),
+                &key,
                 state.clone(),
                 is_open,
                 scale,
-                None,
+                Some(view),
                 t,
             ))
             .child(
