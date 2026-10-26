@@ -1,7 +1,7 @@
 //! Design tokens for GPUI in the "calmly smooth" system (after the Anchor
 //! style reference): sun-bleached cream surfaces stacked like paper on paper,
-//! one ink, one dusty-blue accent rationed to the decisive action, Archivo set in
-//! two weights, 4px cards against pill buttons, and shadows thin as grain.
+//! one ink, one copper accent rationed to the decisive action, Anthropic Sans
+//! throughout, 4px cards against pill buttons, and shadows thin as grain.
 //! Pure UI: colors, type, spacing, radius, elevation, motion + a few styled primitives.
 //! Written against GPUI's current API; field/method names may need small tweaks per GPUI version.
 
@@ -75,285 +75,47 @@ pub struct Radius {
     pub pill: Pixels,    // 9999: buttons, badges, avatars
 }
 
-/// A theme you can pick in Settings: a whole look, not only a palette. Its
-/// surfaces and one colour, light and dark (`tint`), and its form: faces,
-/// corners, density, depth and how a selected row shows (`form`). Calmly
-/// smooth is the system's own form; the others each set their own.
+/// Forge's look: Calmly smooth, its surfaces and one colour light and
+/// dark (`tint`), and its form: corners, density, depth (`form`). One look
+/// for now; every face is Anthropic Sans (`fonts.rs`).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Look {
-    /// Sun-bleached cream and dusty blue: the system's own.
+    /// Warm paper and graphite, one copper for the action.
     #[default]
     Calm,
-    /// The same cream with the reference's terracotta.
-    Terracotta,
-    /// Ivory paper and patina teal: Forge's first look.
-    Patina,
-    /// Plain greys and ink: no colour at all.
-    Ink,
-    /// Cool slate and a deep blue.
-    Slate,
-    /// Soft heather and plum.
-    Plum,
-    /// Layered: raised cards, the "+" grouped with a line on each row.
-    Layers,
-    /// The "+" opens a tray of chips inside the box, over nothing.
-    Tray,
-    /// Cool studio greys; the "+" splits into a list and its page.
-    Studio,
-    /// Round, roomy; the "+" opens a grid of tiles.
-    Tiles,
-    /// Keyboard first, violet; the "+" is a list you type to filter.
-    Command,
-    /// Calmly smooth's surfaces and form, untouched; one colour, used
-    /// sparingly: Electric Blue for the action, focus and what runs.
-    Premium,
 }
 
 impl Look {
-    pub const ALL: [Look; 12] = [
-        Look::Calm,
-        Look::Terracotta,
-        Look::Patina,
-        Look::Ink,
-        Look::Slate,
-        Look::Plum,
-        Look::Layers,
-        Look::Tray,
-        Look::Studio,
-        Look::Tiles,
-        Look::Command,
-        Look::Premium,
-    ];
+    #[cfg(test)]
+    pub const ALL: [Look; 1] = [Look::Calm];
 
     /// How it is saved (`window.json`).
     pub fn id(self) -> &'static str {
-        match self {
-            Look::Calm => "calm",
-            Look::Terracotta => "terracotta",
-            Look::Patina => "patina",
-            Look::Ink => "ink",
-            Look::Slate => "slate",
-            Look::Plum => "plum",
-            Look::Layers => "layers",
-            Look::Tray => "tray",
-            Look::Studio => "studio",
-            Look::Tiles => "tiles",
-            Look::Command => "command",
-            Look::Premium => "premium",
-        }
+        "calm"
     }
 
-    pub fn from_id(id: &str) -> Option<Look> {
-        Look::ALL.into_iter().find(|l| l.id() == id)
+    /// A saved theme: whatever was saved, it is Calmly smooth now.
+    pub fn from_id(_id: &str) -> Option<Look> {
+        Some(Look::Calm)
     }
 
+    #[cfg(test)]
     pub fn name(self) -> &'static str {
-        match self {
-            Look::Calm => "Calmly smooth",
-            Look::Terracotta => "Terracotta",
-            Look::Patina => "Patina",
-            Look::Ink => "Ink",
-            Look::Slate => "Slate",
-            Look::Plum => "Plum",
-            Look::Layers => "Layers",
-            Look::Tray => "Tray",
-            Look::Studio => "Studio",
-            Look::Tiles => "Tiles",
-            Look::Command => "Command",
-            Look::Premium => "Premium",
-        }
+        "Calmly smooth"
     }
 
-    pub fn blurb(self) -> &'static str {
-        match self {
-            Look::Calm => "Cream and dusty blue, Archivo",
-            Look::Terracotta => "Warm paper, replies in a serif",
-            Look::Patina => "Ivory and teal, Inter, flat",
-            Look::Ink => "Greys and Geist, nothing else",
-            Look::Slate => "Cool grey, Plex, compact",
-            Look::Plum => "Heather, an editorial serif",
-            Look::Layers => "Raised cards, a grouped + menu",
-            Look::Tray => "Pills, the + as a tray in the box",
-            Look::Studio => "Cool greys, a split + menu",
-            Look::Tiles => "Round and roomy, + as tiles",
-            Look::Command => "Violet, a + you type to filter",
-            Look::Premium => "Graphite and one electric blue",
-        }
-    }
-
-    /// Everything but colour: faces, corners, density, depth, selection.
+    /// Everything but colour: corners, density, depth.
     fn form(self) -> Form {
-        let base = Form {
-            sans: None,
-            display: None,
-            mono: "JetBrains Mono",
-            reading: None,
+        Form {
             display_weight: FontWeight::SEMIBOLD,
             // (button, card, field, composer, pressed: buttons and chips)
             corners: (4., 4., 4., 4., 9999.),
             row: 30.,
             titlebar: 36.,
-            chat: (16., 26.),
+            // Denser, as Claude Code sets a reply: a third more on screen.
+            chat: (15., 24.),
             heading: (32., 36.),
-            depth: Depth::Grain,
-            // A neutral wash, as Claude Code marks the open row: the accent
-            // stays for the action.
-            selection: Selection::Wash,
             motion_ms: 200,
-            add_menu: AddMenu::List,
-        };
-        match self {
-            // Forge Ember: Hanken Grotesk, a warm humanist grotesk that reads
-            // like a letter at reply size (Anthropic Sans takes over where it
-            // is installed, `fonts.rs`).
-            Look::Calm | Look::Premium => Form {
-                sans: Some("Hanken Grotesk"),
-                display: Some("Hanken Grotesk"),
-                // Denser, as Claude Code sets a reply: a third more on screen.
-                chat: (15., 24.),
-                ..base
-            },
-            // Claude's school: a warm grotesk, replies set like a letter in
-            // Source Serif, soft corners, room to breathe, a soft lift.
-            Look::Terracotta => Form {
-                sans: Some("Hanken Grotesk"),
-                display: Some("Source Serif 4 Display"),
-                reading: Some("Source Serif 4"),
-                display_weight: FontWeight::NORMAL,
-                corners: (8., 12., 10., 16., 9999.),
-                row: 32.,
-                titlebar: 40.,
-                chat: (16., 27.),
-                heading: (34., 38.),
-                depth: Depth::Lift,
-                selection: Selection::Card,
-                motion_ms: 220,
-                ..base
-            },
-            // Calm and exact: Inter, small radii throughout, no shadows,
-            // a hairline edge, the accent's tint on the selected row.
-            Look::Patina => Form {
-                sans: Some("Inter"),
-                display: Some("Inter"),
-                corners: (6., 8., 6., 12., 6.),
-                chat: (15., 24.),
-                heading: (28., 32.),
-                depth: Depth::Flat,
-                selection: Selection::Tint,
-                motion_ms: 180,
-                ..base
-            },
-            // Cursor's school: Geist and Geist Mono, neutral and quiet, the
-            // filled action in ink, a grey wash for what is selected.
-            Look::Ink => Form {
-                sans: Some("Geist"),
-                display: Some("Geist"),
-                mono: "Geist Mono",
-                corners: (6., 8., 8., 12., 8.),
-                chat: (15., 24.),
-                heading: (28., 32.),
-                depth: Depth::Flat,
-                selection: Selection::Wash,
-                motion_ms: 140,
-                ..base
-            },
-            // Zed's school: IBM Plex, square corners, dense rows, a low
-            // title bar, the tint on the selected row, no shadows.
-            Look::Slate => Form {
-                sans: Some("IBM Plex Sans"),
-                display: Some("IBM Plex Sans"),
-                mono: "IBM Plex Mono",
-                corners: (3., 4., 3., 6., 4.),
-                row: 26.,
-                titlebar: 32.,
-                chat: (14., 23.),
-                heading: (24., 28.),
-                depth: Depth::Flat,
-                selection: Selection::Tint,
-                motion_ms: 120,
-                ..base
-            },
-            // Editorial: Instrument Sans, the greeting in Instrument Serif,
-            // round everything, a soft lift.
-            Look::Plum => Form {
-                sans: Some("Instrument Sans"),
-                display: Some("Instrument Serif"),
-                display_weight: FontWeight::NORMAL,
-                corners: (12., 16., 14., 22., 9999.),
-                row: 32.,
-                titlebar: 38.,
-                chat: (15., 24.),
-                heading: (40., 44.),
-                depth: Depth::Lift,
-                selection: Selection::Soft,
-                motion_ms: 220,
-                ..base
-            },
-            // Direction A: layers. Hanken Grotesk over Archivo headings,
-            // soft corners, raised cards, the "+" grouped, each row with
-            // a line saying what it does.
-            Look::Layers => Form {
-                sans: Some("Hanken Grotesk"),
-                corners: (8., 14., 10., 18., 9999.),
-                row: 32.,
-                titlebar: 40.,
-                heading: (34., 38.),
-                depth: Depth::Lift,
-                selection: Selection::Card,
-                add_menu: AddMenu::Grouped,
-                ..base
-            },
-            // Direction B: a tray. Pills everywhere; the "+" unfolds a row
-            // of chips inside the box instead of a menu over the chat.
-            Look::Tray => Form {
-                sans: Some("Hanken Grotesk"),
-                corners: (9999., 12., 10., 20., 9999.),
-                row: 32.,
-                titlebar: 38.,
-                depth: Depth::Lift,
-                selection: Selection::Card,
-                add_menu: AddMenu::Tray,
-                ..base
-            },
-            // Direction C: a studio. Cool greys, tidy 8px corners, the "+"
-            // split into a list and the chosen one's page.
-            Look::Studio => Form {
-                sans: Some("Hanken Grotesk"),
-                corners: (8., 10., 8., 18., 8.),
-                chat: (15., 24.),
-                depth: Depth::Lift,
-                selection: Selection::Soft,
-                motion_ms: 180,
-                add_menu: AddMenu::Split,
-                ..base
-            },
-            // Direction D: tiles. Round and roomy, squircle buttons, the
-            // "+" a grid of large tiles.
-            Look::Tiles => Form {
-                sans: Some("Hanken Grotesk"),
-                corners: (12., 18., 12., 22., 12.),
-                row: 34.,
-                titlebar: 40.,
-                chat: (15., 24.),
-                heading: (36., 40.),
-                depth: Depth::Lift,
-                selection: Selection::Wash,
-                motion_ms: 220,
-                add_menu: AddMenu::Tiles,
-                ..base
-            },
-            // Direction E: command first. Compact, a grey wash for what is
-            // selected, the "+" a list you type into.
-            Look::Command => Form {
-                sans: Some("Hanken Grotesk"),
-                corners: (8., 10., 9., 16., 10.),
-                chat: (15., 24.),
-                depth: Depth::Grain,
-                selection: Selection::Wash,
-                motion_ms: 160,
-                add_menu: AddMenu::Search,
-                ..base
-            },
         }
     }
 
@@ -380,121 +142,25 @@ impl Look {
             link_hover,
             mark_top,
         };
-        match (self, dark) {
-            // Forge Ember: warm paper and warm graphite, one copper heat for
-            // the action, the current row and state (`.impeccable`, 2026-10-23).
-            (Look::Calm, false) => t(
-                0xebe8e1, 0xf7f5f1, 0xffffff, 0xf1eee8, 0xb4532a, 0xffffff, 0xf5e2d7, 0xa44a24,
-                0x86391a, 0x93401c,
-            ),
-            (Look::Calm, true) => t(
+        // Forge Ember: warm paper and warm graphite, one copper heat for
+        // the action, the current row and state (`.impeccable`, 2026-10-23).
+        if dark {
+            t(
                 0x1b1a19, 0x242322, 0x2e2d2b, 0x1f1e1d, 0xe2895b, 0x1b1a19, 0x3e2b22, 0xeb9d74,
                 0xf3b694, 0xe2895b,
-            ),
-            (Look::Terracotta, false) => t(
-                0xe3d7cd, 0xf0e9e5, 0xffffff, 0xf5f2f0, 0xb85a2a, 0xffffff, 0xf6dccb, 0xa8492a,
-                0x8c3a20, 0x8f3f1e,
-            ),
-            (Look::Terracotta, true) => t(
-                0x171513, 0x1e1c1a, 0x2b2825, 0x262321, 0xee884f, 0x171513, 0x3d2a20, 0xf0a77d,
-                0xf5bd9a, 0xee884f,
-            ),
-            (Look::Patina, false) => t(
-                0xe9e6df, 0xf9f8f5, 0xffffff, 0xf0eee8, 0x216d70, 0xffffff, 0xd0e6e7, 0x216d70,
-                0x10585b, 0x216d70,
-            ),
-            (Look::Patina, true) => t(
-                0x141312, 0x232321, 0x2c2c2a, 0x1f1e1d, 0x529a9d, 0x141312, 0x2f4749, 0x8ecacd,
-                0xabdbde, 0x6fb3b6,
-            ),
-            (Look::Ink, false) => t(
-                0xe2e2df, 0xf1f1ef, 0xffffff, 0xf6f6f4, 0x1e1e1e, 0xffffff, 0xdededb, 0x1e1e1e,
-                0x3a3a3a, 0x52524e,
-            ),
-            (Look::Ink, true) => t(
-                0x121212, 0x1b1b1a, 0x272726, 0x222221, 0xf0f0ee, 0x121212, 0x333331, 0xf0f0ee,
-                0xffffff, 0x9e9e99,
-            ),
-            (Look::Slate, false) => t(
-                0xd8dde3, 0xedf0f3, 0xffffff, 0xf4f6f8, 0x3b5b8c, 0xffffff, 0xd9e2ef, 0x3b5b8c,
-                0x2e4870, 0x3b5b8c,
-            ),
-            (Look::Slate, true) => t(
-                0x111418, 0x181c21, 0x242a32, 0x1e232a, 0x9db7e0, 0x111418, 0x26303e, 0x9db7e0,
-                0xb8cbea, 0x9db7e0,
-            ),
-            (Look::Plum, false) => t(
-                0xe5d9e0, 0xf2ebef, 0xffffff, 0xf7f2f5, 0x7a3e65, 0xffffff, 0xeddbe6, 0x7a3e65,
-                0x62304f, 0x7a3e65,
-            ),
-            (Look::Plum, true) => t(
-                0x171217, 0x1f1a1f, 0x2c252c, 0x262026, 0xd3a3c6, 0x171217, 0x3a2a36, 0xd3a3c6,
-                0xe2bfd8, 0xd3a3c6,
-            ),
-            // The five directions: Forge's cream surfaces (Studio's cool
-            // greys) under an accent of their own.
-            (Look::Layers, false) => t(
-                0xe3d7cd, 0xf0e9e5, 0xffffff, 0xf5f2f0, 0x3d4f8f, 0xffffff, 0xdfe3f2, 0x3d4f8f,
-                0x2f3e72, 0x3d4f8f,
-            ),
-            (Look::Layers, true) => t(
-                0x171513, 0x1e1c1a, 0x2b2825, 0x262321, 0xa9b5e8, 0x171513, 0x272c40, 0xa9b5e8,
-                0xc4cdf0, 0xa9b5e8,
-            ),
-            (Look::Tray, false) => t(
-                0xe3d7cd, 0xf0e9e5, 0xffffff, 0xf5f2f0, 0x2e6077, 0xffffff, 0xd8e7ee, 0x2e6077,
-                0x234b5e, 0x2e6077,
-            ),
-            (Look::Tray, true) => t(
-                0x171513, 0x1e1c1a, 0x2b2825, 0x262321, 0x93c2d6, 0x171513, 0x233540, 0x93c2d6,
-                0xb3d6e4, 0x93c2d6,
-            ),
-            (Look::Studio, false) => t(
-                0xdcdde3, 0xeeeff3, 0xffffff, 0xf4f5f8, 0x4a4fa0, 0xffffff, 0xe0e1f3, 0x4a4fa0,
-                0x3a3e84, 0x4a4fa0,
-            ),
-            (Look::Studio, true) => t(
-                0x131417, 0x1a1b1f, 0x25262c, 0x202126, 0xb3b6f0, 0x131417, 0x2a2b44, 0xb3b6f0,
-                0xcdcff6, 0xb3b6f0,
-            ),
-            (Look::Tiles, false) => t(
-                0xe3d7cd, 0xf0e9e5, 0xffffff, 0xf5f2f0, 0x3f6b4f, 0xffffff, 0xdbe8df, 0x3f6b4f,
-                0x30543d, 0x3f6b4f,
-            ),
-            (Look::Tiles, true) => t(
-                0x171513, 0x1e1c1a, 0x2b2825, 0x262321, 0x9fcfae, 0x171513, 0x24352b, 0x9fcfae,
-                0xbde0c7, 0x86c19a,
-            ),
-            (Look::Command, false) => t(
-                0xe3d7cd, 0xf0e9e5, 0xffffff, 0xf5f2f0, 0x6a4fa3, 0xffffff, 0xe7dff3, 0x6a4fa3,
-                0x553d86, 0x6a4fa3,
-            ),
-            // Forge Premium: Calm's paper and graphite to the hex, the
-            // copper swapped for one blue (deeper by day, for its label).
-            (Look::Premium, false) => t(
-                0xebe8e1, 0xf7f5f1, 0xffffff, 0xf1eee8, 0x2563eb, 0xffffff, 0xdbe6fb, 0x2563eb,
-                0x1d4ed8, 0x1d4ed8,
-            ),
-            (Look::Premium, true) => t(
-                0x1b1a19, 0x242322, 0x2e2d2b, 0x1f1e1d, 0x3b82f6, 0x0b0f1a, 0x1e2a44, 0x7aa7f8,
-                0xa5c4fa, 0x7aa7f8,
-            ),
-            (Look::Command, true) => t(
-                0x171513, 0x1e1c1a, 0x2b2825, 0x262321, 0xc2adf0, 0x171513, 0x30283f, 0xc2adf0,
-                0xd6c8f5, 0xc2adf0,
-            ),
+            )
+        } else {
+            t(
+                0xebe8e1, 0xf7f5f1, 0xffffff, 0xf1eee8, 0xb4532a, 0xffffff, 0xf5e2d7, 0xa44a24,
+                0x86391a, 0x93401c,
+            )
         }
     }
 }
 
-/// A theme's form. `None` faces keep the system's (`fonts.rs`).
+/// The look's form.
 #[derive(Clone, Copy)]
 struct Form {
-    sans: Option<&'static str>,
-    display: Option<&'static str>,
-    mono: &'static str,
-    /// A reply's prose, when it is not the interface face.
-    reading: Option<&'static str>,
     display_weight: FontWeight,
     corners: (f32, f32, f32, f32, f32),
     row: f32,
@@ -503,51 +169,7 @@ struct Form {
     chat: (f32, f32),
     /// The greeting and the home screen's heading.
     heading: (f32, f32),
-    depth: Depth,
-    selection: Selection,
     motion_ms: u64,
-    add_menu: AddMenu,
-}
-
-/// How surfaces lift off the canvas.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Depth {
-    /// Three hairline shadows, thin as paper grain (the system's).
-    Grain,
-    /// A soft shadow, as a card resting on a desk.
-    Lift,
-    /// No shadow: a 1px edge in the border colour.
-    Flat,
-}
-
-/// How the composer's "+" opens (`ui/add_menu.rs`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AddMenu {
-    /// A plain menu: icon, label, shortcut or chevron.
-    List,
-    /// Two groups (add to this message, tools), each row with a line.
-    Grouped,
-    /// A row of chips inside the box, over nothing.
-    Tray,
-    /// A list beside the chosen row's page.
-    Split,
-    /// A grid of large tiles.
-    Tiles,
-    /// A list you type into to filter; Enter picks the first.
-    Search,
-}
-
-/// How a selected row (a chat, a section) stands out.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Selection {
-    /// The accent's pale form (the system's).
-    Soft,
-    /// A sticky note: the card colour with a hairline.
-    Card,
-    /// The accent's tint, the label in the accent.
-    Tint,
-    /// A quiet grey wash.
-    Wash,
 }
 
 /// One mode of a theme, as hex: the canvas (title bar and sidebar), the
@@ -576,18 +198,14 @@ pub struct Theme {
     pub text: TypeScale,
     pub space: Space,
     pub radius: Radius,
-    pub font_sans: SharedString, // Archivo, bundled in 400 and 600 (`fonts.rs`)
-    pub font_serif: SharedString, // Source Serif (substitute for Lyon Text)
+    pub font_sans: SharedString, // Anthropic Sans Text: every word the app sets (`fonts.rs`)
     pub motion_ms: u64,          // 200ms ease for hovers/transitions
     // Forge additions (see the section at the end of the tokens).
-    pub font_mono: SharedString, // JetBrains Mono: code, paths, commands
-    pub font_code_inline: SharedString, // IBM Plex Mono: a name in prose; its small x-height sits level with the text
-    pub font_display: SharedString, // large lines (the greeting, headings): Archivo, as everything is
+    pub font_mono: SharedString, // code, paths, commands: Anthropic Sans Text too
+    pub font_code_inline: SharedString, // a name in prose: the same face
+    pub font_display: SharedString, // large lines (the greeting, headings): Anthropic Sans Display
     pub display_weight: FontWeight, // 600: headings are set in the heavier of the two cuts
-    pub font_reading: SharedString, // a reply's prose: the interface face, or a serif (Terracotta)
-    pub depth: Depth,               // how surfaces lift: grain, a soft lift, or flat
-    pub selection: Selection,       // how a selected row shows
-    pub add_menu: AddMenu,          // how the composer's "+" opens
+    pub font_reading: SharedString, // a reply's prose: the interface face
     pub extra: ExtraColors,
     pub terminal: TerminalColors,
     pub code: CodeColors,
@@ -642,17 +260,13 @@ impl Theme {
                 field: px(4.),
                 pill: px(9999.),
             },
-            font_sans: crate::fonts::sans(),
-            font_serif: "Source Serif 4".into(),
+            font_sans: crate::fonts::TEXT.into(),
             motion_ms: 200,
-            font_mono: "JetBrains Mono".into(),
-            font_code_inline: "IBM Plex Mono".into(),
-            font_display: crate::fonts::display(),
+            font_mono: crate::fonts::TEXT.into(),
+            font_code_inline: crate::fonts::TEXT.into(),
+            font_display: crate::fonts::DISPLAY.into(),
             display_weight: FontWeight::SEMIBOLD,
-            font_reading: crate::fonts::sans(),
-            depth: Depth::Grain,
-            selection: Selection::Soft,
-            add_menu: AddMenu::List,
+            font_reading: crate::fonts::TEXT.into(),
             extra: ExtraColors::for_mode(is_dark),
             terminal: TerminalColors::for_mode(is_dark),
             code: CodeColors::for_mode(is_dark),
@@ -683,36 +297,14 @@ impl Theme {
         self.extra.toggle_on = c(k.link);
         // Live activity and agents take the accent and the theme's spread,
         // unless the theme names their own.
-        (self.extra.live, self.extra.agent) = match (look, self.is_dark) {
-            // One blue, used once: what runs takes the accent's blue; agents
-            // carry no colour of their own.
-            (Look::Premium, _) => (c(k.link), Some(self.colors.text_muted)),
-            _ => (c(k.accent), None),
-        };
+        // Live activity takes the accent; agents carry no colour of their own.
+        (self.extra.live, self.extra.agent) = (c(k.accent), None);
         self.extra.mark_top = c(k.mark_top);
         self.colors.primary = c(k.link);
         self.colors.primary_hover = c(k.link_hover);
         self.colors.primary_tint = c(k.link).opacity(if self.is_dark { 0.16 } else { 0.12 });
 
         let f = look.form();
-        let face = |name: Option<&str>, or: SharedString| -> SharedString {
-            name.map_or(or, |n| n.to_string().into())
-        };
-        self.font_sans = face(f.sans, crate::fonts::sans());
-        self.font_display = face(f.display, crate::fonts::display());
-        self.font_mono = f.mono.into();
-        self.font_reading = face(f.reading, self.font_sans.clone());
-        // Anthropic Sans, when installed, sets every face in every theme,
-        // code included: nothing else draws.
-        if let Some((text, display)) = crate::fonts::brand() {
-            self.font_sans = text.clone();
-            self.font_display = display;
-            self.font_serif = text.clone();
-            self.font_reading = text.clone();
-            let mono = crate::fonts::brand_mono().unwrap_or(text);
-            self.font_mono = mono.clone();
-            self.font_code_inline = mono;
-        }
         self.display_weight = f.display_weight;
         let (button, card, field, composer, pressed) = f.corners;
         let r = &mut self.radius;
@@ -722,17 +314,11 @@ impl Theme {
         z.composer_radius = px(composer);
         (z.row, z.titlebar) = (px(f.row), px(f.titlebar));
         // Anthropic Sans runs large (a tall x-height): a step smaller, so a
-        // reply reads at the size the theme meant.
-        let (size, line) = match crate::fonts::brand() {
-            Some(_) => ((f.chat.0 - BRAND_STEP).max(13.), f.chat.1 - BRAND_STEP),
-            None => f.chat,
-        };
+        // reply reads at the size the look meant.
+        let (size, line) = ((f.chat.0 - BRAND_STEP).max(13.), f.chat.1 - BRAND_STEP);
         z.chat_text = px(size);
         z.line_height_chat = line / size;
         (z.greeting, z.home_heading) = (px(f.heading.0), px(f.heading.1));
-        self.depth = f.depth;
-        self.selection = f.selection;
-        self.add_menu = f.add_menu;
         self.motion_ms = f.motion_ms;
     }
 
@@ -814,35 +400,10 @@ impl Theme {
         ]
     }
 
-    /// What lifts a card or the session off the canvas, in this theme's
-    /// depth: paper grain (three hairline shadows under 4px of blur and 6%
-    /// ink), a soft lift, or flat (a 1px edge drawn as a ring).
+    /// What lifts a card or the session off the canvas: paper grain (three
+    /// hairline shadows under 4px of blur and 6% ink).
     pub fn elevation_grain(&self) -> Vec<BoxShadow> {
         let d = self.is_dark;
-        match self.depth {
-            Depth::Grain => {}
-            Depth::Flat => {
-                return vec![BoxShadow {
-                    color: self.colors.border,
-                    offset: point(px(0.), px(0.)),
-                    blur_radius: px(0.),
-                    spread_radius: px(1.),
-                    inset: false,
-                }]
-            }
-            Depth::Lift => {
-                return [(1., 2., 0.04, 0.3), (8., 24., 0.07, 0.35)]
-                    .into_iter()
-                    .map(|(y, blur, light, dark)| BoxShadow {
-                        color: ink(if d { dark } else { light }),
-                        offset: point(px(0.), px(y)),
-                        blur_radius: px(blur),
-                        spread_radius: px(if y > 2. { -6. } else { 0. }),
-                        inset: false,
-                    })
-                    .collect()
-            }
-        }
         [(1., 0.06, 0.35), (2., 0.04, 0.2), (4., 0.01, 0.1)]
             .into_iter()
             .map(|(y, light, dark)| BoxShadow {
@@ -861,10 +422,9 @@ impl Theme {
 impl Theme {
     /// The sidebar's shadow where it meets the session: its colour at the
     /// edge, fading out over `Sizes::side_shade`, so the sidebar reads as a
-    /// layer over the window. None in a flat theme, whose session has its
-    /// 1px edge instead.
+    /// layer over the window.
     pub fn side_shade(&self) -> Option<Hsla> {
-        (self.depth != Depth::Flat).then(|| ink(if self.is_dark { 0.30 } else { 0.06 }))
+        Some(ink(if self.is_dark { 0.30 } else { 0.06 }))
     }
 }
 // Tokens the app shell needs that DESIGN.md implies but the base set above
@@ -899,7 +459,7 @@ pub struct ExtraColors {
     pub fill_fg: Hsla,     // text and icons on `fill` (ink in light, paper in dark)
     // The accent: patina teal (forged copper as it weathers), one colour in
     // both modes (`#216d70`), kept for the few places
-    // it earns: the send button, the mark's core, a dot in the background field.
+    // it earns: the send button, the mark's core.
     pub accent: Hsla,
     pub accent_soft: Hsla, // the send button with nothing to send; a soft wash
     pub accent_fg: Hsla,
@@ -935,8 +495,6 @@ pub struct ExtraColors {
     // wash, a rounded chip (`ui/markdown.rs`).
     pub code_inline_fg: Hsla,
     pub code_inline_bg: Hsla,
-    // The home screen's field of dots (`ui/dot_field.rs`).
-    pub dot: Hsla,
     // Permission modes, as Forge for VS Code tints them (forge-tokens.css).
     pub mode_edit: Hsla,   // Edit automatically
     pub mode_plan: Hsla,   // Plan
@@ -1005,7 +563,6 @@ impl ExtraColors {
                 memory_tint: rgb(0x3a3220).into(),
                 code_inline_fg: rgb(0xef968b).into(),
                 code_inline_bg: Hsla::from(rgb(0xf0e6dc)).opacity(0.09),
-                dot: rgb(0x8b857e).into(),
                 mode_edit: rgb(0x2da160).into(),
                 mode_plan: rgb(0x428fdc).into(),
                 mode_bypass: rgb(0xec5941).into(),
@@ -1078,7 +635,6 @@ impl ExtraColors {
                 memory_tint: rgb(0xf6ecd2).into(),
                 code_inline_fg: rgb(0xa13430).into(),
                 code_inline_bg: Hsla::from(rgb(0x2b2622)).opacity(0.065),
-                dot: rgb(0x8b857e).into(),
                 mode_edit: rgb(0x108548).into(),
                 mode_plan: rgb(0x1f75cb).into(),
                 mode_bypass: rgb(0xa32c12).into(),
@@ -1240,17 +796,17 @@ const BRAND_STEP: f32 = 1.;
 pub struct Sizes {
     pub titlebar: Pixels,      // 36
     pub sidebar: Pixels,       // 288
-    pub column: Pixels, // 760: the reading column, and the composer under it
-    pub thinking_max: Pixels, // 240: an opened thought's tallest; longer ones scroll
-    pub row: Pixels,    // 30: sidebar rows, menu items
-    pub menu_row: Pixels, // 26: a row in a session menu, as Claude Code's
-    pub menu_width: Pixels, // 200: a session menu's width
+    pub column: Pixels,        // 760: the reading column, and the composer under it
+    pub thinking_max: Pixels,  // 240: an opened thought's tallest; longer ones scroll
+    pub row: Pixels,           // 30: sidebar rows, menu items
+    pub menu_row: Pixels,      // 26: a row in a session menu, as Claude Code's
+    pub menu_width: Pixels,    // 200: a session menu's width
     pub session_panel: Pixels, // 300: the Session column beside a chat
-    pub quiet_line: Pixels, // 26: a quiet line in a reply: a call, a thought, a run of work
-    pub thumb_w: Pixels, // 34: a picture a call returned, at the end of its line
-    pub thumb_h: Pixels, // 22: the same, short enough for the quiet line
-    pub tool_image: Pixels, // 360: that picture's widest, in the call's opened body
-    pub control: Pixels, // 26: pills, small buttons
+    pub quiet_line: Pixels,    // 26: a quiet line in a reply: a call, a thought, a run of work
+    pub thumb_w: Pixels,       // 34: a picture a call returned, at the end of its line
+    pub thumb_h: Pixels,       // 22: the same, short enough for the quiet line
+    pub tool_image: Pixels,    // 360: that picture's widest, in the call's opened body
+    pub control: Pixels,       // 26: pills, small buttons
     // Icons: one scale, 12 / 14 / 16 / 20, and Lucide's own 2px stroke.
     pub icon_xs: Pixels,            // 12: inside captions and chips
     pub icon_sm: Pixels,            // 14
@@ -1263,8 +819,8 @@ pub struct Sizes {
     pub palette: Pixels,            // command palette width
     pub hairline: Pixels,           // 1
     pub line_height_chat: f32,      // 23px lines at 15px: whole pixels, crisp
-    pub chat_text: Pixels,          // 15: replies and your messages, Archivo's body size
-    pub greeting: Pixels,           // 32: the new-chat greeting, Archivo 600
+    pub chat_text: Pixels,          // 15: replies and your messages
+    pub greeting: Pixels,           // 32: the new-chat greeting, Anthropic Sans Display 600
     pub statusbar: Pixels,          // 26: the status bar at the foot of the window
     pub figure: Pixels,             // 28: one figure that leads a view (agents finished)
     pub panel_in_ms: u64,           // 280: the side panel sliding in
@@ -1314,10 +870,8 @@ pub struct Sizes {
     pub rail: Pixels,      // 52: the collapsed sidebar
     pub side_shade: Pixels, // 12: the sidebar's shadow across the session's left edge
     pub edge_fade: Pixels, // 40: the transcript fading out where the composer meets it
-    pub home_heading: Pixels, // 36: the home screen's heading, Archivo 600
+    pub home_heading: Pixels, // 36: the home screen's heading, Anthropic Sans Display 600
     pub mark_home: Pixels, // 44: the mark beside the home screen's greeting
-    pub dot_gap: Pixels,   // 14: the background field's grid
-    pub dot: Pixels,       // 2: one dot's diameter
 }
 
 impl Default for Sizes {
@@ -1399,8 +953,6 @@ impl Default for Sizes {
             edge_fade: px(40.),
             home_heading: px(36.),
             mark_home: px(44.),
-            dot_gap: px(14.),
-            dot: px(2.),
         }
     }
 }
@@ -1432,18 +984,12 @@ pub fn app_root(t: &Theme) -> Div {
 }
 
 /// White card on canvas: hairline border, 12px radius, no shadow.
-/// A selected row (a chat, a section, a project), in the theme's style.
+/// A selected row (a chat, a section, a project).
 pub fn selected<E: Styled>(t: &Theme, e: E) -> E {
-    let e = e.font_weight(FontWeight::MEDIUM);
-    match t.selection {
-        Selection::Soft => e.bg(t.extra.accent_soft.opacity(0.6)),
-        Selection::Card => e
-            .bg(t.colors.surface)
-            .border_1()
-            .border_color(t.colors.border),
-        Selection::Tint => e.bg(t.colors.primary_tint).text_color(t.colors.primary),
-        Selection::Wash => e.bg(t.colors.border.opacity(0.7)),
-    }
+    // A neutral wash, as Claude Code marks the open row: the accent stays
+    // for the action.
+    e.font_weight(FontWeight::MEDIUM)
+        .bg(t.colors.border.opacity(0.7))
 }
 
 pub fn card(t: &Theme) -> Div {
@@ -1591,11 +1137,11 @@ mod look_tests {
     use super::*;
 
     #[test]
-    fn every_look_round_trips_by_its_id_and_calm_is_the_default() {
-        for l in Look::ALL {
-            assert_eq!(Look::from_id(l.id()), Some(l));
+    fn any_saved_theme_reads_as_the_one_look() {
+        // Themes saved before there was one look come back as it.
+        for id in ["calm", "terracotta", "premium", "ink", "neon"] {
+            assert_eq!(Look::from_id(id), Some(Look::Calm));
         }
-        assert_eq!(Look::from_id("neon"), None);
         assert_eq!(Look::default(), Look::Calm);
         // Calm laid over the base changes nothing: one source of its values.
         for dark in [false, true] {
@@ -1612,20 +1158,6 @@ mod look_tests {
             ] {
                 assert_eq!(x.to_rgb(), y.to_rgb());
             }
-        }
-    }
-
-    #[test]
-    fn looks_differ_from_each_other() {
-        for dark in [false, true] {
-            let accents: Vec<_> = Look::ALL
-                .iter()
-                .map(|l| format!("{:?}", Theme::of(*l, dark).extra.accent.to_rgb()))
-                .collect();
-            let mut unique = accents.clone();
-            unique.sort();
-            unique.dedup();
-            assert_eq!(unique.len(), accents.len(), "{accents:?}");
         }
     }
 }

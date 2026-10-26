@@ -150,7 +150,7 @@ These mark "AI slop" schematics of any type:
 | Anti-pattern | Why it fails |
 |---|---|
 | Dark mode + cyan/purple glow | Looks "technical" without design decisions |
-| JetBrains Mono as blanket "dev" font | Mono is for *technical* content — ports, commands, URLs. Names go in Hanken Grotesk sans. |
+| Anthropic Sans as blanket "dev" font | Mono is for *technical* content — ports, commands, URLs. Names go in Anthropic Sans sans. |
 | Identical boxes for every node | Erases hierarchy |
 | Legend floating inside the diagram area | Collides with nodes |
 | Arrow labels with no masking rect | Bleeds through the line |
@@ -189,11 +189,11 @@ Type-reference snippets write roles as placeholders: `{ink}`, `{ink @ 0.40}` for
 
 **Node treatments** (focal, backend/API/step, store/state, external/cloud, input/user, optional/async, security/boundary): fill and stroke per [style-guide.md § Node type → treatment](references/style-guide.md#node-type--treatment).
 
-**Typography:** Source Serif 4 for the H1 title and italic callouts, Hanken Grotesk sans 600 for node names, JetBrains Mono for sublabels, eyebrows, and arrow labels. Sizes, weights, and the font `<link>`: [style-guide.md § Typography](references/style-guide.md#typography); per-preset type ramp: [output-spec.md](references/output-spec.md). When the user asks for offline output, system fonts, or no Google Fonts, follow [style-guide.md § Font source](references/style-guide.md#font-source).
+**Typography:** Anthropic Sans only: Display for the H1 title, Text for everything else (node names at 600, sublabels, eyebrows, arrow labels, italic callouts). No font `<link>` and no other face. Sizes and weights: [style-guide.md § Typography](references/style-guide.md#typography); per-preset type ramp: [output-spec.md](references/output-spec.md).
 
 **Non-Latin labels** — extend the family: [Korean](references/style-guide.md#korean-labels), [Chinese](references/style-guide.md#traditional-chinese-labels), [Cyrillic](references/style-guide.md#cyrillic-labels).
 
-**Mono is for technical content only** — never as a blanket "dev" font, and never JetBrains Mono.
+**Mono is for technical content only** — never as a blanket "dev" font, and never Anthropic Sans.
 
 ---
 
@@ -210,7 +210,7 @@ Universal building blocks. Type-specialized primitives (lifeline, activation bar
 Exact markup (background, dotted paper, markers, node box, arrow label, legend) and the long form of each connector rule: [`references/primitives-core.md`](references/primitives-core.md). The static templates (`template.html`, `template-dark.html`, `template-full.html`) already define the background and the `arrow`, `arrow-accent`, and `arrow-link` markers; `template-motion.html` defines only its own prefixed marker, so add the others from primitives-core.md when a motion diagram needs them.
 
 - **Arrows:** `muted` by default, `accent` for the headline path, `link` for HTTP/API and external calls, dashed `5,4` for optional, passive, return, or async. Draw arrows before boxes so lines sit behind nodes.
-- **Node box:** an opaque paper mask rect, then the styled box at `rx=6`, a rectangular type tag at `rx=2` (not a pill), the name in Hanken Grotesk 600, and a JetBrains Mono sublabel.
+- **Node box:** an opaque paper mask rect, then the styled box at `rx=6`, a rectangular type tag at `rx=2` (not a pill), the name in Anthropic Sans 600, and a Anthropic Sans sublabel.
 
 ### Mandatory connector rules
 
@@ -302,11 +302,11 @@ Run before producing any diagram.
 **Typography:**
 
 - [ ] Brand match uses exact public families/weights, verified via `getComputedStyle`; fallbacks disclosed?
-- [ ] Human-readable names in Hanken Grotesk sans, not JetBrains Mono?
-- [ ] Technical sublabels (ports, commands, URLs) in JetBrains Mono?
-- [ ] Page title in Source Serif 4?
-- [ ] Annotation callouts (if any) in *italic* Source Serif 4? (see [primitive-annotation.md](references/primitive-annotation.md))
-- [ ] No JetBrains Mono anywhere?
+- [ ] Human-readable names in Anthropic Sans sans, not Anthropic Sans?
+- [ ] Technical sublabels (ports, commands, URLs) in Anthropic Sans?
+- [ ] Page title in Anthropic Sans?
+- [ ] Annotation callouts (if any) in *italic* Anthropic Sans? (see [primitive-annotation.md](references/primitive-annotation.md))
+- [ ] No Anthropic Sans anywhere?
 
 ---
 
@@ -369,7 +369,7 @@ The size preset sets the `viewBox` **and** the type ramp; `faithful` is the only
 
 Always produce a single self-contained `.html` file:
 
-- Embedded CSS (no external except Google Fonts)
+- Embedded CSS, nothing external (no font loaded)
 - Inline SVG (no external images)
 - Static by default; minimal inline JavaScript only for explicit animation controls/state
 

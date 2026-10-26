@@ -23,7 +23,7 @@
 <!-- Bar body -->
 <rect x="X" y="Y" width="W" height="H" fill="{muted @ 0.15}" stroke="{muted}" stroke-width="1"/>
 <!-- Value label above bar -->
-<text x="X+W/2" y="Y-8" fill="{muted}" font-size="8" font-family="{arrow-label}" text-anchor="middle">VALUE</text>
+<text x="X+W/2" y="Y-8" fill="{muted}" font-size="8" font-family="Anthropic Sans Text" text-anchor="middle">VALUE</text>
 ```
 
 Focal bar: replace fill with `accent @ 0.12`, stroke with `accent`, label fill with `accent`.
@@ -80,9 +80,9 @@ Focal bar: replace fill with `accent @ 0.12`, stroke with `accent`, label fill w
 <line x1="458" y1="96" x2="740" y2="96" stroke="{ink @ 0.55}" stroke-width="1"/>
 <circle cx="458" cy="96" r="6" fill="{paper}" stroke="{muted}" stroke-width="1.5"/>
 <circle cx="740" cy="96" r="6" fill="{accent}" stroke="{ink}" stroke-width="1"/>
-<text x="446" y="100" fill="{muted}" font-size="8" font-family="{arrow-label}" text-anchor="end">34</text>
-<text x="752" y="100" fill="{muted}" font-size="8" font-family="{arrow-label}">71</text>
-<text x="188" y="100" fill="{ink}" font-size="11" font-weight="600" font-family="{node-name}" text-anchor="end">Platform</text>
+<text x="446" y="100" fill="{muted}" font-size="8" font-family="Anthropic Sans Text" text-anchor="end">34</text>
+<text x="752" y="100" fill="{muted}" font-size="8" font-family="Anthropic Sans Text">71</text>
+<text x="188" y="100" fill="{ink}" font-size="11" font-weight="600" font-family="Anthropic Sans Text" text-anchor="end">Platform</text>
 ```
 
 Values 34 and 71 on a 0–100 domain compute to 458.4 and 739.6, rounded to 458 and 740. Had this row fallen instead, the accent dot would sit on the left; the two anchors stay tied to left and right, and each label carries its own series' value.

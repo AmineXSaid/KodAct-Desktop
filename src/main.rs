@@ -187,7 +187,6 @@ fn main() {
         .with_assets(assets::Assets)
         .run(|cx: &mut App| {
             gpui::init(cx);
-            assets::load_fonts(cx);
             fonts::choose(cx);
             highlight::warm_up();
             theme::init(cx);

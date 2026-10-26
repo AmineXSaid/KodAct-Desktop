@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Corner coffee shop · From the door to a seat</title>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -12,13 +11,13 @@
       --color-ink:     #f5f5f5;
       --color-muted:   #bfc0c0;
       --color-accent:  #f08a59;
-      --font-sans:     'Geist', system-ui, sans-serif;
-      --font-serif:    'Instrument Serif', serif;
-      --font-mono:     'Geist Mono', ui-monospace, monospace;
+      --font-sans:     'Anthropic Sans Text';
+      --font-serif:    'Anthropic Sans Display';
+      --font-mono:     'Anthropic Sans Text';
     }
 
     body {
-      font-family: var(--font-sans);
+      font-family:'Anthropic Sans Text';
       background: var(--color-paper);
       color: var(--color-ink);
       min-height: 100vh;
@@ -32,7 +31,7 @@
     .diagram-container { width: 100%; overflow-x: auto; }
 
     .eyebrow {
-      font-family: var(--font-mono);
+      font-family:'Anthropic Sans Text';
       font-size: 0.66rem;
       font-weight: 500;
       letter-spacing: 0.18em;
@@ -42,7 +41,7 @@
     }
 
     h1 {
-      font-family: var(--font-serif);
+      font-family:'Anthropic Sans Display';
       font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
       font-weight: 400;
       letter-spacing: -0.02em;
@@ -106,14 +105,14 @@
         <g data-box data-rect="330 100 348 240 0" data-z="6" data-h="8" data-kind="furniture"><path data-role="silhouette" d="M 538 347 L 538 347 L 678 277 L 678 277 L 696 286 L 696 286 L 696 294 L 696 294 L 556 364 L 556 364 L 538 355 L 538 355 Z" fill="#393e53"/><path d="M 556 356 L 556 356 L 538 347 L 538 347 L 678 277 L 678 277 L 696 286 L 696 286 Z" fill="rgba(245,245,245,0.10)"/><path d="M 556 356 L 556 356 L 696 286 L 696 286 L 696 294 L 696 294 L 556 364 L 556 364 Z" fill="rgba(45,49,66,0.45)"/><path d="M 538 347 L 538 347 L 556 356 L 556 356 L 696 286 L 696 286 M 556 356 L 556 364" fill="none" stroke="rgba(245,245,245,0.45)" stroke-width="0.8"/><path d="M 538 347 L 538 347 L 678 277 L 678 277 L 696 286 L 696 286 L 696 294 L 696 294 L 556 364 L 556 364 L 538 355 L 538 355 Z" fill="none" stroke="#f5f5f5" stroke-width="0.8" stroke-linejoin="round"/></g>
         <g data-box data-rect="354 6 360 254 0" data-z="6" data-h="22" data-kind="wall"><path data-role="silhouette" d="M 548 352 L 548 352 L 796 228 L 796 228 L 802 231 L 802 231 L 802 253 L 802 253 L 554 377 L 554 377 L 548 374 L 548 374 Z" fill="#393e53"/><path d="M 554 355 L 554 355 L 548 352 L 548 352 L 796 228 L 796 228 L 802 231 L 802 231 Z" fill="rgba(245,245,245,0.10)"/><path d="M 554 355 L 554 355 L 802 231 L 802 231 L 802 253 L 802 253 L 554 377 L 554 377 Z" fill="rgba(45,49,66,0.45)"/><path d="M 548 352 L 548 352 L 554 355 L 554 355 L 802 231 L 802 231 M 554 355 L 554 377" fill="none" stroke="rgba(245,245,245,0.45)" stroke-width="0.8"/><path d="M 548 352 L 548 352 L 796 228 L 796 228 L 802 231 L 802 231 L 802 253 L 802 253 L 554 377 L 554 377 L 548 374 L 548 374 Z" fill="none" stroke="#f5f5f5" stroke-width="1.0" stroke-linejoin="round"/></g>
         <g data-box data-rect="190 254 360 260 0" data-z="6" data-h="22" data-kind="wall"><path data-role="silhouette" d="M 378 273 L 378 273 L 384 270 L 384 270 L 554 355 L 554 355 L 554 377 L 554 377 L 548 380 L 548 380 L 378 295 L 378 295 Z" fill="#393e53"/><path d="M 548 358 L 548 358 L 378 273 L 378 273 L 384 270 L 384 270 L 554 355 L 554 355 Z" fill="rgba(245,245,245,0.10)"/><path d="M 548 358 L 548 358 L 554 355 L 554 355 L 554 377 L 554 377 L 548 380 L 548 380 Z" fill="rgba(45,49,66,0.45)"/><path d="M 378 273 L 378 273 L 548 358 L 548 358 L 554 355 L 554 355 M 548 358 L 548 380" fill="none" stroke="rgba(245,245,245,0.45)" stroke-width="0.8"/><path d="M 378 273 L 378 273 L 384 270 L 384 270 L 554 355 L 554 355 L 554 377 L 554 377 L 548 380 L 548 380 L 378 295 L 378 295 Z" fill="none" stroke="#f5f5f5" stroke-width="1.0" stroke-linejoin="round"/></g>
-        <g data-role="tag" data-name="Entrance" data-at="148 170 6"><rect x="386" y="213" width="80" height="32" rx="2" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/><text data-role="name" x="426" y="229" text-anchor="middle" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif">Entrance</text><text x="426" y="240" text-anchor="middle" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.08em">door, queue</text></g>
-        <g data-role="tag" data-name="Espresso bar" data-at="42 228 6"><rect x="210" y="189" width="104" height="32" rx="2" fill="#393e53" stroke="#f08a59" stroke-width="0.8"/><text data-role="name" x="262" y="205" text-anchor="middle" fill="#f08a59" font-size="12" font-weight="600" font-family="'Geist', sans-serif">Espresso bar</text><text x="262" y="216" text-anchor="middle" fill="#f08a59" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.08em">order, pickup</text></g>
-        <g data-role="tag" data-name="Seating" data-at="252 150 6"><rect x="516" y="255" width="68" height="32" rx="2" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/><text data-role="name" x="550" y="271" text-anchor="middle" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif">Seating</text><text x="550" y="282" text-anchor="middle" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.08em">22 seats</text></g>
-        <g data-role="tag" data-name="Kitchen" data-at="46 60 6"><rect x="388" y="107" width="92" height="32" rx="2" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/><text data-role="name" x="434" y="123" text-anchor="middle" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif">Kitchen</text><text x="434" y="134" text-anchor="middle" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.08em">back of house</text></g>
-        <g data-role="tag" data-name="Restroom" data-at="296 50 6"><rect x="656" y="227" width="76" height="32" rx="2" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/><text data-role="name" x="694" y="243" text-anchor="middle" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif">Restroom</text><text x="694" y="254" text-anchor="middle" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.08em">1 stall</text></g>
+        <g data-role="tag" data-name="Entrance" data-at="148 170 6"><rect x="386" y="213" width="80" height="32" rx="2" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/><text data-role="name" x="426" y="229" text-anchor="middle" fill="#f5f5f5" font-size="12" font-weight="600" font-family="Anthropic Sans Text">Entrance</text><text x="426" y="240" text-anchor="middle" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.08em">door, queue</text></g>
+        <g data-role="tag" data-name="Espresso bar" data-at="42 228 6"><rect x="210" y="189" width="104" height="32" rx="2" fill="#393e53" stroke="#f08a59" stroke-width="0.8"/><text data-role="name" x="262" y="205" text-anchor="middle" fill="#f08a59" font-size="12" font-weight="600" font-family="Anthropic Sans Text">Espresso bar</text><text x="262" y="216" text-anchor="middle" fill="#f08a59" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.08em">order, pickup</text></g>
+        <g data-role="tag" data-name="Seating" data-at="252 150 6"><rect x="516" y="255" width="68" height="32" rx="2" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/><text data-role="name" x="550" y="271" text-anchor="middle" fill="#f5f5f5" font-size="12" font-weight="600" font-family="Anthropic Sans Text">Seating</text><text x="550" y="282" text-anchor="middle" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.08em">22 seats</text></g>
+        <g data-role="tag" data-name="Kitchen" data-at="46 60 6"><rect x="388" y="107" width="92" height="32" rx="2" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/><text data-role="name" x="434" y="123" text-anchor="middle" fill="#f5f5f5" font-size="12" font-weight="600" font-family="Anthropic Sans Text">Kitchen</text><text x="434" y="134" text-anchor="middle" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.08em">back of house</text></g>
+        <g data-role="tag" data-name="Restroom" data-at="296 50 6"><rect x="656" y="227" width="76" height="32" rx="2" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/><text data-role="name" x="694" y="243" text-anchor="middle" fill="#f5f5f5" font-size="12" font-weight="600" font-family="Anthropic Sans Text">Restroom</text><text x="694" y="254" text-anchor="middle" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.08em">1 stall</text></g>
         </g>
-        <text x="188" y="432" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">FOCAL ROOM</text>
-        <text x="308" y="432" fill="#bfc0c0" font-size="8.5" font-family="'Geist', sans-serif" font-style="italic">Every customer passes the espresso bar twice, once to order and once to pick up, so it sits beside the door.</text>
+        <text x="188" y="432" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.18em">FOCAL ROOM</text>
+        <text x="308" y="432" fill="#bfc0c0" font-size="8.5" font-family="Anthropic Sans Text" font-style="italic">Every customer passes the espresso bar twice, once to order and once to pick up, so it sits beside the door.</text>
       </svg>
     </div>
   </div>

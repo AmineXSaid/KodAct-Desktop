@@ -325,7 +325,7 @@ impl RenderOnce for Button {
             .bg(bg)
             .text_size(text)
             .text_color(fg)
-            // Labels on buttons are set in Archivo's heavier cut.
+            // Labels on buttons are set in the heavier cut.
             .when(
                 matches!(
                     self.variant,

@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Level 3 office · Where the team actually sits</title>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -12,13 +11,13 @@
       --color-ink:     #f5f5f5;
       --color-muted:   #bfc0c0;
       --color-accent:  #f08a59;
-      --font-sans:     'Geist', system-ui, sans-serif;
-      --font-serif:    'Instrument Serif', serif;
-      --font-mono:     'Geist Mono', ui-monospace, monospace;
+      --font-sans:     'Anthropic Sans Text';
+      --font-serif:    'Anthropic Sans Display';
+      --font-mono:     'Anthropic Sans Text';
     }
 
     body {
-      font-family: var(--font-sans);
+      font-family:'Anthropic Sans Text';
       background: var(--color-paper);
       color: var(--color-ink);
       min-height: 100vh;
@@ -32,7 +31,7 @@
     .diagram-container { width: 100%; overflow-x: auto; }
 
     .eyebrow {
-      font-family: var(--font-mono);
+      font-family:'Anthropic Sans Text';
       font-size: 0.66rem;
       font-weight: 500;
       letter-spacing: 0.18em;
@@ -42,7 +41,7 @@
     }
 
     h1 {
-      font-family: var(--font-serif);
+      font-family:'Anthropic Sans Display';
       font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
       font-weight: 400;
       letter-spacing: -0.02em;
@@ -99,14 +98,14 @@
         <g data-box data-rect="330 112 348 228 0" data-z="6" data-h="16" data-kind="furniture"><path data-role="silhouette" d="M 542 333 L 542 333 L 658 275 L 658 275 L 676 284 L 676 284 L 676 300 L 676 300 L 560 358 L 560 358 L 542 349 L 542 349 Z" fill="#393e53"/><path d="M 560 342 L 560 342 L 542 333 L 542 333 L 658 275 L 658 275 L 676 284 L 676 284 Z" fill="rgba(245,245,245,0.10)"/><path d="M 560 342 L 560 342 L 676 284 L 676 284 L 676 300 L 676 300 L 560 358 L 560 358 Z" fill="rgba(45,49,66,0.45)"/><path d="M 542 333 L 542 333 L 560 342 L 560 342 L 676 284 L 676 284 M 560 342 L 560 358" fill="none" stroke="rgba(245,245,245,0.45)" stroke-width="0.8"/><path d="M 542 333 L 542 333 L 658 275 L 658 275 L 676 284 L 676 284 L 676 300 L 676 300 L 560 358 L 560 358 L 542 349 L 542 349 Z" fill="none" stroke="#f5f5f5" stroke-width="0.8" stroke-linejoin="round"/></g>
         <g data-box data-rect="354 6 360 234 0" data-z="6" data-h="22" data-kind="wall"><path data-role="silhouette" d="M 560 342 L 560 342 L 788 228 L 788 228 L 794 231 L 794 231 L 794 253 L 794 253 L 566 367 L 566 367 L 560 364 L 560 364 Z" fill="#393e53"/><path d="M 566 345 L 566 345 L 560 342 L 560 342 L 788 228 L 788 228 L 794 231 L 794 231 Z" fill="rgba(245,245,245,0.10)"/><path d="M 566 345 L 566 345 L 794 231 L 794 231 L 794 253 L 794 253 L 566 367 L 566 367 Z" fill="rgba(45,49,66,0.45)"/><path d="M 560 342 L 560 342 L 566 345 L 566 345 L 794 231 L 794 231 M 566 345 L 566 367" fill="none" stroke="rgba(245,245,245,0.45)" stroke-width="0.8"/><path d="M 560 342 L 560 342 L 788 228 L 788 228 L 794 231 L 794 231 L 794 253 L 794 253 L 566 367 L 566 367 L 560 364 L 560 364 Z" fill="none" stroke="#f5f5f5" stroke-width="1.0" stroke-linejoin="round"/></g>
         <g data-box data-rect="76 234 360 240 0" data-z="6" data-h="22" data-kind="wall"><path data-role="silhouette" d="M 276 206 L 276 206 L 282 203 L 282 203 L 566 345 L 566 345 L 566 367 L 566 367 L 560 370 L 560 370 L 276 228 L 276 228 Z" fill="#393e53"/><path d="M 560 348 L 560 348 L 276 206 L 276 206 L 282 203 L 282 203 L 566 345 L 566 345 Z" fill="rgba(245,245,245,0.10)"/><path d="M 560 348 L 560 348 L 566 345 L 566 345 L 566 367 L 566 367 L 560 370 L 560 370 Z" fill="rgba(45,49,66,0.45)"/><path d="M 276 206 L 276 206 L 560 348 L 560 348 L 566 345 L 566 345 M 560 348 L 560 370" fill="none" stroke="rgba(245,245,245,0.45)" stroke-width="0.8"/><path d="M 276 206 L 276 206 L 282 203 L 282 203 L 566 345 L 566 345 L 566 367 L 566 367 L 560 370 L 560 370 L 276 228 L 276 228 Z" fill="none" stroke="#f5f5f5" stroke-width="1.0" stroke-linejoin="round"/></g>
-        <g data-role="tag" data-name="Open office" data-at="112 124 6"><rect x="380" y="172" width="96" height="32" rx="2" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/><text data-role="name" x="428" y="188" text-anchor="middle" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif">Open office</text><text x="428" y="199" text-anchor="middle" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.08em">24 desks</text></g>
-        <g data-role="tag" data-name="Meeting room" data-at="288 88 6"><rect x="588" y="242" width="104" height="32" rx="2" fill="#393e53" stroke="#f08a59" stroke-width="0.8"/><text data-role="name" x="640" y="258" text-anchor="middle" fill="#f08a59" font-size="12" font-weight="600" font-family="'Geist', sans-serif">Meeting room</text><text x="640" y="269" text-anchor="middle" fill="#f08a59" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.08em">12 seats</text></g>
-        <g data-role="tag" data-name="Kitchen" data-at="274 214 6"><rect x="454" y="298" width="92" height="32" rx="2" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/><text data-role="name" x="500" y="314" text-anchor="middle" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif">Kitchen</text><text x="500" y="325" text-anchor="middle" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.08em">café, lockers</text></g>
-        <g data-role="tag" data-name="Lobby" data-at="96 214 6"><rect x="288" y="209" width="68" height="32" rx="2" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/><text data-role="name" x="322" y="225" text-anchor="middle" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif">Lobby</text><text x="322" y="236" text-anchor="middle" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.08em">reception</text></g>
-        <g data-role="tag" data-name="Booth" data-at="192 206 6"><rect x="394" y="253" width="64" height="32" rx="2" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/><text data-role="name" x="426" y="269" text-anchor="middle" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif">Booth</text><text x="426" y="280" text-anchor="middle" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.08em">1 person</text></g>
+        <g data-role="tag" data-name="Open office" data-at="112 124 6"><rect x="380" y="172" width="96" height="32" rx="2" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/><text data-role="name" x="428" y="188" text-anchor="middle" fill="#f5f5f5" font-size="12" font-weight="600" font-family="Anthropic Sans Text">Open office</text><text x="428" y="199" text-anchor="middle" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.08em">24 desks</text></g>
+        <g data-role="tag" data-name="Meeting room" data-at="288 88 6"><rect x="588" y="242" width="104" height="32" rx="2" fill="#393e53" stroke="#f08a59" stroke-width="0.8"/><text data-role="name" x="640" y="258" text-anchor="middle" fill="#f08a59" font-size="12" font-weight="600" font-family="Anthropic Sans Text">Meeting room</text><text x="640" y="269" text-anchor="middle" fill="#f08a59" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.08em">12 seats</text></g>
+        <g data-role="tag" data-name="Kitchen" data-at="274 214 6"><rect x="454" y="298" width="92" height="32" rx="2" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/><text data-role="name" x="500" y="314" text-anchor="middle" fill="#f5f5f5" font-size="12" font-weight="600" font-family="Anthropic Sans Text">Kitchen</text><text x="500" y="325" text-anchor="middle" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.08em">café, lockers</text></g>
+        <g data-role="tag" data-name="Lobby" data-at="96 214 6"><rect x="288" y="209" width="68" height="32" rx="2" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/><text data-role="name" x="322" y="225" text-anchor="middle" fill="#f5f5f5" font-size="12" font-weight="600" font-family="Anthropic Sans Text">Lobby</text><text x="322" y="236" text-anchor="middle" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.08em">reception</text></g>
+        <g data-role="tag" data-name="Booth" data-at="192 206 6"><rect x="394" y="253" width="64" height="32" rx="2" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/><text data-role="name" x="426" y="269" text-anchor="middle" fill="#f5f5f5" font-size="12" font-weight="600" font-family="Anthropic Sans Text">Booth</text><text x="426" y="280" text-anchor="middle" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.08em">1 person</text></g>
         </g>
-        <text x="200" y="420" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">FOCAL ROOM</text>
-        <text x="320" y="420" fill="#bfc0c0" font-size="8.5" font-family="'Geist', sans-serif" font-style="italic">Walls cut at desk height so every room reads from one view; the meeting room is the one under discussion.</text>
+        <text x="200" y="420" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.18em">FOCAL ROOM</text>
+        <text x="320" y="420" fill="#bfc0c0" font-size="8.5" font-family="Anthropic Sans Text" font-style="italic">Walls cut at desk height so every room reads from one view; the meeting room is the one under discussion.</text>
       </svg>
     </div>
   </div>

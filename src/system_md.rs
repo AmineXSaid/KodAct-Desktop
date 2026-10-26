@@ -10,7 +10,7 @@ use std::fmt::Write as _;
 use gpui::{Hsla, Pixels};
 
 use crate::palette_check::{contrast, oklab, rgba};
-use crate::theme::Theme;
+use crate::theme::{Look, Theme};
 
 const PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/.interface-design/system.md");
 /// `DESIGN.md` (the DESIGN.md format, read by the impeccable skill), from the
@@ -68,7 +68,7 @@ fn render() -> String {
     let _ = writeln!(w, "**Foundation:** Forge Ember. Warm paper by day: the window and sidebar #ebe8e1, the session a sheet of #f7f5f1 on it, cards white on that. Warm graphite at night: #1b1a19, #242322, cards #2e2d2b. One ink carries the type. One colour, ember copper (#b4532a; #e2895b at night): the decisive action, links, a switch that is on, the mark's top, a waiting dot. Inline code in coral on a faint wash. Everything else is neutral; colour otherwise only for meaning (modes, status).\n");
     let _ = writeln!(w, "**Depth:** nearly flat. Hairlines inside cards; the session and the user's message lift on paper grain (three 1px shadows at 6/4/1% ink); popovers and the permission card a touch more.\n");
     let _ = writeln!(w, "**Shape:** two shapes. Everything you press is a pill (buttons, chips, icon buttons, the new-chat and needs-you pills); everything that holds content is 4px (cards, rows, menus, fields, the composer, the session).\n");
-    let _ = writeln!(w, "**Type:** Hanken Grotesk only (Anthropic Sans where it is installed): 400 for text, 500 for labels, 600 for headings and buttons. Small labels in sentence case, never uppercase and never above a heading. Code in JetBrains Mono.\n");
+    let _ = writeln!(w, "**Type:** Anthropic Sans only, the Text cut for every word (code included) and the Display cut for the greeting and headings: 400 for text, 500 for labels, 600 for headings and buttons. Small labels in sentence case, never uppercase and never above a heading. The app bundles no font; diagrams are redrawn in it whatever they name.\n");
 
     let _ = writeln!(w, "## Tokens\n");
     let sp = &l.space;
@@ -211,7 +211,6 @@ fn render() -> String {
             "a switch's track (20px tall, 14px thumb)",
         ),
         ("rail", z.rail, "the collapsed sidebar"),
-        ("dot_gap", z.dot_gap, "the home screen's dot grid"),
         (
             "mark_home",
             z.mark_home,
@@ -260,53 +259,39 @@ fn render() -> String {
     }
     let _ = writeln!(w);
 
-    let _ = writeln!(w, "### Themes\nPicked in Settings > General > Theme and kept in `window.json`. Each is a whole look: its surfaces and one colour, and its form (faces, corners, density, depth, how a selected row shows). Calmly smooth is the system's own form; every theme passes `palette_check.rs` in both modes.\n");
-    let _ = writeln!(w, "| Theme | Light canvas / session / accent | Dark canvas / session / accent |\n|---|---|---|");
-    for look in crate::theme::Look::ALL {
-        let (a, b) = (Theme::of(look, false), Theme::of(look, true));
-        let _ = writeln!(
-            w,
-            "| {} ({}) | `{}` / `{}` / `{}` | `{}` / `{}` / `{}` |",
-            look.name(),
-            look.blurb(),
-            hex(a.extra.pane),
-            hex(a.extra.stage),
-            hex(a.extra.accent),
-            hex(b.extra.pane),
-            hex(b.extra.stage),
-            hex(b.extra.accent)
-        );
-    }
-    let _ = writeln!(w);
-    let _ = writeln!(w, "| Theme | Faces (UI / display / code / replies) | Corners button · card · field · composer · pressed | Row · title bar · chat | Depth | Selected row |\n|---|---|---|---|---|---|");
-    for look in crate::theme::Look::ALL {
-        let a = Theme::of(look, false);
-        let (r, z) = (&a.radius, &a.size);
-        let _ = writeln!(
-            w,
-            "| {} | {} / {} / {} / {} | {} · {} · {} · {} · {} | {} · {} · {} | {:?} | {:?} |",
-            look.name(),
-            a.font_sans,
-            a.font_display,
-            a.font_mono,
-            a.font_reading,
-            px(r.button),
-            px(r.card),
-            px(r.field),
-            px(z.composer_radius),
-            if f32::from(r.compact) >= 999. {
-                "pill".to_string()
-            } else {
-                px(r.compact)
-            },
-            px(z.row),
-            px(z.titlebar),
-            px(z.chat_text),
-            a.depth,
-            a.selection,
-        );
-    }
-    let _ = writeln!(w);
+    let _ = writeln!(w, "### Theme\nOne look, Calmly smooth, in light and dark (`window.json` keeps the mode). Every face is Anthropic Sans: Text for every word (interface, replies, code, the terminal, diagrams), Display for the large lines (`fonts.rs`). It passes `palette_check.rs` in both modes.\n");
+    let (a, b) = (Theme::of(Look::Calm, false), Theme::of(Look::Calm, true));
+    let (r, z) = (&a.radius, &a.size);
+    let _ = writeln!(
+        w,
+        "| | Light | Dark |\n|---|---|---|\n| Canvas / session / accent | `{}` / `{}` / `{}` | `{}` / `{}` / `{}` |\n",
+        hex(a.extra.pane),
+        hex(a.extra.stage),
+        hex(a.extra.accent),
+        hex(b.extra.pane),
+        hex(b.extra.stage),
+        hex(b.extra.accent)
+    );
+    let _ = writeln!(
+        w,
+        "Faces (UI / display / code / replies): {} / {} / {} / {}. Corners button · card · field · composer · pressed: {} · {} · {} · {} · {}. Row · title bar · chat: {} · {} · {}.\n",
+        a.font_sans,
+        a.font_display,
+        a.font_mono,
+        a.font_reading,
+        px(r.button),
+        px(r.card),
+        px(r.field),
+        px(z.composer_radius),
+        if f32::from(r.compact) >= 999. {
+            "pill".to_string()
+        } else {
+            px(r.compact)
+        },
+        px(z.row),
+        px(z.titlebar),
+        px(z.chat_text),
+    );
 
     let _ = writeln!(
         w,
@@ -532,7 +517,6 @@ fn render() -> String {
     let _ = writeln!(w, "## Patterns\n");
     let _ = writeln!(w, "### Buttons (`ui/button.rs`)\nOne family; every control takes keyboard focus (a `primary` edge shows for the keyboard only), names itself to assistive technology, and swallows clicks while disabled or loading.\n- Primary: {}px tall, padding 0 14px, radius {}px, `fill` with `fill_fg`, 500 weight. One per surface.\n- Secondary and Outlined: `surface`, 1px `border_strong`, `hover` wash.\n- Ghost: clear until hovered. Danger: `fill_danger`, white.\n- Icon: {}px square, radius {}px, a {}px icon in `text_muted`; outlined squares {}px at {}px radius.\n- Send: {}px, radius {}px, `accent` with a white arrow; `accent_soft` with nothing to send; Stop is an ink ring round a square.\n- Switch: {}x{}px pill, {}px thumb sliding over {}ms; `toggle_on` when on, `border_strong` when off.\n- Segmented: a `sunk` track, radius {}px; the chosen segment raised onto `surface` at {}px.\n", px(z.button_h), px(r.button), px(z.hit), px(r.button), px(z.icon), px(z.hit_lg), px(r.control), px(z.hit_lg), px(r.control), px(z.switch_w), px(z.switch_h), px(z.switch_thumb), z.pop_in_ms, px(r.button), px(r.segment));
     let _ = writeln!(w, "### Composer\n- Width: up to {}px, centred\n- One unit: a white box (radius {}px, 1px `border`, `border_strong` while focused, tinted by the mode when one is set) resting in a `sunk` tray\n- Text: {}px; the outlined + bottom left and Send bottom right, {}px from the box's edges\n- The tray: the project, the context ring, the model and the mode as quiet {}px selectors: a 14px icon, the label, a chevron that flips while open; washed on hover, raised onto `surface` with a hairline while open\n", px(z.composer_width), px(z.composer_radius), px(tx.body), px(sp.snug), px(z.button_sm));
-    let _ = writeln!(w, "### Dot Field (`ui/dot_field.rs`)\n- Behind the home screen: a {}px grid of {}px dots in `dot`, gathered in two clouds hugging the content (beside the heading, past the composer's lower right), their outlines warped and density varied by slow noise, faded with a smooth falloff to a quiet margin round the measured content and before every edge\n- About 1.6% of dots in `accent`; fewer still are 5px outlined squares or accent diamonds\n- Painted on one canvas from cached geometry; breathes over 9s, leans up to 4px from the pointer, brightens while the composer has focus; glides to its new place when the layout changes (sidebar, resize, a growing composer); rests when hidden or inactive; still under reduced motion\n- Behind a chat it fills both margins beside the reading column (kept 18px clear of it), at 30% of its home strength (40% in dark); while Forge replies a slow wave runs down through it (crest 80%), easing in and out with the reply; still and faint under reduced motion\n", px(z.dot_gap), px(z.dot));
     let _ = writeln!(w, "### Card Default\n- Border: 1px `border`\n- Padding: {}px\n- Radius: {}px\n- Background: `surface`\n- Usage: tool calls, file cards, code blocks\n", px(sp.xl), px(r.card));
     let _ = writeln!(w, "### Popover\n- Border: 1px `border`, radius {}px, padding {}px\n- Background: `surface`, with the two-layer popover shadow\n- Usage: menus, pickers, the command palette\n", px(r.card), px(sp.xs));
     let _ = writeln!(w, "### File Card\n- A file Forge made, in its reply: up to 440px, `surface`, 1px `border`, radius {}px, padding {}px\n- A 36x44 page tile (radius {}px, concentric with the card) previews it, its type in mono `primary`\n- Title 600 `text_strong`; \"Document · MD\" caption `text_muted`; a bordered Download button\n- Open: the edge turns `primary` at 60%\n", px(r.card), px(sp.sm), px(r.small));
@@ -550,8 +534,8 @@ fn render() -> String {
         ("Paper on paper", "The session is a 4px sheet on the cream canvas with paper grain; the title bar and sidebar have no dividers, the sheet's edge is the split.", "2026-10-18"),
         ("Pills to press, 4px to hold", "The contrast between the two shapes is the system: it says at a glance what acts and what holds.", "2026-10-18"),
         ("Ink pills for the loud neutrals", "New chat and needs-you are ink pills; the accent is kept for the one decision in front of you (Allow once, Send).", "2026-10-18"),
-        ("Archivo for everything", "A single face set in two weights reads as set type; headings in 600 replace the display serif.", "2026-10-18"),
-        ("Hanken Grotesk, not Archivo", "Archivo read boxy and wide as prose; Hanken Grotesk is a warm humanist grotesk, close in spirit to Anthropic Sans, and ships an italic.", "2026-10-23"),
+        ("Anthropic Sans only", "One family everywhere, in its Text and Display cuts: the interface, replies, code, the terminal and diagrams. No other face is bundled or named.", "2026-10-26"),
+        ("One look", "The theme picker and its eleven other looks are gone; Calmly smooth, light and dark, is the app's one look.", "2026-10-26"),
         ("Forge Ember", "Warm paper and warm graphite, the sidebar a step deeper than the session, and one copper heat for the action, the current state and links: the forge's own colour, as calm as Claude Code's.", "2026-10-23"),
         ("A neutral wash for the open row", "The accent stays for the action; the open chat and the open screen lift by a grey wash.", "2026-10-23"),
         ("Composer at 620px", "A comfortable measure for a prompt, the same in a chat and on the welcome page.", "2026-10-11"),

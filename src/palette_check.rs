@@ -166,7 +166,7 @@ fn each_theme_has_one_colour() {
     for (mode, t) in both() {
         let x = &t.extra;
         let chroma = oklab(rgba(x.accent)).1;
-        if t.look != crate::theme::Look::Ink {
+        {
             assert!(chroma > 0.04, "{mode}: the accent has no colour");
             for (name, c) in [
                 ("link", t.colors.primary),
@@ -179,8 +179,6 @@ fn each_theme_has_one_colour() {
                     "{mode}: the {name} is {d:.0}° off the accent"
                 );
             }
-        } else {
-            assert!(chroma < 0.01, "{mode}: Ink has a colour");
         }
         // The accent holds a UI part's 3:1 on the session and on a card,
         // and its label reads on it.

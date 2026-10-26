@@ -33,7 +33,7 @@ fn raster(svg: &str, width: f32, scale: f32) -> Option<(Arc<Image>, f32, f32)> {
         if let Some(i) = c.get(&k) {
             return Some(i.clone());
         }
-        let sized = crate::diagram::sized(svg, device)?;
+        let sized = crate::diagram::sized(&crate::diagram::brand_fonts(svg), device)?;
         if c.len() >= KEEP {
             c.clear();
         }

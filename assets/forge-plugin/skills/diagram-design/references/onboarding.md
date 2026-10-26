@@ -84,15 +84,14 @@ Read the rendered `font-family` stack of:
 - `<body>` → `node-name` family  
 - `<code>`, `<pre>`, or any mono-styled element → `sublabel` family
 
-If the site has only one family, keep the schematic defaults for the missing roles (Source Serif 4 for title, JetBrains Mono for mono). Don't force-pick a mono font that isn't on the site.
+If the site has only one family, keep the schematic defaults for the missing roles (Anthropic Sans for title, Anthropic Sans for mono). Don't force-pick a mono font that isn't on the site.
 
 ### Exact-font gate for brand-matched output
 
-Do not replace a detected brand family with `serif`, `system-ui`, or `ui-monospace` merely to make the file dependency-free. A public font is part of the visual system.
+A brand's own typeface is not carried over: diagrams are set in Anthropic Sans.
 
 1. Record the computed family and weight used by the sampled heading, body, and technical-label elements.
-2. Trace each family to its source: an existing Google Fonts stylesheet, an installed/system stack, or a custom-hosted `@font-face`.
-3. If it is available through Google Fonts, carry the exact family name, weights, and approved stylesheet into the style guide and generated HTML. The single-file allowlist accepts only a parsed HTTPS URL whose hostname is exactly `fonts.googleapis.com` and whose path is exactly `/css2`; prefix/lookalike hosts and other paths fail. Preserve an intentional system stack in order and verify the resolved family on the target machine.
+2. Fonts are not part of a profile: every diagram is set in Anthropic Sans, whatever the brand uses.
 4. A custom-hosted or paid font is not compatible with the default single-file allowlist. Label that role `fallback` unless the user separately approves and packages the font; never silently add a remote font URL or claim an exact match.
 5. Verify the rendered output with `getComputedStyle`; a declared family that failed to load does not pass.
 

@@ -295,7 +295,7 @@ impl RulesView {
                     // The section's subhead, in the editorial serif.
                     .child(
                         div()
-                            .font_family(t.font_serif.clone())
+                            .font_family(t.font_display.clone())
                             .text_size(t.text.subheading)
                             .text_color(t.colors.text_body)
                             .child(format!("What Claude Code reads in {where_}, and when. Files read every session cost context every time; the rest load only when they apply.")),

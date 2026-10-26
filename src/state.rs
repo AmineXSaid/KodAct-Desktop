@@ -1971,9 +1971,6 @@ pub struct AppState {
     pub open_groups: std::collections::HashSet<(usize, usize, usize)>,
     /// The row a jump landed on, marked for a moment: (chat, message, block).
     pub flash: Option<(usize, usize, usize)>,
-    /// The home screen's dots also behind a chat (off: a chat sits on a
-    /// plain stage, its text the only thing that moves). `chat-pattern.txt`.
-    pub chat_pattern: bool,
     /// When each thought began and ended: (chat, message, block).
     thought: std::collections::HashMap<
         (usize, usize, usize),
@@ -2194,9 +2191,6 @@ impl AppState {
             open_groups: Default::default(),
             flash: None,
             thought: Default::default(),
-            chat_pattern: crate::profile::dir()
-                .and_then(|d| std::fs::read_to_string(d.join("chat-pattern.txt")).ok())
-                .is_some_and(|s| s.trim() == "on"),
             tasks_open: false,
             approvals_open: false,
             compacting: Default::default(),
@@ -5409,16 +5403,6 @@ impl AppState {
     pub fn jump_to(&mut self, msg: usize, cx: &mut Context<Self>) {
         self.jump_seq += 1;
         self.jump = Some((self.jump_seq, msg, None));
-        cx.notify();
-    }
-
-    /// The dots behind chats, on or off, kept in the config folder.
-    pub fn set_chat_pattern(&mut self, on: bool, cx: &mut Context<Self>) {
-        self.chat_pattern = on;
-        if let Some(dir) = crate::profile::dir() {
-            let _ = std::fs::create_dir_all(&dir);
-            let _ = std::fs::write(dir.join("chat-pattern.txt"), if on { "on" } else { "off" });
-        }
         cx.notify();
     }
 

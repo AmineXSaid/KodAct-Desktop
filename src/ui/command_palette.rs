@@ -302,38 +302,6 @@ impl CommandPalette {
                 Box::new(ToggleTheme),
             ),
         ];
-        // One row per theme; the current one is ticked.
-        let current = cx.theme().look;
-        for look in crate::theme::Look::ALL {
-            let action: Box<dyn Action> = match look {
-                crate::theme::Look::Calm => Box::new(ThemeCalm),
-                crate::theme::Look::Terracotta => Box::new(ThemeTerracotta),
-                crate::theme::Look::Patina => Box::new(ThemePatina),
-                crate::theme::Look::Ink => Box::new(ThemeInk),
-                crate::theme::Look::Slate => Box::new(ThemeSlate),
-                crate::theme::Look::Plum => Box::new(ThemePlum),
-                crate::theme::Look::Layers => Box::new(ThemeLayers),
-                crate::theme::Look::Tray => Box::new(ThemeTray),
-                crate::theme::Look::Studio => Box::new(ThemeStudio),
-                crate::theme::Look::Tiles => Box::new(ThemeTiles),
-                crate::theme::Look::Command => Box::new(ThemeCommand),
-                crate::theme::Look::Premium => Box::new(ThemePremium),
-            };
-            // An action, named as one; the theme's character beside it.
-            out.push(act(
-                &format!("Use the {} theme", look.name()),
-                if look == current {
-                    "icons/check.svg"
-                } else {
-                    "icons/sparkles.svg"
-                },
-                None,
-                action,
-            ));
-            if let Some(last) = out.last_mut() {
-                last.detail = Some(look.blurb().into());
-            }
-        }
         out.extend([
             act(
                 if s.browser {

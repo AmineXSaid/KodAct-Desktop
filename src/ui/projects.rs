@@ -616,7 +616,7 @@ impl ProjectsView {
                                     .child(
                                         // The section's subhead, in the editorial serif.
                                         div()
-                                            .font_family(t.font_serif.clone())
+                                            .font_family(t.font_display.clone())
                                             .text_size(t.text.subheading)
                                             .text_color(t.colors.text_body)
                                             .child("A folder with its own chats, rules and memory. Open one to pick up where you left off."),

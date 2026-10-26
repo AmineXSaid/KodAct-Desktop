@@ -27,7 +27,6 @@ pub mod doc_comments;
 pub mod doc_find;
 pub mod doc_pane;
 pub mod documents;
-pub mod dot_field;
 pub mod editor_kit;
 pub mod env_editor;
 pub mod file_card;
@@ -104,18 +103,6 @@ gpui::actions!(
         ToggleSidebar,
         ToggleCommandPalette,
         ToggleTheme,
-        ThemeCalm,
-        ThemeTerracotta,
-        ThemePatina,
-        ThemeInk,
-        ThemeSlate,
-        ThemePlum,
-        ThemeLayers,
-        ThemeTray,
-        ThemeStudio,
-        ThemeTiles,
-        ThemeCommand,
-        ThemePremium,
         ToggleBrowser,
         OpenRemoteMenu,
         ConnectWsl,

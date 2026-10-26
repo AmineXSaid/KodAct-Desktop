@@ -24,7 +24,6 @@ use super::side_chat::SideChat;
 use super::sidebar::Sidebar;
 use super::*;
 use crate::state::{AppState, PanelTab, Screen, TitleMenu};
-use crate::theme::Look;
 use crate::theme::{self, ActiveTheme};
 
 pub struct Workspace {
@@ -48,8 +47,6 @@ pub struct Workspace {
     attachment_editor: Entity<super::attachment_editor::AttachmentEditor>,
     /// SSH's password and passphrase prompts.
     askpass: Entity<super::askpass::AskpassDialog>,
-    /// The home screen's field of dots, behind the greeting and the composer.
-    dots: Entity<super::dot_field::DotField>,
     /// Comments on the file in the side panel (`doc_comments.rs`).
     doc_comments: Entity<super::doc_comments::DocComments>,
     /// Find in the file in the side panel (`doc_find.rs`).
@@ -67,16 +64,6 @@ pub struct Workspace {
 impl Workspace {
     /// Switch to `look` (the command palette's "Theme: …"), keeping light
     /// or dark, and keep it for the next launch.
-    fn pick_look(&mut self, look: Look, cx: &mut Context<Self>) {
-        let dark = self.state.read(cx).dark;
-        self.state.update(cx, |s, cx| {
-            s.look = look;
-            s.save_window();
-            cx.notify();
-        });
-        set_theme(look, dark, cx);
-    }
-
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let state = cx.new(|cx| {
             let mut s = AppState::new();
@@ -120,8 +107,6 @@ impl Workspace {
             cx.new(|cx| super::doc_comments::DocComments::new(state.clone(), window, cx));
         let doc_find = cx.new(|cx| super::doc_find::DocFind::new(state.clone(), window, cx));
         let files = cx.new(|cx| super::files_pane::FilesPane::new(state.clone(), window, cx));
-        let composer_focus = composer.read(cx).focus_handle(cx);
-        let dots = cx.new(|cx| super::dot_field::DotField::new(Some(composer_focus), window, cx));
         let first_run = state.read(cx).onboarding;
         // The opener: the full film on a first run, ending on the naming
         // screen; a short one after, ending in the app.
@@ -170,7 +155,6 @@ impl Workspace {
             confirm,
             attachment_editor,
             askpass,
-            dots,
             doc_comments,
             doc_find,
             files,
@@ -650,8 +634,8 @@ impl Workspace {
     }
 
     /// A new chat: the greeting in the display serif beside Forge's mark, a
-    /// quiet line under it, the composer and the starters, over the field of
-    /// dots. The field fills the session behind them and never scrolls.
+    /// quiet line under it, the composer and the starters, on a plain
+    /// ground.
     fn welcome(&self, _window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let s = self.state.read(cx);
@@ -671,71 +655,62 @@ impl Workspace {
         } else {
             format!("Working in {project}. Forge asks before it changes anything.")
         };
-        div()
-            .flex_1()
-            .min_h_0()
-            .relative()
-            .flex()
-            .flex_col()
-            .child(self.dots.clone())
-            .child(
-                // A short window scrolls it rather than cutting off the starters.
-                div()
-                    .id("welcome")
-                    .flex_1()
-                    .min_h_0()
-                    .overflow_y_scroll()
-                    .child(
-                        div()
-                            .min_h_full()
-                            .flex()
-                            .flex_col()
-                            .items_center()
-                            .justify_center()
-                            .px(t.space.xl)
-                            .py(t.space.xxxl)
-                            // A little above the middle, where the eye lands.
-                            .pb(t.space.xxl * 2.)
-                            .child(
-                                div()
-                                    .w_full()
-                                    .max_w(t.size.composer_width + t.space.xxl)
-                                    .relative()
-                                    .flex()
-                                    .flex_col()
-                                    .items_center()
-                                    .gap(t.space.xl)
-                                    // The page rises in piece by piece as it opens.
-                                    .child(super::motion::row_in_full(
-                                        div()
-                                            .flex()
-                                            .flex_col()
-                                            .items_center()
-                                            .gap(t.space.snug)
-                                            .child(greeting_line(&line, &t))
-                                            .child(
-                                                div()
-                                                    .text_size(t.text.body_sm)
-                                                    .text_color(t.colors.text_muted)
-                                                    .text_center()
-                                                    .child(sub),
-                                            ),
-                                        "welcome-greeting",
-                                        0,
-                                        &t,
-                                    ))
-                                    .child(self.composer.clone())
-                                    .child(super::starters::render(
-                                        &t,
-                                        &self.state,
-                                        &self.composer,
-                                        cx,
-                                    ))
-                                    // The dot field arranges itself around this column.
-                                    .child(self.dots.read(cx).content_probe()),
-                            ),
-                    ),
-            )
+        div().flex_1().min_h_0().relative().flex().flex_col().child(
+            // A short window scrolls it rather than cutting off the starters.
+            div()
+                .id("welcome")
+                .flex_1()
+                .min_h_0()
+                .overflow_y_scroll()
+                .child(
+                    div()
+                        .min_h_full()
+                        .flex()
+                        .flex_col()
+                        .items_center()
+                        .justify_center()
+                        .px(t.space.xl)
+                        .py(t.space.xxxl)
+                        // A little above the middle, where the eye lands.
+                        .pb(t.space.xxl * 2.)
+                        .child(
+                            div()
+                                .w_full()
+                                .max_w(t.size.composer_width + t.space.xxl)
+                                .relative()
+                                .flex()
+                                .flex_col()
+                                .items_center()
+                                .gap(t.space.xl)
+                                // The page rises in piece by piece as it opens.
+                                .child(super::motion::row_in_full(
+                                    div()
+                                        .flex()
+                                        .flex_col()
+                                        .items_center()
+                                        .gap(t.space.snug)
+                                        .child(greeting_line(&line, &t))
+                                        .child(
+                                            div()
+                                                .text_size(t.text.body_sm)
+                                                .text_color(t.colors.text_muted)
+                                                .text_center()
+                                                .child(sub),
+                                        ),
+                                    "welcome-greeting",
+                                    0,
+                                    &t,
+                                ))
+                                .child(self.composer.clone())
+                                .child(super::starters::render(
+                                    &t,
+                                    &self.state,
+                                    &self.composer,
+                                    cx,
+                                )),
+                        ),
+                ),
+        )
     }
 
     /// The chat an action from the palette or a key acts on: the one showing.
@@ -823,8 +798,6 @@ impl Render for Workspace {
         // Which chat shows: its transcript animates in when it changes.
         let chat_key = s.chat().map_or(usize::MAX, |c| c.id);
         let empty = s.chat().is_none_or(|c| c.messages.is_empty());
-        self.dots.read(cx).set_backdrop(!empty, s.busy());
-        let chat_pattern = s.chat_pattern;
         // The side column: the file or tab in it and the Files pane, kept
         // while it slides back out after it closes.
         let side_now = (s.doc.is_some() || s.panel.is_some() || s.files_open)
@@ -1097,7 +1070,6 @@ impl Render for Workspace {
                 .relative()
                 // Behind a chat the stage is plain, as the text wants it;
                 // the home screen's field follows only if you asked for it.
-                .when(chat_pattern, |d| d.child(self.dots.clone()))
                 .children(self.chat_header(cx))
                 // Always there: the bar draws itself while open and as it leaves.
                 .child(self.find.clone())
@@ -1332,26 +1304,6 @@ impl Render for Workspace {
                 });
                 set_theme(look, dark, cx);
             }))
-            .on_action(cx.listener(|this, _: &ThemeCalm, _, cx| this.pick_look(Look::Calm, cx)))
-            .on_action(
-                cx.listener(|this, _: &ThemeTerracotta, _, cx| {
-                    this.pick_look(Look::Terracotta, cx)
-                }),
-            )
-            .on_action(cx.listener(|this, _: &ThemePatina, _, cx| this.pick_look(Look::Patina, cx)))
-            .on_action(cx.listener(|this, _: &ThemeInk, _, cx| this.pick_look(Look::Ink, cx)))
-            .on_action(cx.listener(|this, _: &ThemeSlate, _, cx| this.pick_look(Look::Slate, cx)))
-            .on_action(cx.listener(|this, _: &ThemePlum, _, cx| this.pick_look(Look::Plum, cx)))
-            .on_action(cx.listener(|this, _: &ThemeLayers, _, cx| this.pick_look(Look::Layers, cx)))
-            .on_action(cx.listener(|this, _: &ThemeTray, _, cx| this.pick_look(Look::Tray, cx)))
-            .on_action(cx.listener(|this, _: &ThemeStudio, _, cx| this.pick_look(Look::Studio, cx)))
-            .on_action(cx.listener(|this, _: &ThemeTiles, _, cx| this.pick_look(Look::Tiles, cx)))
-            .on_action(
-                cx.listener(|this, _: &ThemeCommand, _, cx| this.pick_look(Look::Command, cx)),
-            )
-            .on_action(
-                cx.listener(|this, _: &ThemePremium, _, cx| this.pick_look(Look::Premium, cx)),
-            )
             .on_action(
                 cx.listener(|this, _: &FocusComposer, window, cx| this.focus_composer(window, cx)),
             )

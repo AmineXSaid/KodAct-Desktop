@@ -6,13 +6,10 @@
 //!
 //! The name step forges itself in: the ingot's faces land white hot and
 //! lock with a burst of heat, then the whole cube cools as metal does,
-//! through orange and ember red to its own colours, while a ring runs out
-//! through the dot field behind; a halo and an orbiting spark settle under
-//! the cube, the question arrives word by word and the field rises in. The
-//! field's edge charges with the accent while it has the keyboard, each
-//! keystroke sends a faint ring through the dots, and Enter strikes the
-//! cube (a hot quarter turn) before the avatars slide in. Reduced motion:
-//! all of it at rest.
+//! through orange and ember red to its own colours; a halo and an orbiting
+//! spark settle under the cube, the question arrives word by word, and
+//! Enter strikes the cube (a hot quarter turn) before the avatars slide in.
+//! Reduced motion: all of it at rest.
 
 use gpui::component::input::{Input, InputEvent, InputState};
 use std::time::Duration;
@@ -22,7 +19,6 @@ use gpui::{
     Entity, FocusHandle, IntoElement, Render, SharedString, Subscription, Task, Window,
 };
 
-use super::dot_field::DotField;
 use super::{icon, ingot, motion};
 use crate::avatars;
 use crate::state::AppState;
@@ -72,7 +68,6 @@ pub struct Onboarding {
     selected: SharedString,
     focus: FocusHandle,
     /// The dot field behind both steps (its ripples are the strikes).
-    dots: Entity<DotField>,
     /// Bumped each time the name step opens, so the forging plays afresh.
     intro: usize,
     /// Bumped on each strike (Enter on a good name), and the wait for it.
@@ -81,7 +76,6 @@ pub struct Onboarding {
     /// Whether you had a name when the step opened (the question asks for
     /// it "now"); kept, so the question doesn't change as you strike.
     returning: bool,
-    lock: Option<Task<()>>,
     /// Opened by the opener, which has already forged the cube: the hero
     /// rests while the question and the field arrive.
     forged: bool,
@@ -99,16 +93,12 @@ impl Onboarding {
                     InputEvent::PressEnter { .. } => this.submit(window, cx),
                     InputEvent::Change => {
                         this.error = None;
-                        // Each keystroke strikes lightly: a faint ring through the dots.
-                        this.dots.update(cx, |d, cx| d.pulse(0.35, cx));
                         cx.notify();
                     }
                     _ => {}
                 },
             )];
         let selected = state.read(cx).avatar.clone();
-        let field_focus = gpui::Focusable::focus_handle(input.read(cx), cx);
-        let dots = cx.new(|cx| DotField::new(Some(field_focus), window, cx));
         Self {
             state,
             input,
@@ -120,29 +110,20 @@ impl Onboarding {
             settle: None,
             selected,
             focus: cx.focus_handle(),
-            dots,
             intro: 0,
             strike: 0,
             striking: None,
             returning: false,
-            lock: None,
             forged: false,
             _subs: subs,
         }
     }
 
-    /// Play the forging: the ring through the dots goes out as the cube locks.
-    fn forge(&mut self, cx: &mut Context<Self>) {
+    /// Play the forging.
+    fn forge(&mut self) {
         self.intro += 1;
         self.strike = 0;
         self.striking = None;
-        let dots = self.dots.clone();
-        self.lock = Some(cx.spawn(async move |_, cx| {
-            cx.background_executor()
-                .timer(Duration::from_millis(LOCK_MS as u64))
-                .await;
-            dots.update(cx, |d, cx| d.pulse(1., cx));
-        }));
     }
 
     /// Show it at the name: the current name filled in, the field focused.
@@ -158,7 +139,7 @@ impl Onboarding {
             i.focus(window, cx);
         });
         self.forged = false;
-        self.forge(cx);
+        self.forge();
     }
 
     /// Show it at the name as the opener hands over: the cube it forged
@@ -166,7 +147,6 @@ impl Onboarding {
     pub fn open_forged(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.open(window, cx);
         self.forged = true;
-        self.lock = None;
     }
 
     /// Show it at the avatars.
@@ -210,7 +190,6 @@ impl Onboarding {
             // Strike the cube, a ring through the dots, then on to the avatars.
             Ok(()) => {
                 self.strike += 1;
-                self.dots.update(cx, |d, cx| d.pulse(1., cx));
                 self.striking = Some(cx.spawn_in(window, async move |this, cx| {
                     cx.background_executor().timer(STRIKE).await;
                     let _ = this.update_in(cx, |o, window, cx| {
@@ -795,45 +774,38 @@ impl Render for Onboarding {
                 )
         });
 
-        // The dot field fills the stage behind the steps, arranged round them.
-        let probe = self.dots.read(cx).content_probe();
-        div()
-            .flex_1()
-            .min_h_0()
-            .relative()
-            .bg(t.extra.stage)
-            .child(self.dots.clone())
-            .child(
-                div()
-                    .id("onboarding")
-                    .key_context("Onboarding")
-                    .track_focus(&self.focus)
-                    .on_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, window, cx| {
+        div().flex_1().min_h_0().relative().bg(t.extra.stage).child(
+            div()
+                .id("onboarding")
+                .key_context("Onboarding")
+                .track_focus(&self.focus)
+                .on_key_down(
+                    cx.listener(|this, ev: &gpui::KeyDownEvent, window, cx| {
                         this.key(ev, window, cx)
-                    }))
-                    .absolute()
-                    .inset_0()
-                    // A window shorter than the steps scrolls them, never cuts them.
-                    .overflow_y_scroll()
-                    .child(
-                        div()
-                            .min_h_full()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .pt(t.space.xl)
-                            .pb(t.space.xxl * 2.)
-                            .child(
-                                div()
-                                    .flex_none()
-                                    .relative()
-                                    .w(px(560.))
-                                    .h(px(480.))
-                                    .child(probe)
-                                    .children(leaving)
-                                    .child(entering),
-                            ),
-                    ),
-            )
+                    }),
+                )
+                .absolute()
+                .inset_0()
+                // A window shorter than the steps scrolls them, never cuts them.
+                .overflow_y_scroll()
+                .child(
+                    div()
+                        .min_h_full()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .pt(t.space.xl)
+                        .pb(t.space.xxl * 2.)
+                        .child(
+                            div()
+                                .flex_none()
+                                .relative()
+                                .w(px(560.))
+                                .h(px(480.))
+                                .children(leaving)
+                                .child(entering),
+                        ),
+                ),
+        )
     }
 }
