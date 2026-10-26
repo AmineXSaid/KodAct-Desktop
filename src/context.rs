@@ -293,15 +293,28 @@ impl ContextUsage {
     /// an engine.
     pub fn demo(messages: u64) -> Self {
         let tools: Vec<(String, u64)> = [
-            ("Bash", 2_900), ("Edit", 1_400), ("Read", 1_200), ("Write", 900), ("Grep", 1_100),
-            ("Glob", 600), ("WebFetch", 800), ("WebSearch", 700), ("Task", 2_600), ("TodoWrite", 2_100),
-            ("mcp__github__create_issue", 1_900), ("mcp__github__list_prs", 1_600),
+            ("Bash", 2_900),
+            ("Edit", 1_400),
+            ("Read", 1_200),
+            ("Write", 900),
+            ("Grep", 1_100),
+            ("Glob", 600),
+            ("WebFetch", 800),
+            ("WebSearch", 700),
+            ("Task", 2_600),
+            ("TodoWrite", 2_100),
+            ("mcp__github__create_issue", 1_900),
+            ("mcp__github__list_prs", 1_600),
         ]
         .into_iter()
         .map(|(n, t)| (n.to_string(), t))
         .collect();
         let (builtin, mcp) = tools.iter().fold((0, 0), |(b, m), (n, t)| {
-            if n.starts_with("mcp__") { (b, m + t) } else { (b + t, m) }
+            if n.starts_with("mcp__") {
+                (b, m + t)
+            } else {
+                (b + t, m)
+            }
         });
         let categories = vec![
             ("System prompt".to_string(), 3_400),
@@ -318,8 +331,15 @@ impl ContextUsage {
             autocompact_at: Some(155_000),
             categories,
             tools,
-            memory_files: vec![("FORGE.md".into(), 1_300), ("~/.forge/FORGE.md".into(), 400)],
-            skills: vec![("frontend-design".into(), 300), ("pdf".into(), 250), ("xlsx".into(), 350)],
+            memory_files: vec![
+                ("FORGE.md".into(), 1_300),
+                ("~/.forge/FORGE.md".into(), 400),
+            ],
+            skills: vec![
+                ("frontend-design".into(), 300),
+                ("pdf".into(), 250),
+                ("xlsx".into(), 350),
+            ],
         }
     }
 }
@@ -415,9 +435,15 @@ mod tests {
         assert_eq!((u.used(), u.buffer(), u.free()), (20_000, 45_000, 135_000));
         assert_eq!(u.memory_files, vec![("FORGE.md".to_string(), 120)]);
         // The endpoint's own measure wins when it gave one.
-        let measured = ContextUsage { measured: 21_500, ..u };
+        let measured = ContextUsage {
+            measured: 21_500,
+            ..u
+        };
         assert_eq!(measured.used(), 21_500);
-        assert_eq!(ContextUsage::from_json(&serde_json::json!({"oops": 1})), None);
+        assert_eq!(
+            ContextUsage::from_json(&serde_json::json!({"oops": 1})),
+            None
+        );
         let d = ContextUsage::demo(5_000);
         assert_eq!(d.total, d.categories.iter().map(|(_, t)| t).sum::<u64>());
     }

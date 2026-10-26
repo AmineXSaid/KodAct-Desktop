@@ -206,7 +206,9 @@ fn find_ci(hay: &str, needle: &str) -> Vec<(usize, usize)> {
         if i < from {
             continue;
         }
-        let mut chars = hay[i..].char_indices().flat_map(|(j, c)| c.to_lowercase().map(move |l| (j, l)));
+        let mut chars = hay[i..]
+            .char_indices()
+            .flat_map(|(j, c)| c.to_lowercase().map(move |l| (j, l)));
         let mut end = None;
         let mut ok = true;
         for want in &n {
@@ -232,12 +234,20 @@ fn find_ci(hay: &str, needle: &str) -> Vec<(usize, usize)> {
 fn tail(s: &str, chars: usize) -> String {
     let n = s.chars().count();
     let t: String = s.chars().skip(n.saturating_sub(chars)).collect();
-    if n > chars { format!("…{}", t.trim_start()) } else { t }
+    if n > chars {
+        format!("…{}", t.trim_start())
+    } else {
+        t
+    }
 }
 
 fn head(s: &str, chars: usize) -> String {
     let t: String = s.chars().take(chars).collect();
-    if s.chars().count() > chars { format!("{}…", t.trim_end()) } else { t }
+    if s.chars().count() > chars {
+        format!("{}…", t.trim_end())
+    } else {
+        t
+    }
 }
 
 fn plain(s: &str) -> String {
@@ -288,7 +298,12 @@ pub fn find_cells(sheets: &[crate::office::Sheet], query: &str, limit: usize) ->
                 total += 1;
                 if out.len() < limit {
                     out.push(Hit {
-                        place: format!("{}!{}{}", sheet.name, crate::office::column_letters(c), r + 1),
+                        place: format!(
+                            "{}!{}{}",
+                            sheet.name,
+                            crate::office::column_letters(c),
+                            r + 1
+                        ),
                         page: None,
                         cell: Some((si, (r, c))),
                         before: tail(&cell.text[..a], 30),
@@ -367,13 +382,23 @@ mod tests {
         assert_eq!(total, 2);
         assert_eq!(hits[0].place, "Slide 3");
         assert_eq!(hits[0].page, Some(2));
-        assert_eq!((hits[0].before.as_str(), hits[0].hit.as_str()), ("", "Licences"));
+        assert_eq!(
+            (hits[0].before.as_str(), hits[0].hit.as_str()),
+            ("", "Licences")
+        );
         assert_eq!(hits[0].after, ": 700, licences renegotiated");
         assert_eq!(hits[1].hit, "licences");
         let memo = "# Q3 memo\n\nTravel rises to 520 EUR.";
         let (hits, _) = find_text(memo, "RISES", 10);
-        assert_eq!((hits[0].place.as_str(), hits[0].page), ("the section “Q3 memo”", None));
-        assert_eq!(find_text(memo, "  ", 10).1, 0, "a blank search finds nothing");
+        assert_eq!(
+            (hits[0].place.as_str(), hits[0].page),
+            ("the section “Q3 memo”", None)
+        );
+        assert_eq!(
+            find_text(memo, "  ", 10).1,
+            0,
+            "a blank search finds nothing"
+        );
         assert_eq!(find_ci("Straße straße", "STRASSE").len(), 0);
         assert_eq!(find_ci("Éclair éclair", "éclair"), vec![(0, 7), (8, 15)]);
     }

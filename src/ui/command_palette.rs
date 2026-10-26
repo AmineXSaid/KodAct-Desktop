@@ -9,9 +9,8 @@
 use gpui::component::input::{self, Input, InputEvent, InputState};
 use gpui::component::Sizable as _;
 use gpui::{
-    div, font, prelude::*, px, Action, AnyElement, Context, CursorStyle, Div, Entity,
-    FontWeight, IntoElement, Render, ScrollHandle, SharedString, StyledText,
-    Subscription, TextRun, Window,
+    div, font, prelude::*, px, Action, AnyElement, Context, CursorStyle, Div, Entity, FontWeight,
+    IntoElement, Render, ScrollHandle, SharedString, StyledText, Subscription, TextRun, Window,
 };
 
 use super::*;
@@ -352,8 +351,18 @@ impl CommandPalette {
                 Some(shortcut("/")),
                 Box::new(ToggleModelPicker),
             ),
-            act("Go back", "icons/arrow-left.svg", Some("Alt+Left".into()), Box::new(GoBack)),
-            act("Go forward", "icons/arrow-right.svg", Some("Alt+Right".into()), Box::new(GoForward)),
+            act(
+                "Go back",
+                "icons/arrow-left.svg",
+                Some("Alt+Left".into()),
+                Box::new(GoBack),
+            ),
+            act(
+                "Go forward",
+                "icons/arrow-right.svg",
+                Some("Alt+Right".into()),
+                Box::new(GoForward),
+            ),
             act(
                 "Focus the composer",
                 "icons/pencil.svg",
@@ -402,10 +411,30 @@ impl CommandPalette {
                 Some(shortcut("Shift E")),
                 Box::new(TogglePanel),
             ),
-            act("Side panel: Plan", "icons/route.svg", Some(shortcut("1")), Box::new(ShowPlanView)),
-            act("Side panel: Agents", "icons/bot.svg", Some(shortcut("2")), Box::new(ShowAgentsView)),
-            act("Side panel: Files", "icons/folder.svg", Some(shortcut("3")), Box::new(ShowFilesView)),
-            act("Side panel: Browser", "icons/globe.svg", Some(shortcut("4")), Box::new(ShowBrowserView)),
+            act(
+                "Side panel: Plan",
+                "icons/route.svg",
+                Some(shortcut("1")),
+                Box::new(ShowPlanView),
+            ),
+            act(
+                "Side panel: Agents",
+                "icons/bot.svg",
+                Some(shortcut("2")),
+                Box::new(ShowAgentsView),
+            ),
+            act(
+                "Side panel: Files",
+                "icons/folder.svg",
+                Some(shortcut("3")),
+                Box::new(ShowFilesView),
+            ),
+            act(
+                "Side panel: Browser",
+                "icons/globe.svg",
+                Some(shortcut("4")),
+                Box::new(ShowBrowserView),
+            ),
             act(
                 if s.doc_below {
                     "Put the side panel beside the chat"
@@ -669,7 +698,11 @@ impl CommandPalette {
             }
             if matches!(
                 f.office(),
-                Some(crate::office::Kind::Docx | crate::office::Kind::Pptx | crate::office::Kind::Xlsx)
+                Some(
+                    crate::office::Kind::Docx
+                        | crate::office::Kind::Pptx
+                        | crate::office::Kind::Xlsx
+                )
             ) {
                 out.push(act(
                     "Export the open file to PDF",
@@ -741,7 +774,11 @@ impl CommandPalette {
                     Box::new(OpenInVsCode),
                 ),
                 act(
-                    if c.archived { "Unarchive this chat" } else { "Archive this chat" },
+                    if c.archived {
+                        "Unarchive this chat"
+                    } else {
+                        "Archive this chat"
+                    },
                     "icons/archive.svg",
                     None,
                     Box::new(ArchiveChat),
@@ -843,7 +880,10 @@ impl CommandPalette {
                 );
             }
             // Messages sent while Forge works, not yet with it.
-            if s.current.and_then(|c| s.queued.get(&c)).is_some_and(|q| !q.is_empty()) {
+            if s.current
+                .and_then(|c| s.queued.get(&c))
+                .is_some_and(|q| !q.is_empty())
+            {
                 chat.insert(
                     0,
                     act(
@@ -1123,10 +1163,12 @@ impl CommandPalette {
             Target::Action(a) => window.dispatch_action(a, cx),
             Target::Chat(id) => self.state.update(cx, |s, cx| s.open_chat(id, cx)),
             // A gateway's model is "profile\u{1}id".
-            Target::Model(name) => self.state.update(cx, |s, cx| match name.split_once('\u{1}') {
-                Some((profile, id)) => s.pick_catalog_model(profile, id, cx),
-                None => s.select_profile(&name, cx),
-            }),
+            Target::Model(name) => self
+                .state
+                .update(cx, |s, cx| match name.split_once('\u{1}') {
+                    Some((profile, id)) => s.pick_catalog_model(profile, id, cx),
+                    None => s.select_profile(&name, cx),
+                }),
             Target::Mode(m) => self.state.update(cx, |s, cx| s.set_mode(m, cx)),
             Target::File(rel) => self.state.update(cx, |s, cx| s.open_project_file(rel, cx)),
             Target::Message(id, q) => {
@@ -1304,7 +1346,11 @@ impl CommandPalette {
             .rounded(t.radius.field)
             .border_1()
             .text_size(t.text.body)
-            .child(icon("icons/search.svg", t.size.icon_sm, t.colors.text_muted));
+            .child(icon(
+                "icons/search.svg",
+                t.size.icon_sm,
+                t.colors.text_muted,
+            ));
         let dropdown = self.dropdown(window, cx);
         field
             .w(t.size.palette)
@@ -1322,13 +1368,11 @@ impl CommandPalette {
             .capture_action(nav::<input::IndentInline>("tab", cx))
             .capture_action(nav::<input::OutdentInline>("shift-tab", cx))
             .capture_action(nav::<input::Escape>("escape", cx))
-            .capture_action(
-                cx.listener(|this, e: &input::Enter, window, cx| {
-                    if !e.secondary && !e.shift && this.key("enter", window, cx) {
-                        cx.stop_propagation();
-                    }
-                }),
-            )
+            .capture_action(cx.listener(|this, e: &input::Enter, window, cx| {
+                if !e.secondary && !e.shift && this.key("enter", window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
             .child(
                 div()
                     .flex_1()
@@ -1405,9 +1449,9 @@ impl CommandPalette {
                                 .child(found.counts[i].to_string()),
                         )
                     })
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.set_scope(tab, window, cx)
-                    })),
+                    .on_click(
+                        cx.listener(move |this, _, window, cx| this.set_scope(tab, window, cx)),
+                    ),
             );
         }
 
@@ -1425,7 +1469,11 @@ impl CommandPalette {
             if cmd.group != last_group {
                 last_group = cmd.group;
                 child += 1;
-                let more = found.cut.iter().find(|(g, _)| *g == cmd.group).map(|(_, n)| *n);
+                let more = found
+                    .cut
+                    .iter()
+                    .find(|(g, _)| *g == cmd.group)
+                    .map(|(_, n)| *n);
                 let to = Scope::of(cmd.group);
                 list = list.child(
                     div()
@@ -1523,7 +1571,11 @@ impl CommandPalette {
             list = list.child(super::motion::row_in(row, ("cmd-in", i), i, &t));
         }
         if count == 0 {
-            let words = scope(self.query.read(cx).value().as_ref()).1.trim().chars().count();
+            let words = scope(self.query.read(cx).value().as_ref())
+                .1
+                .trim()
+                .chars()
+                .count();
             list = list.child(
                 div()
                     .px(t.space.md)
@@ -1665,8 +1717,12 @@ impl Render for CommandPalette {
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.close(cx);
                         window.dispatch_action(Box::new(FocusComposer), cx);
-                    })), "palette-scrim", t.extra.scrim, leaving, &t),
-            )
+                    })),
+                "palette-scrim",
+                t.extra.scrim,
+                leaving,
+                &t,
+            ))
             .child(
                 div()
                     .absolute()

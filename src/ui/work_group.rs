@@ -149,7 +149,10 @@ pub fn summary(calls: &[&ToolCall]) -> String {
         });
     }
     // Sub-agents are named as agents, not as "a tool".
-    let agents = ok.iter().filter(|c| crate::state::is_agent_tool(&c.target)).count();
+    let agents = ok
+        .iter()
+        .filter(|c| crate::state::is_agent_tool(&c.target))
+        .count();
     if agents > 0 {
         parts.push(format!("ran {}", plural(agents, "an agent", "agents")));
     }
@@ -259,7 +262,11 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
         .children(live_step.map(|c| {
             // Agents at work: Forge's cube turning, as on each agent's row.
             if crate::state::is_agent_tool(&c.target) {
-                super::turning_logo_in(f32::from(t.size.icon_sm), format!("work-turn-{chat}-{msg}-{start}"), t.extra.live)
+                super::turning_logo_in(
+                    f32::from(t.size.icon_sm),
+                    format!("work-turn-{chat}-{msg}-{start}"),
+                    t.extra.live,
+                )
             } else {
                 super::tasks::status_icon(
                     ToolStatus::Running,
@@ -396,7 +403,8 @@ mod tests {
             diff: vec![],
             open: false,
             full: false,
-            review: Review::Open, images: vec![],
+            review: Review::Open,
+            images: vec![],
         }
     }
 

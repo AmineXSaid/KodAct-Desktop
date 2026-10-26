@@ -31,6 +31,44 @@ pub enum Wire {
     #[default]
     Anthropic,
     Openai,
+    /// Google's Gemini API (`models/<model>:generateContent`): Google AI
+    /// Studio, or a gateway that speaks it. ForgeCLI's native Gemini wire.
+    Gemini,
+}
+
+impl Wire {
+    /// How the wire is named in Settings.
+    pub fn label(self) -> &'static str {
+        match self {
+            Wire::Anthropic => "Anthropic Messages",
+            Wire::Openai => "OpenAI-compatible",
+            Wire::Gemini => "Gemini",
+        }
+    }
+}
+
+/// The headers a key travels in, on this wire to this URL: Anthropic's
+/// format both `x-api-key` and a bearer token (gateways take one or the
+/// other), OpenAI's a bearer token, Gemini's `x-goog-api-key` for Google AI
+/// Studio, a bearer token for Vertex AI, both for anything else (as
+/// ForgeCLI sends them).
+pub fn auth_headers(wire: Wire, base_url: &str, key: &str) -> Vec<(&'static str, String)> {
+    let bearer = ("authorization", format!("Bearer {key}"));
+    match wire {
+        Wire::Anthropic => vec![("x-api-key", key.to_string()), bearer],
+        Wire::Openai => vec![bearer],
+        Wire::Gemini => {
+            let host = host_of(base_url).to_ascii_lowercase();
+            let host = host.split(':').next().unwrap_or_default().to_string();
+            if host.ends_with("aiplatform.googleapis.com") {
+                vec![bearer]
+            } else if host.ends_with("googleapis.com") {
+                vec![("x-goog-api-key", key.to_string())]
+            } else {
+                vec![("x-goog-api-key", key.to_string()), bearer]
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, Default)]
@@ -386,7 +424,7 @@ pub struct Preset {
 }
 
 /// Cloud presets, then local runtimes on their documented default ports.
-pub const PRESETS: [Preset; 9] = [
+pub const PRESETS: [Preset; 10] = [
     Preset {
         id: "anthropic",
         label: "Anthropic",
@@ -402,6 +440,16 @@ pub const PRESETS: [Preset; 9] = [
         wire: Wire::Openai,
         key: true,
         catalog: false,
+    },
+    // Google AI Studio's Gemini API, on ForgeCLI's native Gemini wire (thought
+    // signatures, thinking levels); its model list goes in the model menu.
+    Preset {
+        id: "gemini",
+        label: "Google Gemini",
+        base_url: "https://generativelanguage.googleapis.com/v1beta",
+        wire: Wire::Gemini,
+        key: true,
+        catalog: true,
     },
     Preset {
         id: "openrouter",
@@ -550,12 +598,9 @@ pub fn list_catalog(
         req = req.set(k, v);
     }
     if let Some(k) = key.filter(|k| !k.is_empty()) {
-        req = match wire {
-            Wire::Anthropic => req
-                .set("x-api-key", k)
-                .set("authorization", &format!("Bearer {k}")),
-            Wire::Openai => req.set("authorization", &format!("Bearer {k}")),
-        };
+        for (h, v) in auth_headers(wire, base_url, k) {
+            req = req.set(h, &v);
+        }
     }
     let body: serde_json::Value = match req.call() {
         Ok(r) => r
@@ -619,21 +664,32 @@ pub fn parse_catalog(body: &serde_json::Value) -> Vec<ModelInfo> {
                 .is_none_or(|t| t == "chat")
         })
         .filter_map(|m| {
-            let id = m
-                .get("id")
-                .or(m.get("name"))
-                .and_then(|i| i.as_str())?
-                .to_string();
+            // Gemini's list: `models/<id>`, `displayName`, `inputTokenLimit`,
+            // and only what can `generateContent` is a chat model.
+            let methods = m
+                .get("supportedGenerationMethods")
+                .and_then(|v| v.as_array());
+            if methods.is_some_and(|ms| !ms.iter().any(|x| x == "generateContent")) {
+                return None;
+            }
+            let raw = m.get("id").or(m.get("name")).and_then(|i| i.as_str())?;
+            let id = raw.strip_prefix("models/").unwrap_or(raw).to_string();
             let name = m
                 .get("display_name")
-                .or(m.get("name"))
+                .or(m.get("displayName"))
+                .or(m.get("name").filter(|_| methods.is_none()))
                 .and_then(|n| n.as_str())
                 .filter(|n| *n != id && !n.is_empty())
                 .map(str::to_string);
-            let context = ["context_length", "context_window", "max_context_length"]
-                .iter()
-                .find_map(|k| m.get(*k).and_then(|c| c.as_u64()))
-                .filter(|c| *c > 0);
+            let context = [
+                "context_length",
+                "context_window",
+                "max_context_length",
+                "inputTokenLimit",
+            ]
+            .iter()
+            .find_map(|k| m.get(*k).and_then(|c| c.as_u64()))
+            .filter(|c| *c > 0);
             let caps = m.get("capabilities");
             let flag =
                 |k: &str| caps.and_then(|c| c.get(k)).and_then(|v| v.as_bool()) == Some(true);
@@ -702,6 +758,8 @@ impl Profile {
             Wire::Anthropic => anthropic_url(base, "/v1/models"),
             Wire::Openai if ends_in_version(base) => format!("{base}/models"),
             Wire::Openai => format!("{base}/v1/models"),
+            // One page holds every model.
+            Wire::Gemini => format!("{base}/models?pageSize=1000"),
         }
     }
 
@@ -749,6 +807,11 @@ impl Profile {
             Wire::Anthropic => {
                 anthropic_url(base, self.chat_path.as_deref().unwrap_or("/v1/messages"))
             }
+            // The check and titles ask for a whole answer; chats stream through ForgeCLI.
+            Wire::Gemini => format!(
+                "{base}/models/{}:generateContent",
+                self.model.trim().trim_start_matches("models/")
+            ),
         }
     }
 
@@ -1003,6 +1066,54 @@ mod tests {
             auth: Auth::None,
             capabilities: Default::default(),
         }
+    }
+
+    #[test]
+    fn gemini_urls_keys_and_model_list() {
+        let mut p = profile(
+            "https://generativelanguage.googleapis.com/v1beta/",
+            Wire::Gemini,
+        );
+        p.model = "models/gemini-3-flash-preview".into();
+        assert_eq!(
+            p.chat_url(),
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent"
+        );
+        assert_eq!(
+            p.models_url(),
+            "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000"
+        );
+        let names = |u: &str| -> Vec<&str> {
+            auth_headers(Wire::Gemini, u, "k")
+                .into_iter()
+                .map(|(h, _)| h)
+                .collect()
+        };
+        assert_eq!(
+            names("https://generativelanguage.googleapis.com/v1beta"),
+            ["x-goog-api-key"]
+        );
+        assert_eq!(
+            names("https://us-central1-aiplatform.googleapis.com/v1/projects/p/locations/us-central1/publishers/google"),
+            ["authorization"]
+        );
+        assert_eq!(
+            names("http://127.0.0.1:20128/v1beta"),
+            ["x-goog-api-key", "authorization"]
+        );
+        let models = parse_catalog(&serde_json::json!({"models": [
+            {"name": "models/gemini-3-flash-preview", "displayName": "Gemini 3 Flash Preview", "inputTokenLimit": 1048576,
+             "supportedGenerationMethods": ["generateContent", "countTokens"]},
+            {"name": "models/gemini-embedding-001", "supportedGenerationMethods": ["embedContent"]},
+            {"name": "models/imagen-4.0-generate-001", "supportedGenerationMethods": ["predict"]}
+        ]}));
+        assert_eq!(models.len(), 1, "{models:?}");
+        assert_eq!(models[0].id, "gemini-3-flash-preview");
+        assert_eq!(models[0].name.as_deref(), Some("Gemini 3 Flash Preview"));
+        assert_eq!(models[0].context, Some(1_048_576));
+        assert!(PRESETS
+            .iter()
+            .any(|p| p.id == "gemini" && p.wire == Wire::Gemini && p.key));
     }
 
     #[test]

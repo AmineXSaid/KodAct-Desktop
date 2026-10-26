@@ -49,12 +49,45 @@ struct Face {
 }
 
 const FACES: [Face; 6] = [
-    Face { normal: [0., 1., 0.], corners: [[-1., 1., -1.], [1., 1., -1.], [1., 1., 1.], [-1., 1., 1.]] },
-    Face { normal: [0., -1., 0.], corners: [[-1., -1., -1.], [1., -1., -1.], [1., -1., 1.], [-1., -1., 1.]] },
-    Face { normal: [1., 0., 0.], corners: [[1., -1., -1.], [1., 1., -1.], [1., 1., 1.], [1., -1., 1.]] },
-    Face { normal: [-1., 0., 0.], corners: [[-1., -1., -1.], [-1., 1., -1.], [-1., 1., 1.], [-1., -1., 1.]] },
-    Face { normal: [0., 0., 1.], corners: [[-1., -1., 1.], [1., -1., 1.], [1., 1., 1.], [-1., 1., 1.]] },
-    Face { normal: [0., 0., -1.], corners: [[-1., -1., -1.], [1., -1., -1.], [1., 1., -1.], [-1., 1., -1.]] },
+    Face {
+        normal: [0., 1., 0.],
+        corners: [[-1., 1., -1.], [1., 1., -1.], [1., 1., 1.], [-1., 1., 1.]],
+    },
+    Face {
+        normal: [0., -1., 0.],
+        corners: [
+            [-1., -1., -1.],
+            [1., -1., -1.],
+            [1., -1., 1.],
+            [-1., -1., 1.],
+        ],
+    },
+    Face {
+        normal: [1., 0., 0.],
+        corners: [[1., -1., -1.], [1., 1., -1.], [1., 1., 1.], [1., -1., 1.]],
+    },
+    Face {
+        normal: [-1., 0., 0.],
+        corners: [
+            [-1., -1., -1.],
+            [-1., 1., -1.],
+            [-1., 1., 1.],
+            [-1., -1., 1.],
+        ],
+    },
+    Face {
+        normal: [0., 0., 1.],
+        corners: [[-1., -1., 1.], [1., -1., 1.], [1., 1., 1.], [-1., 1., 1.]],
+    },
+    Face {
+        normal: [0., 0., -1.],
+        corners: [
+            [-1., -1., -1.],
+            [1., -1., -1.],
+            [1., 1., -1.],
+            [-1., 1., -1.],
+        ],
+    },
 ];
 
 /// How lit a side is, 0 (turned from the light) to 1 (facing it); the
@@ -114,7 +147,10 @@ fn place(rough: f32, yaw: f32, pitch: f32, overlap: f32) -> Vec<(Vec3, f32)> {
         .iter()
         .map(|v| {
             let c = |i: usize| (v.at[i] * spread + v.jitter[i] * jitter) * pitch;
-            (to_view([c(0), c(1), c(2)], yaw), pitch / 2. * (1. + (v.chip - 1.) * rough) + overlap)
+            (
+                to_view([c(0), c(1), c(2)], yaw),
+                pitch / 2. * (1. + (v.chip - 1.) * rough) + overlap,
+            )
         })
         .collect();
     v.sort_by(|a, b| a.0[2].total_cmp(&b.0[2]));
@@ -133,7 +169,13 @@ struct Frame {
 }
 
 /// A finished frame, for reduced motion.
-const RESTING: Frame = Frame { beat: 3, yaw: REST_YAW, rough: 0., squash: 0., burst: 0. };
+const RESTING: Frame = Frame {
+    beat: 3,
+    yaw: REST_YAW,
+    rough: 0.,
+    squash: 0.,
+    burst: 0.,
+};
 
 fn ease_out(t: f32) -> f32 {
     1. - (1. - t).powi(3)
@@ -156,7 +198,11 @@ fn frame_at(ms: f32) -> Frame {
         beat,
         yaw: REST_YAW + (beat as f32 + ease_in_out(((f - 0.12) / 0.34).clamp(0., 1.))) * FRAC_PI_2,
         rough: if struck {
-            lerp(ROUGH[beat - 1], ROUGH[beat], ease_out((f / 0.2).clamp(0., 1.)))
+            lerp(
+                ROUGH[beat - 1],
+                ROUGH[beat],
+                ease_out((f / 0.2).clamp(0., 1.)),
+            )
         } else {
             ease_in_out(((f - 0.2) / 0.55).clamp(0., 1.))
         },
@@ -231,7 +277,13 @@ fn paint(bounds: Bounds<Pixels>, frame: Frame, ink: Inks, window: &mut Window) {
 
     let faces: Vec<(&Face, Vec3, [Vec3; 4])> = FACES
         .iter()
-        .map(|f| (f, to_view(f.normal, frame.yaw), f.corners.map(|c| to_view(c, frame.yaw))))
+        .map(|f| {
+            (
+                f,
+                to_view(f.normal, frame.yaw),
+                f.corners.map(|c| to_view(c, frame.yaw)),
+            )
+        })
         .filter(|(_, n, _)| n[2] > 0.02)
         .collect();
 
@@ -255,29 +307,39 @@ fn paint(bounds: Bounds<Pixels>, frame: Frame, ink: Inks, window: &mut Window) {
     };
 
     // One small cube: its visible faces, lit, blended from stock to finish.
-    let cube = |cx: f32, cy: f32, centre: Vec3, half: f32, alpha: f32, heat: f32, window: &mut Window| {
-        for (face, normal, corners) in &faces {
-            let pts: Vec<(f32, f32)> = corners
-                .iter()
-                .map(|c| (cx + (centre[0] + c[0] * half) * sx, cy - (centre[1] + c[1] * half) * sy))
-                .collect();
-            if face.normal[1] == 1. {
-                fill(&pts, ink.stock_top, alpha, window);
-                fill(&pts, ink.top, alpha * finish, window);
-            } else {
-                let light = side_light(*normal);
-                fill(&pts, ink.stock_shade, alpha, window);
-                fill(&pts, ink.stock_lit, alpha * light, window);
-                fill(&pts, ink.shade, alpha * finish, window);
-                fill(&pts, ink.lit, alpha * light * finish, window);
+    let cube =
+        |cx: f32, cy: f32, centre: Vec3, half: f32, alpha: f32, heat: f32, window: &mut Window| {
+            for (face, normal, corners) in &faces {
+                let pts: Vec<(f32, f32)> = corners
+                    .iter()
+                    .map(|c| {
+                        (
+                            cx + (centre[0] + c[0] * half) * sx,
+                            cy - (centre[1] + c[1] * half) * sy,
+                        )
+                    })
+                    .collect();
+                if face.normal[1] == 1. {
+                    fill(&pts, ink.stock_top, alpha, window);
+                    fill(&pts, ink.top, alpha * finish, window);
+                } else {
+                    let light = side_light(*normal);
+                    fill(&pts, ink.stock_shade, alpha, window);
+                    fill(&pts, ink.stock_lit, alpha * light, window);
+                    fill(&pts, ink.shade, alpha * finish, window);
+                    fill(&pts, ink.lit, alpha * light * finish, window);
+                }
+                // Sparks: a struck chunk glows hot, brightest on its lit faces.
+                if heat > 0. {
+                    let glow = if face.normal[1] == 1. {
+                        0.9
+                    } else {
+                        0.35 + 0.55 * side_light(*normal)
+                    };
+                    fill(&pts, ink.spark, alpha * heat * glow, window);
+                }
             }
-            // Sparks: a struck chunk glows hot, brightest on its lit faces.
-            if heat > 0. {
-                let glow = if face.normal[1] == 1. { 0.9 } else { 0.35 + 0.55 * side_light(*normal) };
-                fill(&pts, ink.spark, alpha * heat * glow, window);
-            }
-        }
-    };
+        };
 
     for (centre, half) in place(frame.rough, frame.yaw, pitch, overlap) {
         cube(mid, mid, centre, half, 1., 0., window);
@@ -303,7 +365,11 @@ fn paint(bounds: Bounds<Pixels>, frame: Frame, ink: Inks, window: &mut Window) {
 }
 
 fn still(size: f32, frame: Frame, ink: Inks) -> gpui::Canvas<()> {
-    canvas(|_, _, _| {}, move |bounds, _, window, _| paint(bounds, frame, ink, window)).size(px(size))
+    canvas(
+        |_, _, _| {},
+        move |bounds, _, window, _| paint(bounds, frame, ink, window),
+    )
+    .size(px(size))
 }
 
 /// The cube being forged while Forge works, `size` px square, its finished
@@ -311,7 +377,11 @@ fn still(size: f32, frame: Frame, ink: Inks) -> gpui::Canvas<()> {
 pub fn working(size: f32, id: impl Into<ElementId>, color: Hsla) -> AnyElement {
     let ink = inks(color);
     if motion::reduced_motion() {
-        return div().size(px(size)).flex_none().child(still(size, RESTING, ink)).into_any_element();
+        return div()
+            .size(px(size))
+            .flex_none()
+            .child(still(size, RESTING, ink))
+            .into_any_element();
     }
     let lap = BEAT_MS * 4.;
     div()

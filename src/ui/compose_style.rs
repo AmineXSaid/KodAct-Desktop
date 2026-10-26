@@ -44,7 +44,11 @@ impl Style {
 }
 
 /// The styled ranges of `text`: its Markdown, and its mentions (`marks`).
-pub fn styles(text: &str, marks: &[(Range<usize>, Mark)], t: &Theme) -> Vec<(Range<usize>, HighlightStyle)> {
+pub fn styles(
+    text: &str,
+    marks: &[(Range<usize>, Mark)],
+    t: &Theme,
+) -> Vec<(Range<usize>, HighlightStyle)> {
     let mut s = vec![Style::default(); text.len()];
     let marker = t.colors.text_muted.opacity(0.6);
     let paint = |s: &mut [Style], r: Range<usize>, f: &dyn Fn(&mut Style)| {
@@ -168,7 +172,9 @@ fn inline(s: &mut [Style], text: &str, r: Range<usize>, marker: Hsla, t: &Theme)
                 i = a + open.len();
                 continue;
             }
-            let Some(k2) = line[a + open.len()..].find(open) else { break };
+            let Some(k2) = line[a + open.len()..].find(open) else {
+                break;
+            };
             let c = a + open.len() + k2;
             let inner = a + open.len()..c;
             if inner.is_empty() || code[c] || line[inner.clone()].starts_with(' ') {
@@ -219,9 +225,13 @@ fn inline(s: &mut [Style], text: &str, r: Range<usize>, marker: Hsla, t: &Theme)
     let mut i = 0;
     while let Some(k) = line[i..].find('[') {
         let a = i + k;
-        let Some(k2) = line[a..].find("](") else { break };
+        let Some(k2) = line[a..].find("](") else {
+            break;
+        };
         let mid = a + k2;
-        let Some(k3) = line[mid..].find(')') else { break };
+        let Some(k3) = line[mid..].find(')') else {
+            break;
+        };
         let close = mid + k3;
         if !code[a] {
             s[base + a].color = Some(marker);
@@ -244,7 +254,12 @@ pub fn toggle(text: &str, r: Range<usize>, marker: &str) -> (String, Range<usize
     let before = &text[..r.start];
     let after = &text[r.end..];
     if before.ends_with(marker) && after.starts_with(marker) {
-        let out = format!("{}{}{}", &before[..before.len() - n], &text[r.clone()], &after[n..]);
+        let out = format!(
+            "{}{}{}",
+            &before[..before.len() - n],
+            &text[r.clone()],
+            &after[n..]
+        );
         return (out, r.start - n..r.end - n);
     }
     let out = format!("{before}{marker}{}{marker}{after}", &text[r.clone()]);
@@ -279,9 +294,12 @@ fn code_line(l: &str) -> bool {
         || ["=>", "->", "::", "==", "!=", "&&", "||", "</", "/>", "();"]
             .iter()
             .any(|p| t.contains(p))
-        || ["#include", "import ", "fn ", "def ", "let ", "const ", "var ", "return ", "if (", "for (", "$ ", "at ", "//"]
-            .iter()
-            .any(|p| t.starts_with(p))
+        || [
+            "#include", "import ", "fn ", "def ", "let ", "const ", "var ", "return ", "if (",
+            "for (", "$ ", "at ", "//",
+        ]
+        .iter()
+        .any(|p| t.starts_with(p))
         || log_line(t)
 }
 
@@ -293,12 +311,15 @@ fn log_line(t: &str) -> bool {
         && b[4] == b'-'
         && b[5..7].iter().all(u8::is_ascii_digit)
         && b[7] == b'-';
-    let clock = b.len() >= 8 && b[2] == b':' && b[5] == b':' && b[..2].iter().all(u8::is_ascii_digit);
+    let clock =
+        b.len() >= 8 && b[2] == b':' && b[5] == b':' && b[..2].iter().all(u8::is_ascii_digit);
     let head: String = t.chars().take(40).collect();
     date || clock
-        || ["ERROR", "WARN", "INFO", "DEBUG", "TRACE", "FATAL", "CRITICAL"]
-            .iter()
-            .any(|lv| head.contains(lv))
+        || [
+            "ERROR", "WARN", "INFO", "DEBUG", "TRACE", "FATAL", "CRITICAL",
+        ]
+        .iter()
+        .any(|lv| head.contains(lv))
 }
 
 /// A sentence: several words, ending as prose does, no code punctuation.
@@ -313,16 +334,31 @@ fn prose_line(l: &str) -> bool {
 fn language(body: &str) -> Option<&'static str> {
     let t = body.trim_start();
     let has = |ps: &[&str]| ps.iter().any(|p| body.contains(p));
-    if (t.starts_with('{') || t.starts_with('[')) && serde_json::from_str::<serde_json::Value>(body).is_ok() {
+    if (t.starts_with('{') || t.starts_with('['))
+        && serde_json::from_str::<serde_json::Value>(body).is_ok()
+    {
         return Some("json");
     }
-    if t.starts_with("diff --git") || (t.starts_with("--- ") && body.contains("\n+++ ")) || t.starts_with("@@ ") {
+    if t.starts_with("diff --git")
+        || (t.starts_with("--- ") && body.contains("\n+++ "))
+        || t.starts_with("@@ ")
+    {
         return Some("diff");
     }
-    if has(&["Traceback (most recent call last)"]) || (has(&["def ", "self.", "elif "]) && has(&[":\n"])) {
+    if has(&["Traceback (most recent call last)"])
+        || (has(&["def ", "self.", "elif "]) && has(&[":\n"]))
+    {
         return Some("python");
     }
-    if has(&["panicked at", "error[E", "fn main", "impl ", "let mut ", "pub fn ", "::new("]) {
+    if has(&[
+        "panicked at",
+        "error[E",
+        "fn main",
+        "impl ",
+        "let mut ",
+        "pub fn ",
+        "::new(",
+    ]) {
         return Some("rust");
     }
     let lines: Vec<&str> = body.lines().filter(|l| !l.trim().is_empty()).collect();
@@ -342,7 +378,9 @@ fn language(body: &str) -> Option<&'static str> {
     if upper.contains("SELECT ") && upper.contains(" FROM ") {
         return Some("sql");
     }
-    if t.starts_with("#!/bin/") || lines.iter().filter(|l| l.starts_with("$ ")).count() * 2 >= lines.len() {
+    if t.starts_with("#!/bin/")
+        || lines.iter().filter(|l| l.starts_with("$ ")).count() * 2 >= lines.len()
+    {
         return Some("bash");
     }
     if has(&["#include", "int main("]) {
@@ -386,8 +424,14 @@ mod tests {
 
     #[test]
     fn shortcuts_wrap_and_unwrap() {
-        assert_eq!(toggle("make it bold", 8..12, "**"), ("make it **bold**".into(), 10..14));
-        assert_eq!(toggle("make it **bold**", 10..14, "**"), ("make it bold".into(), 8..12));
+        assert_eq!(
+            toggle("make it bold", 8..12, "**"),
+            ("make it **bold**".into(), 10..14)
+        );
+        assert_eq!(
+            toggle("make it **bold**", 10..14, "**"),
+            ("make it bold".into(), 8..12)
+        );
         assert_eq!(toggle("x", 1..1, "`"), ("x``".into(), 2..2));
     }
 
@@ -397,7 +441,9 @@ mod tests {
         assert_eq!(code_block(rust).unwrap(), format!("```rust\n{rust}\n```"));
         let log = "2026-10-21 10:02:11 INFO starting\n2026-10-21 10:02:12 ERROR boom";
         assert!(code_block(log).unwrap().starts_with("```log\n"));
-        assert!(code_block("{\n  \"a\": 1\n}").unwrap().starts_with("```json\n"));
+        assert!(code_block("{\n  \"a\": 1\n}")
+            .unwrap()
+            .starts_with("```json\n"));
         let py = "Traceback (most recent call last):\n  File \"x.py\", line 1\nValueError: no";
         assert!(code_block(py).unwrap().starts_with("```python\n"));
         // Prose, one line, and text already fenced paste as they are.

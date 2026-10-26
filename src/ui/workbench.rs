@@ -182,13 +182,48 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
             let done = todos.iter().filter(|(s, _)| *s == ToolStatus::Done).count();
             let running = v.agents.iter().filter(|r| r.ended.is_none()).count();
             let of = |a: usize, b: usize| (b > 0).then(|| format!("{a}/{b}"));
-            let item = |which, label, icon, readout, live, key| super::lens::Item { which, label, icon, readout, live, key };
+            let item = |which, label, icon, readout, live, key| super::lens::Item {
+                which,
+                label,
+                icon,
+                readout,
+                live,
+                key,
+            };
             super::lens::Lens::new(
                 vec![
-                    item(PanelTab::Plan, "Plan", "icons/route.svg", of(done, todos.len()), false, "1"),
-                    item(PanelTab::Agents, "Agents", "icons/bot.svg", of(v.agents.len() - running, v.agents.len()), running > 0, "2"),
-                    item(PanelTab::Files, "Files", "icons/folder.svg", (!files.is_empty()).then(|| files.len().to_string()), false, "3"),
-                    item(PanelTab::Browser, "Browser", "icons/globe.svg", None, false, "4"),
+                    item(
+                        PanelTab::Plan,
+                        "Plan",
+                        "icons/route.svg",
+                        of(done, todos.len()),
+                        false,
+                        "1",
+                    ),
+                    item(
+                        PanelTab::Agents,
+                        "Agents",
+                        "icons/bot.svg",
+                        of(v.agents.len() - running, v.agents.len()),
+                        running > 0,
+                        "2",
+                    ),
+                    item(
+                        PanelTab::Files,
+                        "Files",
+                        "icons/folder.svg",
+                        (!files.is_empty()).then(|| files.len().to_string()),
+                        false,
+                        "3",
+                    ),
+                    item(
+                        PanelTab::Browser,
+                        "Browser",
+                        "icons/globe.svg",
+                        None,
+                        false,
+                        "4",
+                    ),
                 ],
                 v.tab,
                 state.clone(),

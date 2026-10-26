@@ -24,7 +24,6 @@ const VERSION: u32 = 1;
 /// are read again from where they were written.
 const INLINE_BYTES: usize = 4 * 1024 * 1024;
 
-
 /// A saved answer's `rule` naming the mode that answered it, not a rule.
 const MODE_PREFIX: &str = "mode:";
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -831,8 +830,14 @@ mod tests {
             header: "H".into(),
             text: text.into(),
             options: vec![
-                QOption { label: "Tauri (Recommended)".into(), description: "d".into() },
-                QOption { label: "Leptos".into(), description: "".into() },
+                QOption {
+                    label: "Tauri (Recommended)".into(),
+                    description: "d".into(),
+                },
+                QOption {
+                    label: "Leptos".into(),
+                    description: "".into(),
+                },
             ],
             multi: false,
             picked,
@@ -844,18 +849,31 @@ mod tests {
                 detail: "Stack?".into(),
                 verdict: Verdict::Allowed,
                 info: PermInfo {
-                    questions: vec![q("Stack?", vec![0], None), q("Store?", vec![], Some("Markdown files"))],
+                    questions: vec![
+                        q("Stack?", vec![0], None),
+                        q("Store?", vec![], Some("Markdown files")),
+                    ],
                     ..Default::default()
                 },
             }],
         });
         let json = serde_json::to_string(&save_form(&c, Path::new("/w"))).unwrap();
         let back = messages_of(&serde_json::from_str(&json).unwrap());
-        let Message::Assistant { blocks } = &back[0] else { panic!() };
-        let Block::Permission { verdict, info, .. } = &blocks[0] else { panic!() };
+        let Message::Assistant { blocks } = &back[0] else {
+            panic!()
+        };
+        let Block::Permission { verdict, info, .. } = &blocks[0] else {
+            panic!()
+        };
         assert_eq!(*verdict, Verdict::Allowed);
         let answers: Vec<_> = info.questions.iter().map(|q| q.answer()).collect();
-        assert_eq!(answers, [Some("Tauri (Recommended)".into()), Some("Markdown files".into())]);
+        assert_eq!(
+            answers,
+            [
+                Some("Tauri (Recommended)".into()),
+                Some("Markdown files".into())
+            ]
+        );
     }
 
     #[test]

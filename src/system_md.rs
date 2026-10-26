@@ -130,9 +130,21 @@ fn render() -> String {
         ("sidebar", z.sidebar, "the sidebar's width"),
         ("column", z.column, "the reading column"),
         ("menu_row", z.menu_row, "a row in a chat's menu"),
-        ("session_panel", z.session_panel, "the Session column beside a chat: environment, context, changes"),
-        ("composer_line", z.composer_line, "the composer box with one line in it: +, the text, send"),
-        ("menu_width", z.menu_width, "a chat menu's width, and its flyouts' least"),
+        (
+            "session_panel",
+            z.session_panel,
+            "the Session column beside a chat: environment, context, changes",
+        ),
+        (
+            "composer_line",
+            z.composer_line,
+            "the composer box with one line in it: +, the text, send",
+        ),
+        (
+            "menu_width",
+            z.menu_width,
+            "a chat menu's width, and its flyouts' least",
+        ),
         (
             "thumb_w",
             z.thumb_w,
@@ -564,7 +576,10 @@ fn render_design() -> String {
     let q = |c: Hsla| format!("\"{}\"", css(c));
     let _ = writeln!(w, "---");
     let _ = writeln!(w, "name: Forge");
-    let _ = writeln!(w, "description: The desktop app for ForgeCLI: a calm workspace for long agent sessions");
+    let _ = writeln!(
+        w,
+        "description: The desktop app for ForgeCLI: a calm workspace for long agent sessions"
+    );
     let _ = writeln!(w, "colors:");
     for (name, light, dark) in [
         ("canvas", l.colors.canvas, d.colors.canvas),
@@ -589,12 +604,33 @@ fn render_design() -> String {
     let tx = &l.text;
     let _ = writeln!(w, "typography:");
     let _ = writeln!(w, "  prose:\n    fontFamily: \"{}\"\n    fontSize: \"{}px\"\n    fontWeight: 400\n    lineHeight: {:.3}", l.font_reading, px(z.chat_text), z.line_height_chat);
-    let _ = writeln!(w, "  ui:\n    fontFamily: \"{}\"\n    fontSize: \"{}px\"\n    fontWeight: 400", l.font_sans, px(tx.body_sm));
-    let _ = writeln!(w, "  caption:\n    fontFamily: \"{}\"\n    fontSize: \"{}px\"\n    fontWeight: 400", l.font_sans, px(tx.caption));
+    let _ = writeln!(
+        w,
+        "  ui:\n    fontFamily: \"{}\"\n    fontSize: \"{}px\"\n    fontWeight: 400",
+        l.font_sans,
+        px(tx.body_sm)
+    );
+    let _ = writeln!(
+        w,
+        "  caption:\n    fontFamily: \"{}\"\n    fontSize: \"{}px\"\n    fontWeight: 400",
+        l.font_sans,
+        px(tx.caption)
+    );
     let _ = writeln!(w, "  code:\n    fontFamily: \"{}\"", l.font_mono);
-    let _ = writeln!(w, "  code-inline:\n    fontFamily: \"{}\"", l.font_code_inline);
+    let _ = writeln!(
+        w,
+        "  code-inline:\n    fontFamily: \"{}\"",
+        l.font_code_inline
+    );
     let r = &l.radius;
-    let _ = writeln!(w, "rounded:\n  button: \"{}px\"\n  card: \"{}px\"\n  field: \"{}px\"\n  composer: \"{}px\"", px(r.button), px(r.card), px(r.field), px(z.composer_radius));
+    let _ = writeln!(
+        w,
+        "rounded:\n  button: \"{}px\"\n  card: \"{}px\"\n  field: \"{}px\"\n  composer: \"{}px\"",
+        px(r.button),
+        px(r.card),
+        px(r.field),
+        px(z.composer_radius)
+    );
     let sp = &l.space;
     let _ = writeln!(w, "spacing:\n  xs: \"{}px\"\n  sm: \"{}px\"\n  md: \"{}px\"\n  lg: \"{}px\"\n  xl: \"{}px\"\n  xxl: \"{}px\"", px(sp.xs), px(sp.sm), px(sp.md), px(sp.lg), px(sp.xl), px(sp.xxl));
     let _ = writeln!(w, "components:");

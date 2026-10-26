@@ -526,9 +526,15 @@ pub fn back(t: &Theme, id: &'static str, label: &str) -> gpui::Stateful<gpui::Di
         .font_weight(gpui::FontWeight::MEDIUM)
         .text_color(t.colors.text_muted)
         .hover(move |d| d.bg(hover).text_color(strong))
-        .child(icon("icons/arrow-left.svg", t.size.icon_sm, t.colors.text_muted))
+        .child(icon(
+            "icons/arrow-left.svg",
+            t.size.icon_sm,
+            t.colors.text_muted,
+        ))
         .child(label.to_string())
-        .tooltip(|window, cx| gpui::component::tooltip::Tooltip::new("Back (Esc)").build(window, cx))
+        .tooltip(|window, cx| {
+            gpui::component::tooltip::Tooltip::new("Back (Esc)").build(window, cx)
+        })
 }
 
 /// A small link-style action ("Open the folder", "Check again").

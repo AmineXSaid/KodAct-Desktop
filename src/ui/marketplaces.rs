@@ -15,7 +15,7 @@ use gpui::{
 
 use super::editor_kit as kit;
 use super::icon;
-use crate::skill_install::{self as si, Marketplace, MarketPlugin};
+use crate::skill_install::{self as si, MarketPlugin, Marketplace};
 use crate::state::AppState;
 use crate::theme::{self, ActiveTheme, Theme};
 
@@ -40,15 +40,21 @@ pub struct Marketplaces {
 
 impl Marketplaces {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let source = cx.new(|cx| InputState::new(window, cx).placeholder("owner/repo, a git URL, or a folder"));
+        let source = cx.new(|cx| {
+            InputState::new(window, cx).placeholder("owner/repo, a git URL, or a folder")
+        });
         Self {
             _subs: vec![
                 cx.observe(&state, |_, _, cx| cx.notify()),
-                cx.subscribe_in(&source, window, |this, _, ev: &gpui::component::input::InputEvent, window, cx| {
-                    if matches!(ev, gpui::component::input::InputEvent::PressEnter { .. }) {
-                        this.add(window, cx);
-                    }
-                }),
+                cx.subscribe_in(
+                    &source,
+                    window,
+                    |this, _, ev: &gpui::component::input::InputEvent, window, cx| {
+                        if matches!(ev, gpui::component::input::InputEvent::PressEnter { .. }) {
+                            this.add(window, cx);
+                        }
+                    },
+                ),
             ],
             source,
             state,
@@ -82,7 +88,10 @@ impl Marketplaces {
                         .map(|(name, source)| {
                             let r = si::parse_source(&source, &cwd).and_then(|src| {
                                 let root = si::fetch(&src, &si::work_dir())?;
-                                Ok(Read { market: si::read_marketplace(&root)?, root })
+                                Ok(Read {
+                                    market: si::read_marketplace(&root)?,
+                                    root,
+                                })
                             });
                             (name, r)
                         })
@@ -142,7 +151,10 @@ impl Marketplaces {
             Ok(()) => {
                 self.read.remove(&name);
                 self.state.update(cx, |s, cx| {
-                    s.show_toast(format!("Removed the {name} marketplace. Plugins installed from it stay."), cx)
+                    s.show_toast(
+                        format!("Removed the {name} marketplace. Plugins installed from it stay."),
+                        cx,
+                    )
                 });
             }
             Err(e) => self.error = Some(e.into()),
@@ -151,7 +163,9 @@ impl Marketplaces {
     }
 
     fn install(&mut self, read: &Read, plugin: &MarketPlugin, cx: &mut Context<Self>) {
-        let Some(root) = si::plugins_root() else { return };
+        let Some(root) = si::plugins_root() else {
+            return;
+        };
         let source = si::known_marketplaces()
             .into_iter()
             .find(|(n, _)| *n == read.market.name)
@@ -165,8 +179,15 @@ impl Marketplaces {
                 format!("Installed the {name} plugin. New chats load it."),
                 move |project| {
                     let work = si::work_dir();
-                    let r = si::install_plugin(&plugin, &read.market, &read.root, &source, &root, &work)
-                        .and_then(|dir| si::add_plugin_dir(project, &dir));
+                    let r = si::install_plugin(
+                        &plugin,
+                        &read.market,
+                        &read.root,
+                        &source,
+                        &root,
+                        &work,
+                    )
+                    .and_then(|dir| si::add_plugin_dir(project, &dir));
                     let _ = std::fs::remove_dir_all(&work);
                     r
                 },
@@ -201,7 +222,13 @@ impl Marketplaces {
         });
     }
 
-    fn plugin_card(&self, t: &Theme, read: &Read, p: &MarketPlugin, cx: &mut Context<Self>) -> gpui::AnyElement {
+    fn plugin_card(
+        &self,
+        t: &Theme,
+        read: &Read,
+        p: &MarketPlugin,
+        cx: &mut Context<Self>,
+    ) -> gpui::AnyElement {
         let dir = si::plugins_root().map(|r| {
             r.join(crate::downloads::clean_name(&read.market.name))
                 .join(crate::downloads::clean_name(&p.name))
@@ -216,25 +243,47 @@ impl Marketplaces {
         let (r1, p1, r2, p2) = (read.clone(), p.clone(), read.clone(), p.clone());
         let mut card = kit::card(t)
             .child(icon("icons/puzzle.svg", t.size.icon, t.colors.text_muted))
-            .child(kit::card_text(t, title, true, Some(p.description.clone()), None));
+            .child(kit::card_text(
+                t,
+                title,
+                true,
+                Some(p.description.clone()),
+                None,
+            ));
         if installed {
             let (dir, name) = (dir.clone().unwrap_or_default(), p.name.clone());
-            card = card
-                .child(kit::scope_pill(t, "Installed"))
-                .child(
-                    kit::icon_button(t, SharedString::from(format!("update-plugin-{key}")), "icons/refresh-cw.svg", "Update", false)
+            card =
+                card.child(kit::scope_pill(t, "Installed"))
+                    .child(
+                        kit::icon_button(
+                            t,
+                            SharedString::from(format!("update-plugin-{key}")),
+                            "icons/refresh-cw.svg",
+                            "Update",
+                            false,
+                        )
                         .on_click(cx.listener(move |this, _, _, cx| this.install(&r1, &p1, cx))),
-                )
-                .child(
-                    kit::icon_button(t, SharedString::from(format!("rm-plugin-{key}")), "icons/trash.svg", "Remove", true)
-                        .on_click(cx.listener(move |this, _, _, cx| this.remove(dir.clone(), name.clone(), cx))),
-                );
+                    )
+                    .child(
+                        kit::icon_button(
+                            t,
+                            SharedString::from(format!("rm-plugin-{key}")),
+                            "icons/trash.svg",
+                            "Remove",
+                            true,
+                        )
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.remove(dir.clone(), name.clone(), cx)
+                        })),
+                    );
         } else {
             card = card.child(
                 theme::ghost_button(t, if busy { "Installing…" } else { "Install" })
                     .id(SharedString::from(format!("install-plugin-{key}")))
                     .when(busy, |d| d.opacity(0.6))
-                    .when(!busy, |d| d.on_click(cx.listener(move |this, _, _, cx| this.install(&r2, &p2, cx)))),
+                    .when(!busy, |d| {
+                        d.on_click(cx.listener(move |this, _, _, cx| this.install(&r2, &p2, cx)))
+                    }),
             );
         }
         card.into_any_element()
@@ -306,23 +355,43 @@ impl Render for Marketplaces {
                             .child(from),
                     )
                     .child(
-                        kit::icon_button(&t, SharedString::from(format!("forget-market-{name}")), "icons/x.svg", "Remove this marketplace (installed plugins stay)", true)
-                            .on_click(cx.listener(move |this, _, _, cx| this.forget(forget.clone(), cx))),
+                        kit::icon_button(
+                            &t,
+                            SharedString::from(format!("forget-market-{name}")),
+                            "icons/x.svg",
+                            "Remove this marketplace (installed plugins stay)",
+                            true,
+                        )
+                        .on_click(
+                            cx.listener(move |this, _, _, cx| this.forget(forget.clone(), cx)),
+                        ),
                     ),
             );
             match self.read.get(&name).cloned() {
                 None => out = out.child(kit::loading(&t)),
                 Some(Err(e)) => {
                     out = out.child(
-                        div().text_size(t.text.caption).text_color(t.extra.danger).child(format!("Couldn't read it: {e}")),
+                        div()
+                            .text_size(t.text.caption)
+                            .text_color(t.extra.danger)
+                            .child(format!("Couldn't read it: {e}")),
                     )
                 }
                 Some(Ok(read)) => {
                     if read.market.plugins.is_empty() {
-                        out = out.child(div().text_size(t.text.caption).text_color(t.colors.text_muted).child("It lists no plugins."));
+                        out = out.child(
+                            div()
+                                .text_size(t.text.caption)
+                                .text_color(t.colors.text_muted)
+                                .child("It lists no plugins."),
+                        );
                     }
-                    let cards: Vec<gpui::AnyElement> =
-                        read.market.plugins.iter().map(|p| self.plugin_card(&t, &read, p, cx)).collect();
+                    let cards: Vec<gpui::AnyElement> = read
+                        .market
+                        .plugins
+                        .iter()
+                        .map(|p| self.plugin_card(&t, &read, p, cx))
+                        .collect();
                     out = out.children(cards);
                 }
             }

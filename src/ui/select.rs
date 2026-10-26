@@ -56,7 +56,12 @@ fn ends(s: &Selection, order: &HashMap<SharedString, u64>) -> Option<((u64, usiz
 }
 
 /// The part of a paragraph (at reading place `me`, `len` bytes) selected.
-fn part(s: &Selection, order: &HashMap<SharedString, u64>, me: u64, len: usize) -> Option<Range<usize>> {
+fn part(
+    s: &Selection,
+    order: &HashMap<SharedString, u64>,
+    me: u64,
+    len: usize,
+) -> Option<Range<usize>> {
     let ((so, si), (eo, ei)) = ends(s, order)?;
     if me < so || me > eo {
         return None;
@@ -91,7 +96,12 @@ fn highlight(runs: Vec<TextRun>, r: Range<usize>, color: Hsla) -> Vec<TextRun> {
     for run in runs {
         let (start, end) = (at, at + run.len);
         at = end;
-        let cuts = [start, r.start.clamp(start, end), r.end.clamp(start, end), end];
+        let cuts = [
+            start,
+            r.start.clamp(start, end),
+            r.end.clamp(start, end),
+            end,
+        ];
         for w in cuts.windows(2) {
             if w[1] > w[0] {
                 let mut piece = run.clone();
@@ -214,14 +224,20 @@ mod tests {
     #[test]
     fn a_selection_runs_across_paragraphs_in_reading_order() {
         begin_frame();
-        let (a, b, c): (SharedString, SharedString, SharedString) = ("a".into(), "b".into(), "c".into());
+        let (a, b, c): (SharedString, SharedString, SharedString) =
+            ("a".into(), "b".into(), "c".into());
         let color = gpui::black();
         prepare(&a, "first para", vec![run(10)], color);
         prepare(&b, "second", vec![run(6)], color);
         prepare(&c, "third one", vec![run(9)], color);
         // Another chat's paragraph, laid out earlier, takes no part.
         begin_frame();
-        prepare(&"other".into(), "Explain this project", vec![run(20)], color);
+        prepare(
+            &"other".into(),
+            "Explain this project",
+            vec![run(20)],
+            color,
+        );
         begin_frame();
         prepare(&a, "first para", vec![run(10)], color);
         prepare(&b, "second", vec![run(6)], color);
@@ -236,7 +252,13 @@ mod tests {
         // The middle paragraph is highlighted whole, the first in part.
         begin_frame();
         let first = prepare(&a, "first para", vec![run(10)], color);
-        assert_eq!(first.iter().map(|r| (r.len, r.background_color.is_some())).collect::<Vec<_>>(), [(6, false), (4, true)]);
+        assert_eq!(
+            first
+                .iter()
+                .map(|r| (r.len, r.background_color.is_some()))
+                .collect::<Vec<_>>(),
+            [(6, false), (4, true)]
+        );
         assert!(clear());
         assert_eq!(selected_text(), None);
     }

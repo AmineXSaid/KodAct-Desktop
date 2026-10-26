@@ -143,8 +143,12 @@ fn trailing(t: &Theme, i: usize, browser: bool, state: &Entity<AppState>) -> Any
                 .on_toggle(move |_, _, cx| st.update(cx, |s, cx| s.toggle_browser(cx)))
                 .into_any_element()
         }
-        _ => icon("icons/chevron-right.svg", t.size.icon_sm, t.colors.text_muted)
-            .into_any_element(),
+        _ => icon(
+            "icons/chevron-right.svg",
+            t.size.icon_sm,
+            t.colors.text_muted,
+        )
+        .into_any_element(),
     }
 }
 
@@ -224,8 +228,18 @@ fn on_run(
 }
 
 /// The plain menu: icon, label, and its end.
-fn list(t: &Theme, state: &Entity<AppState>, browser: bool, hooks: &Hooks) -> gpui::Stateful<gpui::Div> {
-    let mut card = div().id("add-menu").w(px(260.)).py(px(4.)).flex().flex_col();
+fn list(
+    t: &Theme,
+    state: &Entity<AppState>,
+    browser: bool,
+    hooks: &Hooks,
+) -> gpui::Stateful<gpui::Div> {
+    let mut card = div()
+        .id("add-menu")
+        .w(px(260.))
+        .py(px(4.))
+        .flex()
+        .flex_col();
     for (i, item) in ITEMS.iter().enumerate() {
         if i == 1 {
             card = card.child(div().my(px(4.)).h(px(1.)).bg(t.colors.border));
@@ -236,7 +250,13 @@ fn list(t: &Theme, state: &Entity<AppState>, browser: bool, hooks: &Hooks) -> gp
             .h(t.size.row)
             .gap(px(10.))
             .child(icon(item.glyph, t.size.icon_sm, t.colors.text_muted))
-            .child(div().flex_1().min_w_0().text_color(t.colors.text_strong).child(item.label))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .text_color(t.colors.text_strong)
+                    .child(item.label),
+            )
             .child(trailing(t, i, browser, state));
         card = card.child(on_run(row, i, hooks, state));
     }
@@ -244,7 +264,12 @@ fn list(t: &Theme, state: &Entity<AppState>, browser: bool, hooks: &Hooks) -> gp
 }
 
 /// Two groups, each row an icon tile over a line on what it does.
-fn grouped(t: &Theme, state: &Entity<AppState>, browser: bool, hooks: &Hooks) -> gpui::Stateful<gpui::Div> {
+fn grouped(
+    t: &Theme,
+    state: &Entity<AppState>,
+    browser: bool,
+    hooks: &Hooks,
+) -> gpui::Stateful<gpui::Div> {
     let label = |text: &'static str| {
         div()
             .px(px(10.))
@@ -281,11 +306,19 @@ fn grouped(t: &Theme, state: &Entity<AppState>, browser: bool, hooks: &Hooks) ->
                     .items_center()
                     .justify_center()
                     .rounded(t.radius.button.min(px(8.)))
-                    .bg(if first { t.extra.accent_soft } else { t.extra.sunk })
+                    .bg(if first {
+                        t.extra.accent_soft
+                    } else {
+                        t.extra.sunk
+                    })
                     .child(icon(
                         item.glyph,
                         t.size.icon_sm,
-                        if first { t.extra.accent } else { t.colors.text_muted },
+                        if first {
+                            t.extra.accent
+                        } else {
+                            t.colors.text_muted
+                        },
                     )),
             )
             .child(
@@ -315,7 +348,12 @@ fn grouped(t: &Theme, state: &Entity<AppState>, browser: bool, hooks: &Hooks) ->
 
 /// A list beside the chosen row's page: its name, its line, and the one
 /// thing it does. Pointing at a row chooses it; a click runs it.
-fn split(t: &Theme, state: &Entity<AppState>, browser: bool, hooks: &Hooks) -> gpui::Stateful<gpui::Div> {
+fn split(
+    t: &Theme,
+    state: &Entity<AppState>,
+    browser: bool,
+    hooks: &Hooks,
+) -> gpui::Stateful<gpui::Div> {
     let at = hooks.split_at.min(ITEMS.len() - 1);
     let mut left = div()
         .w(px(196.))
@@ -342,7 +380,11 @@ fn split(t: &Theme, state: &Entity<AppState>, browser: bool, hooks: &Hooks) -> g
             .child(icon(
                 item.glyph,
                 t.size.icon_sm,
-                if on { t.extra.accent } else { t.colors.text_muted },
+                if on {
+                    t.extra.accent
+                } else {
+                    t.colors.text_muted
+                },
             ))
             .child(
                 div()
@@ -356,7 +398,11 @@ fn split(t: &Theme, state: &Entity<AppState>, browser: bool, hooks: &Hooks) -> g
                     }),
             )
             .when(on, |d| {
-                d.child(icon("icons/chevron-right.svg", t.size.icon_sm, t.extra.accent))
+                d.child(icon(
+                    "icons/chevron-right.svg",
+                    t.size.icon_sm,
+                    t.extra.accent,
+                ))
             });
         left = left.child(on_run(row, i, hooks, state));
     }
@@ -420,11 +466,13 @@ fn split(t: &Theme, state: &Entity<AppState>, browser: bool, hooks: &Hooks) -> g
 }
 
 /// A grid of large tiles; the browser's tile says whether it is on.
-fn tiles(t: &Theme, state: &Entity<AppState>, browser: bool, hooks: &Hooks) -> gpui::Stateful<gpui::Div> {
-    let mut grid = div()
-        .grid()
-        .grid_cols(3)
-        .gap(px(8.));
+fn tiles(
+    t: &Theme,
+    state: &Entity<AppState>,
+    browser: bool,
+    hooks: &Hooks,
+) -> gpui::Stateful<gpui::Div> {
+    let mut grid = div().grid().grid_cols(3).gap(px(8.));
     for (i, item) in ITEMS.iter().enumerate() {
         let first = i == 0;
         let label: SharedString = match (item.key, item.does) {
@@ -511,9 +559,19 @@ fn search(
             .child(icon(
                 item.glyph,
                 t.size.icon_sm,
-                if first { t.extra.accent } else { t.colors.text_muted },
+                if first {
+                    t.extra.accent
+                } else {
+                    t.colors.text_muted
+                },
             ))
-            .child(div().flex_1().min_w_0().text_color(t.colors.text_strong).child(item.label))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .text_color(t.colors.text_strong)
+                    .child(item.label),
+            )
             .map(|d| {
                 if first {
                     d.child(
@@ -559,8 +617,17 @@ fn search(
                 .gap(px(8.))
                 .border_b_1()
                 .border_color(t.colors.border)
-                .child(icon("icons/search.svg", t.size.icon_sm, t.colors.text_muted))
-                .child(div().flex_1().min_w_0().child(Input::new(&hooks.filter).appearance(false))),
+                .child(icon(
+                    "icons/search.svg",
+                    t.size.icon_sm,
+                    t.colors.text_muted,
+                ))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .child(Input::new(&hooks.filter).appearance(false)),
+                ),
         )
         .child(rows)
         .child(

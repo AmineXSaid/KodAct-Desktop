@@ -247,17 +247,47 @@ pub fn custom(project: &std::path::Path) -> Vec<Command> {
 /// The skills ForgeCLI ships (`forge-agents/bundled`), by name and what
 /// they do. A user or project skill of the same name replaces one.
 const BUNDLED_SKILLS: &[(&str, &str)] = &[
-    ("batch", "Make the same change across many files, in parallel sub-agents"),
-    ("code-review", "Review code changes for bugs, with a depth level and an optional fix pass"),
-    ("fewer-permission-prompts", "Cut down permission prompts by allowing safe commands this project uses often"),
-    ("init", "Write or improve FORGE.md, the project's instructions for Forge"),
-    ("review", "Review code changes for bugs (same as /code-review)"),
+    (
+        "batch",
+        "Make the same change across many files, in parallel sub-agents",
+    ),
+    (
+        "code-review",
+        "Review code changes for bugs, with a depth level and an optional fix pass",
+    ),
+    (
+        "fewer-permission-prompts",
+        "Cut down permission prompts by allowing safe commands this project uses often",
+    ),
+    (
+        "init",
+        "Write or improve FORGE.md, the project's instructions for Forge",
+    ),
+    (
+        "review",
+        "Review code changes for bugs (same as /code-review)",
+    ),
     ("run", "Start the project and show it working"),
-    ("run-skill-generator", "Write a project skill that captures how to build, run and check this project"),
-    ("security-review", "Review pending changes for exploitable security vulnerabilities"),
-    ("simplify", "Review recent changes for reuse, clarity and efficiency, then fix what you find"),
-    ("update-config", "Change Forge's settings files: permissions, hooks, environment variables, model and more"),
-    ("verify", "Prove a change works by running it, not by reading it"),
+    (
+        "run-skill-generator",
+        "Write a project skill that captures how to build, run and check this project",
+    ),
+    (
+        "security-review",
+        "Review pending changes for exploitable security vulnerabilities",
+    ),
+    (
+        "simplify",
+        "Review recent changes for reuse, clarity and efficiency, then fix what you find",
+    ),
+    (
+        "update-config",
+        "Change Forge's settings files: permissions, hooks, environment variables, model and more",
+    ),
+    (
+        "verify",
+        "Prove a change works by running it, not by reading it",
+    ),
 ];
 
 /// The skills you can run with `/name`: the project's and yours (from the
@@ -291,7 +321,10 @@ pub fn remote_skills(heads: &[(String, String)]) -> Vec<Command> {
             let doc = crate::forge_files::Doc::parse(md);
             let description = doc.get("description").filter(|d| !d.is_empty())?;
             Some(Command {
-                name: doc.get("name").filter(|n| !n.is_empty()).unwrap_or_else(|| folder.clone()),
+                name: doc
+                    .get("name")
+                    .filter(|n| !n.is_empty())
+                    .unwrap_or_else(|| folder.clone()),
                 args: String::new(),
                 description,
             })
@@ -356,15 +389,27 @@ mod tests {
     #[test]
     fn a_remote_lists_its_own_skills_and_forge_s() {
         let heads = vec![
-            ("tls-notes".to_string(), "---\nname: tls-notes\ndescription: Explain TLS\n---\n".to_string()),
-            ("nameless".to_string(), "---\ndescription: Folder-named\n---\n".to_string()),
-            ("model-only".to_string(), "---\nname: model-only\ndescription: x\nuser-invocable: false\n---\n".to_string()),
+            (
+                "tls-notes".to_string(),
+                "---\nname: tls-notes\ndescription: Explain TLS\n---\n".to_string(),
+            ),
+            (
+                "nameless".to_string(),
+                "---\ndescription: Folder-named\n---\n".to_string(),
+            ),
+            (
+                "model-only".to_string(),
+                "---\nname: model-only\ndescription: x\nuser-invocable: false\n---\n".to_string(),
+            ),
             ("broken".to_string(), "---\nname: broken\n---\n".to_string()),
         ];
         let names: Vec<String> = remote_skills(&heads).into_iter().map(|c| c.name).collect();
         assert_eq!(names[..2], ["nameless", "tls-notes"]);
         assert!(!names.iter().any(|n| n == "model-only" || n == "broken"));
-        assert!(names.iter().any(|n| n == "forge:diagram-design"), "{names:?}");
+        assert!(
+            names.iter().any(|n| n == "forge:diagram-design"),
+            "{names:?}"
+        );
         assert!(names.iter().any(|n| n == "init"));
     }
 

@@ -50,13 +50,12 @@ pub fn card(t: &Theme, s: &AppState, id: usize, state: gpui::Entity<AppState>) -
     }
 
     let mut modes = div().flex().flex_wrap().gap(t.space.xs);
-    let mode_choices = std::iter::once((None, "Yours"))
-        .chain(
-            ModeId::ALL
-                .into_iter()
-                .filter(|m| *m != ModeId::Bypass || s.bypass_allowed)
-                .map(|m| (Some(m), m.label())),
-        );
+    let mode_choices = std::iter::once((None, "Yours")).chain(
+        ModeId::ALL
+            .into_iter()
+            .filter(|m| *m != ModeId::Bypass || s.bypass_allowed)
+            .map(|m| (Some(m), m.label())),
+    );
     for (i, (m, shown)) in mode_choices.enumerate() {
         let on = mode == m;
         let st = state.clone();

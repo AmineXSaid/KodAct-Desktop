@@ -9,8 +9,8 @@
 
 use gpui::component::input::{Input, InputEvent, InputState};
 use gpui::{
-    div, prelude::*, px, relative, Context, Entity, FontWeight, IntoElement, Render,
-    SharedString, Subscription, Window,
+    div, prelude::*, px, relative, Context, Entity, FontWeight, IntoElement, Render, SharedString,
+    Subscription, Window,
 };
 
 use super::editor_kit as kit;
@@ -28,7 +28,8 @@ pub struct NewProject {
 
 impl NewProject {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let url = cx.new(|cx| InputState::new(window, cx).placeholder("https://github.com/owner/name"));
+        let url =
+            cx.new(|cx| InputState::new(window, cx).placeholder("https://github.com/owner/name"));
         let name = cx.new(|cx| InputState::new(window, cx).placeholder("Project name"));
         let subs = vec![
             cx.subscribe(&url, |this, _, ev: &InputEvent, cx| {
@@ -162,12 +163,16 @@ impl Render for NewProject {
         for tpl in crate::templates::ALL {
             let on = self.template == tpl.key;
             chips = chips.child(
-                kit::chip(&t, SharedString::from(format!("np-tpl-{}", tpl.key)), tpl.label, on).on_click(
-                    cx.listener(move |this, _, _, cx| {
-                        this.template = tpl.key;
-                        cx.notify();
-                    }),
-                ),
+                kit::chip(
+                    &t,
+                    SharedString::from(format!("np-tpl-{}", tpl.key)),
+                    tpl.label,
+                    on,
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.template = tpl.key;
+                    cx.notify();
+                })),
             );
         }
         let chosen = crate::templates::by_key(self.template);
@@ -186,7 +191,10 @@ impl Render for NewProject {
                 .child(if chosen.instructions.is_empty() {
                     format!("In {home}, empty.")
                 } else {
-                    format!("In {home}, with a FORGE.md for {}.", chosen.label.to_lowercase())
+                    format!(
+                        "In {home}, with a FORGE.md for {}.",
+                        chosen.label.to_lowercase()
+                    )
                 }),
         )
         .child(

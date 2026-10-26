@@ -382,12 +382,9 @@ pub(crate) fn request(
         req = req.set(k, v);
     }
     if let Some(t) = token {
-        req = match profile.wire {
-            Wire::Anthropic => req
-                .set("x-api-key", t)
-                .set("authorization", &format!("Bearer {t}")),
-            Wire::Openai => req.set("authorization", &format!("Bearer {t}")),
-        };
+        for (h, v) in crate::endpoints::auth_headers(profile.wire, &profile.base_url, t) {
+            req = req.set(h, &v);
+        }
     }
     req
 }
@@ -403,12 +400,18 @@ pub fn context_from_listing(listing: &serde_json::Value, model: &str) -> Option<
         [e.get("id"), e.get("name")]
             .into_iter()
             .flatten()
-            .any(|v| v.as_str() == Some(model))
+            .filter_map(|v| v.as_str())
+            .any(|v| v == model || v.strip_prefix("models/") == Some(model))
     })?;
-    ["context_length", "max_input_tokens", "context_window"]
-        .iter()
-        .find_map(|k| entry.get(*k).and_then(|v| v.as_u64()))
-        .filter(|n| *n > 0)
+    [
+        "context_length",
+        "max_input_tokens",
+        "context_window",
+        "inputTokenLimit",
+    ]
+    .iter()
+    .find_map(|k| entry.get(*k).and_then(|v| v.as_u64()))
+    .filter(|n| *n > 0)
 }
 
 /// Read the model's context window from the endpoint's model list, when
@@ -460,6 +463,13 @@ fn read(r: Result<ureq::Response, ureq::Error>) -> Reply {
 /// The check's request: a few tokens of answer to "hi". OpenAI's reasoning
 /// models take `max_completion_tokens`, and need a little room to think.
 fn probe_body(profile: &Profile) -> serde_json::Value {
+    if profile.wire == Wire::Gemini {
+        // Gemini thinks first, and a short limit only cuts the answer: it still answers 200.
+        return serde_json::json!({
+            "contents": [{ "role": "user", "parts": [{ "text": "hi" }] }],
+            "generationConfig": { "maxOutputTokens": 16 }
+        });
+    }
     let mut body = serde_json::json!({ "model": profile.model, "messages": [{ "role": "user", "content": "hi" }] });
     if profile.wire == Wire::Openai && crate::endpoints::is_reasoning_model(&profile.model) {
         body["max_completion_tokens"] = 16.into();

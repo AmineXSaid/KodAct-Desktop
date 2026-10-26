@@ -316,7 +316,11 @@ impl Workspace {
                     .text_ellipsis()
                     .child(c.title.clone()),
             )
-            .child(icon("icons/chevron-down.svg", t.size.icon_sm, t.colors.text_muted))
+            .child(icon(
+                "icons/chevron-down.svg",
+                t.size.icon_sm,
+                t.colors.text_muted,
+            ))
             .on_click(move |ev, _, cx| {
                 cx.stop_propagation();
                 // Under the title, its left edge.
@@ -342,7 +346,12 @@ impl Workspace {
         )
     }
 
-    fn title_bar(&self, frames: BarFrames, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn title_bar(
+        &self,
+        frames: BarFrames,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let t = cx.theme().clone();
         // Deferred so it paints above the page under the title bar.
         let switcher = frames.switcher.map(|leaving| {
@@ -367,7 +376,10 @@ impl Workspace {
         let side = s.doc.is_none().then_some(s.panel).flatten();
         let (plan_on, files_on) = (side == Some(PanelTab::Plan), s.files_open);
         let menu = s.title_menu.map(|(m, _)| m);
-        let (share_on, more_on) = (menu == Some(TitleMenu::Share), menu == Some(TitleMenu::More));
+        let (share_on, more_on) = (
+            menu == Some(TitleMenu::Share),
+            menu == Some(TitleMenu::More),
+        );
         let session_on = s.session_open;
         // A pane's button shows it is open: the accent's wash and ink.
         let toggle = |id: &'static str, path: &'static str, tip: &'static str, on: bool| {
@@ -388,7 +400,11 @@ impl Workspace {
                 .cursor_pointer()
                 .when(on, |d| d.bg(tint))
                 .when(!on, |d| d.hover(move |st| st.bg(hover)))
-                .child(icon(path, t.size.icon, if on { ink } else { t.colors.text_muted }))
+                .child(icon(
+                    path,
+                    t.size.icon,
+                    if on { ink } else { t.colors.text_muted },
+                ))
         };
         let chat = (s.screen == Screen::Chat)
             .then(|| s.current.and_then(|id| s.chats.iter().find(|c| c.id == id)))
@@ -547,22 +563,45 @@ impl Workspace {
                     )
                 })
                 .child(div().flex_1())
-                .children(super::tasks::render(&t, &self.state, window, frames.tasks, cx))
-                .children(super::approvals::render(&t, &self.state, window, frames.approvals, cx))
+                .children(super::tasks::render(
+                    &t,
+                    &self.state,
+                    window,
+                    frames.tasks,
+                    cx,
+                ))
+                .children(super::approvals::render(
+                    &t,
+                    &self.state,
+                    window,
+                    frames.approvals,
+                    cx,
+                ))
                 // The Session column: where it runs, its context, its changes.
                 .when(chat_open, |d| {
                     d.child(
-                        toggle("show-session", "icons/panel-right.svg", "Session", session_on)
-                            .on_click(cx.listener(|_, _, window, cx| {
-                                window.dispatch_action(Box::new(ToggleSession), cx)
-                            })),
+                        toggle(
+                            "show-session",
+                            "icons/panel-right.svg",
+                            "Session",
+                            session_on,
+                        )
+                        .on_click(cx.listener(|_, _, window, cx| {
+                            window.dispatch_action(Box::new(ToggleSession), cx)
+                        })),
                     )
                 })
                 .child(
-                    toggle("show-plan", "icons/list-todo.svg", "Plan (Ctrl+Shift+E)", plan_on)
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.state.update(cx, |s, cx| s.toggle_panel_tab(PanelTab::Plan, cx))
-                        })),
+                    toggle(
+                        "show-plan",
+                        "icons/list-todo.svg",
+                        "Plan (Ctrl+Shift+E)",
+                        plan_on,
+                    )
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.state
+                            .update(cx, |s, cx| s.toggle_panel_tab(PanelTab::Plan, cx))
+                    })),
                 )
                 .child(
                     toggle("show-files", "icons/folder.svg", "Files", files_on).on_click(
@@ -599,7 +638,8 @@ impl Workspace {
                         })
                         .on_click(cx.listener(|this, ev: &gpui::ClickEvent, _, cx| {
                             let at = gpui::point(ev.position().x, ev.position().y);
-                            this.state.update(cx, |s, cx| s.toggle_title_menu(TitleMenu::More, at, cx))
+                            this.state
+                                .update(cx, |s, cx| s.toggle_title_menu(TitleMenu::More, at, cx))
                         })),
                 ),
         )
@@ -702,7 +742,11 @@ impl Workspace {
 
     /// The title bar's project switcher: every project, then All projects
     /// and Open folder….
-    fn toast(&self, frame: Frame<SharedString>, cx: &mut Context<Self>) -> Option<impl IntoElement> {
+    fn toast(
+        &self,
+        frame: Frame<SharedString>,
+        cx: &mut Context<Self>,
+    ) -> Option<impl IntoElement> {
         let t = cx.theme().clone();
         let (text, leaving) = frame?;
         let id = format!("toast-{}", text);
@@ -722,8 +766,11 @@ impl Workspace {
                         .items_center()
                         .gap(t.space.sm)
                         .child(icon("icons/info.svg", t.size.icon_sm, t.colors.text_muted))
-                        .child(text), &id, leaving, &t),
-),
+                        .child(text),
+                    &id,
+                    leaving,
+                    &t,
+                )),
         )
     }
 }
@@ -745,7 +792,9 @@ impl Render for Workspace {
         };
         let p = &mut self.presence;
         let palette_f = p.palette.frame(palette_now, t.size.menu_out_ms, window);
-        let shortcuts_f = p.shortcuts.frame(shortcuts_now, t.size.window_out_ms, window);
+        let shortcuts_f = p
+            .shortcuts
+            .frame(shortcuts_now, t.size.window_out_ms, window);
         let map_f = p.map.frame(map_now, t.size.window_out_ms, window);
         let title_f = p.title.frame(title_now, t.size.menu_out_ms, window);
         let chat_f = p.chat.frame(chat_now, t.size.menu_out_ms, window);
@@ -758,16 +807,15 @@ impl Render for Workspace {
             BarFrames {
                 switcher: p.switcher.frame(sw.then_some(()), out, window).map(|f| f.1),
                 tasks: p.tasks.frame(ta.then_some(()), out, window).map(|f| f.1),
-                approvals: p.approvals.frame(ap.then_some(()), out, window).map(|f| f.1),
+                approvals: p
+                    .approvals
+                    .frame(ap.then_some(()), out, window)
+                    .map(|f| f.1),
             }
         };
         let s = self.state.read(cx);
-        let (sidebar_open, onboarding, screen, loading) = (
-            s.sidebar_open,
-            s.onboarding,
-            s.screen,
-            s.loading,
-        );
+        let (sidebar_open, onboarding, screen, loading) =
+            (s.sidebar_open, s.onboarding, s.screen, s.loading);
         // Which chat shows: its transcript animates in when it changes.
         let chat_key = s.chat().map_or(usize::MAX, |c| c.id);
         let empty = s.chat().is_none_or(|c| c.messages.is_empty());
@@ -788,11 +836,10 @@ impl Render for Workspace {
         // With Files open the side column stands beside the chat.
         let below = s.doc_below && !files_open;
         // The terminal dock, kept while it slides back out.
-        let dock_f = self.presence.dock.frame(
-            s.terminal_open.then_some(()),
-            t.size.panel_out_ms,
-            window,
-        );
+        let dock_f =
+            self.presence
+                .dock
+                .frame(s.terminal_open.then_some(()), t.size.panel_out_ms, window);
         let dock_leaving = dock_f.is_some_and(|(_, leaving)| leaving);
         let terminal_open = dock_f.is_some();
         // What is left of the window beside the sidebar is shared by the
@@ -924,12 +971,7 @@ impl Render for Workspace {
                 .or(panel)
                 .map(|p| match files_open {
                     // A file or tab above, the Files pane under it.
-                    true => div()
-                        .flex_1()
-                        .min_h_0()
-                        .flex()
-                        .child(p)
-                        .into_any_element(),
+                    true => div().flex_1().min_h_0().flex().child(p).into_any_element(),
                     false => p,
                 });
             let column = match (top, files_open) {
@@ -956,7 +998,9 @@ impl Render for Workspace {
             };
             column.and_then(|p| match side_leaving {
                 // Leaving: back out to the edge (below the chat, gone at once).
-                true => (!pane_below).then(|| super::motion::slide_out(p, pane_width, "side-panel", &t)),
+                true => {
+                    (!pane_below).then(|| super::motion::slide_out(p, pane_width, "side-panel", &t))
+                }
                 false => Some(super::motion::slide_in(p, pane_width, pane_below, &t)),
             })
         };
@@ -979,14 +1023,22 @@ impl Render for Workspace {
             )
         } else if matches!(screen, Screen::Projects | Screen::Project(_)) {
             // A project page opens its knowledge files in the side panel too.
-            let doc_open = matches!(screen, Screen::Project(_)) && self.state.read(cx).doc.is_some();
+            let doc_open =
+                matches!(screen, Screen::Project(_)) && self.state.read(cx).doc.is_some();
             main.child(
                 div()
                     .flex_1()
                     .min_h_0()
                     .flex()
                     .when(below, |d| d.flex_col())
-                    .child(div().flex_1().min_w_0().min_h_0().flex().child(self.projects.clone()))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .min_h_0()
+                            .flex()
+                            .child(self.projects.clone()),
+                    )
                     .when(doc_open, |d| d.children(pane)),
             )
         } else if empty {
@@ -1055,7 +1107,11 @@ impl Render for Workspace {
                         .with_animation(
                             ("transcript-in", chat_key),
                             gpui::Animation::new(std::time::Duration::from_millis(
-                                if super::motion::reduced_motion() { 1 } else { t.size.panel_in_ms },
+                                if super::motion::reduced_motion() {
+                                    1
+                                } else {
+                                    t.size.panel_in_ms
+                                },
                             ))
                             .with_easing(gpui::ease_out_quint()),
                             |d, k| d.opacity(k).mt(px(10. * (1. - k))),
@@ -1086,7 +1142,8 @@ impl Render for Workspace {
                 .frame(session_now, t.size.panel_out_ms, window)
                 .map(|(chat, leaving)| {
                     let w = f32::from(t.size.session_panel);
-                    let col = super::session_panel::render(&t, &self.state, self.state.read(cx), chat);
+                    let col =
+                        super::session_panel::render(&t, &self.state, self.state.read(cx), chat);
                     match leaving {
                         true => super::motion::slide_out(col, w, "session-column", &t),
                         false => super::motion::slide_in(col, w, false, &t),
@@ -1115,7 +1172,9 @@ impl Render for Workspace {
                 if k.modifiers.modified() {
                     return;
                 }
-                let Some(id) = this.state.read(cx).chat_menu else { return };
+                let Some(id) = this.state.read(cx).chat_menu else {
+                    return;
+                };
                 if let Some(f) = super::chat_menu::letter(&k.key) {
                     cx.stop_propagation();
                     this.state.update(cx, |s, cx| f(s, id, cx));
@@ -1131,7 +1190,8 @@ impl Render for Workspace {
                 this.state.update(cx, |s, cx| s.toggle_files(cx))
             }))
             .on_action(cx.listener(|this, _: &ShowChatFiles, _, cx| {
-                this.state.update(cx, |s, cx| s.toggle_panel_tab(PanelTab::Files, cx))
+                this.state
+                    .update(cx, |s, cx| s.toggle_panel_tab(PanelTab::Files, cx))
             }))
             .on_action(cx.listener(|this, _: &OpenDocuments, _, cx| {
                 this.state.update(cx, |s, cx| {
@@ -1168,16 +1228,20 @@ impl Render for Workspace {
                 this.state.update(cx, |s, cx| s.toggle_panel(cx))
             }))
             .on_action(cx.listener(|this, _: &ShowPlanView, _, cx| {
-                this.state.update(cx, |s, cx| s.show_panel(PanelTab::Plan, cx))
+                this.state
+                    .update(cx, |s, cx| s.show_panel(PanelTab::Plan, cx))
             }))
             .on_action(cx.listener(|this, _: &ShowAgentsView, _, cx| {
-                this.state.update(cx, |s, cx| s.show_panel(PanelTab::Agents, cx))
+                this.state
+                    .update(cx, |s, cx| s.show_panel(PanelTab::Agents, cx))
             }))
             .on_action(cx.listener(|this, _: &ShowFilesView, _, cx| {
-                this.state.update(cx, |s, cx| s.show_panel(PanelTab::Files, cx))
+                this.state
+                    .update(cx, |s, cx| s.show_panel(PanelTab::Files, cx))
             }))
             .on_action(cx.listener(|this, _: &ShowBrowserView, _, cx| {
-                this.state.update(cx, |s, cx| s.show_panel(PanelTab::Browser, cx))
+                this.state
+                    .update(cx, |s, cx| s.show_panel(PanelTab::Browser, cx))
             }))
             .on_action(cx.listener(|this, _: &ToggleSplit, _, cx| {
                 this.state.update(cx, |s, cx| {
@@ -1275,8 +1339,12 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &ThemeTray, _, cx| this.pick_look(Look::Tray, cx)))
             .on_action(cx.listener(|this, _: &ThemeStudio, _, cx| this.pick_look(Look::Studio, cx)))
             .on_action(cx.listener(|this, _: &ThemeTiles, _, cx| this.pick_look(Look::Tiles, cx)))
-            .on_action(cx.listener(|this, _: &ThemeCommand, _, cx| this.pick_look(Look::Command, cx)))
-            .on_action(cx.listener(|this, _: &ThemePremium, _, cx| this.pick_look(Look::Premium, cx)))
+            .on_action(
+                cx.listener(|this, _: &ThemeCommand, _, cx| this.pick_look(Look::Command, cx)),
+            )
+            .on_action(
+                cx.listener(|this, _: &ThemePremium, _, cx| this.pick_look(Look::Premium, cx)),
+            )
             .on_action(
                 cx.listener(|this, _: &FocusComposer, window, cx| this.focus_composer(window, cx)),
             )
@@ -1489,7 +1557,8 @@ impl Render for Workspace {
             })
             .capture_key_down(|ev: &gpui::KeyDownEvent, _, cx| {
                 let k = &ev.keystroke;
-                if k.key == "c" && k.modifiers.secondary() && !k.modifiers.shift && !k.modifiers.alt {
+                if k.key == "c" && k.modifiers.secondary() && !k.modifiers.shift && !k.modifiers.alt
+                {
                     if let Some(text) = super::select::selected_text() {
                         cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
                         cx.stop_propagation();
@@ -1547,7 +1616,8 @@ impl Render for Workspace {
             }))
             .on_action(cx.listener(|this, _: &ContinueInNewChat, _, cx| {
                 if let Some(id) = this.current_chat(cx) {
-                    this.state.update(cx, |s, cx| s.continue_in_new_chat(id, cx));
+                    this.state
+                        .update(cx, |s, cx| s.continue_in_new_chat(id, cx));
                 }
             }))
             .on_action(cx.listener(|this, _: &CopyChatMarkdown, _, cx| {
@@ -1683,8 +1753,12 @@ impl Render for Workspace {
             .when(palette_f.is_some(), |d| d.child(self.palette.clone()))
             .child(self.side.clone())
             .child(self.settings.clone())
-            .children(map_f.map(|(_, leaving)| super::project_map::render(&t, &self.state, leaving, cx)))
-            .children(shortcuts_f.map(|(_, leaving)| super::shortcuts::render(&t, &self.state, leaving)))
+            .children(
+                map_f.map(|(_, leaving)| super::project_map::render(&t, &self.state, leaving, cx)),
+            )
+            .children(
+                shortcuts_f.map(|(_, leaving)| super::shortcuts::render(&t, &self.state, leaving)),
+            )
             .children(self.chat_menu(chat_f, window, cx))
             .children(self.title_menu(title_f, window, cx))
             .child(self.confirm.clone())
@@ -1743,7 +1817,10 @@ impl Workspace {
         // sidebar's where they were asked for, your name's rising from it.
         let (at, corner) = match which {
             TitleMenu::Share | TitleMenu::More => (
-                gpui::point(at.x - t.size.menu_width + t.space.lg, t.size.titlebar - px(2.)),
+                gpui::point(
+                    at.x - t.size.menu_width + t.space.lg,
+                    t.size.titlebar - px(2.),
+                ),
                 gpui::Anchor::TopLeft,
             ),
             TitleMenu::Help => (at, gpui::Anchor::TopLeft),
@@ -1818,14 +1895,20 @@ impl Workspace {
                             .on_mouse_down_out(move |_, _, cx| {
                                 close.update(cx, |s, cx| s.open_chat_menu(None, cx))
                             })
-                            .child(super::motion::unfold(div().child(super::chat_menu::render(
+                            .child(super::motion::unfold(
+                                div().child(super::chat_menu::render(
+                                    &t,
+                                    &self.state,
+                                    info,
+                                    s.chat_sub,
+                                    targets,
+                                    window,
+                                )),
+                                &format!("chat-menu-{id}"),
+                                false,
+                                leaving,
                                 &t,
-                                &self.state,
-                                info,
-                                s.chat_sub,
-                                targets,
-                                window,
-                            )), &format!("chat-menu-{id}"), false, leaving, &t)),
+                            )),
                     ),
             )
             .with_priority(2)
@@ -1897,7 +1980,12 @@ pub fn project_switcher(
     let s = state.read(cx);
     let home = crate::rules::home_dir();
     let hover = t.colors.hover;
-    let mut projects: Vec<_> = s.projects.iter().filter(|p| p.saved && (!p.archived || p.id == s.current_project)).cloned().collect();
+    let mut projects: Vec<_> = s
+        .projects
+        .iter()
+        .filter(|p| p.saved && (!p.archived || p.id == s.current_project))
+        .cloned()
+        .collect();
     projects.sort_by_key(|p| (p.id != s.current_project, !p.pinned, p.opened_minutes_ago));
     let connected: Vec<_> = s
         .projects
@@ -2128,7 +2216,11 @@ fn nav_button(
         .child(icon(
             path,
             t.size.icon,
-            if can { t.colors.text_muted } else { t.colors.text_muted.opacity(0.35) },
+            if can {
+                t.colors.text_muted
+            } else {
+                t.colors.text_muted.opacity(0.35)
+            },
         ))
         .when(can, move |d| {
             d.cursor_pointer()

@@ -146,7 +146,10 @@ pub fn fence(lang: &str, code: &str, t: &crate::theme::Theme) -> Option<Arc<str>
     ) {
         return None;
     }
-    let k = (key(&format!("{lang}\u{0}{code}\u{0}{}", t.look.id())), t.is_dark);
+    let k = (
+        key(&format!("{lang}\u{0}{code}\u{0}{}", t.look.id())),
+        t.is_dark,
+    );
     FENCES.with(|f| {
         let mut f = f.borrow_mut();
         if let Some(hit) = f.get(&k) {

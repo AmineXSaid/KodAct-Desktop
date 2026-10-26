@@ -97,10 +97,17 @@ impl ChatView {
         let s = self.state.read(cx);
         // The last row holds the working line and what you queued.
         let busy = s.busy();
-        let queued = s.chat().and_then(|c| s.queued.get(&c.id)).map_or(0, Vec::len);
+        let queued = s
+            .chat()
+            .and_then(|c| s.queued.get(&c.id))
+            .map_or(0, Vec::len);
         let tail = busy || queued > 0;
         let (id, count, version) = match s.chat() {
-            Some(c) => (Some(c.id), c.messages.len() + tail as usize, (c.version, queued)),
+            Some(c) => (
+                Some(c.id),
+                c.messages.len() + tail as usize,
+                (c.version, queued),
+            ),
             None => (None, 0, (0, 0)),
         };
         if id != self.shown_chat {
@@ -436,7 +443,11 @@ impl ChatView {
                         )
                     })
                     .tooltip(move |w, cx| {
-                        let words = if busy { "New messages below" } else { "Jump to latest" };
+                        let words = if busy {
+                            "New messages below"
+                        } else {
+                            "Jump to latest"
+                        };
                         gpui::component::tooltip::Tooltip::new(format!(
                             "{words} ({})",
                             super::shortcut("J")
@@ -502,17 +513,22 @@ impl ChatView {
             None => {
                 let i = cx.new(|cx| InputState::new(window, cx).placeholder("Type your answer"));
                 let state = self.state.clone();
-                self._other_subs.push(cx.subscribe_in(&i, window, move |_, i, ev: &InputEvent, _, cx| {
-                    let text = i.read(cx).value().to_string();
-                    match ev {
-                        InputEvent::Change => state.update(cx, |s, cx| s.set_own_text(text, cx)),
-                        // Enter answers this question with it and moves on.
-                        InputEvent::PressEnter { .. } if !text.trim().is_empty() => {
-                            state.update(cx, |s, cx| s.answer_in_words(text.trim().to_string(), cx))
+                self._other_subs.push(cx.subscribe_in(
+                    &i,
+                    window,
+                    move |_, i, ev: &InputEvent, _, cx| {
+                        let text = i.read(cx).value().to_string();
+                        match ev {
+                            InputEvent::Change => {
+                                state.update(cx, |s, cx| s.set_own_text(text, cx))
+                            }
+                            // Enter answers this question with it and moves on.
+                            InputEvent::PressEnter { .. } if !text.trim().is_empty() => state
+                                .update(cx, |s, cx| s.answer_in_words(text.trim().to_string(), cx)),
+                            _ => {}
                         }
-                        _ => {}
-                    }
-                }));
+                    },
+                ));
                 self.other = Some(i.clone());
                 i
             }
@@ -530,7 +546,10 @@ impl ChatView {
 impl Render for ChatView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let other = self.other_field(window, cx);
-        let other_msg = self.other_for.map(|(_, m, _, _)| m).filter(|_| other.is_some());
+        let other_msg = self
+            .other_for
+            .map(|(_, m, _, _)| m)
+            .filter(|_| other.is_some());
         // Paragraphs take their reading order afresh, top to bottom.
         super::select::begin_frame();
         self.finish_reveal(window, cx);
@@ -553,9 +572,7 @@ impl Render for ChatView {
                     let ctx = ItemContext {
                         state: state.clone(),
                         marks: match m {
-                            Message::User { text, .. } => {
-                                super::autocomplete::marks(text, s, true)
-                            }
+                            Message::User { text, .. } => super::autocomplete::marks(text, s, true),
                             _ => vec![],
                         },
                         place: s
@@ -583,7 +600,10 @@ impl Render for ChatView {
                                 })
                             }),
                         after_error: ix > 0
-                            && matches!(chat.messages.get(ix - 1), Some(Message::Notice { error: true, .. })),
+                            && matches!(
+                                chat.messages.get(ix - 1),
+                                Some(Message::Notice { error: true, .. })
+                            ),
                         in_last_turn: !chat.messages[ix + 1..]
                             .iter()
                             .any(|m| matches!(m, Message::User { .. })),
@@ -656,7 +676,11 @@ impl Render for ChatView {
                         ),
                         None => div().into_any_element(),
                     };
-                    let queued = s.queued.get(&chat.id).map(Vec::as_slice).unwrap_or_default();
+                    let queued = s
+                        .queued
+                        .get(&chat.id)
+                        .map(Vec::as_slice)
+                        .unwrap_or_default();
                     div()
                         .flex()
                         .flex_col()
@@ -750,12 +774,9 @@ impl Render for ChatView {
                 )
             })
             // The transcript's scrollbar, over its right edge.
-            .child(
-                div().absolute().inset_0().child(
-                    gpui::component::scroll::Scrollbar::vertical(&self.list)
-                        .id("chat-scrollbar"),
-                ),
-            )
+            .child(div().absolute().inset_0().child(
+                gpui::component::scroll::Scrollbar::vertical(&self.list).id("chat-scrollbar"),
+            ))
             .children(jump)
     }
 }
@@ -883,7 +904,9 @@ fn working_line(
         })
         .when_some(detail, |d, step| {
             let step: SharedString = step.into();
-            d.tooltip(move |w, cx| gpui::component::tooltip::Tooltip::new(step.clone()).build(w, cx))
+            d.tooltip(move |w, cx| {
+                gpui::component::tooltip::Tooltip::new(step.clone()).build(w, cx)
+            })
         })
         .into_any_element()
 }

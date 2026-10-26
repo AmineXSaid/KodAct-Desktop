@@ -413,7 +413,9 @@ pub fn rule_scope(suggestions: &serde_json::Value) -> Option<&'static str> {
 
 /// Pick option `opt` of question `q` (see `AppState::pick_option`).
 pub fn pick(qs: &mut [Question], step: &mut usize, q: usize, opt: usize) {
-    let Some(question) = qs.get_mut(q) else { return };
+    let Some(question) = qs.get_mut(q) else {
+        return;
+    };
     if opt >= question.options.len() {
         return;
     }
@@ -501,8 +503,26 @@ pub fn always_label(rule: Option<&str>) -> String {
 /// Programs used through a subcommand: their rule keeps it (`git push`,
 /// `npm test`), as allowing all of git or npm is not what the click meant.
 const SUBCOMMANDED: &[&str] = &[
-    "git", "npm", "pnpm", "yarn", "bun", "cargo", "docker", "kubectl", "go", "pip", "pip3",
-    "uv", "poetry", "dotnet", "gh", "brew", "apt", "apt-get", "systemctl", "terraform",
+    "git",
+    "npm",
+    "pnpm",
+    "yarn",
+    "bun",
+    "cargo",
+    "docker",
+    "kubectl",
+    "go",
+    "pip",
+    "pip3",
+    "uv",
+    "poetry",
+    "dotnet",
+    "gh",
+    "brew",
+    "apt",
+    "apt-get",
+    "systemctl",
+    "terraform",
 ];
 
 /// A command rule widened to the command itself: `rm perm_a.txt` allows
@@ -515,9 +535,9 @@ fn command_of(rule: &str) -> String {
         .next()
         .unwrap_or("")
         .trim();
-    let mut words = first.split_whitespace().skip_while(|w| {
-        w.contains('=') && !w.starts_with('-') && !w.starts_with('=')
-    });
+    let mut words = first
+        .split_whitespace()
+        .skip_while(|w| w.contains('=') && !w.starts_with('-') && !w.starts_with('='));
     let Some(program) = words.next() else {
         return rule.trim_end_matches(":*").to_string();
     };
@@ -1536,7 +1556,11 @@ pub enum Request {
     /// Stop these sub-agents (every running one when you chose "Stop all").
     StopAgents { chat: usize, ids: Vec<String> },
     /// Take back a queued message; `edit` puts it back in the box.
-    CancelQueued { chat: usize, uuid: String, edit: bool },
+    CancelQueued {
+        chat: usize,
+        uuid: String,
+        edit: bool,
+    },
     /// What fills the chat's context, for the Session column.
     ContextUsage { chat: usize },
 }
@@ -1891,7 +1915,10 @@ pub struct AppState {
     /// plain stage, its text the only thing that moves). `chat-pattern.txt`.
     pub chat_pattern: bool,
     /// When each thought began and ended: (chat, message, block).
-    thought: std::collections::HashMap<(usize, usize, usize), (std::time::Instant, Option<std::time::Instant>)>,
+    thought: std::collections::HashMap<
+        (usize, usize, usize),
+        (std::time::Instant, Option<std::time::Instant>),
+    >,
     /// The task panel and the approvals list are open.
     pub tasks_open: bool,
     pub approvals_open: bool,
@@ -2274,7 +2301,12 @@ impl AppState {
                 let listed = cx
                     .background_spawn(async move {
                         let key = crate::health::token(&p.auth).ok().flatten();
-                        crate::endpoints::list_catalog(&p.base_url, p.wire, key.as_deref(), &p.headers)
+                        crate::endpoints::list_catalog(
+                            &p.base_url,
+                            p.wire,
+                            key.as_deref(),
+                            &p.headers,
+                        )
                     })
                     .await;
                 if let Ok(models) = listed {
@@ -2300,7 +2332,9 @@ impl AppState {
                 id: id.to_string(),
                 ..Default::default()
             });
-        let Some(e) = self.endpoints.as_mut() else { return };
+        let Some(e) = self.endpoints.as_mut() else {
+            return;
+        };
         let Some(p) = e.profiles.iter_mut().find(|p| p.name == name) else {
             return;
         };
@@ -2485,14 +2519,18 @@ impl AppState {
                         model: id.clone(),
                         ..base.clone()
                     };
-                    let verdict = crate::health::probe_with(&profile, key.clone(), crate::health::TEST_TIMEOUT)
-                        .unwrap_or_else(|e| crate::health::ModelHealth {
-                            id: id.clone(),
-                            servable: false,
-                            ms: 0,
-                            detail: Some(e),
-                            checked_at: crate::health::now_ms(),
-                        });
+                    let verdict = crate::health::probe_with(
+                        &profile,
+                        key.clone(),
+                        crate::health::TEST_TIMEOUT,
+                    )
+                    .unwrap_or_else(|e| crate::health::ModelHealth {
+                        id: id.clone(),
+                        servable: false,
+                        ms: 0,
+                        detail: Some(e),
+                        checked_at: crate::health::now_ms(),
+                    });
                     if tx.send_blocking((id, verdict)).is_err() {
                         break;
                     }
@@ -2756,7 +2794,9 @@ impl AppState {
     fn place(&self) -> Place {
         Place {
             screen: self.screen,
-            chat: (self.screen == Screen::Chat).then_some(self.current).flatten(),
+            chat: (self.screen == Screen::Chat)
+                .then_some(self.current)
+                .flatten(),
         }
     }
 
@@ -2781,7 +2821,9 @@ impl AppState {
     /// A place that is still there: its chat or project not deleted since.
     fn reachable(&self, p: &Place) -> bool {
         match p.screen {
-            Screen::Chat => p.chat.is_none_or(|id| self.chats.iter().any(|c| c.id == id)),
+            Screen::Chat => p
+                .chat
+                .is_none_or(|id| self.chats.iter().any(|c| c.id == id)),
             Screen::Project(id) => self.project(id).is_some(),
             Screen::Rules | Screen::Projects | Screen::Documents => true,
         }
@@ -2790,7 +2832,11 @@ impl AppState {
     /// Back (`forward` false) or forward: to the nearest place still there.
     pub fn step_place(&mut self, forward: bool, cx: &mut Context<Self>) {
         loop {
-            let next = if forward { self.nav_forward.pop() } else { self.nav_back.pop() };
+            let next = if forward {
+                self.nav_forward.pop()
+            } else {
+                self.nav_back.pop()
+            };
             let Some(next) = next else {
                 return;
             };
@@ -2869,7 +2915,9 @@ impl AppState {
                 })
                 .unwrap_or(false);
             if still {
-                cx.background_executor().timer(Duration::from_secs(60)).await;
+                cx.background_executor()
+                    .timer(Duration::from_secs(60))
+                    .await;
                 let _ = this.update(cx, |s, cx| {
                     if s.repo_reads == read && s.screen == Screen::Project(id) {
                         s.load_repo(id, cx);
@@ -2994,7 +3042,9 @@ impl AppState {
                 crate::project_share::export(path, &name, &description, memory, &dir).map(|f| {
                     format!(
                         "Saved to Downloads as {}. Whoever imports it gets this project's setup.",
-                        f.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+                        f.file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_default()
                     )
                 })
             },
@@ -3007,14 +3057,16 @@ impl AppState {
         self.share_step(
             id,
             move |path| {
-                crate::project_share::import(&file, path).map(|r| match (r.added.len(), r.kept.len()) {
-                    (0, 0) => "That setup was empty.".to_string(),
-                    (a, 0) => format!("Imported {a} file{}.", if a == 1 { "" } else { "s" }),
-                    (a, k) => format!(
-                        "Imported {a} file{}; kept {k} this project already had ({}).",
-                        if a == 1 { "" } else { "s" },
-                        r.kept.join(", ")
-                    ),
+                crate::project_share::import(&file, path).map(|r| {
+                    match (r.added.len(), r.kept.len()) {
+                        (0, 0) => "That setup was empty.".to_string(),
+                        (a, 0) => format!("Imported {a} file{}.", if a == 1 { "" } else { "s" }),
+                        (a, k) => format!(
+                            "Imported {a} file{}; kept {k} this project already had ({}).",
+                            if a == 1 { "" } else { "s" },
+                            r.kept.join(", ")
+                        ),
+                    }
                 })
             },
             cx,
@@ -3070,7 +3122,10 @@ impl AppState {
         let Some(dir) = crate::templates::projects_home()
             .and_then(|h| crate::templates::clone_target(&h, &url))
         else {
-            return self.show_toast("Paste a repository's address, like https://github.com/owner/name.", cx);
+            return self.show_toast(
+                "Paste a repository's address, like https://github.com/owner/name.",
+                cx,
+            );
         };
         if dir.exists() {
             // Already cloned: open it.
@@ -3233,13 +3288,20 @@ impl AppState {
     }
 
     /// Add files to project `id`'s knowledge.
-    pub fn knowledge_add(&mut self, id: usize, paths: Vec<std::path::PathBuf>, cx: &mut Context<Self>) {
+    pub fn knowledge_add(
+        &mut self,
+        id: usize,
+        paths: Vec<std::path::PathBuf>,
+        cx: &mut Context<Self>,
+    ) {
         self.knowledge_change(
             id,
             move |p| {
                 crate::knowledge::add(p, &paths).map(|n| match n {
                     0 => "Those files are in the knowledge already.".into(),
-                    1 => "Added to the knowledge, On demand: Forge reads it when it matters.".into(),
+                    1 => {
+                        "Added to the knowledge, On demand: Forge reads it when it matters.".into()
+                    }
                     n => format!("Added {n} files to the knowledge, On demand."),
                 })
             },
@@ -3248,7 +3310,13 @@ impl AppState {
     }
 
     /// Add a note you wrote to project `id`'s knowledge.
-    pub fn knowledge_add_text(&mut self, id: usize, title: String, text: String, cx: &mut Context<Self>) {
+    pub fn knowledge_add_text(
+        &mut self,
+        id: usize,
+        title: String,
+        text: String,
+        cx: &mut Context<Self>,
+    ) {
         self.knowledge_change(
             id,
             move |p| crate::knowledge::add_text(p, &title, &text).map(|_| String::new()),
@@ -3256,7 +3324,13 @@ impl AppState {
         );
     }
 
-    pub fn knowledge_set_always(&mut self, id: usize, rel: String, always: bool, cx: &mut Context<Self>) {
+    pub fn knowledge_set_always(
+        &mut self,
+        id: usize,
+        rel: String,
+        always: bool,
+        cx: &mut Context<Self>,
+    ) {
         self.knowledge_change(
             id,
             move |p| crate::knowledge::set_always(p, &rel, always).map(|_| String::new()),
@@ -3274,7 +3348,13 @@ impl AppState {
 
     /// Save project `id`'s instructions: shared (its FORGE.md) or yours
     /// only (FORGE.local.md). Empty removes the file.
-    pub fn save_instructions(&mut self, id: usize, mine: bool, text: String, cx: &mut Context<Self>) {
+    pub fn save_instructions(
+        &mut self,
+        id: usize,
+        mine: bool,
+        text: String,
+        cx: &mut Context<Self>,
+    ) {
         let Some((_, brief)) = self.project_brief.as_ref().filter(|(b, _)| *b == id) else {
             return;
         };
@@ -3485,7 +3565,12 @@ impl AppState {
                 .filter(|c| self.project(c.project).is_some_and(|p| !p.scratch))
                 .max_by_key(|c| c.updated)
                 .map(|c| c.project)
-                .or_else(|| self.projects.iter().find(|p| !p.scratch && p.saved).map(|p| p.id))
+                .or_else(|| {
+                    self.projects
+                        .iter()
+                        .find(|p| !p.scratch && p.saved)
+                        .map(|p| p.id)
+                })
         };
         match folder {
             Some(id) => {
@@ -4541,10 +4626,15 @@ impl AppState {
         match file.office() {
             Some(Kind::Pdf) => return self.download(file, cx),
             Some(_) => {}
-            None => return self.show_toast("Only Word, Excel and PowerPoint files export to PDF.", cx),
+            None => {
+                return self.show_toast("Only Word, Excel and PowerPoint files export to PDF.", cx)
+            }
         }
         if crate::office_render::soffice().is_none() {
-            self.show_toast("Exporting to PDF needs LibreOffice. Install it, then try again.", cx);
+            self.show_toast(
+                "Exporting to PDF needs LibreOffice. Install it, then try again.",
+                cx,
+            );
             return;
         }
         let Some(dir) = crate::downloads::dir() else {
@@ -4554,7 +4644,8 @@ impl AppState {
         let (name, bytes) = (file.name.to_string(), file.data());
         let pdf_name = format!(
             "{}.pdf",
-            name.rsplit_once('.').map_or(name.as_str(), |(stem, _)| stem)
+            name.rsplit_once('.')
+                .map_or(name.as_str(), |(stem, _)| stem)
         );
         self.show_toast(format!("Exporting {pdf_name}…"), cx);
         cx.spawn(async move |this, cx| {
@@ -5225,7 +5316,8 @@ impl AppState {
         if let Some(c) = self.chat_mut(chat) {
             let last = msg + 1 == c.messages.len();
             if let Some(Message::Assistant { blocks }) = c.messages.get_mut(msg) {
-                start = crate::ui::work_group::run_of(blocks, block, streaming && last).map(|r| r.start);
+                start = crate::ui::work_group::run_of(blocks, block, streaming && last)
+                    .map(|r| r.start);
                 if let Some(Block::Tool(t)) = blocks.get_mut(block) {
                     t.open = true;
                 }
@@ -5242,7 +5334,9 @@ impl AppState {
         // The mark fades by itself; then it goes.
         let seq = self.jump_seq;
         cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(Duration::from_millis(1800)).await;
+            cx.background_executor()
+                .timer(Duration::from_millis(1800))
+                .await;
             let _ = this.update(cx, |s, cx| {
                 if s.jump_seq == seq && s.flash.take().is_some() {
                     if let Some(c) = s.chat_mut(chat) {
@@ -5790,7 +5884,11 @@ impl AppState {
         if let Request::ContextUsage { chat } = req {
             // An older ForgeCLI doesn't know the request: the card keeps
             // the composer's measure.
-            if let Some(u) = result.ok().as_ref().and_then(crate::context::ContextUsage::from_json) {
+            if let Some(u) = result
+                .ok()
+                .as_ref()
+                .and_then(crate::context::ContextUsage::from_json)
+            {
                 self.context_usage.insert(chat, u);
                 cx.notify();
             }
@@ -5799,7 +5897,10 @@ impl AppState {
         if let Request::CancelQueued { chat, uuid, edit } = req {
             match result {
                 Ok(v) if v["cancelled"] == true => self.unqueue(chat, &uuid, edit, cx),
-                Ok(_) => self.show_toast("Already with Forge: it reached the model before it could be taken back.", cx),
+                Ok(_) => self.show_toast(
+                    "Already with Forge: it reached the model before it could be taken back.",
+                    cx,
+                ),
                 Err(e) => self.show_toast(format!("Couldn't take it back: {e}"), cx),
             }
             return;
@@ -5858,7 +5959,9 @@ impl AppState {
                 self.touch(chat, cx);
             }
             (
-                Request::StopAgents { .. } | Request::CancelQueued { .. } | Request::ContextUsage { .. },
+                Request::StopAgents { .. }
+                | Request::CancelQueued { .. }
+                | Request::ContextUsage { .. },
                 _,
             ) => {}
             (_, Err(e)) => self.show_toast(format!("Couldn't revert: {e}"), cx),
@@ -5956,7 +6059,12 @@ impl AppState {
     }
 
     /// Open chat `id`'s menu at `at` (a toggle when it's open already).
-    pub fn chat_menu_from(&mut self, id: usize, at: gpui::Point<gpui::Pixels>, cx: &mut Context<Self>) {
+    pub fn chat_menu_from(
+        &mut self,
+        id: usize,
+        at: gpui::Point<gpui::Pixels>,
+        cx: &mut Context<Self>,
+    ) {
         self.chat_menu_at = at;
         let open = self.chat_menu != Some(id);
         self.open_chat_menu(open.then_some(id), cx);
@@ -6088,7 +6196,12 @@ impl AppState {
     }
 
     /// Open or close one of the title bar's menus, at `at`.
-    pub fn toggle_title_menu(&mut self, which: TitleMenu, at: gpui::Point<gpui::Pixels>, cx: &mut Context<Self>) {
+    pub fn toggle_title_menu(
+        &mut self,
+        which: TitleMenu,
+        at: gpui::Point<gpui::Pixels>,
+        cx: &mut Context<Self>,
+    ) {
         self.title_menu = match self.title_menu {
             Some((open, _)) if open == which => None,
             _ => Some((which, at)),
@@ -6112,7 +6225,11 @@ impl AppState {
             .iter()
             .filter(|p| Some(p.id) != here && !p.archived && (p.saved || p.scratch))
             .map(|p| {
-                let name = if p.scratch { "Plain chats".into() } else { p.name.clone() };
+                let name = if p.scratch {
+                    "Plain chats".into()
+                } else {
+                    p.name.clone()
+                };
                 (p.id, name)
             })
             .collect()
@@ -6341,7 +6458,10 @@ impl AppState {
         self.chat_menu = None;
         match self.chat_project_dir(id) {
             Some(dir) => cx.open_with_system(&dir),
-            None => self.show_toast("This chat works on another machine: open its folder there.", cx),
+            None => self.show_toast(
+                "This chat works on another machine: open its folder there.",
+                cx,
+            ),
         }
     }
 
@@ -6349,19 +6469,26 @@ impl AppState {
     pub fn open_chat_in_vscode(&mut self, id: usize, cx: &mut Context<Self>) {
         self.chat_menu = None;
         let Some(dir) = self.chat_project_dir(id) else {
-            return self.show_toast("This chat works on another machine: open its folder there.", cx);
+            return self.show_toast(
+                "This chat works on another machine: open its folder there.",
+                cx,
+            );
         };
         cx.spawn(async move |this, cx| {
             let started = cx
                 .background_spawn(async move {
-                    let mut cmd = std::process::Command::new(if cfg!(windows) { "code.cmd" } else { "code" });
+                    let mut cmd =
+                        std::process::Command::new(if cfg!(windows) { "code.cmd" } else { "code" });
                     cmd.arg(&dir);
                     cmd.spawn().map(|_| ())
                 })
                 .await;
             if started.is_err() {
                 let _ = this.update(cx, |s, cx| {
-                    s.show_toast("VS Code isn't on this computer's PATH (the `code` command).", cx)
+                    s.show_toast(
+                        "VS Code isn't on this computer's PATH (the `code` command).",
+                        cx,
+                    )
                 });
             }
         })
@@ -6678,7 +6805,14 @@ impl AppState {
 
     /// Choose "Other" on question `q`: your own words replace the options
     /// picked, typed in the card's field (`set_own_text`).
-    pub fn choose_other(&mut self, chat: usize, msg: usize, block: usize, q: usize, cx: &mut Context<Self>) {
+    pub fn choose_other(
+        &mut self,
+        chat: usize,
+        msg: usize,
+        block: usize,
+        q: usize,
+        cx: &mut Context<Self>,
+    ) {
         self.edit_questions(chat, msg, block, |qs, _| {
             if let Some(question) = qs.get_mut(q) {
                 question.picked.clear();
@@ -6691,7 +6825,9 @@ impl AppState {
     /// What you are typing as "Other" on the question the waiting card shows.
     pub fn set_own_text(&mut self, text: String, cx: &mut Context<Self>) {
         let Some(chat) = self.current else { return };
-        let Some((msg, block)) = self.pending_question(chat) else { return };
+        let Some((msg, block)) = self.pending_question(chat) else {
+            return;
+        };
         self.edit_questions(chat, msg, block, |qs, step| {
             if let Some(question) = qs.get_mut(*step) {
                 if question.own.is_some() {
@@ -6708,7 +6844,13 @@ impl AppState {
         let chat = self.current?;
         let (msg, block) = self.pending_question(chat)?;
         let qs = self.questions_at(chat, msg, block);
-        let step = match self.chats.iter().find(|c| c.id == chat)?.messages.get(msg)? {
+        let step = match self
+            .chats
+            .iter()
+            .find(|c| c.id == chat)?
+            .messages
+            .get(msg)?
+        {
             Message::Assistant { blocks } => match blocks.get(block)? {
                 Block::Permission { info, .. } => info.step,
                 _ => 0,
@@ -6720,7 +6862,14 @@ impl AppState {
     }
 
     /// Show question `q` on its card.
-    pub fn question_tab(&mut self, chat: usize, msg: usize, block: usize, q: usize, cx: &mut Context<Self>) {
+    pub fn question_tab(
+        &mut self,
+        chat: usize,
+        msg: usize,
+        block: usize,
+        q: usize,
+        cx: &mut Context<Self>,
+    ) {
         self.edit_questions(chat, msg, block, |qs, step| {
             if q < qs.len() {
                 *step = q;
@@ -6730,8 +6879,18 @@ impl AppState {
     }
 
     /// Send your answers, once every question has one.
-    pub fn submit_answers(&mut self, chat: usize, msg: usize, block: usize, cx: &mut Context<Self>) {
-        if self.questions_at(chat, msg, block).iter().all(Question::answered) {
+    pub fn submit_answers(
+        &mut self,
+        chat: usize,
+        msg: usize,
+        block: usize,
+        cx: &mut Context<Self>,
+    ) {
+        if self
+            .questions_at(chat, msg, block)
+            .iter()
+            .all(Question::answered)
+        {
             self.answer(chat, msg, block, Verdict::Allowed, cx);
         }
     }
@@ -6741,7 +6900,9 @@ impl AppState {
     /// all. A permission card is denied with it, as before.
     pub fn answer_in_words(&mut self, text: String, cx: &mut Context<Self>) {
         let Some(chat) = self.current else { return };
-        let Some((msg, block)) = self.pending_question(chat) else { return };
+        let Some((msg, block)) = self.pending_question(chat) else {
+            return;
+        };
         if self.questions_at(chat, msg, block).is_empty() {
             return self.deny_with_note(chat, text, cx);
         }
@@ -6757,7 +6918,11 @@ impl AppState {
 
     /// The chat you're looking at waits on your answer to a question.
     pub fn asking(&self) -> bool {
-        self.busy() && self.current.and_then(|c| self.pending_question(c)).is_some()
+        self.busy()
+            && self
+                .current
+                .and_then(|c| self.pending_question(c))
+                .is_some()
     }
 
     /// What the chat you're looking at waits on is a question card.
@@ -6766,7 +6931,6 @@ impl AppState {
             .and_then(|c| Some((c, self.pending_question(c)?)))
             .is_some_and(|(c, (m, b))| !self.questions_at(c, m, b).is_empty())
     }
-
 
     // ------------------------------------------------------------ messages sent while Forge works
 
@@ -6810,7 +6974,8 @@ impl AppState {
             .map(|l| l.session.cancel_queued(&uuid));
         match sent {
             Some(Ok(id)) => {
-                self.requests.insert(id, Request::CancelQueued { chat, uuid, edit });
+                self.requests
+                    .insert(id, Request::CancelQueued { chat, uuid, edit });
             }
             Some(Err(e)) => self.show_toast(format!("Couldn't take it back: {e}"), cx),
             None => {}
@@ -6834,8 +6999,12 @@ impl AppState {
     }
 
     fn unqueue(&mut self, chat: usize, uuid: &str, edit: bool, cx: &mut Context<Self>) {
-        let Some(list) = self.queued.get_mut(&chat) else { return };
-        let Some(i) = list.iter().position(|q| q.uuid == uuid) else { return };
+        let Some(list) = self.queued.get_mut(&chat) else {
+            return;
+        };
+        let Some(i) = list.iter().position(|q| q.uuid == uuid) else {
+            return;
+        };
         let q = list.remove(i);
         if edit {
             self.draft = Some(q.text.to_string());
@@ -6855,7 +7024,11 @@ impl AppState {
             }
         }
         if self.current == Some(chat) {
-            let joined = list.iter().map(|q| q.text.to_string()).collect::<Vec<_>>().join("\n\n");
+            let joined = list
+                .iter()
+                .map(|q| q.text.to_string())
+                .collect::<Vec<_>>()
+                .join("\n\n");
             self.draft = Some(joined);
         }
         cx.notify();
@@ -6865,7 +7038,9 @@ impl AppState {
     /// transcript here, as your messages, where the model read them. Returns
     /// whether it was one of them.
     fn land_queued(&mut self, chat: usize, uuid: &str, text: &str, cx: &mut Context<Self>) -> bool {
-        let Some(list) = self.queued.get_mut(&chat) else { return false };
+        let Some(list) = self.queued.get_mut(&chat) else {
+            return false;
+        };
         let landed = take_landed(list, uuid, text);
         if landed.is_empty() {
             return false;
@@ -6896,7 +7071,11 @@ impl AppState {
         let Some(list) = self.queued.get(&chat).filter(|l| !l.is_empty()) else {
             return false;
         };
-        let text = list.iter().map(|q| q.text.to_string()).collect::<Vec<_>>().join("\n\n");
+        let text = list
+            .iter()
+            .map(|q| q.text.to_string())
+            .collect::<Vec<_>>()
+            .join("\n\n");
         self.land_queued(chat, "demo", &text, cx)
     }
 
@@ -6910,7 +7089,15 @@ impl AppState {
         match &c.messages[msg] {
             Message::Assistant { blocks } => blocks
                 .iter()
-                .rposition(|b| matches!(b, Block::Permission { verdict: Verdict::Pending, .. }))
+                .rposition(|b| {
+                    matches!(
+                        b,
+                        Block::Permission {
+                            verdict: Verdict::Pending,
+                            ..
+                        }
+                    )
+                })
                 .map(|b| (msg, b)),
             _ => None,
         }
@@ -6993,18 +7180,24 @@ impl AppState {
                         });
                     }
                 }
-                let sent = self.sessions.get(&chat).map(|l| match (allow, note.as_deref()) {
-                    (true, _) => l.session.answer_questions(&ask.request_id, &ask.input, &questions),
-                    (false, Some(n)) => l.session.answer(
-                        &ask.request_id,
-                        false,
-                        false,
-                        &ask.input,
-                        &ask.suggestions,
-                        Some(n),
-                    ),
-                    (false, None) => l.session.skip_questions(&ask.request_id),
-                });
+                let sent = self
+                    .sessions
+                    .get(&chat)
+                    .map(|l| match (allow, note.as_deref()) {
+                        (true, _) => {
+                            l.session
+                                .answer_questions(&ask.request_id, &ask.input, &questions)
+                        }
+                        (false, Some(n)) => l.session.answer(
+                            &ask.request_id,
+                            false,
+                            false,
+                            &ask.input,
+                            &ask.suggestions,
+                            Some(n),
+                        ),
+                        (false, None) => l.session.skip_questions(&ask.request_id),
+                    });
                 if let Some(Err(e)) = sent {
                     self.notice(chat, e, true);
                     self.finish_turn(chat, cx);
@@ -7014,9 +7207,9 @@ impl AppState {
             }
             if !allow {
                 if let Some(&(m, b)) = self.tool_rows.get(&(chat, ask.tool_use_id.clone())) {
-                    let said = note
-                        .as_ref()
-                        .map_or("You declined this.".to_string(), |n| format!("You declined this: {n}"));
+                    let said = note.as_ref().map_or("You declined this.".to_string(), |n| {
+                        format!("You declined this: {n}")
+                    });
                     self.update_tool(chat, m, b, |t| {
                         t.status = ToolStatus::Declined;
                         t.output = said.into();
@@ -7353,7 +7546,11 @@ impl AppState {
                     if matches!(step, Step::ToolStart(..) | Step::End { .. }) {
                         let _ = this.update(cx, |s, cx| {
                             if s.land_queued_demo(id, cx) {
-                                s.apply(id, Step::Say("Noted, I'll take that into account. ".into()), cx);
+                                s.apply(
+                                    id,
+                                    Step::Say("Noted, I'll take that into account. ".into()),
+                                    cx,
+                                );
                             }
                         });
                     }
@@ -7452,7 +7649,9 @@ impl AppState {
             .and_then(|dir| {
                 let mut block = crate::knowledge::block(dir).unwrap_or_default();
                 if memory_on {
-                    block.push_str(&crate::project_memory::prompt(&crate::project_memory::read(dir)));
+                    block.push_str(&crate::project_memory::prompt(
+                        &crate::project_memory::read(dir),
+                    ));
                 }
                 (!block.trim().is_empty()).then_some(block)
             });
@@ -7465,7 +7664,7 @@ impl AppState {
                     let mut content = crate::attach::content_blocks(
                         &text,
                         &attachments,
-                        l.profile.wire == crate::endpoints::Wire::Anthropic,
+                        l.profile.wire != crate::endpoints::Wire::Openai,
                     );
                     if let Some(blocks) = content.as_array_mut() {
                         blocks.insert(0, serde_json::json!({ "type": "text", "text": k }));
@@ -7477,7 +7676,7 @@ impl AppState {
                     l.session.send_content(crate::attach::content_blocks(
                         &text,
                         &attachments,
-                        l.profile.wire == crate::endpoints::Wire::Anthropic,
+                        l.profile.wire != crate::endpoints::Wire::Openai,
                     ))
                 }
             })
@@ -7727,9 +7926,9 @@ impl AppState {
                     ..
                 } => {
                     if let Some(l) = self.sessions.get(&chat) {
-                        let _ = l
-                            .session
-                            .answer(&request_id, false, false, &input, &suggestions, None);
+                        let _ =
+                            l.session
+                                .answer(&request_id, false, false, &input, &suggestions, None);
                     }
                     return;
                 }
@@ -7773,7 +7972,8 @@ impl AppState {
             Event::ToolUse { id, name, input } => {
                 self.panel_follows(chat, &name);
                 if name == "Bash" || name == "PowerShell" {
-                    self.command_started.insert((chat, id.clone()), SystemTime::now());
+                    self.command_started
+                        .insert((chat, id.clone()), SystemTime::now());
                 }
                 if let Some(at) =
                     self.push_block(chat, Block::Tool(crate::backend::tool_call(&name, &input)))
@@ -7845,9 +8045,9 @@ impl AppState {
                     && self.auto_approves(chat, &tool_name, &input)
                 {
                     if let Some(l) = self.sessions.get(&chat) {
-                        let _ = l
-                            .session
-                            .answer(&request_id, true, false, &input, &suggestions, None);
+                        let _ =
+                            l.session
+                                .answer(&request_id, true, false, &input, &suggestions, None);
                     }
                     return;
                 }
@@ -8083,28 +8283,32 @@ impl AppState {
     }
 
     /// Documents a command may have made: the `.docx`, `.xlsx`, `.pptx` and
-/// `.pdf` paths in its command line and what it printed, and the `.html` and
-/// `.svg` ones (a diagram copied from its template; at most eight).
-pub fn document_paths(command: &str, output: &str) -> Vec<String> {
-    let mut out: Vec<String> = vec![];
-    for word in command.split_whitespace().chain(output.split_whitespace()) {
-        let w = word
-            .trim_matches(|c: char| matches!(c, '"' | '\'' | '`' | '(' | ')' | '[' | ']' | ',' | ';'))
-            .trim_end_matches(['.', ':']);
-        let w = w.rsplit_once('=').map_or(w, |(_, v)| v);
-        let lower = w.to_ascii_lowercase();
-        let doc = [".docx", ".xlsx", ".pptx", ".pdf", ".html", ".htm", ".svg"].iter().any(|e| lower.ends_with(e));
-        if doc && w.len() > 5 && !out.iter().any(|o| o == w) {
-            out.push(w.to_string());
+    /// `.pdf` paths in its command line and what it printed, and the `.html` and
+    /// `.svg` ones (a diagram copied from its template; at most eight).
+    pub fn document_paths(command: &str, output: &str) -> Vec<String> {
+        let mut out: Vec<String> = vec![];
+        for word in command.split_whitespace().chain(output.split_whitespace()) {
+            let w = word
+                .trim_matches(|c: char| {
+                    matches!(c, '"' | '\'' | '`' | '(' | ')' | '[' | ']' | ',' | ';')
+                })
+                .trim_end_matches(['.', ':']);
+            let w = w.rsplit_once('=').map_or(w, |(_, v)| v);
+            let lower = w.to_ascii_lowercase();
+            let doc = [".docx", ".xlsx", ".pptx", ".pdf", ".html", ".htm", ".svg"]
+                .iter()
+                .any(|e| lower.ends_with(e));
+            if doc && w.len() > 5 && !out.iter().any(|o| o == w) {
+                out.push(w.to_string());
+            }
+            if out.len() == 8 {
+                break;
+            }
         }
-        if out.len() == 8 {
-            break;
-        }
+        out
     }
-    out
-}
 
-/// A document Forge wrote on a remote, read back over the connection
+    /// A document Forge wrote on a remote, read back over the connection
     /// (off this thread); its card joins the reply when it arrives.
     fn remote_written_file(
         &mut self,
@@ -8480,8 +8684,7 @@ impl AppState {
         let abandoned = self.project(left).is_some_and(|p| {
             !p.saved
                 && p.path != remote.to_path()
-                && crate::remote::Remote::parse(&p.path)
-                    .is_some_and(|r| r.target == remote.target)
+                && crate::remote::Remote::parse(&p.path).is_some_and(|r| r.target == remote.target)
         }) && !self.chats.iter().any(|c| c.project == left);
         let target = remote.target.clone();
         // Connecting doesn't make a project: Save as project does, if you want one.
@@ -8501,9 +8704,15 @@ impl AppState {
     fn devcontainer_folder(&self) -> Option<crate::remote::DevSource> {
         use crate::remote::{DevSource, Target};
         match crate::remote::Remote::parse(&self.project_dir) {
-            None => self.project_dir.is_dir().then(|| DevSource::Local(self.project_dir.clone())),
+            None => self
+                .project_dir
+                .is_dir()
+                .then(|| DevSource::Local(self.project_dir.clone())),
             Some(r) => match r.target {
-                Target::Wsl(distro) => Some(DevSource::Wsl { distro, path: r.path }),
+                Target::Wsl(distro) => Some(DevSource::Wsl {
+                    distro,
+                    path: r.path,
+                }),
                 _ => None,
             },
         }
@@ -8512,7 +8721,8 @@ impl AppState {
     /// In a WSL folder: find out, off the UI thread, whether it has a dev
     /// container definition, for the menu's Reopen in container.
     fn check_devcontainer(&mut self, cx: &mut Context<Self>) {
-        let Some(crate::remote::DevSource::Wsl { distro, path }) = self.devcontainer_folder() else {
+        let Some(crate::remote::DevSource::Wsl { distro, path }) = self.devcontainer_folder()
+        else {
             return;
         };
         let key = self.project_dir.clone();
@@ -8521,7 +8731,9 @@ impl AppState {
         }
         cx.spawn(async move |this, cx| {
             let has = cx
-                .background_spawn(async move { crate::remote::wsl_has_devcontainer(&distro, &path) })
+                .background_spawn(
+                    async move { crate::remote::wsl_has_devcontainer(&distro, &path) },
+                )
                 .await;
             let _ = this.update(cx, |s, cx| {
                 s.wsl_devcontainers.insert(key, has);
@@ -8588,7 +8800,10 @@ impl AppState {
     pub fn rebuild_container(&mut self, cx: &mut Context<Self>) {
         if self.in_devcontainer() {
             self.with_devcontainer_source(|s, dir, cx| s.start_devcontainer(dir, true, cx), cx);
-        } else if let Some(src) = self.devcontainer_folder().filter(|_| self.has_devcontainer()) {
+        } else if let Some(src) = self
+            .devcontainer_folder()
+            .filter(|_| self.has_devcontainer())
+        {
             self.start_devcontainer(src, true, cx);
         } else {
             self.show_toast("There's no dev container here to rebuild.", cx);
@@ -8623,7 +8838,12 @@ impl AppState {
 
     /// Start (or with `fresh`, rebuild) the dev container for `dir` and open
     /// its folder there, saying each step in the status bar.
-    fn start_devcontainer(&mut self, src: crate::remote::DevSource, fresh: bool, cx: &mut Context<Self>) {
+    fn start_devcontainer(
+        &mut self,
+        src: crate::remote::DevSource,
+        fresh: bool,
+        cx: &mut Context<Self>,
+    ) {
         self.remote_menu = None;
         let placeholder = crate::remote::Target::Container {
             name: "dev container".into(),
@@ -8677,7 +8897,9 @@ impl AppState {
     pub fn has_devcontainer(&self) -> bool {
         match self.devcontainer_folder() {
             Some(crate::remote::DevSource::Local(dir)) => {
-                dir.join(".devcontainer").join("devcontainer.json").is_file()
+                dir.join(".devcontainer")
+                    .join("devcontainer.json")
+                    .is_file()
                     || dir.join(".devcontainer.json").is_file()
             }
             Some(crate::remote::DevSource::Wsl { .. }) => self
@@ -8856,9 +9078,13 @@ impl AppState {
     /// When each thought of the newest reply began and ended (it ends when
     /// anything follows it), for its "Thought for 12s".
     fn time_thinking(&mut self, chat: usize) {
-        let Some(c) = self.chats.iter().find(|c| c.id == chat) else { return };
+        let Some(c) = self.chats.iter().find(|c| c.id == chat) else {
+            return;
+        };
         let m = c.messages.len().saturating_sub(1);
-        let Some(Message::Assistant { blocks }) = c.messages.get(m) else { return };
+        let Some(Message::Assistant { blocks }) = c.messages.get(m) else {
+            return;
+        };
         let now = std::time::Instant::now();
         for (b, blk) in blocks.iter().enumerate() {
             if !matches!(blk, Block::Thinking { .. }) {
@@ -8892,12 +9118,20 @@ impl AppState {
     /// made or rewrote them), each read and shown as a card in the reply:
     /// from disk here, over the connection on a remote, so a document made
     /// in WSL or a container previews and downloads on this computer too.
-    fn documents_made(&mut self, chat: usize, paths: Vec<String>, since: SystemTime, cx: &mut Context<Self>) {
+    fn documents_made(
+        &mut self,
+        chat: usize,
+        paths: Vec<String>,
+        since: SystemTime,
+        cx: &mut Context<Self>,
+    ) {
         // A little slack: file times and this clock can differ by a beat.
         let since = since - std::time::Duration::from_secs(2);
         if let Some(remote) = self.chat_remote(chat) {
             let extra = self.remote_extra(&remote.target);
-            let secs = since.duration_since(SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+            let secs = since
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs());
             let task = cx.background_spawn(async move {
                 crate::remote::changed_since(&remote.target, &remote.path, &paths, secs, &extra)
             });
@@ -8915,8 +9149,12 @@ impl AppState {
             return;
         }
         for p in paths {
-            let Some(file) = self.written_file(chat, &p) else { continue };
-            let Some(path) = file.path.as_ref().map(|p| p.to_string()) else { continue };
+            let Some(file) = self.written_file(chat, &p) else {
+                continue;
+            };
+            let Some(path) = file.path.as_ref().map(|p| p.to_string()) else {
+                continue;
+            };
             let fresh = std::fs::metadata(&path)
                 .and_then(|m| m.modified())
                 .is_ok_and(|t| t >= since);
@@ -9055,7 +9293,9 @@ impl AppState {
                 .await;
             let _ = this.update(cx, |s, cx| {
                 match done {
-                    Ok(()) => s.show_toast("Undone: the memory is as it was before that reply.", cx),
+                    Ok(()) => {
+                        s.show_toast("Undone: the memory is as it was before that reply.", cx)
+                    }
                     Err(e) => s.show_toast(format!("Couldn't undo it: {e}"), cx),
                 }
                 cx.notify();
@@ -9301,7 +9541,11 @@ impl AppState {
                 }))
             }
             (Step::ToolDiff(diff), Some(blocks)) => {
-                if let Some(Block::Tool(t)) = blocks.iter_mut().rev().find(|b| matches!(b, Block::Tool(_))) {
+                if let Some(Block::Tool(t)) = blocks
+                    .iter_mut()
+                    .rev()
+                    .find(|b| matches!(b, Block::Tool(_)))
+                {
                     t.diff = diff;
                 }
             }
@@ -9326,7 +9570,11 @@ impl AppState {
                 }
             }
             (Step::Failed(output), Some(blocks)) => {
-                if let Some(Block::Tool(t)) = blocks.iter_mut().rev().find(|b| matches!(b, Block::Tool(_))) {
+                if let Some(Block::Tool(t)) = blocks
+                    .iter_mut()
+                    .rev()
+                    .find(|b| matches!(b, Block::Tool(_)))
+                {
                     t.status = ToolStatus::Failed;
                     t.output = output.into();
                 }
@@ -9336,7 +9584,8 @@ impl AppState {
                 t.status = ToolStatus::Done;
                 blocks.push(Block::Tool(t));
                 let row = blocks.len() - 1;
-                let (title, detail) = crate::backend::ask_text(crate::backend::QUESTION_TOOL, &input);
+                let (title, detail) =
+                    crate::backend::ask_text(crate::backend::QUESTION_TOOL, &input);
                 blocks.push(Block::Permission {
                     title: title.into(),
                     detail: detail.into(),
@@ -9666,7 +9915,10 @@ fn demo_screenshots() -> Vec<Step> {
 /// with thinking between them, as a real build-out goes.
 fn demo_questions() -> Vec<Step> {
     use serde_json::json;
-    let mut s = words("Before I scaffold anything, two choices change the whole layout:", Step::Say);
+    let mut s = words(
+        "Before I scaffold anything, two choices change the whole layout:",
+        Step::Say,
+    );
     s.push(Step::Question(json!({ "questions": [
         { "question": "Which stack should the app use?", "header": "Stack", "multiSelect": false, "options": [
             { "label": "Tauri v2 hybrid (Recommended)", "description": "React and TypeScript for the UI, a Rust core for files and search." },
@@ -9675,8 +9927,15 @@ fn demo_questions() -> Vec<Step> {
         { "question": "Where should sheets be stored?", "header": "Storage", "multiSelect": false, "options": [
             { "label": "JSON files", "description": "Easy to back up and to read by hand." },
             { "label": "SQLite", "description": "One file, fast queries, harder to diff." } ] } ] })));
-    s.extend(words("Going with your answers. The Rust core first, then the frontend on top.", Step::Say));
-    s.push(Step::ToolStart(ToolKind::Write, "folio/Cargo.toml".into(), None));
+    s.extend(words(
+        "Going with your answers. The Rust core first, then the frontend on top.",
+        Step::Say,
+    ));
+    s.push(Step::ToolStart(
+        ToolKind::Write,
+        "folio/Cargo.toml".into(),
+        None,
+    ));
     s.push(Step::ToolDiff(diff(&[
         (DiffKind::Add, "[package]"),
         (DiffKind::Add, "name = \"folio-core\""),
@@ -9686,8 +9945,15 @@ fn demo_questions() -> Vec<Step> {
     s.push(Step::Failed(
         "File has not been read yet. Read it first before writing to it.".into(),
     ));
-    s.extend(words("cargo init already made it; read it, then edit.", Step::Think));
-    s.push(Step::Use("Read", json!({ "file_path": "folio/Cargo.toml" }), "[package]\nname = \"folio\"\nversion = \"0.1.0\"\nedition = \"2021\"\n".into()));
+    s.extend(words(
+        "cargo init already made it; read it, then edit.",
+        Step::Think,
+    ));
+    s.push(Step::Use(
+        "Read",
+        json!({ "file_path": "folio/Cargo.toml" }),
+        "[package]\nname = \"folio\"\nversion = \"0.1.0\"\nedition = \"2021\"\n".into(),
+    ));
     let edit = |file: &str, old: &str, new: &str| {
         Step::Use(
             "Edit",
@@ -9695,23 +9961,53 @@ fn demo_questions() -> Vec<Step> {
             "The file was updated.".into(),
         )
     };
-    s.push(edit("folio/Cargo.toml", "name = \"folio\"", "name = \"folio-core\""));
-    s.push(edit("folio/src/model.rs", "pub struct Sheet;", "pub struct Sheet {\n    pub id: Uuid,\n    pub stickers: Vec<Sticker>,\n}"));
-    s.push(edit("folio/src/lib.rs", "", "pub mod model;\npub mod store;\npub mod assets;"));
+    s.push(edit(
+        "folio/Cargo.toml",
+        "name = \"folio\"",
+        "name = \"folio-core\"",
+    ));
+    s.push(edit(
+        "folio/src/model.rs",
+        "pub struct Sheet;",
+        "pub struct Sheet {\n    pub id: Uuid,\n    pub stickers: Vec<Sticker>,\n}",
+    ));
+    s.push(edit(
+        "folio/src/lib.rs",
+        "",
+        "pub mod model;\npub mod store;\npub mod assets;",
+    ));
     s.push(Step::Use(
         "Bash",
         json!({ "command": "cargo build", "description": "Build the Rust core" }),
         "error[E0277]: the trait `From<ZipError>` is not implemented for `Error`".into(),
     ));
-    s.push(Step::Failed("error[E0277]: the trait `From<ZipError>` is not implemented for `Error`\nexit 101".into()));
+    s.push(Step::Failed(
+        "error[E0277]: the trait `From<ZipError>` is not implemented for `Error`\nexit 101".into(),
+    ));
     s.extend(words("The zip error needs its own variant.", Step::Think));
     for (file, old, new) in [
-        ("folio/src/lib.rs", "Io(std::io::Error),", "Io(std::io::Error),\n    Zip(zip::result::ZipError),"),
+        (
+            "folio/src/lib.rs",
+            "Io(std::io::Error),",
+            "Io(std::io::Error),\n    Zip(zip::result::ZipError),",
+        ),
         ("folio/src/assets.rs", "fn import(", "pub fn import("),
-        ("folio/src/assets.rs", "let img = decode(bytes)?;", "let img = decode(bytes).map_err(Error::Image)?;"),
+        (
+            "folio/src/assets.rs",
+            "let img = decode(bytes)?;",
+            "let img = decode(bytes).map_err(Error::Image)?;",
+        ),
         ("folio/src/store.rs", "fn save(", "pub fn save("),
-        ("folio/src/store.rs", "std::fs::write(path, json)?;", "write_atomic(path, json.as_bytes())?;"),
-        ("folio/src/workspace.rs", "sheets: vec![],", "sheets: Vec::new(),"),
+        (
+            "folio/src/store.rs",
+            "std::fs::write(path, json)?;",
+            "write_atomic(path, json.as_bytes())?;",
+        ),
+        (
+            "folio/src/workspace.rs",
+            "sheets: vec![],",
+            "sheets: Vec::new(),",
+        ),
         ("folio/src/backup.rs", "zip.finish();", "zip.finish()?;"),
     ] {
         s.push(edit(file, old, new));
@@ -9814,15 +10110,32 @@ fn demo_six_agents() -> Vec<Step> {
         })
     };
     let tool = |parent: &str, id: &str, name: &str, input: serde_json::Value| {
-        Step::Agent(Event::SubTool { parent: parent.into(), id: id.into(), name: name.into(), input })
+        Step::Agent(Event::SubTool {
+            parent: parent.into(),
+            id: id.into(),
+            name: name.into(),
+            input,
+        })
     };
     let done = |parent: &str, id: &str| {
-        Step::Agent(Event::SubResult { parent: parent.into(), id: id.into(), is_error: false })
+        Step::Agent(Event::SubResult {
+            parent: parent.into(),
+            id: id.into(),
+            is_error: false,
+        })
     };
     let end = |id: &str, out: &str, failed: bool| {
-        Step::Agent(Event::ToolResult { id: id.into(), output: out.into(), is_error: failed, images: vec![] })
+        Step::Agent(Event::ToolResult {
+            id: id.into(),
+            output: out.into(),
+            is_error: failed,
+            images: vec![],
+        })
     };
-    let mut s = words("I'll survey the repository with six agents working side by side.", Step::Say);
+    let mut s = words(
+        "I'll survey the repository with six agents working side by side.",
+        Step::Say,
+    );
     s.extend([
         start("b1", "Explore", "Find Rust files"),
         start("b2", "Explore", "Count Python files"),
@@ -10015,7 +10328,10 @@ fn script(prompt: &str) -> Vec<Step> {
         if !fact.ends_with('.') {
             fact.push('.');
         }
-        s.extend(words("Noted. I'll keep that in this project's memory.", Step::Say));
+        s.extend(words(
+            "Noted. I'll keep that in this project's memory.",
+            Step::Say,
+        ));
         s.push(Step::Remember(fact));
         s.push(Step::End { seconds: 1.4 });
         return s;
@@ -10279,6 +10595,14 @@ fn proxied_env(env: &[(String, String)]) -> (crate::model_proxy::Route, Vec<(Str
             headers.push(("authorization".to_string(), format!("Bearer {t}")));
         }
         b
+    } else if let Some(b) = get("FORGE_GEMINI_BASE_URL") {
+        // As the real host takes it (the remote, on 127.0.0.1, sends both).
+        if let Some(t) = get("FORGE_GEMINI_API_KEY") {
+            for (h, v) in crate::endpoints::auth_headers(crate::endpoints::Wire::Gemini, &b, &t) {
+                headers.push((h.to_string(), v));
+            }
+        }
+        b
     } else {
         if let Some(t) = get("FORGE_OPENAI_API_KEY") {
             headers.push(("authorization".to_string(), format!("Bearer {t}")));
@@ -10296,7 +10620,10 @@ fn proxied_env(env: &[(String, String)]) -> (crate::model_proxy::Route, Vec<(Str
         .iter()
         .filter(|(k, _)| k != "FORGE_CUSTOM_HEADERS")
         .map(|(k, v)| match k.as_str() {
-            "FORGE_API_KEY" | "FORGE_AUTH_TOKEN" | "FORGE_OPENAI_API_KEY" => {
+            "FORGE_API_KEY"
+            | "FORGE_AUTH_TOKEN"
+            | "FORGE_OPENAI_API_KEY"
+            | "FORGE_GEMINI_API_KEY" => {
                 (k.clone(), crate::model_proxy::PLACEHOLDER_KEY.to_string())
             }
             _ => (k.clone(), v.clone()),
@@ -10497,7 +10824,8 @@ fn mock_chats() -> Vec<Chat> {
             diff: vec![],
             open: false,
             full: false,
-            review: Review::Open, images: vec![],
+            review: Review::Open,
+            images: vec![],
         })
     };
     let budget = vec![
@@ -10643,10 +10971,16 @@ mod tests {
         assert_eq!(list[0].path, here);
         assert!(list[0].saved && !list[0].listed);
         let o = list.iter().find(|x| x.path == other).unwrap();
-        assert_eq!((o.name.as_ref(), o.description.as_ref(), o.pinned), ("Budget work", "Q3 numbers", true));
+        assert_eq!(
+            (o.name.as_ref(), o.description.as_ref(), o.pinned),
+            ("Budget work", "Q3 numbers", true)
+        );
         assert!(list.last().unwrap().scratch);
         // A folder's own name isn't stored as a custom one.
-        assert_eq!(super::Project::at(1, other.clone(), true).record().name, None);
+        assert_eq!(
+            super::Project::at(1, other.clone(), true).record().name,
+            None
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -10697,10 +11031,16 @@ mod tests {
     #[test]
     fn a_replayed_message_lands_the_queued_ones_it_carries() {
         use super::{take_landed, Queued};
-        let q = |u: &str, t: &str| Queued { uuid: u.into(), text: t.to_string().into() };
+        let q = |u: &str, t: &str| Queued {
+            uuid: u.into(),
+            text: t.to_string().into(),
+        };
         // Delivered mid-turn: by its own id.
         let mut list = vec![q("a", "Keep it short."), q("b", "Use lib.rs.")];
-        assert_eq!(take_landed(&mut list, "b", "Use lib.rs."), vec![q("b", "Use lib.rs.")]);
+        assert_eq!(
+            take_landed(&mut list, "b", "Use lib.rs."),
+            vec![q("b", "Use lib.rs.")]
+        );
         assert_eq!(list, vec![q("a", "Keep it short.")]);
         // Run as a turn of its own, joined, under ForgeCLI's id: by its words.
         let mut list = vec![q("a", "one"), q("b", "two"), q("c", "later")];
@@ -10728,10 +11068,18 @@ mod tests {
         assert!(text.contains("\x1b[36m--show-current\x1b[0m"));
         assert!(text.contains("main\r\ndone\r\n"));
         assert!(text.contains("\x1b[1;32mexit 0") && text.contains("2 lines"));
-        let failed = super::AgentFeed { failed: true, ..feed.clone() };
-        let stopped = super::AgentFeed { stopped: true, ..feed.clone() };
+        let failed = super::AgentFeed {
+            failed: true,
+            ..feed.clone()
+        };
+        let stopped = super::AgentFeed {
+            stopped: true,
+            ..feed.clone()
+        };
         assert!(String::from_utf8_lossy(&stopped.bytes()).contains("stopped"));
-        assert!(String::from_utf8(failed.bytes()).unwrap().contains("\x1b[1;31mexit 1"));
+        assert!(String::from_utf8(failed.bytes())
+            .unwrap()
+            .contains("\x1b[1;31mexit 1"));
     }
 
     #[test]
@@ -10743,17 +11091,23 @@ mod tests {
             content: content.to_string().into(),
             bytes: None,
         };
-        let page = |h1: &str| format!("<html><h1>{h1}</h1><svg viewBox=\"0 0 10 10\"><rect/></svg></html>");
+        let page = |h1: &str| {
+            format!("<html><h1>{h1}</h1><svg viewBox=\"0 0 10 10\"><rect/></svg></html>")
+        };
         let mut chat = Chat::new(1, 1, "t".into());
         chat.messages = vec![Message::Assistant { blocks: vec![] }];
         // Copied from the template, then edited: the edit brings its card.
         let v1 = card("tls.html", &page("Template"));
         assert_eq!(chat.update_card(v1.clone(), true), Some(v1.clone()));
-        chat.messages = vec![Message::Assistant { blocks: vec![Block::File(v1)] }];
+        chat.messages = vec![Message::Assistant {
+            blocks: vec![Block::File(v1)],
+        }];
         // Edited again: the same card, now showing the last version.
         let v2 = card("tls.html", &page("TLS 1.3 handshake"));
         assert_eq!(chat.update_card(v2.clone(), true), None);
-        let Message::Assistant { blocks } = &chat.messages[0] else { panic!() };
+        let Message::Assistant { blocks } = &chat.messages[0] else {
+            panic!()
+        };
         assert!(matches!(&blocks[..], [Block::File(f)] if f == &v2));
         // Editing a README brings no card; writing one still does.
         let readme = card("README.md", "# Forge");
@@ -10767,20 +11121,28 @@ mod tests {
             "python scripts/docx_tool.py create memo.md out/Q3-memo.docx && echo done",
             "Wrote out/Q3-memo.docx (2 pages).\nAlso saved \"deck.pptx\", budget.XLSX; see report.pdf.",
         );
-        assert_eq!(found, ["out/Q3-memo.docx", "deck.pptx", "budget.XLSX", "report.pdf"]);
+        assert_eq!(
+            found,
+            ["out/Q3-memo.docx", "deck.pptx", "budget.XLSX", "report.pdf"]
+        );
         assert!(super::AppState::document_paths("ls -la", "a.txt b.md").is_empty());
         // Diagram Design starts a diagram by copying its template.
         let found = super::AppState::document_paths(
             "cp ~/.forge/plugin/forge/skills/diagram-design/assets/template.html docs/diagrams/tls.html",
             "",
         );
-        assert_eq!(found.last().map(String::as_str), Some("docs/diagrams/tls.html"));
+        assert_eq!(
+            found.last().map(String::as_str),
+            Some("docs/diagrams/tls.html")
+        );
     }
 
     #[test]
     fn always_allow_allows_the_command_not_one_use_of_it() {
         let rule = |c: &str| {
-            let v = super::command_rules(serde_json::json!([{"type": "addRules", "rules": [{"toolName": "Bash", "ruleContent": c}], "destination": "localSettings"}]));
+            let v = super::command_rules(
+                serde_json::json!([{"type": "addRules", "rules": [{"toolName": "Bash", "ruleContent": c}], "destination": "localSettings"}]),
+            );
             super::rule_name(&v).unwrap()
         };
         assert_eq!(rule("rm perm_a.txt"), "Bash(rm:*)");
@@ -10791,9 +11153,14 @@ mod tests {
         assert_eq!(rule("npm test:*"), "Bash(npm test:*)");
         assert_eq!(rule("git -C repo status"), "Bash(git:*)");
         assert_eq!(rule("FOO=1 make build && make test"), "Bash(make:*)");
-        assert_eq!(super::always_label(Some(&rule("rm perm_a.txt"))), "Always allow rm");
+        assert_eq!(
+            super::always_label(Some(&rule("rm perm_a.txt"))),
+            "Always allow rm"
+        );
         // Other tools' rules are left as they are.
-        let web = super::command_rules(serde_json::json!([{"type": "addRules", "rules": [{"toolName": "WebFetch", "ruleContent": "domain:docs.rs"}]}]));
+        let web = super::command_rules(
+            serde_json::json!([{"type": "addRules", "rules": [{"toolName": "WebFetch", "ruleContent": "domain:docs.rs"}]}]),
+        );
         assert_eq!(super::rule_name(&web).unwrap(), "WebFetch(domain:docs.rs)");
     }
 
@@ -10804,12 +11171,27 @@ mod tests {
         assert_eq!(l(Some("Edit")), "Always allow edits");
         assert_eq!(l(Some("WebFetch(domain:docs.rs)")), "Always allow docs.rs");
         assert_eq!(l(Some("WebSearch")), "Always allow web searches");
-        assert_eq!(l(Some("mcp__forge-browser__click")), "Always allow browser click");
-        assert_eq!(l(Some("mcp__github__create_issue")), "Always allow github create issue");
-        assert_eq!(l(Some("mcp__forge-browser__click")), "Always allow browser click");
-        assert_eq!(l(Some("mcp__github__create_issue")), "Always allow github create issue");
+        assert_eq!(
+            l(Some("mcp__forge-browser__click")),
+            "Always allow browser click"
+        );
+        assert_eq!(
+            l(Some("mcp__github__create_issue")),
+            "Always allow github create issue"
+        );
+        assert_eq!(
+            l(Some("mcp__forge-browser__click")),
+            "Always allow browser click"
+        );
+        assert_eq!(
+            l(Some("mcp__github__create_issue")),
+            "Always allow github create issue"
+        );
         assert_eq!(l(None), "Always allow");
-        assert!(l(Some("Bash(cargo build --release --target x86_64-pc-windows-gnu)")).ends_with('…'));
+        assert!(l(Some(
+            "Bash(cargo build --release --target x86_64-pc-windows-gnu)"
+        ))
+        .ends_with('…'));
         let s = serde_json::json!([{"type": "addRules", "rules": [{"toolName": "Edit"}], "destination": "localSettings"}]);
         assert_eq!(super::rule_scope(&s), Some("in this project, for you"));
         assert_eq!(super::rule_scope(&serde_json::json!([])), None);
@@ -10857,6 +11239,24 @@ mod tests {
             [("authorization".to_string(), "Bearer k".to_string())]
         );
         assert_eq!(remote[1].1, crate::model_proxy::PLACEHOLDER_KEY);
+        // Gemini: the key as Google AI Studio takes it; the remote gets a placeholder.
+        let env = vec![
+            (
+                "FORGE_GEMINI_BASE_URL".to_string(),
+                "https://generativelanguage.googleapis.com/v1beta".to_string(),
+            ),
+            ("FORGE_GEMINI_API_KEY".to_string(), "AIza-real".to_string()),
+        ];
+        let (route, remote) = super::proxied_env(&env);
+        assert_eq!(
+            route.base,
+            "https://generativelanguage.googleapis.com/v1beta"
+        );
+        assert_eq!(
+            route.headers,
+            [("x-goog-api-key".to_string(), "AIza-real".to_string())]
+        );
+        assert_eq!(remote[1].1, crate::model_proxy::PLACEHOLDER_KEY);
     }
     use super::*;
 
@@ -10866,7 +11266,10 @@ mod tests {
             text: format!("{labels:?}?"),
             options: labels
                 .iter()
-                .map(|l| QOption { label: l.to_string(), description: String::new() })
+                .map(|l| QOption {
+                    label: l.to_string(),
+                    description: String::new(),
+                })
                 .collect(),
             multi,
             ..Default::default()
@@ -10875,7 +11278,10 @@ mod tests {
 
     #[test]
     fn picking_answers_a_question_and_moves_on() {
-        let mut qs = vec![question(false, &["a", "b"]), question(true, &["x", "y", "z"])];
+        let mut qs = vec![
+            question(false, &["a", "b"]),
+            question(true, &["x", "y", "z"]),
+        ];
         let mut step = 0;
         pick(&mut qs, &mut step, 0, 1);
         assert_eq!((qs[0].answer().as_deref(), step), (Some("b"), 1));

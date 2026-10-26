@@ -58,16 +58,23 @@ pub struct SkillInstall {
 impl SkillInstall {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let source = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("github.com/owner/repo, owner/repo, a folder, or a .zip")
+            InputState::new(window, cx)
+                .placeholder("github.com/owner/repo, owner/repo, a folder, or a .zip")
         });
         Self {
             _subs: vec![
                 cx.observe(&state, |_, _, cx| cx.notify()),
-                cx.subscribe_in(&source, window, |this, _, ev: &gpui::component::input::InputEvent, _, cx| {
-                    if matches!(ev, gpui::component::input::InputEvent::PressEnter { .. }) && this.busy.is_none() {
-                        this.look(cx);
-                    }
-                }),
+                cx.subscribe_in(
+                    &source,
+                    window,
+                    |this, _, ev: &gpui::component::input::InputEvent, _, cx| {
+                        if matches!(ev, gpui::component::input::InputEvent::PressEnter { .. })
+                            && this.busy.is_none()
+                        {
+                            this.look(cx);
+                        }
+                    },
+                ),
             ],
             source,
             state,
@@ -115,7 +122,14 @@ impl SkillInstall {
             files: !folder,
             directories: folder,
             multiple: false,
-            prompt: Some(if folder { "Use this folder" } else { "Use this file" }.into()),
+            prompt: Some(
+                if folder {
+                    "Use this folder"
+                } else {
+                    "Use this file"
+                }
+                .into(),
+            ),
         });
         let input = self.source.clone();
         cx.spawn_in(window, async move |this, cx| {
@@ -205,7 +219,9 @@ impl SkillInstall {
     }
 
     fn install(&mut self, cx: &mut Context<Self>) {
-        let Some(l) = self.looked.as_ref() else { return };
+        let Some(l) = self.looked.as_ref() else {
+            return;
+        };
         let skills: Vec<FoundSkill> = l
             .picked
             .iter()
@@ -225,8 +241,13 @@ impl SkillInstall {
             None => String::new(),
         };
         let done = match names.as_slice() {
-            [one] => format!("Installed the {one} skill{place}. New chats can use it, here and in Claude Code."),
-            _ => format!("Installed {} skills{place}. New chats can use them, here and in Claude Code.", names.len()),
+            [one] => format!(
+                "Installed the {one} skill{place}. New chats can use it, here and in Claude Code."
+            ),
+            _ => format!(
+                "Installed {} skills{place}. New chats can use them, here and in Claude Code.",
+                names.len()
+            ),
         };
         self.busy = Some("Installing…");
         self.error = None;
@@ -243,7 +264,9 @@ impl SkillInstall {
                             (None, Some(dest)) => {
                                 si::install_skill(sk, &source, &root, dest, true).map(|_| ())?
                             }
-                            (None, None) => return Err("Claude Code's folder is unknown here.".into()),
+                            (None, None) => {
+                                return Err("Claude Code's folder is unknown here.".into())
+                            }
                         }
                     }
                     Ok(())
@@ -268,9 +291,17 @@ impl SkillInstall {
 
     /// A plugin: copied under Forge's plugins folder and added to `pluginDirs`.
     fn install_plugin(&mut self, cx: &mut Context<Self>) {
-        let Some(p) = self.looked.as_ref().and_then(|l| l.found.plugin.clone()) else { return };
-        let Some(root) = si::plugins_root() else { return };
-        let source = self.looked.as_ref().map(|l| l.source.label()).unwrap_or_default();
+        let Some(p) = self.looked.as_ref().and_then(|l| l.found.plugin.clone()) else {
+            return;
+        };
+        let Some(root) = si::plugins_root() else {
+            return;
+        };
+        let source = self
+            .looked
+            .as_ref()
+            .map(|l| l.source.label())
+            .unwrap_or_default();
         let name = p.name.clone();
         self.busy = Some("Installing…");
         let task = self.state.update(cx, |s, cx| {
@@ -295,8 +326,12 @@ impl SkillInstall {
     }
 
     fn add_marketplace(&mut self, cx: &mut Context<Self>) {
-        let Some(l) = self.looked.as_ref() else { return };
-        let Some(m) = l.found.marketplace.clone() else { return };
+        let Some(l) = self.looked.as_ref() else {
+            return;
+        };
+        let Some(m) = l.found.marketplace.clone() else {
+            return;
+        };
         let source = l.source.label();
         match si::remember_marketplace(&m.name, Some(&source)) {
             Ok(()) => {
@@ -313,7 +348,14 @@ impl SkillInstall {
         }
     }
 
-    fn skill_card(&self, t: &Theme, i: usize, sk: &FoundSkill, l: &Looked, cx: &mut Context<Self>) -> gpui::AnyElement {
+    fn skill_card(
+        &self,
+        t: &Theme,
+        i: usize,
+        sk: &FoundSkill,
+        l: &Looked,
+        cx: &mut Context<Self>,
+    ) -> gpui::AnyElement {
         let on = l.picked.contains(&i);
         let mut notes: Vec<(gpui::Hsla, String)> = vec![];
         if let Some(p) = &sk.problem {
@@ -322,20 +364,36 @@ impl SkillInstall {
         if !sk.commands.is_empty() {
             notes.push((
                 t.extra.warning,
-                format!("Runs before each use: {}", sk.commands.iter().map(|c| format!("`{}`", c.lines().next().unwrap_or(c))).collect::<Vec<_>>().join(", ")),
+                format!(
+                    "Runs before each use: {}",
+                    sk.commands
+                        .iter()
+                        .map(|c| format!("`{}`", c.lines().next().unwrap_or(c)))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
             ));
         }
         if !sk.allowed_tools.is_empty() {
             notes.push((
                 t.colors.text_muted,
-                format!("Allowed without asking while it runs: {}", sk.allowed_tools.join(", ")),
+                format!(
+                    "Allowed without asking while it runs: {}",
+                    sk.allowed_tools.join(", ")
+                ),
             ));
         }
         if !sk.scripts.is_empty() {
-            notes.push((t.colors.text_muted, format!("Scripts: {}", sk.scripts.join(", "))));
+            notes.push((
+                t.colors.text_muted,
+                format!("Scripts: {}", sk.scripts.join(", ")),
+            ));
         }
         if l.there.contains(&i) {
-            notes.push((t.colors.text_muted, "Installed already: this replaces it.".into()));
+            notes.push((
+                t.colors.text_muted,
+                "Installed already: this replaces it.".into(),
+            ));
         }
         let detail = format!(
             "{} · {} file{}",
@@ -343,13 +401,13 @@ impl SkillInstall {
             sk.files,
             if sk.files == 1 { "" } else { "s" }
         );
-        let mut text = div().flex_1().min_w_0().flex().flex_col().gap(px(2.)).child(kit::card_text(
-            t,
-            sk.name.clone(),
-            true,
-            Some(detail),
-            None,
-        ));
+        let mut text = div()
+            .flex_1()
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .gap(px(2.))
+            .child(kit::card_text(t, sk.name.clone(), true, Some(detail), None));
         for (c, n) in notes {
             text = text.child(
                 div()
@@ -362,19 +420,28 @@ impl SkillInstall {
         kit::card(t)
             .items_start()
             .when(!on, |d| d.opacity(0.7))
-            .child(div().pt(px(2.)).child(icon("icons/wand-sparkles.svg", t.size.icon, t.colors.text_muted)))
+            .child(div().pt(px(2.)).child(icon(
+                "icons/wand-sparkles.svg",
+                t.size.icon,
+                t.colors.text_muted,
+            )))
             .child(text)
             .when(sk.problem.is_none(), |d| {
                 d.child(
-                    kit::chip(t, SharedString::from(format!("pick-skill-{i}")), if on { "Included" } else { "Skipped" }, on)
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            if let Some(l) = this.looked.as_mut() {
-                                if !l.picked.remove(&i) {
-                                    l.picked.insert(i);
-                                }
+                    kit::chip(
+                        t,
+                        SharedString::from(format!("pick-skill-{i}")),
+                        if on { "Included" } else { "Skipped" },
+                        on,
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        if let Some(l) = this.looked.as_mut() {
+                            if !l.picked.remove(&i) {
+                                l.picked.insert(i);
                             }
-                            cx.notify();
-                        })),
+                        }
+                        cx.notify();
+                    })),
                 )
             })
             .into_any_element()
@@ -386,7 +453,11 @@ impl Render for SkillInstall {
         let t = cx.theme().clone();
         let s = self.state.read(cx);
         let remote = s.current_remote().map(|r| r.target.label());
-        let project_name = s.project_dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let project_name = s
+            .project_dir
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
         let busy = self.busy;
         let mut out = div()
             .flex()
@@ -407,7 +478,9 @@ impl Render for SkillInstall {
         }
         .id("install-find")
         .when(busy.is_some(), |d| d.opacity(0.6))
-        .when(busy.is_none(), |d| d.on_click(cx.listener(|this, _, _, cx| this.look(cx))));
+        .when(busy.is_none(), |d| {
+            d.on_click(cx.listener(|this, _, _, cx| this.look(cx)))
+        });
         out = out.child(kit::field(
             &t,
             "Where from",
@@ -429,22 +502,38 @@ impl Render for SkillInstall {
 
         let mut into = div().flex().gap(px(6.));
         for (v, label) in [
-            (Into::Yours, "Yours, every project (~/.claude/skills)".to_string()),
-            (Into::Project, format!("{project_name} only (.claude/skills)")),
+            (
+                Into::Yours,
+                "Yours, every project (~/.claude/skills)".to_string(),
+            ),
+            (
+                Into::Project,
+                format!("{project_name} only (.claude/skills)"),
+            ),
         ] {
             into = into.child(
-                kit::chip(&t, SharedString::from(format!("install-into-{}", v == Into::Yours)), label, self.into == v)
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.into = v;
-                        cx.notify();
-                    })),
+                kit::chip(
+                    &t,
+                    SharedString::from(format!("install-into-{}", v == Into::Yours)),
+                    label,
+                    self.into == v,
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.into = v;
+                    cx.notify();
+                })),
             );
         }
         let hint = match &remote {
             Some(r) => format!("On {r}, where this project's chats run."),
             None => "Claude Code reads the same folders.".to_string(),
         };
-        out = out.child(kit::field(&t, "Install into", Some(&hint), into.into_any_element()));
+        out = out.child(kit::field(
+            &t,
+            "Install into",
+            Some(&hint),
+            into.into_any_element(),
+        ));
         out = out.children(kit::status(&t, &self.error));
 
         if let Some(l) = &self.looked {
@@ -452,8 +541,23 @@ impl Render for SkillInstall {
                 out = out.child(kit::group(&t, "A plugin marketplace")).child(
                     kit::card(&t)
                         .child(icon("icons/puzzle.svg", t.size.icon, t.colors.text_muted))
-                        .child(kit::card_text(&t, m.name.clone(), true, Some(format!("{} plugin{} to choose from. {}", m.plugins.len(), if m.plugins.len() == 1 { "" } else { "s" }, m.description)), None))
-                        .child(theme::primary_button(&t, "Add marketplace").id("install-add-market").on_click(cx.listener(|this, _, _, cx| this.add_marketplace(cx)))),
+                        .child(kit::card_text(
+                            &t,
+                            m.name.clone(),
+                            true,
+                            Some(format!(
+                                "{} plugin{} to choose from. {}",
+                                m.plugins.len(),
+                                if m.plugins.len() == 1 { "" } else { "s" },
+                                m.description
+                            )),
+                            None,
+                        ))
+                        .child(
+                            theme::primary_button(&t, "Add marketplace")
+                                .id("install-add-market")
+                                .on_click(cx.listener(|this, _, _, cx| this.add_marketplace(cx))),
+                        ),
                 );
             }
             if let Some(p) = &l.found.plugin {
@@ -475,7 +579,10 @@ impl Render for SkillInstall {
             }
             if !l.found.skills.is_empty() {
                 let n = l.found.skills.len();
-                out = out.child(kit::group(&t, format!("{n} skill{} found", if n == 1 { "" } else { "s" })));
+                out = out.child(kit::group(
+                    &t,
+                    format!("{n} skill{} found", if n == 1 { "" } else { "s" }),
+                ));
                 let cards: Vec<gpui::AnyElement> = l
                     .found
                     .skills
@@ -495,12 +602,17 @@ impl Render for SkillInstall {
                         .flex()
                         .justify_end()
                         .gap(px(8.))
-                        .child(kit::cancel_button(&t, "install-cancel").on_click(cx.listener(|this, _, _, cx| this.close(cx))))
+                        .child(
+                            kit::cancel_button(&t, "install-cancel")
+                                .on_click(cx.listener(|this, _, _, cx| this.close(cx))),
+                        )
                         .child(
                             theme::primary_button(&t, label)
                                 .id("install-go")
                                 .when(busy.is_some() || picked == 0, |d| d.opacity(0.6))
-                                .when(busy.is_none() && picked > 0, |d| d.on_click(cx.listener(|this, _, _, cx| this.install(cx)))),
+                                .when(busy.is_none() && picked > 0, |d| {
+                                    d.on_click(cx.listener(|this, _, _, cx| this.install(cx)))
+                                }),
                         ),
                 );
             }

@@ -13,7 +13,6 @@ use std::time::Duration;
 
 use gpui::{div, prelude::*, px, Animation, AnimationExt, AnyElement, Div, ElementId, Hsla};
 
-
 /// The kinds of work the working line names.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Activity {

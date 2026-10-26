@@ -136,13 +136,17 @@ pub struct Launch {
     pub env: Vec<(String, String)>,
 }
 
-/// The base URL ForgeCLI wants: it adds `/v1/messages` (Messages API) or
-/// `/chat/completions` (OpenAI-compatible) itself.
+/// The base URL ForgeCLI wants: it adds `/v1/messages` (Messages API),
+/// `/chat/completions` (OpenAI-compatible) or `/models/<model>:...` (Gemini)
+/// itself.
 fn cli_base_url(profile: &Profile) -> String {
+    if profile.wire == Wire::Gemini {
+        return profile.base_url.trim().trim_end_matches('/').to_string();
+    }
     let url = profile.chat_url();
     let suffix = match profile.wire {
         Wire::Anthropic => "/v1/messages",
-        Wire::Openai => "/chat/completions",
+        _ => "/chat/completions",
     };
     url.strip_suffix(suffix).unwrap_or(&url).to_string()
 }
@@ -235,6 +239,12 @@ pub fn launch(
                 env.push(("FORGE_OPENAI_API_KEY".into(), t));
             }
         }
+        Wire::Gemini => {
+            env.push(("FORGE_GEMINI_BASE_URL".into(), base));
+            if let Some(t) = token {
+                env.push(("FORGE_GEMINI_API_KEY".into(), t));
+            }
+        }
     }
     if !profile.headers.is_empty() {
         let lines: Vec<String> = profile
@@ -299,6 +309,9 @@ impl Session {
             "FORGE_AUTH_TOKEN",
             "FORGE_OPENAI_BASE_URL",
             "FORGE_OPENAI_API_KEY",
+            "FORGE_GEMINI_BASE_URL",
+            "FORGE_GEMINI_API_KEY",
+            "FORGE_GEMINI_AUTH_HEADER",
             "FORGE_CUSTOM_HEADERS",
             "FORGE_MODEL",
         ] {
@@ -427,7 +440,14 @@ impl Session {
         suggestions: &Value,
         note: Option<&str>,
     ) -> Result<(), String> {
-        self.write(answer_line(request_id, allow, always, input, suggestions, note))
+        self.write(answer_line(
+            request_id,
+            allow,
+            always,
+            input,
+            suggestions,
+            note,
+        ))
     }
 
     /// Answer AskUserQuestion with what you chose (`questions_answer_line`).
@@ -1099,7 +1119,11 @@ pub fn tool_call(name: &str, input: &Value) -> ToolCall {
             (
                 ToolKind::Other,
                 QUESTION_TOOL.to_string(),
-                Some(if n == 1 { "1 question".into() } else { format!("{n} questions") }),
+                Some(if n == 1 {
+                    "1 question".into()
+                } else {
+                    format!("{n} questions")
+                }),
                 vec![],
             )
         }
@@ -1252,13 +1276,34 @@ mod tests {
             delta("ught>Hi there!"),
             json!({"type":"result","is_error":false,"duration_ms":10,"usage":{}}),
         ]);
-        let thinking: String = ev.iter().filter_map(|e| match e { Event::Thinking(t) => Some(t.as_str()), _ => None }).collect();
-        let text: String = ev.iter().filter_map(|e| match e { Event::Text(t) => Some(t.as_str()), _ => None }).collect();
+        let thinking: String = ev
+            .iter()
+            .filter_map(|e| match e {
+                Event::Thinking(t) => Some(t.as_str()),
+                _ => None,
+            })
+            .collect();
+        let text: String = ev
+            .iter()
+            .filter_map(|e| match e {
+                Event::Text(t) => Some(t.as_str()),
+                _ => None,
+            })
+            .collect();
         assert_eq!(thinking, "The user said hi. I'll respond naturally.");
         assert_eq!(text, "Hi there!");
         // A plain "<" in a reply is not held back for ever.
-        let ev = parse(&[delta("if a <"), json!({"type":"result","is_error":false,"duration_ms":10,"usage":{}})]);
-        let text: String = ev.iter().filter_map(|e| match e { Event::Text(t) => Some(t.as_str()), _ => None }).collect();
+        let ev = parse(&[
+            delta("if a <"),
+            json!({"type":"result","is_error":false,"duration_ms":10,"usage":{}}),
+        ]);
+        let text: String = ev
+            .iter()
+            .filter_map(|e| match e {
+                Event::Text(t) => Some(t.as_str()),
+                _ => None,
+            })
+            .collect();
         assert_eq!(text, "if a <");
     }
 
@@ -1281,7 +1326,8 @@ mod tests {
             Event::ToolResult {
                 id: "t1".into(),
                 output: "a\nb".into(),
-                is_error: false, images: vec![],
+                is_error: false,
+                images: vec![],
             }
         );
         assert!(
@@ -1395,7 +1441,10 @@ mod tests {
               "options": [{ "label": "folio", "description": "" }, { "label": "notes", "description": "" }] } ] });
         let mut qs = questions(&input);
         assert_eq!(qs.len(), 3);
-        assert_eq!((qs[0].header.as_str(), qs[0].options[1].label.as_str()), ("Stack", "Leptos"));
+        assert_eq!(
+            (qs[0].header.as_str(), qs[0].options[1].label.as_str()),
+            ("Stack", "Leptos")
+        );
         assert!(qs[1].multi && !qs[0].multi);
         assert_eq!(ask_text(QUESTION_TOOL, &input).0, "Forge has 3 questions");
         qs[0].picked = vec![0];
@@ -1442,11 +1491,19 @@ mod tests {
             .get("updatedPermissions")
             .is_none());
         assert_eq!(
-            answer_line("r1", false, false, &input, &sugg, None)["response"]["response"]["behavior"],
+            answer_line("r1", false, false, &input, &sugg, None)["response"]["response"]
+                ["behavior"],
             "deny"
         );
         // Denied with your words: Forge gets them, not just a no.
-        let said = answer_line("r1", false, false, &input, &sugg, Some("Use lib.rs instead"));
+        let said = answer_line(
+            "r1",
+            false,
+            false,
+            &input,
+            &sugg,
+            Some("Use lib.rs instead"),
+        );
         let message = said["response"]["response"]["message"].as_str().unwrap();
         assert!(message.contains("Use lib.rs instead"), "{message}");
     }
@@ -1496,6 +1553,18 @@ mod tests {
             "FORGE_OPENAI_BASE_URL".into(),
             "http://127.0.0.1:11434/v1".into()
         )));
+        // Gemini: ForgeCLI's native wire, the base URL as written.
+        let g: Profile = serde_json::from_value(json!({"name":"g","baseUrl":"https://generativelanguage.googleapis.com/v1beta/","wire":"gemini","model":"gemini-3-flash-preview"}))
+        .unwrap();
+        let l = launch(&g, ModeId::Manual, false, Conversation::New(id)).unwrap();
+        assert!(l.env.contains(&(
+            "FORGE_GEMINI_BASE_URL".into(),
+            "https://generativelanguage.googleapis.com/v1beta".into()
+        )));
+        assert!(!l
+            .env
+            .iter()
+            .any(|(k, _)| k == "FORGE_BASE_URL" || k == "FORGE_OPENAI_BASE_URL"));
     }
 
     #[test]

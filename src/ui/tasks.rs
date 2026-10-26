@@ -6,8 +6,8 @@
 use std::time::Duration;
 
 use gpui::{
-    div, percentage, prelude::*, px, Animation, AnimationExt, AnyElement, Entity,
-    SharedString, Transformation,
+    div, percentage, prelude::*, px, Animation, AnimationExt, AnyElement, Entity, SharedString,
+    Transformation,
 };
 
 use super::icon;
@@ -170,7 +170,11 @@ pub fn render(
         .cursor_pointer()
         .hover(move |d| d.bg(hover))
         .text_size(t.text.caption)
-        .text_color(if failed > 0 { t.extra.danger } else { t.colors.text_muted })
+        .text_color(if failed > 0 {
+            t.extra.danger
+        } else {
+            t.colors.text_muted
+        })
         .child(if running > 0 {
             status_icon(ToolStatus::Running, t, "tasks-pill-spin".into())
         } else {
@@ -226,19 +230,20 @@ pub fn render(
                             .text_color(t.colors.text)
                             .child(task.label.clone()),
                     )
-                    .on_click(move |_, _, cx| st.update(cx, |s, cx| s.jump_to_block(msg, block, cx))),
+                    .on_click(move |_, _, cx| {
+                        st.update(cx, |s, cx| s.jump_to_block(msg, block, cx))
+                    }),
             );
         }
         let close = state.clone();
         gpui::deferred(super::motion::unfold(
-
-        theme::fit_window(
-            theme::popover(t).id("tasks-popover"),
-            window,
-            t,
-            t.size.titlebar + t.size.control,
-            None,
-        )
+            theme::fit_window(
+                theme::popover(t).id("tasks-popover"),
+                window,
+                t,
+                t.size.titlebar + t.size.control,
+                None,
+            )
             .occlude()
             .absolute()
             .top(t.size.control + t.space.xs)
@@ -266,8 +271,7 @@ pub fn render(
             false,
             leaving,
             t,
-        ),
-        )
+        ))
         .with_priority(2)
     });
     Some(
@@ -303,7 +307,8 @@ mod tests {
             diff: vec![],
             open: false,
             full: false,
-            review: Review::Open, images: vec![],
+            review: Review::Open,
+            images: vec![],
         })
     }
 

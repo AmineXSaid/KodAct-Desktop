@@ -378,9 +378,7 @@ pub fn render(
                         } else {
                             format!("Show {} that failed", g.failed)
                         })
-                        .on_click(move |_, _, cx| {
-                            st.update(cx, |s, cx| s.toggle_failed_models(cx))
-                        })
+                        .on_click(move |_, _, cx| st.update(cx, |s, cx| s.toggle_failed_models(cx)))
                 });
                 list = list.child(
                     div()

@@ -47,7 +47,8 @@ impl SkillsEditor {
                 TextareaState::new(window, cx)
                     .placeholder("Run pdftotext -layout on the file, then…")
             }),
-            install: cx.new(|cx| super::skill_install::SkillInstall::new(state.clone(), window, cx)),
+            install: cx
+                .new(|cx| super::skill_install::SkillInstall::new(state.clone(), window, cx)),
             state,
             form: None,
             scope: Scope::Project,
@@ -302,11 +303,19 @@ impl SkillsEditor {
                 };
                 // One line: a long path keeps its end, where the name is.
                 let n = from.chars().count();
-                let from = if n > 64 { format!("…{}", from.chars().skip(n - 63).collect::<String>()) } else { from };
+                let from = if n > 64 {
+                    format!("…{}", from.chars().skip(n - 63).collect::<String>())
+                } else {
+                    from
+                };
                 (t.colors.text_muted, format!("From {from}"))
             })
         });
-        let remote = self.state.read(cx).current_remote().filter(|_| sk.scope == Scope::User);
+        let remote = self
+            .state
+            .read(cx)
+            .current_remote()
+            .filter(|_| sk.scope == Scope::User);
         let (update_dir, update_name) = (sk.dir.clone(), sk.name.clone());
         let copy = sk.clone();
         kit::card(t)
@@ -320,24 +329,36 @@ impl SkillsEditor {
             .when(claude, |d| d.child(kit::scope_pill(t, "Claude Code")))
             .when(remote.is_some(), |d| {
                 d.child(
-                    kit::icon_button(t, SharedString::from(format!("copy-skill-{key}")), "icons/share.svg", "Copy to this project's machine (WSL, SSH)", false)
-                        .on_click(cx.listener(move |this, _, _, cx| this.copy_to_remote(&copy, cx))),
+                    kit::icon_button(
+                        t,
+                        SharedString::from(format!("copy-skill-{key}")),
+                        "icons/share.svg",
+                        "Copy to this project's machine (WSL, SSH)",
+                        false,
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| this.copy_to_remote(&copy, cx))),
                 )
             })
             .when(installed.is_some(), |d| {
                 d.child(
-                    kit::icon_button(t, SharedString::from(format!("update-skill-{key}")), "icons/refresh-cw.svg", "Update", false)
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            let (dir, name) = (update_dir.clone(), update_name.clone());
-                            this.state.update(cx, |s, cx| {
-                                s.engine_write(
-                                    format!("Updated the {name} skill."),
-                                    move |_| crate::skill_install::update_skill(&dir),
-                                    cx,
-                                )
-                                .detach()
-                            });
-                        })),
+                    kit::icon_button(
+                        t,
+                        SharedString::from(format!("update-skill-{key}")),
+                        "icons/refresh-cw.svg",
+                        "Update",
+                        false,
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        let (dir, name) = (update_dir.clone(), update_name.clone());
+                        this.state.update(cx, |s, cx| {
+                            s.engine_write(
+                                format!("Updated the {name} skill."),
+                                move |_| crate::skill_install::update_skill(&dir),
+                                cx,
+                            )
+                            .detach()
+                        });
+                    })),
                 )
             })
             .child(
@@ -397,7 +418,9 @@ impl SkillsEditor {
     /// into its `~/.claude/skills`, where ForgeCLI there finds it.
     fn copy_to_remote(&mut self, sk: &ff::Skill, cx: &mut Context<Self>) {
         let s = self.state.read(cx);
-        let Some(remote) = s.current_remote() else { return };
+        let Some(remote) = s.current_remote() else {
+            return;
+        };
         let extra = s.remote_extra(&remote.target);
         let (dir, name) = (sk.dir.clone(), sk.name.clone());
         let label = remote.target.label();
@@ -405,11 +428,14 @@ impl SkillsEditor {
             s.engine_write(
                 format!("Copied the {name} skill to {label}."),
                 move |_| {
-                    let found = crate::skill_install::read_skill(&dir).ok_or("its SKILL.md can't be read")?;
+                    let found = crate::skill_install::read_skill(&dir)
+                        .ok_or("its SKILL.md can't be read")?;
                     let source = crate::skill_install::Source::Folder(dir.clone());
                     let root = dir.parent().unwrap_or(&dir).to_path_buf();
-                    crate::skill_install::install_skill_remote(&found, &source, &root, &remote, true, true, &extra)
-                        .map(|_| ())
+                    crate::skill_install::install_skill_remote(
+                        &found, &source, &root, &remote, true, true, &extra,
+                    )
+                    .map(|_| ())
                 },
                 cx,
             )

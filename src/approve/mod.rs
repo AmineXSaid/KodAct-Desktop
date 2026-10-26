@@ -280,9 +280,8 @@ pub fn auto_approves_command(request: &AutoApproveInput) -> bool {
     if edits {
         return match request.tool_name.as_str() {
             "AskUserQuestion" | "ExitPlanMode" => false,
-            "Bash" | "PowerShell" => non_blank(request.command.as_deref()).is_some_and(|c| {
-                !deletes(c, &request.working_directory, &request.home_directory)
-            }),
+            "Bash" | "PowerShell" => non_blank(request.command.as_deref())
+                .is_some_and(|c| !deletes(c, &request.working_directory, &request.home_directory)),
             _ => true,
         };
     }
@@ -406,16 +405,43 @@ mod tests {
     #[test]
     fn edit_automatically_runs_everything_but_a_deletion() {
         // Any command, any tool, without asking.
-        for c in ["ls", "curl -s https://example.com", "npm install", "git push", "python3 build.py", "mv a b", "echo x > out.txt"] {
+        for c in [
+            "ls",
+            "curl -s https://example.com",
+            "npm install",
+            "git push",
+            "python3 build.py",
+            "mv a b",
+            "echo x > out.txt",
+        ] {
             assert!(approves(c), "{c} should run");
         }
-        for tool in ["mcp__forge-browser__click", "WebFetch", "Task", "Write", "mcp__github__create_issue"] {
-            assert!(approves_with("", "acceptEdits", true, tool), "{tool} should run");
+        for tool in [
+            "mcp__forge-browser__click",
+            "WebFetch",
+            "Task",
+            "Write",
+            "mcp__github__create_issue",
+        ] {
+            assert!(
+                approves_with("", "acceptEdits", true, tool),
+                "{tool} should run"
+            );
         }
         // Even with safe-command approval turned off: the mode says so.
         assert!(approves_with("cargo test", "acceptEdits", false, "Bash"));
         // Deleting a file asks, on Linux and Windows alike.
-        for c in ["rm perm_a.txt", "rm -rf build", "find . -name '*.o' -delete", "ls | xargs rm", "sudo rm x", "del notes.txt", "Remove-Item .\\x.txt", "rmdir old", "git clean -fd"] {
+        for c in [
+            "rm perm_a.txt",
+            "rm -rf build",
+            "find . -name '*.o' -delete",
+            "ls | xargs rm",
+            "sudo rm x",
+            "del notes.txt",
+            "Remove-Item .\\x.txt",
+            "rmdir old",
+            "git clean -fd",
+        ] {
             assert!(!approves(c), "{c} should ask");
         }
         // A question to you, or a plan, is yours to answer.
@@ -492,11 +518,17 @@ mod tests {
             ("rm -rf ~", "catastrophic"),
             (r#"find . -name "*.pyc" -delete"#, "find -delete"),
             ("git clean -fdx", "git clean"),
-            ("echo 1 > /etc/hosts", "overwrites a file outside the project"),
+            (
+                "echo 1 > /etc/hosts",
+                "overwrites a file outside the project",
+            ),
             ("rm helper.py", "deletes a project file"),
             ("git rm helper.py", "deletes through git"),
             ("truncate -s 0 helper.py", "empties a file"),
-            ("echo x > notes.txt && rm notes.txt", "an edit and a deletion together"),
+            (
+                "echo x > notes.txt && rm notes.txt",
+                "an edit and a deletion together",
+            ),
             ("git reset --hard HEAD~1", "discards"),
             ("git checkout -- helper.py", "discards"),
             ("git branch -D feature", "deletes a branch"),

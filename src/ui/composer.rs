@@ -101,7 +101,8 @@ impl Composer {
         });
         let styling = input.update(cx, |i, cx| i.create_decorations_collection(vec![], cx));
         let filter = cx.new(|cx| InputState::new(window, cx).placeholder("Search models…"));
-        let add_filter = cx.new(|cx| InputState::new(window, cx).placeholder("Add or find a tool…"));
+        let add_filter =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Add or find a tool…"));
         let subs = vec![
             cx.observe_in(&state, window, |this, state, window, cx| {
                 // An edited message comes back here to be changed and sent.
@@ -112,7 +113,12 @@ impl Composer {
                 // While a question waits, what you type answers it.
                 let s = state.read(cx);
                 let in_chat = s.chat().is_some_and(|c| !c.messages.is_empty());
-                let now = (s.in_folder(), s.asking().then(|| s.asking_question()), s.busy(), in_chat);
+                let now = (
+                    s.in_folder(),
+                    s.asking().then(|| s.asking_question()),
+                    s.busy(),
+                    in_chat,
+                );
                 if now != this.placeholder_now {
                     this.placeholder_now = now;
                     this.input.update(cx, |i, cx| {
@@ -145,25 +151,29 @@ impl Composer {
                 cx.notify();
             }),
             // The search "+" menu: typing filters it, Enter runs the first match.
-            cx.subscribe_in(&add_filter, window, |this, f, ev: &InputEvent, window, cx| match ev {
-                InputEvent::Change => cx.notify(),
-                InputEvent::PressEnter { .. } => {
-                    let query = f.read(cx).value().to_string();
-                    // Closed here, on the composer already in hand: going
-                    // back through its entity mid-update would panic.
-                    if let Some(&i) = super::add_menu::matches(&query).first() {
-                        match super::add_menu::action(i) {
-                            Some(action) => {
-                                this.add_open = false;
-                                cx.notify();
-                                window.dispatch_action(action, cx);
+            cx.subscribe_in(
+                &add_filter,
+                window,
+                |this, f, ev: &InputEvent, window, cx| match ev {
+                    InputEvent::Change => cx.notify(),
+                    InputEvent::PressEnter { .. } => {
+                        let query = f.read(cx).value().to_string();
+                        // Closed here, on the composer already in hand: going
+                        // back through its entity mid-update would panic.
+                        if let Some(&i) = super::add_menu::matches(&query).first() {
+                            match super::add_menu::action(i) {
+                                Some(action) => {
+                                    this.add_open = false;
+                                    cx.notify();
+                                    window.dispatch_action(action, cx);
+                                }
+                                None => this.state.update(cx, |s, cx| s.toggle_browser(cx)),
                             }
-                            None => this.state.update(cx, |s, cx| s.toggle_browser(cx)),
                         }
                     }
-                }
-                _ => {}
-            }),
+                    _ => {}
+                },
+            ),
             cx.subscribe_in(&filter, window, |_, _, ev: &InputEvent, _, cx| {
                 if matches!(ev, InputEvent::Change) {
                     cx.notify();
@@ -250,7 +260,12 @@ impl Composer {
 
     /// Ctrl+B, Ctrl+I, Ctrl+E: the selection made bold, italic or code (or
     /// made plain again). True when it took the key.
-    fn format_key(&mut self, ev: &gpui::KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) -> bool {
+    fn format_key(
+        &mut self,
+        ev: &gpui::KeyDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
         let k = &ev.keystroke;
         if !k.modifiers.secondary() || k.modifiers.shift || k.modifiers.alt {
             return false;
@@ -299,21 +314,36 @@ impl Composer {
         let Some(block) = super::compose_style::code_block(&text) else {
             return false;
         };
-        self.input.update(cx, |i, cx| {
-            let value = i.value();
-            let r = i.selected_range();
-            let before = &value[..r.start];
-            // Inside a fence already: the text goes in as it is.
-            if before.lines().filter(|l| l.trim_start().starts_with("```")).count() % 2 == 1 {
-                return false;
-            }
-            let lead = if before.is_empty() || before.ends_with('\n') { "" } else { "\n" };
-            let tail = if value[r.end..].starts_with('\n') { "" } else { "\n" };
-            i.replace(format!("{lead}{block}{tail}"), window, cx);
-            true
-        })
-        .then(|| self.restyle(cx))
-        .is_some()
+        self.input
+            .update(cx, |i, cx| {
+                let value = i.value();
+                let r = i.selected_range();
+                let before = &value[..r.start];
+                // Inside a fence already: the text goes in as it is.
+                if before
+                    .lines()
+                    .filter(|l| l.trim_start().starts_with("```"))
+                    .count()
+                    % 2
+                    == 1
+                {
+                    return false;
+                }
+                let lead = if before.is_empty() || before.ends_with('\n') {
+                    ""
+                } else {
+                    "\n"
+                };
+                let tail = if value[r.end..].starts_with('\n') {
+                    ""
+                } else {
+                    "\n"
+                };
+                i.replace(format!("{lead}{block}{tail}"), window, cx);
+                true
+            })
+            .then(|| self.restyle(cx))
+            .is_some()
     }
 
     /// What the "+" menu needs from the composer: closing it, a press
@@ -359,8 +389,12 @@ impl Composer {
         let text = self.text(cx);
         // A question waits: what you typed answers a question card, or
         // denies a permission card and says what to do instead.
-        if self.state.read(cx).asking() && !text.trim().is_empty() && crate::state::parse_btw(&text).is_none() {
-            self.state.update(cx, |s, cx| s.answer_in_words(text.trim().to_string(), cx));
+        if self.state.read(cx).asking()
+            && !text.trim().is_empty()
+            && crate::state::parse_btw(&text).is_none()
+        {
+            self.state
+                .update(cx, |s, cx| s.answer_in_words(text.trim().to_string(), cx));
             self.input.update(cx, |i, cx| i.set_value("", window, cx));
             return;
         }
@@ -368,7 +402,8 @@ impl Composer {
         // (`/btw` keeps its side card).
         if self.state.read(cx).busy() && crate::state::parse_btw(&text).is_none() {
             if !text.trim().is_empty() {
-                self.state.update(cx, |s, cx| s.queue_message(text.trim().to_string(), cx));
+                self.state
+                    .update(cx, |s, cx| s.queue_message(text.trim().to_string(), cx));
                 self.input.update(cx, |i, cx| i.set_value("", window, cx));
             }
             return;
@@ -581,7 +616,12 @@ impl Render for Composer {
                 window
                     .text_system()
                     .shape_text(text.clone(), t.text.body, &[run], Some(width), None)
-                    .map(|lines| lines.iter().map(|l| l.wrap_boundaries().len() + 1).sum::<usize>())
+                    .map(|lines| {
+                        lines
+                            .iter()
+                            .map(|l| l.wrap_boundaries().len() + 1)
+                            .sum::<usize>()
+                    })
                     .unwrap_or(1)
             } else {
                 text.split('\n').count()
@@ -621,16 +661,19 @@ impl Render for Composer {
         let mode_trigger = super::mode_menu::trigger(&t, &state, cx, skip);
         let out = t.size.menu_out_ms;
         let modes_now = self.state.read(cx).modes_open.then_some(());
-        let modes_menu = self.modes_presence.frame(modes_now, out, window).map(|(_, leaving)| {
-            super::mode_menu::menu(
-                &t,
-                &state,
-                window,
-                cx,
-                move |pos, cx| dismiss_modes(pos, false, cx),
-                leaving,
-            )
-        });
+        let modes_menu = self
+            .modes_presence
+            .frame(modes_now, out, window)
+            .map(|(_, leaving)| {
+                super::mode_menu::menu(
+                    &t,
+                    &state,
+                    window,
+                    cx,
+                    move |pos, cx| dismiss_modes(pos, false, cx),
+                    leaving,
+                )
+            });
         // The "+": a menu above it in the theme's style, or the tray inside
         // the box (`add_menu`).
         let add_hooks = self.add_hooks(cx);
@@ -664,11 +707,9 @@ impl Render for Composer {
                 }
             });
         };
-        let model_frame = self.model_presence.frame(
-            self.state.read(cx).picker_open.then_some(()),
-            out,
-            window,
-        );
+        let model_frame =
+            self.model_presence
+                .frame(self.state.read(cx).picker_open.then_some(()), out, window);
         let s = self.state.read(cx);
         let (busy, mode, picker_open) = (s.busy(), s.mode, s.picker_open);
         let model_menu = model_frame.map(|(_, leaving)| {
@@ -823,7 +864,11 @@ impl Render for Composer {
             .filter(|p| !p.scratch)
             .map(|p| p.name.clone())
             .unwrap_or_else(|| "Work in a folder".into());
-        let host = self.state.read(cx).current_remote().map(|r| r.target.label());
+        let host = self
+            .state
+            .read(cx)
+            .current_remote()
+            .map(|r| r.target.label());
         let remote = host.is_some();
         let project_button = quiet("project", false)
             .aria_label("Project")
@@ -916,22 +961,32 @@ impl Render for Composer {
 
         // In a chat the box is as wide as the text above it, on the same
         // edges; on the new-chat screen it keeps its own width.
-        let in_chat = self.state.read(cx).chat().is_some_and(|c| !c.messages.is_empty());
+        let in_chat = self
+            .state
+            .read(cx)
+            .chat()
+            .is_some_and(|c| !c.messages.is_empty());
         let composer = div()
             .key_context("Composer")
             .track_focus(&self.menu_focus)
             .relative()
             .w_full()
-            .max_w(if in_chat { t.size.column } else { t.size.composer_width })
+            .max_w(if in_chat {
+                t.size.column
+            } else {
+                t.size.composer_width
+            })
             .flex()
             .flex_col()
             .gap(px(6.))
             // Ctrl+F finds in the chat (`find_bar.rs`), not in the text box:
             // the editor's own search bar would open inside the composer.
-            .capture_action(cx.listener(|_, _: &gpui::component::input::Search, window, cx| {
-                cx.stop_propagation();
-                window.dispatch_action(Box::new(super::ToggleFind), cx);
-            }))
+            .capture_action(
+                cx.listener(|_, _: &gpui::component::input::Search, window, cx| {
+                    cx.stop_propagation();
+                    window.dispatch_action(Box::new(super::ToggleFind), cx);
+                }),
+            )
             // The text box's own Escape closes the autocomplete first, keeping the focus.
             .capture_action(
                 cx.listener(|this, _: &gpui::component::input::Escape, _, cx| {
@@ -987,7 +1042,9 @@ impl Render for Composer {
             // makes it bold instead.
             .capture_action(cx.listener(|this, _: &super::ToggleSidebar, window, cx| {
                 let selected = !this.input.read(cx).selected_range().is_empty();
-                if selected && gpui::Focusable::focus_handle(this.input.read(cx), cx).is_focused(window) {
+                if selected
+                    && gpui::Focusable::focus_handle(this.input.read(cx), cx).is_focused(window)
+                {
                     this.format("**", window, cx);
                     cx.stop_propagation();
                 }
@@ -1120,4 +1177,3 @@ impl Render for Composer {
         div().w_full().flex().justify_center().child(composer)
     }
 }
-

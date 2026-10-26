@@ -228,9 +228,8 @@ pub fn render(
             )
         })
         .child(
-            tool_button("doc-find", "icons/search.svg", "Find in this file").on_click(
-                move |_, _, cx| finder.update(cx, |s, cx| s.toggle_doc_find(cx)),
-            ),
+            tool_button("doc-find", "icons/search.svg", "Find in this file")
+                .on_click(move |_, _, cx| finder.update(cx, |s, cx| s.toggle_doc_find(cx))),
         )
         .when(exports, |d| {
             d.child(
@@ -290,7 +289,12 @@ pub fn render(
         );
 
     // The find bar sits under the header.
-    let header = div().flex_none().flex().flex_col().child(header).child(find);
+    let header = div()
+        .flex_none()
+        .flex()
+        .flex_col()
+        .child(header)
+        .child(find);
     let body = div().id("doc-body").flex_1().min_h_0().overflow_y_scroll();
     // What this version changed, in words (a workbook's show in its grid).
     if showing_changes && changed_cells.is_none() {

@@ -397,7 +397,10 @@ impl DotField {
             m.target = point(-u * 2. * LEAN, -v * 2. * LEAN);
         }
         // The lens follows the pointer while it is over the field.
-        let rel = point(f32::from(mouse.x - bounds.origin.x), f32::from(mouse.y - bounds.origin.y));
+        let rel = point(
+            f32::from(mouse.x - bounds.origin.x),
+            f32::from(mouse.y - bounds.origin.y),
+        );
         let inside = rel.x >= 0. && rel.y >= 0. && rel.x <= w && rel.y <= h;
         let fast = dt.min(EASE_MS as f32 / 1000.);
         if inside {
@@ -405,7 +408,10 @@ impl DotField {
                 m.lens = rel;
             }
             let k = (fast * 14.).min(1.);
-            m.lens = point(m.lens.x + (rel.x - m.lens.x) * k, m.lens.y + (rel.y - m.lens.y) * k);
+            m.lens = point(
+                m.lens.x + (rel.x - m.lens.x) * k,
+                m.lens.y + (rel.y - m.lens.y) * k,
+            );
         }
         let lens_want = inside as u8 as f32;
         m.lens_on += (lens_want - m.lens_on) * (fast * 5.).min(1.);
@@ -619,7 +625,12 @@ fn paint_marks(
                 m.at.y + motion.lean.y * depth + slide.y,
             );
             // The lens: near the pointer a dot grows, lights and parts.
-            let near = lens(x, y, motion.lens, motion.lens_on * (1. - 0.5 * motion.quiet));
+            let near = lens(
+                x,
+                y,
+                motion.lens,
+                motion.lens_on * (1. - 0.5 * motion.quiet),
+            );
             let (dx, dy) = (x - motion.lens.x, y - motion.lens.y);
             let dist = (dx * dx + dy * dy).sqrt().max(1.);
             let push = near * LENS_PUSH;
@@ -813,7 +824,10 @@ mod ripple_tests {
         };
         // At rest: faint, never below the rest, a gentle swell.
         let (lo, hi) = range(0.);
-        assert!(lo >= CHAT_REST - 1e-6 && hi > CHAT_REST + 0.05 && hi < CHAT_REST + 0.15, "{lo}..{hi}");
+        assert!(
+            lo >= CHAT_REST - 1e-6 && hi > CHAT_REST + 0.05 && hi < CHAT_REST + 0.15,
+            "{lo}..{hi}"
+        );
         // Working: a taller swell, still under the home screen's strength.
         let (_, hi_work) = range(1.);
         assert!(hi_work > hi && hi_work <= WORK_CREST + 1e-6, "{hi_work}");
@@ -880,15 +894,28 @@ mod tests {
         let c = chat_content(w, h, 760.);
         let marks = chat_layout(w, h, 14., c);
         // Dots everywhere: the margins, behind the column, and every corner.
-        for (x, y) in [(60., 60.), (w - 60., 60.), (60., h - 60.), (w - 60., h - 60.), (w / 2., h / 2.), (w / 2., h - 40.)] {
+        for (x, y) in [
+            (60., 60.),
+            (w - 60., 60.),
+            (60., h - 60.),
+            (w - 60., h - 60.),
+            (w / 2., h / 2.),
+            (w / 2., h - 40.),
+        ] {
             assert!(
-                marks.iter().any(|m| (m.at.x - x).abs() < 40. && (m.at.y - y).abs() < 40.),
+                marks
+                    .iter()
+                    .any(|m| (m.at.x - x).abs() < 40. && (m.at.y - y).abs() < 40.),
                 "no dots near ({x}, {y})"
             );
         }
         // Fainter behind the column than in the margins.
         let mean = |f: &dyn Fn(f32) -> bool| {
-            let v: Vec<f32> = marks.iter().filter(|m| f(m.at.x)).map(|m| m.weight).collect();
+            let v: Vec<f32> = marks
+                .iter()
+                .filter(|m| f(m.at.x))
+                .map(|m| m.weight)
+                .collect();
             v.iter().sum::<f32>() / v.len().max(1) as f32
         };
         let inside = mean(&|x| x > c[0] + 40. && x < c[2] - 40.);

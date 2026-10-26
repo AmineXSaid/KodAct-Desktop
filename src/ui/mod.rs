@@ -1,6 +1,7 @@
 //! The window's views. `workspace` composes them; each file is one component.
 
 pub mod activity;
+pub mod add_menu;
 pub mod agents_editor;
 pub mod agents_view;
 pub mod approvals;
@@ -11,11 +12,9 @@ pub mod browser_view;
 pub mod button;
 pub mod changed_files;
 pub mod chat_menu;
-pub mod documents;
-pub mod session_panel;
-pub mod title_menus;
 pub mod chat_view;
 pub mod command_palette;
+pub mod compose_style;
 pub mod composer;
 pub mod confirm;
 pub mod context_menu;
@@ -25,58 +24,58 @@ pub mod diagram_view;
 pub mod doc_changes;
 pub mod doc_comments;
 pub mod doc_find;
-pub mod new_project;
-pub mod project_github;
-pub mod project_defaults;
-pub mod project_sharing;
-pub mod project_knowledge;
-pub mod project_memory;
-pub mod project_rail;
 pub mod doc_pane;
+pub mod documents;
 pub mod dot_field;
 pub mod editor_kit;
 pub mod env_editor;
 pub mod file_card;
-pub mod add_menu;
-pub mod compose_style;
-pub mod select;
 pub mod file_icon;
 pub mod file_icon_map;
 pub mod file_mark;
 pub mod files_pane;
 pub mod find_bar;
+mod forge_cube;
 pub mod guide;
 pub mod hooks_editor;
 pub mod ingot;
 mod lens;
-mod forge_cube;
 pub mod markdown;
+pub mod marketplaces;
 pub mod mcp_editor;
 pub mod memory_view;
 pub mod message;
 pub mod mode_menu;
 pub mod model_menu;
 pub mod motion;
+pub mod new_project;
 pub mod onboarding;
 pub mod opener;
 pub mod permissions_editor;
 pub mod planned;
 pub mod plugins_editor;
 pub mod profiles_editor;
+pub mod project_defaults;
+pub mod project_github;
+pub mod project_knowledge;
 pub mod project_map;
+pub mod project_memory;
+pub mod project_rail;
+pub mod project_sharing;
 pub mod projects;
 pub mod question_card;
 pub mod queued;
 pub mod remote_menu;
 pub mod rules_view;
 pub mod sandbox_editor;
+pub mod select;
+pub mod session_panel;
 pub mod settings;
 pub mod sheet_view;
 pub mod shortcuts;
 pub mod side_chat;
 pub mod sidebar;
 pub mod skeleton;
-pub mod marketplaces;
 pub mod skill_install;
 pub mod skills_editor;
 pub mod slash_commands;
@@ -85,10 +84,11 @@ pub mod status_bar;
 pub mod tasks;
 pub mod terminal;
 pub mod terminal_dock;
+pub mod title_menus;
 pub mod versions;
+pub mod work_group;
 pub mod workbench;
 pub mod workspace;
-pub mod work_group;
 
 use gpui::{div, prelude::*, svg, App, Div, Hsla, Pixels, SharedString, Svg};
 
@@ -216,7 +216,11 @@ pub fn turning_logo(size: f32, id: impl Into<gpui::ElementId>) -> gpui::AnyEleme
 
 /// The Forge logo turning, painted in `color` (lit from above): the mark of
 /// work in progress in the conversation, in the theme's live colour.
-pub fn turning_logo_in(size: f32, id: impl Into<gpui::ElementId>, color: gpui::Hsla) -> gpui::AnyElement {
+pub fn turning_logo_in(
+    size: f32,
+    id: impl Into<gpui::ElementId>,
+    color: gpui::Hsla,
+) -> gpui::AnyElement {
     // Forge for VS Code's working cube: stock struck true, a quarter turn a
     // beat, drawn a little larger than an icon so its voxels read.
     forge_cube::working(size * 1.25, id, color)

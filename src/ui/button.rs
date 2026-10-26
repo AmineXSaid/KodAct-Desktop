@@ -320,10 +320,7 @@ impl RenderOnce for Button {
             .when(
                 matches!(
                     self.variant,
-                    Variant::Primary
-                        | Variant::Danger
-                        | Variant::Accent
-                        | Variant::Secondary
+                    Variant::Primary | Variant::Danger | Variant::Accent | Variant::Secondary
                 ) || (self.variant == Variant::Ghost && self.size != Size::Compact),
                 |d| d.font_weight(gpui::FontWeight::SEMIBOLD),
             )

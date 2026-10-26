@@ -212,19 +212,30 @@ mod tests {
             "Segoe UI".into(),
         ];
         let (text, display) = brand_faces(&cuts).unwrap();
-        assert_eq!((text.as_ref(), display.as_ref()), ("Anthropic Sans Text", "Anthropic Sans Display"));
+        assert_eq!(
+            (text.as_ref(), display.as_ref()),
+            ("Anthropic Sans Text", "Anthropic Sans Display")
+        );
         // One family for both, in any case.
         let one = vec!["anthropic sans".to_string()];
-        assert_eq!(brand_faces(&one).map(|b| b.1).as_deref(), Some("anthropic sans"));
+        assert_eq!(
+            brand_faces(&one).map(|b| b.1).as_deref(),
+            Some("anthropic sans")
+        );
         // A Display cut alone isn't enough for body text.
         assert_eq!(brand_faces(&["Anthropic Sans Display".to_string()]), None);
         assert_eq!(brand_faces(&["Segoe UI".to_string()]), None);
         // Never bundled: the app's own fonts don't include it.
-        let bundled = std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/fonts")).unwrap();
-        assert!(bundled
-            .filter_map(|e| e.ok())
-            .all(|e| !e.file_name().to_string_lossy().to_lowercase().contains("anthropic")));
-        assert!(!include_str!("assets.rs").to_lowercase().contains("anthropic"));
+        let bundled =
+            std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/fonts")).unwrap();
+        assert!(bundled.filter_map(|e| e.ok()).all(|e| !e
+            .file_name()
+            .to_string_lossy()
+            .to_lowercase()
+            .contains("anthropic")));
+        assert!(!include_str!("assets.rs")
+            .to_lowercase()
+            .contains("anthropic"));
     }
 
     #[test]

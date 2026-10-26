@@ -48,12 +48,19 @@ fn bubble(t: &Theme, state: &Entity<AppState>, chat: usize, q: &Queued) -> AnyEl
                 .text_size(t.text.caption)
                 .text_color(t.colors.text_muted)
                 .child(icon("icons/clock.svg", t.size.icon_xs, t.colors.text_muted))
-                .child(div().flex_1().min_w_0().child("Queued · reaches Forge at its next step"))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .child("Queued · reaches Forge at its next step"),
+                )
                 .child(
                     Button::icon(id("edit"), "icons/pencil.svg", "Edit")
                         .compact()
                         .on_click(move |_, window, app| {
-                            edit.update(app, |s, cx| s.remove_queued(chat, uuid_edit.clone(), true, cx));
+                            edit.update(app, |s, cx| {
+                                s.remove_queued(chat, uuid_edit.clone(), true, cx)
+                            });
                             window.dispatch_action(Box::new(super::FocusComposer), app);
                         }),
                 )
@@ -61,7 +68,9 @@ fn bubble(t: &Theme, state: &Entity<AppState>, chat: usize, q: &Queued) -> AnyEl
                     Button::icon(id("remove"), "icons/x.svg", "Remove")
                         .compact()
                         .on_click(move |_, _, app| {
-                            remove.update(app, |s, cx| s.remove_queued(chat, uuid_remove.clone(), false, cx))
+                            remove.update(app, |s, cx| {
+                                s.remove_queued(chat, uuid_remove.clone(), false, cx)
+                            })
                         }),
                 ),
         )

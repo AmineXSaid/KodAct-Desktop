@@ -37,7 +37,10 @@ pub enum Source {
         path: Option<String>,
     },
     /// Any other git repository (cloned with `git`).
-    Git { url: String, git_ref: Option<String> },
+    Git {
+        url: String,
+        git_ref: Option<String>,
+    },
     Folder(PathBuf),
     /// A `.zip` or `.skill` file.
     Archive(PathBuf),
@@ -47,13 +50,15 @@ impl Source {
     /// How the source is written back (in a record, for Update).
     pub fn label(&self) -> String {
         match self {
-            Source::GitHub { owner, repo, git_ref, path } => {
+            Source::GitHub {
+                owner,
+                repo,
+                git_ref,
+                path,
+            } => {
                 let mut s = format!("https://github.com/{owner}/{repo}");
                 if git_ref.is_some() || path.is_some() {
-                    s.push_str(&format!(
-                        "/tree/{}",
-                        git_ref.as_deref().unwrap_or("HEAD")
-                    ));
+                    s.push_str(&format!("/tree/{}", git_ref.as_deref().unwrap_or("HEAD")));
                     if let Some(p) = path {
                         s.push_str(&format!("/{p}"));
                     }
@@ -76,7 +81,10 @@ pub fn parse_source(input: &str, cwd: &Path) -> Result<Source, String> {
     if input.is_empty() {
         return Err("Paste a GitHub link or owner/repo, or choose a folder or a .zip file.".into());
     }
-    let expanded = match input.strip_prefix("~/").or_else(|| input.strip_prefix("~\\")) {
+    let expanded = match input
+        .strip_prefix("~/")
+        .or_else(|| input.strip_prefix("~\\"))
+    {
         Some(rest) => crate::rules::home_dir().map(|h| h.join(rest)),
         None => Some(PathBuf::from(input)),
     };
@@ -93,14 +101,20 @@ pub fn parse_source(input: &str, cwd: &Path) -> Result<Source, String> {
         Some((u, f)) => (u, Some(f.to_string()).filter(|f| !f.is_empty())),
         None => (input, None),
     };
-    let bare = url.trim_start_matches("https://").trim_start_matches("http://");
+    let bare = url
+        .trim_start_matches("https://")
+        .trim_start_matches("http://");
     let bare = bare.strip_prefix("www.").unwrap_or(bare);
     let gh = bare.strip_prefix("github.com/").or_else(|| {
         // `owner/repo` alone: two plain words.
         let parts: Vec<&str> = url.split('/').collect();
         (parts.len() == 2
             && !url.contains(':')
-            && parts.iter().all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c))))
+            && parts.iter().all(|p| {
+                !p.is_empty()
+                    && p.chars()
+                        .all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c))
+            }))
         .then_some(url)
     });
     if let Some(rest) = gh {
@@ -112,14 +126,29 @@ pub fn parse_source(input: &str, cwd: &Path) -> Result<Source, String> {
                 git_ref = Some(parts[3].to_string());
                 let rest = parts[4..].join("/");
                 // A link to a SKILL.md names its folder.
-                let rest = rest.strip_suffix("/SKILL.md").map(str::to_string).unwrap_or(rest);
+                let rest = rest
+                    .strip_suffix("/SKILL.md")
+                    .map(str::to_string)
+                    .unwrap_or(rest);
                 path = Some(rest).filter(|p| !p.is_empty() && p != "SKILL.md");
             }
-            return Ok(Source::GitHub { owner: parts[0].to_string(), repo, git_ref, path });
+            return Ok(Source::GitHub {
+                owner: parts[0].to_string(),
+                repo,
+                git_ref,
+                path,
+            });
         }
     }
-    if url.starts_with("https://") || url.starts_with("http://") || url.starts_with("git@") || url.starts_with("ssh://") {
-        return Ok(Source::Git { url: url.to_string(), git_ref: fragment });
+    if url.starts_with("https://")
+        || url.starts_with("http://")
+        || url.starts_with("git@")
+        || url.starts_with("ssh://")
+    {
+        return Ok(Source::Git {
+            url: url.to_string(),
+            git_ref: fragment,
+        });
     }
     Err(format!(
         "{input} is not a folder, a .zip or .skill file, a GitHub repository (owner/repo) or a git URL."
@@ -136,18 +165,27 @@ fn http() -> ureq::Agent {
 
 /// Download `url` into `file`, at most [`MAX_DOWNLOAD`].
 fn download(url: &str, file: &Path) -> Result<(), String> {
-    let resp = http().get(url).set("User-Agent", "Forge").call().map_err(|e| match e {
-        ureq::Error::Status(404, _) => "not found (a private repository, or a wrong name or branch)".to_string(),
-        ureq::Error::Status(code, _) => format!("the server answered {code}"),
-        ureq::Error::Transport(t) => t.to_string(),
-    })?;
+    let resp = http()
+        .get(url)
+        .set("User-Agent", "Forge")
+        .call()
+        .map_err(|e| match e {
+            ureq::Error::Status(404, _) => {
+                "not found (a private repository, or a wrong name or branch)".to_string()
+            }
+            ureq::Error::Status(code, _) => format!("the server answered {code}"),
+            ureq::Error::Transport(t) => t.to_string(),
+        })?;
     let mut bytes = vec![];
     resp.into_reader()
         .take(MAX_DOWNLOAD + 1)
         .read_to_end(&mut bytes)
         .map_err(|e| e.to_string())?;
     if bytes.len() as u64 > MAX_DOWNLOAD {
-        return Err(format!("it is larger than {} MB", MAX_DOWNLOAD / 1024 / 1024));
+        return Err(format!(
+            "it is larger than {} MB",
+            MAX_DOWNLOAD / 1024 / 1024
+        ));
     }
     std::fs::write(file, bytes).map_err(|e| e.to_string())
 }
@@ -174,7 +212,12 @@ pub fn fetch(src: &Source, work: &Path) -> Result<PathBuf, String> {
             crate::stage::zip(p, &dest).map_err(|e| format!("{}: {e}", p.display()))?;
             Ok(single_root(&dest))
         }
-        Source::GitHub { owner, repo, git_ref, path } => {
+        Source::GitHub {
+            owner,
+            repo,
+            git_ref,
+            path,
+        } => {
             let r = git_ref.as_deref().unwrap_or("HEAD");
             let url = format!("https://codeload.github.com/{owner}/{repo}/zip/{r}");
             let file = work.join("repo.zip");
@@ -185,7 +228,8 @@ pub fn fetch(src: &Source, work: &Path) -> Result<PathBuf, String> {
             let root = single_root(&dest);
             match path {
                 Some(p) => {
-                    let sub = crate::stage::safe_entry(&root, p).ok_or("that folder is outside the repository")?;
+                    let sub = crate::stage::safe_entry(&root, p)
+                        .ok_or("that folder is outside the repository")?;
                     sub.is_dir()
                         .then_some(sub)
                         .ok_or_else(|| format!("{owner}/{repo} has no folder {p}"))
@@ -272,7 +316,9 @@ fn name_problem(name: &str) -> Option<String> {
             || ('\u{e000}'..='\u{f8ff}').contains(&c)
     });
     if bad {
-        return Some(format!("its name {name:?} has characters Claude Code and Forge refuse"));
+        return Some(format!(
+            "its name {name:?} has characters Claude Code and Forge refuse"
+        ));
     }
     if name == "synced" || name.starts_with("anthropic-skills") {
         return Some(format!("{name} is a reserved name"));
@@ -322,24 +368,49 @@ pub fn commands_in(body: &str) -> Vec<String> {
 }
 
 fn files_in(dir: &Path, base: &Path, out: &mut Vec<String>) {
-    let Ok(rd) = std::fs::read_dir(dir) else { return };
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
     for e in rd.flatten() {
         let p = e.path();
         if p.is_dir() {
-            if p.file_name().is_some_and(|n| n != ".git" && n != "node_modules") {
+            if p.file_name()
+                .is_some_and(|n| n != ".git" && n != "node_modules")
+            {
                 files_in(&p, base, out);
             }
         } else {
-            out.push(p.strip_prefix(base).unwrap_or(&p).to_string_lossy().replace('\\', "/"));
+            out.push(
+                p.strip_prefix(base)
+                    .unwrap_or(&p)
+                    .to_string_lossy()
+                    .replace('\\', "/"),
+            );
         }
     }
 }
 
 fn is_script(rel: &str) -> bool {
-    let ext = rel.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
+    let ext = rel
+        .rsplit_once('.')
+        .map(|(_, e)| e.to_ascii_lowercase())
+        .unwrap_or_default();
     matches!(
         ext.as_str(),
-        "sh" | "bash" | "zsh" | "py" | "js" | "mjs" | "cjs" | "ts" | "ps1" | "psm1" | "bat" | "cmd" | "rb" | "pl" | "php"
+        "sh" | "bash"
+            | "zsh"
+            | "py"
+            | "js"
+            | "mjs"
+            | "cjs"
+            | "ts"
+            | "ps1"
+            | "psm1"
+            | "bat"
+            | "cmd"
+            | "rb"
+            | "pl"
+            | "php"
     )
 }
 
@@ -347,7 +418,10 @@ fn is_script(rel: &str) -> bool {
 pub fn read_skill(dir: &Path) -> Option<FoundSkill> {
     let text = std::fs::read_to_string(dir.join("SKILL.md")).ok()?;
     let doc = crate::forge_files::Doc::parse(&text);
-    let folder = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let folder = dir
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let name = doc.get("name").filter(|n| !n.is_empty()).unwrap_or(folder);
     let description = doc
         .get("description")
@@ -367,7 +441,8 @@ pub fn read_skill(dir: &Path) -> Option<FoundSkill> {
         .get("allowed-tools")
         .map(|raw| split_rules(raw.trim_start_matches('[').trim_end_matches(']')))
         .unwrap_or_default();
-    let problem = name_problem(&name).or_else(|| description.is_empty().then(|| "it is empty".to_string()));
+    let problem =
+        name_problem(&name).or_else(|| description.is_empty().then(|| "it is empty".to_string()));
     Some(FoundSkill {
         commands: commands_in(&doc.body),
         scripts: files.iter().filter(|f| is_script(f)).cloned().collect(),
@@ -404,14 +479,25 @@ fn split_rules(raw: &str) -> Vec<String> {
 
 /// A plugin's manifest, if `dir` is a plugin.
 pub fn read_plugin(dir: &Path) -> Option<FoundPlugin> {
-    let file = [".claude-plugin/plugin.json", ".forge-plugin/plugin.json", "plugin.json"]
-        .iter()
-        .map(|f| dir.join(f))
-        .find(|f| f.is_file())?;
+    let file = [
+        ".claude-plugin/plugin.json",
+        ".forge-plugin/plugin.json",
+        "plugin.json",
+    ]
+    .iter()
+    .map(|f| dir.join(f))
+    .find(|f| f.is_file())?;
     let v: Value = serde_json::from_str(&std::fs::read_to_string(file).ok()?).ok()?;
-    let folder = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let folder = dir
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     Some(FoundPlugin {
-        name: v["name"].as_str().filter(|n| !n.is_empty()).unwrap_or(&folder).to_string(),
+        name: v["name"]
+            .as_str()
+            .filter(|n| !n.is_empty())
+            .unwrap_or(&folder)
+            .to_string(),
         description: v["description"].as_str().unwrap_or_default().to_string(),
         version: v["version"].as_str().map(str::to_string),
         dir: dir.to_path_buf(),
@@ -428,7 +514,9 @@ fn scan_dir(dir: &Path, depth: usize, out: &mut Vec<FoundSkill>) {
     if depth == 0 {
         return;
     }
-    let Ok(rd) = std::fs::read_dir(dir) else { return };
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
     let mut subs: Vec<PathBuf> = rd
         .flatten()
         .map(|e| e.path())
@@ -456,7 +544,11 @@ pub fn scan(root: &Path) -> Found {
     if marketplace.is_none() {
         scan_dir(root, SCAN_DEPTH, &mut skills);
     }
-    Found { skills, plugin, marketplace }
+    Found {
+        skills,
+        plugin,
+        marketplace,
+    }
 }
 
 /// Where an installed thing came from.
@@ -474,7 +566,10 @@ fn now() -> String {
 
 fn copy_dir(from: &Path, to: &Path) -> Result<(), String> {
     std::fs::create_dir_all(to).map_err(|e| e.to_string())?;
-    for e in std::fs::read_dir(from).map_err(|e| e.to_string())?.flatten() {
+    for e in std::fs::read_dir(from)
+        .map_err(|e| e.to_string())?
+        .flatten()
+    {
         let p = e.path();
         let name = e.file_name();
         if name == ".git" {
@@ -501,14 +596,18 @@ fn place(from: &Path, to: &Path, replace: bool) -> Result<(), String> {
     }
     let parent = to.parent().ok_or("no folder to install into")?;
     std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    let tmp = parent.join(format!(".{}.installing", to.file_name().unwrap_or_default().to_string_lossy()));
+    let tmp = parent.join(format!(
+        ".{}.installing",
+        to.file_name().unwrap_or_default().to_string_lossy()
+    ));
     let _ = std::fs::remove_dir_all(&tmp);
     if let Err(e) = copy_dir(from, &tmp) {
         let _ = std::fs::remove_dir_all(&tmp);
         return Err(e);
     }
     if to.exists() {
-        std::fs::remove_dir_all(to).map_err(|e| format!("couldn't replace {}: {e}", to.display()))?;
+        std::fs::remove_dir_all(to)
+            .map_err(|e| format!("couldn't replace {}: {e}", to.display()))?;
     }
     std::fs::rename(&tmp, to).map_err(|e| e.to_string())
 }
@@ -519,7 +618,11 @@ fn write_record(dir: &Path, origin: &Origin) -> Result<(), String> {
         "path": origin.path_in_source,
         "installed": origin.installed,
     });
-    std::fs::write(dir.join(RECORD), serde_json::to_string_pretty(&v).unwrap_or_default()).map_err(|e| e.to_string())
+    std::fs::write(
+        dir.join(RECORD),
+        serde_json::to_string_pretty(&v).unwrap_or_default(),
+    )
+    .map_err(|e| e.to_string())
 }
 
 /// Where an installed skill or plugin came from, if Forge installed it.
@@ -565,7 +668,11 @@ pub fn install_skill(
         .filter(|p| !p.is_empty());
     write_record(
         &to,
-        &Origin { source: source.label(), path_in_source: rel, installed: now() },
+        &Origin {
+            source: source.label(),
+            path_in_source: rel,
+            installed: now(),
+        },
     )?;
     Ok(to)
 }
@@ -576,7 +683,11 @@ fn dir_files(dir: &Path) -> Result<Vec<(String, Vec<u8>)>, String> {
     files_in(dir, dir, &mut rel);
     rel.sort();
     rel.into_iter()
-        .map(|r| std::fs::read(dir.join(&r)).map(|b| (r.clone(), b)).map_err(|e| format!("{r}: {e}")))
+        .map(|r| {
+            std::fs::read(dir.join(&r))
+                .map(|b| (r.clone(), b))
+                .map_err(|e| format!("{r}: {e}"))
+        })
         .collect()
 }
 
@@ -594,7 +705,9 @@ pub fn install_skill_remote(
     if let Some(p) = &skill.problem {
         return Err(format!("{} can't be installed: {p}", skill.name));
     }
-    let folder = skill_target(skill, Path::new("")).to_string_lossy().into_owned();
+    let folder = skill_target(skill, Path::new(""))
+        .to_string_lossy()
+        .into_owned();
     let root = if user {
         "~/.claude/skills".to_string()
     } else {
@@ -614,14 +727,19 @@ pub fn install_skill_remote(
         installed: now(),
     };
     let record = json!({"source": origin.source, "path": origin.path_in_source, "installed": origin.installed});
-    files.push((RECORD.to_string(), serde_json::to_vec_pretty(&record).unwrap_or_default()));
-    crate::remote::put_dir(&remote.target, &dest, &files, replace, extra).map_err(|e| e.to_string())?;
+    files.push((
+        RECORD.to_string(),
+        serde_json::to_vec_pretty(&record).unwrap_or_default(),
+    ));
+    crate::remote::put_dir(&remote.target, &dest, &files, replace, extra)
+        .map_err(|e| e.to_string())?;
     Ok(dest)
 }
 
 /// Install again, from where it came, the skill Forge installed at `dir`.
 pub fn update_skill(dir: &Path) -> Result<(), String> {
-    let o = origin(dir).ok_or("Forge didn't install this skill, so it doesn't know where it came from.")?;
+    let o = origin(dir)
+        .ok_or("Forge didn't install this skill, so it doesn't know where it came from.")?;
     let source = parse_source(&o.source, Path::new("/"))?;
     let work = work_dir();
     let result = (|| {
@@ -633,14 +751,23 @@ pub fn update_skill(dir: &Path) -> Result<(), String> {
         let name = read_skill(dir).map(|s| s.name);
         let skill = match from {
             Some(d) => read_skill(&d),
-            None => scan(&root).skills.into_iter().find(|s| Some(&s.name) == name.as_ref()),
+            None => scan(&root)
+                .skills
+                .into_iter()
+                .find(|s| Some(&s.name) == name.as_ref()),
         }
         .ok_or_else(|| format!("{} no longer has this skill", o.source))?;
         if let Some(p) = &skill.problem {
             return Err(format!("the new version can't be installed: {p}"));
         }
         place(&skill.dir, dir, true)?;
-        write_record(dir, &Origin { installed: now(), ..o.clone() })
+        write_record(
+            dir,
+            &Origin {
+                installed: now(),
+                ..o.clone()
+            },
+        )
     })();
     let _ = std::fs::remove_dir_all(&work);
     result
@@ -685,10 +812,16 @@ pub fn read_marketplace(root: &Path) -> Result<Marketplace, String> {
     let file = root.join(".claude-plugin").join("marketplace.json");
     let text = std::fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
     let v: Value = serde_json::from_str(&text).map_err(|e| format!("marketplace.json: {e}"))?;
-    let plugin_root = v["metadata"]["pluginRoot"].as_str().unwrap_or("").trim_matches('/').to_string();
+    let plugin_root = v["metadata"]["pluginRoot"]
+        .as_str()
+        .unwrap_or("")
+        .trim_matches('/')
+        .to_string();
     let mut plugins = vec![];
     for p in v["plugins"].as_array().into_iter().flatten() {
-        let Some(name) = p["name"].as_str() else { continue };
+        let Some(name) = p["name"].as_str() else {
+            continue;
+        };
         let source = match &p["source"] {
             // `./path` is from the marketplace's root; a bare name is under `metadata.pluginRoot`.
             Value::String(s) if !s.contains("://") && !s.starts_with("git@") => {
@@ -699,13 +832,26 @@ pub fn read_marketplace(root: &Path) -> Result<Marketplace, String> {
                 };
                 PluginSource::Relative(rel)
             }
-            Value::String(url) => PluginSource::Remote(Source::Git { url: url.clone(), git_ref: None }),
+            Value::String(url) => PluginSource::Remote(Source::Git {
+                url: url.clone(),
+                git_ref: None,
+            }),
             Value::Object(o) => {
-                let git_ref = o.get("ref").or_else(|| o.get("sha")).and_then(Value::as_str).map(str::to_string);
-                let path = o.get("path").and_then(Value::as_str).map(|p| p.trim_matches('/').to_string());
+                let git_ref = o
+                    .get("ref")
+                    .or_else(|| o.get("sha"))
+                    .and_then(Value::as_str)
+                    .map(str::to_string);
+                let path = o
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .map(|p| p.trim_matches('/').to_string());
                 match o.get("source").and_then(Value::as_str) {
                     Some("github") => {
-                        let Some((owner, repo)) = o.get("repo").and_then(Value::as_str).and_then(|r| r.split_once('/'))
+                        let Some((owner, repo)) = o
+                            .get("repo")
+                            .and_then(Value::as_str)
+                            .and_then(|r| r.split_once('/'))
                         else {
                             continue;
                         };
@@ -717,13 +863,23 @@ pub fn read_marketplace(root: &Path) -> Result<Marketplace, String> {
                         })
                     }
                     Some("url" | "git" | "git-subdir") => {
-                        let Some(url) = o.get("url").and_then(Value::as_str) else { continue };
+                        let Some(url) = o.get("url").and_then(Value::as_str) else {
+                            continue;
+                        };
                         // A GitHub URL downloads without git.
                         match parse_source(url, Path::new("/")) {
                             Ok(Source::GitHub { owner, repo, .. }) => {
-                                PluginSource::Remote(Source::GitHub { owner, repo, git_ref, path })
+                                PluginSource::Remote(Source::GitHub {
+                                    owner,
+                                    repo,
+                                    git_ref,
+                                    path,
+                                })
                             }
-                            _ => PluginSource::Remote(Source::Git { url: url.to_string(), git_ref }),
+                            _ => PluginSource::Remote(Source::Git {
+                                url: url.to_string(),
+                                git_ref,
+                            }),
                         }
                     }
                     _ => continue,
@@ -739,10 +895,17 @@ pub fn read_marketplace(root: &Path) -> Result<Marketplace, String> {
             entry: p.clone(),
         });
     }
-    let folder = root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let folder = root
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     Ok(Marketplace {
         name: v["name"].as_str().unwrap_or(&folder).to_string(),
-        description: v["description"].as_str().or(v["metadata"]["description"].as_str()).unwrap_or_default().to_string(),
+        description: v["description"]
+            .as_str()
+            .or(v["metadata"]["description"].as_str())
+            .unwrap_or_default()
+            .to_string(),
         plugins,
     })
 }
@@ -783,8 +946,11 @@ pub fn install_plugin(
         let dir = to.join(".claude-plugin");
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         if !dir.join("plugin.json").is_file() || plugin.entry["strict"] == Value::Bool(false) {
-            std::fs::write(dir.join("plugin.json"), serde_json::to_string_pretty(&manifest).unwrap_or_default())
-                .map_err(|e| e.to_string())?;
+            std::fs::write(
+                dir.join("plugin.json"),
+                serde_json::to_string_pretty(&manifest).unwrap_or_default(),
+            )
+            .map_err(|e| e.to_string())?;
         }
     }
     write_record(
@@ -822,22 +988,43 @@ pub fn remove_plugin_dir(project: &Path, dir: &Path) -> Result<(), String> {
         .into_iter()
         .filter(|v| v.as_str() != Some(d.as_str()))
         .collect();
-    set_setting(project, Layer::User, "pluginDirs", (!dirs.is_empty()).then_some(Value::Array(dirs)))
+    set_setting(
+        project,
+        Layer::User,
+        "pluginDirs",
+        (!dirs.is_empty()).then_some(Value::Array(dirs)),
+    )
 }
 
 /// A plugin found on its own (not in a marketplace): copied to
 /// `plugins/local/<name>` and added to your `pluginDirs`.
-pub fn install_local_plugin(plugin: &FoundPlugin, source: &str, plugins_root: &Path, project: &Path) -> Result<(), String> {
-    let to = plugins_root.join("local").join(crate::downloads::clean_name(&plugin.name));
+pub fn install_local_plugin(
+    plugin: &FoundPlugin,
+    source: &str,
+    plugins_root: &Path,
+    project: &Path,
+) -> Result<(), String> {
+    let to = plugins_root
+        .join("local")
+        .join(crate::downloads::clean_name(&plugin.name));
     place(&plugin.dir, &to, true)?;
-    write_record(&to, &Origin { source: source.to_string(), path_in_source: None, installed: now() })?;
+    write_record(
+        &to,
+        &Origin {
+            source: source.to_string(),
+            path_in_source: None,
+            installed: now(),
+        },
+    )?;
     add_plugin_dir(project, &to)
 }
 
 /// The marketplaces you added: `marketplaces.json` in Forge's config folder,
 /// `[{ "name": …, "source": … }]`.
 pub fn known_marketplaces() -> Vec<(String, String)> {
-    let Some(file) = marketplaces_file() else { return vec![] };
+    let Some(file) = marketplaces_file() else {
+        return vec![];
+    };
     let v: Value = std::fs::read_to_string(file)
         .ok()
         .and_then(|t| serde_json::from_str(&t).ok())
@@ -845,7 +1032,12 @@ pub fn known_marketplaces() -> Vec<(String, String)> {
     v.as_array()
         .into_iter()
         .flatten()
-        .filter_map(|m| Some((m["name"].as_str()?.to_string(), m["source"].as_str()?.to_string())))
+        .filter_map(|m| {
+            Some((
+                m["name"].as_str()?.to_string(),
+                m["source"].as_str()?.to_string(),
+            ))
+        })
         .collect()
 }
 
@@ -861,11 +1053,15 @@ pub fn remember_marketplace(name: &str, source: Option<&str>) -> Result<(), Stri
     if let Some(s) = source {
         list.push((name.to_string(), s.to_string()));
     }
-    let v: Vec<Value> = list.iter().map(|(n, s)| json!({"name": n, "source": s})).collect();
+    let v: Vec<Value> = list
+        .iter()
+        .map(|(n, s)| json!({"name": n, "source": s}))
+        .collect();
     if let Some(d) = file.parent() {
         std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
     }
-    std::fs::write(&file, serde_json::to_string_pretty(&v).unwrap_or_default()).map_err(|e| e.to_string())
+    std::fs::write(&file, serde_json::to_string_pretty(&v).unwrap_or_default())
+        .map_err(|e| e.to_string())
 }
 
 /// A fresh folder for one install's downloads, under the system's temp folder.
@@ -899,27 +1095,47 @@ mod tests {
             git_ref: git_ref.map(str::to_string),
             path: path.map(str::to_string),
         };
-        assert_eq!(parse_source("cathrynlavery/diagram-design", &cwd).unwrap(), gh("cathrynlavery", "diagram-design", None, None));
+        assert_eq!(
+            parse_source("cathrynlavery/diagram-design", &cwd).unwrap(),
+            gh("cathrynlavery", "diagram-design", None, None)
+        );
         assert_eq!(
             parse_source("https://github.com/cathrynlavery/diagram-design.git", &cwd).unwrap(),
             gh("cathrynlavery", "diagram-design", None, None)
         );
         assert_eq!(
-            parse_source("https://github.com/anthropics/skills/tree/main/skills/pdf", &cwd).unwrap(),
+            parse_source(
+                "https://github.com/anthropics/skills/tree/main/skills/pdf",
+                &cwd
+            )
+            .unwrap(),
             gh("anthropics", "skills", Some("main"), Some("skills/pdf"))
         );
         assert_eq!(
-            parse_source("github.com/anthropics/skills/blob/v2/skills/pdf/SKILL.md", &cwd).unwrap(),
+            parse_source(
+                "github.com/anthropics/skills/blob/v2/skills/pdf/SKILL.md",
+                &cwd
+            )
+            .unwrap(),
             gh("anthropics", "skills", Some("v2"), Some("skills/pdf"))
         );
         assert_eq!(
             parse_source("https://gitlab.com/team/skills.git#stable", &cwd).unwrap(),
-            Source::Git { url: "https://gitlab.com/team/skills.git".into(), git_ref: Some("stable".into()) }
+            Source::Git {
+                url: "https://gitlab.com/team/skills.git".into(),
+                git_ref: Some("stable".into())
+            }
         );
         std::fs::create_dir_all(cwd.join("local-skill")).unwrap();
         std::fs::write(cwd.join("pack.skill"), b"x").unwrap();
-        assert_eq!(parse_source("local-skill", &cwd).unwrap(), Source::Folder(cwd.join("local-skill")));
-        assert_eq!(parse_source("pack.skill", &cwd).unwrap(), Source::Archive(cwd.join("pack.skill")));
+        assert_eq!(
+            parse_source("local-skill", &cwd).unwrap(),
+            Source::Folder(cwd.join("local-skill"))
+        );
+        assert_eq!(
+            parse_source("pack.skill", &cwd).unwrap(),
+            Source::Archive(cwd.join("pack.skill"))
+        );
         assert!(parse_source("not a thing", &cwd).is_err());
         assert!(parse_source("", &cwd).is_err());
         assert_eq!(
@@ -945,14 +1161,21 @@ mod tests {
         std::fs::create_dir_all(&other).unwrap();
         std::fs::write(other.join("SKILL.md"), "# Tidy imports\nSort them.").unwrap();
         std::fs::create_dir_all(root.join("node_modules/dep/skills/nope")).unwrap();
-        std::fs::write(root.join("node_modules/dep/skills/nope/SKILL.md"), "---\ndescription: x\n---\n").unwrap();
+        std::fs::write(
+            root.join("node_modules/dep/skills/nope/SKILL.md"),
+            "---\ndescription: x\n---\n",
+        )
+        .unwrap();
         let found = scan(&root);
         let names: Vec<&str> = found.skills.iter().map(|s| s.name.as_str()).collect();
         assert_eq!(names, ["terse", "pdf"]);
         let pdf = &found.skills[1];
         assert_eq!(pdf.commands, ["pdfinfo $0", "echo hi"]);
         assert_eq!(pdf.scripts, ["scripts/x.py"]);
-        assert_eq!(pdf.allowed_tools, ["Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/x.py *)", "Read"]);
+        assert_eq!(
+            pdf.allowed_tools,
+            ["Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/x.py *)", "Read"]
+        );
         assert_eq!((pdf.files, pdf.problem.as_deref()), (3, None));
         assert_eq!(found.skills[0].description, "Tidy imports");
         let _ = std::fs::remove_dir_all(&root);
@@ -963,23 +1186,43 @@ mod tests {
         let root = tmp("install");
         let src = root.join("src/diagram-design");
         std::fs::create_dir_all(src.join("assets")).unwrap();
-        std::fs::write(src.join("SKILL.md"), "---\nname: diagram-design\ndescription: Diagrams\n---\nDraw.").unwrap();
+        std::fs::write(
+            src.join("SKILL.md"),
+            "---\nname: diagram-design\ndescription: Diagrams\n---\nDraw.",
+        )
+        .unwrap();
         std::fs::write(src.join("assets/t.html"), "<svg/>").unwrap();
         let skill = read_skill(&src).unwrap();
         let dest = root.join("home/.claude/skills");
-        let source = Source::GitHub { owner: "cathrynlavery".into(), repo: "diagram-design".into(), git_ref: None, path: None };
+        let source = Source::GitHub {
+            owner: "cathrynlavery".into(),
+            repo: "diagram-design".into(),
+            git_ref: None,
+            path: None,
+        };
         let to = install_skill(&skill, &source, &root.join("src"), &dest, false).unwrap();
         assert_eq!(to, dest.join("diagram-design"));
         assert!(to.join("SKILL.md").is_file() && to.join("assets/t.html").is_file());
         let o = origin(&to).unwrap();
         assert_eq!(o.source, "https://github.com/cathrynlavery/diagram-design");
         assert_eq!(o.path_in_source.as_deref(), Some("diagram-design"));
-        assert!(install_skill(&skill, &source, &root, &dest, false).unwrap_err().contains("already installed"));
-        std::fs::write(src.join("SKILL.md"), "---\nname: diagram-design\ndescription: Diagrams v2\n---\nDraw.").unwrap();
+        assert!(install_skill(&skill, &source, &root, &dest, false)
+            .unwrap_err()
+            .contains("already installed"));
+        std::fs::write(
+            src.join("SKILL.md"),
+            "---\nname: diagram-design\ndescription: Diagrams v2\n---\nDraw.",
+        )
+        .unwrap();
         install_skill(&read_skill(&src).unwrap(), &source, &root, &dest, true).unwrap();
-        assert!(std::fs::read_to_string(to.join("SKILL.md")).unwrap().contains("v2"));
+        assert!(std::fs::read_to_string(to.join("SKILL.md"))
+            .unwrap()
+            .contains("v2"));
         // A name Claude Code refuses is not installed.
-        let bad = FoundSkill { problem: name_problem("a<b>"), ..skill.clone() };
+        let bad = FoundSkill {
+            problem: name_problem("a<b>"),
+            ..skill.clone()
+        };
         assert!(install_skill(&bad, &source, &root, &dest, false).is_err());
         uninstall(&to).unwrap();
         assert!(!to.exists());
@@ -995,7 +1238,8 @@ mod tests {
             let mut z = zip::ZipWriter::new(f);
             let opts = zip::write::SimpleFileOptions::default();
             z.start_file("pack/SKILL.md", opts).unwrap();
-            std::io::Write::write_all(&mut z, b"---\nname: pack\ndescription: Packed\n---\nGo.").unwrap();
+            std::io::Write::write_all(&mut z, b"---\nname: pack\ndescription: Packed\n---\nGo.")
+                .unwrap();
             z.start_file("../../escape.txt", opts).unwrap();
             std::io::Write::write_all(&mut z, b"no").unwrap();
             z.finish().unwrap();
@@ -1016,7 +1260,11 @@ mod tests {
         std::fs::create_dir_all(m.join(".claude-plugin")).unwrap();
         std::fs::create_dir_all(m.join("plugins/fmt/skills/fmt")).unwrap();
         std::fs::create_dir_all(m.join("loose")).unwrap();
-        std::fs::write(m.join("plugins/fmt/skills/fmt/SKILL.md"), "---\ndescription: Format\n---\nfmt").unwrap();
+        std::fs::write(
+            m.join("plugins/fmt/skills/fmt/SKILL.md"),
+            "---\ndescription: Format\n---\nfmt",
+        )
+        .unwrap();
         std::fs::write(m.join("loose/README.md"), "x").unwrap();
         std::fs::write(
             m.join(".claude-plugin/marketplace.json"),
@@ -1042,16 +1290,40 @@ mod tests {
             })
         );
         let plugins = root.join("plugins");
-        let fmt = install_plugin(&market.plugins[0], &market, &m, "acme/team-tools", &plugins, &root.join("w")).unwrap();
+        let fmt = install_plugin(
+            &market.plugins[0],
+            &market,
+            &m,
+            "acme/team-tools",
+            &plugins,
+            &root.join("w"),
+        )
+        .unwrap();
         assert_eq!(fmt, plugins.join("team-tools/fmt"));
         assert!(fmt.join("skills/fmt/SKILL.md").is_file());
         // Its manifest comes from the marketplace entry when it has none.
-        let loose = install_plugin(&market.plugins[1], &market, &m, "acme/team-tools", &plugins, &root.join("w")).unwrap();
-        let manifest: Value =
-            serde_json::from_str(&std::fs::read_to_string(loose.join(".claude-plugin/plugin.json")).unwrap()).unwrap();
-        assert_eq!((manifest["name"].as_str(), manifest["skills"][0].as_str()), (Some("loose"), Some("./skills")));
+        let loose = install_plugin(
+            &market.plugins[1],
+            &market,
+            &m,
+            "acme/team-tools",
+            &plugins,
+            &root.join("w"),
+        )
+        .unwrap();
+        let manifest: Value = serde_json::from_str(
+            &std::fs::read_to_string(loose.join(".claude-plugin/plugin.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            (manifest["name"].as_str(), manifest["skills"][0].as_str()),
+            (Some("loose"), Some("./skills"))
+        );
         assert!(manifest.get("source").is_none());
-        assert_eq!(origin(&fmt).unwrap().path_in_source.as_deref(), Some("fmt@team-tools"));
+        assert_eq!(
+            origin(&fmt).unwrap().path_in_source.as_deref(),
+            Some("fmt@team-tools")
+        );
         assert!(scan(&m).marketplace.is_some() && scan(&m).skills.is_empty());
         let _ = std::fs::remove_dir_all(&root);
     }

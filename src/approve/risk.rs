@@ -72,9 +72,23 @@ pub struct RiskAssessment {
 
 /// Programs whose whole purpose is destroying something.
 const DESTRUCTIVE_COMMANDS: &[&str] = &[
-    "rm", "rmdir", "shred", "unlink", "truncate", "dd", "mkfs", "fdisk", "parted", "wipefs", "srm",
+    "rm",
+    "rmdir",
+    "shred",
+    "unlink",
+    "truncate",
+    "dd",
+    "mkfs",
+    "fdisk",
+    "parted",
+    "wipefs",
+    "srm",
     // Windows: cmd.exe and PowerShell (matched case-blind).
-    "del", "erase", "rd", "remove-item", "ri",
+    "del",
+    "erase",
+    "rd",
+    "remove-item",
+    "ri",
 ];
 
 /// Programs that run another program. The real command is one of their

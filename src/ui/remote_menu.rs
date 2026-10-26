@@ -192,9 +192,13 @@ impl RemotePicker {
                             .caption(format!(
                                 "On {}, from {}",
                                 r.target.label(),
-                                r.path.trim_end_matches('/').rsplit('/').next().unwrap_or(&r.path)
+                                r.path
+                                    .trim_end_matches('/')
+                                    .rsplit('/')
+                                    .next()
+                                    .unwrap_or(&r.path)
                             ))
-                        .more(),
+                            .more(),
                     );
                 }
                 actions.extend([
@@ -398,7 +402,11 @@ impl RemotePicker {
                                     e.name.clone(),
                                     Act::Browse(f.target.clone(), into),
                                 );
-                                rows.push(if here { row.caption("You're here") } else { row });
+                                rows.push(if here {
+                                    row.caption("You're here")
+                                } else {
+                                    row
+                                });
                             } else {
                                 let mut r = Row::new("icons/file.svg", e.name.clone(), Act::Close);
                                 r.act = None;

@@ -55,15 +55,18 @@ pub enum Mark {
 /// space follows it (`sent` false); in a sent message its end counts too.
 pub fn marks(text: &str, s: &AppState, sent: bool) -> Vec<(std::ops::Range<usize>, Mark)> {
     let mut out = vec![];
-    let finished = |end: usize| {
-        text[end..].starts_with(char::is_whitespace) || (sent && end == text.len())
-    };
+    let finished =
+        |end: usize| text[end..].starts_with(char::is_whitespace) || (sent && end == text.len());
     if let Some(rest) = text.strip_prefix('/') {
         let end = 1 + rest.find(char::is_whitespace).unwrap_or(rest.len());
         let name = &text[1..end];
         if finished(end) {
             if let Some(c) = s.completion_commands().into_iter().find(|c| c.name == name) {
-                let mark = if c.group == "Skills" { Mark::Skill } else { Mark::Command };
+                let mark = if c.group == "Skills" {
+                    Mark::Skill
+                } else {
+                    Mark::Command
+                };
                 out.push((0..end, mark));
             }
         }
@@ -356,7 +359,10 @@ pub fn file_items(q: &str, entries: &[String]) -> Vec<Item> {
             score += 100_000;
         }
         // Under the folder typed, its own entries before deeper ones.
-        let depth = path[base.len()..].trim_end_matches('/').matches('/').count() as i32;
+        let depth = path[base.len()..]
+            .trim_end_matches('/')
+            .matches('/')
+            .count() as i32;
         score -= depth * 5;
         // Tests after the code they test, when the match is as good.
         if path.contains("test") || path.contains("spec") {
@@ -667,10 +673,19 @@ mod tests {
         let deep: Vec<String> = ["a/", "a/b/", "a/b/tls_assistant/", "a/b/tls_assistant/x.py"]
             .map(String::from)
             .to_vec();
-        assert_eq!(file_items("tls", &deep)[0].detail.as_ref(), "a/b/tls_assistant");
-        assert_eq!(file_items("a/b/tl", &deep)[0].detail.as_ref(), "a/b/tls_assistant");
+        assert_eq!(
+            file_items("tls", &deep)[0].detail.as_ref(),
+            "a/b/tls_assistant"
+        );
+        assert_eq!(
+            file_items("a/b/tl", &deep)[0].detail.as_ref(),
+            "a/b/tls_assistant"
+        );
         // Typing on after a mention inserted mid-sentence completes the new word.
-        assert_eq!(trigger("/simplify @comp").map(|t| t.query), Some("comp".into()));
+        assert_eq!(
+            trigger("/simplify @comp").map(|t| t.query),
+            Some("comp".into())
+        );
         // A space in a path is quoted, as ForgeCLI reads it.
         assert_eq!(mention("docs/a b.md"), "@\"docs/a b.md\"");
     }

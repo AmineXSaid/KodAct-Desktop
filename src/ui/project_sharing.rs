@@ -118,21 +118,34 @@ impl Render for ProjectSharing {
                 .flex()
                 .items_start()
                 .gap(t.space.sm)
-                .child(div().pt(px(2.)).child(icon("icons/circle-check.svg", t.size.icon_sm, t.extra.success)))
-                .child(note("Committed: everyone who clones the project gets it.".into()).flex_1().min_w_0())
+                .child(div().pt(px(2.)).child(icon(
+                    "icons/circle-check.svg",
+                    t.size.icon_sm,
+                    t.extra.success,
+                )))
+                .child(
+                    note("Committed: everyone who clones the project gets it.".into())
+                        .flex_1()
+                        .min_w_0(),
+                )
                 .into_any_element(),
             Some(n) => div()
                 .flex()
                 .items_center()
                 .gap(t.space.sm)
-                .child(note(format!(
-                    "{n} setup file{} not committed yet.",
-                    if n == 1 { "" } else { "s" }
-                )).flex_1())
+                .child(
+                    note(format!(
+                        "{n} setup file{} not committed yet.",
+                        if n == 1 { "" } else { "s" }
+                    ))
+                    .flex_1(),
+                )
                 .child(
                     theme::ghost_button(&t, "Commit")
                         .id("share-commit")
-                        .on_click(move |_, _, cx| commit.update(cx, |s, cx| s.share_commit(id, memory, cx))),
+                        .on_click(move |_, _, cx| {
+                            commit.update(cx, |s, cx| s.share_commit(id, memory, cx))
+                        }),
                 )
                 .into_any_element(),
         };

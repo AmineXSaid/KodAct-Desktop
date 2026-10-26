@@ -1241,19 +1241,19 @@ const BRAND_STEP: f32 = 1.;
 /// The app's fixed dimensions.
 #[derive(Clone, Copy)]
 pub struct Sizes {
-    pub titlebar: Pixels,     // 36
-    pub sidebar: Pixels,      // 288
-    pub column: Pixels,       // 720: the reading column, and the composer under it
-    pub thinking_max: Pixels, // 240: an opened thought's tallest; longer ones scroll
-    pub row: Pixels,          // 30: sidebar rows, menu items
-    pub menu_row: Pixels,     // 26: a row in a session menu, as Claude Code's
-    pub menu_width: Pixels,   // 200: a session menu's width
+    pub titlebar: Pixels,      // 36
+    pub sidebar: Pixels,       // 288
+    pub column: Pixels,        // 720: the reading column, and the composer under it
+    pub thinking_max: Pixels,  // 240: an opened thought's tallest; longer ones scroll
+    pub row: Pixels,           // 30: sidebar rows, menu items
+    pub menu_row: Pixels,      // 26: a row in a session menu, as Claude Code's
+    pub menu_width: Pixels,    // 200: a session menu's width
     pub session_panel: Pixels, // 300: the Session column beside a chat
-    pub quiet_line: Pixels,   // 26: a quiet line in a reply: a call, a thought, a run of work
-    pub thumb_w: Pixels,      // 34: a picture a call returned, at the end of its line
-    pub thumb_h: Pixels,      // 22: the same, short enough for the quiet line
-    pub tool_image: Pixels,   // 360: that picture's widest, in the call's opened body
-    pub control: Pixels,      // 26: pills, small buttons
+    pub quiet_line: Pixels,    // 26: a quiet line in a reply: a call, a thought, a run of work
+    pub thumb_w: Pixels,       // 34: a picture a call returned, at the end of its line
+    pub thumb_h: Pixels,       // 22: the same, short enough for the quiet line
+    pub tool_image: Pixels,    // 360: that picture's widest, in the call's opened body
+    pub control: Pixels,       // 26: pills, small buttons
     // Icons: one scale, 12 / 14 / 16 / 20, and Lucide's own 2px stroke.
     pub icon_xs: Pixels,            // 12: inside captions and chips
     pub icon_sm: Pixels,            // 14

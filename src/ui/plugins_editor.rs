@@ -206,10 +206,13 @@ impl Render for PluginsEditor {
         if self.values.is_none() {
             self.read(cx);
         }
-        let browse = theme::ghost_button(&t, "Marketplaces")
-            .id("open-marketplaces")
-            .on_click(cx.listener(|this, _, _, cx| this.state.update(cx, |s, cx| s.open_marketplaces(cx))))
-            .into_any_element();
+        let browse =
+            theme::ghost_button(&t, "Marketplaces")
+                .id("open-marketplaces")
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.state.update(cx, |s, cx| s.open_marketplaces(cx))
+                }))
+                .into_any_element();
         let mut out = div().flex().flex_col().gap(px(10.)).child(kit::header(
             &t,
             "Plugins",

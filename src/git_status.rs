@@ -207,7 +207,11 @@ fn rollup(v: &Value) -> Option<Checks> {
             _ => pending = true,
         }
     }
-    Some(if pending { Checks::Pending } else { Checks::Passing })
+    Some(if pending {
+        Checks::Pending
+    } else {
+        Checks::Passing
+    })
 }
 
 fn gh_json(dir: &Path, args: &[&str]) -> Result<Value, String> {
@@ -218,16 +222,46 @@ fn gh_json(dir: &Path, args: &[&str]) -> Result<Value, String> {
 fn via_gh(dir: &Path, repo: &str) -> Result<Hub, String> {
     let prs = gh_json(
         dir,
-        &["pr", "list", "-R", repo, "--state", "open", "--limit", "8", "--json",
-          "number,title,author,headRefName,isDraft,url,statusCheckRollup"],
+        &[
+            "pr",
+            "list",
+            "-R",
+            repo,
+            "--state",
+            "open",
+            "--limit",
+            "8",
+            "--json",
+            "number,title,author,headRefName,isDraft,url,statusCheckRollup",
+        ],
     )?;
     let issues = gh_json(
         dir,
-        &["issue", "list", "-R", repo, "--state", "open", "--limit", "8", "--json", "number,title,url"],
+        &[
+            "issue",
+            "list",
+            "-R",
+            repo,
+            "--state",
+            "open",
+            "--limit",
+            "8",
+            "--json",
+            "number,title,url",
+        ],
     )?;
     let runs = gh_json(
         dir,
-        &["run", "list", "-R", repo, "--limit", "1", "--json", "name,headBranch,status,conclusion,url"],
+        &[
+            "run",
+            "list",
+            "-R",
+            repo,
+            "--limit",
+            "1",
+            "--json",
+            "name,headBranch,status,conclusion,url",
+        ],
     )
     .unwrap_or(Value::Null);
     Ok(Hub {
@@ -383,9 +417,27 @@ fn demo_hub(slug: &str) -> Hub {
     };
     Hub {
         prs: vec![
-            pr(42, "Project knowledge: Always or On demand", "amine", "knowledge", Checks::Passing),
-            pr(41, "Speed up the side panel's PDF pages", "sam", "faster-pdf", Checks::Failing),
-            pr(39, "Remote: reconnect after sleep", "lee", "reconnect", Checks::Pending),
+            pr(
+                42,
+                "Project knowledge: Always or On demand",
+                "amine",
+                "knowledge",
+                Checks::Passing,
+            ),
+            pr(
+                41,
+                "Speed up the side panel's PDF pages",
+                "sam",
+                "faster-pdf",
+                Checks::Failing,
+            ),
+            pr(
+                39,
+                "Remote: reconnect after sleep",
+                "lee",
+                "reconnect",
+                Checks::Pending,
+            ),
         ],
         issues: vec![
             issue(57, "Ctrl+N does nothing on the Projects page"),
@@ -426,19 +478,23 @@ pub fn switch(project: &Path, branch: &str, create: bool) -> Result<(), String> 
 
 /// The local branches, the current one first.
 pub fn branches(project: &Path) -> Vec<String> {
-    run("git", project, &["branch", "--format=%(HEAD) %(refname:short)"])
-        .map(|o| {
-            let mut v: Vec<(bool, String)> = o
-                .lines()
-                .filter_map(|l| {
-                    let (head, name) = l.split_at_checked(2)?;
-                    Some((head.starts_with('*'), name.trim().to_string()))
-                })
-                .collect();
-            v.sort_by_key(|(head, _)| !head);
-            v.into_iter().map(|(_, n)| n).collect()
-        })
-        .unwrap_or_default()
+    run(
+        "git",
+        project,
+        &["branch", "--format=%(HEAD) %(refname:short)"],
+    )
+    .map(|o| {
+        let mut v: Vec<(bool, String)> = o
+            .lines()
+            .filter_map(|l| {
+                let (head, name) = l.split_at_checked(2)?;
+                Some((head.starts_with('*'), name.trim().to_string()))
+            })
+            .collect();
+        v.sort_by_key(|(head, _)| !head);
+        v.into_iter().map(|(_, n)| n).collect()
+    })
+    .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -448,15 +504,25 @@ mod tests {
     #[test]
     fn the_remote_and_its_github_repo_are_read() {
         let config = "[core]\n\tbare = false\n[remote \"upstream\"]\n\turl = https://github.com/acme/tool.git\n[remote \"origin\"]\n\turl = git@github.com:amine/forge-gpui.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n";
-        assert_eq!(parse_remote(config).as_deref(), Some("git@github.com:amine/forge-gpui.git"));
-        assert_eq!(parse_remote("[remote \"up\"]\n url = https://x/y\n").as_deref(), Some("https://x/y"));
+        assert_eq!(
+            parse_remote(config).as_deref(),
+            Some("git@github.com:amine/forge-gpui.git")
+        );
+        assert_eq!(
+            parse_remote("[remote \"up\"]\n url = https://x/y\n").as_deref(),
+            Some("https://x/y")
+        );
         for url in [
             "git@github.com:amine/forge-gpui.git",
             "https://github.com/amine/forge-gpui",
             "https://github.com/amine/forge-gpui.git/",
             "ssh://git@github.com/amine/forge-gpui.git",
         ] {
-            assert_eq!(github_repo(url), Some(("amine".into(), "forge-gpui".into())), "{url}");
+            assert_eq!(
+                github_repo(url),
+                Some(("amine".into(), "forge-gpui".into())),
+                "{url}"
+            );
         }
         assert_eq!(github_repo("https://gitlab.com/a/b"), None);
     }
@@ -465,20 +531,33 @@ mod tests {
     fn status_reads_the_branch_and_its_changes() {
         let s = "# branch.oid 1234\n# branch.head main\n# branch.upstream origin/main\n# branch.ab +2 -1\n1 .M N... 100644 100644 100644 a b src/x.rs\n2 R. N... 100644 100644 100644 a b R100 new.rs\told.rs\n? notes.txt\n";
         let r = parse_status(s);
-        assert_eq!((r.branch.as_str(), r.upstream.as_deref()), ("main", Some("origin/main")));
+        assert_eq!(
+            (r.branch.as_str(), r.upstream.as_deref()),
+            ("main", Some("origin/main"))
+        );
         assert_eq!((r.ahead, r.behind, r.changed, r.untracked), (2, 1, 2, 1));
     }
 
     #[test]
     fn checks_roll_up_failing_first_then_pending() {
-        let v: Value = serde_json::from_str(r#"[{"conclusion":"SUCCESS"},{"status":"IN_PROGRESS","conclusion":""}]"#).unwrap();
+        let v: Value = serde_json::from_str(
+            r#"[{"conclusion":"SUCCESS"},{"status":"IN_PROGRESS","conclusion":""}]"#,
+        )
+        .unwrap();
         assert_eq!(rollup(&v), Some(Checks::Pending));
-        let v: Value = serde_json::from_str(r#"[{"conclusion":"SUCCESS"},{"conclusion":"FAILURE"}]"#).unwrap();
+        let v: Value =
+            serde_json::from_str(r#"[{"conclusion":"SUCCESS"},{"conclusion":"FAILURE"}]"#).unwrap();
         assert_eq!(rollup(&v), Some(Checks::Failing));
         let v: Value = serde_json::from_str(r#"[{"state":"SUCCESS"}]"#).unwrap();
         assert_eq!(rollup(&v), Some(Checks::Passing));
         assert_eq!(rollup(&Value::Null), None);
-        let run = Run { name: "CI".into(), branch: "main".into(), status: "completed".into(), conclusion: Some("failure".into()), url: String::new() };
+        let run = Run {
+            name: "CI".into(),
+            branch: "main".into(),
+            status: "completed".into(),
+            conclusion: Some("failure".into()),
+            url: String::new(),
+        };
         assert_eq!(run.checks(), Checks::Failing);
     }
 }
