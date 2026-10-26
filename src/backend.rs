@@ -398,14 +398,12 @@ impl Session {
     }
 
     /// A message sent while a reply runs, for its next step (`priority:
-    /// "next"`): ForgeCLI gives it to the model between tool calls, or
-    /// runs it next when the turn ends first; either way it is echoed back
-    /// under `uuid` when it lands (`Event::UserAccepted`).
-    pub fn queue(&self, text: &str, uuid: &str) -> Result<(), String> {
-        let mut line = user_line(text);
-        line["priority"] = "next".into();
-        line["uuid"] = uuid.into();
-        self.write(line)
+    /// "next"`), with its attachments (`attach::content_blocks`): ForgeCLI
+    /// gives it to the model between tool calls, or runs it next when the
+    /// turn ends first; either way it is echoed back under `uuid` when it
+    /// lands (`Event::UserAccepted`).
+    pub fn queue_content(&self, content: Value, uuid: &str) -> Result<(), String> {
+        self.write(json!({ "type": "user", "message": { "role": "user", "content": content }, "parent_tool_use_id": null, "session_id": "", "priority": "next", "uuid": uuid }))
     }
 
     /// Take back a queued message that hasn't reached the model; the answer

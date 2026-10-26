@@ -23,6 +23,7 @@ mod diagnose;
 mod diagram;
 mod doc_versions;
 mod downloads;
+mod draw;
 mod endpoints;
 mod error_words;
 mod export;

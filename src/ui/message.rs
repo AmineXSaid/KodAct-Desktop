@@ -654,63 +654,27 @@ fn user(
         .into_any_element()
 }
 
-/// Your message in parts: what you wrote, styled as it was in the box, and
-/// each fenced block (code or a log you pasted) as a code block of its own,
-/// with its language's colours and a copy button.
+/// Your message as you typed it, as Claude shows it: plain text, line
+/// breaks kept, only the mentions coloured. Nothing in it is read as
+/// Markdown, so a pasted transcript is never taken for code.
 fn user_parts(text: &SharedString, key: &str, cx: &ItemContext, t: &Theme) -> Vec<AnyElement> {
-    let mut out = vec![];
-    let plain = |r: std::ops::Range<usize>, out: &mut Vec<AnyElement>| {
-        let body = text[r.clone()].trim_matches('\n');
-        if body.trim().is_empty() {
-            return;
-        }
-        let from = r.start + text[r.clone()].find(body).unwrap_or(0);
-        let marks: Vec<_> = cx
-            .marks
-            .iter()
-            .filter(|(m, _)| m.start >= from && m.end <= from + body.len())
-            .map(|(m, k)| (m.start - from..m.end - from, *k))
-            .collect();
-        out.push(markdown::selectable_plain(
-            SharedString::from(format!("user-text-{key}-{}", out.len())),
-            &SharedString::from(body.to_string()),
-            &marks,
-            t,
-        ));
-    };
-    let (mut at, mut open, mut pos) = (0, None::<usize>, 0);
-    for line in text.split_inclusive('\n') {
-        if line.trim_start().starts_with("```") {
-            match open {
-                None => {
-                    plain(at..pos, &mut out);
-                    open = Some(pos);
-                }
-                Some(start) => {
-                    let end = pos + line.len();
-                    out.push(markdown::render(
-                        &text[start..end],
-                        t,
-                        &CopyContext {
-                            state: cx.state.clone(),
-                            key: format!("{}-{}-u{}", cx.chat, cx.index, out.len()),
-                            copied: cx.copied.clone(),
-                            scale: cx.scale,
-                            sources: cx.sources.clone(),
-                            zooms: cx.zooms.clone(),
-                            streaming: false,
-                        },
-                    ));
-                    open = None;
-                    at = end;
-                }
-            }
-        }
-        pos += line.len();
+    let body = text.trim_matches('\n');
+    if body.trim().is_empty() {
+        return vec![];
     }
-    // An unclosed fence stays text.
-    plain(open.unwrap_or(at)..text.len(), &mut out);
-    out
+    let from = text.find(body).unwrap_or(0);
+    let marks: Vec<_> = cx
+        .marks
+        .iter()
+        .filter(|(m, _)| m.start >= from && m.end <= from + body.len())
+        .map(|(m, k)| (m.start - from..m.end - from, *k))
+        .collect();
+    vec![markdown::selectable_plain(
+        SharedString::from(format!("user-text-{key}")),
+        &SharedString::from(body.to_string()),
+        &marks,
+        t,
+    )]
 }
 
 fn assistant(blocks: &[Block], cx: &ItemContext, t: &Theme) -> AnyElement {

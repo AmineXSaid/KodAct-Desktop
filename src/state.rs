@@ -1584,6 +1584,8 @@ pub fn take_landed(list: &mut Vec<Queued>, uuid: &str, text: &str) -> Vec<Queued
 pub struct Queued {
     pub uuid: String,
     pub text: SharedString,
+    /// What it carries: pictures, pasted texts, files.
+    pub attachments: Vec<crate::attach::Attachment>,
 }
 
 // ---------------------------------------------------------------- the state
@@ -1875,6 +1877,11 @@ pub struct AppState {
     attachment_seq: u64,
     /// Pasted images so far, to number their names.
     pasted: usize,
+    /// Pasted texts so far, likewise.
+    pasted_texts: usize,
+    /// The attachment open in the editor (`attachment_editor.rs`): a pasted
+    /// text to edit, or a picture to draw on. By its id.
+    pub editing_attachment: Option<u64>,
     /// Answers ForgeCLI gives at once, in the order asked, by chat: `true`
     /// for a command typed in the composer (`/status`), `false` for `/btw`.
     immediate_queue: std::collections::HashMap<usize, std::collections::VecDeque<bool>>,
@@ -2111,6 +2118,8 @@ impl AppState {
             attachments: vec![],
             attachment_seq: 0,
             pasted: 0,
+            pasted_texts: 0,
+            editing_attachment: None,
             immediate_queue: Default::default(),
             requests: Default::default(),
             file_index: None,
@@ -3828,8 +3837,30 @@ impl AppState {
     /// Edit one of your messages: the conversation goes back to before it,
     /// and its text waits in the composer to be changed and sent.
     pub fn edit(&mut self, chat: usize, msg: usize, cx: &mut Context<Self>) {
+        // Its pasted texts and pictures go back in the box with its words.
+        let kept: Vec<crate::attach::Attachment> = match self
+            .chats
+            .iter()
+            .find(|c| c.id == chat)
+            .and_then(|c| c.messages.get(msg))
+        {
+            Some(Message::User { attachments, .. }) => attachments
+                .iter()
+                .filter(|a| {
+                    a.kind == crate::attach::Kind::Pasted
+                        || (matches!(a.kind, crate::attach::Kind::Image(_)) && a.bytes.is_some())
+                })
+                .cloned()
+                .collect(),
+            _ => vec![],
+        };
         if let Some(text) = self.take_from(chat, msg, cx) {
             self.draft = Some(text);
+            for mut a in kept {
+                self.attachment_seq += 1;
+                a.id = self.attachment_seq;
+                self.attachments.push(a);
+            }
             cx.notify();
         }
     }
@@ -4263,6 +4294,19 @@ impl AppState {
             .rsplit_once('.')
             .map(|(_, e)| e.to_ascii_lowercase())
             .unwrap_or_default();
+        // A pasted text opens beside the chat, to read whole.
+        if a.kind == Kind::Pasted {
+            let content = a.text.as_deref().unwrap_or_default().to_string();
+            return self.open_doc(
+                FileRef {
+                    name: format!("{}.txt", a.name).into(),
+                    path: None,
+                    content: content.into(),
+                    bytes: None,
+                },
+                cx,
+            );
+        }
         let viewable = matches!(a.kind, Kind::Pdf | Kind::Document(_))
             && matches!(ext.as_str(), "docx" | "xlsx" | "pptx" | "pdf");
         let Some(chat) = self.current else { return };
@@ -5634,6 +5678,57 @@ impl AppState {
         cx.notify();
     }
 
+    /// Text you pasted that was too long for the box: a Pasted text card.
+    pub fn add_pasted_text(&mut self, text: String, cx: &mut Context<Self>) {
+        if self.attachments.len() >= crate::attach::MAX_FILES {
+            return self.show_toast(
+                format!("A message takes up to {} files.", crate::attach::MAX_FILES),
+                cx,
+            );
+        }
+        self.pasted_texts += 1;
+        self.attachment_seq += 1;
+        let a = crate::attach::pasted_text(&text, self.pasted_texts, self.attachment_seq);
+        self.attachments.push(a);
+        cx.notify();
+    }
+
+    /// Open an attachment in the box in its editor: a pasted text, or a
+    /// picture to draw on.
+    pub fn edit_attachment(&mut self, id: u64, cx: &mut Context<Self>) {
+        self.editing_attachment = self.attachments.iter().any(|a| a.id == id).then_some(id);
+        cx.notify();
+    }
+
+    pub fn close_attachment_editor(&mut self, cx: &mut Context<Self>) {
+        self.editing_attachment = None;
+        cx.notify();
+    }
+
+    /// A pasted text, edited: its new words (all of it gone removes the card).
+    pub fn set_pasted_text(&mut self, id: u64, text: String, cx: &mut Context<Self>) {
+        if text.trim().is_empty() {
+            self.attachments.retain(|a| a.id != id);
+        } else if let Some(a) = self.attachments.iter_mut().find(|a| a.id == id) {
+            a.size = text.len() as u64;
+            a.text = Some(std::sync::Arc::from(text.as_str()));
+        }
+        self.editing_attachment = None;
+        cx.notify();
+    }
+
+    /// A picture, drawn on: the new picture (a PNG) replaces it.
+    pub fn set_attachment_image(&mut self, id: u64, png: Vec<u8>, cx: &mut Context<Self>) {
+        if let Some(a) = self.attachments.iter_mut().find(|a| a.id == id) {
+            a.kind = crate::attach::Kind::Image("image/png");
+            a.size = png.len() as u64;
+            a.bytes = Some(std::sync::Arc::from(png.into_boxed_slice()));
+            a.note = Some("drawn on by the user".into());
+        }
+        self.editing_attachment = None;
+        cx.notify();
+    }
+
     /// An image pasted from the clipboard. It is scaled down if big; one
     /// that can't be decoded is saved into the project and goes by path.
     pub fn add_pasted_image(&mut self, bytes: Vec<u8>, ext: &str, cx: &mut Context<Self>) {
@@ -6976,6 +7071,11 @@ impl AppState {
     /// reply ends first (`backend::Session::queue`).
     pub fn queue_message(&mut self, text: String, cx: &mut Context<Self>) {
         let Some(chat) = self.current else { return };
+        // What is attached goes with it, as with a message sent between replies.
+        if self.attachments.iter().any(|a| a.pending) {
+            return self.show_toast("Wait a moment: an attachment is still being prepared.", cx);
+        }
+        let attachments = std::mem::take(&mut self.attachments);
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
         let uuid = format!(
             "forge-queued-{}-{}",
@@ -6987,14 +7087,21 @@ impl AppState {
                 .sessions
                 .get(&chat)
                 .ok_or_else(|| "Forge isn't running".to_string())
-                .and_then(|l| l.session.queue(&text, &uuid));
+                .and_then(|l| {
+                    let documents = l.profile.wire != crate::endpoints::Wire::Openai;
+                    let content = crate::attach::content_blocks(&text, &attachments, documents);
+                    l.session.queue_content(content, &uuid)
+                });
             if let Err(e) = sent {
+                // Not sent: what was attached stays in the box.
+                self.attachments = attachments;
                 return self.show_toast(format!("Couldn't send it: {e}"), cx);
             }
         }
         self.queued.entry(chat).or_default().push(Queued {
             uuid,
             text: text.into(),
+            attachments: attachments.iter().map(|a| a.for_history()).collect(),
         });
         cx.notify();
     }
@@ -7045,6 +7152,7 @@ impl AppState {
         let q = list.remove(i);
         if edit {
             self.draft = Some(q.text.to_string());
+            self.attachments.extend(q.attachments);
         }
         cx.notify();
     }
@@ -7067,6 +7175,9 @@ impl AppState {
                 .collect::<Vec<_>>()
                 .join("\n\n");
             self.draft = Some(joined);
+            for q in list {
+                self.attachments.extend(q.attachments);
+            }
         }
         cx.notify();
     }
@@ -7092,7 +7203,7 @@ impl AppState {
                 c.messages.push(Message::User {
                     text: q.text,
                     sent: SystemTime::now(),
-                    attachments: vec![],
+                    attachments: q.attachments,
                     turn: Some(uuid.to_string().into()),
                 });
             }
@@ -11069,6 +11180,7 @@ mod tests {
     fn a_replayed_message_lands_the_queued_ones_it_carries() {
         use super::{take_landed, Queued};
         let q = |u: &str, t: &str| Queued {
+            attachments: vec![],
             uuid: u.into(),
             text: t.to_string().into(),
         };

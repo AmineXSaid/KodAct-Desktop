@@ -45,6 +45,7 @@ pub struct Workspace {
     find: Entity<FindBar>,
     browser: Entity<super::browser_view::BrowserView>,
     confirm: Entity<ConfirmWindow>,
+    attachment_editor: Entity<super::attachment_editor::AttachmentEditor>,
     /// SSH's password and passphrase prompts.
     askpass: Entity<super::askpass::AskpassDialog>,
     /// The home screen's field of dots, behind the greeting and the composer.
@@ -112,6 +113,8 @@ impl Workspace {
         let find = cx.new(|cx| FindBar::new(state.clone(), window, cx));
         let browser = cx.new(|cx| super::browser_view::BrowserView::new(state.clone(), window, cx));
         let confirm = cx.new(|cx| ConfirmWindow::new(state.clone(), window, cx));
+        let attachment_editor =
+            cx.new(|cx| super::attachment_editor::AttachmentEditor::new(state.clone(), window, cx));
         let askpass = cx.new(|cx| super::askpass::AskpassDialog::new(state.clone(), window, cx));
         let doc_comments =
             cx.new(|cx| super::doc_comments::DocComments::new(state.clone(), window, cx));
@@ -165,6 +168,7 @@ impl Workspace {
             find,
             browser,
             confirm,
+            attachment_editor,
             askpass,
             dots,
             doc_comments,
@@ -1779,6 +1783,7 @@ impl Render for Workspace {
             .children(self.chat_menu(chat_f, window, cx))
             .children(self.title_menu(title_f, window, cx))
             .child(self.confirm.clone())
+            .child(self.attachment_editor.clone())
             .child(self.askpass.clone())
             .children(self.toast(toast_f, cx))
             .children(self.opener.clone())

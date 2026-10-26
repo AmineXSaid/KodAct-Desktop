@@ -74,13 +74,22 @@ fn bubble(t: &Theme, state: &Entity<AppState>, chat: usize, q: &Queued) -> AnyEl
                         }),
                 ),
         )
-        .child(
-            div()
-                .text_size(t.size.chat_text)
-                .line_height(relative(t.size.line_height_chat))
-                .text_color(t.colors.text_body)
-                .child(q.text.clone()),
-        )
+        .when(!q.text.trim().is_empty(), |d| {
+            d.child(
+                div()
+                    .text_size(t.size.chat_text)
+                    .line_height(relative(t.size.line_height_chat))
+                    .text_color(t.colors.text_body)
+                    .child(q.text.clone()),
+            )
+        })
+        // What it carries, as your sent message will show it.
+        .children(super::attachments::sent(
+            t,
+            &q.attachments,
+            &format!("queued-{}", q.uuid),
+            state,
+        ))
         .min_w(px(220.))
         .into_any_element()
 }

@@ -258,94 +258,6 @@ impl Composer {
         self.styling.set(decorations, cx);
     }
 
-    /// Ctrl+B, Ctrl+I, Ctrl+E: the selection made bold, italic or code (or
-    /// made plain again). True when it took the key.
-    fn format_key(
-        &mut self,
-        ev: &gpui::KeyDownEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> bool {
-        let k = &ev.keystroke;
-        if !k.modifiers.secondary() || k.modifiers.shift || k.modifiers.alt {
-            return false;
-        }
-        let marker = match k.key.as_str() {
-            "i" => "*",
-            "e" => "`",
-            _ => return false,
-        };
-        // A key that reaches the composer is for its box, unless the model
-        // menu's search has it.
-        if self.state.read(cx).picker_open {
-            return false;
-        }
-        self.format(marker, window, cx);
-        true
-    }
-
-    /// Wrap the selection in `marker`, or unwrap it, as one undoable edit.
-    fn format(&mut self, marker: &str, window: &mut Window, cx: &mut Context<Self>) {
-        self.input.update(cx, |i, cx| {
-            let r = i.selected_range();
-            let value = i.value();
-            let (_, range) = super::compose_style::toggle(&value, r.clone(), marker);
-            let inner = value[r.clone()].to_string();
-            // Unwrapping takes the markers too: the replaced span is wider.
-            let n = marker.len();
-            let (span, with) = if range.start < r.start {
-                (r.start - n..r.end + n, inner)
-            } else {
-                (r.clone(), format!("{marker}{inner}{marker}"))
-            };
-            i.set_selected_range(span, cx);
-            i.replace(with, window, cx);
-            i.set_selected_range(range, cx);
-        });
-        self.restyle(cx);
-    }
-
-    /// Pasted code or logs go in fenced, with their language, the way an
-    /// issue tracker's description takes them. True when it took the paste.
-    fn paste_code(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
-        let Some(text) = cx.read_from_clipboard().and_then(|c| c.text()) else {
-            return false;
-        };
-        let Some(block) = super::compose_style::code_block(&text) else {
-            return false;
-        };
-        self.input
-            .update(cx, |i, cx| {
-                let value = i.value();
-                let r = i.selected_range();
-                let before = &value[..r.start];
-                // Inside a fence already: the text goes in as it is.
-                if before
-                    .lines()
-                    .filter(|l| l.trim_start().starts_with("```"))
-                    .count()
-                    % 2
-                    == 1
-                {
-                    return false;
-                }
-                let lead = if before.is_empty() || before.ends_with('\n') {
-                    ""
-                } else {
-                    "\n"
-                };
-                let tail = if value[r.end..].starts_with('\n') {
-                    ""
-                } else {
-                    "\n"
-                };
-                i.replace(format!("{lead}{block}{tail}"), window, cx);
-                true
-            })
-            .then(|| self.restyle(cx))
-            .is_some()
-    }
-
     /// What the "+" menu needs from the composer: closing it, a press
     /// outside, the split menu's chosen row, the search menu's field.
     fn add_hooks(&self, cx: &mut Context<Self>) -> super::add_menu::Hooks {
@@ -401,7 +313,8 @@ impl Composer {
         // While a reply runs, a message is queued for Forge's next step
         // (`/btw` keeps its side card).
         if self.state.read(cx).busy() && crate::state::parse_btw(&text).is_none() {
-            if !text.trim().is_empty() {
+            // Words, pictures or pasted texts: each is a message for the next step.
+            if !text.trim().is_empty() || !self.state.read(cx).attachments.is_empty() {
                 self.state
                     .update(cx, |s, cx| s.queue_message(text.trim().to_string(), cx));
                 self.input.update(cx, |i, cx| i.set_value("", window, cx));
@@ -485,6 +398,21 @@ impl Composer {
             _ => return false,
         }
         cx.notify();
+        true
+    }
+
+    /// A paste too long for the box (over `attach::PASTE_CHARS` characters
+    /// or `PASTE_LINES` lines: a log, a file, a transcript) becomes a Pasted
+    /// text card above it, as in Claude's chat box. Shorter text goes in as
+    /// it is. True when it took the paste.
+    fn paste_long(&mut self, cx: &mut Context<Self>) -> bool {
+        let Some(text) = cx.read_from_clipboard().and_then(|c| c.text()) else {
+            return false;
+        };
+        if !crate::attach::is_long_paste(&text) {
+            return false;
+        }
+        self.state.update(cx, |s, cx| s.add_pasted_text(text, cx));
         true
     }
 
@@ -1048,25 +976,14 @@ impl Render for Composer {
             )
             // The text box's own Paste: an image or files are attached instead.
             .capture_action(
-                cx.listener(|this, _: &gpui::component::input::Paste, window, cx| {
-                    if this.paste_files(cx) || this.paste_code(window, cx) {
+                cx.listener(|this, _: &gpui::component::input::Paste, _, cx| {
+                    if this.paste_files(cx) || this.paste_long(cx) {
                         cx.stop_propagation();
                     }
                 }),
             )
-            // Ctrl+B is also the sidebar's: with text selected in the box it
-            // makes it bold instead.
-            .capture_action(cx.listener(|this, _: &super::ToggleSidebar, window, cx| {
-                let selected = !this.input.read(cx).selected_range().is_empty();
-                if selected
-                    && gpui::Focusable::focus_handle(this.input.read(cx), cx).is_focused(window)
-                {
-                    this.format("**", window, cx);
-                    cx.stop_propagation();
-                }
-            }))
             .capture_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, window, cx| {
-                if this.completion_key(ev, window, cx) || this.format_key(ev, window, cx) {
+                if this.completion_key(ev, window, cx) {
                     return cx.stop_propagation();
                 }
                 this.menu_key(ev, window, cx)

@@ -96,7 +96,9 @@ pub fn breakdown(messages: &[Message]) -> Breakdown {
                     .iter()
                     .map(|a| match a.kind {
                         crate::attach::Kind::Image(_) => 1_000,
-                        crate::attach::Kind::Text => a.size.div_ceil(4),
+                        crate::attach::Kind::Text | crate::attach::Kind::Pasted => {
+                            a.size.div_ceil(4)
+                        }
                         // A document's text goes in; a PDF as a document costs about as much.
                         crate::attach::Kind::Pdf | crate::attach::Kind::Document(_) => a
                             .text

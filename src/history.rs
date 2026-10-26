@@ -106,6 +106,9 @@ pub struct SavedAttachment {
     pub opened_to: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub files: Option<usize>,
+    /// A pasted text's words: it has no file to read them back from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
@@ -400,6 +403,9 @@ fn save_messages(chat: &Chat, project: &Path) -> SavedChat {
                             saved_at: a.saved_at.clone(),
                             opened_to: a.extracted.as_ref().map(|x| x.to.clone()),
                             files: a.extracted.as_ref().map(|x| x.count),
+                            text: (a.kind == crate::attach::Kind::Pasted)
+                                .then(|| a.text.as_deref().map(str::to_string))
+                                .flatten(),
                         })
                         .collect(),
                     turn: turn.as_ref().map(|t| t.to_string()),
@@ -567,6 +573,7 @@ pub fn messages_of(saved: &SavedChat) -> Vec<Message> {
                             kind,
                             size: a.size,
                             bytes,
+                            text: a.text.as_deref().map(std::sync::Arc::from),
                             saved_at: a.saved_at.clone(),
                             extracted: a.opened_to.clone().map(|to| {
                                 std::sync::Arc::new(crate::stage::Extracted {
@@ -777,6 +784,26 @@ mod tests {
             when: time(1_700_000_100),
         });
         c
+    }
+
+    #[test]
+    fn a_pasted_text_keeps_its_words_through_the_transcript() {
+        let mut c = sample();
+        if let Some(Message::User { attachments, .. }) = c.messages.get_mut(0) {
+            attachments.push(crate::attach::pasted_text("line one\nline two", 1, 3).for_history());
+        }
+        let saved = save_form(&c, Path::new("/work/app"));
+        let back: SavedChat =
+            serde_json::from_str(&serde_json::to_string(&saved).unwrap()).unwrap();
+        let m = messages_of(&back);
+        let Message::User { attachments, .. } = &m[0] else {
+            panic!()
+        };
+        let p = attachments
+            .iter()
+            .find(|a| a.kind == crate::attach::Kind::Pasted)
+            .unwrap();
+        assert_eq!(p.text.as_deref(), Some("line one\nline two"));
     }
 
     #[test]

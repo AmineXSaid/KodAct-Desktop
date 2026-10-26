@@ -6,6 +6,7 @@ pub mod agents_editor;
 pub mod agents_view;
 pub mod approvals;
 pub mod askpass;
+pub mod attachment_editor;
 pub mod attachments;
 pub mod autocomplete;
 pub mod browser_view;
