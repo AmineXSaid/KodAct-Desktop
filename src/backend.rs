@@ -35,6 +35,9 @@ pub enum Event {
     /// ForgeCLI changed the permission mode itself (a plan approved, plan mode
     /// entered, an answer that set a mode): `system/status`, `permissionMode`.
     ModeChanged(String),
+    /// The chat's `/goal` changed: set, checked, paused, met, given up or
+    /// cleared (`system/goal`).
+    Goal(crate::state::Goal),
     /// A sub-agent's own tool call; `parent` is the call that started it.
     SubTool {
         parent: String,
@@ -888,6 +891,11 @@ impl Parser {
                 };
                 out.push(Event::ControlReply { request_id, result });
             }
+            Some("system") if v["subtype"] == "goal" => {
+                if let Some(goal) = crate::state::Goal::from_wire(&v) {
+                    out.push(Event::Goal(goal));
+                }
+            }
             Some("system") if v["subtype"] == "status" => {
                 if let Some(m) = v["permissionMode"].as_str() {
                     out.push(Event::ModeChanged(m.to_string()));
@@ -1401,6 +1409,44 @@ mod tests {
             json!({"type":"system","subtype":"status","status":null,"permissionMode":"acceptEdits"}),
         ]);
         assert_eq!(ev, vec![Event::ModeChanged("acceptEdits".into())]);
+    }
+
+    #[test]
+    fn a_goal_reaches_the_app_through_each_of_its_states() {
+        use crate::state::{Goal, GoalStatus};
+        let goal = |v: Value| match parse(&[v]).as_slice() {
+            [Event::Goal(g)] => g.clone(),
+            other => panic!("{other:?}"),
+        };
+        let set = goal(
+            json!({"type":"system","subtype":"goal","condition":"tests pass","status":"active","reason":null}),
+        );
+        assert_eq!(
+            set,
+            Goal {
+                condition: "tests pass".into(),
+                status: GoalStatus::Working,
+                reason: None
+            }
+        );
+        let paused = goal(
+            json!({"type":"system","subtype":"goal","condition":"tests pass","status":"active","paused":"limit","reason":"Goal paused: --max-turns reached."}),
+        );
+        assert_eq!(paused.status, GoalStatus::Paused);
+        let met = goal(
+            json!({"type":"system","subtype":"goal","condition":"tests pass","status":"achieved","reason":"cargo test: 12 passed"}),
+        );
+        assert_eq!(
+            (met.status, met.reason.as_deref()),
+            (GoalStatus::Achieved, Some("cargo test: 12 passed"))
+        );
+        assert_eq!(goal(json!({"type":"system","subtype":"goal","condition":"x","status":"failed","reason":"no access"})).status, GoalStatus::Failed);
+        assert_eq!(
+            goal(json!({"type":"system","subtype":"goal","condition":"x","status":"cleared"}))
+                .status,
+            GoalStatus::Cleared
+        );
+        assert!(parse(&[json!({"type":"system","subtype":"goal","status":"active"})]).is_empty());
     }
 
     #[test]

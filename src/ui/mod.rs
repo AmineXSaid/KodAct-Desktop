@@ -37,6 +37,7 @@ pub mod file_mark;
 pub mod files_pane;
 pub mod find_bar;
 mod forge_cube;
+pub mod goal_bar;
 pub mod guide;
 pub mod hooks_editor;
 pub mod ingot;

@@ -183,6 +183,17 @@ impl ChatView {
         let step = if busy {
             let s = self.state.read(cx);
             s.chat().and_then(|c| {
+                // Between a goal's turns ForgeCLI checks it, then goes on.
+                let between = !matches!(c.messages.last(), Some(Message::Assistant { .. }));
+                if between
+                    && s.goals.get(&c.id).map(|g| g.status) == Some(crate::state::GoalStatus::Working)
+                {
+                    let words = match c.messages.last() {
+                        Some(Message::Notice { .. }) => "Going on toward the goal",
+                        _ => "Checking the goal",
+                    };
+                    return Some((Activity::Waiting, words.to_string(), None));
+                }
                 let (activity, words) = step_of(c, s.mode)?;
                 // The step itself shows in its own row above (Reading a
                 // file, Running the tests): the line says what the work is

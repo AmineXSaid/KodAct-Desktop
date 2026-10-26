@@ -678,6 +678,12 @@ impl Render for Composer {
         });
 
         let pending = super::attachments::pending(&t, &state, cx);
+        let goal = {
+            let s = self.state.read(cx);
+            s.current
+                .and_then(|c| s.goals.get(&c))
+                .map(|g| super::goal_bar::render(&t, &state, g, s.busy()))
+        };
         // The list opens at the word being completed: where the caret was
         // when its sign was typed (the input's last layout), kept while the
         // word is typed on.
@@ -1006,6 +1012,7 @@ impl Render for Composer {
                 div()
                     .flex()
                     .flex_col()
+                    .children(goal)
                     .child(
                         div()
                             .flex()

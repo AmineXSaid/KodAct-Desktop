@@ -39,6 +39,7 @@ icons!(
     "chevron-up",
     "circle-check",
     "circle-pause",
+    "target",
     "code-xml",
     "graduation-cap",
     "route",

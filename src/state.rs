@@ -325,6 +325,53 @@ pub enum Decider {
     Mode(SharedString),
 }
 
+/// A chat's `/goal`, as ForgeCLI last reported it: shown above the box
+/// while it lasts (`ui/goal_bar.rs`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Goal {
+    pub condition: String,
+    pub status: GoalStatus,
+    /// What the last check said: what is missing, or why it is met.
+    pub reason: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GoalStatus {
+    /// Forge keeps working toward it.
+    Working,
+    /// Stopped by a guard or an interrupt; a message picks it up again.
+    Paused,
+    Achieved,
+    /// The check judged it can't be met from here.
+    Failed,
+    Cleared,
+}
+
+impl Goal {
+    /// A `system/goal` line: `{condition, status, reason, paused}`.
+    pub fn from_wire(v: &serde_json::Value) -> Option<Goal> {
+        let condition = v["condition"].as_str()?.to_string();
+        let status = match (v["status"].as_str()?, v["paused"].is_string()) {
+            ("active", true) => GoalStatus::Paused,
+            ("active", false) => GoalStatus::Working,
+            ("achieved", _) => GoalStatus::Achieved,
+            ("failed", _) => GoalStatus::Failed,
+            ("cleared", _) => GoalStatus::Cleared,
+            _ => return None,
+        };
+        let reason = v["reason"]
+            .as_str()
+            .map(str::trim)
+            .filter(|r| !r.is_empty())
+            .map(str::to_string);
+        Some(Goal {
+            condition,
+            status,
+            reason,
+        })
+    }
+}
+
 /// What a permission card keeps besides its words, for the row it becomes
 /// once answered (`message.rs`).
 #[derive(Clone, Debug, Default)]
@@ -1801,6 +1848,10 @@ pub struct AppState {
     /// Messages sent while each chat's reply runs, oldest first, until they
     /// reach Forge (`Event::UserAccepted`).
     pub queued: std::collections::HashMap<usize, Vec<Queued>>,
+    /// Each chat's `/goal` while it lasts.
+    pub goals: std::collections::HashMap<usize, Goal>,
+    /// Chats kept busy between a goal's turns, and not by a turn of their own.
+    goal_waiting: std::collections::HashSet<usize>,
     /// When each running turn started.
     turn_started: std::collections::HashMap<usize, std::time::Instant>,
     /// Chats whose next text starts a new block rather than running on.
@@ -2080,6 +2131,8 @@ impl AppState {
             asks: Default::default(),
             headlines: Default::default(),
             queued: Default::default(),
+            goals: Default::default(),
+            goal_waiting: Default::default(),
             turn_started: Default::default(),
             fresh_block: Default::default(),
             settings_open: false,
@@ -2740,6 +2793,31 @@ impl AppState {
     }
 
     /// A reply is playing in the chat you're looking at.
+    /// Clear the chat's goal (`/goal clear`). While a reply runs it is
+    /// stopped first: ForgeCLI pauses the goal, and Clear then ends it.
+    pub fn clear_goal(&mut self, cx: &mut Context<Self>) {
+        let Some(chat) = self.current else { return };
+        match self.goals.get(&chat).map(|g| g.status) {
+            Some(GoalStatus::Working | GoalStatus::Paused) if self.busy() => self.stop(cx),
+            Some(GoalStatus::Working | GoalStatus::Paused) => self.send("/goal clear".into(), cx),
+            // A goal met or given up is over: only its strip goes.
+            _ => {
+                self.goals.remove(&chat);
+                cx.notify();
+            }
+        }
+    }
+
+    /// Between a goal's turns: the chat stays busy while ForgeCLI checks
+    /// the goal and starts the next turn (`system/goal` ends the wait).
+    fn goal_keeps_working(&mut self, chat: usize) {
+        if !self.replies.contains_key(&chat) {
+            self.replies.insert(chat, Task::ready(()));
+            self.turn_started.insert(chat, std::time::Instant::now());
+            self.goal_waiting.insert(chat);
+        }
+    }
+
     pub fn busy(&self) -> bool {
         self.current
             .is_some_and(|id| self.replies.contains_key(&id))
@@ -8080,6 +8158,51 @@ impl AppState {
                     },
                 );
             }
+            Event::Goal(goal) => {
+                let checked = self.goals.contains_key(&chat);
+                match (goal.status, goal.reason.as_deref()) {
+                    // A check found it not met: another turn starts.
+                    (GoalStatus::Working, Some(why)) if checked => {
+                        self.notice(
+                            chat,
+                            format!("Goal not met yet: {why} Forge keeps going."),
+                            false,
+                        );
+                        self.goal_keeps_working(chat);
+                    }
+                    (GoalStatus::Achieved, why) => {
+                        self.notice(
+                            chat,
+                            format!("Goal achieved: {}", why.unwrap_or(&goal.condition)),
+                            false,
+                        );
+                    }
+                    (GoalStatus::Failed, why) => {
+                        self.notice(
+                            chat,
+                            format!("Goal can't be met: {}", why.unwrap_or(&goal.condition)),
+                            true,
+                        );
+                    }
+                    (GoalStatus::Paused, Some(why)) => self.notice(chat, why.to_string(), false),
+                    _ => {}
+                }
+                // The loop stopped: nothing more comes until you write.
+                if goal.status != GoalStatus::Working
+                    && self.replies.contains_key(&chat)
+                    && !self.asks.contains_key(&chat)
+                    && self.goal_waiting.remove(&chat)
+                {
+                    self.replies.remove(&chat);
+                    self.turn_started.remove(&chat);
+                }
+                if goal.status == GoalStatus::Cleared {
+                    self.goals.remove(&chat);
+                } else {
+                    self.goals.insert(chat, goal);
+                }
+                cx.notify();
+            }
             Event::ModeChanged(m) => {
                 let mode = match m.as_str() {
                     "acceptEdits" => Some(ModeId::AcceptEdits),
@@ -8315,6 +8438,11 @@ impl AppState {
                     c.resumable = true;
                 }
                 self.finish_turn(chat, cx);
+                // A goal at work: ForgeCLI checks it now and goes on until it
+                // holds, so the chat keeps working until the goal says.
+                if self.goals.get(&chat).map(|g| g.status) == Some(GoalStatus::Working) {
+                    self.goal_keeps_working(chat);
+                }
             }
             Event::Error(e) => {
                 self.notice(chat, e, true);
