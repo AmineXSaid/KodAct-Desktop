@@ -1406,6 +1406,8 @@ impl Render for Workspace {
                         s.toggle_doc_find(cx);
                     } else if s.doc.is_some() && !s.busy() {
                         s.close_doc(cx);
+                    } else if s.answer_waiting(crate::state::Verdict::Denied, cx) {
+                        // A tool waiting on you: Esc denies it (its card's key).
                     } else {
                         s.stop(cx);
                     }
@@ -1527,6 +1529,21 @@ impl Render for Workspace {
             }))
             .on_action(cx.listener(|this, _: &ToggleTasks, _, cx| {
                 this.state.update(cx, |s, cx| s.toggle_tasks(cx))
+            }))
+            .on_action(cx.listener(|this, _: &AllowWaiting, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.answer_waiting(crate::state::Verdict::Allowed, cx)
+                });
+            }))
+            .on_action(cx.listener(|this, _: &AlwaysAllowWaiting, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.answer_waiting(crate::state::Verdict::AllowedAlways, cx)
+                });
+            }))
+            .on_action(cx.listener(|this, _: &DenyWaiting, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.answer_waiting(crate::state::Verdict::Denied, cx)
+                });
             }))
             .on_action(cx.listener(|this, _: &ShowApprovals, _, cx| {
                 this.state.update(cx, |s, cx| s.toggle_approvals(cx))

@@ -1027,6 +1027,22 @@ impl Render for Composer {
                         // Stopped here, the box never sends: nothing to swallow later.
                         this.ac_took_enter = false;
                         cx.stop_propagation();
+                        return;
+                    }
+                    // Nothing written and a tool waits: Enter allows it,
+                    // Shift Enter always allows it (the card's keys).
+                    if !e.secondary
+                        && this.text(cx).trim().is_empty()
+                        && this.state.read(cx).attachments.is_empty()
+                    {
+                        let verdict = if e.shift {
+                            crate::state::Verdict::AllowedAlways
+                        } else {
+                            crate::state::Verdict::Allowed
+                        };
+                        if this.state.update(cx, |s, cx| s.answer_waiting(verdict, cx)) {
+                            cx.stop_propagation();
+                        }
                     }
                 }),
             )

@@ -51,6 +51,7 @@ pub fn render(t: &Theme, state: &Entity<AppState>, s: &AppState, scale: f32) -> 
                 state.clone(),
                 is_open,
                 scale,
+                None,
                 t,
             ))
             .child(

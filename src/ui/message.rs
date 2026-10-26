@@ -931,14 +931,26 @@ pub(super) fn block(blocks: &[Block], b: usize, cx: &ItemContext, t: &Theme) -> 
             verdict,
             info,
         } => permission(title, detail, *verdict, info, blocks, b, cx, t),
-        Block::File(file) => super::file_card::render(
-            file,
-            &format!("{}-{}-{b}", cx.chat, cx.index),
-            cx.state.clone(),
-            cx.open_doc.as_ref() == Some(file),
-            cx.scale,
-            t,
-        ),
+        Block::File(file) => {
+            let key = format!("{}-{}-{b}", cx.chat, cx.index);
+            let view = super::file_card::DiagramView {
+                zoom: cx
+                    .zooms
+                    .get(&super::file_card::zoom_key(&key))
+                    .copied()
+                    .unwrap_or(1.),
+                text_open: cx.sources.contains(&super::file_card::text_key(&key)),
+            };
+            super::file_card::render(
+                file,
+                &key,
+                cx.state.clone(),
+                cx.open_doc.as_ref() == Some(file),
+                cx.scale,
+                Some(view),
+                t,
+            )
+        }
     }
 }
 
@@ -2374,111 +2386,194 @@ fn permission(
         .filter(|c| c.kind == ToolKind::Bash)
         .map(|c| c.target.clone());
     use super::button::Button;
-    // A scrolling well for code: the change, the command, the script.
-    let well = |name: &str, long: bool| {
-        div()
-            .id(id(name))
-            .max_h(px(240.))
-            .overflow_y_scroll()
-            .when(long, super::hold_wheel)
-            .rounded(t.radius.button)
-            .border_1()
-            .border_color(t.colors.border)
-            .bg(t.extra.inset)
+    // What it is about, as the header names it: the verb and its icon.
+    let (verb, glyph): (SharedString, &'static str) = match (call.map(|c| c.kind), is_plan, is_js) {
+        (_, true, _) => ("Plan".into(), "icons/scroll-text.svg"),
+        (_, _, true) => ("Run a script".into(), "icons/file-code.svg"),
+        (Some(ToolKind::Edit), ..) => ("Edit".into(), "icons/pencil.svg"),
+        (Some(ToolKind::Write), ..) => ("Write".into(), "icons/file-plus.svg"),
+        (Some(ToolKind::Bash), ..) => ("Run".into(), "icons/terminal.svg"),
+        (Some(ToolKind::Web | ToolKind::WebSearch), ..) => ("Fetch".into(), "icons/globe.svg"),
+        _ => (title.clone(), "icons/hand.svg"),
     };
-    let subject: AnyElement = if is_js {
-        let long = detail.lines().count() > 10 || detail.len() > 600;
-        well("script", long)
-            .p(t.space.md)
-            .font_family(t.font_mono.clone())
-            .text_size(t.text.body_sm)
-            .child(super::markdown::code_text(detail, "js", t))
-            .into_any_element()
-    } else if let Some(c) = diff {
+    let target = call
+        .filter(|c| !is_plan && !is_js && c.kind != ToolKind::Bash && c.kind != ToolKind::Other)
+        .map(|c| short_path(&c.target));
+    // A change: its size, and whether it makes a new file.
+    let counts = diff.map(|c| {
         let (adds, dels) = c.diff.iter().fold((0, 0), |(a, d), l| match l.kind {
             DiffKind::Add => (a + 1, d),
             DiffKind::Del => (a, d + 1),
             DiffKind::Same => (a, d),
         });
+        let new_file = c.kind == ToolKind::Write
+            && dels == 0
+            && c.diff.iter().all(|l| l.kind == DiffKind::Add);
+        (adds, dels, new_file)
+    });
+    let chip = |text: &'static str| {
         div()
+            .flex_none()
+            .px(t.space.sm)
+            .h(px(18.))
             .flex()
-            .flex_col()
-            .gap(t.space.xs)
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(t.space.sm)
-                    .text_size(t.text.caption)
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .overflow_hidden()
-                            .whitespace_nowrap()
-                            .text_ellipsis()
-                            .font_family(t.font_mono.clone())
-                            .text_color(t.colors.text_muted)
-                            .child(c.target.clone()),
-                    )
-                    .child(diff_counts(adds, dels, t)),
-            )
-            .child(well("diff", c.diff.len() > 12).child(diff_lines(
-                &c.diff,
-                markdown::lang_of(&c.target),
-                t,
-            )))
-            .into_any_element()
-    } else if let Some(cmd) = command {
-        well("command", cmd.lines().count() > 10)
-            .p(t.space.md)
-            .font_family(t.font_mono.clone())
-            .text_size(t.text.body_sm)
-            .child(super::markdown::code_text(&cmd, "sh", t))
-            .into_any_element()
-    } else {
-        div()
-            .text_color(t.colors.text_body)
-            .child(detail.clone())
-            .into_any_element()
+            .items_center()
+            .rounded(t.radius.pill)
+            .border_1()
+            .border_color(t.colors.border)
+            .text_size(t.text.caption)
+            .text_color(t.colors.text_muted)
+            .child(text)
     };
+    let header = div()
+        .flex()
+        .items_center()
+        .gap(t.space.sm)
+        .px(t.space.lg)
+        .py(t.space.md)
+        .border_b_1()
+        .border_color(t.colors.border)
+        .child(icon(glyph, t.size.icon_sm, t.colors.primary))
+        .child(
+            div()
+                .flex_none()
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(t.colors.text_strong)
+                .child(verb),
+        )
+        .children(target.map(|path| {
+            div()
+                .min_w_0()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .font_family(t.font_mono.clone())
+                .text_size(t.text.caption)
+                .text_color(t.colors.text_muted)
+                .child(path)
+        }))
+        .when(counts.is_some_and(|c| c.2), |d| d.child(chip("New file")))
+        .children(counts.map(|(a, d, _)| diff_counts(a, d, t)))
+        .child(div().flex_1())
+        .when(!is_plan, |d| d.child(env_badge(&cx.place, t)));
+    // The code it would run or write: a change folds to its first lines
+    // until you open all of it; a command or script shows whole.
+    let folded = !info.open;
+    let subject: Option<AnyElement> = if is_js {
+        let long = detail.lines().count() > 10 || detail.len() > 600;
+        Some(
+            div()
+                .id(id("script"))
+                .max_h(px(240.))
+                .overflow_y_scroll()
+                .when(long, super::hold_wheel)
+                .bg(t.extra.inset)
+                .p(t.space.md)
+                .font_family(t.font_mono.clone())
+                .text_size(t.text.body_sm)
+                .child(super::markdown::code_text(detail, "js", t))
+                .into_any_element(),
+        )
+    } else if let Some(c) = diff {
+        let lang = markdown::lang_of(&c.target);
+        let total = c.diff.len();
+        Some(if folded && total > ASK_FOLD {
+            div()
+                .relative()
+                .overflow_hidden()
+                .bg(t.extra.inset)
+                .child(diff_lines(&c.diff[..ASK_FOLD], lang, t))
+                // The cut fades into the card, so it reads as more below.
+                .child(
+                    div()
+                        .absolute()
+                        .left_0()
+                        .right_0()
+                        .bottom_0()
+                        .h(px(28.))
+                        .bg(gpui::linear_gradient(
+                            180.,
+                            gpui::linear_color_stop(t.colors.surface.opacity(0.), 0.),
+                            gpui::linear_color_stop(t.colors.surface, 1.),
+                        )),
+                )
+                .into_any_element()
+        } else {
+            div()
+                .id(id("diff"))
+                .max_h(px(320.))
+                .overflow_y_scroll()
+                .when(total > 16, super::hold_wheel)
+                .bg(t.extra.inset)
+                .child(diff_lines(&c.diff, lang, t))
+                .into_any_element()
+        })
+    } else {
+        command.map(|cmd| {
+            div()
+                .id(id("command"))
+                .max_h(px(240.))
+                .overflow_y_scroll()
+                .when(cmd.lines().count() > 10, super::hold_wheel)
+                .bg(t.extra.inset)
+                .p(t.space.md)
+                .font_family(t.font_mono.clone())
+                .text_size(t.text.body_sm)
+                .child(super::markdown::code_text(&cmd, "sh", t))
+                .into_any_element()
+        })
+    };
+    let more = diff
+        .map(|c| c.diff.len())
+        .filter(|n| *n > ASK_FOLD)
+        .map(|n| {
+            div()
+                .id(id("more"))
+                .w_full()
+                .px(t.space.lg)
+                .pt(t.space.sm)
+                .text_size(t.text.caption)
+                .text_color(t.colors.primary)
+                .cursor_pointer()
+                .hover(|d| d.underline())
+                .child(if folded {
+                    format!("Show all {n} lines")
+                } else {
+                    "Show fewer lines".to_string()
+                })
+                .on_click(toggle(cx, b))
+        });
     let always = crate::state::always_label(info.offer.as_deref());
     let always_tip = match (&info.offer, info.scope) {
         (Some(rule), Some(scope)) => format!("Adds the rule {rule}, {scope}."),
         (Some(rule), None) => format!("Adds the rule {rule}."),
         _ => "Forge won't ask again for this.".to_string(),
     };
-    let body = div()
-        .flex_1()
-        .min_w_0()
+    // Said in words when nothing above shows it.
+    let words = (subject.is_none() && !detail.is_empty())
+        .then(|| div().text_color(t.colors.text_body).child(detail.clone()));
+    let footer = div()
         .flex()
         .flex_col()
         .gap(t.space.md)
-        .p(t.space.lg)
+        .px(t.space.lg)
+        .pt(t.space.md)
+        .pb(t.space.lg)
+        // The question is the heading of what you answer.
         .child(
             div()
                 .flex()
-                .items_start()
-                .gap(t.space.md)
+                .flex_col()
+                .gap(px(3.))
                 .child(
                     div()
-                        .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .gap(px(3.))
-                        // The question is the heading: no label above it.
-                        .child(
-                            div()
-                                .text_size(t.text.body + px(2.))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(t.colors.text_strong)
-                                .child(title.clone()),
-                        ),
+                        .text_size(t.text.body + px(1.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(t.colors.text_strong)
+                        .child(title.clone()),
                 )
-                .when(!is_plan, |d| d.child(env_badge(&cx.place, t))),
+                .children(words),
         )
-        .child(subject)
         // A long script scrolls: say so, so its end isn't missed.
         .when(
             is_js && (detail.lines().count() > 10 || detail.len() > 600),
@@ -2505,52 +2600,78 @@ fn permission(
                 // asked), or keep planning; as Forge for VS Code has it.
                 .when(is_plan, |d| {
                     d.child(
-                        Button::ghost(id("keep"), "No, keep planning")
-                            .on_click(answer(Verdict::KeepPlanning)),
+                        Button::primary(id("plan-auto"), "Yes, edit automatically")
+                            .on_click(answer(Verdict::PlanAutoAccept)),
                     )
-                    .child(div().flex_1())
                     .child(
                         Button::secondary(id("plan-manual"), "Yes, ask before edits")
                             .on_click(answer(Verdict::PlanApprove)),
                     )
+                    .child(div().flex_1())
                     .child(
-                        Button::primary(id("plan-auto"), "Yes, edit automatically")
-                            .on_click(answer(Verdict::PlanAutoAccept)),
+                        Button::ghost(id("keep"), "No, keep planning")
+                            .on_click(answer(Verdict::KeepPlanning)),
                     )
                 })
-                // A tool: deny it (a quiet way out), allow it this once (the
-                // filled action), or always, named for what it allows. The
-                // broad grant is never the loudest button.
+                // A tool: allow it this once (the one filled action, Enter),
+                // always (named for what it allows, Shift Enter), or deny it
+                // (a quiet way out, Esc). Each key works from an empty composer.
                 .when(!is_plan, |d| {
-                    d.child(Button::ghost(id("deny"), "Deny").on_click(answer(Verdict::Denied)))
-                        .child(div().flex_1())
-                        .when(!info.every_time, |d| {
-                            d.child(
-                                Button::secondary(id("always"), always)
-                                    .describe(always_tip)
-                                    .tooltip(true)
-                                    .on_click(answer(Verdict::AllowedAlways)),
-                            )
-                        })
-                        .child(
-                            Button::accent(id("allow"), "Allow once")
-                                .on_click(answer(Verdict::Allowed)),
+                    d.child(
+                        Button::accent(id("allow"), "Allow")
+                            .hint(ASK_KEYS.0)
+                            .on_click(answer(Verdict::Allowed)),
+                    )
+                    .when(!info.every_time, |d| {
+                        d.child(
+                            Button::secondary(id("always"), always)
+                                .hint(ASK_KEYS.1)
+                                .describe(always_tip)
+                                .tooltip(true)
+                                .on_click(answer(Verdict::AllowedAlways)),
                         )
+                    })
+                    .child(div().flex_1())
+                    .child(
+                        Button::ghost(id("deny"), "Deny")
+                            .hint(ASK_KEYS.2)
+                            .on_click(answer(Verdict::Denied)),
+                    )
                 }),
         );
     // A lifted card: its lift and its one accent button say it waits on
     // you; no coloured edge.
     div()
         .flex()
+        .flex_col()
         .overflow_hidden()
         .bg(t.colors.surface)
         .border_1()
         .border_color(t.colors.border)
         .rounded(t.radius.card)
         .shadow(t.elevation_grain())
-        .child(body)
+        .child(header)
+        .children(subject)
+        .children(more)
+        .child(footer)
         .into_any_element()
 }
+
+/// A path as the card's header shows it: its last three parts (the file
+/// and the folders that place it), the rest as "…/".
+fn short_path(path: &str) -> SharedString {
+    let parts: Vec<&str> = path.split(['/', '\\']).filter(|p| !p.is_empty()).collect();
+    if parts.len() <= 3 {
+        return path.to_string().into();
+    }
+    format!("…/{}", parts[parts.len() - 3..].join("/")).into()
+}
+
+/// A waiting change shows this many lines until you open all of it.
+const ASK_FOLD: usize = 4;
+/// The keys that answer a waiting tool from an empty composer: allow,
+/// always allow, deny (`composer.rs`, `workspace.rs`).
+pub const ASK_KEYS: (&str, &str, &str) = ("Enter", "Shift Enter", "Esc");
 
 #[cfg(test)]
 mod tests {
@@ -2564,6 +2685,19 @@ mod tests {
             verdict,
             info: PermInfo::default(),
         }
+    }
+
+    #[test]
+    fn an_asked_path_keeps_its_last_folders() {
+        assert_eq!(
+            super::short_path("/tmp/x/proj/docs/diagrams/a.html").as_ref(),
+            "…/docs/diagrams/a.html"
+        );
+        assert_eq!(super::short_path("src/main.rs").as_ref(), "src/main.rs");
+        assert_eq!(
+            super::short_path(r"C:\Users\me\proj\src\ui\a.rs").as_ref(),
+            "…/src/ui/a.rs"
+        );
     }
 
     #[test]

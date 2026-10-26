@@ -654,6 +654,39 @@ impl CommandPalette {
                 Box::new(ShowShortcuts),
             ),
         );
+        // A tool waits in this chat: its card's three answers, with their keys.
+        if let Some((_, _, _, always)) = s.waiting_tool() {
+            let keys = super::message::ASK_KEYS;
+            out.insert(
+                0,
+                act(
+                    "Deny the waiting request",
+                    "icons/circle-slash.svg",
+                    Some(keys.2.into()),
+                    Box::new(DenyWaiting),
+                ),
+            );
+            if always {
+                out.insert(
+                    0,
+                    act(
+                        "Always allow the waiting request",
+                        "icons/circle-check.svg",
+                        Some(keys.1.into()),
+                        Box::new(AlwaysAllowWaiting),
+                    ),
+                );
+            }
+            out.insert(
+                0,
+                act(
+                    "Allow the waiting request",
+                    "icons/circle-check.svg",
+                    Some(keys.0.into()),
+                    Box::new(AllowWaiting),
+                ),
+            );
+        }
         if !s.pending_approvals().is_empty() {
             out.insert(
                 0,

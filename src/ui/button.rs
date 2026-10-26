@@ -140,6 +140,8 @@ pub struct Button {
     disabled: bool,
     loading: bool,
     selected: bool,
+    /// A key that does the same, after the label in its own colour, quieter.
+    hint: Option<SharedString>,
     on_click: Option<OnClick>,
 }
 
@@ -156,8 +158,15 @@ impl Button {
             disabled: false,
             loading: false,
             selected: false,
+            hint: None,
             on_click: None,
         }
+    }
+
+    /// Show the key that presses this button (`Enter`, `Esc`) after its label.
+    pub fn hint(mut self, key: impl Into<SharedString>) -> Self {
+        self.hint = Some(key.into());
+        self
     }
 
     pub fn primary(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Self {
@@ -337,6 +346,18 @@ impl RenderOnce for Button {
             .children(lead)
             .when_some(self.label, |d, l| {
                 d.child(div().min_w_0().whitespace_nowrap().text_ellipsis().child(l))
+            })
+            .when_some(self.hint, |d, k| {
+                d.child(
+                    div()
+                        .flex_none()
+                        .ml(t.space.xs)
+                        .font_family(t.font_mono.clone())
+                        .font_weight(gpui::FontWeight::NORMAL)
+                        .text_size(t.text.caption - px(1.))
+                        .opacity(0.72)
+                        .child(k),
+                )
             })
             .when_some(tooltip, |d, tip| {
                 d.tooltip(move |window, cx| {

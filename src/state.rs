@@ -6741,6 +6741,43 @@ impl AppState {
         self.answer_with(chat, msg, block, verdict, None, cx)
     }
 
+    /// The tool the open chat waits on you to allow (not a question or a
+    /// plan): its card's place, and whether it offers Always allow.
+    pub fn waiting_tool(&self) -> Option<(usize, usize, usize, bool)> {
+        let chat = self.current?;
+        let (msg, block) = self.pending_question(chat)?;
+        let c = self.chats.iter().find(|c| c.id == chat)?;
+        match c.messages.get(msg) {
+            Some(Message::Assistant { blocks }) => match blocks.get(block) {
+                Some(Block::Permission {
+                    title,
+                    info,
+                    verdict: Verdict::Pending,
+                    ..
+                }) if info.questions.is_empty()
+                    && title.as_ref() != crate::backend::PLAN_ASK_TITLE =>
+                {
+                    Some((chat, msg, block, !info.every_time))
+                }
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Answer the tool the open chat waits on (its card's keys: Enter, Shift
+    /// Enter, Esc). False when nothing waits, or Always isn't offered.
+    pub fn answer_waiting(&mut self, verdict: Verdict, cx: &mut Context<Self>) -> bool {
+        match self.waiting_tool() {
+            Some((_, _, _, false)) if verdict == Verdict::AllowedAlways => false,
+            Some((chat, msg, block, _)) => {
+                self.answer(chat, msg, block, verdict, cx);
+                true
+            }
+            None => false,
+        }
+    }
+
     /// Deny the question `chat` waits on, telling Forge what to do instead
     /// (you typed it in the composer while the card waited).
     pub fn deny_with_note(&mut self, chat: usize, note: String, cx: &mut Context<Self>) {

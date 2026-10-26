@@ -59,6 +59,7 @@ icons!(
     "folder",
     "list-tree",
     "file-code",
+    "file-plus",
     "file-json",
     "file-cog",
     "file-lock",
