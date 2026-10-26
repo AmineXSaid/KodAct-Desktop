@@ -405,6 +405,8 @@ impl ChatView {
         let t = cx.theme().clone();
         let hover = t.colors.hover;
         let busy = self.state.read(cx).busy();
+        // Just past the reading column's right edge, never over a line of
+        // the transcript (narrow, it keeps to the column's corner).
         div()
             .absolute()
             .bottom(t.space.md)
@@ -413,53 +415,62 @@ impl ChatView {
             .flex()
             .justify_center()
             .child(
-                // A round button, as Claude Code's: the arrow says it all;
-                // the words and the key are in its tooltip.
                 div()
-                    .id("jump-latest")
-                    .relative()
+                    .w(t.size.column)
+                    .max_w(gpui::relative(1.))
                     .flex()
-                    .items_center()
-                    .justify_center()
-                    .size(t.size.button_h)
-                    .rounded(t.radius.pill)
-                    .bg(t.colors.surface)
-                    .border_1()
-                    .border_color(t.colors.border)
-                    .shadow(t.elevation_popover())
-                    .cursor_pointer()
-                    .hover(move |d| d.bg(hover))
-                    .child(icon_arrow(&t))
-                    // While a reply plays, a dot says there's more coming.
-                    .when(busy, |d| {
-                        d.child(
+                    .justify_end()
+                    .child(
+                        div().mr(-(t.size.button_h + t.space.md)).child(
+                            // A round button, as Claude Code's: the arrow says it all;
+                            // the words and the key are in its tooltip.
                             div()
-                                .absolute()
-                                .top(px(1.))
-                                .right(px(1.))
-                                .size(px(7.))
+                                .id("jump-latest")
+                                .relative()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .size(t.size.button_h)
                                 .rounded(t.radius.pill)
-                                .bg(t.extra.accent),
-                        )
-                    })
-                    .tooltip(move |w, cx| {
-                        let words = if busy {
-                            "New messages below"
-                        } else {
-                            "Jump to latest"
-                        };
-                        gpui::component::tooltip::Tooltip::new(format!(
-                            "{words} ({})",
-                            super::shortcut("J")
-                        ))
-                        .build(w, cx)
-                    })
-                    .on_click(cx.listener(|this, _, _, cx| this.jump_to_latest(cx)))
-                    .with_animation(
-                        "jump-in",
-                        Animation::new(Duration::from_millis(t.motion_ms))
-                            .with_easing(gpui::ease_in_out),
-                        |d, delta| d.opacity(delta).mb(px(6.) * (1. - delta)),
+                                .bg(t.colors.surface)
+                                .border_1()
+                                .border_color(t.colors.border)
+                                .shadow(t.elevation_popover())
+                                .cursor_pointer()
+                                .hover(move |d| d.bg(hover))
+                                .child(icon_arrow(&t))
+                                // While a reply plays, a dot says there's more coming.
+                                .when(busy, |d| {
+                                    d.child(
+                                        div()
+                                            .absolute()
+                                            .top(px(1.))
+                                            .right(px(1.))
+                                            .size(px(7.))
+                                            .rounded(t.radius.pill)
+                                            .bg(t.extra.accent),
+                                    )
+                                })
+                                .tooltip(move |w, cx| {
+                                    let words = if busy {
+                                        "New messages below"
+                                    } else {
+                                        "Jump to latest"
+                                    };
+                                    gpui::component::tooltip::Tooltip::new(format!(
+                                        "{words} ({})",
+                                        super::shortcut("J")
+                                    ))
+                                    .build(w, cx)
+                                })
+                                .on_click(cx.listener(|this, _, _, cx| this.jump_to_latest(cx)))
+                                .with_animation(
+                                    "jump-in",
+                                    Animation::new(Duration::from_millis(t.motion_ms))
+                                        .with_easing(gpui::ease_in_out),
+                                    |d, delta| d.opacity(delta).mb(px(6.) * (1. - delta)),
+                                ),
+                        ),
                     ),
             )
     }

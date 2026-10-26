@@ -521,17 +521,14 @@ fn linked(
     super::select::wrap(key, layout, el)
 }
 
-/// Inline code's padding: a narrow space each side, inside the chip; a
-/// no-break one, so a line never wraps between the padding and the name.
-pub const CODE_PAD: &str = "\u{202F}";
+/// How far an inline code chip reaches past its first and last glyph. No
+/// padding characters: the wrapper breaks at any space (a no-break one
+/// too), so padding made stray gaps before punctuation and empty rows.
+const CODE_REACH: f32 = 1.5;
 
-/// A span's text as it is laid out: code padded inside its chip.
+/// A span's text as it is laid out: exactly its text (code too).
 fn shown(s: &Span) -> std::borrow::Cow<'_, str> {
-    if s.code {
-        format!("{CODE_PAD}{}{CODE_PAD}", s.text).into()
-    } else {
-        s.text.as_str().into()
-    }
+    s.text.as_str().into()
 }
 
 /// Where the code spans sit in the laid-out text.
@@ -552,7 +549,7 @@ fn code_ranges(spans: &[Span]) -> Vec<std::ops::Range<usize>> {
 /// runs can only fill square, so these are painted from the laid-out
 /// glyph positions, under the text.
 fn chips(layout: TextLayout, ranges: Vec<std::ops::Range<usize>>, t: &Theme) -> impl IntoElement {
-    let (bg, radius) = (t.extra.code_inline_bg, t.radius.small);
+    let (bg, edge, radius) = (t.extra.code_inline_bg, t.colors.border, t.radius.small);
     canvas(
         |_, _, _| {},
         move |_, _, window, _| {
@@ -560,7 +557,17 @@ fn chips(layout: TextLayout, ranges: Vec<std::ops::Range<usize>>, t: &Theme) -> 
             let text = layout.text();
             for r in &ranges {
                 for b in rows(&layout, &text, r.clone(), line) {
-                    window.paint_quad(fill(b, bg).corner_radii(radius));
+                    // A faint ground with a hairline, reaching a little past the glyphs.
+                    let b = Bounds::new(
+                        point(b.origin.x - px(CODE_REACH), b.origin.y),
+                        size(b.size.width + px(CODE_REACH * 2.), b.size.height),
+                    );
+                    window.paint_quad(
+                        fill(b, bg)
+                            .corner_radii(radius)
+                            .border_widths(px(1.))
+                            .border_color(edge),
+                    );
                 }
             }
         },
@@ -601,7 +608,7 @@ fn rows(
         let Some(p) = layout.position_for_index(i) else {
             continue;
         };
-        let ink = !text[i..].starts_with(CODE_PAD);
+        let ink = !text[i..].starts_with(char::is_whitespace);
         row = match row {
             Some((start, last, n, had)) if start.y == p.y => {
                 Some((start, p.x.max(last), n + 1, had || ink))
@@ -1571,6 +1578,28 @@ mod tests {
         );
         assert!(matches!(&b[7], Block::Quote(_)));
         assert_eq!(b[8], Block::Rule);
+    }
+
+    #[test]
+    fn inline_code_is_laid_out_as_itself() {
+        let spans = vec![
+            Span {
+                text: "see ".into(),
+                ..Default::default()
+            },
+            Span {
+                text: "a.rs".into(),
+                code: true,
+                ..Default::default()
+            },
+            Span {
+                text: ".".into(),
+                ..Default::default()
+            },
+        ];
+        let laid: String = spans.iter().map(|s| shown(s).into_owned()).collect();
+        assert_eq!(laid, "see a.rs.", "no padding before the full stop");
+        assert_eq!(code_ranges(&spans), vec![4..8]);
     }
 
     #[test]
