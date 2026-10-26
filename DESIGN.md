@@ -95,7 +95,7 @@ One sans for interface and prose (Archivo), in regular and semibold; replies at 
 
 ## Layout
 
-The transcript and the composer share one 768px column and one edge. Paragraphs 12px apart; tight groups, generous separation. The sidebar is 288px.
+The transcript and the composer share one 760px column and one edge. Paragraphs 12px apart; tight groups, generous separation. The sidebar is 288px.
 
 ## Elevation & Depth
 

@@ -1240,7 +1240,7 @@ const BRAND_STEP: f32 = 1.;
 pub struct Sizes {
     pub titlebar: Pixels,      // 36
     pub sidebar: Pixels,       // 288
-    pub column: Pixels, // 768: the reading column (Claude's measure), and the composer under it
+    pub column: Pixels, // 760: the reading column, and the composer under it
     pub thinking_max: Pixels, // 240: an opened thought's tallest; longer ones scroll
     pub row: Pixels,    // 30: sidebar rows, menu items
     pub menu_row: Pixels, // 26: a row in a session menu, as Claude Code's
@@ -1325,7 +1325,7 @@ impl Default for Sizes {
         Self {
             titlebar: px(36.),
             sidebar: px(288.),
-            column: px(768.),
+            column: px(760.),
             thinking_max: px(240.),
             row: px(30.),
             menu_row: px(26.),
