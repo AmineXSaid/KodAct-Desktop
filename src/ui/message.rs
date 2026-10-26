@@ -2438,6 +2438,38 @@ fn permission(
                 .child(super::markdown::code_text(detail, "js", t))
                 .into_any_element(),
         )
+    } else if let (true, Some(c)) = (is_plan, diff) {
+        // A plan reads as the reply it is: Markdown, not its source.
+        let plan: String = c
+            .diff
+            .iter()
+            .filter(|l| l.kind != DiffKind::Del)
+            .map(|l| l.text.as_ref())
+            .collect::<Vec<_>>()
+            .join("\n");
+        Some(
+            div()
+                .id(id("plan"))
+                .max_h(px(360.))
+                .overflow_y_scroll()
+                .when(plan.lines().count() > 14, super::hold_wheel)
+                .px(t.space.lg)
+                .pt(t.space.md)
+                .child(markdown::render(
+                    &plan,
+                    t,
+                    &CopyContext {
+                        state: cx.state.clone(),
+                        key: format!("plan-{}-{}-{b}", cx.chat, cx.index),
+                        copied: cx.copied.clone(),
+                        scale: cx.scale,
+                        sources: cx.sources.clone(),
+                        zooms: cx.zooms.clone(),
+                        streaming: false,
+                    },
+                ))
+                .into_any_element(),
+        )
     } else if let Some(c) = diff {
         let lang = markdown::lang_of(&c.target);
         let total = c.diff.len();
@@ -2488,6 +2520,7 @@ fn permission(
         })
     };
     let more = diff
+        .filter(|_| !is_plan)
         .map(|c| c.diff.len())
         .filter(|n| *n > ASK_FOLD)
         .map(|n| {
