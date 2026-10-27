@@ -336,6 +336,13 @@ impl Render for DesignHome {
         let room = self.width.get().max(CARD_MIN);
         let cols = ((room + gap) / (CARD_MIN + gap)).floor().max(1.);
         let card_w = ((room - gap * (cols - 1.)) / cols).floor();
+        // A design system of your own, from a website.
+        let from_site = (tab == GalleryTab::Systems).then(|| {
+            let st = state.clone();
+            theme::ghost_button(&t, "From a website…")
+                .id("gallery-from-site")
+                .on_click(move |_, _, cx| st.update(cx, |s, cx| s.design_from_website(cx)))
+        });
         let cards: Vec<_> = entries
             .iter()
             .zip(previews.into_iter().zip(pics))
@@ -375,7 +382,14 @@ impl Render for DesignHome {
                             .justify_between()
                             .gap(t.space.md)
                             .child(tabs)
-                            .child(search),
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(t.space.sm)
+                                    .children(from_site)
+                                    .child(search),
+                            ),
                     )
                     .children(empty)
                     .child(

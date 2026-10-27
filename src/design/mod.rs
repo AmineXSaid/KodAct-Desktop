@@ -4,6 +4,7 @@
 //! prompt can be built from exactly what the run needs. The plan is
 //! `docs/open-design-port.md`.
 
+pub mod capture;
 pub mod export;
 pub mod frontmatter;
 pub mod inline;

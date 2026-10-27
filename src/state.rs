@@ -5356,6 +5356,18 @@ impl AppState {
         cx.notify();
     }
 
+    /// A design system from a website: a design chat whose request (in the
+    /// composer, for you to finish with the address) has Forge capture the
+    /// site's brand with `design_capture`, then design in it.
+    pub fn design_from_website(&mut self, cx: &mut Context<Self>) {
+        self.new_chat(cx);
+        self.set_design(Some(crate::design::prompt::Setup::default()), cx);
+        self.draft = Some(
+            "Capture the brand of https:// with design_capture, then make a landing page in that look.".into(),
+        );
+        cx.notify();
+    }
+
     /// Show a gallery card's example page beside the gallery.
     pub fn design_preview(&mut self, page: &std::path::Path, cx: &mut Context<Self>) {
         self.design_show(page, cx);

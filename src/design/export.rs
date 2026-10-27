@@ -175,6 +175,88 @@ pub fn warm_up() {
     });
 }
 
+/// What a brand capture made.
+pub struct Captured {
+    pub folder: PathBuf,
+    pub brand: super::capture::Brand,
+    /// The site as captured (PNG), also saved as `capture.png`.
+    pub picture: Vec<u8>,
+}
+
+/// Capture the brand of the site at `url` into `project`'s
+/// `brand/<host>/` (`design::capture`): `DESIGN.md`, `tokens.css`, the
+/// logo when there is one, and a picture of the site.
+pub fn capture(url: &str, project: &Path) -> Result<Captured, String> {
+    use super::capture as cap;
+    let url = if url.contains("://") {
+        url.to_string()
+    } else {
+        format!("https://{url}")
+    };
+    let mut guard = CHROME.lock().map_err(|_| "the export browser is stuck")?;
+    if guard.is_none() {
+        *guard = Some(Chrome::start()?);
+    }
+    let chrome = guard.as_mut().expect("started");
+    let (target, s) = chrome.open_url(&url, 1440, 900)?;
+    let got = (|| {
+        let read: cap::Read = chrome
+            .eval(&s, cap::READ_JS)?
+            .as_str()
+            .and_then(|j| serde_json::from_str(j).ok())
+            .ok_or("the page couldn't be read")?;
+        let picture = chrome.shot(&s, 0.0, 0.0, 1440.0, 900.0)?;
+        Ok::<_, String>((read, picture))
+    })();
+    chrome.close(&target);
+    drop(guard);
+    let (read, picture) = got?;
+    let folder = cap::folder(project, &url);
+    std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+    // The logo, as the site has it; else its icon.
+    let icon = read.icon.clone().map(|src| cap::Logo {
+        svg: None,
+        src: Some(src),
+    });
+    match read.logo.as_ref().or(icon.as_ref()) {
+        Some(cap::Logo { svg: Some(svg), .. }) => {
+            let svg = if svg.contains("xmlns") {
+                svg.clone()
+            } else {
+                svg.replacen("<svg", "<svg xmlns=\"http://www.w3.org/2000/svg\"", 1)
+            };
+            let _ = std::fs::write(folder.join("logo.svg"), svg);
+        }
+        Some(cap::Logo { src: Some(src), .. }) if src.starts_with("http") => {
+            if let Some(bytes) = fetch(src) {
+                let ext = src
+                    .rsplit('.')
+                    .next()
+                    .map(|e| {
+                        e.split(['?', '#'])
+                            .next()
+                            .unwrap_or("png")
+                            .to_ascii_lowercase()
+                    })
+                    .filter(|e| ["png", "svg", "jpg", "jpeg", "webp", "gif"].contains(&e.as_str()))
+                    .unwrap_or_else(|| "png".into());
+                let _ = std::fs::write(folder.join(format!("logo.{ext}")), bytes);
+            }
+        }
+        _ => {}
+    }
+    let brand = cap::brand(read, &url);
+    std::fs::write(folder.join("DESIGN.md"), cap::design_md(&brand)).map_err(|e| e.to_string())?;
+    std::fs::write(folder.join("tokens.css"), cap::tokens_css(&brand))
+        .map_err(|e| e.to_string())?;
+    std::fs::write(folder.join("capture.png"), &picture).map_err(|e| e.to_string())?;
+    Ok(Captured {
+        folder,
+        brand,
+        picture,
+    })
+}
+
 /// A thumbnail's size: a 1280 by 800 window, at 0.3.
 const THUMB_SCALE: f64 = 0.3;
 
@@ -443,6 +525,11 @@ impl Chrome {
 
     /// A tab on `path`, `width` by `height`, loaded, fonts in.
     fn open(&mut self, path: &Path, width: u32, height: u32) -> Result<(String, String), String> {
+        self.open_url(&crate::design::live::file_url(path), width, height)
+    }
+
+    /// A tab on `url`, `width` by `height`, loaded, fonts in.
+    fn open_url(&mut self, url: &str, width: u32, height: u32) -> Result<(String, String), String> {
         let t = self.call(None, "Target.createTarget", json!({ "url": "about:blank" }))?;
         let target = t["targetId"].as_str().ok_or("no tab")?.to_string();
         let a = self.call(
@@ -459,12 +546,12 @@ impl Chrome {
             json!({ "width": width, "height": height, "deviceScaleFactor": 1, "mobile": false }),
         )?;
         let mut ev = vec![];
-        self.conn.call(
-            ss,
-            "Page.navigate",
-            json!({ "url": crate::design::live::file_url(path) }),
-            &mut ev,
-        )?;
+        let nav = self
+            .conn
+            .call(ss, "Page.navigate", json!({ "url": url }), &mut ev)?;
+        if let Some(e) = nav["errorText"].as_str() {
+            return Err(format!("{url} didn't load: {e}"));
+        }
         let until = Instant::now() + Duration::from_secs(20);
         while !ev.iter().any(|m| m["method"] == "Page.loadEventFired") && Instant::now() < until {
             if let Some(m) = self.conn.read()? {
@@ -797,6 +884,13 @@ mod tests {
         assert!(t.elapsed() < Duration::from_millis(50));
         eprintln!("a thumbnail {first_thumb:?}");
         let _ = std::fs::remove_file(&th);
+        // A brand, captured from the demo deck as if it were a site.
+        let c = capture(&crate::design::live::file_url(&deck()), &dir).unwrap();
+        let md = std::fs::read_to_string(c.folder.join("DESIGN.md")).unwrap();
+        assert!(md.contains("## 2. Color Palette & Roles"), "{md}");
+        assert!(c.brand.accent.is_some(), "{:?}", c.brand);
+        assert!(c.folder.join("tokens.css").is_file() && c.folder.join("capture.png").is_file());
+        eprintln!("captured: {:?}", c.brand);
         shutdown();
         assert!(warm < Duration::from_secs(8), "{warm:?}");
         if std::env::var_os("FORGE_KEEP_EXPORTS").is_none() {

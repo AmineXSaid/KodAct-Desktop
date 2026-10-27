@@ -510,6 +510,13 @@ screenshots in light and dark and a short report in `docs/` (as P1–P3 did).
   fills in. Preview shows a card's page in the side panel beside the
   gallery; Use starts a design chat set up with it (template, system or
   skill, and the kind of work) and its ready-made request in the composer.
+- Brand from URL: the `design_capture` tool (`design/capture.rs`) loads a
+  site in the export browser and reads what it draws (colours by role and
+  coverage, fonts, sizes, corners, the primary button, the logo or icon, the
+  site's own `:root` tokens) into `brand/<host>/DESIGN.md`, `tokens.css`,
+  the logo and `capture.png`. The gallery's Design systems tab starts such a
+  chat ("From a website…"). Checked on a local page; a live site couldn't be
+  reached from this sandbox (its proxy refuses the browser's tunnel).
 - Design home and chip rail.
 - Gallery.
 - Design systems: picker, view, create, import from GitHub and shadcn.

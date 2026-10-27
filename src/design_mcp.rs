@@ -60,6 +60,8 @@ fn tools() -> Vec<Value> {
         tool("design_export", "Export a page for the user: pdf (a deck prints a slide a page), png (the page, or each slide), pptx (each slide a picture), pptx-editable (each slide's text as PowerPoint text boxes over its picture), html (one self-contained file with its CSS, scripts, images and fonts inside). Saved beside the page; returns where.",
             json!({ "path": { "type": "string", "description": "The page's HTML file: absolute, or from the project's folder." },
                 "format": { "type": "string", "enum": crate::design::export::Format::ALL.iter().map(|f| f.slug()).collect::<Vec<_>>() } }), &["path", "format"]),
+        tool("design_capture", "Capture a brand from a website: loads it and reads what it draws (colours by role and coverage, fonts, type sizes, corners, the primary button, the logo, its own CSS tokens), then writes brand/<host>/DESIGN.md, tokens.css, the logo and capture.png in the project. Use it when the user wants a design in a site's or company's look; then design with that DESIGN.md as the design system.",
+            json!({ "url": { "type": "string", "description": "The site, e.g. https://stripe.com" } }), &["url"]),
     ]
 }
 
@@ -207,6 +209,46 @@ impl Tools {
                 lines.extend(d.notes);
                 Ok(text(lines.join("\n")))
             }
+            "design_capture" => {
+                let url = a["url"]
+                    .as_str()
+                    .map(str::trim)
+                    .filter(|u| !u.is_empty())
+                    .ok_or("url is needed")?;
+                if self.remote.is_some() {
+                    return Err("Capture writes into a project on this computer; this chat's project is on a remote.".into());
+                }
+                let project = std::env::current_dir().map_err(|e| e.to_string())?;
+                let c = crate::design::export::capture(url, &project)?;
+                let b = &c.brand;
+                let mut lines = vec![format!(
+                    "Captured {} into {} (DESIGN.md, tokens.css, capture.png{}).",
+                    b.source,
+                    c.folder.display(),
+                    if ["logo.svg", "logo.png", "logo.jpg", "logo.webp"]
+                        .iter()
+                        .any(|l| c.folder.join(l).is_file())
+                    {
+                        ", the logo"
+                    } else {
+                        ""
+                    }
+                )];
+                lines.push(format!(
+                    "Background {}, text {}, accent {}; fonts {}; corners {}.",
+                    b.background,
+                    b.text,
+                    b.accent.as_deref().unwrap_or("none found"),
+                    if b.fonts.is_empty() { "none read".into() } else { b.fonts.join(", ") },
+                    b.radius.map_or("square".into(), |r| format!("{r}px"))
+                ));
+                lines.push("Read the DESIGN.md, check it against the picture, and correct what the reading got wrong before you design with it.".into());
+                let mut out = text(lines.join("\n"));
+                if let Some(small) = small_jpeg(&c.picture, 960) {
+                    out.push(json!({ "type": "image", "data": crate::attach::base64(&small), "mimeType": "image/jpeg" }));
+                }
+                Ok(out)
+            }
             _ => Err(format!("no tool {name}")),
         }
     }
@@ -322,6 +364,17 @@ impl Tools {
                 .collect(),
         ))
     }
+}
+
+/// A picture made `width` wide, as a JPEG: small enough for the model.
+fn small_jpeg(png: &[u8], width: u32) -> Option<Vec<u8>> {
+    let img = image::load_from_memory(png).ok()?;
+    let img = img.resize(width, width * 4, image::imageops::FilterType::Triangle);
+    let mut out = std::io::Cursor::new(Vec::new());
+    img.to_rgb8()
+        .write_to(&mut out, image::ImageFormat::Jpeg)
+        .ok()?;
+    Some(out.into_inner())
 }
 
 /// Make the panel show `url`: its own tab, reloaded, or a new tab.
@@ -790,7 +843,8 @@ mod tests {
                 "design_read",
                 "design_render",
                 "design_lint",
-                "design_export"
+                "design_export",
+                "design_capture"
             ]
         );
         assert!(handle(
