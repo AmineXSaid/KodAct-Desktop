@@ -336,6 +336,29 @@ impl Render for DesignHome {
         let room = self.width.get().max(CARD_MIN);
         let cols = ((room + gap) / (CARD_MIN + gap)).floor().max(1.);
         let card_w = ((room - gap * (cols - 1.)) / cols).floor();
+        // A Figma file, opened as a page to keep designing.
+        let from_figma = {
+            let st = state.clone();
+            theme::ghost_button(&t, "Open a Figma file…")
+                .id("gallery-figma")
+                .on_click(move |_, _, cx| {
+                    let picked = cx.prompt_for_paths(gpui::PathPromptOptions {
+                        files: true,
+                        directories: false,
+                        multiple: false,
+                        prompt: Some("Open".into()),
+                    });
+                    let st = st.clone();
+                    cx.spawn(async move |cx| {
+                        if let Ok(Ok(Some(paths))) = picked.await {
+                            if let Some(p) = paths.into_iter().next() {
+                                st.update(cx, |s, cx| s.design_import_fig(p, cx));
+                            }
+                        }
+                    })
+                    .detach();
+                })
+        };
         // A design system of your own, from a website.
         let from_site = (tab == GalleryTab::Systems).then(|| {
             let st = state.clone();
@@ -388,6 +411,7 @@ impl Render for DesignHome {
                                     .items_center()
                                     .gap(t.space.sm)
                                     .children(from_site)
+                                    .child(from_figma)
                                     .child(search),
                             ),
                     )

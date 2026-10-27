@@ -6,6 +6,7 @@
 
 pub mod capture;
 pub mod export;
+pub mod fig;
 pub mod frontmatter;
 pub mod inline;
 pub mod library;

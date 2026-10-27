@@ -56,6 +56,8 @@ tungstenite = { version = "=0.30.0", default-features = false, features = ["hand
 # opens it. Big pictures are scaled down before they're sent (image, MIT/Apache-2.0).
 tar = { version = "=0.4.46", default-features = false }
 flate2 = "=1.1.10"
+# Figma files' zstd chunks (`design/fig.rs`); pure Rust (ruzstd, MIT).
+ruzstd = "=0.8.1"
 sevenz-rust2 = { version = "=0.24.0", default-features = false, features = ["bzip2", "deflate"] }
 image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 # Events from each chat's ForgeCLI process to the UI (backend.rs).

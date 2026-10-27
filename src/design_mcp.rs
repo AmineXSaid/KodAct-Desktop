@@ -72,6 +72,9 @@ fn tools() -> Vec<Value> {
                 "prompt": { "type": "string", "description": "For video, what it shows and how it moves; for speech, the words to say." },
                 "name": { "type": "string" },
                 "folder": { "type": "string", "description": "Where to save it, from the project's folder. Default: assets." } }), &["kind", "prompt"]),
+        tool("design_import_fig", "Open a Figma file (.fig) as an HTML page: its pages, frames, shapes, text and pictures placed as in the file. Saved in the project (designs/<name>/index.html by default); then make it a real page from there.",
+            json!({ "path": { "type": "string", "description": "The .fig file: absolute, or from the project's folder." },
+                "to": { "type": "string", "description": "Where to write the page, from the project's folder." } }), &["path"]),
         tool("design_deploy", "Publish a page on the web (Vercel, with the user's token) as one self-contained file, and return its address. Only when the user asks to publish or share a link.",
             json!({ "path": { "type": "string", "description": "The page's HTML file: absolute, or from the project's folder." },
                 "name": { "type": "string", "description": "The site's name, e.g. course-intro." } }), &["path"]),
@@ -319,6 +322,33 @@ impl Tools {
                 Ok(text(format!(
                     "Saved {} ({}). Link it from the page by its path relative to the page.",
                     file.display(),
+                    crate::design::export::took(started.elapsed())
+                )))
+            }
+            "design_import_fig" => {
+                if self.remote.is_some() {
+                    return Err("Figma files open into a project on this computer; this chat's project is on a remote.".into());
+                }
+                let project = std::env::current_dir().map_err(|e| e.to_string())?;
+                let fig = crate::design::inline_path(a["path"].as_str().ok_or("path is needed")?);
+                let fig = if fig.is_absolute() { fig } else { project.join(fig) };
+                let stem: String = fig
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_lowercase())
+                    .unwrap_or_else(|| "figma".into())
+                    .chars()
+                    .map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '-' })
+                    .collect();
+                let to = match a["to"].as_str() {
+                    Some(t) => project.join(t),
+                    None => project.join("designs").join(stem).join("index.html"),
+                };
+                let started = std::time::Instant::now();
+                let pages = crate::design::fig::import(&fig, &to)?;
+                Ok(text(format!(
+                    "Opened {pages} page(s) from {} as {} ({}). design_render it to see it, then make it a real page: real structure, responsive, its look kept.",
+                    fig.display(),
+                    to.display(),
                     crate::design::export::took(started.elapsed())
                 )))
             }
@@ -934,6 +964,7 @@ mod tests {
                 "design_capture",
                 "design_image",
                 "design_media",
+                "design_import_fig",
                 "design_deploy"
             ]
         );

@@ -5506,6 +5506,56 @@ fix everything under 8, render it again to check, then tell me the scores before
         cx.notify();
     }
 
+    /// Open a Figma file (`.fig`) as a design page (`design::fig`): saved
+    /// as `designs/<name>/index.html` in the project, shown in the panel,
+    /// and a design chat started to work on it.
+    pub fn design_import_fig(&mut self, fig: std::path::PathBuf, cx: &mut Context<Self>) {
+        if self.current_remote().is_some() {
+            return self.show_toast("Figma files open into a project on this computer.", cx);
+        }
+        let project = self
+            .project(self.current_project)
+            .map(|p| p.path.clone())
+            .unwrap_or_else(|| self.project_dir.clone());
+        let stem: String = fig
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "figma".into())
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() || c == '-' { c.to_ascii_lowercase() } else { '-' })
+            .collect();
+        let to = project.join("designs").join(&stem).join("index.html");
+        self.show_toast("Opening the Figma file…", cx);
+        cx.spawn(async move |this, cx| {
+            let at = to.clone();
+            let started = std::time::Instant::now();
+            let r = cx
+                .background_spawn(async move { crate::design::fig::import(&fig, &at) })
+                .await;
+            let _ = this.update(cx, |s, cx| match r {
+                Ok(pages) => {
+                    s.new_chat(cx);
+                    s.set_design(Some(crate::design::prompt::Setup::default()), cx);
+                    let rel = to.strip_prefix(&project).unwrap_or(&to).display().to_string();
+                    s.draft = Some(format!(
+                        "{rel} is a Figma file I imported. Make it a real, responsive page from it: keep its look, use real HTML structure (headings, sections, buttons) instead of fixed boxes, then render it to check. "
+                    ));
+                    s.design_show(&to, cx);
+                    s.show_toast(
+                        format!(
+                            "Opened {pages} page{} from Figma in {} as {rel}.",
+                            if pages == 1 { "" } else { "s" },
+                            crate::design::export::took(started.elapsed())
+                        ),
+                        cx,
+                    );
+                }
+                Err(e) => s.show_toast(format!("The Figma file couldn't be opened: {e}"), cx),
+            });
+        })
+        .detach();
+    }
+
     /// Show a gallery card's example page beside the gallery.
     pub fn design_preview(&mut self, page: &std::path::Path, cx: &mut Context<Self>) {
         self.design_show(page, cx);

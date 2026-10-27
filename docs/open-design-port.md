@@ -503,12 +503,24 @@ screenshots in light and dark and a short report in `docs/` (as P1–P3 did).
   every picture inside as a data URI, and writes `<page>.od-figma.json`,
   which the shipped plugin (`design-library/figma-plugin`) rebuilds as
   editable layers. The demo deck: 117 ms warm. Not yet: imported in Figma
-  itself (needs the desktop app); `.fig` import.
+  itself (needs the desktop app).
+- `.fig` import (`design/fig.rs`): a Figma file, plain or zipped with its
+  `images/`, read through the Kiwi schema it carries (zstd or deflate
+  chunks; `ruzstd`, MIT) and rebuilt as HTML: pages, frames placed as in
+  the file, fills (solid, gradient, image), strokes, corners, shadows,
+  opacity, rotation, text with its font, size, weight, spacing and
+  alignment. Vector paths show as their boxes. The gallery's "Open a Figma
+  file…" and the agent's `design_import_fig`. Tested on `.fig` files the
+  tests write (both compressions, zipped with a picture); not yet on a file
+  saved by Figma itself.
 - `capture.js` → IR (validated against `figma-plugin/IR.md`), the
   `.od-figma.json` export, and the plugin shipped with its install steps.
 - `.fig` import (`design/fig.rs`).
 
 **D5: Design screens**
+- Question forms: Forge's `AskUserQuestion` calls show as a form (choices
+  to click, one or several, Send), answered back to ForgeCLI with the call;
+  the design prompt asks a new design's discovery questions this way.
 - Built so far: the gallery (`ui/design_home.rs`, Design in the sidebar,
   Ctrl/⌘ Shift D, the palette): templates, examples, design systems and
   skills as cards with pictures of their example pages, searchable. The
@@ -539,12 +551,17 @@ screenshots in light and dark and a short report in `docs/` (as P1–P3 did).
 - Every action in the palette, with a key binding where it fits.
 
 **D6: Media**
+- Built: `design_image` (OpenAI's images or fal), `design_media` (video
+  from fal, narration from ElevenLabs), with the user's own keys from the
+  environment; tested against local mock servers, not the real services.
 - Image, video and audio providers (fal, OpenAI, Google, xAI, ElevenLabs,
   AIHubMix) with your own keys; prompt templates; image and video templates.
 - HyperFrames video export needs `ffmpeg`. Like Python, it's used when
   present, and Forge says so when it isn't.
 
 **D7: Extras**
+- Built: `design_deploy` publishes a page on Vercel (`VERCEL_TOKEN`) as one
+  self-contained file; tested against a mock of Vercel's API.
 - Live artifacts, deploy to Vercel or Cloudflare Pages, saved page captures,
   Composio connector, installing community plugins.
 
