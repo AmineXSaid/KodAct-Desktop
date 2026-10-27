@@ -1009,6 +1009,16 @@ pub fn ask_text(tool: &str, input: &Value) -> (String, String) {
                 .to_string(),
         );
     }
+    // Questions for you, answered in a form (`ui/question_form.rs`).
+    if tool == "AskUserQuestion" {
+        let asked: Vec<&str> = input["questions"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|q| q["question"].as_str())
+            .collect();
+        return ("Forge's questions".to_string(), asked.join(" · "));
+    }
     let call = tool_call(tool, input);
     let title = match call.kind {
         ToolKind::Edit | ToolKind::Write => {

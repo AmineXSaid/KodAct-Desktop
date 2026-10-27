@@ -69,6 +69,7 @@ pub const READ_JS: &str = r#"(() => {
     title: document.title, description: meta('description') || meta('og:description'),
     bg, ink, border, fonts, sizes, radii, weights, buttons, logo,
     icon: icon ? icon.href : null, vars,
+    css_failed: [...document.querySelectorAll('link[rel~="stylesheet"]')].filter(l => !l.sheet).map(l => l.href || l.getAttribute('href') || '(no address)').slice(0, 20),
     body_bg: hex(getComputedStyle(document.body).backgroundColor) || hex(getComputedStyle(document.documentElement).backgroundColor),
   });
 })()"#;
@@ -101,6 +102,9 @@ pub struct Read {
     pub vars: BTreeMap<String, String>,
     #[serde(default)]
     pub body_bg: Option<String>,
+    /// Stylesheets the page links that didn't load.
+    #[serde(default)]
+    pub css_failed: Vec<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -184,6 +188,8 @@ pub struct Brand {
     pub radius: Option<u32>,
     pub button: Option<Button>,
     pub vars: BTreeMap<String, String>,
+    /// Stylesheets that didn't load: the reading is of a page without them.
+    pub css_failed: Vec<String>,
 }
 
 /// Read roles out of what the page drew.
@@ -287,6 +293,7 @@ pub fn brand(read: Read, url: &str) -> Brand {
         radius,
         button,
         vars: read.vars,
+        css_failed: read.css_failed,
     }
 }
 
@@ -302,6 +309,13 @@ pub fn design_md(b: &Brand) -> String {
             b.description.as_str()
         }
     );
+    if !b.css_failed.is_empty() {
+        out.push_str(&format!(
+            "> **Warning:** {} of the site's stylesheets didn't load{}, so this was read from the page without them. Capture it again where they load before designing with it.\n\n",
+            b.css_failed.len(),
+            crate::design::capture::named(&b.css_failed)
+        ));
+    }
     out.push_str("## 1. Visual Theme & Atmosphere\n\n");
     let dark = luminance(&b.background) < 0.2;
     out.push_str(&format!(
@@ -404,6 +418,22 @@ pub fn design_md(b: &Brand) -> String {
     }
     out.push_str("\n## Use\n\nUse `tokens.css` beside this file: its custom properties are these roles. Keep the accent rare; text on every surface meets WCAG AA. `capture.png` shows the site as captured.\n");
     out
+}
+
+/// The first few failed stylesheets' addresses, as ` (a, b)`; empty
+/// when none had one.
+pub fn named(failed: &[String]) -> String {
+    let named: Vec<&str> = failed
+        .iter()
+        .map(String::as_str)
+        .filter(|h| !h.starts_with('('))
+        .take(3)
+        .collect();
+    if named.is_empty() {
+        String::new()
+    } else {
+        format!(" ({})", named.join(", "))
+    }
 }
 
 /// The brand as CSS custom properties.

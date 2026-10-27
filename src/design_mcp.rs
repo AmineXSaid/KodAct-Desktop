@@ -62,6 +62,19 @@ fn tools() -> Vec<Value> {
                 "format": { "type": "string", "enum": crate::design::export::Format::ALL.iter().map(|f| f.slug()).collect::<Vec<_>>() } }), &["path", "format"]),
         tool("design_capture", "Capture a brand from a website: loads it and reads what it draws (colours by role and coverage, fonts, type sizes, corners, the primary button, the logo, its own CSS tokens), then writes brand/<host>/DESIGN.md, tokens.css, the logo and capture.png in the project. Use it when the user wants a design in a site's or company's look; then design with that DESIGN.md as the design system.",
             json!({ "url": { "type": "string", "description": "The site, e.g. https://stripe.com" } }), &["url"]),
+        tool("design_image", "Make a picture for a design (a hero image, an illustration, a texture) with the user's own picture service (OpenAI's images, or fal), saved as PNG in the project. Describe subject, style, light and composition; say no text in the picture unless it needs some.",
+            json!({ "prompt": { "type": "string" },
+                "size": { "type": "string", "description": "Width x height, e.g. 1536x1024 (landscape), 1024x1536 (portrait), 1024x1024. Default 1536x1024." },
+                "name": { "type": "string", "description": "The file's name, without .png, e.g. hero." },
+                "folder": { "type": "string", "description": "Where to save it, from the project's folder: usually beside the page, e.g. designs/launch. Default: assets." } }), &["prompt"]),
+        tool("design_media", "Make a short video (fal) or a spoken narration (ElevenLabs) for a design, with the user's own key, saved in the project: a hero loop, a product clip, a deck's voice-over.",
+            json!({ "kind": { "type": "string", "enum": ["video", "speech"] },
+                "prompt": { "type": "string", "description": "For video, what it shows and how it moves; for speech, the words to say." },
+                "name": { "type": "string" },
+                "folder": { "type": "string", "description": "Where to save it, from the project's folder. Default: assets." } }), &["kind", "prompt"]),
+        tool("design_deploy", "Publish a page on the web (Vercel, with the user's token) as one self-contained file, and return its address. Only when the user asks to publish or share a link.",
+            json!({ "path": { "type": "string", "description": "The page's HTML file: absolute, or from the project's folder." },
+                "name": { "type": "string", "description": "The site's name, e.g. course-intro." } }), &["path"]),
     ]
 }
 
@@ -242,12 +255,86 @@ impl Tools {
                     if b.fonts.is_empty() { "none read".into() } else { b.fonts.join(", ") },
                     b.radius.map_or("square".into(), |r| format!("{r}px"))
                 ));
+                if !b.css_failed.is_empty() {
+                    lines.push(format!(
+                        "Warning: {} of its stylesheets didn't load{}, so this is the page without its styles, not its brand. Say so to the user rather than designing with it.",
+                        b.css_failed.len(),
+                        crate::design::capture::named(&b.css_failed)
+                    ));
+                }
                 lines.push("Read the DESIGN.md, check it against the picture, and correct what the reading got wrong before you design with it.".into());
                 let mut out = text(lines.join("\n"));
                 if let Some(small) = small_jpeg(&c.picture, 960) {
                     out.push(json!({ "type": "image", "data": crate::attach::base64(&small), "mimeType": "image/jpeg" }));
                 }
                 Ok(out)
+            }
+            "design_image" => {
+                let prompt = a["prompt"]
+                    .as_str()
+                    .map(str::trim)
+                    .filter(|p| !p.is_empty())
+                    .ok_or("prompt is needed")?;
+                if self.remote.is_some() {
+                    return Err("Pictures are saved in a project on this computer; this chat's project is on a remote.".into());
+                }
+                let size = a["size"].as_str().unwrap_or("1536x1024");
+                let name = a["name"].as_str().unwrap_or("image");
+                let project = std::env::current_dir().map_err(|e| e.to_string())?;
+                let folder = a["folder"].as_str().unwrap_or("assets");
+                let dir = crate::design::inline_path(folder);
+                let dir = if dir.is_absolute() { dir } else { project.join(dir) };
+                let started = std::time::Instant::now();
+                let (file, by) = crate::design::services::image(prompt, size, &dir, name)?;
+                let mut out = text(format!(
+                    "Saved {} ({:?}, {}). Link it from the page by its path relative to the page.",
+                    file.display(),
+                    by.label(),
+                    crate::design::export::took(started.elapsed())
+                ));
+                if let Some(small) = std::fs::read(&file).ok().and_then(|b| small_jpeg(&b, 640)) {
+                    out.push(json!({ "type": "image", "data": crate::attach::base64(&small), "mimeType": "image/jpeg" }));
+                }
+                Ok(out)
+            }
+            "design_media" => {
+                let kind = a["kind"].as_str().unwrap_or("video");
+                let what = a["prompt"]
+                    .as_str()
+                    .map(str::trim)
+                    .filter(|p| !p.is_empty())
+                    .ok_or("prompt is needed")?;
+                if self.remote.is_some() {
+                    return Err("Media is saved in a project on this computer; this chat's project is on a remote.".into());
+                }
+                let project = std::env::current_dir().map_err(|e| e.to_string())?;
+                let dir = crate::design::inline_path(a["folder"].as_str().unwrap_or("assets"));
+                let dir = if dir.is_absolute() { dir } else { project.join(dir) };
+                let name = a["name"].as_str().unwrap_or(kind);
+                let started = std::time::Instant::now();
+                let file = match kind {
+                    "speech" => crate::design::services::speech(what, &dir, name)?,
+                    _ => crate::design::services::video(what, &dir, name)?,
+                };
+                Ok(text(format!(
+                    "Saved {} ({}). Link it from the page by its path relative to the page.",
+                    file.display(),
+                    crate::design::export::took(started.elapsed())
+                )))
+            }
+            "design_deploy" => {
+                let page = self.page(a)?;
+                if page.remote_dir.is_some() {
+                    return Err("Publishing works on pages on this computer; this one is on the remote.".into());
+                }
+                let name = a["name"].as_str().map(str::to_string).unwrap_or_else(|| {
+                    page.shown
+                        .file_stem()
+                        .map(|s| s.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| "forge-design".into())
+                });
+                let url = crate::design::services::deploy(&page.shown, &name)?;
+                Ok(text(format!("Published {} at {url} (one self-contained file).", page.name)))
             }
             _ => Err(format!("no tool {name}")),
         }
@@ -844,7 +931,10 @@ mod tests {
                 "design_render",
                 "design_lint",
                 "design_export",
-                "design_capture"
+                "design_capture",
+                "design_image",
+                "design_media",
+                "design_deploy"
             ]
         );
         assert!(handle(

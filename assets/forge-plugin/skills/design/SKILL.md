@@ -25,6 +25,8 @@ prompt with the craft for this kind of work.
   (pictures, or editable text) or one self-contained HTML file.
 - For a design in a site's look, `design_capture` the site: it writes the
   brand's `DESIGN.md` and `tokens.css` into the project to design with.
+- `design_image` makes pictures for the page with the user's own key;
+  `design_deploy` publishes it when they ask for a link.
 
 Without those tools, this is an ordinary chat. Say once, in a line, that
 picking **Design** in the composer (beside the project) makes it a design

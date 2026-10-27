@@ -269,6 +269,107 @@ pub struct PermInfo {
     pub scope: Option<&'static str>,
     /// What you told Forge to do instead, with a denial.
     pub note: Option<SharedString>,
+    /// Questions Forge asks you (`AskUserQuestion`: a design chat's
+    /// discovery form, a choice of directions), with what you picked.
+    pub form: Option<QuestionForm>,
+}
+
+/// Forge's questions, shown as a form: each with its choices, one or
+/// several picked.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct QuestionForm {
+    pub questions: Vec<FormQuestion>,
+    /// The choices picked, by question.
+    pub picked: Vec<Vec<usize>>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FormQuestion {
+    pub question: String,
+    pub header: String,
+    /// (label, what it means).
+    pub options: Vec<(String, String)>,
+    pub multi: bool,
+}
+
+impl QuestionForm {
+    /// The form an `AskUserQuestion` call's input asks for.
+    pub fn from_input(input: &serde_json::Value) -> Option<QuestionForm> {
+        let questions: Vec<FormQuestion> = input["questions"]
+            .as_array()?
+            .iter()
+            .map(|q| FormQuestion {
+                question: q["question"].as_str().unwrap_or_default().to_string(),
+                header: q["header"].as_str().unwrap_or_default().to_string(),
+                options: q["options"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(|o| {
+                        (
+                            o["label"].as_str().unwrap_or_default().to_string(),
+                            o["description"].as_str().unwrap_or_default().to_string(),
+                        )
+                    })
+                    .collect(),
+                multi: q["multiSelect"].as_bool().unwrap_or(false),
+            })
+            .filter(|q| !q.question.is_empty())
+            .collect();
+        (!questions.is_empty()).then(|| QuestionForm {
+            picked: vec![vec![]; questions.len()],
+            questions,
+        })
+    }
+
+    /// Pick (or, for a several-answer question, toggle) a choice.
+    pub fn pick(&mut self, q: usize, option: usize) {
+        let (Some(question), Some(picked)) = (self.questions.get(q), self.picked.get_mut(q)) else {
+            return;
+        };
+        if option >= question.options.len() {
+            return;
+        }
+        if question.multi {
+            match picked.iter().position(|p| *p == option) {
+                Some(i) => {
+                    picked.remove(i);
+                }
+                None => picked.push(option),
+            }
+        } else {
+            *picked = vec![option];
+        }
+    }
+
+    /// Every question has an answer (a choice, or `other` for the first
+    /// without one).
+    pub fn complete(&self, other: bool) -> bool {
+        let open = self.picked.iter().filter(|p| p.is_empty()).count();
+        open == 0 || (other && open == 1)
+    }
+
+    /// The answers, by question, as ForgeCLI takes them: the picked
+    /// labels, and `other` (typed) for the first question with none.
+    pub fn answers(&self, other: Option<&str>) -> serde_json::Map<String, serde_json::Value> {
+        let mut other = other.map(str::trim).filter(|o| !o.is_empty());
+        let mut out = serde_json::Map::new();
+        for (q, picked) in self.questions.iter().zip(&self.picked) {
+            let mut said: Vec<String> = picked
+                .iter()
+                .filter_map(|i| q.options.get(*i).map(|o| o.0.clone()))
+                .collect();
+            if said.is_empty() {
+                if let Some(o) = other.take() {
+                    said.push(o.to_string());
+                }
+            }
+            if !said.is_empty() {
+                out.insert(q.question.clone(), serde_json::Value::String(said.join(", ")));
+            }
+        }
+        out
+    }
 }
 
 /// Where "Always allow" keeps its rule (the suggestion's `destination`).
@@ -7224,9 +7325,79 @@ fix everything under 8, render it again to check, then tell me the scores before
     /// Deny the question `chat` waits on, telling Forge what to do instead
     /// (you typed it in the composer while the card waited).
     pub fn deny_with_note(&mut self, chat: usize, note: String, cx: &mut Context<Self>) {
+        // Questions take what you typed as your own answer.
+        if let Some((msg, block)) = self.pending_question(chat) {
+            if self.form_at(chat, msg, block).is_some() {
+                self.form_send(chat, msg, block, Some(note), cx);
+                return;
+            }
+        }
         if let Some((msg, block)) = self.pending_question(chat) {
             self.answer_with(chat, msg, block, Verdict::Denied, Some(note), cx);
         }
+    }
+
+    fn form_at(&mut self, chat: usize, msg: usize, block: usize) -> Option<&mut QuestionForm> {
+        match self.chat_mut(chat)?.messages.get_mut(msg)? {
+            Message::Assistant { blocks } => match blocks.get_mut(block)? {
+                Block::Permission { info, .. } => info.form.as_mut(),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Pick a choice in the question form Forge waits on.
+    pub fn form_pick(&mut self, chat: usize, msg: usize, block: usize, q: usize, option: usize, cx: &mut Context<Self>) {
+        if let Some(f) = self.form_at(chat, msg, block) {
+            f.pick(q, option);
+        }
+        if let Some(c) = self.chat_mut(chat) {
+            c.version += 1;
+        }
+        cx.notify();
+    }
+
+    /// Send the form's answers (and `other`, typed, for a question without
+    /// a choice) to Forge, which goes on with them.
+    pub fn form_send(&mut self, chat: usize, msg: usize, block: usize, other: Option<String>, cx: &mut Context<Self>) {
+        let Some(form) = self.form_at(chat, msg, block).cloned() else { return };
+        let answers = form.answers(other.as_deref());
+        let said = answers
+            .iter()
+            .map(|(_, a)| a.as_str().unwrap_or_default().to_string())
+            .collect::<Vec<_>>()
+            .join(" · ");
+        // ForgeCLI waits on it (the demo's questions have no one waiting).
+        let ask = self
+            .asks
+            .get(&chat)
+            .filter(|a| a.msg == msg && a.block == block)
+            .map(|a| (a.request_id.clone(), a.input.clone()));
+        let sent = ask.map(|(request_id, mut input)| {
+            input["answers"] = serde_json::Value::Object(answers);
+            self.asks.remove(&chat);
+            self.sessions.get(&chat).map(|l| {
+                l.session
+                    .answer(&request_id, true, false, &input, &serde_json::Value::Null, None)
+            })
+        });
+        let sent = sent.flatten();
+        if let Some(c) = self.chat_mut(chat) {
+            if let Some(Message::Assistant { blocks }) = c.messages.get_mut(msg) {
+                if let Some(Block::Permission { verdict, info, .. }) = blocks.get_mut(block) {
+                    *verdict = Verdict::Allowed;
+                    info.at = Some(std::time::SystemTime::now());
+                    info.note = Some(said.into());
+                }
+            }
+            c.version += 1;
+        }
+        if let Some(Err(e)) = sent {
+            self.notice(chat, e, true);
+            self.finish_turn(chat, cx);
+        }
+        cx.notify();
     }
 
     /// The chat you're looking at waits on your answer to a question.
@@ -7820,7 +7991,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                         && this
                             .update(cx, |s, _| s.last_permission_denied(id))
                             .unwrap_or(false);
-                    asked = matches!(step, Step::Ask(..));
+                    asked = matches!(step, Step::Ask(..) | Step::Form(..));
                     let step = if denied { Step::Denied } else { step };
                     let done = matches!(step, Step::End { .. } | Step::Denied);
                     if this.update(cx, |s, cx| s.apply(id, step, cx)).is_err() {
@@ -8373,6 +8544,9 @@ fix everything under 8, render it again to check, then tell me the scores before
                     kind: Some(crate::backend::tool_call(&tool_name, &input).kind),
                     offer: rule_name(&suggestions).map(Into::into),
                     scope: rule_scope(&suggestions),
+                    form: (tool_name == "AskUserQuestion")
+                        .then(|| QuestionForm::from_input(&input))
+                        .flatten(),
                     ..Default::default()
                 };
                 if let Some((msg, block)) = self.push_block(
@@ -9800,6 +9974,18 @@ impl AppState {
                     },
                 })
             }
+            (Step::Form(input), Some(blocks)) => {
+                let (title, detail) = crate::backend::ask_text("AskUserQuestion", &input);
+                blocks.push(Block::Permission {
+                    title: title.into(),
+                    detail: detail.into(),
+                    verdict: Verdict::Pending,
+                    info: PermInfo {
+                        form: QuestionForm::from_input(&input),
+                        ..Default::default()
+                    },
+                })
+            }
             (Step::Asked(name, input, output, verdict, by, own_row), Some(blocks)) => {
                 // A question answered before: its call, done, then the answer.
                 // A sub-agent's call has no row of its own in the reply.
@@ -9880,6 +10066,8 @@ enum Step {
     ToolStart(ToolKind, String, Option<String>),
     ToolDone(String, Vec<DiffLine>),
     Ask(String, String),
+    /// Questions as a form (an `AskUserQuestion` call's input).
+    Form(serde_json::Value),
     /// A call and the permission question it needed, already answered.
     Asked(
         &'static str,
@@ -9917,6 +10105,7 @@ impl Step {
             Step::ToolDiff(_) => 0,
             Step::ToolDone(..) => 900,
             Step::Ask(..) => 300,
+            Step::Form(..) => 300,
             Step::Asked(..) => 450,
             Step::Use(..) => 500,
             Step::File(..) | Step::Remember(_) => 300,
@@ -10239,6 +10428,26 @@ fn script(prompt: &str) -> Vec<Step> {
         s.extend(words("Noted. I'll keep that in this project's memory.", Step::Say));
         s.push(Step::Remember(fact));
         s.push(Step::End { seconds: 1.4 });
+        return s;
+    }
+    // Open Design's discovery form, before a design: a few questions.
+    if lower.contains("ask me") {
+        s.extend(words("Before I design it, three quick questions.", Step::Say));
+        s.push(Step::Form(serde_json::json!({ "questions": [
+            { "header": "Audience", "question": "Who is it for?", "multiSelect": false, "options": [
+                { "label": "Designers", "description": "People who make interfaces" },
+                { "label": "Engineers", "description": "People who build them" },
+                { "label": "Leaders", "description": "People who fund the work" } ] },
+            { "header": "Feel", "question": "What should it feel like?", "multiSelect": true, "options": [
+                { "label": "Editorial", "description": "Serif headlines, generous space" },
+                { "label": "Technical", "description": "Mono details, grids" },
+                { "label": "Warm", "description": "Soft colours, rounded" },
+                { "label": "Bold", "description": "Big type, strong contrast" } ] },
+            { "header": "Length", "question": "How many slides?", "multiSelect": false, "options": [
+                { "label": "Six", "description": "A short introduction" },
+                { "label": "Twelve", "description": "A full session" } ] } ] })));
+        s.extend(words("Thanks, that's what I needed. I'll start on it now.", Step::Say));
+        s.push(Step::End { seconds: 3.1 });
         return s;
     }
     if ["design", "deck", "slides", "course"].iter().any(|w| lower.contains(w)) {
@@ -10806,6 +11015,31 @@ fn mock_chats() -> Vec<Chat> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_question_form_reads_picks_and_answers() {
+        let input = serde_json::json!({ "questions": [
+            { "question": "Who is it for?", "header": "Audience", "multiSelect": false,
+              "options": [{ "label": "Designers", "description": "" }, { "label": "Engineers", "description": "" }] },
+            { "question": "What feel?", "header": "Feel", "multiSelect": true,
+              "options": [{ "label": "Warm" }, { "label": "Bold" }, { "label": "Calm" }] },
+            { "question": "Anything else?", "header": "Notes", "options": [] } ] });
+        let mut f = super::QuestionForm::from_input(&input).unwrap();
+        assert_eq!(f.questions.len(), 3);
+        assert!(!f.complete(false));
+        f.pick(0, 0);
+        f.pick(0, 1); // one answer: the second replaces the first
+        f.pick(1, 0);
+        f.pick(1, 2);
+        f.pick(1, 0); // several: a second click takes it back
+        f.pick(1, 9); // no such choice
+        assert!(!f.complete(false) && f.complete(true));
+        let a = f.answers(Some("  Keep it short "));
+        assert_eq!(a["Who is it for?"], "Engineers");
+        assert_eq!(a["What feel?"], "Calm");
+        assert_eq!(a["Anything else?"], "Keep it short");
+        assert!(super::QuestionForm::from_input(&serde_json::json!({})).is_none());
+    }
+
     #[test]
     fn projects_keep_their_details_and_the_old_list_still_loads() {
         // The old list: folders only, each on your list.

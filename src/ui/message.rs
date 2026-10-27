@@ -1651,12 +1651,60 @@ fn permission(
             state.update(app, |s, cx| s.answer(chat, msg, b, v, cx))
         }
     };
+    // Questions: a form to answer, not a permission to give.
+    if let (Verdict::Pending, Some(form)) = (verdict, &info.form) {
+        return super::question_form::render(form, &cx.state, (cx.chat, cx.index, b), t);
+    }
+    // Answered questions: what was asked, and what you said.
+    if info.form.is_some() {
+        let said: SharedString = match (verdict, &info.note) {
+            (Verdict::Denied, _) => "You didn't answer".into(),
+            (_, Some(n)) => n.clone(),
+            _ => "Answered".into(),
+        };
+        return div()
+            .flex()
+            .items_start()
+            .gap(t.space.sm)
+            .px(t.space.md)
+            .py(t.space.sm)
+            .rounded(t.radius.button)
+            .border_1()
+            .border_color(t.colors.border)
+            .bg(t.colors.surface)
+            .child(div().pt(px(1.)).child(icon(
+                "icons/message-square.svg",
+                t.size.icon_sm,
+                t.colors.text_muted,
+            )))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.))
+                    .child(
+                        div()
+                            .text_color(t.colors.text_strong)
+                            .child(format!("You answered: {said}")),
+                    )
+                    .child(
+                        div()
+                            .text_size(t.text.caption)
+                            .text_color(t.colors.text_muted)
+                            .child(detail.clone()),
+                    ),
+            )
+            .into_any_element();
+    }
     if matches!(
         verdict,
         Verdict::Allowed | Verdict::AllowedAlways | Verdict::Denied
     ) {
         return answered(title, detail, verdict, info, blocks, b, cx, t);
     }
+
     if verdict != Verdict::Pending {
         let (label, bg, fg) = match verdict {
             Verdict::Denied => ("Denied", t.extra.danger_tint, t.extra.danger),

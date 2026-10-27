@@ -14,6 +14,7 @@ pub mod live;
 pub mod marks;
 pub mod od_subset;
 pub mod pptx;
+pub mod services;
 pub mod prompt;
 pub mod skill_meta;
 pub mod store;
