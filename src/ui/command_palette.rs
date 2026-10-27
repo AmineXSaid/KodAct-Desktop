@@ -664,6 +664,12 @@ impl CommandPalette {
             ]);
         }
         if s.design_on_screen().is_some() {
+            out.push(act(
+                "Review the page: craft, brief, brand, accessibility, copy",
+                "icons/stethoscope.svg",
+                None,
+                Box::new(CritiquePage),
+            ));
             out.push(act("Ask for a new page", "icons/plus.svg", None, Box::new(NewDesignPage)));
             out.push(act(
                 if s.design_select {

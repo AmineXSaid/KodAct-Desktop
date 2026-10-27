@@ -4559,6 +4559,38 @@ impl AppState {
         cx.notify();
     }
 
+    /// Ask Forge to review the page on screen: Open Design's five-part
+    /// design review (craft, the brief, brand, accessibility, copy), with
+    /// the fixes made, not only listed. Sent now, or queued while Forge
+    /// replies.
+    pub fn design_critique(&mut self, cx: &mut Context<Self>) {
+        let Some(page) = self.design_on_screen() else {
+            self.show_toast("Open a design page to review it.", cx);
+            return;
+        };
+        if self.current.is_none() {
+            self.show_toast("Review a page from the chat that made it.", cx);
+            return;
+        }
+        let review = crate::design::root()
+            .map(|r| r.join("plugins/_official/atoms/critique-theater/SKILL.md"))
+            .filter(|p| p.is_file())
+            .map(|p| format!(" Follow the review in {}.", p.display()))
+            .unwrap_or_default();
+        let text = format!(
+            "Review {} as a senior designer would, on five counts: craft (layout, hierarchy, spacing, alignment), \
+whether it does what I asked, the design system (its tokens, type and voice), accessibility (contrast, targets, focus, labels, \
+heading order) and copy (specific, no filler). Render it and lint it first.{review} Score each count out of 10 with the reason, \
+fix everything under 8, render it again to check, then tell me the scores before and after.",
+            page.display()
+        );
+        if self.busy() {
+            self.queue_message(text, cx);
+        } else {
+            self.send(text, cx);
+        }
+    }
+
     /// Ask for another page: the composer starts the request.
     pub fn design_new_page(&mut self, cx: &mut Context<Self>) {
         let like = self

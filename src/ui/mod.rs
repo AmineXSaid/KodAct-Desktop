@@ -180,6 +180,7 @@ gpui::actions!(
         UndoPage,
         RedoPage,
         DuplicatePage,
+        CritiquePage,
         DesignChat,
         DesignDeck,
         DesignPrototype,

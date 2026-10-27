@@ -950,6 +950,9 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &ZoomFit, _, cx| {
                 this.state.update(cx, |s, cx| s.web_zoom_fit(cx))
             }))
+            .on_action(cx.listener(|this, _: &CritiquePage, _, cx| {
+                this.state.update(cx, |s, cx| s.design_critique(cx))
+            }))
             .on_action(cx.listener(|this, _: &DesignChat, _, cx| {
                 this.state.update(cx, |s, cx| s.design_surface(crate::design::prompt::Surface::Any, cx))
             }))

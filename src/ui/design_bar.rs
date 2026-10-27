@@ -442,6 +442,19 @@ pub fn render(
     // The comments: their pins, resolved ones, then each, newest last.
     let open_count = comments.iter().filter(|c| !c.resolved).count();
     let mut comments_menu = sheet(t, 300.)
+        // A whole review, not one comment: Forge scores and fixes the page.
+        .child(
+            row(
+                t,
+                "comments-review",
+                Some("icons/stethoscope.svg"),
+                "Ask Forge to review the page",
+                None,
+                false,
+            )
+            .on_click(act(Box::new(|s, cx| s.design_critique(cx)))),
+        )
+        .child(gap(t))
         .child(
             row(
                 t,

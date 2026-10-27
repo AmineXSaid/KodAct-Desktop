@@ -517,6 +517,10 @@ screenshots in light and dark and a short report in `docs/` (as P1–P3 did).
   the logo and `capture.png`. The gallery's Design systems tab starts such a
   chat ("From a website…"). Checked on a local page; a live site couldn't be
   reached from this sandbox (its proxy refuses the browser's tunnel).
+- Critique: "Ask Forge to review the page" (the Comments menu and the
+  palette) sends Open Design's five-part review (craft, the brief, brand,
+  accessibility, copy; the library's `critique-theater` atom) with scores
+  before and after and the fixes made; queued while Forge replies.
 - Design home and chip rail.
 - Gallery.
 - Design systems: picker, view, create, import from GitHub and shadcn.
