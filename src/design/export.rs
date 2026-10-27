@@ -175,6 +175,59 @@ pub fn warm_up() {
     });
 }
 
+/// A thumbnail's size: a 1280 by 800 window, at 0.3.
+const THUMB_SCALE: f64 = 0.3;
+
+/// Where the thumbnail of `preview` is cached: named for its path, size
+/// and time, so an edited preview gets a new one.
+pub fn thumb_path(preview: &Path) -> Option<PathBuf> {
+    use std::hash::{Hash, Hasher};
+    let meta = std::fs::metadata(preview).ok()?;
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    preview.hash(&mut h);
+    meta.len().hash(&mut h);
+    meta.modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+        .hash(&mut h);
+    let dir = crate::profile::dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join("design-thumbs");
+    Some(dir.join(format!("{:016x}.jpg", h.finish())))
+}
+
+/// The thumbnail of `preview` (an HTML page): from the cache, else taken
+/// now (about a quarter of a second in a warm browser) and cached.
+pub fn thumbnail(preview: &Path) -> Result<PathBuf, String> {
+    let to = thumb_path(preview).ok_or_else(|| format!("No file at {}", preview.display()))?;
+    if to.is_file() {
+        return Ok(to);
+    }
+    if let Some(dir) = to.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    let mut guard = CHROME.lock().map_err(|_| "the export browser is stuck")?;
+    for attempt in 0..2 {
+        if guard.is_none() {
+            *guard = Some(Chrome::start()?);
+        }
+        let chrome = guard.as_mut().expect("started");
+        match chrome.thumbnail(preview) {
+            Ok(jpg) => {
+                // Written whole, then named, so a half file is never read.
+                let part = to.with_extension("part");
+                std::fs::write(&part, jpg).map_err(|e| e.to_string())?;
+                std::fs::rename(&part, &to).map_err(|e| e.to_string())?;
+                return Ok(to);
+            }
+            Err(e) if attempt == 1 => return Err(e),
+            Err(_) => *guard = None,
+        }
+    }
+    unreachable!()
+}
+
 /// A web address's bytes, for a single HTML file (fonts and CDN files).
 fn fetch(url: &str) -> Option<Vec<u8>> {
     let r = ureq::get(url)
@@ -213,6 +266,8 @@ struct Chrome {
     _guard: Child,
     conn: Conn,
     _profile: TempDir,
+    /// The tab thumbnails are taken in, kept for the next: target, session.
+    thumb_tab: Option<(String, String)>,
 }
 
 /// A folder removed when dropped.
@@ -359,6 +414,7 @@ impl Chrome {
             _guard: guard,
             conn,
             _profile: profile,
+            thumb_tab: None,
         })
     }
 
@@ -421,6 +477,53 @@ impl Chrome {
             "(document.fonts ? document.fonts.ready : Promise.resolve()).then(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(1)))))",
         );
         Ok((target, s))
+    }
+
+    /// A small picture of `preview`'s first screen, in the tab kept for it.
+    fn thumbnail(&mut self, preview: &Path) -> Result<Vec<u8>, String> {
+        let s = match self.thumb_tab.clone() {
+            Some((_, s)) => s,
+            None => {
+                let (target, s) = self.open(preview, 1280, 800)?;
+                self.thumb_tab = Some((target, s.clone()));
+                return self.thumb_shot(&s);
+            }
+        };
+        let mut ev = vec![];
+        let nav = self.conn.call(
+            Some(&s),
+            "Page.navigate",
+            json!({ "url": crate::design::live::file_url(preview) }),
+            &mut ev,
+        );
+        if let Err(e) = nav {
+            self.thumb_tab = None;
+            return Err(e);
+        }
+        let until = Instant::now() + Duration::from_secs(8);
+        while !ev.iter().any(|m| m["method"] == "Page.loadEventFired") && Instant::now() < until {
+            if let Some(m) = self.conn.read()? {
+                ev.push(m);
+            }
+        }
+        self.thumb_shot(&s)
+    }
+
+    fn thumb_shot(&mut self, s: &str) -> Result<Vec<u8>, String> {
+        let _ = self.eval(
+            s,
+            "Promise.race([(document.fonts ? document.fonts.ready : Promise.resolve()).then(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(1))))), new Promise(r => setTimeout(() => r(1), 1200))])",
+        );
+        let r = self.call(
+            Some(s),
+            "Page.captureScreenshot",
+            json!({ "format": "jpeg", "quality": 82, "fromSurface": true,
+                "clip": { "x": 0, "y": 0, "width": 1280, "height": 800, "scale": THUMB_SCALE } }),
+        )?;
+        r["data"]
+            .as_str()
+            .and_then(crate::browser::decode_base64)
+            .ok_or_else(|| "the browser gave no picture".to_string())
     }
 
     fn close(&mut self, target: &str) {
@@ -683,6 +786,17 @@ mod tests {
         // Warm: three exports in well under the time of a cold start.
         eprintln!("first {:?}; warm three {:?}", first.took, t.elapsed());
         let warm = t.elapsed();
+        // Thumbnails: taken once, then from the cache.
+        let t = Instant::now();
+        let th = thumbnail(&deck()).unwrap();
+        let first_thumb = t.elapsed();
+        let pic = image::open(&th).unwrap();
+        assert_eq!((pic.width(), pic.height()), (384, 240));
+        let t = Instant::now();
+        assert_eq!(thumbnail(&deck()).unwrap(), th);
+        assert!(t.elapsed() < Duration::from_millis(50));
+        eprintln!("a thumbnail {first_thumb:?}");
+        let _ = std::fs::remove_file(&th);
         shutdown();
         assert!(warm < Duration::from_secs(8), "{warm:?}");
         if std::env::var_os("FORGE_KEEP_EXPORTS").is_none() {

@@ -224,6 +224,7 @@ impl Render for Sidebar {
         let avatar = s.avatar.clone();
         let hover = t.colors.hover;
         let rules_open = s.screen == Screen::Rules;
+        let design_open = s.screen == Screen::Design;
         let projects_open = matches!(s.screen, Screen::Projects | Screen::Project(_));
         let loading = s.loading;
 
@@ -748,6 +749,39 @@ impl Render for Sidebar {
                         )
                         .child(
                             div()
+                                .id("nav-design")
+                                .flex()
+                                .items_center()
+                                .gap(t.space.sm)
+                                .h(t.size.row)
+                                .px(t.space.md)
+                                .rounded(t.radius.button)
+                                .cursor_pointer()
+                                .text_color(if design_open {
+                                    t.colors.text_strong
+                                } else {
+                                    t.colors.text_muted
+                                })
+                                .when(design_open, |d| crate::theme::selected(&t, d))
+                                .when(!design_open, |d| d.hover(move |st| st.bg(hover)))
+                                .child(icon(
+                                    "icons/pen-tool.svg",
+                                    t.size.icon_sm,
+                                    if design_open {
+                                        t.colors.text_strong
+                                    } else {
+                                        t.colors.text_muted
+                                    },
+                                ))
+                                .child(nav_label("Design"))
+                                .when(nav_hover == Some("Design"), |d| d.child(kbd(&t, shortcut("Shift D"))))
+                                .on_hover(cx.listener(|this, on: &bool, _, cx| this.hover_nav("Design", *on, cx)))
+                                .on_click(|_, window, cx| {
+                                    window.dispatch_action(Box::new(OpenDesign), cx)
+                                }),
+                        )
+                        .child(
+                            div()
                                 .id("nav-rules")
                                 .flex()
                                 .items_center()
@@ -945,6 +979,15 @@ pub fn rail(t: &crate::theme::Theme, screen: Screen) -> impl IntoElement {
                 matches!(screen, Screen::Projects | Screen::Project(_)),
             )
             .on_click(dispatch(Box::new(OpenProjects))),
+        )
+        .child(
+            nav(
+                "rail-design",
+                "icons/pen-tool.svg",
+                format!("Design ({})", shortcut("Shift D")),
+                screen == Screen::Design,
+            )
+            .on_click(dispatch(Box::new(OpenDesign))),
         )
         .child(
             nav(

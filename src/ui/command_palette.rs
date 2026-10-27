@@ -370,6 +370,12 @@ impl CommandPalette {
                 Box::new(OpenRules),
             ),
             act(
+                "Design: templates, design systems and skills",
+                "icons/pen-tool.svg",
+                Some(shortcut("Shift D")),
+                Box::new(OpenDesign),
+            ),
+            act(
                 "Open settings",
                 "icons/settings.svg",
                 Some(shortcut(",")),

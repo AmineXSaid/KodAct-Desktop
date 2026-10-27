@@ -17,6 +17,7 @@ pub mod confirm;
 pub mod design_bar;
 pub mod design_chips;
 pub mod design_comment;
+pub mod design_home;
 pub mod design_marks;
 pub mod context_menu;
 pub mod context_ring;
@@ -138,6 +139,7 @@ gpui::actions!(
         ChangeName,
         ChangeAvatar,
         OpenRules,
+        OpenDesign,
         OpenProjects,
         EndpointGuide,
         OpenEndpointsFile,

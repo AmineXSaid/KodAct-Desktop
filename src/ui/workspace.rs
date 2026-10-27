@@ -36,6 +36,7 @@ pub struct Workspace {
     terminal: Entity<super::terminal_dock::TerminalDock>,
     onboarding: Entity<Onboarding>,
     rules: Entity<RulesView>,
+    design_home: Entity<super::design_home::DesignHome>,
     projects: Entity<ProjectsView>,
     side: Entity<SideChat>,
     settings: Entity<Settings>,
@@ -94,6 +95,7 @@ impl Workspace {
             cx.new(|cx| super::terminal_dock::TerminalDock::new(state.clone(), window, cx));
         let onboarding = cx.new(|cx| Onboarding::new(state.clone(), window, cx));
         let rules = cx.new(|cx| RulesView::new(state.clone(), window, cx));
+        let design_home = cx.new(|cx| super::design_home::DesignHome::new(state.clone(), window, cx));
         let projects = cx.new(|cx| ProjectsView::new(state.clone(), composer.clone(), window, cx));
         let side = cx.new(|cx| SideChat::new(state.clone(), window, cx));
         let settings = cx.new(|cx| Settings::new(state.clone(), window, cx));
@@ -146,6 +148,7 @@ impl Workspace {
             terminal,
             onboarding,
             rules,
+            design_home,
             projects,
             side,
             settings,
@@ -787,6 +790,17 @@ impl Render for Workspace {
         };
         let main = if screen == Screen::Rules {
             main.child(self.rules.clone())
+        } else if screen == Screen::Design {
+            // The gallery, and a card's page beside it when previewed.
+            main.child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .flex()
+                    .when(below, |d| d.flex_col())
+                    .child(div().flex_1().min_w_0().min_h_0().flex().child(self.design_home.clone()))
+                    .children(pane),
+            )
         } else if matches!(screen, Screen::Projects | Screen::Project(_)) {
             // A project page opens its knowledge files in the side panel too.
             let doc_open = matches!(screen, Screen::Project(_)) && self.state.read(cx).doc.is_some();
@@ -1246,6 +1260,9 @@ impl Render for Workspace {
                     s.switcher_open = false;
                     cx.notify();
                 })
+            }))
+            .on_action(cx.listener(|this, _: &OpenDesign, _, cx| {
+                this.state.update(cx, |s, cx| s.open_design_home(cx))
             }))
             .on_action(cx.listener(|this, _: &OpenRules, _, cx| {
                 this.state.update(cx, |s, cx| {

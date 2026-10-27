@@ -502,6 +502,14 @@ screenshots in light and dark and a short report in `docs/` (as P1–P3 did).
 - `.fig` import (`design/fig.rs`).
 
 **D5: Design screens**
+- Built so far: the gallery (`ui/design_home.rs`, Design in the sidebar,
+  Ctrl/⌘ Shift D, the palette): templates, examples, design systems and
+  skills as cards with pictures of their example pages, searchable. The
+  pictures are taken in the background by the export browser (about 0.16 s
+  each) and cached by file and date, so the gallery opens at once and
+  fills in. Preview shows a card's page in the side panel beside the
+  gallery; Use starts a design chat set up with it (template, system or
+  skill, and the kind of work) and its ready-made request in the composer.
 - Design home and chip rail.
 - Gallery.
 - Design systems: picker, view, create, import from GitHub and shadcn.

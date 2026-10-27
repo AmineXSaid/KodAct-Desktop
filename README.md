@@ -58,6 +58,7 @@ table in step.
 | F2 | Rename this chat |
 | Ctrl/⌘ Shift P | Projects |
 | Ctrl/⌘ Shift R | Rules and memory |
+| Ctrl/⌘ Shift D | Design: start from the library |
 | Ctrl/⌘ Shift A | Chats that need you |
 | Ctrl/⌘ Shift M | The project map |
 | Ctrl/⌘ Alt O | Remote: WSL, SSH host or container |

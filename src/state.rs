@@ -823,6 +823,54 @@ pub enum Screen {
     Projects,
     /// One project: its chats, and a composer to start another.
     Project(usize),
+    /// The design library to start from: templates, examples, design
+    /// systems and skills (`ui/design_home.rs`).
+    Design,
+}
+
+/// The design gallery's lists.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GalleryTab {
+    Templates,
+    Examples,
+    Systems,
+    Skills,
+}
+
+impl GalleryTab {
+    pub const ALL: [GalleryTab; 4] = [
+        GalleryTab::Templates,
+        GalleryTab::Examples,
+        GalleryTab::Systems,
+        GalleryTab::Skills,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            GalleryTab::Templates => "Templates",
+            GalleryTab::Examples => "Examples",
+            GalleryTab::Systems => "Design systems",
+            GalleryTab::Skills => "Skills",
+        }
+    }
+
+    pub fn kind(self) -> crate::design::library::Kind {
+        use crate::design::library::Kind;
+        match self {
+            GalleryTab::Templates => Kind::Template,
+            GalleryTab::Examples => Kind::Example,
+            GalleryTab::Systems => Kind::DesignSystem,
+            GalleryTab::Skills => Kind::Skill,
+        }
+    }
+}
+
+/// A gallery card's picture.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Thumb {
+    Queued,
+    Ready(std::path::PathBuf),
+    Failed,
 }
 
 /// The Settings window's sections.
@@ -1517,6 +1565,13 @@ pub struct AppState {
     /// once, off the main thread, when the first design chat needs it.
     pub design_index: Option<std::sync::Arc<crate::design::library::Index>>,
     design_index_asked: bool,
+    /// The design gallery's list on show.
+    pub gallery_tab: GalleryTab,
+    /// Gallery cards' pictures, by preview page (`design::export::thumbnail`),
+    /// and the pages waiting for one, in the order they show.
+    pub design_thumbs: std::collections::HashMap<std::path::PathBuf, Thumb>,
+    design_thumb_queue: std::collections::VecDeque<std::path::PathBuf>,
+    design_thumbs_running: bool,
     /// Chosen before the chat exists (on a new chat's screen): the chat
     /// your next message starts is a design chat set up with this.
     pub design_next: Option<crate::design::prompt::Setup>,
@@ -1844,6 +1899,10 @@ impl AppState {
             design_systems_asked: false,
             design_index: None,
             design_index_asked: false,
+            gallery_tab: GalleryTab::Templates,
+            design_thumbs: Default::default(),
+            design_thumb_queue: Default::default(),
+            design_thumbs_running: false,
             design_next: None,
             design_anchors: Default::default(),
             design_anchors_sent: vec![],
@@ -5173,6 +5232,135 @@ impl AppState {
         self.set_design(Some(setup), cx);
     }
 
+    /// The design gallery: the library to start a design from.
+    pub fn open_design_home(&mut self, cx: &mut Context<Self>) {
+        self.screen = Screen::Design;
+        self.palette_open = false;
+        self.picker_open = false;
+        self.design_load_index(cx);
+        // The pictures come from the export browser: start it now.
+        crate::design::export::warm_up();
+        cx.notify();
+    }
+
+    pub fn set_gallery_tab(&mut self, tab: GalleryTab, cx: &mut Context<Self>) {
+        self.gallery_tab = tab;
+        cx.notify();
+    }
+
+    /// The gallery shows these previews: picture each that has none yet,
+    /// in this order. Pages waiting that no longer show wait no more.
+    pub fn design_want_thumbs(&mut self, pages: Vec<std::path::PathBuf>, cx: &mut Context<Self>) {
+        let wanted: std::collections::HashSet<&std::path::PathBuf> = pages.iter().collect();
+        let dropped: Vec<std::path::PathBuf> = self
+            .design_thumb_queue
+            .iter()
+            .filter(|p| !wanted.contains(p))
+            .cloned()
+            .collect();
+        for p in dropped {
+            self.design_thumbs.remove(&p);
+        }
+        self.design_thumb_queue.retain(|p| wanted.contains(p));
+        for p in pages {
+            if !self.design_thumbs.contains_key(&p) {
+                self.design_thumbs.insert(p.clone(), Thumb::Queued);
+                self.design_thumb_queue.push_back(p);
+            }
+        }
+        if self.design_thumbs_running || self.design_thumb_queue.is_empty() {
+            return;
+        }
+        self.design_thumbs_running = true;
+        cx.spawn(async move |this, cx| loop {
+            let next = this
+                .update(cx, |s, _| {
+                    let next = s.design_thumb_queue.pop_front();
+                    if next.is_none() {
+                        s.design_thumbs_running = false;
+                    }
+                    next
+                })
+                .ok()
+                .flatten();
+            let Some(page) = next else { break };
+            let at = page.clone();
+            let got = cx
+                .background_spawn(async move { crate::design::export::thumbnail(&at) })
+                .await;
+            let alive = this.update(cx, |s, cx| {
+                // Still wanted (not dropped meanwhile)?
+                if let Some(t) = s.design_thumbs.get_mut(&page) {
+                    *t = match got {
+                        Ok(p) => Thumb::Ready(p),
+                        Err(_) => Thumb::Failed,
+                    };
+                    cx.notify();
+                }
+            });
+            if alive.is_err() {
+                break;
+            }
+        })
+        .detach();
+    }
+
+    /// Start a design from a gallery card: a new chat, set up with it (the
+    /// template, design system or skill, and the kind of work it is for),
+    /// and its ready-made request in the composer.
+    pub fn design_start_from(
+        &mut self,
+        kind: crate::design::library::Kind,
+        id: &str,
+        cx: &mut Context<Self>,
+    ) {
+        use crate::design::library::Kind;
+        use crate::design::prompt::{Setup, Surface};
+        let Some(ix) = self.design_index.clone() else { return };
+        let Some(e) = ix.get(kind, id) else { return };
+        let surface = match e.mode.as_deref() {
+            Some("deck") => Surface::Deck,
+            Some("prototype") => Surface::Prototype,
+            Some("image") => Surface::Marketing,
+            Some("video") => Surface::Video,
+            _ => Surface::Any,
+        };
+        let mut setup = Setup {
+            surface,
+            ..Setup::default()
+        };
+        // An example starts from what it was made with.
+        let (kind, id) = match (kind, &e.twin, &e.parent) {
+            (Kind::Example, Some((k, i)), _) => (*k, i.clone()),
+            (Kind::Example, None, Some(parent)) => (Kind::Template, parent.clone()),
+            _ => (kind, e.id.clone()),
+        };
+        match kind {
+            Kind::Template => setup.template = Some(id),
+            Kind::Skill => setup.skill = Some(id),
+            Kind::DesignSystem => setup.system = Some(id),
+            _ => {}
+        }
+        let ask = match (&e.query, e.kind) {
+            (_, Some(Kind::DesignSystem)) => format!(
+                "Make a landing page in the {} design system.",
+                e.title
+            ),
+            (Some(q), _) => q.clone(),
+            _ if !e.example_prompt.trim().is_empty() => e.example_prompt.clone(),
+            _ => format!("Make something like {}.", e.title),
+        };
+        self.new_chat(cx);
+        self.set_design(Some(setup), cx);
+        self.draft = Some(ask);
+        cx.notify();
+    }
+
+    /// Show a gallery card's example page beside the gallery.
+    pub fn design_preview(&mut self, page: &std::path::Path, cx: &mut Context<Self>) {
+        self.design_show(page, cx);
+    }
+
     /// Read the library's index for design chats, once, off the main thread.
     fn design_load_index(&mut self, cx: &mut Context<Self>) {
         if std::mem::replace(&mut self.design_index_asked, true) {
@@ -5184,10 +5372,12 @@ impl AppState {
                     crate::design::root().map(|r| std::sync::Arc::new(crate::design::library::Index::load(&r)))
                 })
                 .await;
-            let _ = this.update(cx, |s, _| {
+            let _ = this.update(cx, |s, cx| {
                 if s.design_index.is_none() {
                     s.design_index = ix;
                 }
+                // The gallery and the composer's menu show it.
+                cx.notify();
             });
         })
         .detach();
