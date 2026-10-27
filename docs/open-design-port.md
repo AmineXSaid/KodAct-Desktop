@@ -497,6 +497,13 @@ screenshots in light and dark and a short report in `docs/` (as P1–P3 did).
   that shows still prints empty on the others.
 
 **D4: Figma**
+- Built: Save for Figma (the Share menu, the palette, `design_export` with
+  `figma`) runs the library's own clipper (`clipper/capture.js`) on the page
+  in the export browser (a deck laid out as for print, every slide), puts
+  every picture inside as a data URI, and writes `<page>.od-figma.json`,
+  which the shipped plugin (`design-library/figma-plugin`) rebuilds as
+  editable layers. The demo deck: 117 ms warm. Not yet: imported in Figma
+  itself (needs the desktop app); `.fig` import.
 - `capture.js` → IR (validated against `figma-plugin/IR.md`), the
   `.od-figma.json` export, and the plugin shipped with its install steps.
 - `.fig` import (`design/fig.rs`).

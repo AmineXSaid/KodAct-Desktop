@@ -832,6 +832,7 @@ pub fn render(
                 (Format::Pptx, "share-pptx", "icons/presentation.svg", "Save as PowerPoint", deck.is_some()),
                 (Format::PptxEditable, "share-pptx-edit", "icons/file-pen.svg", "Save as editable PowerPoint", deck.is_some()),
                 (Format::Html, "share-html", "icons/file-code.svg", "Save as one HTML file", true),
+                (Format::Figma, "share-figma", "icons/layers.svg", "Save for Figma (editable layers)", true),
             ]
             .into_iter()
             .filter(|r| r.4)

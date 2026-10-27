@@ -173,6 +173,7 @@ gpui::actions!(
         SavePagePptx,
         SavePagePptxEditable,
         SavePageHtml,
+        SavePageFigma,
         NewDesignPage,
         CommentTool,
         LayoutGuides,

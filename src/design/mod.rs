@@ -118,3 +118,8 @@ fn attach_console() {
         AttachConsole(ATTACH_PARENT_PROCESS);
     }
 }
+
+/// A `file://` address's path, its %-escapes decoded.
+pub fn inline_path(url_path: &str) -> std::path::PathBuf {
+    std::path::PathBuf::from(inline::decode(url_path.split(['?', '#']).next().unwrap_or(url_path)))
+}

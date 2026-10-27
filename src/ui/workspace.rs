@@ -980,6 +980,9 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &SavePagePptxEditable, _, cx| {
                 this.state.update(cx, |s, cx| s.design_export(crate::design::export::Format::PptxEditable, cx))
             }))
+            .on_action(cx.listener(|this, _: &SavePageFigma, _, cx| {
+                this.state.update(cx, |s, cx| s.design_export(crate::design::export::Format::Figma, cx))
+            }))
             .on_action(cx.listener(|this, _: &SavePageHtml, _, cx| {
                 this.state.update(cx, |s, cx| s.design_export(crate::design::export::Format::Html, cx))
             }))

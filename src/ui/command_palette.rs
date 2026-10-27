@@ -661,6 +661,7 @@ impl CommandPalette {
                 act("Save the deck as PowerPoint", "icons/presentation.svg", None, Box::new(SavePagePptx)),
                 act("Save the deck as editable PowerPoint", "icons/file-pen.svg", None, Box::new(SavePagePptxEditable)),
                 act("Save the page as one HTML file", "icons/file-code.svg", None, Box::new(SavePageHtml)),
+                act("Save the page for Figma (editable layers)", "icons/layers.svg", None, Box::new(SavePageFigma)),
             ]);
         }
         if s.design_on_screen().is_some() {

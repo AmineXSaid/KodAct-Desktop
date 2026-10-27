@@ -19,6 +19,11 @@ struct Source<'a> {
     missing: Vec<String>,
 }
 
+/// A file's media type, by its name.
+pub fn mime_of(name: &str) -> &'static str {
+    mime(name)
+}
+
 fn mime(name: &str) -> &'static str {
     let ext = name
         .rsplit('.')
@@ -102,6 +107,11 @@ fn resolve(base: &Base, r: &str) -> Base {
             }
         }
     }
+}
+
+/// `%20` and the like, decoded.
+pub fn decode(s: &str) -> String {
+    percent_decode(s)
 }
 
 fn percent_decode(s: &str) -> String {

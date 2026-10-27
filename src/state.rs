@@ -4661,8 +4661,13 @@ fix everything under 8, render it again to check, then tell me the scores before
                             0 => String::new(),
                             n => format!(" {n} linked files weren't found and stay links."),
                         };
+                        let figma = if format == crate::design::export::Format::Figma {
+                            " Import it in Figma with the OD Figma Import plugin (design-library/figma-plugin)."
+                        } else {
+                            ""
+                        };
                         format!(
-                            "Saved {what} beside the page in {}.{missing}",
+                            "Saved {what} beside the page in {}.{missing}{figma}",
                             crate::design::export::took(d.took)
                         )
                     }

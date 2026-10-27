@@ -33,15 +33,19 @@ pub enum Format {
     PptxEditable,
     /// One HTML file with everything it needs inside it.
     Html,
+    /// Open Design's Figma capture (`.od-figma.json`), rebuilt as editable
+    /// layers by its Figma plugin (`design-library/figma-plugin`).
+    Figma,
 }
 
 impl Format {
-    pub const ALL: [Format; 5] = [
+    pub const ALL: [Format; 6] = [
         Format::Pdf,
         Format::Png,
         Format::Pptx,
         Format::PptxEditable,
         Format::Html,
+        Format::Figma,
     ];
 
     pub fn slug(self) -> &'static str {
@@ -51,6 +55,7 @@ impl Format {
             Format::Pptx => "pptx",
             Format::PptxEditable => "pptx-editable",
             Format::Html => "html",
+            Format::Figma => "figma",
         }
     }
 
@@ -65,6 +70,7 @@ impl Format {
             Format::Pptx => "PowerPoint (pictures)",
             Format::PptxEditable => "PowerPoint (editable text)",
             Format::Html => "Single HTML file",
+            Format::Figma => "Figma layers",
         }
     }
 
@@ -75,6 +81,7 @@ impl Format {
             Format::Png => "png",
             Format::Pptx | Format::PptxEditable => "pptx",
             Format::Html => "html",
+            Format::Figma => "od-figma.json",
         }
     }
 }
@@ -666,6 +673,54 @@ impl Chrome {
         match (format, &deck) {
             // Made without the browser (`export`).
             (Format::Html, _) => Err(Failure::Page("not a browser export".into())),
+            (Format::Figma, _) => {
+                // A deck's slides all laid out, one under another.
+                if deck.is_some() {
+                    self.call(
+                        ss,
+                        "Emulation.setEmulatedMedia",
+                        json!({ "media": "print" }),
+                    )?;
+                }
+                let lib = crate::design::root().ok_or_else(|| {
+                    Failure::Page("Figma export needs Forge's design library (its clipper).".into())
+                })?;
+                let clipper =
+                    std::fs::read_to_string(lib.join("clipper/capture.js")).map_err(|e| {
+                        Failure::Page(format!("The clipper isn't in the design library: {e}"))
+                    })?;
+                self.eval(s, &clipper)?;
+                let got = self.eval(
+                    s,
+                    "(() => { const c = window.__odCapture({ includeImages: true }); return JSON.stringify({ ir: c.figmaIr, nodes: c.figmaNodeCount, cut: c.figmaTruncated }); })()",
+                )?;
+                let got: Value = got
+                    .as_str()
+                    .and_then(|j| serde_json::from_str(j).ok())
+                    .ok_or_else(|| "the capture gave nothing".to_string())?;
+                let mut ir = got["ir"].clone();
+                if ir.is_null() {
+                    return Err(Failure::Page(
+                        "The page couldn't be captured for Figma.".into(),
+                    ));
+                }
+                let base = page.parent().map(Path::to_path_buf).unwrap_or_default();
+                let missing = inline_images(&mut ir, &base);
+                let json = serde_json::to_string(&ir).map_err(|e| page_err(e.to_string()))?;
+                std::fs::write(to, json).map_err(|e| page_err(e.to_string()))?;
+                let mut d = done(to.to_path_buf(), 1);
+                d.notes = missing
+                    .into_iter()
+                    .map(|m| format!("a picture that couldn't be read, left out: {m}"))
+                    .collect();
+                if got["cut"].as_bool() == Some(true) {
+                    d.notes.push(format!(
+                        "The page is large: the capture stopped at {} layers.",
+                        got["nodes"]
+                    ));
+                }
+                Ok(d)
+            }
             (Format::Pdf, _) => {
                 let r = self.call(
                     ss,
@@ -781,6 +836,65 @@ impl Chrome {
     }
 }
 
+/// Put a Figma capture's pictures inside it: each IMAGE fill's `url` read
+/// (a file beside the page, or from the web) and replaced by a `dataUri`,
+/// as the plugin expects. Returns the ones that couldn't be read (their
+/// fills are dropped).
+fn inline_images(node: &mut Value, base: &Path) -> Vec<String> {
+    let mut missing = vec![];
+    fn walk(v: &mut Value, base: &Path, missing: &mut Vec<String>) {
+        match v {
+            Value::Object(map) => {
+                if let Some(Value::Array(fills)) = map.get_mut("fills") {
+                    fills.retain_mut(|f| {
+                        let Some(url) = f.get("url").and_then(Value::as_str).map(str::to_string)
+                        else {
+                            return true;
+                        };
+                        let bytes = if let Some(rest) = url.strip_prefix("data:") {
+                            f["dataUri"] = Value::String(format!("data:{rest}"));
+                            f.as_object_mut().map(|o| o.remove("url"));
+                            return true;
+                        } else if let Some(path) = url.strip_prefix("file://") {
+                            std::fs::read(super::inline_path(path)).ok()
+                        } else if url.starts_with("http") {
+                            fetch(&url)
+                        } else {
+                            std::fs::read(base.join(&url)).ok()
+                        };
+                        match bytes {
+                            Some(b) => {
+                                let kind = super::inline::mime_of(&url);
+                                f["dataUri"] = Value::String(format!(
+                                    "data:{kind};base64,{}",
+                                    crate::attach::base64(&b)
+                                ));
+                                f.as_object_mut().map(|o| o.remove("url"));
+                                true
+                            }
+                            None => {
+                                missing.push(url);
+                                false
+                            }
+                        }
+                    });
+                }
+                for (_, child) in map.iter_mut() {
+                    walk(child, base, missing);
+                }
+            }
+            Value::Array(items) => {
+                for i in items {
+                    walk(i, base, missing);
+                }
+            }
+            _ => {}
+        }
+    }
+    walk(node, base, &mut missing);
+    missing
+}
+
 /// The slide pictures' count and size in a `.pptx`, read back: for tests
 /// and for the tool's answer.
 pub fn pptx_summary(bytes: &[u8]) -> Result<(usize, usize), String> {
@@ -884,6 +998,27 @@ mod tests {
         assert!(t.elapsed() < Duration::from_millis(50));
         eprintln!("a thumbnail {first_thumb:?}");
         let _ = std::fs::remove_file(&th);
+        // Figma: the plugin's IR, every picture inside it.
+        let fig = export(&deck(), Format::Figma, &dir.join("deck.od-figma.json")).unwrap();
+        let ir: Value = serde_json::from_str(&std::fs::read_to_string(&fig.path).unwrap()).unwrap();
+        assert_eq!(ir["version"], 1);
+        assert_eq!(ir["root"]["type"], "FRAME");
+        let text = ir.to_string();
+        assert!(text.contains("\"type\":\"TEXT\""));
+        assert!(text.contains("Design Systems 101"));
+        fn linked(v: &Value) -> bool {
+            match v {
+                Value::Object(m) => {
+                    m.get("fills").and_then(Value::as_array).is_some_and(|f| {
+                        f.iter()
+                            .any(|p| p["type"] == "IMAGE" && p.get("url").is_some())
+                    }) || m.values().any(linked)
+                }
+                Value::Array(a) => a.iter().any(linked),
+                _ => false,
+            }
+        }
+        assert!(!linked(&ir["root"]), "a picture left as a link");
         // A brand, captured from the demo deck as if it were a site.
         let c = capture(&crate::design::live::file_url(&deck()), &dir).unwrap();
         let md = std::fs::read_to_string(c.folder.join("DESIGN.md")).unwrap();
