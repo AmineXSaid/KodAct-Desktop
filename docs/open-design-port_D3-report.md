@@ -1,4 +1,4 @@
-# Open Design in Forge: D3 to D5 report
+# Open Design in Forge: D3 to D7 report
 
 What Open Design does, where it is in Forge now, and how fast. All of it was
 run on Linux (headless Chromium 1194, the demo deck of six slides) and checked
@@ -23,6 +23,10 @@ in screenshots in light and dark. Nothing here has been run on Windows yet;
 | Export PPTX (pictures and editable) | Written from scratch; editable text boxes over a text-free picture; speaker notes | `design/pptx.rs` |
 | Export single HTML | Styles, imports, scripts, pictures, fonts and media inline | `design/inline.rs` |
 | Figma | `.od-figma.json` from the library's clipper, for the shipped plugin | Share menu, `design/export.rs` |
+| `.fig` import | Pages, frames, fills, strokes, corners, shadows, text and pictures rebuilt as HTML | `design/fig.rs`; gallery "Open a Figma file…", `design_import_fig` |
+| GenUI forms (discovery questions, direction picker) | Forge's questions as a clickable form; answers go back to the agent | `ui/question_form.rs` |
+| Media: images, video, audio | `design_image` (OpenAI or fal), `design_media` (fal video, ElevenLabs narration), your own keys | `design/services.rs` |
+| Deploy | `design_deploy`: Vercel, one self-contained file | `design/services.rs` |
 | Versions, undo and redo of a page | Kept per page | design bar |
 | Present | The page fills the window, slide by slide | F11 |
 
@@ -63,17 +67,24 @@ finished at once.
 
 ## Not done or not checked
 
-- **Windows:** not run there.
-- **PowerPoint and Figma:** the PPTX hasn't been opened in PowerPoint; the
-  Figma file hasn't been imported in Figma (that needs the desktop app).
-- **Network:** a live site couldn't be captured here, because this
-  sandbox's proxy refuses the browser's tunnel. Capture was checked on a
-  local page.
-- **Not built yet:**
-  - media generation (images, video, audio with your own keys);
-  - deploy to Vercel or Cloudflare;
-  - GenUI forms (`design_ask`);
-  - `.fig` import;
+- **Windows:** not run there (`cargo check` for Windows passes). This container
+  has no Windows or Wine, and GPUI draws with DirectX there.
+- **A real model:** design chats were checked at the wire (the prompt and
+  tools ForgeCLI is given, the answers they return) and with the demo. They
+  weren't driven by a model here: the only model access in this container
+  is the session's own, which isn't Forge's to use.
+- **Real outside services:** OpenAI, fal, ElevenLabs and Vercel were
+  checked against mock servers that answer as their APIs do, not the
+  services themselves. That needs your keys.
+- **Brand from a live site:** it loaded github.com live, but this
+  sandbox's proxy blocks the site's stylesheet host. Capture now detects
+  that and warns, rather than reporting an unstyled page as the brand.
+- **Real Figma and PowerPoint files:** `.fig` import is tested on files
+  the tests write, not one saved by Figma. The PPTX hasn't been opened in
+  PowerPoint, and the Figma export hasn't been imported in Figma.
+- **Not built:**
+  - Cloudflare Pages, beside Vercel;
+  - vector paths from `.fig` files (a vector shows as its box);
   - the deck thumbnail rail;
   - Open Design's routines, translations and pets.
 - **Charts:** a chart drawn only on the slide that shows still prints empty
