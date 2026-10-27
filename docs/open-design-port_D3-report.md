@@ -1,0 +1,80 @@
+# Open Design in Forge: D3 to D5 report
+
+What Open Design does, where it is in Forge now, and how fast. All of it was
+run on Linux (headless Chromium 1194, the demo deck of six slides) and checked
+in screenshots in light and dark. Nothing here has been run on Windows yet;
+`cargo check --target x86_64-pc-windows-gnu` passes.
+
+## Open Design's features, and Forge's
+
+| Open Design | In Forge | Where |
+|:--|:--|:--|
+| The library: skills, templates, examples, design systems, craft | All of it, indexed: 169 skills, 126 templates, 188 examples, 152 design systems, 11 craft rules | `design/library.rs`, `design-library/` |
+| Home gallery to start from | Design screen: searchable cards with pictures, Preview beside it, Use starts a set-up design chat | `ui/design_home.rs` (Ctrl/⌘ Shift D) |
+| Design chat setup: surface, design system, template, skill | The composer's design chip | `ui/design_chips.rs` |
+| The design prompt | Charter, task profile, design system, craft, skill, template | `design/prompt.rs` |
+| `od` tools for the agent | `design_search`, `design_read`, `design_render`, `design_lint`, `design_export`, `design_capture` | `design_mcp.rs` |
+| Live preview while it designs | The side panel shows each page as it is written | `design/live.rs`, `web_view.rs` |
+| Comments on any part, drawing on the page | The design bar's comment tool, pins, marks | `ui/design_bar.rs`, `ui/design_comment.rs`, `ui/design_marks.rs` |
+| Critique | "Ask Forge to review the page": the five-part review, scored and fixed | Comments menu, palette |
+| Brand from URL | `design_capture`: a site's colours, type, corners, button, logo into `brand/<host>/DESIGN.md` and `tokens.css` | `design/capture.rs`; gallery "From a website…" |
+| Export PDF | A deck a slide a page | Share menu |
+| Export PNG | The page, or every slide | Share menu, `design/export.rs` |
+| Export PPTX (pictures and editable) | Written from scratch; editable text boxes over a text-free picture; speaker notes | `design/pptx.rs` |
+| Export single HTML | Styles, imports, scripts, pictures, fonts and media inline | `design/inline.rs` |
+| Figma | `.od-figma.json` from the library's clipper, for the shipped plugin | Share menu, `design/export.rs` |
+| Versions, undo and redo of a page | Kept per page | design bar |
+| Present | The page fills the window, slide by slide | F11 |
+
+## Speed
+
+| What | Time |
+|:--|:--|
+| First export, starting its browser | 0.34 s |
+| A deck as PPTX, PDF or PNGs, warm | about 0.5 s each |
+| Editable PPTX of six slides, from the app | 0.5 s |
+| Single HTML file | a few ms |
+| Figma capture, warm | 0.12 s |
+| A gallery picture | 0.16 s, then cached (instant) |
+| `design_render`, six slides | 3.7 s → 0.53 s |
+| `design_render`, a page | 0.81 s → 0.26 s |
+
+Exports and pictures run in a headless Chromium of Forge's own. It starts when
+the Share menu or the gallery opens and stays up, so the panel the user
+watches never changes. It closes with the app; that was checked by looking
+for its processes after quitting. A deck is laid out once as for print, and
+every slide is captured where it lies: no stepping through slides, no waiting
+on their animations. `design_render` now waits for fonts and two drawn
+frames instead of fixed sleeps, and pictures slides with their transitions
+finished at once.
+
+## Checked
+
+- `cargo build` with no warnings. `cargo test`: 437 pass. The browser tests
+  (`cargo test -- --ignored design::export`) export every format, check that
+  the PDF's page count equals the slide count, read back the PPTX's slides
+  and text boxes, check the HTML for links outside the file and the Figma IR
+  for pictures still linked, and time a warm run.
+- The editable PPTX, drawn by LibreOffice, has its text where the slide had
+  it, over a picture without the text.
+- In the app: the Share menu's exports and their toasts, the gallery
+  (pictures fill in, Preview, Use, dark mode), the review row and the message
+  it sends.
+
+## Not done or not checked
+
+- **Windows:** not run there.
+- **PowerPoint and Figma:** the PPTX hasn't been opened in PowerPoint; the
+  Figma file hasn't been imported in Figma (that needs the desktop app).
+- **Network:** a live site couldn't be captured here, because this
+  sandbox's proxy refuses the browser's tunnel. Capture was checked on a
+  local page.
+- **Not built yet:**
+  - media generation (images, video, audio with your own keys);
+  - deploy to Vercel or Cloudflare;
+  - GenUI forms (`design_ask`);
+  - `.fig` import;
+  - the deck thumbnail rail;
+  - Open Design's routines, translations and pets.
+- **Charts:** a chart drawn only on the slide that shows still prints empty
+  on the other slides.
