@@ -16,7 +16,6 @@
 
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 use serde_json::{json, Value};
 
@@ -280,13 +279,21 @@ impl Tools {
             return Err(format!("The deck has {count} slides."));
         }
         let mut out = vec![];
-        for n in from..=to {
-            b.eval(&go_to_slide_js(n))?;
-            std::thread::sleep(Duration::from_millis(450));
-            let shot = b.run_step("screenshot", &json!({}))?;
-            out.push(json!({ "type": "text", "text": format!("Slide {n} of {count}:") }));
-            out.extend(shot.into_iter().filter(|c| c["type"] == "image"));
-        }
+        // Each slide as it ends up, at once: its transitions and entrance
+        // animations finish instantly while the pictures are taken.
+        b.eval(STILL_JS)?;
+        let mut shots = || -> Answer {
+            for n in from..=to {
+                b.eval(&format!("{} && {SETTLED_JS}", go_to_slide_js(n)))?;
+                let shot = b.run_step("screenshot", &json!({}))?;
+                out.push(json!({ "type": "text", "text": format!("Slide {n} of {count}:") }));
+                out.extend(shot.into_iter().filter(|c| c["type"] == "image"));
+            }
+            Ok(vec![])
+        };
+        let r = shots();
+        let _ = b.eval(MOVING_JS);
+        r?;
         Ok(out)
     }
 
@@ -332,10 +339,19 @@ fn show(b: &mut Browser, url: &str) -> Result<(), String> {
             b.run_step("new_tab", &json!({ "url": url }))?;
         }
     }
-    // Web fonts and first animations.
-    std::thread::sleep(Duration::from_millis(600));
+    // Web fonts in and the first frames drawn (not a fixed wait).
+    b.eval(SETTLED_JS)?;
     Ok(())
 }
+
+/// Resolves once fonts are in and two frames are drawn, or after 1.5 s.
+const SETTLED_JS: &str = "Promise.race([(document.fonts ? document.fonts.ready : Promise.resolve()).then(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))), new Promise(r => setTimeout(() => r(true), 1500))])";
+
+/// Transitions and animations end at once (for pictures of each slide).
+const STILL_JS: &str = "(() => { const st = document.createElement('style'); st.id = 'forge-still'; st.textContent = '*, *::before, *::after { transition-duration: 0s !important; transition-delay: 0s !important; animation-duration: 0s !important; animation-delay: 0s !important; scroll-behavior: auto !important; }'; document.head.appendChild(st); return true; })()";
+
+/// The page moves again.
+const MOVING_JS: &str = "document.getElementById('forge-still')?.remove()";
 
 /// How many slides the page has (`live::deck_slides`: an overview's
 /// copies, added later in the page, aren't counted).
