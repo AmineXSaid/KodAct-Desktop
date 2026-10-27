@@ -480,6 +480,21 @@ screenshots in light and dark and a short report in `docs/` (as P1–P3 did).
   - a PPTX reads back (zip + XML) and renders in the panel;
   - the HTML has no external references.
 - Windows: open the PPTX in PowerPoint.
+- Built: `design/export.rs` (a headless Chromium of its own, started when
+  the Share menu opens and kept warm, closed with the app through
+  `--browser-guard`; a deck is laid out as for print and every slide
+  captured where it lies, with no stepping or waiting), `design/pptx.rs`
+  (PowerPoint written from scratch: a picture per slide, speaker notes from
+  `aside.notes`, and for the editable kind each text block as a text box
+  over a picture taken with the text hidden), `design/inline.rs` (one HTML
+  file: stylesheets, `@import`s, scripts, pictures, fonts and media inline,
+  web ones fetched). In the Share menu and the palette, and the agent's
+  `design_export` tool. Measured on the demo deck (6 slides, Linux): the
+  first export 0.3 s with the browser's start, then about 0.5 s each; one
+  HTML file in milliseconds. The editable PowerPoint, drawn by LibreOffice,
+  has its text where the slide had it.
+- Not yet: opened in PowerPoint on Windows; a chart drawn only on the slide
+  that shows still prints empty on the others.
 
 **D4: Figma**
 - `capture.js` → IR (validated against `figma-plugin/IR.md`), the

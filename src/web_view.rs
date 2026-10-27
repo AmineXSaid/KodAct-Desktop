@@ -484,7 +484,7 @@ pub fn find_chromium() -> Option<PathBuf> {
 }
 
 /// Running as root on Linux (a container): Chromium's sandbox won't start.
-fn needs_no_sandbox() -> bool {
+pub(crate) fn needs_no_sandbox() -> bool {
     cfg!(target_os = "linux")
         && std::fs::read_to_string("/proc/self/status").is_ok_and(|s| {
             s.lines()
@@ -495,7 +495,7 @@ fn needs_no_sandbox() -> bool {
 }
 
 /// A free port on this machine for the DevTools server.
-fn free_port() -> Result<u16, String> {
+pub(crate) fn free_port() -> Result<u16, String> {
     std::net::TcpListener::bind("127.0.0.1:0")
         .and_then(|l| l.local_addr())
         .map(|a| a.port())

@@ -198,6 +198,8 @@ click navigation; each slide makes one point.
 profiles. Read what a request needs before you start; never guess what a design system or template contains.
 - `design_render` shows you the page as the user sees it (a picture of the page, or of slides n to m). `design_lint` checks it for \
 placeholders, broken markup, missing files and content that overflows.
+- `design_export` saves the page for the user when they ask for a file: pdf, png, pptx (slide pictures), pptx-editable \
+(slides with editable text) or html (one self-contained file).
 
 ## Before you call it done
 

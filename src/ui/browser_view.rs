@@ -277,6 +277,10 @@ impl BrowserView {
 
     /// Open one of the design bar's menus, or close it.
     pub fn set_menu(&mut self, menu: Option<super::design_bar::Menu>, cx: &mut Context<Self>) {
+        // The exports' browser starts while you choose one.
+        if menu == Some(super::design_bar::Menu::Share) {
+            crate::design::export::warm_up();
+        }
         self.design_menu = menu;
         cx.notify();
     }

@@ -799,7 +799,8 @@ pub fn render(
         ));
 
     // Share: the page as a PDF, or as it is, elsewhere.
-    let share_menu = sheet(t, 240.)
+    use crate::design::export::Format;
+    let share_menu = sheet(t, 260.)
         .child(
             row(
                 t,
@@ -810,6 +811,21 @@ pub fn render(
                 false,
             )
             .on_click(act(Box::new(|s, cx| s.design_export_pdf(cx)))),
+        )
+        // The other exports (`design::export`), in a browser of their own.
+        .children(
+            [
+                (Format::Png, "share-png", "icons/image.svg", if deck.is_some() { "Save slides as PNG" } else { "Save as PNG" }, true),
+                (Format::Pptx, "share-pptx", "icons/presentation.svg", "Save as PowerPoint", deck.is_some()),
+                (Format::PptxEditable, "share-pptx-edit", "icons/file-pen.svg", "Save as editable PowerPoint", deck.is_some()),
+                (Format::Html, "share-html", "icons/file-code.svg", "Save as one HTML file", true),
+            ]
+            .into_iter()
+            .filter(|r| r.4)
+            .map(|(format, id, icon, label, _)| {
+                row(t, id, Some(icon), label, None, false)
+                    .on_click(act(Box::new(move |s, cx| s.design_export(format, cx))))
+            }),
         )
         .child(
             row(

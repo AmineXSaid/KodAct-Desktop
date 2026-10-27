@@ -58,6 +58,9 @@ fn tools() -> Vec<Value> {
                 "full_page": { "type": "boolean", "description": "The whole page scrolled, not only what fits the panel." } }), &["path"]),
         tool("design_lint", "Check a page before you call it done: placeholder text, a file cut short, broken markup, missing files, unpinned CDN links, a missing title or viewport; and, when the panel shows the page, content that overflows its slide or the window.",
             json!({ "path": { "type": "string", "description": "The page's HTML file: absolute, or from the project's folder." } }), &["path"]),
+        tool("design_export", "Export a page for the user: pdf (a deck prints a slide a page), png (the page, or each slide), pptx (each slide a picture), pptx-editable (each slide's text as PowerPoint text boxes over its picture), html (one self-contained file with its CSS, scripts, images and fonts inside). Saved beside the page; returns where.",
+            json!({ "path": { "type": "string", "description": "The page's HTML file: absolute, or from the project's folder." },
+                "format": { "type": "string", "enum": crate::design::export::Format::ALL.iter().map(|f| f.slug()).collect::<Vec<_>>() } }), &["path", "format"]),
     ]
 }
 
@@ -169,6 +172,41 @@ impl Tools {
                         .collect::<Vec<_>>()
                         .join("\n"),
                 ))
+            }
+            "design_export" => {
+                use crate::design::export::{self, Format};
+                let format = a["format"]
+                    .as_str()
+                    .and_then(Format::from_slug)
+                    .ok_or("format is one of pdf, png, pptx, pptx-editable, html")?;
+                let page = self.page(a)?;
+                if page.remote_dir.is_some() {
+                    return Err("Exports work on pages on this computer; this one is on the remote.".into());
+                }
+                let to = export::target(&page.shown, format);
+                let d = export::export(&page.shown, format, &to)?;
+                let mut lines = vec![format!(
+                    "Saved {} ({}{}) in {}.",
+                    d.path.display(),
+                    format.label(),
+                    if d.count > 1 { format!(", {} slides", d.count) } else { String::new() },
+                    export::took(d.took)
+                )];
+                if format == Format::PptxEditable {
+                    if let Ok((_, texts)) = std::fs::read(&d.path).map_err(|e| e.to_string()).and_then(|b| export::pptx_summary(&b)) {
+                        lines.push(format!("{texts} text boxes you can edit in PowerPoint."));
+                    }
+                }
+                if format == Format::Html {
+                    let left = std::fs::read_to_string(&d.path)
+                        .map(|h| crate::design::inline::outside_refs(&h))
+                        .unwrap_or_default();
+                    if !left.is_empty() {
+                        lines.push(format!("Still links outside the file: {}", left.join(", ")));
+                    }
+                }
+                lines.extend(d.notes);
+                Ok(text(lines.join("\n")))
             }
             _ => Err(format!("no tool {name}")),
         }
@@ -735,7 +773,8 @@ mod tests {
                 "design_search",
                 "design_read",
                 "design_render",
-                "design_lint"
+                "design_lint",
+                "design_export"
             ]
         );
         assert!(handle(

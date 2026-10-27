@@ -651,6 +651,10 @@ impl CommandPalette {
                     Box::new(Present),
                 ),
                 act("Save the page as PDF", "icons/file-down.svg", None, Box::new(SavePagePdf)),
+                act("Save the page as PNG", "icons/image.svg", None, Box::new(SavePagePng)),
+                act("Save the deck as PowerPoint", "icons/presentation.svg", None, Box::new(SavePagePptx)),
+                act("Save the deck as editable PowerPoint", "icons/file-pen.svg", None, Box::new(SavePagePptxEditable)),
+                act("Save the page as one HTML file", "icons/file-code.svg", None, Box::new(SavePageHtml)),
             ]);
         }
         if s.design_on_screen().is_some() {

@@ -13,13 +13,16 @@ and those comments come back to you.
 ## 1. Use the design tools when you have them
 
 In a design chat Forge gives you `design_search`, `design_read`,
-`design_render` and `design_lint` (as `mcp__forge-design__…`), and its design
+`design_render`, `design_lint` and `design_export` (as
+`mcp__forge-design__…`), and its design
 prompt with the craft for this kind of work.
 
 - `design_search` the library for a skill, template or design system that
   fits, and `design_read` it before you start. Never guess what one contains.
 - `design_render` the page to see it as the user does (a page, or slides n to
   m), and `design_lint` it before you call it done.
+- When the user wants a file, `design_export` it: PDF, PNG, PowerPoint
+  (pictures, or editable text) or one self-contained HTML file.
 
 Without those tools, this is an ordinary chat. Say once, in a line, that
 picking **Design** in the composer (beside the project) makes it a design

@@ -4,12 +4,15 @@
 //! prompt can be built from exactly what the run needs. The plan is
 //! `docs/open-design-port.md`.
 
+pub mod export;
 pub mod frontmatter;
+pub mod inline;
 pub mod library;
 pub mod lint;
 pub mod live;
 pub mod marks;
 pub mod od_subset;
+pub mod pptx;
 pub mod prompt;
 pub mod skill_meta;
 pub mod store;

@@ -4534,6 +4534,55 @@ impl AppState {
         self.web_send(crate::web_view::Cmd::Pdf(to), cx);
     }
 
+    /// Export the design page on screen (`design::export`): beside it, in a
+    /// browser of its own, so the panel doesn't change. Says where it went.
+    pub fn design_export(&mut self, format: crate::design::export::Format, cx: &mut Context<Self>) {
+        let Some(page) = self.design_on_screen() else {
+            self.show_toast("Open a design page to export it.", cx);
+            return;
+        };
+        if !page.is_file() {
+            self.show_toast("Only a page saved on this computer can be exported.", cx);
+            return;
+        }
+        let to = crate::design::export::target(&page, format);
+        self.show_toast(format!("Exporting as {}…", format.label()), cx);
+        cx.spawn(async move |this, cx| {
+            let r = cx
+                .background_spawn(async move { crate::design::export::export(&page, format, &to) })
+                .await;
+            let _ = this.update(cx, |s, cx| {
+                let say = match r {
+                    Ok(d) => {
+                        let name = d
+                            .path
+                            .file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_default();
+                        let what = if d.path.is_dir() {
+                            format!("{} slides in {name}", d.count)
+                        } else if d.count > 1 {
+                            format!("{name} ({} slides)", d.count)
+                        } else {
+                            name
+                        };
+                        let missing = match d.notes.len() {
+                            0 => String::new(),
+                            n => format!(" {n} linked files weren't found and stay links."),
+                        };
+                        format!(
+                            "Saved {what} beside the page in {}.{missing}",
+                            crate::design::export::took(d.took)
+                        )
+                    }
+                    Err(e) => format!("The {} export failed: {e}", format.label()),
+                };
+                s.show_toast(say, cx);
+            });
+        })
+        .detach();
+    }
+
     /// Zoom the browser's page: 1 is its own size.
     pub fn web_zoom_to(&mut self, zoom: f64, cx: &mut Context<Self>) {
         let zoom = zoom.clamp(0.25, 2.0);

@@ -954,6 +954,18 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &Present, _, cx| {
                 this.state.update(cx, |s, cx| s.set_presenting(!s.presenting, cx))
             }))
+            .on_action(cx.listener(|this, _: &SavePagePng, _, cx| {
+                this.state.update(cx, |s, cx| s.design_export(crate::design::export::Format::Png, cx))
+            }))
+            .on_action(cx.listener(|this, _: &SavePagePptx, _, cx| {
+                this.state.update(cx, |s, cx| s.design_export(crate::design::export::Format::Pptx, cx))
+            }))
+            .on_action(cx.listener(|this, _: &SavePagePptxEditable, _, cx| {
+                this.state.update(cx, |s, cx| s.design_export(crate::design::export::Format::PptxEditable, cx))
+            }))
+            .on_action(cx.listener(|this, _: &SavePageHtml, _, cx| {
+                this.state.update(cx, |s, cx| s.design_export(crate::design::export::Format::Html, cx))
+            }))
             .on_action(cx.listener(|this, _: &SavePagePdf, _, cx| {
                 this.state.update(cx, |s, cx| s.design_export_pdf(cx))
             }))
