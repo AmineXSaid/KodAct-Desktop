@@ -929,7 +929,7 @@ mod tests {
             "mkdir -p \"$1\" && cat > \"$1/index.html\" && : > \"$1/here.png\"",
             std::slice::from_ref(&dir),
             page.as_bytes(),
-            Duration::from_secs(30),
+            std::time::Duration::from_secs(30),
             &extra,
         )
         .unwrap();
@@ -988,7 +988,7 @@ mod tests {
             "rm -rf \"$1\"",
             &[dir],
             b"",
-            Duration::from_secs(30),
+            std::time::Duration::from_secs(30),
             &extra,
         )
         .unwrap();
