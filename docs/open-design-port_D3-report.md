@@ -1,4 +1,4 @@
-# Open Design in Forge: D3 to D7 report
+# Open Design in Forge: D3 to D8 report
 
 What Open Design does, where it is in Forge now, and how fast. All of it was
 run on Linux (headless Chromium 1194, the demo deck of six slides) and checked
@@ -28,6 +28,10 @@ in screenshots in light and dark. Nothing here has been run on Windows yet;
 | Media: images, video, audio | `design_image` (OpenAI or fal), `design_media` (fal video, ElevenLabs narration), your own keys | `design/services.rs` |
 | Deploy | `design_deploy`: Vercel or Cloudflare Pages (its direct upload), one self-contained file | `design/services.rs` |
 | Deck thumbnail rail | A deck's outline shows its slides as pictures; a click goes to the slide | `ui/browser_view.rs`, `export::slide_thumbs` |
+| Routines | Requests run on a schedule (hourly, daily, weekly), as new chats; `/routine <when>: <request>`; Design › Routines | `design/routines.rs` |
+| Pets | The library's animated companions beside the chat, in the chat's mood | `design/pets.rs`, `ui/pet.rs` |
+| Translations | English, French, Spanish, German for the design surfaces | `src/i18n.rs` |
+| Langfuse traces | Each reply to your own Langfuse, when its keys are set | `design/trace.rs` |
 | Versions, undo and redo of a page | Kept per page | design bar |
 | Present | The page fills the window, slide by slide | F11 |
 
@@ -83,6 +87,7 @@ finished at once.
 - **Real Figma and PowerPoint files:** `.fig` import is tested on files
   the tests write, not one saved by Figma. The PPTX hasn't been opened in
   PowerPoint, and the Figma export hasn't been imported in Figma.
-- **Not built:** Open Design's routines, translations and pets (D8).
+- **Not built:** other agent CLIs (Codex, Gemini, …) as engines, which the plan marks optional; Forge runs ForgeCLI.
+- **Translations:** English, French, Spanish and German cover the design surfaces; the rest of Forge's interface is still English.
 - **Charts:** a chart drawn only on the slide that shows still prints empty
   on the other slides.

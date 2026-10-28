@@ -21,6 +21,7 @@ pub mod prompt;
 pub mod routines;
 pub mod skill_meta;
 pub mod store;
+pub mod trace;
 
 use std::path::{Path, PathBuf};
 

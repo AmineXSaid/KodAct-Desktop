@@ -5720,6 +5720,41 @@ fix everything under 8, render it again to check, then tell me the scores before
         .detach();
     }
 
+    /// A chat's latest reply, as Langfuse traces it (`design::trace`).
+    fn trace_turn(&self, chat: usize) -> Option<crate::design::trace::Turn> {
+        let c = self.chats.iter().find(|c| c.id == chat)?;
+        let start = c.messages.iter().rposition(|m| matches!(m, Message::User { .. }))?;
+        let Message::User { text, .. } = &c.messages[start] else { return None };
+        let mut t = crate::design::trace::Turn {
+            chat: c.title.to_string(),
+            session: c.session.clone(),
+            input: text.to_string(),
+            model: self.active_profile().map(|p| p.model.clone()),
+            design: c.design.as_ref().and_then(|d| serde_json::to_value(d).ok()),
+            ..Default::default()
+        };
+        for m in &c.messages[start + 1..] {
+            match m {
+                Message::Assistant { blocks } => {
+                    for b in blocks {
+                        match b {
+                            Block::Text(x) => t.output.push_str(x),
+                            Block::Tool(call) => t.tools.push(format!("{:?} {}", call.kind, call.target)),
+                            _ => {}
+                        }
+                    }
+                }
+                Message::TurnEnd { seconds, usage } => {
+                    t.seconds = Some(*seconds);
+                    t.tokens = usage.as_ref().map(|u| (u.input + u.cache_read + u.cache_creation, u.output));
+                }
+                Message::Notice { error: true, .. } => t.failed = true,
+                _ => {}
+            }
+        }
+        Some(t)
+    }
+
     /// Show a gallery card's example page beside the gallery.
     pub fn design_preview(&mut self, page: &std::path::Path, cx: &mut Context<Self>) {
         self.design_show(page, cx);
@@ -9792,6 +9827,15 @@ impl AppState {
         if self.current != Some(chat) {
             if let Some(c) = self.chat_mut(chat) {
                 c.unread = true;
+            }
+        }
+        // Your Langfuse, when set up: the reply as a trace.
+        if crate::design::trace::target().is_some() {
+            if let Some(turn) = self.trace_turn(chat) {
+                cx.background_spawn(async move {
+                    let _ = crate::design::trace::send(&turn);
+                })
+                .detach();
             }
         }
         self.send_design_held(chat, cx);
