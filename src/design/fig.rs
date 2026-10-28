@@ -1186,6 +1186,41 @@ mod tests {
         out
     }
 
+    /// Files saved by Figma (`tests/fig`, from fig2sketch): every one opens,
+    /// with what it holds.
+    #[test]
+    fn real_figma_files_open() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fig");
+        let out = std::env::temp_dir().join(format!("forge-realfig-{}", std::process::id()));
+        let open = |name: &str| {
+            let to = out.join(format!("{name}.html"));
+            let t = std::time::Instant::now();
+            let pages = import(&dir.join(format!("{name}.fig")), &to).unwrap();
+            assert!(
+                t.elapsed() < std::time::Duration::from_secs(2),
+                "{name}: {:?}",
+                t.elapsed()
+            );
+            (pages, std::fs::read_to_string(&to).unwrap())
+        };
+        let (pages, html) = open("structure");
+        assert_eq!(pages, 1);
+        assert!(html.contains(">ABC</div>"), "its text");
+        assert!(
+            html.contains("url('data:image/png;base64,"),
+            "its pictures, from images/"
+        );
+        assert!(html.contains("transform:matrix("), "its rotated shapes");
+        assert!(html.contains("box-shadow:"), "its shadow");
+        let (_, html) = open("vector");
+        assert!(html.contains("<path d=\"M"), "its vector paths");
+        let (_, html) = open("corners");
+        assert!(html.contains("border-radius:"), "its corners");
+        let (pages, _) = open("prototyping");
+        assert_eq!(pages, 2);
+        let _ = std::fs::remove_dir_all(&out);
+    }
+
     #[test]
     fn vectors_are_drawn_from_their_paths() {
         let mut blob = vec![1u8];

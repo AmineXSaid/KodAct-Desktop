@@ -623,6 +623,45 @@ pub(crate) struct Conn {
     pub(crate) dialogs: Vec<String>,
 }
 
+/// Print the page to PDF, read back in pieces: a large PDF in one message
+/// trips the WebSocket reader, so Chrome hands it over as a stream.
+pub(crate) fn print_pdf(
+    c: &mut Conn,
+    s: Option<&str>,
+    events: &mut Vec<Value>,
+) -> Result<Vec<u8>, String> {
+    let r = c.call(
+        s,
+        "Page.printToPDF",
+        json!({ "printBackground": true, "preferCSSPageSize": true, "transferMode": "ReturnAsStream" }),
+        events,
+    )?;
+    let handle = r["stream"]
+        .as_str()
+        .ok_or("the browser gave no PDF")?
+        .to_string();
+    let mut out = vec![];
+    loop {
+        let r = c.call(s, "IO.read", json!({ "handle": handle, "size": 512 * 1024 }), events)?;
+        let data = r["data"].as_str().unwrap_or("");
+        // The last piece can be empty, with end of file.
+        if data.is_empty() {
+        } else if r["base64Encoded"].as_bool() == Some(true) {
+            out.extend(crate::browser::decode_base64(data).ok_or("the PDF came back unreadable")?);
+        } else {
+            out.extend_from_slice(data.as_bytes());
+        }
+        if r["eof"].as_bool() != Some(false) {
+            break;
+        }
+    }
+    let _ = c.call(s, "IO.close", json!({ "handle": handle }), events);
+    if out.is_empty() {
+        return Err("the browser gave an empty PDF".into());
+    }
+    Ok(out)
+}
+
 /// Connect to a DevTools WebSocket (`ws://127.0.0.1:<port>/devtools/…`).
 pub(crate) fn connect(ws_url: &str) -> Result<Conn, String> {
     let host = ws_url
@@ -643,6 +682,14 @@ pub(crate) fn connect(ws_url: &str) -> Result<Conn, String> {
 }
 
 impl Conn {
+    /// How long a read waits for the next message before saying none came.
+    pub(crate) fn set_read_timeout(&self, wait: Duration) -> Result<(), String> {
+        self.ws
+            .get_ref()
+            .set_read_timeout(Some(wait))
+            .map_err(|e| e.to_string())
+    }
+
     pub(crate) fn send(
         &mut self,
         session: Option<&str>,
@@ -1222,19 +1269,7 @@ fn devtools(
                         json!({ "expression": crate::design::live::DECK_PRINT_JS, "returnByValue": true }),
                         &mut events,
                     );
-                    let printed = c
-                        .call(
-                            s,
-                            "Page.printToPDF",
-                            json!({ "printBackground": true, "preferCSSPageSize": true }),
-                            &mut events,
-                        )
-                        .and_then(|r| {
-                            r["data"]
-                                .as_str()
-                                .and_then(crate::browser::decode_base64)
-                                .ok_or_else(|| "the browser gave no PDF".to_string())
-                        })
+                    let printed = print_pdf(&mut c, s, &mut events)
                         .and_then(|pdf| std::fs::write(&to, pdf).map_err(|e| e.to_string()))
                         .map(|()| to);
                     let _ = c.call(

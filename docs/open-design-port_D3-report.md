@@ -57,6 +57,20 @@ on their animations. `design_render` now waits for fonts and two drawn
 frames instead of fixed sleeps, and pictures slides with their transitions
 finished at once.
 
+## On real content
+
+- **The library's own decks and pages:** 24 picked at random, each exported as PDF, PNG, PowerPoint (decks) and one HTML file: 96 exports, none failed. Times on Linux, debug build:
+
+  | Export | Median | 90th percentile | Slowest |
+  |:--|--:|--:|--:|
+  | PDF | 467 ms | 1.1 s | 3.0 s |
+  | PNG | 884 ms | 1.8 s | 6.0 s |
+  | PowerPoint | 1.0 s | 1.8 s | 6.2 s |
+  | Single HTML | 3 ms | 15 ms | 32 ms |
+
+  The slowest was a pixel-art deck whose PDF is 20 MB. That deck crashed the export (a single 27 MB WebSocket message trips `tungstenite`'s reader), so PDFs now come back from Chrome as a stream, in half-megabyte pieces. The panel's own Save as PDF uses the same path. Two real decks' editable PowerPoints, drawn by LibreOffice, have their text where the slides had it.
+- **Figma files saved by Figma:** ten from fig2sketch's test data (MIT) all open: vectors, corners, sections, prototypes, components, broken images. Four are kept in `tests/fig` with a test of their pictures, text, rotation, shadows, vector paths and pages.
+
 ## Checked
 
 - `cargo build` with no warnings. `cargo test`: 437 pass. The browser tests

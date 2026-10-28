@@ -578,6 +578,10 @@ impl Chrome {
             std::thread::sleep(Duration::from_millis(100));
         };
         let mut conn = crate::web_view::connect(&ws)?;
+        // Waits of its own (no frames to keep up with): a large answer (a
+        // PDF, a long page's picture) arrives in one read, not cut by a
+        // timeout mid-frame, which the WebSocket reader doesn't survive.
+        conn.set_read_timeout(Duration::from_secs(5))?;
         // A page's alert or confirm would hold the export.
         conn.answer_dialogs = Some(false);
         Ok(Chrome {
@@ -803,15 +807,8 @@ impl Chrome {
                 Ok(d)
             }
             (Format::Pdf, _) => {
-                let r = self.call(
-                    ss,
-                    "Page.printToPDF",
-                    json!({ "printBackground": true, "preferCSSPageSize": true }),
-                )?;
-                let pdf = r["data"]
-                    .as_str()
-                    .and_then(crate::browser::decode_base64)
-                    .ok_or_else(|| "the browser gave no PDF".to_string())?;
+                let mut ev = vec![];
+                let pdf = crate::web_view::print_pdf(&mut self.conn, ss, &mut ev)?;
                 std::fs::write(to, &pdf).map_err(|e| page_err(e.to_string()))?;
                 let count = deck
                     .as_ref()
