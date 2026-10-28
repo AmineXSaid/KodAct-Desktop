@@ -1296,11 +1296,11 @@ impl Render for BrowserView {
                 .border_r_1()
                 .border_color(t.colors.border)
                 .child(
-                    div()
-                        .px(t.space.xs)
-                        .text_size(t.text.caption)
-                        .text_color(t.colors.text_subtle)
-                        .child(format!("{} · {count}", crate::i18n::tr("Slides"))),
+                    crate::theme::section_label(
+                        &t,
+                        &format!("{} · {count}", crate::i18n::tr("Slides")),
+                    )
+                    .px(t.space.xs),
                 )
                 .children((1..=count).map(|n| {
                     let state = self.state.clone();
@@ -1357,14 +1357,7 @@ impl Render for BrowserView {
                 .bg(t.colors.surface)
                 .border_r_1()
                 .border_color(t.colors.border)
-                .child(
-                    div()
-                        .px(t.space.sm)
-                        .pb(t.space.xs)
-                        .text_size(t.text.caption)
-                        .text_color(t.colors.text_subtle)
-                        .child("Outline"),
-                )
+                .child(crate::theme::section_label(&t, "Outline").px(t.space.sm).pb(t.space.xs))
                 .when(empty, |d| {
                     d.child(
                         div()
@@ -1521,7 +1514,8 @@ fn present_controls(t: &Theme, cx: &Context<BrowserView>) -> impl IntoElement {
         .right_0()
         .flex()
         .justify_center()
-        .child(
+        // It rises into place, as the app's floating bars do.
+        .child(super::motion::rise_in(
             crate::theme::popover(t)
                 .occlude()
                 .flex()
@@ -1534,7 +1528,10 @@ fn present_controls(t: &Theme, cx: &Context<BrowserView>) -> impl IntoElement {
                         .id("present-exit")
                         .on_click(|_, window, cx| window.dispatch_action(Box::new(super::Present), cx)),
                 ),
-        )
+            "present-controls",
+            6.,
+            t,
+        ))
 }
 
 /// A dialog the page opened, as a card over the page: what it says, and

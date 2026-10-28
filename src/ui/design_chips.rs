@@ -104,13 +104,8 @@ pub fn menu(
     let surface = setup.as_ref().map(|d| d.surface);
     let hover = t.colors.hover;
 
-    // The tabs.
-    let mut tabs = div()
-        .flex()
-        .items_center()
-        .gap(t.space.xs)
-        .px(t.space.sm)
-        .pb(t.space.tight);
+    // The tabs: one choice on a track, as the app's other views.
+    let mut seg = super::button::Segmented::new("design-tabs", "Design chat");
     for (tb, name) in [
         (DesignTab::Work, "Work"),
         (DesignTab::Look, "Look"),
@@ -118,33 +113,11 @@ pub fn menu(
         (DesignTab::Skill, "Skill"),
     ] {
         let st = state.clone();
-        let picked = tb == tab;
-        tabs = tabs.child(
-            div()
-                .id(SharedString::from(format!("design-tab-{name}")))
-                .px(t.space.sm)
-                .h(t.size.button_sm)
-                .flex()
-                .items_center()
-                .rounded(t.radius.compact)
-                .text_size(t.text.caption)
-                .cursor_pointer()
-                .text_color(if picked {
-                    t.colors.text_strong
-                } else {
-                    t.colors.text_muted
-                })
-                .map(|d| {
-                    if picked {
-                        crate::theme::selected(t, d)
-                    } else {
-                        d.hover(move |st| st.bg(hover))
-                    }
-                })
-                .child(name)
-                .on_click(move |_, _, cx| st.update(cx, |s, cx| s.design_menu_to(Some(tb), cx))),
-        );
+        seg = seg.option(name, tb == tab, move |_, _, cx| {
+            st.update(cx, |s, cx| s.design_menu_to(Some(tb), cx))
+        });
     }
+    let tabs = div().px(t.space.sm).pb(t.space.tight).flex().child(seg);
 
     let row = |id: SharedString, title: SharedString, sub: Option<SharedString>, picked: bool| {
         div()
