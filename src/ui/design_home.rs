@@ -105,7 +105,7 @@ fn card(
             Some(Thumb::Queued) => div()
                 .text_size(t.text.caption)
                 .text_color(t.colors.text_subtle)
-                .child("Drawing…")
+                .child(crate::i18n::tr("Drawing…"))
                 .into_any_element(),
             _ => icon(
                 match kind {
@@ -120,14 +120,14 @@ fn card(
         });
     let use_it = {
         let (state, id) = (state.clone(), id.clone());
-        theme::text_button(t, "Use")
+        theme::text_button(t, crate::i18n::tr("Use"))
             .id(SharedString::from(format!("use-{kind:?}-{id}")))
             .text_color(t.colors.primary)
             .on_click(move |_, _, cx| state.update(cx, |s, cx| s.design_start_from(kind, &id, cx)))
     };
     let look = preview.map(|p| {
         let state = state.clone();
-        theme::text_button(t, "Preview")
+        theme::text_button(t, crate::i18n::tr("Preview"))
             .id(SharedString::from(format!("look-{kind:?}-{id}")))
             .on_click(move |_, _, cx| state.update(cx, |s, cx| s.design_preview(&p, cx)))
     });
@@ -207,14 +207,14 @@ impl Render for DesignHome {
                             .font_weight(t.display_weight)
                             .text_size(t.size.greeting)
                             .text_color(t.colors.text_strong)
-                            .child("Design"),
+                            .child(crate::i18n::tr("Design")),
                     )
                     .child(
                         div()
                             .font_family(t.font_serif.clone())
                             .text_size(t.text.subheading)
                             .text_color(t.colors.text_body)
-                            .child("Start from a template, an example, a design system or a skill. Forge sets up the chat, and the page shows beside it as it's made."),
+                            .child(crate::i18n::tr("Start from a template, an example, a design system or a skill. Forge sets up the chat, and the page shows beside it as it's made.")),
                     ),
             );
 
@@ -252,7 +252,7 @@ impl Render for DesignHome {
                     div()
                         .text_color(t.colors.text_muted)
                         .child(if crate::design::root().is_some() {
-                            "Reading the design library…"
+                            crate::i18n::tr("Reading the design library…")
                         } else {
                             "Forge's design library isn't installed: put design-library beside Forge, or set FORGE_DESIGN_LIB."
                         }),
@@ -339,7 +339,7 @@ impl Render for DesignHome {
         // A Figma file, opened as a page to keep designing.
         let from_figma = {
             let st = state.clone();
-            theme::ghost_button(&t, "Open a Figma file…")
+            theme::ghost_button(&t, crate::i18n::tr("Open a Figma file…"))
                 .id("gallery-figma")
                 .on_click(move |_, _, cx| {
                     let picked = cx.prompt_for_paths(gpui::PathPromptOptions {
@@ -362,7 +362,7 @@ impl Render for DesignHome {
         // A design system of your own, from a website.
         let from_site = (tab == GalleryTab::Systems).then(|| {
             let st = state.clone();
-            theme::ghost_button(&t, "From a website…")
+            theme::ghost_button(&t, crate::i18n::tr("From a website…"))
                 .id("gallery-from-site")
                 .on_click(move |_, _, cx| st.update(cx, |s, cx| s.design_from_website(cx)))
         });
@@ -372,7 +372,7 @@ impl Render for DesignHome {
             .map(|(e, (p, pic))| card(&t, card_w, e, pic.as_ref(), p, &state))
             .collect();
         let more = (total > self.shown).then(|| {
-            theme::ghost_button(&t, format!("Show more ({} left)", total - self.shown))
+            theme::ghost_button(&t, format!("{} ({} {})", crate::i18n::tr("Show more"), total - self.shown, crate::i18n::tr("left")))
                 .id("gallery-more")
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.shown += PAGE;
@@ -382,7 +382,7 @@ impl Render for DesignHome {
         let empty = (total == 0).then(|| {
             div()
                 .text_color(t.colors.text_muted)
-                .child(format!("Nothing in {} matches \"{query}\".", tab.label()))
+                .child(format!("{}: {} · \"{query}\"", crate::i18n::tr("Nothing matches"), tab.label()))
         });
 
         div()

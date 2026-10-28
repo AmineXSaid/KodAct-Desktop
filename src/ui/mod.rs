@@ -143,6 +143,7 @@ gpui::actions!(
         OpenRules,
         OpenDesign,
         NextPet,
+        NextLanguage,
         HidePet,
         OpenProjects,
         EndpointGuide,

@@ -28,6 +28,7 @@ mod downloads;
 mod endpoints;
 mod export;
 mod fonts;
+mod i18n;
 mod forge_files;
 mod git_status;
 mod greeting;
@@ -193,6 +194,7 @@ fn main() {
         return;
     }
     log_crashes();
+    i18n::init();
     gpui::application()
         .with_assets(assets::Assets)
         .run(|cx: &mut App| {

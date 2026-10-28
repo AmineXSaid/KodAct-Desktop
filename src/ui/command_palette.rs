@@ -370,6 +370,17 @@ impl CommandPalette {
                 Box::new(OpenRules),
             ),
             act(
+                &format!(
+                    "{}: {} → {}",
+                    crate::i18n::tr("Language"),
+                    crate::i18n::lang().name(),
+                    next_lang().name()
+                ),
+                "icons/globe.svg",
+                None,
+                Box::new(NextLanguage),
+            ),
+            act(
                 if s.pet.is_some() { "Pet: the next one" } else { "Pet: a companion beside the chat" },
                 "icons/sparkles.svg",
                 None,
@@ -1705,4 +1716,20 @@ mod tests {
         assert_eq!(fuzzy("ch", "New chat").unwrap().1, vec![4, 5]);
         assert_eq!(fuzzy("", "anything").unwrap().1, Vec::<usize>::new());
     }
+}
+
+/// The language after the one in use.
+fn next_lang() -> crate::i18n::Lang {
+    use crate::i18n::Lang;
+    let now = crate::i18n::lang();
+    let i = Lang::ALL.iter().position(|l| *l == now).unwrap_or(0);
+    Lang::ALL[(i + 1) % Lang::ALL.len()]
+}
+
+/// Use the next language (from the palette).
+pub fn use_next_language(cx: &mut gpui::App) -> crate::i18n::Lang {
+    let next = next_lang();
+    let _ = crate::i18n::choose(next);
+    cx.refresh_windows();
+    next
 }

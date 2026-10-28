@@ -1295,7 +1295,7 @@ impl Render for BrowserView {
                         .px(t.space.xs)
                         .text_size(t.text.caption)
                         .text_color(t.colors.text_subtle)
-                        .child(format!("Slides · {count}")),
+                        .child(format!("{} · {count}", crate::i18n::tr("Slides"))),
                 )
                 .children((1..=count).map(|n| {
                     let state = self.state.clone();

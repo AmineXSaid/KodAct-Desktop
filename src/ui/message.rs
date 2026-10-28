@@ -1658,7 +1658,7 @@ fn permission(
     // Answered questions: what was asked, and what you said.
     if info.form.is_some() {
         let said: SharedString = match (verdict, &info.note) {
-            (Verdict::Denied, _) => "You didn't answer".into(),
+            (Verdict::Denied, _) => crate::i18n::tr("You didn't answer").into(),
             (_, Some(n)) => n.clone(),
             _ => "Answered".into(),
         };
@@ -1687,7 +1687,7 @@ fn permission(
                     .child(
                         div()
                             .text_color(t.colors.text_strong)
-                            .child(format!("You answered: {said}")),
+                            .child(format!("{}: {said}", crate::i18n::tr("You answered"))),
                     )
                     .child(
                         div()

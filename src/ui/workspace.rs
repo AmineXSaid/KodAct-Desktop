@@ -1270,6 +1270,12 @@ impl Render for Workspace {
                     cx.notify();
                 })
             }))
+            .on_action(cx.listener(|this, _: &NextLanguage, _, cx| {
+                let l = super::command_palette::use_next_language(cx);
+                this.state.update(cx, |s, cx| {
+                    s.show_toast(format!("{}: {}", crate::i18n::tr("Language"), l.name()), cx)
+                })
+            }))
             .on_action(cx.listener(|this, _: &NextPet, _, cx| {
                 this.state.update(cx, |s, cx| s.next_pet(cx))
             }))

@@ -948,10 +948,10 @@ impl GalleryTab {
 
     pub fn label(self) -> &'static str {
         match self {
-            GalleryTab::Templates => "Templates",
-            GalleryTab::Examples => "Examples",
-            GalleryTab::Systems => "Design systems",
-            GalleryTab::Skills => "Skills",
+            GalleryTab::Templates => crate::i18n::tr("Templates"),
+            GalleryTab::Examples => crate::i18n::tr("Examples"),
+            GalleryTab::Systems => crate::i18n::tr("Design systems"),
+            GalleryTab::Skills => crate::i18n::tr("Skills"),
         }
     }
 
@@ -4777,7 +4777,9 @@ fix everything under 8, render it again to check, then tell me the scores before
                             ""
                         };
                         format!(
-                            "Saved {what} beside the page in {}.{missing}{figma}",
+                            "{} {what} {} {}.{missing}{figma}",
+                            crate::i18n::tr("Saved"),
+                            crate::i18n::tr("beside the page in"),
                             crate::design::export::took(d.took)
                         )
                     }

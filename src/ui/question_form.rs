@@ -110,7 +110,7 @@ pub fn render(
                             div()
                                 .text_size(t.text.caption)
                                 .text_color(t.colors.text_subtle)
-                                .child("Pick any"),
+                                .child(crate::i18n::tr("Pick any")),
                         )
                     }),
             )
@@ -124,7 +124,7 @@ pub fn render(
     });
     let ready = form.complete(false);
     let st = state.clone();
-    let send = theme::primary_button(t, "Send answers")
+    let send = theme::primary_button(t, crate::i18n::tr("Send answers"))
         .id(id("send".into()))
         .when(!ready, |d| d.opacity(0.5))
         .on_click(move |_, _, cx| {
@@ -152,7 +152,7 @@ pub fn render(
                     t.size.icon_sm,
                     t.colors.text_muted,
                 ))
-                .child("Forge asks"),
+                .child(crate::i18n::tr("Forge asks")),
         )
         .children(questions)
         .child(
@@ -165,7 +165,7 @@ pub fn render(
                     div()
                         .text_size(t.text.caption)
                         .text_color(t.colors.text_subtle)
-                        .child("Or type your own answer in the box below."),
+                        .child(crate::i18n::tr("Or type your own answer in the box below.")),
                 )
                 .child(send),
         )
