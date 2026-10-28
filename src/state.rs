@@ -1666,6 +1666,8 @@ pub struct AppState {
     /// once, off the main thread, when the first design chat needs it.
     pub design_index: Option<std::sync::Arc<crate::design::library::Index>>,
     design_index_asked: bool,
+    /// The pet beside the chat (`design::pets`), by id; None for none.
+    pub pet: Option<String>,
     /// The design gallery's list on show.
     pub gallery_tab: GalleryTab,
     /// Gallery cards' pictures, by preview page (`design::export::thumbnail`),
@@ -2004,6 +2006,7 @@ impl AppState {
             design_systems_asked: false,
             design_index: None,
             design_index_asked: false,
+            pet: crate::design::pets::chosen(),
             gallery_tab: GalleryTab::Templates,
             design_thumbs: Default::default(),
             design_thumb_queue: Default::default(),
@@ -5587,6 +5590,31 @@ fix everything under 8, render it again to check, then tell me the scores before
             });
         })
         .detach();
+    }
+
+    /// Show the next pet (after none, the first): kept for next time.
+    pub fn next_pet(&mut self, cx: &mut Context<Self>) {
+        let all = crate::design::pets::all();
+        if all.is_empty() {
+            return self.show_toast("No pets: they come with Forge's design library.", cx);
+        }
+        let at = self
+            .pet
+            .as_ref()
+            .and_then(|id| all.iter().position(|p| &p.id == id));
+        let next = &all[at.map_or(0, |i| (i + 1) % all.len())];
+        self.pet = Some(next.id.clone());
+        let _ = crate::design::pets::choose(Some(&next.id));
+        let about = if next.description.is_empty() { String::new() } else { format!(": {}", next.description) };
+        self.show_toast(format!("{}{about}", next.name), cx);
+        cx.notify();
+    }
+
+    /// No pet.
+    pub fn hide_pet(&mut self, cx: &mut Context<Self>) {
+        self.pet = None;
+        let _ = crate::design::pets::choose(None);
+        cx.notify();
     }
 
     /// Show a gallery card's example page beside the gallery.

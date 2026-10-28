@@ -50,6 +50,7 @@ pub mod mcp_editor;
 pub mod memory_view;
 pub mod message;
 pub mod mode_menu;
+pub mod pet;
 pub mod question_form;
 pub mod model_menu;
 pub mod motion;
@@ -141,6 +142,8 @@ gpui::actions!(
         ChangeAvatar,
         OpenRules,
         OpenDesign,
+        NextPet,
+        HidePet,
         OpenProjects,
         EndpointGuide,
         OpenEndpointsFile,

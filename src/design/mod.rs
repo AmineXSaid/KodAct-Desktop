@@ -14,6 +14,7 @@ pub mod lint;
 pub mod live;
 pub mod marks;
 pub mod od_subset;
+pub mod pets;
 pub mod pptx;
 pub mod services;
 pub mod prompt;

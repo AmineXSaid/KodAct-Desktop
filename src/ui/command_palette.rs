@@ -370,6 +370,12 @@ impl CommandPalette {
                 Box::new(OpenRules),
             ),
             act(
+                if s.pet.is_some() { "Pet: the next one" } else { "Pet: a companion beside the chat" },
+                "icons/sparkles.svg",
+                None,
+                Box::new(NextPet),
+            ),
+            act(
                 "Design: templates, design systems and skills",
                 "icons/pen-tool.svg",
                 Some(shortcut("Shift D")),
@@ -663,6 +669,9 @@ impl CommandPalette {
                 act("Save the page as one HTML file", "icons/file-code.svg", None, Box::new(SavePageHtml)),
                 act("Save the page for Figma (editable layers)", "icons/layers.svg", None, Box::new(SavePageFigma)),
             ]);
+        }
+        if s.pet.is_some() {
+            out.push(act("Pet: hide it", "icons/x.svg", None, Box::new(HidePet)));
         }
         if s.design_on_screen().is_some() {
             out.push(act(

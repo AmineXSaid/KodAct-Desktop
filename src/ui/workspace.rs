@@ -37,6 +37,7 @@ pub struct Workspace {
     onboarding: Entity<Onboarding>,
     rules: Entity<RulesView>,
     design_home: Entity<super::design_home::DesignHome>,
+    pet: Entity<super::pet::PetView>,
     projects: Entity<ProjectsView>,
     side: Entity<SideChat>,
     settings: Entity<Settings>,
@@ -96,6 +97,7 @@ impl Workspace {
         let onboarding = cx.new(|cx| Onboarding::new(state.clone(), window, cx));
         let rules = cx.new(|cx| RulesView::new(state.clone(), window, cx));
         let design_home = cx.new(|cx| super::design_home::DesignHome::new(state.clone(), window, cx));
+        let pet = cx.new(|cx| super::pet::PetView::new(state.clone(), cx));
         let projects = cx.new(|cx| ProjectsView::new(state.clone(), composer.clone(), window, cx));
         let side = cx.new(|cx| SideChat::new(state.clone(), window, cx));
         let settings = cx.new(|cx| Settings::new(state.clone(), window, cx));
@@ -149,6 +151,7 @@ impl Workspace {
             onboarding,
             rules,
             design_home,
+            pet,
             projects,
             side,
             settings,
@@ -1267,6 +1270,12 @@ impl Render for Workspace {
                     cx.notify();
                 })
             }))
+            .on_action(cx.listener(|this, _: &NextPet, _, cx| {
+                this.state.update(cx, |s, cx| s.next_pet(cx))
+            }))
+            .on_action(cx.listener(|this, _: &HidePet, _, cx| {
+                this.state.update(cx, |s, cx| s.hide_pet(cx))
+            }))
             .on_action(cx.listener(|this, _: &OpenDesign, _, cx| {
                 this.state.update(cx, |s, cx| s.open_design_home(cx))
             }))
@@ -1437,7 +1446,7 @@ impl Render for Workspace {
                                 d.child(super::sidebar::rail(&t, screen))
                             }
                         })
-                        .child(main)
+                        .child(main.relative().when(screen == Screen::Chat, |m| m.child(self.pet.clone())))
                         .when(terminal_open, |d| d.child(dock)),
                 )
                 .child(super::status_bar::render(
