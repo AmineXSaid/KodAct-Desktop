@@ -71,6 +71,8 @@ pub struct BrowserView {
     zoom: f64,
     /// The design bar's open menu.
     design_menu: Option<super::design_bar::Menu>,
+    /// The bar's menu as it shows: open, or on its way out.
+    menu_presence: super::motion::Presence<super::design_bar::Menu>,
     /// The comment tool's box, over the part picked.
     comment_box: Entity<super::design_comment::DesignCommentBox>,
     /// A comment was open when the app last changed.
@@ -158,6 +160,7 @@ impl BrowserView {
             shown_url: String::new(),
             zoom: 1.0,
             design_menu: None,
+            menu_presence: Default::default(),
             comment_box,
             picked: false,
             drawing: None,
@@ -460,6 +463,7 @@ impl Render for BrowserView {
         let zoom = s.web_zoom;
         self.zoom = zoom;
         let presenting = s.presenting;
+        let out_ms = cx.theme().size.menu_out_ms;
         // A page this chat designed gets the design bar, and its comments.
         let here = s.design_comments_here();
         let design_bar = s.design_on_screen().filter(|_| !presenting).map(|page| {
@@ -491,6 +495,7 @@ impl Render for BrowserView {
                 systems: s.design_systems.clone(),
                 filter: self.library_filter.clone(),
                 filter_text: self.library_filter.read(cx).value().to_string(),
+                hung: self.menu_presence.frame(self.design_menu, out_ms, window),
             }
         });
         let tool_now = s.design_tool.filter(|_| design_bar.is_some());

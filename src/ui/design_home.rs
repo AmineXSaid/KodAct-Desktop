@@ -300,39 +300,16 @@ impl Render for DesignHome {
             cx.defer(move |cx| st.update(cx, |s, cx| s.design_want_thumbs(wanted, cx)));
         }
 
-        let tabs = div()
-            .flex()
-            .items_center()
-            .gap(t.space.xs)
-            .children(counts.into_iter().map(|(g, n)| {
-                let on = g == tab;
-                let hover = t.colors.hover;
+        // The four lists: one choice on a track, as the app's other views.
+        let tabs = counts.into_iter().fold(
+            super::button::Segmented::new("gallery-tabs", crate::i18n::tr("Library")),
+            |seg, (g, n)| {
                 let st = state.clone();
-                div()
-                    .id(SharedString::from(format!("gallery-{g:?}")))
-                    .flex()
-                    .items_center()
-                    .gap(t.space.tight)
-                    .h(t.size.button_sm)
-                    .px(t.space.md)
-                    .rounded(t.radius.button)
-                    .cursor_pointer()
-                    .text_color(if on {
-                        t.colors.text_strong
-                    } else {
-                        t.colors.text_muted
-                    })
-                    .when(on, |d| theme::selected(&t, d))
-                    .when(!on, |d| d.hover(move |st| st.bg(hover)))
-                    .child(g.label())
-                    .child(
-                        div()
-                            .text_size(t.text.caption)
-                            .text_color(t.colors.text_subtle)
-                            .child(n.to_string()),
-                    )
-                    .on_click(move |_, _, cx| st.update(cx, |s, cx| s.set_gallery_tab(g, cx)))
-            }));
+                seg.option(format!("{} {n}", g.label()), g == tab, move |_, _, cx| {
+                    st.update(cx, |s, cx| s.set_gallery_tab(g, cx))
+                })
+            },
+        );
 
         // As many columns as fit, sharing the width.
         let gap = f32::from(t.space.lg);
@@ -494,30 +471,32 @@ impl Render for DesignHome {
             .overflow_y_scroll()
             .child(
                 div()
-                    .px(t.space.xxl)
-                    .py(t.space.xl)
+                    .px(t.space.xl)
+                    .py(t.space.xxl)
                     .flex()
                     .flex_col()
                     .gap(t.space.lg)
                     .child(header)
+                    // The lists and the search on one row, what to start
+                    // from under it: neither moves when the list changes.
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .gap(t.space.md)
+                            .child(tabs)
+                            .child(search),
+                    )
                     .child(
                         div()
                             .flex()
                             .flex_wrap()
                             .items_center()
-                            .justify_between()
-                            .gap(t.space.md)
-                            .child(tabs)
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap(t.space.sm)
-                                    .child(routines_button)
-                                    .children(from_site)
-                                    .child(from_figma)
-                                    .child(search),
-                            ),
+                            .gap(t.space.sm)
+                            .child(routines_button)
+                            .child(from_figma)
+                            .children(from_site),
                     )
                     .children(routines_list)
                     .children(empty)

@@ -97,6 +97,7 @@ const TABLE: &[(&str, [&str; 3])] = &[
             "Starte mit einer Vorlage, einem Beispiel, einem Designsystem oder einem Skill. Forge richtet den Chat ein, und die Seite erscheint daneben, während sie entsteht.",
         ],
     ),
+    ("Library", ["Bibliothèque", "Biblioteca", "Bibliothek"]),
     ("Templates", ["Modèles", "Plantillas", "Vorlagen"]),
     ("Examples", ["Exemples", "Ejemplos", "Beispiele"]),
     ("Design systems", ["Design systems", "Sistemas de diseño", "Designsysteme"]),

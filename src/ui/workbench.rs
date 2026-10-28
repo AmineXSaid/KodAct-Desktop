@@ -582,6 +582,7 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
         PanelTab::Browser => div().size_full().child(v.browser.clone()).into_any_element(),
     };
 
+    let fills = v.tab == PanelTab::Browser;
     div()
         .flex_none()
         .when(!v.below, |d| d.w(px(v.width)).h_full().border_l_1())
@@ -608,11 +609,13 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
                 .flex_1()
                 .min_h_0()
                 .bg(ground)
-                .overflow_y_scroll()
+                // The browser fills the panel and scrolls its own page;
+                // the other views scroll here.
+                .map(|d| if fills { d.flex().flex_col() } else { d.overflow_y_scroll() })
                 // Each view arrives as the capsule lands on it: it fades in
                 // and rises a few pixels into place.
                 .child(super::motion::rise_in(
-                    div().child(body),
+                    div().when(fills, |d| d.flex_1().min_h_0()).child(body),
                     SharedString::from(format!("panel-view-{:?}", v.tab)),
                     6.,
                     t,

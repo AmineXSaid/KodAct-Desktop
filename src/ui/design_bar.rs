@@ -119,6 +119,8 @@ pub struct Bar {
     pub systems: Option<std::sync::Arc<Vec<crate::state::SystemCard>>>,
     pub filter: Entity<gpui::component::input::InputState>,
     pub filter_text: String,
+    /// The menu hanging under the bar: the open one, or one leaving.
+    pub hung: Option<(Menu, bool)>,
 }
 
 /// What a menu row does to the app.
@@ -149,46 +151,41 @@ fn tool(
     tip: &'static str,
 ) -> gpui::Stateful<gpui::Div> {
     let hover = t.colors.hover;
-    div()
-        .id(id)
-        .flex_none()
-        .min_w(t.size.control)
-        .h(t.size.control)
-        .flex()
-        .items_center()
-        .justify_center()
-        .gap(t.space.xs)
-        .px(if label.is_some() { t.space.sm } else { px(0.) })
-        .rounded(t.radius.button)
-        .cursor_pointer()
-        .when(on, |d| d.bg(hover))
-        .hover(move |s| s.bg(hover))
-        .text_size(t.text.caption)
-        .font_weight(gpui::FontWeight::MEDIUM)
-        .text_color(t.colors.text)
-        .child(icon(path, t.size.icon_sm, t.colors.text_muted))
-        .children(label.map(|l| {
-            div()
-                .min_w_0()
-                .max_w(px(180.))
-                .overflow_hidden()
-                .whitespace_nowrap()
-                .text_ellipsis()
-                .child(l)
-        }))
-        .when(menu, |d| {
-            d.child(icon(
-                "icons/chevron-down.svg",
-                t.size.icon_xs,
-                t.colors.text_subtle,
-            ))
-        })
-        // No tip over its own open menu.
-        .when(!on, |d| {
-            d.tooltip(move |window, cx| {
-                gpui::component::tooltip::Tooltip::new(tip).build(window, cx)
-            })
-        })
+    // A menu or a name: the selector the composer's controls use, raised
+    // while its menu is open. An icon alone: the panel's icon button.
+    let base = if menu || label.is_some() {
+        super::button::selector(t, id, on)
+            .min_w(t.size.control)
+            .h(t.size.control)
+            .child(icon(path, t.size.icon_sm, t.colors.text_muted))
+            .children(label.map(|l| {
+                div()
+                    .min_w_0()
+                    .max_w(px(180.))
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
+                    .child(l)
+            }))
+            .when(menu, |d| d.child(super::button::chevron(t, on)))
+    } else {
+        div()
+            .id(id)
+            .flex_none()
+            .size(t.size.control)
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded(t.radius.button)
+            .cursor_pointer()
+            .when(on, |d| d.bg(hover))
+            .hover(move |s| s.bg(hover))
+            .child(icon(path, t.size.icon, t.colors.text_muted))
+    };
+    // No tip over its own open menu.
+    base.when(!on, |d| {
+        d.tooltip(move |window, cx| gpui::component::tooltip::Tooltip::new(tip).build(window, cx))
+    })
 }
 
 /// A row in a menu: an icon (or its room), its label, a key hint, and a
@@ -265,7 +262,13 @@ fn gap(t: &Theme) -> impl IntoElement {
 
 /// A menu hanging under its button: left-aligned, or right-aligned at the
 /// bar's end; a click elsewhere closes it.
-fn hang(t: &Theme, right: bool, menu: gpui::Div, cx: &Context<BrowserView>) -> impl IntoElement {
+fn hang(
+    t: &Theme,
+    right: bool,
+    menu: gpui::Div,
+    leaving: bool,
+    cx: &Context<BrowserView>,
+) -> impl IntoElement {
     div()
         .absolute()
         .top(relative(1.))
@@ -286,7 +289,12 @@ fn hang(t: &Theme, right: bool, menu: gpui::Div, cx: &Context<BrowserView>) -> i
                             .on_mouse_down_out(
                                 cx.listener(|this, _, _, cx| this.set_menu(None, cx)),
                             )
-                            .child(menu),
+                            .child(super::motion::drop_menu(
+                                menu.id("design-bar-menu"),
+                                "design-bar-menu",
+                                leaving,
+                                t,
+                            )),
                     ),
             )
             .with_priority(2),
@@ -323,7 +331,9 @@ pub fn render(
         systems,
         filter,
         filter_text,
+        hung,
     } = bar;
+    let (hung, leaving) = (hung.map(|h| h.0), hung.is_some_and(|h| h.1));
     // Each menu row does its thing on the app, then the menu closes.
     let act = |f: Box<Act>| {
         let state = state.clone();
@@ -900,8 +910,8 @@ pub fn render(
                     .min_w_0()
                     .on_click(toggle(Menu::Pages)),
                 )
-                .when(menu == Some(Menu::Pages), |d| {
-                    d.child(hang(t, false, pages_menu, cx))
+                .when(hung == Some(Menu::Pages), |d| {
+                    d.child(hang(t, false, pages_menu, leaving, cx))
                 }),
         )
         .child(
@@ -919,8 +929,8 @@ pub fn render(
                     )
                     .on_click(toggle(Menu::Insert)),
                 )
-                .when(menu == Some(Menu::Insert), |d| {
-                    d.child(hang(t, false, insert_menu, cx))
+                .when(hung == Some(Menu::Insert), |d| {
+                    d.child(hang(t, false, insert_menu, leaving, cx))
                 }),
         )
         .child(
@@ -970,8 +980,8 @@ pub fn render(
                     .min_w(px(20.))
                     .on_click(toggle(Menu::Comments)),
                 )
-                .when(menu == Some(Menu::Comments), |d| {
-                    d.child(hang(t, false, comments_menu, cx))
+                .when(hung == Some(Menu::Comments), |d| {
+                    d.child(hang(t, false, comments_menu, leaving, cx))
                 }),
         )
         .child(div().flex_1())
@@ -997,8 +1007,8 @@ pub fn render(
                         })
                     }),
                 )
-                .when(menu == Some(Menu::Library), |d| {
-                    d.child(hang(t, false, library_menu, cx))
+                .when(hung == Some(Menu::Library), |d| {
+                    d.child(hang(t, false, library_menu, leaving, cx))
                 }),
         )
         // A deck: back, the slide and how many, on.
@@ -1075,8 +1085,8 @@ pub fn render(
                     )
                     .on_click(toggle(Menu::Zoom)),
                 )
-                .when(menu == Some(Menu::Zoom), |d| {
-                    d.child(hang(t, true, zoom_menu, cx))
+                .when(hung == Some(Menu::Zoom), |d| {
+                    d.child(hang(t, true, zoom_menu, leaving, cx))
                 }),
         )
         .child(
@@ -1095,8 +1105,8 @@ pub fn render(
                     )
                     .on_click(toggle(Menu::Share)),
                 )
-                .when(menu == Some(Menu::Share), |d| {
-                    d.child(hang(t, true, share_menu, cx))
+                .when(hung == Some(Menu::Share), |d| {
+                    d.child(hang(t, true, share_menu, leaving, cx))
                 }),
         )
 }

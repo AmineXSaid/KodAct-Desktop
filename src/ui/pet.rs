@@ -189,7 +189,8 @@ impl Render for PetView {
         div()
             .absolute()
             .left(px(24.))
-            .bottom(px(if in_chat { 158. } else { 24. }))
+            // Just above the composer's one line and its tray.
+            .bottom(px(if in_chat { 112. } else { 24. }))
             .w(px(WIDTH as f32))
             .h(px(h as f32))
             .children(pic.map(|p| img(p).size_full()))

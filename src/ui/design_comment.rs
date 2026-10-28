@@ -190,7 +190,8 @@ impl Render for DesignCommentBox {
             cx.listener(|this, _, window, cx| this.submit(window, cx)),
         );
 
-        theme::popover(&t)
+        // It drops in under the part it's on, as the app's menus do.
+        let card = theme::popover(&t)
             .id("design-comment")
             .occlude()
             // Esc closes the comment; the tool stays on for the next one.
@@ -277,7 +278,7 @@ impl Render for DesignCommentBox {
                     .line_height(relative(1.4))
                     .text_color(t.colors.text_subtle)
                     .child(say),
-            )
-            .into_any_element()
+            );
+        super::motion::drop_menu(card, "design-comment", false, &t)
     }
 }
