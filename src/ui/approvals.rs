@@ -14,6 +14,8 @@ pub fn render(
     t: &Theme,
     state: &Entity<AppState>,
     window: &gpui::Window,
+    // The list: Some(leaving) while it shows or leaves.
+    shown: Option<bool>,
     cx: &gpui::App,
 ) -> Option<AnyElement> {
     let s = state.read(cx);
@@ -21,10 +23,9 @@ pub fn render(
     if pending.is_empty() {
         return None;
     }
-    let open = s.approvals_open;
     let n = pending.len();
     let toggle = state.clone();
-    let fill_hover = t.extra.fill_hover;
+    let fill_hover = t.colors.text.opacity(0.12);
     let badge = div()
         .id("approvals")
         // Occludes the title bar's drag area (see workspace.rs).
@@ -35,11 +36,12 @@ pub fn render(
         .h(t.size.control)
         .px(t.space.sm)
         .rounded(t.radius.pill)
-        // The ink pill, its dot the accent: the one thing waiting on you.
-        .bg(t.extra.fill)
-        .text_color(t.extra.fill_fg)
+        // A quiet badge: the accent dot says it waits on you; the words
+        // stay in the ink, on a soft ground, never the loudest thing.
+        .bg(t.colors.text.opacity(0.07))
+        .text_color(t.colors.text)
         .text_size(t.text.body_sm)
-        .font_weight(FontWeight::SEMIBOLD)
+        .font_weight(FontWeight::MEDIUM)
         .cursor_pointer()
         .hover(move |d| d.bg(fill_hover))
         .child(div().size(px(7.)).rounded_full().bg(t.extra.accent))
@@ -54,7 +56,7 @@ pub fn render(
             |d, delta| d.opacity(delta),
         );
     let hover = t.colors.hover;
-    let list = open.then(|| {
+    let list = shown.map(|leaving| {
         let mut rows = div().flex().flex_col();
         for (i, (chat, title, asks, msg)) in pending.iter().cloned().enumerate() {
             let st = state.clone();
@@ -117,7 +119,7 @@ pub fn render(
             );
         }
         let close = state.clone();
-        gpui::deferred(
+        gpui::deferred(super::motion::unfold(
             theme::fit_window(
                 theme::popover(t).id("approvals-list"),
                 window,
@@ -148,7 +150,11 @@ pub fn render(
                     .child(SharedString::from("Waiting on your answer")),
             )
             .child(rows),
-        )
+            "approvals-list",
+            false,
+            leaving,
+            t,
+        ))
         .with_priority(2)
     });
     Some(

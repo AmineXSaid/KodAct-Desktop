@@ -136,24 +136,28 @@ impl Render for SandboxEditor {
             .and_then(|v| v.get("network"))
             .and_then(Value::as_bool)
             .unwrap_or(false);
-        let mut modes = div().flex().flex_col().items_start().gap(px(6.)).child(
-            kit::chip(&t, "sandbox-unset", "Not set here", mode.is_none()).on_click(cx.listener(
-                |this, _, _, cx| {
-                    this.write(
-                        |v| {
-                            if let Some(o) = v.as_object_mut() {
-                                o.remove("mode");
-                            }
-                        },
-                        cx,
-                    )
-                },
-            )),
+        let mut modes = div().flex().flex_col().gap(px(6.)).child(
+            kit::option_row(
+                &t,
+                "sandbox-unset",
+                "Not set here: another file decides, or none does",
+                mode.is_none(),
+            )
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.write(
+                    |v| {
+                        if let Some(o) = v.as_object_mut() {
+                            o.remove("mode");
+                        }
+                    },
+                    cx,
+                )
+            })),
         );
         for (m, label) in ff::SANDBOX_MODES {
             modes =
                 modes.child(
-                    kit::chip(
+                    kit::option_row(
                         &t,
                         SharedString::from(format!("sandbox-{m}")),
                         label,
@@ -191,10 +195,22 @@ impl Render for SandboxEditor {
             &t,
             "Network",
             Some("Off keeps sandboxed commands offline; on lets them reach the network."),
-            kit::chip(&t, "sandbox-network", if network { "On · turn off" } else { "Off · turn on" }, network)
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.write(move |v| v["network"] = json!(!network), cx)
+            div()
+                .flex()
+                .items_center()
+                .gap(t.space.sm)
+                .child(super::button::Switch::new("sandbox-network", network, "Network for sandboxed commands").on_toggle({
+                    let me = cx.entity().downgrade();
+                    move |on, _, cx| {
+                        let _ = me.update(cx, |this, cx| this.write(move |v| v["network"] = json!(on), cx));
+                    }
                 }))
+                .child(
+                    div()
+                        .text_size(t.text.body_sm)
+                        .text_color(t.colors.text)
+                        .child(if network { "On" } else { "Off" }),
+                )
                 .into_any_element(),
         ))
         .child(

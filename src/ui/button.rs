@@ -33,8 +33,6 @@ pub enum Variant {
     Outlined,
     /// A destructive confirm.
     Danger,
-    /// Saying no, framed in red but not filled: Deny.
-    DangerOutline,
     /// The accent fill, kept for sending.
     Accent,
 }
@@ -44,7 +42,6 @@ pub enum Variant {
 pub enum Size {
     Compact,
     Regular,
-    Large,
 }
 
 /// The colours a variant paints at rest and hovered.
@@ -89,12 +86,6 @@ impl Variant {
                 hover_bg: t.extra.fill_danger.opacity(0.9),
                 fg: t.colors.primary_fg,
                 border: None,
-            },
-            Variant::DangerOutline => Paint {
-                bg: t.colors.surface,
-                hover_bg: over(t.extra.danger_tint, t.colors.surface),
-                fg: t.extra.danger,
-                border: Some(t.extra.danger),
             },
             Variant::Accent => Paint {
                 bg: t.extra.accent,
@@ -149,6 +140,8 @@ pub struct Button {
     disabled: bool,
     loading: bool,
     selected: bool,
+    /// A key that does the same, after the label in its own colour, quieter.
+    hint: Option<SharedString>,
     on_click: Option<OnClick>,
 }
 
@@ -165,8 +158,15 @@ impl Button {
             disabled: false,
             loading: false,
             selected: false,
+            hint: None,
             on_click: None,
         }
+    }
+
+    /// Show the key that presses this button (`Enter`, `Esc`) after its label.
+    pub fn hint(mut self, key: impl Into<SharedString>) -> Self {
+        self.hint = Some(key.into());
+        self
     }
 
     pub fn primary(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Self {
@@ -185,11 +185,6 @@ impl Button {
         Self::new(id, Variant::Danger).label(label)
     }
 
-    /// No, in a red frame: Deny.
-    pub fn danger_outline(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Self {
-        Self::new(id, Variant::DangerOutline).label(label)
-    }
-
     /// The one decisive action, in the accent: Allow once, Send.
     pub fn accent(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Self {
         Self::new(id, Variant::Accent).label(label)
@@ -206,20 +201,6 @@ impl Button {
             .with_icon(path)
             .describe(describe)
             .tooltip(true)
-    }
-
-    /// An outlined icon-only square (the composer's +).
-    pub fn outlined_icon(
-        id: impl Into<ElementId>,
-        path: &'static str,
-        describe: impl Into<SharedString>,
-    ) -> Self {
-        Self::icon(id, path, describe).variant(Variant::Outlined)
-    }
-
-    pub fn variant(mut self, variant: Variant) -> Self {
-        self.variant = variant;
-        self
     }
 
     pub fn label(mut self, label: impl Into<SharedString>) -> Self {
@@ -244,11 +225,6 @@ impl Button {
 
     pub fn compact(mut self) -> Self {
         self.size = Size::Compact;
-        self
-    }
-
-    pub fn large(mut self) -> Self {
-        self.size = Size::Large;
         self
     }
 
@@ -286,7 +262,6 @@ impl RenderOnce for Button {
         let (h, pad, icon_size, text) = match (self.size, icon_only) {
             (Size::Compact, true) => (t.size.hit_sm, px(0.), t.size.icon_sm, t.text.caption),
             (Size::Regular, true) => (t.size.hit, px(0.), t.size.icon, t.text.body_sm),
-            (Size::Large, true) => (t.size.hit_lg, px(0.), t.size.icon, t.text.body_sm),
             (Size::Compact, false) => (
                 t.size.button_sm,
                 t.space.snug,
@@ -294,7 +269,6 @@ impl RenderOnce for Button {
                 t.text.caption,
             ),
             (Size::Regular, false) => (t.size.button_h, px(14.), t.size.icon, t.text.body_sm),
-            (Size::Large, false) => (t.size.hit_lg, t.space.lg, t.size.icon, t.text.body),
         };
         // Everything you press is a pill.
         let radius = match (icon_only, self.size) {
@@ -351,15 +325,11 @@ impl RenderOnce for Button {
             .bg(bg)
             .text_size(text)
             .text_color(fg)
-            // Labels on buttons are set in Archivo's heavier cut.
+            // Labels on buttons are set in the heavier cut.
             .when(
                 matches!(
                     self.variant,
-                    Variant::Primary
-                        | Variant::Danger
-                        | Variant::DangerOutline
-                        | Variant::Accent
-                        | Variant::Secondary
+                    Variant::Primary | Variant::Danger | Variant::Accent | Variant::Secondary
                 ) || (self.variant == Variant::Ghost && self.size != Size::Compact),
                 |d| d.font_weight(gpui::FontWeight::SEMIBOLD),
             )
@@ -376,6 +346,18 @@ impl RenderOnce for Button {
             .children(lead)
             .when_some(self.label, |d, l| {
                 d.child(div().min_w_0().whitespace_nowrap().text_ellipsis().child(l))
+            })
+            .when_some(self.hint, |d, k| {
+                d.child(
+                    div()
+                        .flex_none()
+                        .ml(t.space.xs)
+                        .font_family(t.font_mono.clone())
+                        .font_weight(gpui::FontWeight::NORMAL)
+                        .text_size(t.text.caption - px(1.))
+                        .opacity(0.72)
+                        .child(k),
+                )
             })
             .when_some(tooltip, |d, tip| {
                 d.tooltip(move |window, cx| {
@@ -433,13 +415,15 @@ pub fn send_button(
         .justify_center()
         .rounded(t.radius.control);
     match state {
+        // Stop: a soft disc with the ink square, never louder than the
+        // work it would stop.
         SendState::Busy => {
             let ink = t.colors.text;
+            let (rest, hover) = (ink.opacity(0.08), ink.opacity(0.14));
             base.aria_label("Stop the reply")
-                .border_2()
-                .border_color(ink)
+                .bg(rest)
                 .cursor_pointer()
-                .hover(|s| s.opacity(0.8))
+                .hover(move |s| s.bg(hover))
                 .child(div().size(px(10.)).rounded(px(2.)).bg(ink))
                 .tooltip(|window, cx| {
                     gpui::component::tooltip::Tooltip::new("Stop (Esc)").build(window, cx)

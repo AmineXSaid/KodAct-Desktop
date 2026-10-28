@@ -84,6 +84,25 @@ mod tests {
     }
 
     #[test]
+    fn the_plugin_teaches_with_the_expert_skill() {
+        let skills = super::skills();
+        let (_, description) = skills
+            .iter()
+            .find(|(n, _)| n == "forge:expert")
+            .expect("forge:expert is bundled");
+        assert!(description.contains("Teach the user"), "{description}");
+        let names: Vec<&str> = embedded::FILES.iter().map(|(p, _)| *p).collect();
+        for f in ["methods", "shapes", "levels"] {
+            assert!(
+                names.contains(&format!("skills/expert/reference/{f}.md").as_str()),
+                "{f}"
+            );
+        }
+        // Expert is no longer an output style.
+        assert!(!names.iter().any(|n| n.starts_with("output-styles/")));
+    }
+
+    #[test]
     fn the_plugin_carries_its_manifest_and_diagram_design() {
         let names: Vec<&str> = embedded::FILES.iter().map(|(p, _)| *p).collect();
         assert!(names.contains(&".claude-plugin/plugin.json"));

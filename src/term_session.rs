@@ -166,7 +166,12 @@ pub fn remote_shell(r: &Remote, shell: &str, trust_new_key: bool) -> Shell {
         Target::Container { name, user, wsl } => {
             // On a WSL distro's Docker: through wsl.exe, as every call to it.
             let mut a = match wsl {
-                Some(d) => vec!["-d".to_string(), d.clone(), "--exec".into(), "docker".into()],
+                Some(d) => vec![
+                    "-d".to_string(),
+                    d.clone(),
+                    "--exec".into(),
+                    "docker".into(),
+                ],
                 None => vec![],
             };
             a.extend(["exec".to_string(), "-it".into()]);

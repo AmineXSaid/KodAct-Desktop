@@ -40,6 +40,8 @@ pub struct Fit {
     pub from_panel: bool,
     /// A document shows its text instead of its pages.
     pub text: bool,
+    /// A Markdown file or a page shows its source (else its preview).
+    pub source: bool,
     /// Which version of the file this is, and how many the chat has.
     pub version: (usize, usize),
     /// The panel shows what this version changed.
@@ -130,6 +132,9 @@ pub fn render(
     let launcher = state.clone();
 
     let from_panel = fit.from_panel;
+    // Markdown and pages read as themselves, or as what was written.
+    let two_views = office.is_none() && (diagram || file.is_markdown());
+    let source = two_views && fit.source;
     let text_view = fit.text;
     let page_pick = fit.page_pick;
     let has_pages = matches!(read, Some(Ok(p)) if matches!(p.as_ref(), crate::office::Preview::Doc(d) if !d.pages.is_empty()));
@@ -190,7 +195,37 @@ pub fn render(
                         .child(file.kind()),
                 ),
         )
-        .when(diagram, |d| {
+        .child(
+            tool_button("doc-close", "icons/x.svg", "Close")
+                .on_click(move |_, _, cx| closer.update(cx, |s, cx| s.close_doc(cx))),
+        );
+    // Under the name, as in Claude's panel: how to view it on the left,
+    // what to do with it on the right.
+    let toolbar = div()
+        .flex_none()
+        .h(px(40.))
+        .flex()
+        .items_center()
+        .gap(t.space.xs)
+        .px(t.space.md)
+        .border_b_1()
+        .border_color(t.colors.border)
+        .when(two_views, |d| {
+            let (to_preview, to_source) = (state.clone(), state.clone());
+            d.child(
+                super::button::Segmented::new("doc-views", "View")
+                    .option("Preview", !source, move |_, _, cx| {
+                        to_preview.update(cx, |s, cx| s.set_source_view(false, cx))
+                    })
+                    .option(
+                        if diagram { "Code" } else { "Markdown" },
+                        source,
+                        move |_, _, cx| to_source.update(cx, |s, cx| s.set_source_view(true, cx)),
+                    ),
+            )
+        })
+        .child(div().flex_1())
+        .when(diagram && !source, |d| {
             d.child(
                 tool_button(
                     "doc-fit",
@@ -228,9 +263,8 @@ pub fn render(
             )
         })
         .child(
-            tool_button("doc-find", "icons/search.svg", "Find in this file").on_click(
-                move |_, _, cx| finder.update(cx, |s, cx| s.toggle_doc_find(cx)),
-            ),
+            tool_button("doc-find", "icons/search.svg", "Find in this file")
+                .on_click(move |_, _, cx| finder.update(cx, |s, cx| s.toggle_doc_find(cx))),
         )
         .when(exports, |d| {
             d.child(
@@ -283,14 +317,16 @@ pub fn render(
         .child(
             tool_button("doc-download", "icons/download.svg", "Download")
                 .on_click(move |_, _, cx| saver.update(cx, |s, cx| s.download(&to_save, cx))),
-        )
-        .child(
-            tool_button("doc-close", "icons/x.svg", "Close")
-                .on_click(move |_, _, cx| closer.update(cx, |s, cx| s.close_doc(cx))),
         );
 
     // The find bar sits under the header.
-    let header = div().flex_none().flex().flex_col().child(header).child(find);
+    let header = div()
+        .flex_none()
+        .flex()
+        .flex_col()
+        .child(header)
+        .child(toolbar)
+        .child(find);
     let body = div().id("doc-body").flex_1().min_h_0().overflow_y_scroll();
     // What this version changed, in words (a workbook's show in its grid).
     if showing_changes && changed_cells.is_none() {
@@ -320,7 +356,22 @@ pub fn render(
         );
         return finish_at(fit.below, file, header, body, footer(), fit.width, t);
     }
-    let body = if diagram {
+    let body = if source || (office.is_none() && !binary && !file.is_markdown() && !diagram) {
+        // The source, as an editor shows it: a file that is only text, or
+        // a page or Markdown file switched to its source.
+        body.child(
+            div()
+                .px(t.space.lg)
+                .pt(t.space.lg)
+                .pb(t.space.xxl * 2.)
+                .child(super::source_view::render(
+                    "doc-source",
+                    &file.content,
+                    super::source_view::lang_for(&file.name),
+                    t,
+                )),
+        )
+    } else if diagram {
         // The drawing, with its one-line description above it. At actual
         // size a drawing wider than the panel scrolls sideways.
         let pad = t.space.xl;
@@ -475,7 +526,7 @@ fn selectable(name: &str, text: &str, t: &Theme) -> AnyElement {
         .child(
             gpui::component::text::TextView::markdown(
                 SharedString::from(format!("doc-text-{name}")),
-                text.to_string(),
+                super::markdown::fence_front_matter(text).into_owned(),
             )
             .selectable(true),
         )

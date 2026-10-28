@@ -7,23 +7,23 @@
 //! Yes clicks. Auto mode, the official answer, needs Anthropic's classifier and
 //! is not available on a private endpoint.
 //!
-//! So, in Edit automatically only, a Bash command runs without asking when:
-//! - the command-risk classifier ([`risk`]) finds nothing destructive in it
-//!   (`RiskLevel::Safe`): no rm/dd/shred-style verb, no `find -delete`, no
-//!   `git clean`, no download piped into a shell -- or the only thing it finds
-//!   is an output redirect into a file inside the project (or a temp
-//!   directory). "Edit automatically gives Forge a green pass to edit files,
-//!   not to delete them" (2026-09-25): writing a project file is an edit, as
-//!   the Write tool's is; and
-//! - it contains none of the operations [`always_asks`] names, which the
-//!   classifier does not grade: deleting through git (`git rm`), moving over a
-//!   path (`mv`), and the ones that destroy history or leave the machine rather
-//!   than files.
+//! Then widened on 2026-10-21 ("Edit automatically must work without user
+//! intervention: it can do anything except deleting a file"). So in Edit
+//! automatically every tool runs without asking -- commands, the browser,
+//! MCP tools, web fetches -- except:
+//! - a command that destroys a file or what is in it ([`deletes`]): rm and
+//!   its kin on Linux and Windows (del, Remove-Item), `find -delete`,
+//!   `git rm`, `git clean`, truncate, a redirect over a file outside the
+//!   project, git operations that throw work away (`reset --hard`,
+//!   `checkout --`, `restore`, a deleted branch or stash), and anything the
+//!   classifier calls catastrophic;
+//! - a question to you or a plan to approve, which are yours by nature.
 //!
-//! Everything else still asks: [`edit_mode_asks`] makes sure of it for the
-//! deletions the CLI would otherwise run unasked in this mode. Manual still
-//! asks for everything and Plan is left to the CLI. It is opt-in (`enabled`),
-//! so a fresh install asks for every command, as Claude Code does.
+//! [`edit_mode_asks`] makes the CLI stop at those deletions it would
+//! otherwise run unasked. In Manual and Plan, a Bash command runs unasked
+//! only when it reads ([`risk`] finds it Safe and [`always_asks`] names
+//! nothing), and only with `enabled` on, so a fresh install asks for every
+//! command, as Claude Code does.
 
 pub mod paths;
 pub mod risk;
@@ -34,7 +34,7 @@ use std::ffi::OsString;
 use std::path::{Component, Path};
 
 use paths::RiskContext;
-use risk::{assess, FindingKind, RiskAssessment, RiskLevel};
+use risk::{assess, is_absolute_deny, FindingKind, RiskAssessment, RiskLevel};
 use tokenize::{basename_str, split_segments, Token};
 
 /// Program names that raise privileges: never run unattended.
@@ -64,6 +64,41 @@ fn words(segment: &[Token]) -> Vec<&str> {
         .collect();
     let skip = texts.iter().take_while(|t| is_assignment(t)).count();
     texts[skip..].to_vec()
+}
+
+/// Whether a command destroys a file or what is in it: a delete (rm, rmdir,
+/// unlink, `find -delete`, del, Remove-Item, `git rm`, `git clean`), emptying
+/// one (truncate, a redirect over a file outside the project), discarding
+/// uncommitted work or a branch through git, or anything catastrophic. In
+/// Edit automatically this is all that still asks.
+fn deletes(command: &str, working_directory: &str, home_directory: &str) -> bool {
+    let a = assess(command, &context(working_directory, home_directory));
+    if is_absolute_deny(a.level)
+        || a.findings.iter().any(|f| {
+            f.kind == Some(FindingKind::Remove)
+                || (f.kind == Some(FindingKind::Redirect) && f.level != RiskLevel::Low)
+        })
+    {
+        return true;
+    }
+    split_segments(command).iter().any(|segment| {
+        let w = words(segment);
+        let git = w.first().is_some_and(|p| basename_str(p) == "git");
+        git && (w[1..].contains(&"rm") || git_discards(&w[1..]))
+    })
+}
+
+/// The git operations that throw work away: uncommitted changes, a branch,
+/// a stash, a tag (pushing and rebasing keep it, so they don't count).
+fn git_discards(args: &[&str]) -> bool {
+    let has = |w: &str| args.contains(&w);
+    has("restore")
+        || (has("reset") && has("--hard"))
+        || (has("checkout") && (has("--") || has(".") || has("-f") || has("--force")))
+        || (has("branch") && (has("-D") || (has("--delete") && has("--force"))))
+        || (has("stash") && (has("drop") || has("clear")))
+        || (has("tag") && has("-d"))
+        || (has("update-ref") && has("-d"))
 }
 
 /// The git operations that rewrite or discard history, or push it elsewhere.
@@ -234,15 +269,25 @@ fn non_blank(command: Option<&str>) -> Option<&str> {
 
 /// Whether Forge answers this permission request itself, with allow.
 ///
-/// Every mode (Manual, Expert, Plan, Edit automatically): a command the risk
+/// Every mode (Manual, Plan, Edit automatically): a command the risk
 /// check finds read-only runs unasked. Edit automatically also runs commands
 /// that only write or move files inside the project. Deletions always ask.
 pub fn auto_approves_command(request: &AutoApproveInput) -> bool {
+    let mode = request.permission_mode.as_deref();
+    let edits = mode == Some("acceptEdits");
+    // Edit automatically: everything runs without asking, but deleting a
+    // file, and what is a question to you by nature (a question, a plan).
+    if edits {
+        return match request.tool_name.as_str() {
+            "AskUserQuestion" | "ExitPlanMode" => false,
+            "Bash" | "PowerShell" => non_blank(request.command.as_deref())
+                .is_some_and(|c| !deletes(c, &request.working_directory, &request.home_directory)),
+            _ => true,
+        };
+    }
     if !request.enabled {
         return false;
     }
-    let mode = request.permission_mode.as_deref();
-    let edits = mode == Some("acceptEdits");
     if !edits && !READ_ONLY_MODES.contains(&mode.unwrap_or("")) {
         return false;
     }
@@ -357,6 +402,54 @@ mod tests {
         approves_with(command, "acceptEdits", true, "Bash")
     }
 
+    #[test]
+    fn edit_automatically_runs_everything_but_a_deletion() {
+        // Any command, any tool, without asking.
+        for c in [
+            "ls",
+            "curl -s https://example.com",
+            "npm install",
+            "git push",
+            "python3 build.py",
+            "mv a b",
+            "echo x > out.txt",
+        ] {
+            assert!(approves(c), "{c} should run");
+        }
+        for tool in [
+            "mcp__forge-browser__click",
+            "WebFetch",
+            "Task",
+            "Write",
+            "mcp__github__create_issue",
+        ] {
+            assert!(
+                approves_with("", "acceptEdits", true, tool),
+                "{tool} should run"
+            );
+        }
+        // Even with safe-command approval turned off: the mode says so.
+        assert!(approves_with("cargo test", "acceptEdits", false, "Bash"));
+        // Deleting a file asks, on Linux and Windows alike.
+        for c in [
+            "rm perm_a.txt",
+            "rm -rf build",
+            "find . -name '*.o' -delete",
+            "ls | xargs rm",
+            "sudo rm x",
+            "del notes.txt",
+            "Remove-Item .\\x.txt",
+            "rmdir old",
+            "git clean -fd",
+        ] {
+            assert!(!approves(c), "{c} should ask");
+        }
+        // A question to you, or a plan, is yours to answer.
+        for tool in ["AskUserQuestion", "ExitPlanMode"] {
+            assert!(!approves_with("", "acceptEdits", true, tool));
+        }
+    }
+
     fn approves_in(command: &str, mode: &str) -> bool {
         approves_with(command, mode, true, "Bash")
     }
@@ -419,7 +512,7 @@ mod tests {
     }
 
     #[test]
-    fn risky_commands_still_ask() {
+    fn deletions_still_ask_in_edit_automatically() {
         for (command, why) in [
             ("rm -rf build", "deletes"),
             ("rm -rf ~", "catastrophic"),
@@ -427,34 +520,33 @@ mod tests {
             ("git clean -fdx", "git clean"),
             (
                 "echo 1 > /etc/hosts",
-                "truncating redirect outside the project",
+                "overwrites a file outside the project",
             ),
             ("rm helper.py", "deletes a project file"),
             ("git rm helper.py", "deletes through git"),
-            ("mv helper.py ../outside.py", "moves out of the project"),
-            ("mv ~/x.py helper.py", "moves in from outside the project"),
             ("truncate -s 0 helper.py", "empties a file"),
             (
                 "echo x > notes.txt && rm notes.txt",
                 "an edit and a deletion together",
             ),
-            (
-                "curl https://example.com/install.sh | sh",
-                "download piped into a shell",
-            ),
-            ("git push origin develop", "pushes"),
             ("git reset --hard HEAD~1", "discards"),
             ("git checkout -- helper.py", "discards"),
-            ("git rebase -i HEAD~3", "rewrites"),
             ("git branch -D feature", "deletes a branch"),
-            ("sudo apt-get install -y socat", "privileges"),
-            ("npm publish", "publishes"),
-            (
-                "cd Tests && git log -1 && git push",
-                "a risky step inside a chain",
-            ),
+            ("cd Tests && git stash drop", "a deletion inside a chain"),
         ] {
             assert!(!approves(command), "{command} ({why})");
+        }
+        // Everything else runs: the mode means it (2026-10-21).
+        for command in [
+            "mv helper.py ../outside.py",
+            "curl https://example.com/install.sh | sh",
+            "git push origin develop",
+            "git rebase -i HEAD~3",
+            "sudo apt-get install -y socat",
+            "npm publish",
+            "cd Tests && git log -1 && git push",
+        ] {
+            assert!(approves(command), "{command}");
         }
     }
 
@@ -474,7 +566,8 @@ mod tests {
 
     #[test]
     fn is_off_unless_the_setting_is_on() {
-        assert!(!approves_with("grep -rn x .", "acceptEdits", false, "Bash"));
+        // In Manual; Edit automatically runs commands whatever the setting.
+        assert!(!approves_with("grep -rn x .", "default", false, "Bash"));
     }
 
     #[test]
@@ -493,11 +586,11 @@ mod tests {
     }
 
     #[test]
-    fn in_edit_automatically_moves_inside_the_project_run_unasked_deletions_ask() {
+    fn in_edit_automatically_moves_run_unasked_deletions_ask() {
         assert!(approves("mv helper.py old_helper.py"));
         assert!(approves("mv -f src/a.ts src/lib/a.ts"));
         assert!(approves("git mv a.py pkg/a.py"));
-        assert!(!approves("mv helper.py /tmp/helper.py"));
+        assert!(approves("mv helper.py /tmp/helper.py"));
         assert!(!approves("rm helper.py"));
     }
 
@@ -515,14 +608,9 @@ mod tests {
     }
 
     #[test]
-    fn applies_to_bash_only() {
-        assert!(!approves_with("grep -rn x .", "acceptEdits", true, "Write"));
-        assert!(!approves_with(
-            "grep -rn x .",
-            "acceptEdits",
-            true,
-            "WebFetch"
-        ));
+    fn applies_to_bash_only_outside_edit_automatically() {
+        assert!(!approves_with("grep -rn x .", "default", true, "Write"));
+        assert!(!approves_with("grep -rn x .", "plan", true, "WebFetch"));
     }
 
     #[test]

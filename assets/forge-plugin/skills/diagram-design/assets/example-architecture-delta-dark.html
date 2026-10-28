@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Order fulfilment · Architecture delta</title>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -13,14 +12,14 @@
       --color-muted: #bfc0c0;
       --color-rule: rgba(245,245,245,0.12);
       --color-accent: #f08a59;
-      --font-sans: 'Geist', system-ui, sans-serif;
-      --font-serif: 'Instrument Serif', serif;
-      --font-mono: 'Geist Mono', ui-monospace, monospace;
+      --font-sans: 'Anthropic Sans Text';
+      --font-serif: 'Anthropic Sans Display';
+      --font-mono: 'Anthropic Sans Text';
     }
-    body { font-family: var(--font-sans); color: var(--color-ink); background: var(--color-paper); min-height: 100vh; padding: 3rem 2rem; display: flex; align-items: center; justify-content: center; }
+    body { font-family:'Anthropic Sans Text'; color: var(--color-ink); background: var(--color-paper); min-height: 100vh; padding: 3rem 2rem; display: flex; align-items: center; justify-content: center; }
     .frame { width: 100%; max-width: 1200px; min-width: 0; margin: 0 auto; }
-    .eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.75rem; }
-    h1 { font-family: var(--font-serif); font-size: clamp(1.75rem, 3vw + 1rem, 2rem); line-height: 1.1; font-weight: 400; letter-spacing: -0.02em; margin-bottom: 1.75rem; }
+    .eyebrow { font-family:'Anthropic Sans Text'; font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.75rem; }
+    h1 { font-family:'Anthropic Sans Display'; font-size: clamp(1.75rem, 3vw + 1rem, 2rem); line-height: 1.1; font-weight: 400; letter-spacing: -0.02em; margin-bottom: 1.75rem; }
     .subtitle { max-width: 64ch; font-size: 0.9375rem; line-height: 1.6; color: var(--color-muted); margin-bottom: 2rem; }
     .diagram-container { width: 100%; overflow-x: auto; }
     .diagram-container:focus-visible { outline: 2px solid var(--color-muted); outline-offset: 4px; }
@@ -42,12 +41,12 @@
           <marker id="architecture-delta-dark-arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 0, 8 3, 0 6" fill="#bfc0c0"/></marker>
         </defs>
         <rect width="1200" height="680" fill="#2d3142"/>
-        <text x="24" y="28" fill="#f5f5f5" font-size="14" font-family="'Geist', sans-serif" font-weight="600">Before</text>
-        <text x="24" y="52" fill="#bfc0c0" font-size="10" font-family="'Geist', sans-serif" >Synchronous dispatch · v1</text>
-        <text x="424" y="28" fill="#f5f5f5" font-size="14" font-family="'Geist', sans-serif" font-weight="600">Changes</text>
-        <text x="424" y="52" fill="#bfc0c0" font-size="10" font-family="'Geist', sans-serif" >Four components · three relationships</text>
-        <text x="840" y="28" fill="#f5f5f5" font-size="14" font-family="'Geist', sans-serif" font-weight="600">After</text>
-        <text x="840" y="52" fill="#bfc0c0" font-size="10" font-family="'Geist', sans-serif" >Queued fulfilment · v2</text>
+        <text x="24" y="28" fill="#f5f5f5" font-size="14" font-family="Anthropic Sans Text" font-weight="600">Before</text>
+        <text x="24" y="52" fill="#bfc0c0" font-size="10" font-family="Anthropic Sans Text" >Synchronous dispatch · v1</text>
+        <text x="424" y="28" fill="#f5f5f5" font-size="14" font-family="Anthropic Sans Text" font-weight="600">Changes</text>
+        <text x="424" y="52" fill="#bfc0c0" font-size="10" font-family="Anthropic Sans Text" >Four components · three relationships</text>
+        <text x="840" y="28" fill="#f5f5f5" font-size="14" font-family="Anthropic Sans Text" font-weight="600">After</text>
+        <text x="840" y="52" fill="#bfc0c0" font-size="10" font-family="Anthropic Sans Text" >Queued fulfilment · v2</text>
         <path d="M 392 8 V 576 M 808 8 V 576" stroke="rgba(245,245,245,0.12)" stroke-width="1"/>
         <g data-snapshot="before" transform="translate(24 96)" data-grid="336 480 4">
 <!-- Relationships precede components; endpoints meet the declared bounds. -->
@@ -56,69 +55,69 @@
 <path data-kind="relationship" data-object-id="r3" data-status="removed" data-signature="dispatch" data-from="legacy" data-to="worker" d="M 168 256 V 272 Q 168 280 160 280 H 88 Q 80 280 80 288 V 304" fill="none" stroke="#bfc0c0" stroke-width="1.2" stroke-dasharray="4 4" marker-end="url(#architecture-delta-dark-arrow)"/>
 <path data-kind="relationship" data-object-id="r5" data-status="unchanged" data-signature="write-order" data-from="worker" data-to="db" d="M 80 368 V 384 Q 80 392 88 392 H 160 Q 168 392 168 400 V 416" fill="none" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#architecture-delta-dark-arrow)"/>
 <rect x="176" y="72" width="92" height="16" rx="2" fill="#2d3142"/>
-<text x="180" y="84" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" >r1 · HTTPS</text>
+<text x="180" y="84" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" >r1 · HTTPS</text>
 <rect x="176" y="168" width="92" height="16" rx="2" fill="#2d3142"/>
-<text x="180" y="180" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" >r2 · REWIRED</text>
+<text x="180" y="180" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" >r2 · REWIRED</text>
 <rect x="176" y="260" width="92" height="16" rx="2" fill="#2d3142"/>
-<text x="180" y="272" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" >r3 · REMOVED</text>
+<text x="180" y="272" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" >r3 · REMOVED</text>
 <rect x="176" y="396" width="68" height="16" rx="2" fill="#2d3142"/>
-<text x="180" y="408" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" >r5 · SQL</text>
+<text x="180" y="408" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" >r5 · SQL</text>
 <g data-kind="component" data-object-id="storefront" data-status="unchanged" data-signature="web:v1">
 <rect data-role="bounds" x="96" y="0" width="144" height="64" rx="6" fill="#393e53" stroke="#bfc0c0" stroke-width="1.2"/>
-<text x="108" y="15" fill="#bfc0c0" font-size="7.5" font-family="'Geist Mono', monospace" >= storefront · UNCHANGED</text>
-<text x="108" y="36" fill="#f5f5f5" font-size="12" font-family="'Geist', sans-serif" font-weight="600">Storefront</text>
-<text x="108" y="53" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" >web:v1</text>
+<text x="108" y="15" fill="#bfc0c0" font-size="7.5" font-family="Anthropic Sans Text" >= storefront · UNCHANGED</text>
+<text x="108" y="36" fill="#f5f5f5" font-size="12" font-family="Anthropic Sans Text" font-weight="600">Storefront</text>
+<text x="108" y="53" fill="#bfc0c0" font-size="9" font-family="Anthropic Sans Text" >web:v1</text>
 </g>
 <g data-kind="component" data-object-id="api" data-status="changed" data-signature="orders:v1">
 <rect data-role="bounds" x="96" y="96" width="144" height="64" rx="6" fill="rgba(240,138,89,0.10)" stroke="#f08a59" stroke-width="1.2"/>
 <path d="M 97 108 V 148" fill="none" stroke="#f08a59" stroke-width="3"/>
-<text x="108" y="111" fill="#bfc0c0" font-size="7.5" font-family="'Geist Mono', monospace" >~ api · CHANGED</text>
-<text x="108" y="132" fill="#f5f5f5" font-size="12" font-family="'Geist', sans-serif" font-weight="600">Orders API</text>
-<text x="108" y="149" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" >/orders · v1</text>
+<text x="108" y="111" fill="#bfc0c0" font-size="7.5" font-family="Anthropic Sans Text" >~ api · CHANGED</text>
+<text x="108" y="132" fill="#f5f5f5" font-size="12" font-family="Anthropic Sans Text" font-weight="600">Orders API</text>
+<text x="108" y="149" fill="#bfc0c0" font-size="9" font-family="Anthropic Sans Text" >/orders · v1</text>
 </g>
 <g data-kind="component" data-object-id="legacy" data-status="removed" data-signature="dispatcher:v1">
 <rect data-role="bounds" x="96" y="192" width="144" height="64" rx="6" fill="#393e53" stroke="#bfc0c0" stroke-width="1.2" stroke-dasharray="4 4"/>
-<text x="108" y="207" fill="#bfc0c0" font-size="7.5" font-family="'Geist Mono', monospace" >− legacy · REMOVED</text>
-<text x="108" y="228" fill="#f5f5f5" font-size="12" font-family="'Geist', sans-serif" font-weight="600">Legacy dispatcher</text>
-<text x="108" y="245" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" >dispatcher:v1</text>
+<text x="108" y="207" fill="#bfc0c0" font-size="7.5" font-family="Anthropic Sans Text" >− legacy · REMOVED</text>
+<text x="108" y="228" fill="#f5f5f5" font-size="12" font-family="Anthropic Sans Text" font-weight="600">Legacy dispatcher</text>
+<text x="108" y="245" fill="#bfc0c0" font-size="9" font-family="Anthropic Sans Text" >dispatcher:v1</text>
 </g>
 <g data-kind="component" data-object-id="worker" data-status="moved" data-signature="fulfilment:v1">
 <rect data-role="bounds" x="8" y="304" width="144" height="64" rx="6" fill="#393e53" stroke="#bfc0c0" stroke-width="1.2" stroke-dasharray="1 4" stroke-linecap="round"/>
-<text x="20" y="319" fill="#bfc0c0" font-size="7.5" font-family="'Geist Mono', monospace" >↔ worker · MOVED</text>
-<text x="20" y="340" fill="#f5f5f5" font-size="12" font-family="'Geist', sans-serif" font-weight="600">Fulfilment worker</text>
-<text x="20" y="357" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" >fulfilment:v1</text>
+<text x="20" y="319" fill="#bfc0c0" font-size="7.5" font-family="Anthropic Sans Text" >↔ worker · MOVED</text>
+<text x="20" y="340" fill="#f5f5f5" font-size="12" font-family="Anthropic Sans Text" font-weight="600">Fulfilment worker</text>
+<text x="20" y="357" fill="#bfc0c0" font-size="9" font-family="Anthropic Sans Text" >fulfilment:v1</text>
 </g>
 <g data-kind="component" data-object-id="db" data-status="unchanged" data-signature="orders:postgres">
 <rect data-role="bounds" x="96" y="416" width="144" height="64" rx="6" fill="#393e53" stroke="#bfc0c0" stroke-width="1.2"/>
-<text x="108" y="431" fill="#bfc0c0" font-size="7.5" font-family="'Geist Mono', monospace" >= db · UNCHANGED</text>
-<text x="108" y="452" fill="#f5f5f5" font-size="12" font-family="'Geist', sans-serif" font-weight="600">Orders database</text>
-<text x="108" y="469" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" >PostgreSQL</text>
+<text x="108" y="431" fill="#bfc0c0" font-size="7.5" font-family="Anthropic Sans Text" >= db · UNCHANGED</text>
+<text x="108" y="452" fill="#f5f5f5" font-size="12" font-family="Anthropic Sans Text" font-weight="600">Orders database</text>
+<text x="108" y="469" fill="#bfc0c0" font-size="9" font-family="Anthropic Sans Text" >PostgreSQL</text>
 </g>
-<text x="192" y="332" fill="#bfc0c0" font-size="12" font-family="'Geist', sans-serif" >Same worker,</text>
-<text x="192" y="352" fill="#bfc0c0" font-size="12" font-family="'Geist', sans-serif" >moves right →</text>
+<text x="192" y="332" fill="#bfc0c0" font-size="12" font-family="Anthropic Sans Text" >Same worker,</text>
+<text x="192" y="352" fill="#bfc0c0" font-size="12" font-family="Anthropic Sans Text" >moves right →</text>
 </g>
-        <text x="424" y="110" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" >01</text>
-<text x="456" y="108" data-change="CHANGED" data-target="api" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">CHANGED · api<tspan x="456" y="131" fill="#f5f5f5" font-size="12" font-family="'Geist', sans-serif" letter-spacing="0">Orders API v1 → v2</tspan></text>
+        <text x="424" y="110" fill="#bfc0c0" font-size="9" font-family="Anthropic Sans Text" >01</text>
+<text x="456" y="108" data-change="CHANGED" data-target="api" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.06em">CHANGED · api<tspan x="456" y="131" fill="#f5f5f5" font-size="12" font-family="Anthropic Sans Text" letter-spacing="0">Orders API v1 → v2</tspan></text>
 <path d="M 456 148 H 776" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/>
-<text x="424" y="170" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" >02</text>
-<text x="456" y="168" data-change="REMOVED" data-target="legacy" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">REMOVED · legacy<tspan x="456" y="191" fill="#f5f5f5" font-size="12" font-family="'Geist', sans-serif" letter-spacing="0">Retire legacy dispatcher</tspan></text>
+<text x="424" y="170" fill="#bfc0c0" font-size="9" font-family="Anthropic Sans Text" >02</text>
+<text x="456" y="168" data-change="REMOVED" data-target="legacy" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.06em">REMOVED · legacy<tspan x="456" y="191" fill="#f5f5f5" font-size="12" font-family="Anthropic Sans Text" letter-spacing="0">Retire legacy dispatcher</tspan></text>
 <path d="M 456 208 H 776" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/>
-<text x="424" y="230" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" >03</text>
-<text x="456" y="228" data-change="ADDED" data-target="queue" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">ADDED · queue<tspan x="456" y="251" fill="#f5f5f5" font-size="12" font-family="'Geist', sans-serif" letter-spacing="0">Introduce durable order queue</tspan></text>
+<text x="424" y="230" fill="#bfc0c0" font-size="9" font-family="Anthropic Sans Text" >03</text>
+<text x="456" y="228" data-change="ADDED" data-target="queue" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.06em">ADDED · queue<tspan x="456" y="251" fill="#f5f5f5" font-size="12" font-family="Anthropic Sans Text" letter-spacing="0">Introduce durable order queue</tspan></text>
 <path d="M 456 268 H 776" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/>
-<text x="424" y="290" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" >04</text>
-<text x="456" y="288" data-change="MOVED" data-target="worker" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">MOVED · worker<tspan x="456" y="311" fill="#f5f5f5" font-size="12" font-family="'Geist', sans-serif" letter-spacing="0">Fulfilment worker: left → right</tspan></text>
+<text x="424" y="290" fill="#bfc0c0" font-size="9" font-family="Anthropic Sans Text" >04</text>
+<text x="456" y="288" data-change="MOVED" data-target="worker" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.06em">MOVED · worker<tspan x="456" y="311" fill="#f5f5f5" font-size="12" font-family="Anthropic Sans Text" letter-spacing="0">Fulfilment worker: left → right</tspan></text>
 <path d="M 456 328 H 776" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/>
-<text x="424" y="350" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" >05</text>
-<text x="456" y="348" data-change="REWIRED" data-target="r2" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">REWIRED · r2<tspan x="456" y="371" fill="#f5f5f5" font-size="12" font-family="'Geist', sans-serif" letter-spacing="0">Orders API: dispatcher → queue</tspan></text>
+<text x="424" y="350" fill="#bfc0c0" font-size="9" font-family="Anthropic Sans Text" >05</text>
+<text x="456" y="348" data-change="REWIRED" data-target="r2" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.06em">REWIRED · r2<tspan x="456" y="371" fill="#f5f5f5" font-size="12" font-family="Anthropic Sans Text" letter-spacing="0">Orders API: dispatcher → queue</tspan></text>
 <path d="M 456 388 H 776" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/>
-<text x="424" y="410" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" >06</text>
-<text x="456" y="408" data-change="REMOVED" data-target="r3" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">REMOVED · r3<tspan x="456" y="431" fill="#f5f5f5" font-size="12" font-family="'Geist', sans-serif" letter-spacing="0">Dispatcher → worker</tspan></text>
+<text x="424" y="410" fill="#bfc0c0" font-size="9" font-family="Anthropic Sans Text" >06</text>
+<text x="456" y="408" data-change="REMOVED" data-target="r3" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.06em">REMOVED · r3<tspan x="456" y="431" fill="#f5f5f5" font-size="12" font-family="Anthropic Sans Text" letter-spacing="0">Dispatcher → worker</tspan></text>
 <path d="M 456 448 H 776" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/>
-<text x="424" y="470" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" >07</text>
-<text x="456" y="468" data-change="ADDED" data-target="r4" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">ADDED · r4<tspan x="456" y="491" fill="#f5f5f5" font-size="12" font-family="'Geist', sans-serif" letter-spacing="0">Queue → worker</tspan></text>
-<text x="424" y="544" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">PRESERVED</text>
-<text x="424" y="564" fill="#bfc0c0" font-size="11" font-family="'Geist', sans-serif" >Storefront · database · r1 · r5</text>
+<text x="424" y="470" fill="#bfc0c0" font-size="9" font-family="Anthropic Sans Text" >07</text>
+<text x="456" y="468" data-change="ADDED" data-target="r4" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.06em">ADDED · r4<tspan x="456" y="491" fill="#f5f5f5" font-size="12" font-family="Anthropic Sans Text" letter-spacing="0">Queue → worker</tspan></text>
+<text x="424" y="544" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.14em">PRESERVED</text>
+<text x="424" y="564" fill="#bfc0c0" font-size="11" font-family="Anthropic Sans Text" >Storefront · database · r1 · r5</text>
         <g data-snapshot="after" transform="translate(840 96)" data-grid="336 480 4">
 <!-- Relationships precede components; endpoints meet the declared bounds. -->
 <path data-kind="relationship" data-object-id="r1" data-status="unchanged" data-signature="https:create" data-from="storefront" data-to="api" d="M 168 64 V 96" fill="none" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#architecture-delta-dark-arrow)"/>
@@ -126,65 +125,65 @@
 <path data-kind="relationship" data-object-id="r4" data-status="added" data-signature="deliver" data-from="queue" data-to="worker" d="M 168 256 V 272 Q 168 280 176 280 H 248 Q 256 280 256 288 V 304" fill="none" stroke="#bfc0c0" stroke-width="2" marker-end="url(#architecture-delta-dark-arrow)"/>
 <path data-kind="relationship" data-object-id="r5" data-status="unchanged" data-signature="write-order" data-from="worker" data-to="db" d="M 256 368 V 384 Q 256 392 248 392 H 176 Q 168 392 168 400 V 416" fill="none" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#architecture-delta-dark-arrow)"/>
 <rect x="176" y="72" width="92" height="16" rx="2" fill="#2d3142"/>
-<text x="180" y="84" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" >r1 · HTTPS</text>
+<text x="180" y="84" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" >r1 · HTTPS</text>
 <rect x="176" y="168" width="92" height="16" rx="2" fill="#2d3142"/>
-<text x="180" y="180" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" >r2 · REWIRED</text>
+<text x="180" y="180" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" >r2 · REWIRED</text>
 <rect x="68" y="260" width="92" height="16" rx="2" fill="#2d3142"/>
-<text x="156" y="272" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end">r4 · ADDED</text>
+<text x="156" y="272" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" text-anchor="end">r4 · ADDED</text>
 <rect x="92" y="396" width="68" height="16" rx="2" fill="#2d3142"/>
-<text x="156" y="408" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end">r5 · SQL</text>
+<text x="156" y="408" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" text-anchor="end">r5 · SQL</text>
 <g data-kind="component" data-object-id="storefront" data-status="unchanged" data-signature="web:v1">
 <rect data-role="bounds" x="96" y="0" width="144" height="64" rx="6" fill="#393e53" stroke="#bfc0c0" stroke-width="1.2"/>
-<text x="108" y="15" fill="#bfc0c0" font-size="7.5" font-family="'Geist Mono', monospace" >= storefront · UNCHANGED</text>
-<text x="108" y="36" fill="#f5f5f5" font-size="12" font-family="'Geist', sans-serif" font-weight="600">Storefront</text>
-<text x="108" y="53" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" >web:v1</text>
+<text x="108" y="15" fill="#bfc0c0" font-size="7.5" font-family="Anthropic Sans Text" >= storefront · UNCHANGED</text>
+<text x="108" y="36" fill="#f5f5f5" font-size="12" font-family="Anthropic Sans Text" font-weight="600">Storefront</text>
+<text x="108" y="53" fill="#bfc0c0" font-size="9" font-family="Anthropic Sans Text" >web:v1</text>
 </g>
 <g data-kind="component" data-object-id="api" data-status="changed" data-signature="orders:v2">
 <rect data-role="bounds" x="96" y="96" width="144" height="64" rx="6" fill="rgba(240,138,89,0.10)" stroke="#f08a59" stroke-width="1.2"/>
 <path d="M 97 108 V 148" fill="none" stroke="#f08a59" stroke-width="3"/>
-<text x="108" y="111" fill="#bfc0c0" font-size="7.5" font-family="'Geist Mono', monospace" >~ api · CHANGED</text>
-<text x="108" y="132" fill="#f5f5f5" font-size="12" font-family="'Geist', sans-serif" font-weight="600">Orders API</text>
-<text x="108" y="149" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" >/orders · v2</text>
+<text x="108" y="111" fill="#bfc0c0" font-size="7.5" font-family="Anthropic Sans Text" >~ api · CHANGED</text>
+<text x="108" y="132" fill="#f5f5f5" font-size="12" font-family="Anthropic Sans Text" font-weight="600">Orders API</text>
+<text x="108" y="149" fill="#bfc0c0" font-size="9" font-family="Anthropic Sans Text" >/orders · v2</text>
 </g>
 <g data-kind="component" data-object-id="queue" data-status="added" data-signature="orders:durable:v1">
 <rect data-role="bounds" x="96" y="192" width="144" height="64" rx="6" fill="#393e53" stroke="#bfc0c0" stroke-width="1.2"/>
 <rect x="100" y="196" width="136" height="56" rx="4" fill="none" stroke="#bfc0c0" stroke-width="0.8"/>
-<text x="108" y="207" fill="#bfc0c0" font-size="7.5" font-family="'Geist Mono', monospace" >+ queue · ADDED</text>
-<text x="108" y="228" fill="#f5f5f5" font-size="12" font-family="'Geist', sans-serif" font-weight="600">Order queue</text>
-<text x="108" y="245" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" >durable · at-least-once</text>
+<text x="108" y="207" fill="#bfc0c0" font-size="7.5" font-family="Anthropic Sans Text" >+ queue · ADDED</text>
+<text x="108" y="228" fill="#f5f5f5" font-size="12" font-family="Anthropic Sans Text" font-weight="600">Order queue</text>
+<text x="108" y="245" fill="#bfc0c0" font-size="9" font-family="Anthropic Sans Text" >durable · at-least-once</text>
 </g>
 <g data-kind="component" data-object-id="worker" data-status="moved" data-signature="fulfilment:v1">
 <rect data-role="bounds" x="184" y="304" width="144" height="64" rx="6" fill="#393e53" stroke="#bfc0c0" stroke-width="1.2" stroke-dasharray="1 4" stroke-linecap="round"/>
-<text x="196" y="319" fill="#bfc0c0" font-size="7.5" font-family="'Geist Mono', monospace" >↔ worker · MOVED</text>
-<text x="196" y="340" fill="#f5f5f5" font-size="12" font-family="'Geist', sans-serif" font-weight="600">Fulfilment worker</text>
-<text x="196" y="357" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" >fulfilment:v1</text>
+<text x="196" y="319" fill="#bfc0c0" font-size="7.5" font-family="Anthropic Sans Text" >↔ worker · MOVED</text>
+<text x="196" y="340" fill="#f5f5f5" font-size="12" font-family="Anthropic Sans Text" font-weight="600">Fulfilment worker</text>
+<text x="196" y="357" fill="#bfc0c0" font-size="9" font-family="Anthropic Sans Text" >fulfilment:v1</text>
 </g>
 <g data-kind="component" data-object-id="db" data-status="unchanged" data-signature="orders:postgres">
 <rect data-role="bounds" x="96" y="416" width="144" height="64" rx="6" fill="#393e53" stroke="#bfc0c0" stroke-width="1.2"/>
-<text x="108" y="431" fill="#bfc0c0" font-size="7.5" font-family="'Geist Mono', monospace" >= db · UNCHANGED</text>
-<text x="108" y="452" fill="#f5f5f5" font-size="12" font-family="'Geist', sans-serif" font-weight="600">Orders database</text>
-<text x="108" y="469" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" >PostgreSQL</text>
+<text x="108" y="431" fill="#bfc0c0" font-size="7.5" font-family="Anthropic Sans Text" >= db · UNCHANGED</text>
+<text x="108" y="452" fill="#f5f5f5" font-size="12" font-family="Anthropic Sans Text" font-weight="600">Orders database</text>
+<text x="108" y="469" fill="#bfc0c0" font-size="9" font-family="Anthropic Sans Text" >PostgreSQL</text>
 </g>
-<text x="16" y="332" fill="#bfc0c0" font-size="12" font-family="'Geist', sans-serif" >Same worker,</text>
-<text x="16" y="352" fill="#bfc0c0" font-size="12" font-family="'Geist', sans-serif" >new placement.</text>
+<text x="16" y="332" fill="#bfc0c0" font-size="12" font-family="Anthropic Sans Text" >Same worker,</text>
+<text x="16" y="352" fill="#bfc0c0" font-size="12" font-family="Anthropic Sans Text" >new placement.</text>
 </g>
         <path d="M 24 608 H 1176" stroke="rgba(245,245,245,0.12)" stroke-width="1"/>
 <rect x="24" y="624" width="20" height="16" rx="3" fill="none" stroke="#bfc0c0" stroke-width="1"/>
-<text x="56" y="636" fill="#bfc0c0" font-size="11" font-family="'Geist', sans-serif" >= Unchanged</text>
+<text x="56" y="636" fill="#bfc0c0" font-size="11" font-family="Anthropic Sans Text" >= Unchanged</text>
 <rect x="220" y="624" width="20" height="16" rx="3" fill="none" stroke="#bfc0c0" stroke-width="1"/>
 <rect x="224" y="628" width="12" height="8" rx="1" fill="none" stroke="#bfc0c0" stroke-width="0.8"/>
-<text x="252" y="636" fill="#bfc0c0" font-size="11" font-family="'Geist', sans-serif" >+ Added</text>
+<text x="252" y="636" fill="#bfc0c0" font-size="11" font-family="Anthropic Sans Text" >+ Added</text>
 <rect x="416" y="624" width="20" height="16" rx="3" fill="none" stroke="#bfc0c0" stroke-width="1" stroke-dasharray="4 4"/>
-<text x="448" y="636" fill="#bfc0c0" font-size="11" font-family="'Geist', sans-serif" >− Removed</text>
+<text x="448" y="636" fill="#bfc0c0" font-size="11" font-family="Anthropic Sans Text" >− Removed</text>
 <rect x="612" y="624" width="20" height="16" rx="3" fill="none" stroke="#bfc0c0" stroke-width="1"/>
 <path d="M 613 628 V 636" stroke="#bfc0c0" stroke-width="3"/>
-<text x="644" y="636" fill="#bfc0c0" font-size="11" font-family="'Geist', sans-serif" >~ Changed</text>
+<text x="644" y="636" fill="#bfc0c0" font-size="11" font-family="Anthropic Sans Text" >~ Changed</text>
 <rect x="808" y="624" width="20" height="16" rx="3" fill="none" stroke="#bfc0c0" stroke-width="1" stroke-dasharray="1 4" stroke-linecap="round"/>
-<text x="840" y="636" fill="#bfc0c0" font-size="11" font-family="'Geist', sans-serif" >↔ Moved</text>
+<text x="840" y="636" fill="#bfc0c0" font-size="11" font-family="Anthropic Sans Text" >↔ Moved</text>
 <path d="M 1004 632 H 1024" fill="none" stroke="#bfc0c0" stroke-width="1.2" stroke-dasharray="8 3 2 3" marker-end="url(#architecture-delta-dark-arrow)"/>
-<text x="1036" y="636" fill="#bfc0c0" font-size="11" font-family="'Geist', sans-serif" >⇢ Rewired</text>
-<text x="24" y="660" fill="#bfc0c0" font-size="9" font-family="'Geist', sans-serif" >IDs persist across snapshots. Dashed and dotted strokes encode change, not protocol.</text>
-<text x="1176" y="660" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">6 components · 5 relationships · 7 changes</text>
+<text x="1036" y="636" fill="#bfc0c0" font-size="11" font-family="Anthropic Sans Text" >⇢ Rewired</text>
+<text x="24" y="660" fill="#bfc0c0" font-size="9" font-family="Anthropic Sans Text" >IDs persist across snapshots. Dashed and dotted strokes encode change, not protocol.</text>
+<text x="1176" y="660" fill="#bfc0c0" font-size="9" font-family="Anthropic Sans Text" text-anchor="end">6 components · 5 relationships · 7 changes</text>
       </svg>
     </div>
     <p class="scroll-hint">Scroll the diagram horizontally to compare both snapshots and the change ledger.</p>

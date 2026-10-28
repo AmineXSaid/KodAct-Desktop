@@ -356,7 +356,7 @@ impl SlashCommands {
                         None,
                         kit::line(t, &self.name, true),
                     )))
-                    .child(div().flex_1().child(kit::field(
+                    .child(div().flex_1().min_w_0().child(kit::field(
                         t,
                         "Arguments hint",
                         None,

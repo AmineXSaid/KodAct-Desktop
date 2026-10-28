@@ -16,7 +16,6 @@ use crate::theme::Theme;
 pub fn tint(t: &Theme, mode: ModeId) -> Option<Hsla> {
     match mode {
         ModeId::Manual => None,
-        ModeId::Expert => Some(t.extra.mode_expert),
         ModeId::AcceptEdits => Some(t.extra.mode_edit),
         ModeId::Plan => Some(t.extra.mode_plan),
         ModeId::Bypass => Some(t.extra.mode_bypass),
@@ -117,6 +116,7 @@ pub fn menu(
     window: &gpui::Window,
     cx: &App,
     on_out: impl Fn(gpui::Point<gpui::Pixels>, &mut App) + 'static,
+    leaving: bool,
 ) -> impl IntoElement {
     let s = state.read(cx);
     let (current, allowed, warning) = (s.mode, s.bypass_allowed, s.bypass_warning);
@@ -249,13 +249,11 @@ pub fn menu(
             gpui::anchored()
                 .anchor(gpui::Anchor::BottomRight)
                 .snap_to_window_with_margin(t.size.viewport_margin)
-                .child(div().pb(px(8.)).child(super::motion::edge_draw(
-                    menu,
-                    "modes-in",
-                    t.colors.primary,
-                    0.,
-                    t,
-                ))),
+                .child(
+                    div()
+                        .pb(px(8.))
+                        .child(super::motion::composer_menu(menu, "modes", 0., leaving, t)),
+                ),
         )
         .with_priority(2),
     )

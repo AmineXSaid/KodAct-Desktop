@@ -33,20 +33,25 @@ impl ProjectGithub {
         let new_branch = cx.new(|cx| InputState::new(window, cx).placeholder("New branch name"));
         let subs = vec![
             cx.observe(&state, |_, _, cx| cx.notify()),
-            cx.subscribe_in(&new_branch, window, |this, input, ev: &InputEvent, window, cx| {
-                if matches!(ev, InputEvent::PressEnter { .. }) {
-                    let name = input.read(cx).value().trim().to_string();
-                    if name.is_empty() {
-                        return;
+            cx.subscribe_in(
+                &new_branch,
+                window,
+                |this, input, ev: &InputEvent, window, cx| {
+                    if matches!(ev, InputEvent::PressEnter { .. }) {
+                        let name = input.read(cx).value().trim().to_string();
+                        if name.is_empty() {
+                            return;
+                        }
+                        input.update(cx, |i, cx| i.set_value("", window, cx));
+                        this.branching = false;
+                        if let Screen::Project(id) = this.state.read(cx).screen {
+                            this.state
+                                .update(cx, |s, cx| s.repo_switch(id, name, true, cx));
+                        }
+                        cx.notify();
                     }
-                    input.update(cx, |i, cx| i.set_value("", window, cx));
-                    this.branching = false;
-                    if let Screen::Project(id) = this.state.read(cx).screen {
-                        this.state.update(cx, |s, cx| s.repo_switch(id, name, true, cx));
-                    }
-                    cx.notify();
-                }
-            }),
+                },
+            ),
         ];
         Self {
             state,
@@ -212,18 +217,15 @@ impl Render for ProjectGithub {
             div()
                 .flex()
                 .items_center()
+                .child(crate::theme::section_label(&t, &label).flex_1())
                 .child(
-                    div()
-                        .flex_1()
-                        .text_size(t.text.caption)
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(t.colors.text_muted)
-                        .child(label.to_uppercase()),
-                )
-                .child(
-                    super::button::Button::icon("gh-refresh", "icons/refresh-cw.svg", "Read it again")
-                        .compact()
-                        .on_click(move |_, _, cx| reload.update(cx, |s, cx| s.load_repo(id, cx))),
+                    super::button::Button::icon(
+                        "gh-refresh",
+                        "icons/refresh-cw.svg",
+                        "Read it again",
+                    )
+                    .compact()
+                    .on_click(move |_, _, cx| reload.update(cx, |s, cx| s.load_repo(id, cx))),
                 )
                 .into_any_element()
         };
@@ -289,7 +291,11 @@ impl Render for ProjectGithub {
                     .font_family(t.font_mono.clone())
                     .text_size(t.text.caption)
                     .text_color(t.colors.text)
-                    .child(icon("icons/git-branch.svg", t.size.icon_xs, t.colors.text_muted))
+                    .child(icon(
+                        "icons/git-branch.svg",
+                        t.size.icon_xs,
+                        t.colors.text_muted,
+                    ))
                     .child(
                         div()
                             .min_w_0()
@@ -298,8 +304,14 @@ impl Render for ProjectGithub {
                             .text_ellipsis()
                             .child(repo.branch.clone()),
                     )
-                    .child(icon("icons/chevron-down.svg", t.size.icon_xs, t.colors.text_subtle))
-                    .on_click(cx.listener(move |this, _, _, cx| this.open_branches(path.clone(), cx))),
+                    .child(icon(
+                        "icons/chevron-down.svg",
+                        t.size.icon_xs,
+                        t.colors.text_subtle,
+                    ))
+                    .on_click(
+                        cx.listener(move |this, _, _, cx| this.open_branches(path.clone(), cx)),
+                    ),
             )
             .when(repo.ahead > 0, |d| {
                 d.child(
@@ -308,7 +320,11 @@ impl Render for ProjectGithub {
                         .items_center()
                         .text_size(t.text.caption)
                         .text_color(t.colors.text_muted)
-                        .child(icon("icons/arrow-up.svg", t.size.icon_xs, t.colors.text_muted))
+                        .child(icon(
+                            "icons/arrow-up.svg",
+                            t.size.icon_xs,
+                            t.colors.text_muted,
+                        ))
                         .child(repo.ahead.to_string()),
                 )
             })
@@ -319,7 +335,11 @@ impl Render for ProjectGithub {
                         .items_center()
                         .text_size(t.text.caption)
                         .text_color(t.extra.warning)
-                        .child(icon("icons/arrow-down.svg", t.size.icon_xs, t.extra.warning))
+                        .child(icon(
+                            "icons/arrow-down.svg",
+                            t.size.icon_xs,
+                            t.extra.warning,
+                        ))
                         .child(repo.behind.to_string()),
                 )
             })
@@ -362,7 +382,11 @@ impl Render for ProjectGithub {
                                 .text_ellipsis()
                                 .child(format!("{owner}/{name}")),
                         )
-                        .child(icon("icons/external-link.svg", t.size.icon_xs, t.colors.text_subtle))
+                        .child(icon(
+                            "icons/external-link.svg",
+                            t.size.icon_xs,
+                            t.colors.text_subtle,
+                        ))
                         .on_click(move |_, _, cx| cx.open_url(&url)),
                 )
             });
@@ -391,10 +415,24 @@ impl Render for ProjectGithub {
                         .cursor_pointer()
                         .font_family(t.font_mono.clone())
                         .text_size(t.text.caption)
-                        .text_color(if on { t.colors.text_strong } else { t.colors.text })
+                        .text_color(if on {
+                            t.colors.text_strong
+                        } else {
+                            t.colors.text
+                        })
                         .hover(move |s| s.bg(hover))
-                        .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(b.clone()))
-                        .when(on, |d| d.child(icon("icons/check.svg", t.size.icon_xs, t.colors.primary)))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .child(b.clone()),
+                        )
+                        .when(on, |d| {
+                            d.child(icon("icons/check.svg", t.size.icon_xs, t.colors.primary))
+                        })
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.branching = false;
                             if !on {
@@ -419,7 +457,11 @@ impl Render for ProjectGithub {
         });
 
         let mut out = card
-            .child(title(if repo.github.is_some() { "GitHub" } else { "Repository" }))
+            .child(title(if repo.github.is_some() {
+                "GitHub"
+            } else {
+                "Repository"
+            }))
             .child(branch_row)
             .children(branches)
             .child(actions);
@@ -455,7 +497,12 @@ impl Render for ProjectGithub {
                             .items_center()
                             .gap(t.space.sm)
                             .text_size(t.text.caption)
-                            .child(div().size(px(8.)).rounded(t.radius.pill).bg(checks_color(c, &t)))
+                            .child(
+                                div()
+                                    .size(px(8.))
+                                    .rounded(t.radius.pill)
+                                    .bg(checks_color(c, &t)),
+                            )
                             .child(
                                 div()
                                     .flex_1()
@@ -483,10 +530,17 @@ impl Render for ProjectGithub {
                 }
                 out = out.child(section(&t, format!("Pull requests · {}", hub.prs.len())));
                 if hub.prs.is_empty() {
-                    out = out.child(div().text_size(t.text.caption).text_color(t.colors.text_subtle).child("None open."));
+                    out = out.child(
+                        div()
+                            .text_size(t.text.caption)
+                            .text_color(t.colors.text_subtle)
+                            .child("None open."),
+                    );
                 }
                 for p in &hub.prs {
-                    let color = p.checks.map_or(t.colors.text_muted, |c| checks_color(c, &t));
+                    let color = p
+                        .checks
+                        .map_or(t.colors.text_muted, |c| checks_color(c, &t));
                     let detail = format!(
                         "#{} · {}{} · {}",
                         p.number,
@@ -513,7 +567,12 @@ impl Render for ProjectGithub {
                 }
                 out = out.child(section(&t, format!("Issues · {}", hub.issues.len())));
                 if hub.issues.is_empty() {
-                    out = out.child(div().text_size(t.text.caption).text_color(t.colors.text_subtle).child("None open."));
+                    out = out.child(
+                        div()
+                            .text_size(t.text.caption)
+                            .text_color(t.colors.text_subtle)
+                            .child("None open."),
+                    );
                 }
                 for i in &hub.issues {
                     let ask = format!(
@@ -537,7 +596,10 @@ impl Render for ProjectGithub {
                     div()
                         .text_size(t.text.caption)
                         .text_color(t.colors.text_subtle)
-                        .child(format!("Live from {}; read again every minute while this page is open.", hub.via)),
+                        .child(format!(
+                            "Live from {}; read again every minute while this page is open.",
+                            hub.via
+                        )),
                 );
             }
         }

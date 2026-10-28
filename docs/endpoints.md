@@ -64,6 +64,30 @@ from its catalogue, such as `"qwen/qwen3-coder"`.
 }
 ```
 
+### OmniRoute (a gateway on this PC, as Claude Code uses it)
+
+OmniRoute puts hundreds of models from many providers behind one address.
+Forge reaches it as Claude Code does: Anthropic's format at the root URL (no
+`/v1`), with an OmniRoute API key sent as a Bearer token. With `catalog` on,
+the model menu lists every model OmniRoute offers (combos and `auto/…` too),
+each with its name and context window, and picking one switches this profile
+to it, as Claude Code's `/model` does.
+
+```json
+{
+  "name": "omniroute",
+  "baseUrl": "http://127.0.0.1:20128",
+  "wire": "anthropic",
+  "model": "cc/claude-sonnet-4-6",
+  "auth": { "type": "bearer", "token": "${env:OMNIROUTE_API_KEY}" },
+  "capabilities": { "catalog": true }
+}
+```
+
+In Settings › Models, the **OmniRoute** preset fills all of this in. To pin
+every request to one provider account, add OmniRoute's header:
+`"headers": { "x-omniroute-connection": "<connection id>" }`.
+
 A complete file with two profiles looks like this:
 
 ```json
@@ -123,6 +147,7 @@ that answers, and it is the one your chats use. Forge remembers it.
 | `capabilities.effort` | | `true` if the model takes a reasoning effort. |
 | `capabilities.effortLevels` | | Which: `low`, `medium`, `high`, `xhigh`, `max`. |
 | `capabilities.fast` | | `true` if it has a fast mode. |
+| `capabilities.catalog` | | `true` for a gateway (OmniRoute, OpenRouter): the model menu lists all its models, and picking one switches this profile to it. |
 | `selected` | | The profile picked when Forge starts (top level). |
 | `syncIntervalMinutes` | | How often every model is checked; `0` turns it off (top level). |
 

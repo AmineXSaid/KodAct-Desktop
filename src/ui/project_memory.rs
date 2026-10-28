@@ -67,6 +67,7 @@ impl Render for ProjectMemory {
             .child(
                 div()
                     .flex_1()
+                    .min_w_0()
                     .text_size(t.text.caption)
                     .font_weight(FontWeight::SEMIBOLD)
                     .text_color(t.colors.text_muted)
@@ -97,21 +98,25 @@ impl Render for ProjectMemory {
                         .flex()
                         .justify_end()
                         .gap(t.space.sm)
-                        .child(theme::text_button(&t, "Cancel").id("memory-cancel").on_click(
-                            cx.listener(|this, _, _, cx| {
-                                this.editing = false;
-                                cx.notify();
-                            }),
-                        ))
-                        .child(theme::primary_button(&t, "Save").id("memory-save").on_click(
-                            cx.listener(move |this, _, _, cx| {
-                                let text = this.editor.read(cx).value().to_string();
-                                this.editing = false;
-                                this.state
-                                    .update(cx, |s, cx| s.edit_memory(id, move |_| text, cx));
-                                cx.notify();
-                            }),
-                        )),
+                        .child(
+                            theme::text_button(&t, "Cancel")
+                                .id("memory-cancel")
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.editing = false;
+                                    cx.notify();
+                                })),
+                        )
+                        .child(
+                            theme::primary_button(&t, "Save")
+                                .id("memory-save")
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    let text = this.editor.read(cx).value().to_string();
+                                    this.editing = false;
+                                    this.state
+                                        .update(cx, |s, cx| s.edit_memory(id, move |_| text, cx));
+                                    cx.notify();
+                                })),
+                        ),
                 )
                 .into_any_element()
         } else if topics.is_empty() {
@@ -158,7 +163,11 @@ impl Render for ProjectMemory {
                                     .flex_1()
                                     .min_w_0()
                                     .text_size(t.text.body_sm)
-                                    .text_color(if on { t.colors.text_body } else { t.colors.text_subtle })
+                                    .text_color(if on {
+                                        t.colors.text_body
+                                    } else {
+                                        t.colors.text_subtle
+                                    })
                                     .line_height(relative(1.4))
                                     .child(fact),
                             )
@@ -173,16 +182,20 @@ impl Render for ProjectMemory {
                                             "Forget this",
                                         )
                                         .compact()
-                                        .on_click(move |_, _, cx| {
-                                            let f = f.clone();
-                                            forget.update(cx, |s, cx| {
-                                                s.edit_memory(
-                                                    id,
-                                                    move |now| crate::project_memory::forget(now, &f),
-                                                    cx,
-                                                )
-                                            })
-                                        }),
+                                        .on_click(
+                                            move |_, _, cx| {
+                                                let f = f.clone();
+                                                forget.update(cx, |s, cx| {
+                                                    s.edit_memory(
+                                                        id,
+                                                        move |now| {
+                                                            crate::project_memory::forget(now, &f)
+                                                        },
+                                                        cx,
+                                                    )
+                                                })
+                                            },
+                                        ),
                                     ),
                             ),
                     );
@@ -220,7 +233,11 @@ impl Render for ProjectMemory {
                     d.child(
                         theme::text_button(
                             &t,
-                            if confirm { "Click again to forget all" } else { "Forget everything" },
+                            if confirm {
+                                "Click again to forget all"
+                            } else {
+                                "Forget everything"
+                            },
                         )
                         .id("memory-clear")
                         .text_size(t.text.caption)

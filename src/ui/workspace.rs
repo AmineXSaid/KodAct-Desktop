@@ -9,6 +9,9 @@ use gpui::{
 };
 
 use super::chat_view::ChatView;
+
+/// The Files pane's share of the side column, under a file open above it.
+const FILES_SHARE: f32 = 0.5;
 use super::command_palette::CommandPalette;
 use super::composer::Composer;
 use super::confirm::ConfirmWindow;
@@ -20,8 +23,7 @@ use super::settings::Settings;
 use super::side_chat::SideChat;
 use super::sidebar::Sidebar;
 use super::*;
-use crate::state::{AppState, Screen};
-use crate::theme::Look;
+use crate::state::{AppState, PanelTab, Screen, TitleMenu};
 use crate::theme::{self, ActiveTheme};
 
 pub struct Workspace {
@@ -44,16 +46,19 @@ pub struct Workspace {
     find: Entity<FindBar>,
     browser: Entity<super::browser_view::BrowserView>,
     confirm: Entity<ConfirmWindow>,
+    attachment_editor: Entity<super::attachment_editor::AttachmentEditor>,
     /// SSH's password and passphrase prompts.
     askpass: Entity<super::askpass::AskpassDialog>,
-    /// The home screen's field of dots, behind the greeting and the composer.
-    dots: Entity<super::dot_field::DotField>,
     /// Comments on the file in the side panel (`doc_comments.rs`).
     doc_comments: Entity<super::doc_comments::DocComments>,
     /// Find in the file in the side panel (`doc_find.rs`).
     doc_find: Entity<super::doc_find::DocFind>,
+    /// The project's tree and a viewer, under the side panel (`files_pane.rs`).
+    files: Entity<super::files_pane::FilesPane>,
     /// The film as Forge opens, while it plays (`opener.rs`).
     opener: Option<Entity<super::opener::Opener>>,
+    /// The windows drawn here, kept for the beat each takes to leave.
+    presence: Presences,
     _opener_sub: Option<gpui::Subscription>,
     focus: FocusHandle,
 }
@@ -61,16 +66,6 @@ pub struct Workspace {
 impl Workspace {
     /// Switch to `look` (the command palette's "Theme: …"), keeping light
     /// or dark, and keep it for the next launch.
-    fn pick_look(&mut self, look: Look, cx: &mut Context<Self>) {
-        let dark = self.state.read(cx).dark;
-        self.state.update(cx, |s, cx| {
-            s.look = look;
-            s.save_window();
-            cx.notify();
-        });
-        set_theme(look, dark, cx);
-    }
-
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let state = cx.new(|cx| {
             let mut s = AppState::new();
@@ -78,7 +73,12 @@ impl Workspace {
             s.start_routines(cx);
             s
         });
-        cx.observe(&state, |_, _, cx| cx.notify()).detach();
+        cx.observe(&state, |_, state, cx| {
+            // Each change of place goes on back and forward's list.
+            state.update(cx, |s, _| s.track_place());
+            cx.notify()
+        })
+        .detach();
         // The theme and mode you left it in.
         {
             let s = state.read(cx);
@@ -105,12 +105,13 @@ impl Workspace {
         let find = cx.new(|cx| FindBar::new(state.clone(), window, cx));
         let browser = cx.new(|cx| super::browser_view::BrowserView::new(state.clone(), window, cx));
         let confirm = cx.new(|cx| ConfirmWindow::new(state.clone(), window, cx));
+        let attachment_editor =
+            cx.new(|cx| super::attachment_editor::AttachmentEditor::new(state.clone(), window, cx));
         let askpass = cx.new(|cx| super::askpass::AskpassDialog::new(state.clone(), window, cx));
         let doc_comments =
             cx.new(|cx| super::doc_comments::DocComments::new(state.clone(), window, cx));
         let doc_find = cx.new(|cx| super::doc_find::DocFind::new(state.clone(), window, cx));
-        let composer_focus = composer.read(cx).focus_handle(cx);
-        let dots = cx.new(|cx| super::dot_field::DotField::new(Some(composer_focus), window, cx));
+        let files = cx.new(|cx| super::files_pane::FilesPane::new(state.clone(), window, cx));
         let first_run = state.read(cx).onboarding;
         // The opener: the full film on a first run, ending on the naming
         // screen; a short one after, ending in the app.
@@ -159,11 +160,13 @@ impl Workspace {
             find,
             browser,
             confirm,
+            attachment_editor,
             askpass,
-            dots,
             doc_comments,
             doc_find,
+            files,
             opener,
+            presence: Presences::default(),
             _opener_sub: opener_sub,
             focus: cx.focus_handle(),
         };
@@ -234,7 +237,7 @@ impl Workspace {
     }
 
     /// The dock beside the session, `width` wide, with a grip on its left edge.
-    fn dock(&self, width: f32, cx: &mut Context<Self>) -> gpui::AnyElement {
+    fn dock(&self, width: f32, leaving: bool, cx: &mut Context<Self>) -> gpui::AnyElement {
         let t = cx.theme().clone();
         let grip = self.state.clone();
         let line = t.colors.primary;
@@ -264,25 +267,145 @@ impl Workspace {
                     }),
             )
             .into_any_element();
-        super::motion::slide_in(pane, width, false, &t)
+        match leaving {
+            true => super::motion::slide_out(pane, width, "terminal-dock", &t),
+            false => super::motion::slide_in(pane, width, false, &t),
+        }
     }
 
-    fn title_bar(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
+    /// The open chat's name, heading the conversation under the title bar
+    /// (the bar keeps only the app and the window's controls); a click
+    /// opens its menu under it.
+    fn chat_header(&self, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
+        let t = cx.theme().clone();
+        let s = self.state.read(cx);
+        let c = (s.screen == Screen::Chat)
+            .then(|| s.current.and_then(|id| s.chats.iter().find(|c| c.id == id)))
+            .flatten()
+            .filter(|c| !c.messages.is_empty())?;
+        let (id, hover) = (c.id, t.colors.hover);
+        let menu_open = s.chat_menu == Some(id);
+        let state = self.state.clone();
+        let title = div()
+            .id("chat-title")
+            .flex()
+            .items_center()
+            .gap(t.space.xs)
+            .min_w_0()
+            .h(t.size.control)
+            .pl(t.space.sm)
+            .pr(t.space.xs)
+            .ml(-t.space.sm)
+            .rounded(t.radius.small)
+            .cursor_pointer()
+            .text_size(t.text.body)
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(t.colors.text_strong)
+            .hover(move |st| st.bg(hover))
+            .when(menu_open, |d| d.bg(hover))
+            .child(
+                div()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
+                    .child(c.title.clone()),
+            )
+            .child(icon(
+                "icons/chevron-down.svg",
+                t.size.icon_sm,
+                t.colors.text_muted,
+            ))
+            .on_click(move |ev, _, cx| {
+                cx.stop_propagation();
+                // Under the title, its left edge.
+                let at = gpui::point(
+                    ev.position().x - t.space.lg,
+                    ev.position().y + t.size.control / 2. + t.space.xs,
+                );
+                state.update(cx, |s, cx| s.chat_menu_from(id, at, cx));
+            });
+        Some(
+            // From the chat's left edge, one control tall: the title, not
+            // a band of empty room.
+            div()
+                .flex_none()
+                .flex()
+                .items_center()
+                .h(t.size.control + t.space.sm)
+                .px(t.space.lg)
+                .border_b_1()
+                .border_color(t.colors.border)
+                .child(title)
+                .into_any_element(),
+        )
+    }
+
+    fn title_bar(
+        &self,
+        frames: BarFrames,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let t = cx.theme().clone();
         // Deferred so it paints above the page under the title bar.
-        let switcher = self.state.read(cx).switcher_open.then(|| {
-            gpui::deferred(project_switcher(
-                &self.state,
-                window,
-                cx,
-                t.size.control + t.space.xs,
+        let switcher = frames.switcher.map(|leaving| {
+            gpui::deferred(super::motion::unfold(
+                div().child(project_switcher(
+                    &self.state,
+                    window,
+                    cx,
+                    t.size.control + t.space.xs,
+                )),
+                "project-switcher",
+                false,
+                leaving,
+                &t,
             ))
             .with_priority(1)
         });
-        // The search field: you type in it, the palette drops below.
-        let field = self.palette.update(cx, |p, cx| p.field(window, cx));
+        let unseen = !self.state.read(cx).terminal_open && self.terminal.read(cx).unseen;
         let s = self.state.read(cx);
         let hover = t.colors.hover;
+        let (tint, ink) = (t.colors.primary_tint, t.colors.primary);
+        let side = s.doc.is_none().then_some(s.panel).flatten();
+        let (plan_on, files_on) = (side == Some(PanelTab::Plan), s.files_open);
+        let menu = s.title_menu.map(|(m, _)| m);
+        let (share_on, more_on) = (
+            menu == Some(TitleMenu::Share),
+            menu == Some(TitleMenu::More),
+        );
+        let session_on = s.session_open;
+        // A pane's button shows it is open: the accent's wash and ink.
+        let toggle = |id: &'static str, path: &'static str, tip: &'static str, on: bool| {
+            div()
+                .id(id)
+                .occlude()
+                // No tooltip over its own open menu or pane.
+                .when(!on, |d| {
+                    d.tooltip(move |window, cx| {
+                        gpui::component::tooltip::Tooltip::new(tip).build(window, cx)
+                    })
+                })
+                .size(t.size.control)
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(t.radius.small)
+                .cursor_pointer()
+                .when(on, |d| d.bg(tint))
+                .when(!on, |d| d.hover(move |st| st.bg(hover)))
+                .child(icon(
+                    path,
+                    t.size.icon,
+                    if on { ink } else { t.colors.text_muted },
+                ))
+        };
+        let chat = (s.screen == Screen::Chat)
+            .then(|| s.current.and_then(|id| s.chats.iter().find(|c| c.id == id)))
+            .flatten()
+            .filter(|c| !c.messages.is_empty());
+        let chat_open = chat.is_some();
         // Icon-only: each says what it does, with its key.
         // Every control in the bar occludes it: on Windows the bar is the
         // window's drag area, and a click on anything not occluding it is
@@ -304,23 +427,64 @@ impl Workspace {
                 .child(icon(path, t.size.icon, t.colors.text_muted))
         };
         // A flat chrome: the component's own background is a gradient.
+        let sidebar_open = s.sidebar_open;
         TitleBar::new().h(t.size.titlebar).bg(t.extra.chrome).child(
             div()
+                .relative()
                 .flex()
                 .items_center()
                 .gap(t.space.xs)
                 .w_full()
+                .h_full()
                 .pr(t.space.sm)
-                .child(
-                    button(
+                .map(|d| {
+                    let toggle = button(
                         "toggle-sidebar",
                         "icons/panel-left.svg",
                         "Show or hide the sidebar (Ctrl+B)",
                     )
                     .on_click(cx.listener(|_, _, window, cx| {
                         window.dispatch_action(Box::new(ToggleSidebar), cx)
-                    })),
-                )
+                    }));
+                    if sidebar_open {
+                        // Over the sidebar, its head: the toggle and Forge's
+                        // name (Chat | Code heads the sidebar itself).
+                        d.child(
+                            // The title bar insets its row by the sidebar's
+                            // own padding, so the switch ends where the
+                            // sidebar's search field does.
+                            div()
+                                .flex_none()
+                                .w(t.size.sidebar - t.space.md)
+                                .flex()
+                                .items_center()
+                                .gap(t.space.sm)
+                                .pr(t.space.sm)
+                                .child(toggle)
+                                .child(super::ingot::wordmark(15., &t)),
+                        )
+                    } else {
+                        d.child(toggle)
+                    }
+                })
+                // Back and forward through the places you were, dimmed when
+                // there's nowhere to go.
+                .child(nav_button(
+                    "go-back",
+                    "icons/arrow-left.svg",
+                    "Back (Alt+Left)",
+                    !s.nav_back.is_empty(),
+                    Box::new(GoBack),
+                    &t,
+                ))
+                .child(nav_button(
+                    "go-forward",
+                    "icons/arrow-right.svg",
+                    "Forward (Alt+Right)",
+                    !s.nav_forward.is_empty(),
+                    Box::new(GoForward),
+                    &t,
+                ))
                 // The project and its branch: here while the sidebar is
                 // hidden, at the top of the sidebar's sheet while it shows.
                 // A plain chat has no folder to show.
@@ -393,77 +557,71 @@ impl Workspace {
                             .children(switcher),
                     )
                 })
-                // The branch, when the folder is a repository.
-                .when(!s.branch.is_empty() && !s.sidebar_open, |d| {
-                    let branch = s.branch.clone();
-                    let copier = self.state.clone();
-                    let strong = t.colors.text;
+                .child(div().flex_1())
+                .children(super::tasks::render(
+                    &t,
+                    &self.state,
+                    window,
+                    frames.tasks,
+                    cx,
+                ))
+                .children(super::approvals::render(
+                    &t,
+                    &self.state,
+                    window,
+                    frames.approvals,
+                    cx,
+                ))
+                // The Session column: where it runs, its context, its changes.
+                .when(chat_open, |d| {
                     d.child(
-                        div()
-                            .id("branch")
-                            .occlude()
-                            .flex()
-                            .items_center()
-                            .gap(t.space.xs)
-                            .px(t.space.sm)
-                            .py(px(2.))
-                            .rounded(t.radius.pill)
-                            .bg(t.colors.hover)
-                            .cursor_pointer()
-                            .hover(move |st| st.text_color(strong))
-                            .tooltip(|window, cx| {
-                                gpui::component::tooltip::Tooltip::new("Copy the branch name")
-                                    .build(window, cx)
-                            })
-                            .on_click(move |_, _, cx| {
-                                cx.write_to_clipboard(gpui::ClipboardItem::new_string(
-                                    branch.to_string(),
-                                ));
-                                copier.update(cx, |s, cx| {
-                                    s.show_toast(format!("Copied {branch}"), cx)
-                                });
-                            })
-                            .text_size(t.text.caption)
-                            .font_family(t.font_mono.clone())
-                            .text_color(t.colors.text_muted)
-                            .child(icon(
-                                "icons/git-branch.svg",
-                                t.size.icon_xs,
-                                t.colors.text_muted,
-                            ))
-                            .child(s.branch.clone()),
+                        toggle(
+                            "show-session",
+                            "icons/panel-right.svg",
+                            "Session",
+                            session_on,
+                        )
+                        .on_click(cx.listener(|_, _, window, cx| {
+                            window.dispatch_action(Box::new(ToggleSession), cx)
+                        })),
                     )
                 })
-                .child(div().flex_1())
-                .child(field)
-                .child(div().flex_1())
-                .children(super::approvals::render(&t, &self.state, window, cx))
-                .child({
-                    let open = s.terminal_open;
-                    let unseen = !open && self.terminal.read(cx).unseen;
-                    div()
-                        .id("toggle-terminal")
-                        .occlude()
-                        .relative()
-                        .size(t.size.control)
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .rounded(t.radius.pill)
-                        .cursor_pointer()
-                        .when(open, |d| d.bg(t.colors.primary_tint))
-                        .when(!open, |d| d.hover(move |st| st.bg(hover)))
-                        .child(icon(
-                            "icons/terminal.svg",
-                            t.size.icon,
-                            if open {
-                                t.colors.primary
-                            } else {
-                                t.colors.text_muted
-                            },
-                        ))
+                .child(
+                    toggle(
+                        "show-plan",
+                        "icons/list-todo.svg",
+                        "Plan (Ctrl+Shift+E)",
+                        plan_on,
+                    )
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.state
+                            .update(cx, |s, cx| s.toggle_panel_tab(PanelTab::Plan, cx))
+                    })),
+                )
+                .child(
+                    toggle("show-files", "icons/folder.svg", "Files", files_on).on_click(
+                        cx.listener(|this, _, _, cx| {
+                            this.state.update(cx, |s, cx| s.toggle_files(cx))
+                        }),
+                    ),
+                )
+                .when(chat_open, |d| {
+                    d.child(
+                        toggle("share-chat", "icons/share.svg", "Share", share_on).on_click(
+                            cx.listener(|this, ev: &gpui::ClickEvent, _, cx| {
+                                let at = gpui::point(ev.position().x, ev.position().y);
+                                this.state.update(cx, |s, cx| {
+                                    s.toggle_title_menu(TitleMenu::Share, at, cx)
+                                })
+                            }),
+                        ),
+                    )
+                })
+                .child(
+                    toggle("more", "icons/ellipsis-vertical.svg", "More", more_on)
+                        // New output in a closed terminal: a dot, as before.
                         .when(unseen, |d| {
-                            d.child(
+                            d.relative().child(
                                 div()
                                     .absolute()
                                     .top(px(4.))
@@ -473,59 +631,18 @@ impl Workspace {
                                     .bg(t.colors.primary),
                             )
                         })
-                        .tooltip(move |window, cx| {
-                            gpui::component::tooltip::Tooltip::new(if unseen {
-                                "Terminal: new output (Ctrl+`)"
-                            } else {
-                                "Terminal (Ctrl+`)"
-                            })
-                            .build(window, cx)
-                        })
-                        .on_click(cx.listener(|_, _, window, cx| {
-                            window.dispatch_action(Box::new(ToggleTerminal), cx)
-                        }))
-                })
-                .child(
-                    button(
-                        "toggle-panel",
-                        "icons/panel-right.svg",
-                        "Side panel: plan, files, browser (Ctrl+Shift+E)",
-                    )
-                    .on_click(cx.listener(|_, _, window, cx| {
-                        window.dispatch_action(Box::new(TogglePanel), cx)
-                    })),
-                )
-                .child(
-                    button(
-                        "toggle-theme",
-                        if t.is_dark {
-                            "icons/sun.svg"
-                        } else {
-                            "icons/moon.svg"
-                        },
-                        if t.is_dark {
-                            "Light theme (Ctrl+Shift+L)"
-                        } else {
-                            "Dark theme (Ctrl+Shift+L)"
-                        },
-                    )
-                    .on_click(cx.listener(|_, _, window, cx| {
-                        window.dispatch_action(Box::new(ToggleTheme), cx)
-                    })),
-                )
-                .child(
-                    button("settings", "icons/settings.svg", "Settings (Ctrl+,)").on_click(
-                        cx.listener(|_, _, window, cx| {
-                            window.dispatch_action(Box::new(OpenSettings), cx)
-                        }),
-                    ),
+                        .on_click(cx.listener(|this, ev: &gpui::ClickEvent, _, cx| {
+                            let at = gpui::point(ev.position().x, ev.position().y);
+                            this.state
+                                .update(cx, |s, cx| s.toggle_title_menu(TitleMenu::More, at, cx))
+                        })),
                 ),
         )
     }
 
     /// A new chat: the greeting in the display serif beside Forge's mark, a
-    /// quiet line under it, the composer and the starters, over the field of
-    /// dots. The field fills the session behind them and never scrolls.
+    /// quiet line under it, the composer and the starters, on a plain
+    /// ground.
     fn welcome(&self, _window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let s = self.state.read(cx);
@@ -545,71 +662,62 @@ impl Workspace {
         } else {
             format!("Working in {project}. Forge asks before it changes anything.")
         };
-        div()
-            .flex_1()
-            .min_h_0()
-            .relative()
-            .flex()
-            .flex_col()
-            .child(self.dots.clone())
-            .child(
-                // A short window scrolls it rather than cutting off the starters.
-                div()
-                    .id("welcome")
-                    .flex_1()
-                    .min_h_0()
-                    .overflow_y_scroll()
-                    .child(
-                        div()
-                            .min_h_full()
-                            .flex()
-                            .flex_col()
-                            .items_center()
-                            .justify_center()
-                            .px(t.space.xl)
-                            .py(t.space.xxxl)
-                            // A little above the middle, where the eye lands.
-                            .pb(t.space.xxl * 2.)
-                            .child(
-                                div()
-                                    .w_full()
-                                    .max_w(t.size.composer_width + t.space.xxl)
-                                    .relative()
-                                    .flex()
-                                    .flex_col()
-                                    .items_center()
-                                    .gap(t.space.xl)
-                                    // The page rises in piece by piece as it opens.
-                                    .child(super::motion::row_in_full(
-                                        div()
-                                            .flex()
-                                            .flex_col()
-                                            .items_center()
-                                            .gap(t.space.snug)
-                                            .child(greeting_line(&line, &t))
-                                            .child(
-                                                div()
-                                                    .text_size(t.text.body_sm)
-                                                    .text_color(t.colors.text_muted)
-                                                    .text_center()
-                                                    .child(sub),
-                                            ),
-                                        "welcome-greeting",
-                                        0,
-                                        &t,
-                                    ))
-                                    .child(self.composer.clone())
-                                    .child(super::starters::render(
-                                        &t,
-                                        &self.state,
-                                        &self.composer,
-                                        cx,
-                                    ))
-                                    // The dot field arranges itself around this column.
-                                    .child(self.dots.read(cx).content_probe()),
-                            ),
-                    ),
-            )
+        div().flex_1().min_h_0().relative().flex().flex_col().child(
+            // A short window scrolls it rather than cutting off the starters.
+            div()
+                .id("welcome")
+                .flex_1()
+                .min_h_0()
+                .overflow_y_scroll()
+                .child(
+                    div()
+                        .min_h_full()
+                        .flex()
+                        .flex_col()
+                        .items_center()
+                        .justify_center()
+                        .px(t.space.xl)
+                        .py(t.space.xxxl)
+                        // A little above the middle, where the eye lands.
+                        .pb(t.space.xxl * 2.)
+                        .child(
+                            div()
+                                .w_full()
+                                .max_w(t.size.composer_width + t.space.xxl)
+                                .relative()
+                                .flex()
+                                .flex_col()
+                                .items_center()
+                                .gap(t.space.xl)
+                                // The page rises in piece by piece as it opens.
+                                .child(super::motion::row_in_full(
+                                    div()
+                                        .flex()
+                                        .flex_col()
+                                        .items_center()
+                                        .gap(t.space.snug)
+                                        .child(greeting_line(&line, &t))
+                                        .child(
+                                            div()
+                                                .text_size(t.text.body_sm)
+                                                .text_color(t.colors.text_muted)
+                                                .text_center()
+                                                .child(sub),
+                                        ),
+                                    "welcome-greeting",
+                                    0,
+                                    &t,
+                                ))
+                                .child(self.composer.clone())
+                                .child(super::starters::render(
+                                    &t,
+                                    &self.state,
+                                    &self.composer,
+                                    cx,
+                                )),
+                        ),
+                ),
+        )
     }
 
     /// The chat an action from the palette or a key acts on: the one showing.
@@ -620,9 +728,14 @@ impl Workspace {
 
     /// The title bar's project switcher: every project, then All projects
     /// and Open folder….
-    fn toast(&self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
+    fn toast(
+        &self,
+        frame: Frame<SharedString>,
+        cx: &mut Context<Self>,
+    ) -> Option<impl IntoElement> {
         let t = cx.theme().clone();
-        let text: SharedString = self.state.read(cx).toast.clone()?;
+        let (text, leaving) = frame?;
+        let id = format!("toast-{}", text);
         Some(
             div()
                 .absolute()
@@ -631,7 +744,7 @@ impl Workspace {
                 .right_0()
                 .flex()
                 .justify_center()
-                .child(
+                .child(super::motion::notice(
                     theme::popover(&t)
                         .px(t.space.lg)
                         .py(t.space.sm)
@@ -640,7 +753,10 @@ impl Workspace {
                         .gap(t.space.sm)
                         .child(icon("icons/info.svg", t.size.icon_sm, t.colors.text_muted))
                         .child(text),
-                ),
+                    &id,
+                    leaving,
+                    &t,
+                )),
         )
     }
 }
@@ -648,21 +764,69 @@ impl Workspace {
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
+        // Each window that just closed leaves over a beat of its own.
+        let (palette_now, shortcuts_now, map_now, title_now, chat_now, toast_now) = {
+            let s = self.state.read(cx);
+            (
+                s.palette_open.then_some(()),
+                s.shortcuts_open.then_some(()),
+                s.map_open.then_some(()),
+                s.title_menu,
+                s.chat_menu,
+                s.toast.clone(),
+            )
+        };
+        let p = &mut self.presence;
+        let palette_f = p.palette.frame(palette_now, t.size.menu_out_ms, window);
+        let shortcuts_f = p
+            .shortcuts
+            .frame(shortcuts_now, t.size.window_out_ms, window);
+        let map_f = p.map.frame(map_now, t.size.window_out_ms, window);
+        let title_f = p.title.frame(title_now, t.size.menu_out_ms, window);
+        let chat_f = p.chat.frame(chat_now, t.size.menu_out_ms, window);
+        let toast_f = p.toast.frame(toast_now, t.size.window_out_ms, window);
+        let bar = {
+            let s = self.state.read(cx);
+            let (sw, ta, ap) = (s.switcher_open, s.tasks_open, s.approvals_open);
+            let p = &mut self.presence;
+            let out = t.size.menu_out_ms;
+            BarFrames {
+                switcher: p.switcher.frame(sw.then_some(()), out, window).map(|f| f.1),
+                tasks: p.tasks.frame(ta.then_some(()), out, window).map(|f| f.1),
+                approvals: p
+                    .approvals
+                    .frame(ap.then_some(()), out, window)
+                    .map(|f| f.1),
+            }
+        };
         let s = self.state.read(cx);
-        let (sidebar_open, palette_open, onboarding, screen, loading) = (
-            s.sidebar_open,
-            s.palette_open,
-            s.onboarding,
-            s.screen,
-            s.loading,
-        );
-        let (find_open, shortcuts_open) = (s.find.is_some(), s.shortcuts_open);
+        let (sidebar_open, onboarding, screen, loading) =
+            (s.sidebar_open, s.onboarding, s.screen, s.loading);
+        // Which chat shows: its transcript animates in when it changes.
+        let chat_key = s.chat().map_or(usize::MAX, |c| c.id);
         let presenting = s.presenting;
         let empty = s.chat().is_none_or(|c| c.messages.is_empty());
-        self.dots.read(cx).set_backdrop(!empty, s.busy());
-        let below = s.doc_below;
-        let terminal_open = s.terminal_open;
-        let side_open = s.doc.is_some() || s.panel.is_some();
+        // The side column: the file or tab in it and the Files pane, kept
+        // while it slides back out after it closes.
+        let side_now = (s.doc.is_some() || s.panel.is_some() || s.files_open)
+            .then(|| (s.doc.clone(), s.panel, s.files_open));
+        let side_f = self
+            .presence
+            .side
+            .frame(side_now, t.size.panel_out_ms, window);
+        let side_leaving = side_f.as_ref().is_some_and(|(_, leaving)| *leaving);
+        let side_open = side_f.is_some();
+        let (side_doc, side_panel, files_open) =
+            side_f.map(|(k, _)| k).unwrap_or((None, None, false));
+        // With Files open the side column stands beside the chat.
+        let below = s.doc_below && !files_open;
+        // The terminal dock, kept while it slides back out.
+        let dock_f =
+            self.presence
+                .dock
+                .frame(s.terminal_open.then_some(()), t.size.panel_out_ms, window);
+        let dock_leaving = dock_f.is_some_and(|(_, leaving)| leaving);
+        let terminal_open = dock_f.is_some();
         // What is left of the window beside the sidebar is shared by the
         // chat, the side panel and the dock; the chat keeps its narrowest.
         let beside = f32::from(window.viewport_size().width)
@@ -672,8 +836,7 @@ impl Render for Workspace {
                 f32::from(t.size.rail)
             };
         let dock_want = self.dock_want(window, cx);
-        let wide = s
-            .doc
+        let wide = side_doc
             .as_ref()
             .is_some_and(|f| f.is_diagram() || f.office() == Some(crate::office::Kind::Xlsx));
         let (panel_w, dock_w) = share_out(
@@ -688,7 +851,7 @@ impl Render for Workspace {
             terminal_open.then(|| (dock_want, f32::from(t.size.terminal_min))),
             f32::from(t.size.chat_min),
         );
-        let dock = self.dock(dock_w, cx);
+        let dock = self.dock(dock_w, dock_leaving, cx);
 
         // The session is a sheet on the cream: 4px corners, paper grain,
         // a gutter to its right and below.
@@ -708,12 +871,13 @@ impl Render for Workspace {
             let s = self.state.read(cx);
             let main_width = beside - if terminal_open { dock_w } else { 0. };
             let fit = super::doc_pane::Fit {
-                width: if s.doc_below { main_width } else { panel_w },
+                width: if below { main_width } else { panel_w },
                 scale: window.scale_factor(),
                 fit: s.doc_fit,
-                below: s.doc_below,
-                from_panel: s.panel.is_some(),
+                below,
+                from_panel: side_panel.is_some(),
                 text: s.doc_text,
+                source: s.source_view,
                 version: {
                     let (all, at) = s.doc_versions();
                     (at, all.len().max(1))
@@ -726,7 +890,7 @@ impl Render for Workspace {
                 .doc_changes
                 .as_ref()
                 .filter(|(k, _)| {
-                    s.doc
+                    side_doc
                         .as_ref()
                         .is_some_and(|f| crate::state::doc_version_key(f) == *k)
                 })
@@ -736,12 +900,12 @@ impl Render for Workspace {
                 .doc_preview
                 .as_ref()
                 .filter(|(k, _)| {
-                    s.doc
+                    side_doc
                         .as_ref()
                         .is_some_and(|f| k.split_once('#').map(|(n, _)| n) == Some(f.name.as_ref()))
                 })
                 .map(|(_, r)| r);
-            let panel = s.panel.map(|tab| {
+            let panel = side_panel.map(|tab| {
                 super::workbench::render(
                     super::workbench::View {
                         tab,
@@ -765,14 +929,17 @@ impl Render for Workspace {
                         working: s.busy(),
                         copied: s.copied.clone(),
                         width: fit.width,
-                        below: s.doc_below,
+                        below,
                         scale: fit.scale,
+                        plan_version: s.plan_version,
+                        source: s.source_view,
                     },
                     self.state.clone(),
                     &t,
                 )
             });
-            s.doc
+            let has_top = side_doc.is_some() || side_panel.is_some();
+            let top = side_doc
                 .as_ref()
                 .map(|f| {
                     super::doc_pane::render(
@@ -790,7 +957,40 @@ impl Render for Workspace {
                     )
                 })
                 .or(panel)
-                .map(|p| super::motion::slide_in(p, pane_width, pane_below, &t))
+                .map(|p| match files_open {
+                    // A file or tab above, the Files pane under it.
+                    true => div().flex_1().min_h_0().flex().child(p).into_any_element(),
+                    false => p,
+                });
+            let column = match (top, files_open) {
+                (top, true) => Some(
+                    div()
+                        .w(px(pane_width))
+                        .h_full()
+                        .flex()
+                        .flex_col()
+                        .border_l_1()
+                        .border_color(t.colors.border)
+                        .children(top)
+                        .child(
+                            div()
+                                .when(has_top, |d| d.h(gpui::relative(FILES_SHARE)).border_t_1())
+                                .when(!has_top, |d| d.flex_1())
+                                .min_h_0()
+                                .border_color(t.colors.border)
+                                .child(self.files.clone()),
+                        )
+                        .into_any_element(),
+                ),
+                (top, false) => top,
+            };
+            column.and_then(|p| match side_leaving {
+                // Leaving: back out to the edge (below the chat, gone at once).
+                true => {
+                    (!pane_below).then(|| super::motion::slide_out(p, pane_width, "side-panel", &t))
+                }
+                false => Some(super::motion::slide_in(p, pane_width, pane_below, &t)),
+            })
         };
         let main = if screen == Screen::Rules {
             main.child(self.rules.clone())
@@ -805,16 +1005,39 @@ impl Render for Workspace {
                     .child(div().flex_1().min_w_0().min_h_0().flex().child(self.design_home.clone()))
                     .children(pane),
             )
-        } else if matches!(screen, Screen::Projects | Screen::Project(_)) {
-            // A project page opens its knowledge files in the side panel too.
-            let doc_open = matches!(screen, Screen::Project(_)) && self.state.read(cx).doc.is_some();
+        } else if screen == Screen::Documents {
+            // A card opens its file beside the list, as from a chat.
+            let page = {
+                let s = self.state.read(cx);
+                super::documents::render(&t, &self.state, s, window.scale_factor())
+            };
             main.child(
                 div()
                     .flex_1()
                     .min_h_0()
                     .flex()
                     .when(below, |d| d.flex_col())
-                    .child(div().flex_1().min_w_0().min_h_0().flex().child(self.projects.clone()))
+                    .child(div().flex_1().min_w_0().min_h_0().flex().child(page))
+                    .children(pane),
+            )
+        } else if matches!(screen, Screen::Projects | Screen::Project(_)) {
+            // A project page opens its knowledge files in the side panel too.
+            let doc_open =
+                matches!(screen, Screen::Project(_)) && self.state.read(cx).doc.is_some();
+            main.child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .flex()
+                    .when(below, |d| d.flex_col())
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .min_h_0()
+                            .flex()
+                            .child(self.projects.clone()),
+                    )
                     .when(doc_open, |d| d.children(pane)),
             )
         } else if empty {
@@ -864,10 +1087,11 @@ impl Render for Workspace {
                 .flex()
                 .flex_col()
                 .relative()
-                // The home screen's field stays behind the whole chat, the
-                // composer's corners too, faint, with a soft wave through it.
-                .child(self.dots.clone())
-                .when(find_open, |d| d.child(self.find.clone()))
+                // Behind a chat the stage is plain, as the text wants it;
+                // the home screen's field follows only if you asked for it.
+                .children(self.chat_header(cx))
+                // Always there: the bar draws itself while open and as it leaves.
+                .child(self.find.clone())
                 .child(
                     div()
                         .flex_1()
@@ -876,11 +1100,19 @@ impl Render for Workspace {
                         .flex_col()
                         .relative()
                         .child(self.chat.clone())
-                        .children(super::tasks::render(&t, &self.state, cx))
+                        // Each chat opened fades and rises in, its task pill
+                        // with it.
                         .with_animation(
-                            "transcript-in",
-                            gpui::Animation::new(std::time::Duration::from_millis(t.motion_ms)),
-                            |d, delta| d.opacity(delta),
+                            ("transcript-in", chat_key),
+                            gpui::Animation::new(std::time::Duration::from_millis(
+                                if super::motion::reduced_motion() {
+                                    1
+                                } else {
+                                    t.size.panel_in_ms
+                                },
+                            ))
+                            .with_easing(gpui::ease_out_quint()),
+                            |d, k| d.opacity(k).mt(px(10. * (1. - k))),
                         ),
                 )
                 .child(
@@ -896,6 +1128,25 @@ impl Render for Workspace {
                                 .child(self.composer.clone()),
                         ),
                 );
+            // The Session column, between the chat and any pane, as Claude
+            // Code's: environment, context and changes at a glance.
+            let session_now = {
+                let s = self.state.read(cx);
+                s.session_open.then_some(s.current).flatten()
+            };
+            let session = self
+                .presence
+                .session
+                .frame(session_now, t.size.panel_out_ms, window)
+                .map(|(chat, leaving)| {
+                    let w = f32::from(t.size.session_panel);
+                    let col =
+                        super::session_panel::render(&t, &self.state, self.state.read(cx), chat);
+                    match leaving {
+                        true => super::motion::slide_out(col, w, "session-column", &t),
+                        false => super::motion::slide_in(col, w, false, &t),
+                    }
+                });
             main.child(
                 div()
                     .flex_1()
@@ -903,6 +1154,7 @@ impl Render for Workspace {
                     .flex()
                     .when(below, |d| d.flex_col())
                     .child(conversation)
+                    .children(session)
                     .children(pane),
             )
         };
@@ -911,11 +1163,42 @@ impl Render for Workspace {
             .id("workspace")
             .key_context("Workspace")
             .track_focus(&self.focus)
+            // While a chat's menu shows, its letters run its rows, wherever
+            // the focus is (Claude Code's session menu works the same).
+            .capture_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, _, cx| {
+                let k = &ev.keystroke;
+                if k.modifiers.modified() {
+                    return;
+                }
+                let Some(id) = this.state.read(cx).chat_menu else {
+                    return;
+                };
+                if let Some(f) = super::chat_menu::letter(&k.key) {
+                    cx.stop_propagation();
+                    this.state.update(cx, |s, cx| f(s, id, cx));
+                }
+            }))
             .relative()
             .flex()
             .flex_col()
+            .on_action(cx.listener(|this, _: &ToggleSession, _, cx| {
+                this.state.update(cx, |s, cx| s.toggle_session(cx))
+            }))
+            .on_action(cx.listener(|this, _: &ToggleFiles, _, cx| {
+                this.state.update(cx, |s, cx| s.toggle_files(cx))
+            }))
+            .on_action(cx.listener(|this, _: &ShowChatFiles, _, cx| {
+                this.state
+                    .update(cx, |s, cx| s.toggle_panel_tab(PanelTab::Files, cx))
+            }))
+            .on_action(cx.listener(|this, _: &OpenDocuments, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.screen = crate::state::Screen::Documents;
+                    cx.notify();
+                })
+            }))
             .on_action(cx.listener(|this, _: &NewChat, window, cx| {
-                this.state.update(cx, |s, cx| s.new_plain_chat(cx));
+                this.state.update(cx, |s, cx| s.new_in_kind(cx));
                 this.focus_composer(window, cx);
             }))
             .on_action(cx.listener(|this, _: &ShowProjectMap, _, cx| {
@@ -1021,6 +1304,22 @@ impl Render for Workspace {
                 this.state.update(cx, |s, cx| s.design_new_page(cx));
                 this.focus_composer(window, cx);
             }))
+            .on_action(cx.listener(|this, _: &ShowPlanView, _, cx| {
+                this.state
+                    .update(cx, |s, cx| s.show_panel(PanelTab::Plan, cx))
+            }))
+            .on_action(cx.listener(|this, _: &ShowAgentsView, _, cx| {
+                this.state
+                    .update(cx, |s, cx| s.show_panel(PanelTab::Agents, cx))
+            }))
+            .on_action(cx.listener(|this, _: &ShowFilesView, _, cx| {
+                this.state
+                    .update(cx, |s, cx| s.show_panel(PanelTab::Files, cx))
+            }))
+            .on_action(cx.listener(|this, _: &ShowBrowserView, _, cx| {
+                this.state
+                    .update(cx, |s, cx| s.show_panel(PanelTab::Browser, cx))
+            }))
             .on_action(cx.listener(|this, _: &ToggleSplit, _, cx| {
                 this.state.update(cx, |s, cx| {
                     s.doc_below = !s.doc_below;
@@ -1103,16 +1402,6 @@ impl Render for Workspace {
                 });
                 set_theme(look, dark, cx);
             }))
-            .on_action(cx.listener(|this, _: &ThemeCalm, _, cx| this.pick_look(Look::Calm, cx)))
-            .on_action(
-                cx.listener(|this, _: &ThemeTerracotta, _, cx| {
-                    this.pick_look(Look::Terracotta, cx)
-                }),
-            )
-            .on_action(cx.listener(|this, _: &ThemePatina, _, cx| this.pick_look(Look::Patina, cx)))
-            .on_action(cx.listener(|this, _: &ThemeInk, _, cx| this.pick_look(Look::Ink, cx)))
-            .on_action(cx.listener(|this, _: &ThemeSlate, _, cx| this.pick_look(Look::Slate, cx)))
-            .on_action(cx.listener(|this, _: &ThemePlum, _, cx| this.pick_look(Look::Plum, cx)))
             .on_action(
                 cx.listener(|this, _: &FocusComposer, window, cx| this.focus_composer(window, cx)),
             )
@@ -1158,6 +1447,7 @@ impl Render for Workspace {
                         s.toggle_map(cx);
                     } else if s.shortcuts_open
                         || s.chat_menu.is_some()
+                        || s.title_menu.is_some()
                         || s.approvals_open
                         || s.context_open
                         || s.tasks_open
@@ -1165,6 +1455,7 @@ impl Render for Workspace {
                     {
                         s.shortcuts_open = false;
                         s.chat_menu = None;
+                        s.title_menu = None;
                         s.approvals_open = false;
                         s.context_open = false;
                         s.tasks_open = false;
@@ -1183,6 +1474,8 @@ impl Render for Workspace {
                         s.toggle_doc_find(cx);
                     } else if s.doc.is_some() && !s.busy() {
                         s.close_doc(cx);
+                    } else if s.answer_waiting(crate::state::Verdict::Denied, cx) {
+                        // A tool waiting on you: Esc denies it (its card's key).
                     } else {
                         s.stop(cx);
                     }
@@ -1211,9 +1504,20 @@ impl Render for Workspace {
                     s.open_settings(crate::state::SettingsTab::Skills, cx)
                 })
             }))
+            .on_action(cx.listener(|this, _: &InstallSkill, _, cx| {
+                this.state.update(cx, |s, cx| s.install_skill(cx))
+            }))
+            .on_action(cx.listener(|this, _: &OpenMarketplaces, _, cx| {
+                this.state.update(cx, |s, cx| s.open_marketplaces(cx))
+            }))
             .on_action(cx.listener(|this, _: &OpenHooks, _, cx| {
                 this.state.update(cx, |s, cx| {
                     s.open_settings(crate::state::SettingsTab::Hooks, cx)
+                })
+            }))
+            .on_action(cx.listener(|this, _: &OpenPlugins, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.open_settings(crate::state::SettingsTab::Plugins, cx)
                 })
             }))
             .on_action(cx.listener(|this, _: &OpenMcpServers, _, cx| {
@@ -1309,6 +1613,21 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &ToggleTasks, _, cx| {
                 this.state.update(cx, |s, cx| s.toggle_tasks(cx))
             }))
+            .on_action(cx.listener(|this, _: &AllowWaiting, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.answer_waiting(crate::state::Verdict::Allowed, cx)
+                });
+            }))
+            .on_action(cx.listener(|this, _: &AlwaysAllowWaiting, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.answer_waiting(crate::state::Verdict::AllowedAlways, cx)
+                });
+            }))
+            .on_action(cx.listener(|this, _: &DenyWaiting, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    s.answer_waiting(crate::state::Verdict::Denied, cx)
+                });
+            }))
             .on_action(cx.listener(|this, _: &ShowApprovals, _, cx| {
                 this.state.update(cx, |s, cx| s.toggle_approvals(cx))
             }))
@@ -1327,6 +1646,30 @@ impl Render for Workspace {
             }))
             .on_action(cx.listener(|this, _: &AttachFiles, _, cx| {
                 super::attachments::pick(this.state.clone(), cx)
+            }))
+            // Text selected in the transcript (`select.rs`): a press
+            // anywhere clears it (a paragraph pressed starts a new one), and
+            // Ctrl+C copies it, before the focused box sees the key.
+            .capture_any_mouse_down(|_, window, _| {
+                if super::select::clear() {
+                    window.refresh();
+                }
+            })
+            .capture_key_down(|ev: &gpui::KeyDownEvent, _, cx| {
+                let k = &ev.keystroke;
+                if k.key == "c" && k.modifiers.secondary() && !k.modifiers.shift && !k.modifiers.alt
+                {
+                    if let Some(text) = super::select::selected_text() {
+                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+                        cx.stop_propagation();
+                    }
+                }
+            })
+            .on_action(cx.listener(|this, _: &GoBack, _, cx| {
+                this.state.update(cx, |s, cx| s.step_place(false, cx))
+            }))
+            .on_action(cx.listener(|this, _: &GoForward, _, cx| {
+                this.state.update(cx, |s, cx| s.step_place(true, cx))
             }))
             .on_action(cx.listener(|this, _: &JumpToLatest, _, cx| {
                 this.chat.update(cx, |c, cx| c.jump_to_latest(cx))
@@ -1356,6 +1699,40 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &DeleteChat, _, cx| {
                 if let Some(id) = this.current_chat(cx) {
                     this.state.update(cx, |s, cx| s.ask_delete(id, cx));
+                }
+            }))
+            .on_action(cx.listener(|this, _: &ArchiveChat, _, cx| {
+                if let Some(id) = this.current_chat(cx) {
+                    this.state.update(cx, |s, cx| s.toggle_archive(id, cx));
+                }
+            }))
+            .on_action(cx.listener(|this, _: &ToggleDetailedView, _, cx| {
+                if let Some(id) = this.current_chat(cx) {
+                    this.state.update(cx, |s, cx| {
+                        let on = s.chats.iter().any(|c| c.id == id && c.detailed);
+                        s.set_detailed(id, !on, cx)
+                    });
+                }
+            }))
+            .on_action(cx.listener(|this, _: &ContinueInNewChat, _, cx| {
+                if let Some(id) = this.current_chat(cx) {
+                    this.state
+                        .update(cx, |s, cx| s.continue_in_new_chat(id, cx));
+                }
+            }))
+            .on_action(cx.listener(|this, _: &CopyChatMarkdown, _, cx| {
+                if let Some(id) = this.current_chat(cx) {
+                    this.state.update(cx, |s, cx| s.copy_chat_markdown(id, cx));
+                }
+            }))
+            .on_action(cx.listener(|this, _: &OpenInVsCode, _, cx| {
+                if let Some(id) = this.current_chat(cx) {
+                    this.state.update(cx, |s, cx| s.open_chat_in_vscode(id, cx));
+                }
+            }))
+            .on_action(cx.listener(|this, _: &OpenChatFolder, _, cx| {
+                if let Some(id) = this.current_chat(cx) {
+                    this.state.update(cx, |s, cx| s.open_chat_folder(id, cx));
                 }
             }))
             .on_action(cx.listener(|this, _: &RegenerateReply, _, cx| {
@@ -1428,7 +1805,7 @@ impl Render for Workspace {
                 }),
             )
             .on_action(cx.listener(|_, _: &Quit, _, cx| cx.quit()))
-            .when(!presenting, |d| d.child(self.title_bar(window, cx)))
+            .when(!presenting, |d| d.child(self.title_bar(bar, window, cx)))
             .children(super::status_bar::banner(
                 self.state.read(cx),
                 self.state.clone(),
@@ -1447,13 +1824,31 @@ impl Render for Workspace {
                         .flex()
                         .bg(t.extra.pane)
                         .map(|d| {
+                            // It slides out of its rail, and folds back into it.
                             if sidebar_open {
-                                d.child(self.sidebar.clone())
+                                d.child(super::motion::sidebar_slide(
+                                    self.sidebar.clone().into_any_element(),
+                                    t.size.rail,
+                                    t.size.sidebar,
+                                    "sidebar-open",
+                                    &t,
+                                ))
                             } else {
-                                d.child(super::sidebar::rail(&t, screen))
+                                d.child(super::motion::sidebar_slide(
+                                    super::sidebar::rail(&t, screen).into_any_element(),
+                                    t.size.sidebar,
+                                    t.size.rail,
+                                    "sidebar-close",
+                                    &t,
+                                ))
                             }
                         })
-                        .child(main.relative().when(screen == Screen::Chat, |m| m.child(self.pet.clone())))
+                        // The sidebar's shadow falls across the session's edge.
+                        .child(
+                            main.relative()
+                                .children(super::motion::side_shade(&t))
+                                .when(screen == Screen::Chat, |m| m.child(self.pet.clone())),
+                        )
                         .when(terminal_open, |d| d.child(dock)),
                 )
                 .child(super::status_bar::render(
@@ -1463,19 +1858,171 @@ impl Render for Workspace {
                     &t,
                 ))
             })
-            .when(palette_open, |d| d.child(self.palette.clone()))
+            .when(palette_f.is_some(), |d| d.child(self.palette.clone()))
             .child(self.side.clone())
             .child(self.settings.clone())
-            .when(self.state.read(cx).map_open, |d| {
-                d.child(super::project_map::render(&t, &self.state, cx))
-            })
-            .when(shortcuts_open, |d| {
-                d.child(super::shortcuts::render(&t, &self.state))
-            })
+            .children(
+                map_f.map(|(_, leaving)| super::project_map::render(&t, &self.state, leaving, cx)),
+            )
+            .children(
+                shortcuts_f.map(|(_, leaving)| super::shortcuts::render(&t, &self.state, leaving)),
+            )
+            .children(self.chat_menu(chat_f, window, cx))
+            .children(self.title_menu(title_f, window, cx))
             .child(self.confirm.clone())
+            .child(self.attachment_editor.clone())
             .child(self.askpass.clone())
-            .children(self.toast(cx))
+            .children(self.toast(toast_f, cx))
             .children(self.opener.clone())
+    }
+}
+
+/// What each window the workspace draws last showed, so it can leave.
+#[derive(Default)]
+struct Presences {
+    palette: super::motion::Presence<()>,
+    shortcuts: super::motion::Presence<()>,
+    map: super::motion::Presence<()>,
+    title: super::motion::Presence<(TitleMenu, gpui::Point<gpui::Pixels>)>,
+    chat: super::motion::Presence<usize>,
+    toast: super::motion::Presence<SharedString>,
+    session: super::motion::Presence<usize>,
+    dock: super::motion::Presence<()>,
+    switcher: super::motion::Presence<()>,
+    tasks: super::motion::Presence<()>,
+    approvals: super::motion::Presence<()>,
+    side: super::motion::Presence<(
+        Option<crate::state::FileRef>,
+        Option<crate::state::PanelTab>,
+        bool,
+    )>,
+}
+
+/// The title bar's popovers: Some(leaving) while each shows or leaves.
+#[derive(Clone, Copy)]
+struct BarFrames {
+    switcher: Option<bool>,
+    tasks: Option<bool>,
+    approvals: Option<bool>,
+}
+
+/// A window to draw (its key), and whether it is leaving.
+type Frame<K> = Option<(K, bool)>;
+
+impl Workspace {
+    /// A small menu: the title bar's Share or ⋮, the sidebar's More or your name.
+    fn title_menu(
+        &self,
+        frame: Frame<(TitleMenu, gpui::Point<gpui::Pixels>)>,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        let t = cx.theme().clone();
+        let s = self.state.read(cx);
+        let ((which, at), leaving) = frame?;
+        let chat = s.current;
+        let close = self.state.clone();
+        // The title bar's open under their button, right edges level; the
+        // sidebar's where they were asked for, your name's rising from it.
+        let (at, corner) = match which {
+            TitleMenu::Share | TitleMenu::More => (
+                gpui::point(
+                    at.x - t.size.menu_width + t.space.lg,
+                    t.size.titlebar - px(2.),
+                ),
+                gpui::Anchor::TopLeft,
+            ),
+            TitleMenu::Help => (at, gpui::Anchor::TopLeft),
+            TitleMenu::Account => (at, gpui::Anchor::BottomLeft),
+        };
+        Some(
+            gpui::deferred(
+                gpui::anchored()
+                    .anchor(corner)
+                    .position(at)
+                    .snap_to_window_with_margin(t.space.sm)
+                    .child(
+                        div()
+                            .on_mouse_down_out(move |_, _, cx| {
+                                close.update(cx, |s, cx| {
+                                    s.title_menu = None;
+                                    cx.notify();
+                                })
+                            })
+                            .child(super::motion::unfold(
+                                div().child(super::title_menus::render(
+                                    &t,
+                                    &self.state,
+                                    which,
+                                    chat,
+                                    window,
+                                )),
+                                &format!("title-menu-{which:?}"),
+                                which == TitleMenu::Account,
+                                leaving,
+                                &t,
+                            )),
+                    ),
+            )
+            .with_priority(2)
+            .into_any_element(),
+        )
+    }
+
+    /// The open chat menu, anchored where it was asked for (under the
+    /// title bar's chat name, or at a sidebar row), over everything.
+    fn chat_menu(
+        &self,
+        frame: Frame<usize>,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        let t = cx.theme().clone();
+        let s = self.state.read(cx);
+        let (id, leaving) = frame?;
+        let c = s.chats.iter().find(|c| c.id == id)?;
+        let info = super::chat_menu::MenuChat {
+            id: c.id,
+            pinned: c.pinned,
+            archived: c.archived,
+            detailed: c.detailed,
+            remote: s.chat_remote(c.id).is_some(),
+        };
+        let targets = if s.chat_sub == Some(crate::state::ChatSub::Move) {
+            s.move_targets(c.id)
+        } else {
+            vec![]
+        };
+        let close = self.state.clone();
+        Some(
+            gpui::deferred(
+                gpui::anchored()
+                    .position(s.chat_menu_at)
+                    .snap_to_window_with_margin(t.space.sm)
+                    .child(
+                        div()
+                            .on_mouse_down_out(move |_, _, cx| {
+                                close.update(cx, |s, cx| s.open_chat_menu(None, cx))
+                            })
+                            .child(super::motion::unfold(
+                                div().child(super::chat_menu::render(
+                                    &t,
+                                    &self.state,
+                                    info,
+                                    s.chat_sub,
+                                    targets,
+                                    window,
+                                )),
+                                &format!("chat-menu-{id}"),
+                                false,
+                                leaving,
+                                &t,
+                            )),
+                    ),
+            )
+            .with_priority(2)
+            .into_any_element(),
+        )
     }
 }
 
@@ -1542,7 +2089,12 @@ pub fn project_switcher(
     let s = state.read(cx);
     let home = crate::rules::home_dir();
     let hover = t.colors.hover;
-    let mut projects: Vec<_> = s.projects.iter().filter(|p| p.saved && (!p.archived || p.id == s.current_project)).cloned().collect();
+    let mut projects: Vec<_> = s
+        .projects
+        .iter()
+        .filter(|p| p.saved && (!p.archived || p.id == s.current_project))
+        .cloned()
+        .collect();
     projects.sort_by_key(|p| (p.id != s.current_project, !p.pinned, p.opened_minutes_ago));
     let connected: Vec<_> = s
         .projects
@@ -1748,4 +2300,40 @@ mod tests {
         // Only the dock.
         assert_eq!(share_out(1000., None, Some((700., 280.)), 400.), (0., 600.));
     }
+}
+
+/// The title bar's back or forward button: dimmed, and doing nothing, when
+/// there's nowhere to go that way.
+fn nav_button(
+    id: &'static str,
+    path: &'static str,
+    tip: &'static str,
+    can: bool,
+    action: Box<dyn gpui::Action>,
+    t: &crate::theme::Theme,
+) -> gpui::Stateful<gpui::Div> {
+    let hover = t.colors.hover;
+    div()
+        .id(id)
+        .occlude()
+        .tooltip(move |window, cx| gpui::component::tooltip::Tooltip::new(tip).build(window, cx))
+        .size(t.size.control)
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(t.radius.pill)
+        .child(icon(
+            path,
+            t.size.icon,
+            if can {
+                t.colors.text_muted
+            } else {
+                t.colors.text_muted.opacity(0.35)
+            },
+        ))
+        .when(can, move |d| {
+            d.cursor_pointer()
+                .hover(move |st| st.bg(hover))
+                .on_click(move |_, window, cx| window.dispatch_action(action.boxed_clone(), cx))
+        })
 }

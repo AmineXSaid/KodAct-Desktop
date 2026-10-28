@@ -196,7 +196,11 @@ mod tests {
     fn real_relay_reaches_back() {
         let name = std::env::var("FORGE_TEST_CONTAINER").expect("FORGE_TEST_CONTAINER");
         let forge = std::env::var("FORGE_TEST_FORGE").expect("FORGE_TEST_FORGE");
-        let t = Target::Container { name, user: None, wsl: None };
+        let t = Target::Container {
+            name,
+            user: None,
+            wsl: None,
+        };
         // A tiny server here: answers each request with what it got.
         let server = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let local = server.local_addr().unwrap().port();

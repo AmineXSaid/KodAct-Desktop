@@ -42,7 +42,11 @@ pub struct Settings {
     ep_key: Entity<InputState>,
     ep_model: Entity<InputState>,
     wire: Wire,
+    /// A gateway: its model list goes in the model menu.
+    catalog: bool,
     models: Vec<String>,
+    /// What the list says about each model: its name and context window.
+    infos: Vec<crate::endpoints::ModelInfo>,
     /// Narrows the endpoint's model list as you type (`endpoints::find_models`).
     model_search: Entity<InputState>,
     model_scroll: gpui::ScrollHandle,
@@ -146,8 +150,8 @@ impl Settings {
                 .placeholder("Paste the key")
                 .masked(true)
         });
-        let ep_model = input("Type a model id, or load the list", window, cx);
-        let model_search = input("Search the models: gpt 5, coder, auto…", window, cx);
+        let ep_model = input("Type the model id, such as qwen3-coder:30b", window, cx);
+        let model_search = input("Search by name or id, or type any id", window, cx);
         let subs = vec![
             cx.observe_in(&state, window, |this, state, window, cx| {
                 let (open, add) = (state.read(cx).settings_open, state.read(cx).settings_add);
@@ -245,7 +249,9 @@ impl Settings {
             model_search,
             model_scroll: gpui::ScrollHandle::new(),
             wire: Wire::Openai,
+            catalog: false,
             models: vec![],
+            infos: vec![],
             status: Status::Idle,
             save_anyway: false,
             detected: vec![],
@@ -276,6 +282,18 @@ impl Settings {
             SettingsTab::Skills => self.skills.update(cx, |e, cx| e.back(cx)),
             SettingsTab::Hooks => self.hooks.update(cx, |e, cx| e.back(cx)),
             SettingsTab::Mcp => self.mcp.update(cx, |e, cx| e.back(cx)),
+            SettingsTab::Plugins if self.state.read(cx).plugins_market => {
+                self.state.update(cx, |s, cx| {
+                    s.plugins_market = false;
+                    cx.notify();
+                });
+                true
+            }
+            SettingsTab::Models if self.form => {
+                self.form = false;
+                cx.notify();
+                true
+            }
             SettingsTab::Models if self.state.read(cx).diagnosis.is_some() => {
                 self.state.update(cx, |s, cx| {
                     s.diagnosis = None;
@@ -303,7 +321,7 @@ impl Settings {
         }
         self.closing = true;
         cx.notify();
-        let ms = super::motion::out_ms(cx.theme());
+        let ms = super::motion::played(cx.theme().size.window_out_ms);
         cx.spawn(async move |this, cx| {
             cx.background_executor()
                 .timer(std::time::Duration::from_millis(ms))
@@ -347,6 +365,7 @@ impl Settings {
             capabilities: Default::default(),
         });
         self.wire = p.wire;
+        self.catalog = p.capabilities.catalog;
         Self::set(&self.ep_name, &p.name, window, cx);
         Self::set(&self.ep_url, &p.base_url, window, cx);
         Self::set(&self.ep_model, &p.model, window, cx);
@@ -382,6 +401,7 @@ impl Settings {
         };
         self.preset = Some(id);
         self.wire = p.wire;
+        self.catalog = p.catalog;
         self.models.clear();
         self.status = Status::Idle;
         Self::set(&self.ep_url, p.base_url, window, cx);
@@ -425,7 +445,7 @@ impl Settings {
         cx.spawn(async move |this, cx| {
             let listed = cx
                 .background_spawn(async move {
-                    crate::endpoints::list_models(&url, wire, key.as_deref(), &Default::default())
+                    crate::endpoints::list_catalog(&url, wire, key.as_deref(), &Default::default())
                 })
                 .await;
             let _ = this.update(cx, |s, cx| {
@@ -444,7 +464,8 @@ impl Settings {
                             )
                             .into(),
                         );
-                        s.models = m;
+                        s.models = m.iter().map(|m| m.id.clone()).collect();
+                        s.infos = m;
                     }
                     Err(e) => {
                         s.status = Status::Failed(
@@ -493,8 +514,12 @@ impl Settings {
             return cx.notify();
         }
         let key = self.key(cx);
-        let needs_key = self.wire == Wire::Anthropic
-            || PRESETS.iter().any(|p| Some(p.id) == self.preset && p.key);
+        // A preset knows; else Anthropic's format wants one, unless the
+        // server is on this machine (a local gateway such as OmniRoute).
+        let needs_key = match PRESETS.iter().find(|p| Some(p.id) == self.preset) {
+            Some(p) => p.key,
+            None => self.wire != Wire::Openai && !crate::endpoints::is_loopback(&url),
+        };
         if key.is_none() && needs_key {
             self.status = Status::Failed("This endpoint needs a key.".into());
             return cx.notify();
@@ -528,10 +553,18 @@ impl Settings {
             } else {
                 crate::endpoints::Auth::None
             },
-            capabilities: old
-                .as_ref()
-                .map(|p| p.capabilities.clone())
-                .unwrap_or_default(),
+            capabilities: match old.as_ref() {
+                Some(o) => crate::endpoints::Capabilities {
+                    catalog: self.catalog,
+                    ..o.capabilities.clone()
+                },
+                // Gemini takes effort as its thinking level (ForgeCLI maps it).
+                None => crate::endpoints::Capabilities {
+                    catalog: self.catalog,
+                    effort: self.wire == Wire::Gemini,
+                    ..Default::default()
+                },
+            },
         };
         let replaces = self.editing.clone();
         self.status = Status::Working(if skip_check {
@@ -551,7 +584,7 @@ impl Settings {
                         let h = crate::health::probe(&profile, std::time::Duration::from_secs(30))?;
                         if !h.servable {
                             return Err(format!(
-                                "the model didn't answer: {}",
+                                "The model didn't answer: {}",
                                 h.detail.unwrap_or_default()
                             ));
                         }
@@ -659,13 +692,13 @@ impl Settings {
             .gap(px(8.))
             .child(
                 div()
-                    .px(px(4.))
-                    .text_size(t.text.caption)
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(t.colors.text_muted)
+                    .px(px(2.))
+                    .text_size(t.text.body_sm)
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(t.colors.text_strong)
                     .child(heading.to_string()),
             )
-            .child(card)
+            .child(card.shadow(t.elevation_grain()))
     }
 
     /// One setting: its name and hint, and its control beside them, or
@@ -724,149 +757,15 @@ impl Settings {
 
     fn boxed(t: &Theme, child: AnyElement) -> gpui::Div {
         div()
-            .h(px(32.))
-            .px(px(2.))
+            .h(t.size.field_h)
+            .px(px(4.))
             .flex()
             .items_center()
             .rounded(t.radius.field)
-            .bg(t.colors.canvas)
+            .bg(t.colors.surface)
             .border_1()
-            .border_color(t.colors.border)
+            .border_color(t.extra.border_strong)
             .child(div().flex_1().min_w_0().child(child))
-    }
-
-    /// The themes, as swatch cards: each previews its canvas, session,
-    /// card and accent in the mode you're in. Picking one applies it at
-    /// once and keeps it for the next launch.
-    fn theme_picker(&self, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
-        let (current, dark) = {
-            let s = self.state.read(cx);
-            (s.look, s.dark)
-        };
-        let mut grid = div().flex().flex_wrap().gap(t.space.sm);
-        for look in theme::Look::ALL {
-            let p = Theme::of(look, dark);
-            let on = look == current;
-            let state = self.state.clone();
-            let hover = t.extra.border_strong;
-            let preview = div()
-                .h(px(64.))
-                .rounded(t.radius.small)
-                .bg(p.extra.pane)
-                .pt(px(8.))
-                .pl(px(8.))
-                .overflow_hidden()
-                .child(
-                    // The session sheet, a card on it, and the one colour.
-                    div()
-                        .size_full()
-                        .rounded_tl(p.radius.card)
-                        .bg(p.extra.stage)
-                        .shadow(p.elevation_grain())
-                        .p(px(8.))
-                        .flex()
-                        .flex_col()
-                        .gap(px(6.))
-                        .child(
-                            div()
-                                .w(px(64.))
-                                .h(px(14.))
-                                .rounded(p.radius.card.min(px(7.)))
-                                .bg(p.colors.surface)
-                                .border_1()
-                                .border_color(p.colors.border),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(6.))
-                                .child(
-                                    div()
-                                        .w(px(34.))
-                                        .h(px(12.))
-                                        .rounded(p.radius.compact.min(px(6.)))
-                                        .bg(p.extra.accent),
-                                )
-                                .child(
-                                    div()
-                                        .w(px(24.))
-                                        .h(px(12.))
-                                        .rounded(p.radius.compact.min(px(6.)))
-                                        .bg(p.extra.fill),
-                                )
-                                .child(super::ingot::mark(14.).marks([
-                                    p.extra.mark_top,
-                                    p.extra.mark_left,
-                                    p.extra.mark_right,
-                                ])),
-                        ),
-                );
-            grid = grid.child(
-                div()
-                    .id(SharedString::from(format!("theme-{}", look.id())))
-                    .role(gpui::accesskit::Role::RadioButton)
-                    .aria_label(look.name())
-                    .w(px(152.))
-                    .p(px(6.))
-                    .flex()
-                    .flex_col()
-                    .gap(px(6.))
-                    .rounded(t.radius.card)
-                    .bg(t.colors.surface)
-                    .border_1()
-                    .border_color(if on {
-                        t.colors.text_strong
-                    } else {
-                        t.colors.border
-                    })
-                    .when(on, |d| d.shadow(t.elevation_grain()))
-                    .cursor_pointer()
-                    .when(!on, |d| d.hover(move |st| st.border_color(hover)))
-                    .child(preview)
-                    .child(
-                        div()
-                            .px(px(2.))
-                            .flex()
-                            .items_center()
-                            .gap(px(6.))
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .font_family(p.font_sans.clone())
-                                    .text_size(t.text.body_sm)
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(t.colors.text_strong)
-                                    .child(look.name()),
-                            )
-                            .when(on, |d| {
-                                d.child(icon(
-                                    "icons/check.svg",
-                                    t.size.icon_sm,
-                                    t.colors.text_strong,
-                                ))
-                            }),
-                    )
-                    .child(
-                        div()
-                            .px(px(2.))
-                            .pb(px(2.))
-                            .text_size(t.text.caption)
-                            .text_color(t.colors.text_muted)
-                            .child(look.blurb()),
-                    )
-                    .on_click(move |_, _, cx| {
-                        state.update(cx, |s, cx| {
-                            s.look = look;
-                            s.save_window();
-                            cx.notify();
-                        });
-                        super::set_theme(look, dark, cx);
-                    }),
-            );
-        }
-        grid.into_any_element()
     }
 
     fn chip(
@@ -932,7 +831,6 @@ impl Settings {
                             });
                     })),
             );
-        let theme_picker = self.theme_picker(t, cx);
         let appearance = super::button::Segmented::new("appearance", "Appearance")
             .option("Light", !dark, move |_, window, cx| {
                 if dark {
@@ -1009,13 +907,6 @@ impl Settings {
                         appearance.into_any_element(),
                         false,
                     ),
-                    Self::row(
-                        t,
-                        "Theme",
-                        Some("The surfaces and the one colour; every theme comes in light and dark."),
-                        theme_picker,
-                        true,
-                    ),
                 ],
             ),
             (
@@ -1052,10 +943,11 @@ impl Settings {
             .flex()
             .flex_col()
             .gap(t.space.loose)
-            .child(Self::section(
+            .child(super::editor_kit::header(
                 t,
                 "General",
-                Some("Who you are, how Forge looks, and how new chats start."),
+                "Who you are, how Forge looks, and how new chats start.",
+                None,
             ));
         for (i, (heading, rows)) in groups.into_iter().enumerate() {
             page = page.child(super::motion::row_in_full(
@@ -1078,29 +970,56 @@ impl Settings {
         let active = s.active_profile().map(|p| p.name.clone());
         let mut list = div().flex().flex_col().gap(px(8.));
         if profiles.is_empty() {
-            list = list.child(
-                div()
-                    .p(px(18.))
-                    .rounded(t.radius.card)
-                    .border_1()
-                    .border_color(t.colors.border)
-                    .text_size(t.text.body_sm)
-                    .text_color(t.colors.text_muted)
-                    .child("No endpoints yet. Add one: a cloud API with its key, or a model server running on this PC."),
-            );
+            list = list.child(super::editor_kit::empty(
+                t,
+                "No endpoints yet. Add one: a cloud API with its key, or a model server running on this PC.",
+            ));
         }
         for p in profiles {
             let (check, syncing) = crate::health::pair_check(&p.model, s.health.get(&p.name));
-            let (dot, text): (Hsla, String) = match &check {
-                crate::health::Check::Answered { ms, .. } => (
-                    t.extra.success,
-                    format!("answered in {}", crate::health::ping_text(*ms)),
-                ),
-                crate::health::Check::Failed { detail }
-                | crate::health::Check::Unreachable { detail } => (t.extra.danger, detail.clone()),
-                _ if syncing => (t.colors.text_muted, "checking…".into()),
-                _ => (t.colors.text_muted, "not checked yet".into()),
-            };
+            // The check, as a badge: how fast it answered (its tone the ping's),
+            // or that it didn't, with why on a line of its own.
+            let (badge_bg, badge_fg, badge, why): (Hsla, Hsla, String, Option<String>) =
+                match &check {
+                    crate::health::Check::Answered { ms, .. } => {
+                        let (bg, fg) = match crate::health::ping_tone(*ms) {
+                            crate::health::Tone::Fast => {
+                                (t.extra.ping_fast_bg, t.extra.ping_fast_fg)
+                            }
+                            crate::health::Tone::Fair => {
+                                (t.extra.ping_fair_bg, t.extra.ping_fair_fg)
+                            }
+                            crate::health::Tone::Slow => {
+                                (t.extra.ping_slow_bg, t.extra.ping_slow_fg)
+                            }
+                        };
+                        (
+                            bg,
+                            fg,
+                            format!("Answered · {}", crate::health::ping_text(*ms)),
+                            None,
+                        )
+                    }
+                    crate::health::Check::Failed { detail }
+                    | crate::health::Check::Unreachable { detail } => (
+                        t.extra.danger_tint,
+                        t.extra.danger,
+                        "Didn't answer".into(),
+                        Some(detail.clone()),
+                    ),
+                    _ if syncing => (
+                        t.colors.hover,
+                        t.colors.text_muted,
+                        "Checking…".into(),
+                        None,
+                    ),
+                    _ => (
+                        t.colors.hover,
+                        t.colors.text_muted,
+                        "Not checked".into(),
+                        None,
+                    ),
+                };
             let in_use = active.as_deref() == Some(p.name.as_str());
             let (use_state, edit_p, rm_name) = (self.state.clone(), p.clone(), p.name.clone());
             let name = p.name.clone();
@@ -1109,8 +1028,8 @@ impl Settings {
                     .flex()
                     .items_center()
                     .gap(px(12.))
-                    .px(px(14.))
-                    .py(px(11.))
+                    .px(t.space.lg)
+                    .py(px(12.))
                     .rounded(t.radius.card)
                     .border_1()
                     .border_color(if in_use {
@@ -1119,15 +1038,29 @@ impl Settings {
                         t.colors.border
                     })
                     .bg(t.colors.surface)
-                    .child(icon(
-                        if p.wire == Wire::Anthropic {
-                            "icons/sparkles.svg"
-                        } else {
-                            "icons/cpu.svg"
-                        },
-                        t.size.icon,
-                        t.colors.text_muted,
-                    ))
+                    .shadow(t.elevation_grain())
+                    // The protocol as a tile, so endpoints scan as a column.
+                    .child(
+                        div()
+                            .flex_none()
+                            .size(px(36.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded(t.radius.card)
+                            .bg(t.extra.sunk)
+                            .border_1()
+                            .border_color(t.colors.border)
+                            .child(icon(
+                                if p.wire == Wire::Anthropic {
+                                    "icons/sparkles.svg"
+                                } else {
+                                    "icons/cpu.svg"
+                                },
+                                t.size.icon,
+                                t.colors.text_muted,
+                            )),
+                    )
                     .child(
                         div()
                             .flex_1()
@@ -1167,43 +1100,44 @@ impl Settings {
                                         "{} · {} · {}",
                                         p.name,
                                         crate::endpoints::host_of(&p.base_url),
-                                        if p.wire == Wire::Anthropic {
-                                            "Anthropic Messages"
-                                        } else {
-                                            "OpenAI-compatible"
-                                        }
+                                        p.wire.label()
                                     )),
                             )
-                            .child(
+                            .children(why.map(|w| {
+                                // The reason, as a sentence.
+                                let mut c = w.chars();
+                                let w: String = c
+                                    .next()
+                                    .map(|f| f.to_uppercase().chain(c).collect())
+                                    .unwrap_or_default();
                                 div()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(6.))
-                                    .child(div().size(px(6.)).rounded(t.radius.pill).bg(dot))
-                                    .child(
-                                        div()
-                                            .overflow_hidden()
-                                            .whitespace_nowrap()
-                                            .text_ellipsis()
-                                            .text_size(t.text.caption)
-                                            .text_color(t.colors.text_muted)
-                                            .child(text),
-                                    ),
-                            ),
+                                    .pt(px(2.))
+                                    .line_clamp(2)
+                                    .text_size(t.text.caption)
+                                    .text_color(t.extra.danger)
+                                    .line_height(relative(1.4))
+                                    .child(w)
+                            })),
                     )
+                    .child(theme::pill(t, badge_bg, badge_fg, badge).flex_none())
                     .when(!in_use, |d| {
                         d.child(
-                            Self::chip(t, SharedString::from(format!("use-{name}")), "Use", false)
-                                .on_click(move |_, _, cx| {
-                                    use_state.update(cx, |s, cx| s.select_profile(&name, cx))
-                                }),
+                            super::button::Button::secondary(
+                                SharedString::from(format!("use-{name}")),
+                                "Use",
+                            )
+                            .compact()
+                            .on_click(move |_, _, cx| {
+                                use_state.update(cx, |s, cx| s.select_profile(&name, cx))
+                            }),
                         )
                     })
                     .child(
-                        Self::chip(
+                        super::editor_kit::icon_button(
                             t,
                             SharedString::from(format!("edit-{}", p.name)),
-                            "Edit",
+                            "icons/pencil.svg",
+                            "Edit this endpoint",
                             false,
                         )
                         .on_click(cx.listener(
@@ -1254,14 +1188,17 @@ impl Settings {
             .flex()
             .flex_col()
             .gap(px(14.))
-            .child(
-                div()
-                    .flex()
-                    .items_start()
-                    .gap(px(12.))
-                    .child(div().flex_1().min_w_0().child(Self::section(t, "Endpoints", Some("Each endpoint is a URL and the model it runs. Forge checks each one with a tiny request; the one in use answers your chats."))))
-                    .child(theme::primary_button(t, "Add endpoint").id("add-endpoint").on_click(cx.listener(|this, _, window, cx| this.open_form(None, window, cx)))),
-            )
+            .child(super::editor_kit::header(
+                t,
+                "Models",
+                "Each endpoint is a URL and the model it runs. Forge checks each one with a tiny request; the one in use answers your chats.",
+                Some(
+                    super::button::Button::primary("add-endpoint", "Add endpoint")
+                        .with_icon("icons/plus.svg")
+                        .on_click(cx.listener(|this, _, window, cx| this.open_form(None, window, cx)))
+                        .into_any_element(),
+                ),
+            ))
             .child(list)
             .child(
                 div()
@@ -1315,135 +1252,46 @@ impl Settings {
             format!("Running on this PC: {}.", names.join(", "))
         });
         let wire = self.wire;
-        let wire_row = div()
-            .flex()
-            .gap(px(6.))
-            .child(
-                Self::chip(t, "wire-openai", "OpenAI-compatible", wire == Wire::Openai).on_click(
-                    cx.listener(|this, _, _, cx| {
-                        this.wire = Wire::Openai;
-                        this.models.clear();
-                        cx.notify();
-                    }),
-                ),
-            )
-            .child(
-                Self::chip(
-                    t,
-                    "wire-anthropic",
-                    "Anthropic Messages",
-                    wire == Wire::Anthropic,
-                )
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.wire = Wire::Anthropic;
-                    this.models.clear();
-                    cx.notify();
-                })),
-            );
-        let picked = Self::val(&self.ep_model, cx);
-        let model_row = div()
-            .flex()
-            .items_end()
-            .gap(px(8.))
-            .child(
-                div()
-                    .flex_1()
-                    .child(Self::field(t, "Model", &self.ep_model)),
-            )
-            .child(
-                theme::ghost_button(t, "Load models")
-                    .id("load-models")
-                    .on_click(cx.listener(|this, _, _, cx| this.load_models(cx))),
-            );
-        // The endpoint's models, narrowed by what you type: one row each,
-        // in a box that keeps the wheel (the page behind stays put).
-        let query = Self::val(&self.model_search, cx);
-        let found = crate::endpoints::find_models(&self.models, &query);
-        const SHOWN: usize = 200;
-        let hover = t.colors.hover;
-        let mut rows = div().flex().flex_col().p(px(4.));
-        for m in found.iter().take(SHOWN) {
-            let (id, on) = (m.to_string(), picked == **m);
-            rows = rows.child(
-                div()
-                    .id(SharedString::from(format!("m-{m}")))
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .h(px(28.))
-                    .px(px(8.))
-                    .rounded(t.radius.button)
-                    .font_family(t.font_mono.clone())
-                    .text_size(t.text.caption)
-                    .text_color(if on {
-                        t.colors.text_strong
-                    } else {
-                        t.colors.text
-                    })
-                    .when(on, |d| d.bg(t.colors.primary_tint))
-                    .when(!on, |d| d.hover(move |st| st.bg(hover)))
-                    .cursor_pointer()
-                    .child(div().flex_1().min_w_0().truncate().child(id.clone()))
-                    .when(on, |d| {
-                        d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.primary))
-                    })
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        Self::set(&this.ep_model, &id, window, cx);
-                        cx.notify();
-                    })),
-            );
-        }
-        let count = match (query.trim().is_empty(), found.len()) {
-            (true, n) => format!("{n} {}", if n == 1 { "model" } else { "models" }),
-            (false, 0) => "No model matches: you can still type the id above.".to_string(),
-            (false, n) => format!("{n} of {} match", self.models.len()),
-        };
-        let more = found.len().saturating_sub(SHOWN);
-        let list = (!self.models.is_empty()).then(|| {
+        let wire_row =
             div()
                 .flex()
-                .flex_col()
                 .gap(px(6.))
-                .child(Self::boxed(
-                    t,
-                    Input::new(&self.model_search)
-                        .appearance(false)
-                        .text_size(t.text.body_sm)
-                        .into_any_element(),
-                ))
                 .child(
-                    div()
-                        .flex()
-                        .text_size(t.text.caption)
-                        .text_color(t.colors.text_muted)
-                        .child(div().flex_1().child(count))
-                        .when(more > 0, |d| {
-                            d.child(format!("{more} more: type to narrow"))
-                        }),
+                    Self::chip(t, "wire-openai", "OpenAI-compatible", wire == Wire::Openai)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.wire = Wire::Openai;
+                            this.models.clear();
+                            cx.notify();
+                        })),
                 )
-                .when(!found.is_empty(), |d| {
-                    d.child(
-                        super::hold_scroll(
-                            div()
-                                .id("model-list")
-                                .max_h(px(220.))
-                                .rounded(t.radius.field)
-                                .border_1()
-                                .border_color(t.colors.border)
-                                .bg(t.colors.surface),
-                            &self.model_scroll,
-                        )
-                        .child(rows),
+                .child(
+                    Self::chip(
+                        t,
+                        "wire-anthropic",
+                        "Anthropic Messages",
+                        wire == Wire::Anthropic,
                     )
-                })
-        });
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.wire = Wire::Anthropic;
+                        this.models.clear();
+                        cx.notify();
+                    })),
+                )
+                .child(
+                    Self::chip(t, "wire-gemini", Wire::Gemini.label(), wire == Wire::Gemini)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.wire = Wire::Gemini;
+                            this.models.clear();
+                            cx.notify();
+                        })),
+                );
+        let model_section = self.model_picker(t, cx);
         let status = match &self.status {
             Status::Idle => None,
             Status::Working(s) => Some((t.colors.text_muted, "icons/loader-circle.svg", s.clone())),
             Status::Ok(s) => Some((t.extra.success, "icons/circle-check.svg", s.clone())),
             Status::Failed(s) => Some((t.extra.danger, "icons/circle-x.svg", s.clone())),
         };
-        let working = matches!(self.status, Status::Working(_));
         let title = if self.editing.is_some() {
             "Edit endpoint"
         } else {
@@ -1453,14 +1301,39 @@ impl Settings {
             .flex()
             .flex_col()
             .gap(px(16.))
-            .child(div().id("back").flex().items_center().gap(px(4.)).cursor_pointer().text_size(t.text.caption).text_color(t.colors.primary).child("← Endpoints").on_click(cx.listener(|this, _, _, cx| {
+            .child(super::editor_kit::back(t, "back", "Endpoints").on_click(cx.listener(|this, _, _, cx| {
                 this.form = false;
                 cx.notify();
             })))
-            .child(Self::section(t, title, Some("Start from a preset or fill it in. Forge lists the models with your key, checks the one you pick with a short request, then saves it and uses it.")))
+            .child(super::editor_kit::header(t, title, "Start from a preset or fill it in. Forge lists the models with your key, checks the one you pick with a short request, then saves it and uses it.", None))
             .child(div().flex().flex_col().gap(px(6.)).child(div().text_size(t.text.caption).font_weight(FontWeight::MEDIUM).text_color(t.colors.text_muted).child("Start from")).child(presets).children(found_note.map(|n| div().text_size(t.text.caption).text_color(t.extra.success).child(n))))
-            .child(div().flex().gap(px(10.)).child(div().w(px(170.)).child(Self::field(t, "Name", &self.ep_name))).child(div().flex_1().child(Self::field(t, "Base URL", &self.ep_url))))
+            .child(div().flex().gap(px(10.)).child(div().w(px(170.)).child(Self::field(t, "Name", &self.ep_name))).child(div().flex_1().min_w_0().child(Self::field(t, "Base URL", &self.ep_url))))
             .child(div().flex().flex_col().gap(px(6.)).child(div().text_size(t.text.caption).font_weight(FontWeight::MEDIUM).text_color(t.colors.text_muted).child("Protocol")).child(wire_row))
+            .child(
+                div()
+                    .flex()
+                    .items_start()
+                    .gap(px(10.))
+                    .child(super::button::Switch::new("ep-catalog", self.catalog, "List all its models in the model menu").on_toggle({
+                        let this = cx.entity().downgrade();
+                        move |on, _, cx| {
+                            let _ = this.update(cx, |this, cx| {
+                                this.catalog = on;
+                                cx.notify();
+                            });
+                        }
+                    }))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.))
+                            .child(div().text_size(t.text.body_sm).text_color(t.colors.text).child("A gateway: list all its models in the model menu"))
+                            .child(div().text_size(t.text.caption).text_color(t.colors.text_muted).child("As Claude Code's /model lists a gateway's models. For OmniRoute, OpenRouter and the like.")),
+                    ),
+            )
             .child(
                 div()
                     .flex()
@@ -1469,21 +1342,636 @@ impl Settings {
                     .child(Self::field(t, "API key", &self.ep_key))
                     .child(div().text_size(t.text.caption).text_color(t.colors.text_muted).child(if cfg!(windows) { "Kept in Windows Credential Manager, never in a file. Local servers need none." } else { "Kept in a private file in Forge's config folder, never in endpoints.json. Local servers need none." })),
             )
-            .child(div().flex().flex_col().gap(px(8.)).child(model_row).children(list))
-            .children(status.map(|(c, i, s)| div().flex().items_start().gap(px(6.)).text_size(t.text.caption).text_color(c).line_height(relative(1.4)).child(div().pt(px(1.)).child(icon(i, t.size.icon_xs, c))).child(div().flex_1().child(s))))
+            .child(model_section)
+            .children(status.map(|(c, i, s)| Self::status_line(t, c, i, s)))
+            .into_any_element()
+    }
+
+    /// The form's actions, pinned under the page so a long model list never
+    /// hides them.
+    fn form_actions(&self, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
+        let working = matches!(self.status, Status::Working(_));
+        div()
+            .flex()
+            .justify_end()
+            .gap(px(8.))
+            .child(
+                theme::text_button(t, "Cancel")
+                    .id("cancel-form")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.form = false;
+                        cx.notify();
+                    })),
+            )
+            .when(self.save_anyway && !working, |d| {
+                d.child(
+                    theme::ghost_button(t, "Save anyway")
+                        .id("save-anyway")
+                        .on_click(
+                            cx.listener(|this, _, window, cx| {
+                                this.check_and_save(true, window, cx)
+                            }),
+                        ),
+                )
+            })
+            .child(
+                super::button::Button::primary(
+                    "check-save",
+                    if working {
+                        "Checking…"
+                    } else {
+                        "Check and save"
+                    },
+                )
+                .loading(working)
+                .on_click(
+                    cx.listener(|this, _, window, cx| this.check_and_save(false, window, cx)),
+                ),
+            )
+            .into_any_element()
+    }
+
+    /// A status under the form: its icon, then the message, wrapped inside
+    /// the form however long it is (a gateway's error can be a paragraph
+    /// with a URL in it), at most four lines; the whole of it in the tooltip.
+    fn status_line(
+        t: &Theme,
+        color: gpui::Hsla,
+        path: &'static str,
+        text: SharedString,
+    ) -> AnyElement {
+        let tip = text.clone();
+        div()
+            .id("form-status")
+            .w_full()
+            .flex()
+            .items_start()
+            .gap(px(6.))
+            .p(t.space.sm)
+            .rounded(t.radius.field)
+            .bg(color.opacity(0.08))
+            .text_size(t.text.caption)
+            .text_color(color)
+            .line_height(relative(1.4))
+            .child(
+                div()
+                    .flex_none()
+                    .pt(px(1.))
+                    .child(icon(path, t.size.icon_xs, color)),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .line_clamp(6)
+                    .child(text),
+            )
+            .tooltip(move |w, cx| gpui::component::tooltip::Tooltip::new(tip.clone()).build(w, cx))
+            .into_any_element()
+    }
+
+    /// The model: the one picked, as a card (its name, id and window), then
+    /// one field that searches the endpoint's list or takes any id typed,
+    /// then the list, grouped by provider: each model's name, id, context
+    /// window and whether it thinks. Before the list is loaded, the field
+    /// takes the id and offers to load the list.
+    fn model_picker(&self, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
+        let picked = Self::val(&self.ep_model, cx);
+        let query = Self::val(&self.model_search, cx);
+        let loaded = !self.models.is_empty();
+        let info = |id: &str| self.infos.iter().find(|m| m.id == id);
+        let hover = t.colors.hover;
+        let window_text = |c: u64| {
+            if c >= 1_000_000 {
+                format!("{}M", (c as f64 / 1_000_000.).round() as u64)
+            } else {
+                format!("{}K", (c as f64 / 1000.).round() as u64)
+            }
+        };
+        let chip = |text: String, fg: gpui::Hsla| {
+            div()
+                .flex_none()
+                .px(px(6.))
+                .rounded(t.radius.small)
+                .bg(fg.opacity(0.1))
+                .text_size(t.text.caption)
+                .text_color(fg)
+                .child(text)
+        };
+        let loading = matches!(&self.status, Status::Working(s) if s.contains("models"));
+        // What a test of this endpoint's models found, and one running.
+        let url_key = crate::health::tests_key(&Self::val(&self.ep_url, cx));
+        let (tests, running, show_failed) = {
+            let s = self.state.read(cx);
+            (
+                s.model_tests.get(&url_key).cloned().unwrap_or_default(),
+                s.tests_running.get(&url_key).copied(),
+                s.show_failed_models,
+            )
+        };
+        let verdict = |id: &str| tests.get(id);
+        let working = self
+            .models
+            .iter()
+            .filter(|m| verdict(m).is_some_and(|v| v.servable))
+            .count();
+        let failed_ids: Vec<&String> = self
+            .models
+            .iter()
+            .filter(|m| verdict(m).is_some_and(|v| !v.servable))
+            .collect();
+        // The heading: "Model", how many the endpoint lists, and reload.
+        let heading = div()
+            .flex()
+            .items_center()
+            .gap(t.space.sm)
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .text_size(t.text.caption)
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(t.colors.text_muted)
+                    .child("Model"),
+            )
+            .when(loaded, |d| {
+                d.child(
+                    div()
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_subtle)
+                        .child(match running {
+                            Some((done, total)) => format!("Testing {done} of {total}…"),
+                            None if tests.is_empty() => format!("{} models", self.models.len()),
+                            None => format!("{working} working / {} models", self.models.len()),
+                        }),
+                )
+            })
+            .child(
+                super::button::Button::icon(
+                    "load-models",
+                    "icons/refresh-cw.svg",
+                    if loaded {
+                        "Load the list again"
+                    } else {
+                        "Load the endpoint's models"
+                    },
+                )
+                .compact()
+                .loading(loading)
+                .on_click(cx.listener(|this, _, _, cx| this.load_models(cx))),
+            );
+        // The model picked: a card, or how to pick one.
+        let picked_card = {
+            let m = info(&picked);
+            let empty = picked.is_empty();
+            div()
+                .flex()
+                .items_center()
+                .gap(t.space.sm)
+                .min_h(px(44.))
+                .px(t.space.md)
+                .py(t.space.xs)
+                .rounded(t.radius.field)
+                .border_1()
+                .border_color(if empty {
+                    t.colors.border
+                } else {
+                    t.colors.primary.opacity(0.5)
+                })
+                .bg(if empty {
+                    t.colors.canvas
+                } else {
+                    t.colors.primary_tint
+                })
+                .child(icon(
+                    if empty {
+                        "icons/cpu.svg"
+                    } else {
+                        "icons/circle-check.svg"
+                    },
+                    t.size.icon_sm,
+                    if empty {
+                        t.colors.text_subtle
+                    } else {
+                        t.colors.primary
+                    },
+                ))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .child(
+                            div()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .text_size(t.text.body_sm)
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(if empty {
+                                    t.colors.text_muted
+                                } else {
+                                    t.colors.text_strong
+                                })
+                                .child(if empty {
+                                    "No model picked yet".to_string()
+                                } else {
+                                    m.and_then(|m| m.name.clone())
+                                        .unwrap_or_else(|| picked.clone())
+                                }),
+                        )
+                        .child(
+                            div()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .text_size(t.text.caption)
+                                .text_color(t.colors.text_subtle)
+                                .child(if empty {
+                                    if loaded {
+                                        "Pick one below, or type its id.".to_string()
+                                    } else {
+                                        "Type its id below, or load the list.".to_string()
+                                    }
+                                } else {
+                                    picked.clone()
+                                }),
+                        ),
+                )
+                .children(
+                    m.and_then(|m| m.context)
+                        .map(|c| chip(window_text(c), t.colors.text_muted)),
+                )
+                .when(m.is_some_and(|m| m.reasoning), |d| {
+                    d.child(chip("Thinks".into(), t.colors.primary))
+                })
+        };
+        // Before the list: the field takes the id itself.
+        if !loaded {
+            return div()
+                .flex()
+                .flex_col()
+                .gap(t.space.sm)
+                .child(heading)
+                .child(picked_card)
+                .child(Self::boxed(
+                    t,
+                    Input::new(&self.ep_model)
+                        .appearance(false)
+                        .text_size(t.text.body_sm)
+                        .into_any_element(),
+                ))
+                .into_any_element();
+        }
+        // The list, narrowed by the field, grouped by the provider before
+        // the `/` ("cc", "kimi"); a typed id the list lacks can still be used.
+        let found = crate::endpoints::find_models(&self.models, &query);
+        const SHOWN: usize = 200;
+        let typed = query.trim().to_string();
+        let custom = !typed.is_empty() && !self.models.iter().any(|m| *m == typed);
+        let searching = !typed.is_empty();
+        // What a test tries: the models the search shows, all of them.
+        let to_test: Vec<String> = found.iter().map(|m| m.to_string()).collect();
+        let hidden = if show_failed {
+            0
+        } else {
+            found.iter().filter(|m| failed_ids.contains(m)).count()
+        };
+        let found: Vec<&String> = found
+            .into_iter()
+            .filter(|m| show_failed || !failed_ids.contains(m) || **m == picked)
+            .collect();
+        let mut rows = div().flex().flex_col().p(px(4.));
+        if custom {
+            let id = typed.clone();
+            rows = rows.child(
+                div()
+                    .id("model-custom")
+                    .flex()
+                    .items_center()
+                    .gap(t.space.sm)
+                    .h(px(36.))
+                    .px(t.space.sm)
+                    .rounded(t.radius.button)
+                    .cursor_pointer()
+                    .hover(move |st| st.bg(hover))
+                    .text_size(t.text.body_sm)
+                    .text_color(t.colors.text)
+                    .child(icon(
+                        "icons/pencil.svg",
+                        t.size.icon_sm,
+                        t.colors.text_muted,
+                    ))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .child(format!("Use “{id}” as the model id")),
+                    )
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        Self::set(&this.ep_model, &id, window, cx);
+                        cx.notify();
+                    })),
+            );
+        }
+        let mut group = None::<String>;
+        for (i, m) in found.iter().take(SHOWN).enumerate() {
+            let id = m.to_string();
+            let provider = id
+                .split_once('/')
+                .map(|(p, _)| p.to_string())
+                .unwrap_or_default();
+            // Provider headings while browsing; a search ranks across them.
+            if !searching && group.as_deref() != Some(provider.as_str()) {
+                rows = rows.child(
+                    div()
+                        .px(t.space.sm)
+                        .pt(if i == 0 { px(4.) } else { t.space.sm })
+                        .pb(px(2.))
+                        .text_size(t.text.caption)
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(t.colors.text_subtle)
+                        .child(if provider.is_empty() {
+                            "Models".to_string()
+                        } else {
+                            provider.clone()
+                        }),
+                );
+                group = Some(provider);
+            }
+            let mi = info(&id);
+            let on = picked == id;
+            let name = mi.and_then(|m| m.name.clone());
+            let pick = id.clone();
+            let tested = verdict(&id);
+            let why = tested
+                .filter(|v| !v.servable)
+                .map(|v| v.detail.clone().unwrap_or_else(|| "No reply".into()));
+            let ping = tested.filter(|v| v.servable).map(|v| {
+                let (bg, fg) = match crate::health::ping_tone(v.ms) {
+                    crate::health::Tone::Fast => (t.extra.ping_fast_bg, t.extra.ping_fast_fg),
+                    crate::health::Tone::Fair => (t.extra.ping_fair_bg, t.extra.ping_fair_fg),
+                    crate::health::Tone::Slow => (t.extra.ping_slow_bg, t.extra.ping_slow_fg),
+                };
+                div()
+                    .flex_none()
+                    .px(px(6.))
+                    .rounded(t.radius.small)
+                    .bg(bg)
+                    .text_size(t.text.caption)
+                    .text_color(fg)
+                    .child(crate::health::ping_text(v.ms))
+            });
+            rows = rows.child(
+                div()
+                    .id(SharedString::from(format!("m-{id}")))
+                    .flex()
+                    .items_center()
+                    .gap(t.space.sm)
+                    .min_h(px(36.))
+                    .px(t.space.sm)
+                    .py(px(3.))
+                    .rounded(t.radius.button)
+                    .cursor_pointer()
+                    .when(on, |d| d.bg(t.colors.primary_tint))
+                    .when(!on, |d| d.hover(move |st| st.bg(hover)))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .child(
+                                div()
+                                    .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .text_ellipsis()
+                                    .text_size(t.text.body_sm)
+                                    .text_color(if on {
+                                        t.colors.text_strong
+                                    } else {
+                                        t.colors.text
+                                    })
+                                    .when(on, |d| d.font_weight(FontWeight::MEDIUM))
+                                    .child(name.clone().unwrap_or_else(|| id.clone())),
+                            )
+                            .when(name.is_some(), |d| {
+                                d.child(
+                                    div()
+                                        .overflow_hidden()
+                                        .whitespace_nowrap()
+                                        .text_ellipsis()
+                                        .text_size(t.text.caption)
+                                        .text_color(t.colors.text_subtle)
+                                        .child(id.clone()),
+                                )
+                            })
+                            // Failed its test: why, as the server said it.
+                            .when_some(why, |d, why| {
+                                d.child(
+                                    div()
+                                        .line_clamp(2)
+                                        .text_size(t.text.caption)
+                                        .text_color(t.extra.danger)
+                                        .child(why),
+                                )
+                            }),
+                    )
+                    .children(ping)
+                    .when(mi.is_some_and(|m| m.reasoning), |d| {
+                        d.child(chip("Thinks".into(), t.colors.primary))
+                    })
+                    .children(
+                        mi.and_then(|m| m.context)
+                            .map(|c| chip(window_text(c), t.colors.text_muted)),
+                    )
+                    .child(div().flex_none().w(t.size.icon_sm).when(on, |d| {
+                        d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.primary))
+                    }))
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        Self::set(&this.ep_model, &pick, window, cx);
+                        cx.notify();
+                    })),
+            );
+        }
+        if hidden > 0 && found.is_empty() {
+            rows = rows.child(
+                div()
+                    .px(t.space.sm)
+                    .py(t.space.sm)
+                    .text_size(t.text.caption)
+                    .text_color(t.colors.text_muted)
+                    .child("Every model that matches failed its test."),
+            );
+        }
+        let more = found.len().saturating_sub(SHOWN);
+        if more > 0 {
+            rows = rows.child(
+                div()
+                    .px(t.space.sm)
+                    .py(t.space.xs)
+                    .text_size(t.text.caption)
+                    .text_color(t.colors.text_subtle)
+                    .child(format!("{more} more: type to narrow")),
+            );
+        }
+        if found.is_empty() && !custom && hidden == 0 {
+            rows = rows.child(
+                div()
+                    .px(t.space.sm)
+                    .py(t.space.sm)
+                    .text_size(t.text.caption)
+                    .text_color(t.colors.text_muted)
+                    .child("No model matches."),
+            );
+        }
+        div()
+            .flex()
+            .flex_col()
+            .gap(t.space.sm)
+            .child(heading)
+            .child(picked_card)
             .child(
                 div()
                     .flex()
-                    .justify_end()
-                    .gap(px(8.))
-                    .child(theme::text_button(t, "Cancel").id("cancel-form").on_click(cx.listener(|this, _, _, cx| {
-                        this.form = false;
-                        cx.notify();
-                    })))
-                    .when(self.save_anyway && !working, |d| d.child(theme::ghost_button(t, "Save anyway").id("save-anyway").on_click(cx.listener(|this, _, window, cx| this.check_and_save(true, window, cx)))))
-                    .child(super::button::Button::primary("check-save", if working { "Checking…" } else { "Check and save" }).loading(working).on_click(cx.listener(|this, _, window, cx| this.check_and_save(false, window, cx)))),
+                    .flex_col()
+                    .rounded(t.radius.field)
+                    .border_1()
+                    .border_color(t.colors.border)
+                    .bg(t.colors.surface)
+                    .overflow_hidden()
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(t.space.sm)
+                            .h(px(36.))
+                            .px(t.space.md)
+                            .border_b_1()
+                            .border_color(t.colors.border)
+                            .bg(t.colors.canvas)
+                            .child(icon(
+                                "icons/search.svg",
+                                t.size.icon_sm,
+                                t.colors.text_subtle,
+                            ))
+                            .child(
+                                div().flex_1().min_w_0().child(
+                                    Input::new(&self.model_search)
+                                        .appearance(false)
+                                        .text_size(t.text.body_sm),
+                                ),
+                            ),
+                    )
+                    .child(self.test_bar(
+                        t,
+                        to_test,
+                        failed_ids.len(),
+                        running.is_some(),
+                        show_failed,
+                        cx,
+                    ))
+                    .child(
+                        super::hold_scroll(
+                            div().id("model-list").max_h(px(264.)),
+                            &self.model_scroll,
+                        )
+                        .child(rows),
+                    ),
             )
             .into_any_element()
+    }
+
+    /// Under the search: test the models it shows, and show or hide the
+    /// ones that failed.
+    fn test_bar(
+        &self,
+        t: &Theme,
+        ids: Vec<String>,
+        failed: usize,
+        running: bool,
+        show_failed: bool,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let count = ids.len();
+        div()
+            .flex()
+            .items_center()
+            .gap(t.space.sm)
+            .px(t.space.md)
+            .py(t.space.xs)
+            .border_b_1()
+            .border_color(t.colors.border)
+            .child(
+                super::button::Button::secondary(
+                    "test-models",
+                    if count == 1 { "Test 1 model".to_string() } else { format!("Test {count} models") },
+                )
+                .with_icon("icons/flask-conical.svg")
+                .compact()
+                .loading(running)
+                .disabled(running || count == 0)
+                .describe("Send each model the search shows one short request; the ones that fail are hidden")
+                .on_click(cx.listener(move |this, _, _, cx| this.test_models(ids.clone(), cx))),
+            )
+            .child(div().flex_1())
+            .when(failed > 0, |d| {
+                let label = format!("Show {failed} that failed");
+                let st = self.state.clone();
+                d.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(t.space.sm)
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_muted)
+                        .child(label.clone())
+                        .child(super::button::Switch::new("show-failed", show_failed, label).on_toggle(
+                            move |_, _, cx| st.update(cx, |s, cx| s.toggle_failed_models(cx)),
+                        )),
+                )
+            })
+    }
+
+    /// Test `ids` on the endpoint the form describes, with the key typed.
+    fn test_models(&mut self, ids: Vec<String>, cx: &mut Context<Self>) {
+        let url = Self::val(&self.ep_url, cx);
+        if let Err(e) = crate::endpoints::validate_url(&url) {
+            self.status = Status::Failed(e.into());
+            return cx.notify();
+        }
+        let headers = self
+            .editing
+            .as_ref()
+            .and_then(|n| {
+                let s = self.state.read(cx);
+                let e = s.endpoints.as_ref()?;
+                e.profiles
+                    .iter()
+                    .find(|p| &p.name == n)
+                    .map(|p| (p.headers.clone(), p.chat_path.clone()))
+            })
+            .unwrap_or_default();
+        let base = Profile {
+            base_url: url,
+            wire: self.wire,
+            headers: headers.0,
+            chat_path: headers.1,
+            name: String::new(),
+            model: String::new(),
+            display_name: None,
+            // The key goes with each try, as typed.
+            auth: crate::endpoints::Auth::None,
+            capabilities: Default::default(),
+        };
+        let key = self.key(cx);
+        self.state
+            .update(cx, |s, cx| s.test_models(base, key, ids, cx));
     }
 
     fn about(&self, t: &Theme) -> AnyElement {
@@ -1667,6 +2155,7 @@ impl Render for Settings {
                 SettingsTab::Guide => super::guide::render(&t).into_any_element(),
                 SettingsTab::About => self.about(&t),
             };
+        let actions = (tab == SettingsTab::Models && self.form).then(|| self.form_actions(&t, cx));
         let close = div().absolute().top(px(12.)).right(px(12.)).child(
             super::button::Button::icon("settings-close", "icons/x.svg", "Close settings (Esc)")
                 .compact()
@@ -1676,10 +2165,10 @@ impl Render for Settings {
             .id("settings-panel")
             .occlude()
             .relative()
-            .w(px(820.))
-            .max_w(relative(0.94))
-            .h(px(600.))
-            .max_h(relative(0.9))
+            .w(t.size.settings_width)
+            .max_w(relative(0.92))
+            .h(t.size.settings_height)
+            .max_h(relative(0.88))
             .flex()
             .bg(t.colors.surface)
             .border_1()
@@ -1713,28 +2202,46 @@ impl Render for Settings {
             )
             .child(
                 div()
-                    .id("settings-body")
                     .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
                     .bg(t.colors.canvas)
                     .rounded_tr(PANEL_RADIUS - t.size.hairline)
                     .rounded_br(PANEL_RADIUS - t.size.hairline)
-                    .min_w_0()
-                    .overflow_y_scroll()
-                    .pl(px(28.))
-                    .pr(px(52.))
-                    .py(px(24.))
-                    // A new section arrives: it fades in and rises into place
-                    // while the frame and the nav stay where they are.
-                    .child(super::motion::rise_in(
-                        div().child(body),
-                        SharedString::from(format!(
-                            "settings-page-{tab:?}-{}-{}",
-                            self.form,
-                            self.state.read(cx).diagnosis.is_some()
-                        )),
-                        6.,
-                        &t,
-                    )),
+                    .child(
+                        div()
+                            .id("settings-body")
+                            .flex_1()
+                            .min_h_0()
+                            .overflow_y_scroll()
+                            .pl(px(40.))
+                            .pr(px(56.))
+                            .pt(px(32.))
+                            .pb(px(40.))
+                            // A new section arrives: it fades in and rises into place
+                            // while the frame and the nav stay where they are.
+                            .child(super::motion::rise_in(
+                                div().child(body),
+                                SharedString::from(format!(
+                                    "settings-page-{tab:?}-{}-{}",
+                                    self.form,
+                                    self.state.read(cx).diagnosis.is_some()
+                                )),
+                                6.,
+                                &t,
+                            )),
+                    )
+                    .children(actions.map(|a| {
+                        div()
+                            .flex_none()
+                            .pl(px(40.))
+                            .pr(px(56.))
+                            .py(t.space.md)
+                            .border_t_1()
+                            .border_color(t.colors.border)
+                            .child(a)
+                    })),
             )
             .child(close);
         let scrim = div()
@@ -1766,17 +2273,8 @@ impl Render for Settings {
                     panel.on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation());
                 // The window rises and fades in as it opens; it sinks and
                 // fades out as it closes, and the backdrop clears with it.
-                if self.closing {
-                    super::motion::sink_out(panel, "settings-out", 8., &t)
-                } else {
-                    super::motion::rise_in(panel, "settings-in", 12., &t)
-                }
+                super::motion::dialog(panel, "settings", self.closing, &t)
             });
-        let scrim_id = if self.closing {
-            "settings-scrim-out"
-        } else {
-            "settings-scrim-in"
-        };
-        super::motion::scrim(scrim, scrim_id, t.extra.scrim, self.closing, &t)
+        super::motion::backdrop(scrim, "settings-scrim", t.extra.scrim, self.closing, &t)
     }
 }

@@ -97,6 +97,7 @@ fn hop_or_auth(name: &str) -> bool {
             | "accept-encoding"
             | "authorization"
             | "x-api-key"
+            | "x-goog-api-key"
             | "keep-alive"
             | "proxy-connection"
             | "upgrade"

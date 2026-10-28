@@ -130,6 +130,7 @@ fn block(out: &mut String, b: &Block) {
                 ToolStatus::Running => " (running)",
                 ToolStatus::Failed => " (failed)",
                 ToolStatus::Declined => " (skipped)",
+                ToolStatus::Interrupted => " (stopped; it may have taken effect)",
             };
             out.push_str(&format!(
                 "- **{}** `{}`{status}\n",
@@ -159,6 +160,17 @@ fn block(out: &mut String, b: &Block) {
                 let text = clip(&text.join("\n"));
                 let f = fence(&text);
                 out.push_str(&format!("\n{f}diff\n{text}\n{f}\n"));
+            }
+            out.push('\n');
+        }
+        Block::Permission { verdict, info, .. } if !info.questions.is_empty() => {
+            let skipped = *verdict != Verdict::Allowed;
+            for q in &info.questions {
+                let said = match q.answer() {
+                    Some(a) if !skipped => a,
+                    _ => "skipped".into(),
+                };
+                out.push_str(&format!("- _{}_ — {said}\n", q.text));
             }
             out.push('\n');
         }
@@ -224,6 +236,7 @@ mod tests {
                         open: true,
                         full: false,
                         review: Review::Open,
+                        images: vec![],
                     }),
                     Block::Tool(ToolCall {
                         kind: ToolKind::Edit,
@@ -238,6 +251,7 @@ mod tests {
                         open: false,
                         full: false,
                         review: Review::Open,
+                        images: vec![],
                     }),
                 ],
             },

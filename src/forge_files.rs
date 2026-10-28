@@ -92,15 +92,57 @@ pub fn kind_dir(kind: &str, scope: Scope, project: &Path) -> Option<PathBuf> {
     }
 }
 
-/// Every folder ForgeCLI reads `kind` from, lowest precedence first.
+/// Claude Code's configuration folder, which ForgeCLI also reads so skills,
+/// commands and agents installed for Claude Code load unchanged
+/// (`forge_config::compat_home`): `$CLAUDE_CONFIG_DIR`, else `~/.claude`.
+pub fn compat_home() -> Option<PathBuf> {
+    std::env::var_os("CLAUDE_CONFIG_DIR")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .or_else(|| crate::rules::home_dir().map(|h| h.join(".claude")))
+}
+
+/// The folders from the project's repository root down to `project`, root
+/// first (`forge_config::project_chain`); outside a repository, only `project`.
+pub fn project_chain(project: &Path) -> Vec<PathBuf> {
+    let mut chain = vec![];
+    for dir in project.ancestors() {
+        chain.push(dir.to_path_buf());
+        if dir.join(".git").exists() {
+            chain.reverse();
+            return chain;
+        }
+    }
+    vec![project.to_path_buf()]
+}
+
+/// Every folder ForgeCLI reads `kind` from, lowest precedence first
+/// (`forge_config::resource_dirs`): Claude Code's `~/.claude/<kind>`, Forge's
+/// own, then the project's `.claude/<kind>` from the repository root down,
+/// `.agents/<kind>` and `.forge/<kind>`.
 fn read_dirs(kind: &str, project: &Path) -> Vec<(Scope, PathBuf)> {
     let mut out = vec![];
+    if let Some(h) = compat_home() {
+        out.push((Scope::User, h.join(kind)));
+    }
     if let Some(h) = cli_home() {
         out.push((Scope::User, h.join(kind)));
     }
+    for d in project_chain(project) {
+        out.push((Scope::Project, d.join(".claude").join(kind)));
+    }
     out.push((Scope::Project, project.join(".agents").join(kind)));
     out.push((Scope::Project, project.join(".forge").join(kind)));
+    let mut seen = std::collections::HashSet::new();
+    out.retain(|(_, d)| seen.insert(d.clone()));
     out
+}
+
+/// Whether a resource lives in one of Claude Code's folders (`.claude`).
+pub fn is_claude_code(path: &Path) -> bool {
+    path.components().any(|c| c.as_os_str() == ".claude")
+        || compat_home().is_some_and(|h| path.starts_with(h))
 }
 
 /// A settings file ForgeCLI layers (later wins): user, project, local.
@@ -690,7 +732,18 @@ fn count_files(dir: &Path) -> usize {
 fn read_skill(scope: Scope, dir: &Path, enabled: bool) -> Option<Skill> {
     let text = std::fs::read_to_string(dir.join("SKILL.md")).ok()?;
     let doc = Doc::parse(&text);
-    let description = doc.get("description").unwrap_or_default();
+    // No description: ForgeCLI (as Claude Code) uses the body's first line.
+    let description = doc
+        .get("description")
+        .filter(|d| !d.is_empty())
+        .or_else(|| {
+            doc.body
+                .lines()
+                .map(|l| l.trim().trim_start_matches('#').trim())
+                .find(|l| !l.is_empty())
+                .map(str::to_string)
+        })
+        .unwrap_or_default();
     Some(Skill {
         scope,
         name: doc
@@ -703,12 +756,15 @@ fn read_skill(scope: Scope, dir: &Path, enabled: bool) -> Option<Skill> {
             }),
         problem: description
             .is_empty()
-            .then(|| "no description, so ForgeCLI skips it".to_string()),
+            .then(|| "empty, so ForgeCLI skips it".to_string()),
         description,
         body: doc.body,
         dir: dir.to_path_buf(),
         enabled,
-        extra_files: count_files(dir).saturating_sub(1),
+        // Forge's install record (`skill_install::RECORD`) isn't one of its files.
+        extra_files: count_files(dir)
+            .saturating_sub(1)
+            .saturating_sub(usize::from(dir.join(".forge-install.json").is_file())),
     })
 }
 

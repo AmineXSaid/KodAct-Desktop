@@ -224,6 +224,44 @@ pub fn save(store: &Store) {
     }
 }
 
+/// A gateway's models put to the test (Settings' Test button): by the
+/// endpoint's address, then by model id. Kept, so a model that failed stays
+/// hidden until it is tested again.
+pub type ModelTests = HashMap<String, HashMap<String, ModelHealth>>;
+
+/// How many of a gateway's models are tried at once.
+pub const TEST_PARALLELISM: usize = 8;
+/// How long one of them may take to answer before it counts as failed.
+pub const TEST_TIMEOUT: Duration = Duration::from_secs(20);
+
+fn tests_path() -> Option<std::path::PathBuf> {
+    crate::profile::dir().map(|d| d.join("model-tests.json"))
+}
+
+pub fn load_tests() -> ModelTests {
+    tests_path()
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default()
+}
+
+pub fn save_tests(tests: &ModelTests) {
+    if let Some(path) = tests_path() {
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if let Ok(text) = serde_json::to_string(tests) {
+            let _ = std::fs::write(path, text);
+        }
+    }
+}
+
+/// The key a gateway's test results go under: its address, without a
+/// trailing slash.
+pub fn tests_key(base_url: &str) -> String {
+    base_url.trim().trim_end_matches('/').to_string()
+}
+
 /// Fold a finished check into the record. A check that could not be sent
 /// keeps the old verdicts and records why; a model list that couldn't be
 /// read keeps the context window read before.
@@ -344,12 +382,9 @@ pub(crate) fn request(
         req = req.set(k, v);
     }
     if let Some(t) = token {
-        req = match profile.wire {
-            Wire::Anthropic => req
-                .set("x-api-key", t)
-                .set("authorization", &format!("Bearer {t}")),
-            Wire::Openai => req.set("authorization", &format!("Bearer {t}")),
-        };
+        for (h, v) in crate::endpoints::auth_headers(profile.wire, &profile.base_url, t) {
+            req = req.set(h, &v);
+        }
     }
     req
 }
@@ -365,12 +400,18 @@ pub fn context_from_listing(listing: &serde_json::Value, model: &str) -> Option<
         [e.get("id"), e.get("name")]
             .into_iter()
             .flatten()
-            .any(|v| v.as_str() == Some(model))
+            .filter_map(|v| v.as_str())
+            .any(|v| v == model || v.strip_prefix("models/") == Some(model))
     })?;
-    ["context_length", "max_input_tokens", "context_window"]
-        .iter()
-        .find_map(|k| entry.get(*k).and_then(|v| v.as_u64()))
-        .filter(|n| *n > 0)
+    [
+        "context_length",
+        "max_input_tokens",
+        "context_window",
+        "inputTokenLimit",
+    ]
+    .iter()
+    .find_map(|k| entry.get(*k).and_then(|v| v.as_u64()))
+    .filter(|n| *n > 0)
 }
 
 /// Read the model's context window from the endpoint's model list, when
@@ -422,6 +463,13 @@ fn read(r: Result<ureq::Response, ureq::Error>) -> Reply {
 /// The check's request: a few tokens of answer to "hi". OpenAI's reasoning
 /// models take `max_completion_tokens`, and need a little room to think.
 fn probe_body(profile: &Profile) -> serde_json::Value {
+    if profile.wire == Wire::Gemini {
+        // Gemini thinks first, and a short limit only cuts the answer: it still answers 200.
+        return serde_json::json!({
+            "contents": [{ "role": "user", "parts": [{ "text": "hi" }] }],
+            "generationConfig": { "maxOutputTokens": 16 }
+        });
+    }
     let mut body = serde_json::json!({ "model": profile.model, "messages": [{ "role": "user", "content": "hi" }] });
     if profile.wire == Wire::Openai && crate::endpoints::is_reasoning_model(&profile.model) {
         body["max_completion_tokens"] = 16.into();
@@ -473,10 +521,31 @@ fn drop_length_keys(body: &mut serde_json::Value, refusal: &str) -> bool {
     o.remove("max_completion_tokens").is_some() || had
 }
 
+/// What to do when a server on this machine doesn't answer: start it.
+/// OmniRoute's own command when it is OmniRoute's port.
+fn start_hint(base_url: &str) -> String {
+    if !crate::endpoints::is_loopback(base_url) {
+        return String::new();
+    }
+    if crate::endpoints::host_of(base_url).ends_with(":20128") {
+        ". Start OmniRoute (npx omniroute serve --tray) and keep it running; its dashboard is http://127.0.0.1:20128".into()
+    } else {
+        ". Start the server on this PC, then check again".into()
+    }
+}
+
 /// Check one pair: Ok with its verdict (answered or not), or Err when the
 /// request could not be sent at all. Blocking; run it off the UI thread.
 pub fn probe(profile: &Profile, timeout: Duration) -> Result<ModelHealth, String> {
-    let token = token(&profile.auth)?;
+    probe_with(profile, token(&profile.auth)?, timeout)
+}
+
+/// `probe` with the key given, as Settings has it before it is saved.
+pub fn probe_with(
+    profile: &Profile,
+    token: Option<String>,
+    timeout: Duration,
+) -> Result<ModelHealth, String> {
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(CONNECT_TIMEOUT)
         .timeout(timeout)
@@ -531,25 +600,30 @@ pub fn probe(profile: &Profile, timeout: Duration) -> Result<ModelHealth, String
                         .and_then(|m| m.as_str())
                         .map(str::to_string)
                 });
-            let detail: String = message
-                .unwrap_or_else(|| format!("HTTP {code}"))
-                .chars()
-                .take(160)
-                .collect();
+            let full = message.unwrap_or_else(|| format!("HTTP {code}"));
+            // Long enough for a gateway's whole explanation (and its fix);
+            // what shows it clamps the lines and carries the rest in a tooltip.
+            let mut detail: String = full.chars().take(600).collect();
+            // Cut short: said so.
+            if detail.len() < full.len() {
+                detail.push('…');
+            }
             verdict(false, Some(detail))
         }
         Reply::Unsent(t) => {
             let text = t.to_string();
+            let host = crate::endpoints::host_of(&profile.base_url);
+            let start = start_hint(&profile.base_url);
             if matches!(
                 t.kind(),
                 ureq::ErrorKind::ConnectionFailed | ureq::ErrorKind::Dns
             ) {
                 if text.contains("timed out") {
-                    return verdict(false, Some("could not connect".into()));
+                    return verdict(false, Some(format!("could not connect to {host}{start}")));
                 }
                 return Err(match t.kind() {
-                    ureq::ErrorKind::Dns => "the host could not be found".into(),
-                    _ => "could not connect".into(),
+                    ureq::ErrorKind::Dns => format!("the host {host} could not be found"),
+                    _ => format!("nothing answers at {host}{start}"),
                 });
             }
             if text.contains("timed out") || text.contains("WouldBlock") {
@@ -558,13 +632,58 @@ pub fn probe(profile: &Profile, timeout: Duration) -> Result<ModelHealth, String
                     Some("listed, but accepted the request and never answered".into()),
                 );
             }
-            verdict(false, Some(text.chars().take(160).collect()))
+            // ureq's "Network Error": the connection opened, then broke
+            // before an answer came back.
+            if t.kind() == ureq::ErrorKind::Io {
+                return verdict(
+                    false,
+                    Some(format!(
+                        "{host} dropped the connection before answering: it may have stopped or restarted{start}"
+                    )),
+                );
+            }
+            verdict(false, Some(text.chars().take(600).collect()))
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_dropped_or_refused_connection_is_said_in_words() {
+        // A server that takes the connection and drops it: ureq's "Network Error".
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for s in l.incoming().take(3) {
+                drop(s);
+            }
+        });
+        let mut p = openai("auto/best-free");
+        p.base_url = format!("http://127.0.0.1:{port}/v1");
+        let h = probe(&p, Duration::from_secs(5)).unwrap();
+        let d = h.detail.unwrap();
+        assert!(!h.servable && d.contains("dropped the connection"), "{d}");
+        // Nothing there at all.
+        let free = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let gone = free.local_addr().unwrap().port();
+        drop(free);
+        p.base_url = format!("http://127.0.0.1:{gone}/v1");
+        let e = probe(&p, Duration::from_secs(5)).unwrap_err();
+        assert!(
+            e.contains("nothing answers") && e.contains("Start the server"),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn a_local_server_that_does_not_answer_says_how_to_start_it() {
+        assert!(start_hint("http://127.0.0.1:20128").contains("npx omniroute serve"));
+        assert!(start_hint("http://localhost:11434/v1").contains("Start the server"));
+        assert_eq!(start_hint("https://api.example.com"), "");
+    }
+
     use super::*;
 
     fn openai(model: &str) -> Profile {

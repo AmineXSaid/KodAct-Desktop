@@ -21,7 +21,7 @@ use serde_json::{json, Value};
 
 use crate::endpoints::{Profile, Wire};
 use crate::modes::ModeId;
-use crate::state::{DiffKind, DiffLine, Review, ToolCall, ToolKind, ToolStatus};
+use crate::state::{DiffKind, DiffLine, QOption, Question, Review, ToolCall, ToolKind, ToolStatus};
 
 /// What the process said, in the order it said it.
 #[derive(Debug, Clone, PartialEq)]
@@ -35,6 +35,9 @@ pub enum Event {
     /// ForgeCLI changed the permission mode itself (a plan approved, plan mode
     /// entered, an answer that set a mode): `system/status`, `permissionMode`.
     ModeChanged(String),
+    /// The chat's `/goal` changed: set, checked, paused, met, given up or
+    /// cleared (`system/goal`).
+    Goal(crate::state::Goal),
     /// A sub-agent's own tool call; `parent` is the call that started it.
     SubTool {
         parent: String,
@@ -69,6 +72,7 @@ pub enum Event {
         id: String,
         output: String,
         is_error: bool,
+        images: Vec<crate::state::ToolImage>,
     },
     /// Forge asks before running a tool.
     Ask {
@@ -143,13 +147,17 @@ pub struct Launch {
     pub env: Vec<(String, String)>,
 }
 
-/// The base URL ForgeCLI wants: it adds `/v1/messages` (Messages API) or
-/// `/chat/completions` (OpenAI-compatible) itself.
+/// The base URL ForgeCLI wants: it adds `/v1/messages` (Messages API),
+/// `/chat/completions` (OpenAI-compatible) or `/models/<model>:...` (Gemini)
+/// itself.
 fn cli_base_url(profile: &Profile) -> String {
+    if profile.wire == Wire::Gemini {
+        return profile.base_url.trim().trim_end_matches('/').to_string();
+    }
     let url = profile.chat_url();
     let suffix = match profile.wire {
         Wire::Anthropic => "/v1/messages",
-        Wire::Openai => "/chat/completions",
+        _ => "/chat/completions",
     };
     url.strip_suffix(suffix).unwrap_or(&url).to_string()
 }
@@ -244,6 +252,12 @@ pub fn launch(
                 env.push(("FORGE_OPENAI_API_KEY".into(), t));
             }
         }
+        Wire::Gemini => {
+            env.push(("FORGE_GEMINI_BASE_URL".into(), base));
+            if let Some(t) = token {
+                env.push(("FORGE_GEMINI_API_KEY".into(), t));
+            }
+        }
     }
     if !profile.headers.is_empty() {
         let lines: Vec<String> = profile
@@ -308,6 +322,9 @@ impl Session {
             "FORGE_AUTH_TOKEN",
             "FORGE_OPENAI_BASE_URL",
             "FORGE_OPENAI_API_KEY",
+            "FORGE_GEMINI_BASE_URL",
+            "FORGE_GEMINI_API_KEY",
+            "FORGE_GEMINI_AUTH_HEADER",
             "FORGE_CUSTOM_HEADERS",
             "FORGE_MODEL",
         ] {
@@ -394,20 +411,24 @@ impl Session {
     }
 
     /// A message sent while a reply runs, for its next step (`priority:
-    /// "next"`): ForgeCLI gives it to the model between tool calls, or
-    /// runs it next when the turn ends first; either way it is echoed back
-    /// under `uuid` when it lands (`Event::UserAccepted`).
-    pub fn queue(&self, text: &str, uuid: &str) -> Result<(), String> {
-        let mut line = user_line(text);
-        line["priority"] = "next".into();
-        line["uuid"] = uuid.into();
-        self.write(line)
+    /// "next"`), with its attachments (`attach::content_blocks`): ForgeCLI
+    /// gives it to the model between tool calls, or runs it next when the
+    /// turn ends first; either way it is echoed back under `uuid` when it
+    /// lands (`Event::UserAccepted`).
+    pub fn queue_content(&self, content: Value, uuid: &str) -> Result<(), String> {
+        self.write(json!({ "type": "user", "message": { "role": "user", "content": content }, "parent_tool_use_id": null, "session_id": "", "priority": "next", "uuid": uuid }))
     }
 
     /// Take back a queued message that hasn't reached the model; the answer
     /// (`{"cancelled": bool}`) arrives as `Event::ControlReply`.
     pub fn cancel_queued(&self, uuid: &str) -> Result<String, String> {
         self.control(json!({ "subtype": "cancel_queued", "uuid": uuid }))
+    }
+
+    /// Ask what fills the context (ForgeCLI's `/context` numbers); the answer
+    /// arrives as `Event::ControlReply` (`context::ContextUsage::from_json`).
+    pub fn context_usage(&self) -> Result<String, String> {
+        self.control(json!({ "subtype": "get_context_usage" }))
     }
 
     /// Your message with its attachments (`attach::content_blocks`).
@@ -430,7 +451,29 @@ impl Session {
         suggestions: &Value,
         note: Option<&str>,
     ) -> Result<(), String> {
-        self.write(answer_line(request_id, allow, always, input, suggestions, note))
+        self.write(answer_line(
+            request_id,
+            allow,
+            always,
+            input,
+            suggestions,
+            note,
+        ))
+    }
+
+    /// Answer AskUserQuestion with what you chose (`questions_answer_line`).
+    pub fn answer_questions(
+        &self,
+        request_id: &str,
+        input: &Value,
+        questions: &[Question],
+    ) -> Result<(), String> {
+        self.write(questions_answer_line(request_id, input, questions))
+    }
+
+    /// Skip AskUserQuestion: Forge goes on with its own assumptions.
+    pub fn skip_questions(&self, request_id: &str) -> Result<(), String> {
+        self.write(skip_questions_line(request_id))
     }
 
     /// Answer a plan (ExitPlanMode), as Forge for VS Code does.
@@ -522,6 +565,71 @@ pub fn answer_line(
     json!({ "type": "control_response", "response": { "subtype": "success", "request_id": request_id, "response": response } })
 }
 
+/// The tool that puts questions to you.
+pub const QUESTION_TOOL: &str = "AskUserQuestion";
+
+/// Tools ForgeCLI always asks about, whatever the rules: a rule for them
+/// would never be used, so their cards offer no "Always allow".
+pub fn always_asks(tool: &str) -> bool {
+    matches!(tool, QUESTION_TOOL | "EnterPlanMode" | "ExitPlanMode")
+}
+
+/// The questions an AskUserQuestion call asks (`questions[]`), none chosen yet.
+pub fn questions(input: &Value) -> Vec<Question> {
+    let s = |v: &Value, k: &str| v[k].as_str().unwrap_or_default().trim().to_string();
+    input["questions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|q| Question {
+            header: s(q, "header"),
+            text: s(q, "question"),
+            options: q["options"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|o| QOption {
+                    label: s(o, "label"),
+                    description: s(o, "description"),
+                })
+                .collect(),
+            multi: q["multiSelect"].as_bool().unwrap_or(false),
+            ..Default::default()
+        })
+        .collect()
+}
+
+/// A question card's title: "Forge has a question", "Forge has 3 questions".
+pub fn questions_title(n: usize) -> String {
+    if n == 1 {
+        "Forge has a question".into()
+    } else {
+        format!("Forge has {n} questions")
+    }
+}
+
+/// Your answers to AskUserQuestion: the call's input with `answers`
+/// (question → answer) added, which ForgeCLI hands the tool.
+pub fn questions_answer_line(request_id: &str, input: &Value, questions: &[Question]) -> Value {
+    let answers: serde_json::Map<String, Value> = questions
+        .iter()
+        .filter_map(|q| Some((q.text.clone(), Value::String(q.answer()?))))
+        .collect();
+    let mut updated = input.clone();
+    updated["answers"] = Value::Object(answers);
+    json!({ "type": "control_response", "response": { "subtype": "success", "request_id": request_id,
+        "response": { "behavior": "allow", "updatedInput": updated } } })
+}
+
+/// What Forge hears when you skip its questions.
+pub const QUESTIONS_SKIPPED: &str =
+    "The user skipped these questions. Proceed with your best judgement and state your assumptions.";
+
+pub fn skip_questions_line(request_id: &str) -> Value {
+    json!({ "type": "control_response", "response": { "subtype": "success", "request_id": request_id,
+        "response": { "behavior": "deny", "message": QUESTIONS_SKIPPED } } })
+}
+
 /// How a plan is answered: start on it with edits approved automatically or
 /// one by one, or keep planning.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -586,12 +694,87 @@ pub struct Parser {
     /// Write calls streaming in, by content block: their id and input so
     /// far, and when their draft was last sent.
     writes: std::collections::HashMap<u64, (String, String, Option<std::time::Instant>)>,
+    /// Inside a `<think>` / `<thought>` span a model wrote into its reply
+    /// text (Gemma, Qwen, DeepSeek behind an OpenAI-compatible route).
+    in_thought: bool,
+    /// The end of the last delta, held back while it could be the start
+    /// of a tag cut across two deltas ("<tho").
+    held: String,
 }
 
 /// How often a page being written is shown again while it streams.
 const DRAFT_EVERY: std::time::Duration = std::time::Duration::from_millis(250);
 
+/// The tags a model wraps its reasoning in when it has no thinking block.
+const THOUGHT_OPEN: [&str; 2] = ["<think>", "<thought>"];
+const THOUGHT_CLOSE: [&str; 2] = ["</think>", "</thought>"];
+
 impl Parser {
+    /// Reply text, with any reasoning a model wrapped in tags split out as
+    /// thinking, so it folds away instead of reading as the answer.
+    fn text(&mut self, text: &str, out: &mut Vec<Event>) {
+        let mut rest = std::mem::take(&mut self.held) + text;
+        loop {
+            let tags: &[&str] = if self.in_thought {
+                &THOUGHT_CLOSE
+            } else {
+                &THOUGHT_OPEN
+            };
+            let found = tags
+                .iter()
+                .filter_map(|t| rest.find(t).map(|i| (i, t.len())))
+                .min_by_key(|(i, _)| *i);
+            match found {
+                Some((i, len)) => {
+                    self.emit(&rest[..i], out);
+                    self.in_thought = !self.in_thought;
+                    out.push(Event::Break);
+                    rest = rest[i + len..].to_string();
+                }
+                None => {
+                    // Hold back a tail that could begin a tag.
+                    let keep = rest
+                        .char_indices()
+                        .rev()
+                        .take(10)
+                        .map(|(i, _)| i)
+                        .filter(|&i| {
+                            let tail = &rest[i..];
+                            tail.starts_with('<') && tags.iter().any(|t| t.starts_with(tail))
+                        })
+                        .min();
+                    match keep {
+                        Some(i) => {
+                            self.held = rest[i..].to_string();
+                            self.emit(&rest[..i], out);
+                        }
+                        None => self.emit(&rest, out),
+                    }
+                    return;
+                }
+            }
+        }
+    }
+
+    fn emit(&self, text: &str, out: &mut Vec<Event>) {
+        if text.is_empty() {
+            return;
+        }
+        out.push(if self.in_thought {
+            Event::Thinking(text.into())
+        } else {
+            Event::Text(text.into())
+        });
+    }
+
+    /// The turn ended: what was held back is said, and a span left open
+    /// closes.
+    fn end_turn(&mut self, out: &mut Vec<Event>) {
+        let held = std::mem::take(&mut self.held);
+        self.emit(&held, out);
+        self.in_thought = false;
+    }
+
     pub fn line(&mut self, line: &str) -> Vec<Event> {
         let Ok(v) = serde_json::from_str::<Value>(line) else {
             return vec![];
@@ -671,7 +854,7 @@ impl Parser {
                     match d["type"].as_str() {
                         Some("text_delta") => {
                             self.streamed = true;
-                            out.push(Event::Text(d["text"].as_str().unwrap_or_default().into()));
+                            self.text(d["text"].as_str().unwrap_or_default(), &mut out);
                         }
                         Some("thinking_delta") => {
                             self.streamed = true;
@@ -708,10 +891,10 @@ impl Parser {
                 }
                 for b in v["message"]["content"].as_array().into_iter().flatten() {
                     match b["type"].as_str() {
-                        Some("text") if !streamed => out.extend([
-                            Event::Break,
-                            Event::Text(b["text"].as_str().unwrap_or_default().into()),
-                        ]),
+                        Some("text") if !streamed => {
+                            out.push(Event::Break);
+                            self.text(b["text"].as_str().unwrap_or_default(), &mut out);
+                        }
                         Some("thinking") if !streamed => out.extend([
                             Event::Break,
                             Event::Thinking(b["thinking"].as_str().unwrap_or_default().into()),
@@ -754,6 +937,11 @@ impl Parser {
                 };
                 out.push(Event::ControlReply { request_id, result });
             }
+            Some("system") if v["subtype"] == "goal" => {
+                if let Some(goal) = crate::state::Goal::from_wire(&v) {
+                    out.push(Event::Goal(goal));
+                }
+            }
             Some("system") if v["subtype"] == "status" => {
                 if let Some(m) = v["permissionMode"].as_str() {
                     out.push(Event::ModeChanged(m.to_string()));
@@ -767,6 +955,10 @@ impl Parser {
                             id: b["tool_use_id"].as_str().unwrap_or_default().into(),
                             output: result_text(&b["content"]),
                             is_error: b["is_error"].as_bool().unwrap_or(false),
+                            images: result_images(
+                                &b["content"],
+                                v["tool_use_result"]["file"]["filePath"].as_str(),
+                            ),
                         });
                     }
                 }
@@ -787,6 +979,7 @@ impl Parser {
                 request_id: v["request_id"].as_str().unwrap_or_default().into(),
             }),
             Some("result") if !nested => {
+                self.end_turn(&mut out);
                 // An immediate command's answer (`/status`...) is not a turn.
                 if v["immediate"] == true {
                     out.push(Event::Immediate {
@@ -853,6 +1046,35 @@ fn result_text(c: &Value) -> String {
         Value::Null => String::new(),
         other => other.to_string(),
     }
+}
+
+/// The pictures in a tool result: base64 image blocks, named after the file
+/// they were read from when the result says which.
+pub fn result_images(c: &Value, path: Option<&str>) -> Vec<crate::state::ToolImage> {
+    use gpui::ImageFormat;
+    let name = path
+        .and_then(|p| p.rsplit(['/', '\\']).next())
+        .unwrap_or("image");
+    c.as_array()
+        .into_iter()
+        .flatten()
+        .filter(|b| b["type"] == "image" && b["source"]["type"] == "base64")
+        .filter_map(|b| {
+            let format = match b["source"]["media_type"].as_str()? {
+                "image/png" => ImageFormat::Png,
+                "image/jpeg" => ImageFormat::Jpeg,
+                "image/gif" => ImageFormat::Gif,
+                "image/webp" => ImageFormat::Webp,
+                _ => return None,
+            };
+            let bytes = crate::browser::decode_base64(b["source"]["data"].as_str()?)?;
+            Some(crate::state::ToolImage {
+                name: name.to_string().into(),
+                path: path.map(|p| p.to_string().into()),
+                image: std::sync::Arc::new(gpui::Image::from_bytes(format, bytes)),
+            })
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------- tool rows
@@ -944,6 +1166,19 @@ pub fn tool_call(name: &str, input: &Value) -> ToolCall {
                 .or_else(|| input["index"].as_u64().map(|i| format!("element {i}")));
             (ToolKind::Other, browser.to_string(), what, vec![])
         }
+        QUESTION_TOOL => {
+            let n = input["questions"].as_array().map_or(0, Vec::len);
+            (
+                ToolKind::Other,
+                QUESTION_TOOL.to_string(),
+                Some(if n == 1 {
+                    "1 question".into()
+                } else {
+                    format!("{n} questions")
+                }),
+                vec![],
+            )
+        }
         // A skill reads as its name, without its plugin's prefix.
         "Skill" => {
             let skill = s("skill");
@@ -969,9 +1204,12 @@ pub fn tool_call(name: &str, input: &Value) -> ToolCall {
         status: ToolStatus::Running,
         output: "".into(),
         diff,
-        open: kind == ToolKind::Bash,
+        // Every call starts closed, a command too: the working line says what
+        // runs, and its terminal block is a click away.
+        open: false,
         full: false,
         review: Review::Open,
+        images: vec![],
     }
 }
 
@@ -1009,15 +1247,10 @@ pub fn ask_text(tool: &str, input: &Value) -> (String, String) {
                 .to_string(),
         );
     }
-    // Questions for you, answered in a form (`ui/question_form.rs`).
-    if tool == "AskUserQuestion" {
-        let asked: Vec<&str> = input["questions"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|q| q["question"].as_str())
-            .collect();
-        return ("Forge's questions".to_string(), asked.join(" · "));
+    if tool == QUESTION_TOOL {
+        let qs = questions(input);
+        let first = qs.first().map(|q| q.text.clone()).unwrap_or_default();
+        return (questions_title(qs.len()), first);
     }
     let call = tool_call(tool, input);
     let title = match call.kind {
@@ -1120,6 +1353,46 @@ mod tests {
     }
 
     #[test]
+    fn reasoning_in_thought_tags_becomes_thinking_even_cut_across_deltas() {
+        let delta = |t: &str| json!({"type":"stream_event","parent_tool_use_id":null,"event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":t}}});
+        let ev = parse(&[
+            delta("<thou"),
+            delta("ght>The user said hi. I'll respond naturally.</tho"),
+            delta("ught>Hi there!"),
+            json!({"type":"result","is_error":false,"duration_ms":10,"usage":{}}),
+        ]);
+        let thinking: String = ev
+            .iter()
+            .filter_map(|e| match e {
+                Event::Thinking(t) => Some(t.as_str()),
+                _ => None,
+            })
+            .collect();
+        let text: String = ev
+            .iter()
+            .filter_map(|e| match e {
+                Event::Text(t) => Some(t.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(thinking, "The user said hi. I'll respond naturally.");
+        assert_eq!(text, "Hi there!");
+        // A plain "<" in a reply is not held back for ever.
+        let ev = parse(&[
+            delta("if a <"),
+            json!({"type":"result","is_error":false,"duration_ms":10,"usage":{}}),
+        ]);
+        let text: String = ev
+            .iter()
+            .filter_map(|e| match e {
+                Event::Text(t) => Some(t.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(text, "if a <");
+    }
+
+    #[test]
     fn streamed_text_is_not_repeated_by_the_full_message() {
         let mut ev = parse(&[
             json!({"type":"stream_event","parent_tool_use_id":null,"event":{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}}),
@@ -1139,6 +1412,7 @@ mod tests {
                 id: "t1".into(),
                 output: "a\nb".into(),
                 is_error: false,
+                images: vec![],
             }
         );
         assert!(
@@ -1217,6 +1491,44 @@ mod tests {
     }
 
     #[test]
+    fn a_goal_reaches_the_app_through_each_of_its_states() {
+        use crate::state::{Goal, GoalStatus};
+        let goal = |v: Value| match parse(&[v]).as_slice() {
+            [Event::Goal(g)] => g.clone(),
+            other => panic!("{other:?}"),
+        };
+        let set = goal(
+            json!({"type":"system","subtype":"goal","condition":"tests pass","status":"active","reason":null}),
+        );
+        assert_eq!(
+            set,
+            Goal {
+                condition: "tests pass".into(),
+                status: GoalStatus::Working,
+                reason: None
+            }
+        );
+        let paused = goal(
+            json!({"type":"system","subtype":"goal","condition":"tests pass","status":"active","paused":"limit","reason":"Goal paused: --max-turns reached."}),
+        );
+        assert_eq!(paused.status, GoalStatus::Paused);
+        let met = goal(
+            json!({"type":"system","subtype":"goal","condition":"tests pass","status":"achieved","reason":"cargo test: 12 passed"}),
+        );
+        assert_eq!(
+            (met.status, met.reason.as_deref()),
+            (GoalStatus::Achieved, Some("cargo test: 12 passed"))
+        );
+        assert_eq!(goal(json!({"type":"system","subtype":"goal","condition":"x","status":"failed","reason":"no access"})).status, GoalStatus::Failed);
+        assert_eq!(
+            goal(json!({"type":"system","subtype":"goal","condition":"x","status":"cleared"}))
+                .status,
+            GoalStatus::Cleared
+        );
+        assert!(parse(&[json!({"type":"system","subtype":"goal","status":"active"})]).is_empty());
+    }
+
+    #[test]
     fn browser_asks_say_what_and_where() {
         let (title, detail) = ask_text(
             "mcp__forge-browser__navigate",
@@ -1239,6 +1551,39 @@ mod tests {
         let typed = "x".repeat(300);
         let (_, detail) = ask_text("mcp__forge-browser__type", &json!({ "text": typed }));
         assert_eq!(detail, typed);
+    }
+
+    #[test]
+    fn questions_are_answered_in_the_calls_input() {
+        let input = json!({ "questions": [
+            { "question": "Which stack?", "header": "Stack", "multiSelect": false,
+              "options": [{ "label": "Tauri", "description": "a" }, { "label": "Leptos", "description": "b" }] },
+            { "question": "Which targets?", "header": "Targets", "multiSelect": true,
+              "options": [{ "label": "Windows", "description": "" }, { "label": "Linux", "description": "" }] },
+            { "question": "Name?", "header": "Name", "multiSelect": false,
+              "options": [{ "label": "folio", "description": "" }, { "label": "notes", "description": "" }] } ] });
+        let mut qs = questions(&input);
+        assert_eq!(qs.len(), 3);
+        assert_eq!(
+            (qs[0].header.as_str(), qs[0].options[1].label.as_str()),
+            ("Stack", "Leptos")
+        );
+        assert!(qs[1].multi && !qs[0].multi);
+        assert_eq!(ask_text(QUESTION_TOOL, &input).0, "Forge has 3 questions");
+        qs[0].picked = vec![0];
+        qs[1].picked = vec![0, 1];
+        qs[2].own = Some("my-notes".into());
+        let line = questions_answer_line("r1", &input, &qs);
+        let r = &line["response"]["response"];
+        assert_eq!(r["behavior"], "allow");
+        assert_eq!(r["updatedInput"]["questions"], input["questions"]);
+        assert_eq!(
+            r["updatedInput"]["answers"],
+            json!({ "Which stack?": "Tauri", "Which targets?": "Windows, Linux", "Name?": "my-notes" })
+        );
+        let skip = skip_questions_line("r1");
+        assert_eq!(skip["response"]["response"]["behavior"], "deny");
+        assert!(always_asks(QUESTION_TOOL) && always_asks("ExitPlanMode") && !always_asks("Bash"));
     }
 
     #[test]
@@ -1269,11 +1614,19 @@ mod tests {
             .get("updatedPermissions")
             .is_none());
         assert_eq!(
-            answer_line("r1", false, false, &input, &sugg, None)["response"]["response"]["behavior"],
+            answer_line("r1", false, false, &input, &sugg, None)["response"]["response"]
+                ["behavior"],
             "deny"
         );
         // Denied with your words: Forge gets them, not just a no.
-        let said = answer_line("r1", false, false, &input, &sugg, Some("Use lib.rs instead"));
+        let said = answer_line(
+            "r1",
+            false,
+            false,
+            &input,
+            &sugg,
+            Some("Use lib.rs instead"),
+        );
         let message = said["response"]["response"]["message"].as_str().unwrap();
         assert!(message.contains("Use lib.rs instead"), "{message}");
     }
@@ -1324,6 +1677,33 @@ mod tests {
             "FORGE_OPENAI_BASE_URL".into(),
             "http://127.0.0.1:11434/v1".into()
         )));
+        // Gemini: ForgeCLI's native wire, the base URL as written.
+        let g: Profile = serde_json::from_value(json!({"name":"g","baseUrl":"https://generativelanguage.googleapis.com/v1beta/","wire":"gemini","model":"gemini-3-flash-preview"}))
+        .unwrap();
+        let l = launch(&g, ModeId::Manual, false, Conversation::New(id)).unwrap();
+        assert!(l.env.contains(&(
+            "FORGE_GEMINI_BASE_URL".into(),
+            "https://generativelanguage.googleapis.com/v1beta".into()
+        )));
+        assert!(!l
+            .env
+            .iter()
+            .any(|(k, _)| k == "FORGE_BASE_URL" || k == "FORGE_OPENAI_BASE_URL"));
+    }
+
+    #[test]
+    fn a_read_picture_comes_back_as_an_image() {
+        let content = json!([
+            {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "aGk="}},
+            {"type": "image", "source": {"type": "base64", "media_type": "image/bmp", "data": "aGk="}},
+            {"type": "text", "text": "x"}
+        ]);
+        let found = result_images(&content, Some("/p/shots/a.png"));
+        assert_eq!(found.len(), 1, "a format Forge can't show is skipped");
+        assert_eq!(found[0].name.as_ref(), "a.png");
+        assert_eq!(found[0].path.as_deref(), Some("/p/shots/a.png"));
+        assert_eq!(found[0].image.bytes(), b"hi");
+        assert!(result_images(&json!("text"), None).is_empty());
     }
 
     #[test]

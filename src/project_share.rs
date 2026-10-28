@@ -37,7 +37,13 @@ pub fn setup_files(project: &Path, memory: bool) -> Vec<String> {
         let mut files: Vec<String> = dir
             .filter_map(|e| e.ok())
             .filter(|e| e.path().is_file())
-            .map(|e| format!("{}/{}", crate::knowledge::DIR, e.file_name().to_string_lossy()))
+            .map(|e| {
+                format!(
+                    "{}/{}",
+                    crate::knowledge::DIR,
+                    e.file_name().to_string_lossy()
+                )
+            })
             .collect();
         files.sort();
         out.extend(files);
@@ -104,10 +110,18 @@ pub fn commit(project: &Path, memory: bool) -> Result<String, String> {
     let mut add = vec!["add", "--"];
     add.extend(files.iter().map(String::as_str));
     git(project, &add)?;
-    let mut commit = vec!["commit", "-m", "Forge project setup: instructions and knowledge", "--"];
+    let mut commit = vec![
+        "commit",
+        "-m",
+        "Forge project setup: instructions and knowledge",
+        "--",
+    ];
     commit.extend(files.iter().map(String::as_str));
     git(project, &commit)
-        .map(|_| "Committed the project's setup. Push it, and everyone who clones the project gets it.".to_string())
+        .map(|_| {
+            "Committed the project's setup. Push it, and everyone who clones the project gets it."
+                .to_string()
+        })
         .or_else(|e| {
             if e.contains("nothing to commit") || e.contains("no changes added") {
                 Ok("The setup is already committed.".to_string())
@@ -148,12 +162,18 @@ pub fn export(
         "description": description,
         "files": files,
     });
-    zip.start_file("project.json", opts).map_err(|e| e.to_string())?;
-    zip.write_all(serde_json::to_string_pretty(&meta).unwrap_or_default().as_bytes())
+    zip.start_file("project.json", opts)
         .map_err(|e| e.to_string())?;
+    zip.write_all(
+        serde_json::to_string_pretty(&meta)
+            .unwrap_or_default()
+            .as_bytes(),
+    )
+    .map_err(|e| e.to_string())?;
     for rel in &files {
         let bytes = std::fs::read(project.join(rel)).map_err(|e| format!("{rel}: {e}"))?;
-        zip.start_file(format!("setup/{rel}"), opts).map_err(|e| e.to_string())?;
+        zip.start_file(format!("setup/{rel}"), opts)
+            .map_err(|e| e.to_string())?;
         zip.write_all(&bytes).map_err(|e| e.to_string())?;
     }
     zip.finish().map_err(|e| e.to_string())?;
@@ -171,7 +191,8 @@ pub struct Imported {
 /// Import a `.forgeproject` into `project`, never overwriting a file.
 pub fn import(file: &Path, project: &Path) -> Result<Imported, String> {
     let f = std::fs::File::open(file).map_err(|e| e.to_string())?;
-    let mut zip = zip::ZipArchive::new(f).map_err(|_| "this isn't a Forge project setup".to_string())?;
+    let mut zip =
+        zip::ZipArchive::new(f).map_err(|_| "this isn't a Forge project setup".to_string())?;
     let is_setup = zip
         .by_name("project.json")
         .ok()
@@ -239,7 +260,9 @@ mod tests {
         let files = setup_files(&a, false);
         assert!(files.contains(&"FORGE.md".to_string()));
         assert!(files.iter().any(|f| f.ends_with("glossary.md")));
-        assert!(!files.iter().any(|f| f.contains("memory") || f.contains("local")));
+        assert!(!files
+            .iter()
+            .any(|f| f.contains("memory") || f.contains("local")));
         assert!(setup_files(&a, true).contains(&crate::project_memory::FILE.to_string()));
 
         let out = project("out");
@@ -251,7 +274,10 @@ mod tests {
         let got = import(&file, &b).unwrap();
         assert_eq!(got.kept, vec!["FORGE.md".to_string()]);
         assert!(got.added.iter().any(|f| f.ends_with("glossary.md")));
-        assert_eq!(std::fs::read_to_string(b.join("FORGE.md")).unwrap(), "Their own.");
+        assert_eq!(
+            std::fs::read_to_string(b.join("FORGE.md")).unwrap(),
+            "Their own."
+        );
         assert!(b.join(crate::project_memory::FILE).is_file());
         assert!(!b.join("FORGE.local.md").exists());
         // Something else isn't imported.

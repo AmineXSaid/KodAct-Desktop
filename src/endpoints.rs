@@ -31,6 +31,44 @@ pub enum Wire {
     #[default]
     Anthropic,
     Openai,
+    /// Google's Gemini API (`models/<model>:generateContent`): Google AI
+    /// Studio, or a gateway that speaks it. ForgeCLI's native Gemini wire.
+    Gemini,
+}
+
+impl Wire {
+    /// How the wire is named in Settings.
+    pub fn label(self) -> &'static str {
+        match self {
+            Wire::Anthropic => "Anthropic Messages",
+            Wire::Openai => "OpenAI-compatible",
+            Wire::Gemini => "Gemini",
+        }
+    }
+}
+
+/// The headers a key travels in, on this wire to this URL: Anthropic's
+/// format both `x-api-key` and a bearer token (gateways take one or the
+/// other), OpenAI's a bearer token, Gemini's `x-goog-api-key` for Google AI
+/// Studio, a bearer token for Vertex AI, both for anything else (as
+/// ForgeCLI sends them).
+pub fn auth_headers(wire: Wire, base_url: &str, key: &str) -> Vec<(&'static str, String)> {
+    let bearer = ("authorization", format!("Bearer {key}"));
+    match wire {
+        Wire::Anthropic => vec![("x-api-key", key.to_string()), bearer],
+        Wire::Openai => vec![bearer],
+        Wire::Gemini => {
+            let host = host_of(base_url).to_ascii_lowercase();
+            let host = host.split(':').next().unwrap_or_default().to_string();
+            if host.ends_with("aiplatform.googleapis.com") {
+                vec![bearer]
+            } else if host.ends_with("googleapis.com") {
+                vec![("x-goog-api-key", key.to_string())]
+            } else {
+                vec![("x-goog-api-key", key.to_string()), bearer]
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, Default)]
@@ -51,6 +89,24 @@ pub struct Capabilities {
     pub effort: bool,
     pub effort_levels: Option<Vec<Effort>>,
     pub fast: bool,
+    /// A gateway (OmniRoute, OpenRouter): its whole model list is offered
+    /// in the model menu, as Claude Code's `/model` lists a gateway's
+    /// models, and picking one switches this profile to it.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub catalog: bool,
+}
+
+/// A model an endpoint lists: its id, and what the list says about it.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct ModelInfo {
+    pub id: String,
+    /// Its name for people ("Claude Sonnet 4.6"), when the list gives one.
+    pub name: Option<String>,
+    /// Its context window in tokens (`context_length`, OpenRouter's and
+    /// OmniRoute's field).
+    pub context: Option<u64>,
+    /// It reasons (thinks) before it answers.
+    pub reasoning: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
@@ -363,16 +419,19 @@ pub struct Preset {
     pub wire: Wire,
     /// Needs a key (a local server doesn't).
     pub key: bool,
+    /// A gateway: its model list goes in the model menu.
+    pub catalog: bool,
 }
 
 /// Cloud presets, then local runtimes on their documented default ports.
-pub const PRESETS: [Preset; 9] = [
+pub const PRESETS: [Preset; 10] = [
     Preset {
         id: "anthropic",
         label: "Anthropic",
         base_url: "https://api.anthropic.com",
         wire: Wire::Anthropic,
         key: true,
+        catalog: false,
     },
     Preset {
         id: "openai",
@@ -380,6 +439,17 @@ pub const PRESETS: [Preset; 9] = [
         base_url: "https://api.openai.com/v1",
         wire: Wire::Openai,
         key: true,
+        catalog: false,
+    },
+    // Google AI Studio's Gemini API, on ForgeCLI's native Gemini wire (thought
+    // signatures, thinking levels); its model list goes in the model menu.
+    Preset {
+        id: "gemini",
+        label: "Google Gemini",
+        base_url: "https://generativelanguage.googleapis.com/v1beta",
+        wire: Wire::Gemini,
+        key: true,
+        catalog: true,
     },
     Preset {
         id: "openrouter",
@@ -387,16 +457,20 @@ pub const PRESETS: [Preset; 9] = [
         base_url: "https://openrouter.ai/api/v1",
         wire: Wire::Openai,
         key: true,
+        catalog: true,
     },
-    // OmniRoute: an OpenAI-compatible gateway on this PC, in front of many
-    // providers (`auto`, `auto/best-coding` and provider-prefixed ids). Chat
-    // works without a key; listing its models takes one of its endpoint keys.
+    // OmniRoute: a gateway on this PC in front of many providers (`auto`,
+    // combos and provider-prefixed ids). Reached as Claude Code reaches it:
+    // Anthropic Messages at the root URL (no `/v1`), the key as a Bearer
+    // token, and its model list offered in the model menu. Chat works
+    // without a key; listing its models takes one of its API keys.
     Preset {
         id: "omniroute",
         label: "OmniRoute",
-        base_url: "http://127.0.0.1:20128/v1",
-        wire: Wire::Openai,
+        base_url: "http://127.0.0.1:20128",
+        wire: Wire::Anthropic,
         key: false,
+        catalog: true,
     },
     Preset {
         id: "ollama",
@@ -404,6 +478,7 @@ pub const PRESETS: [Preset; 9] = [
         base_url: "http://127.0.0.1:11434/v1",
         wire: Wire::Openai,
         key: false,
+        catalog: false,
     },
     Preset {
         id: "lmstudio",
@@ -411,6 +486,7 @@ pub const PRESETS: [Preset; 9] = [
         base_url: "http://127.0.0.1:1234/v1",
         wire: Wire::Openai,
         key: false,
+        catalog: false,
     },
     Preset {
         id: "llamacpp",
@@ -418,6 +494,7 @@ pub const PRESETS: [Preset; 9] = [
         base_url: "http://127.0.0.1:8080/v1",
         wire: Wire::Openai,
         key: false,
+        catalog: false,
     },
     Preset {
         id: "vllm",
@@ -425,6 +502,7 @@ pub const PRESETS: [Preset; 9] = [
         base_url: "http://127.0.0.1:8000/v1",
         wire: Wire::Openai,
         key: false,
+        catalog: false,
     },
     Preset {
         id: "jan",
@@ -432,6 +510,7 @@ pub const PRESETS: [Preset; 9] = [
         base_url: "http://127.0.0.1:1337/v1",
         wire: Wire::Openai,
         key: false,
+        catalog: false,
     },
 ];
 
@@ -451,7 +530,18 @@ pub fn detect_local() -> Vec<&'static str> {
                 scope.spawn(move || {
                     // Any HTTP answer is a server running there: a gateway
                     // (OmniRoute) lists its models only with a key, so 401.
-                    let up = match agent.get(&format!("{}/models", p.base_url)).call() {
+                    let probe = Profile {
+                        name: String::new(),
+                        base_url: p.base_url.into(),
+                        wire: p.wire,
+                        model: String::new(),
+                        display_name: None,
+                        chat_path: None,
+                        headers: Default::default(),
+                        auth: Auth::None,
+                        capabilities: Default::default(),
+                    };
+                    let up = match agent.get(&probe.models_url()).call() {
                         Ok(_) | Err(ureq::Error::Status(..)) => true,
                         Err(ureq::Error::Transport(_)) => false,
                     };
@@ -474,6 +564,17 @@ pub fn list_models(
     key: Option<&str>,
     headers: &BTreeMap<String, String>,
 ) -> Result<Vec<String>, String> {
+    list_catalog(base_url, wire, key, headers).map(|c| c.into_iter().map(|m| m.id).collect())
+}
+
+/// The chat models an endpoint lists, with their names and context windows
+/// where the list gives them, sorted by id. Blocking: off the UI thread.
+pub fn list_catalog(
+    base_url: &str,
+    wire: Wire,
+    key: Option<&str>,
+    headers: &BTreeMap<String, String>,
+) -> Result<Vec<ModelInfo>, String> {
     let probe = Profile {
         name: "probe".into(),
         base_url: base_url.trim().to_string(),
@@ -497,12 +598,9 @@ pub fn list_models(
         req = req.set(k, v);
     }
     if let Some(k) = key.filter(|k| !k.is_empty()) {
-        req = match wire {
-            Wire::Anthropic => req
-                .set("x-api-key", k)
-                .set("authorization", &format!("Bearer {k}")),
-            Wire::Openai => req.set("authorization", &format!("Bearer {k}")),
-        };
+        for (h, v) in auth_headers(wire, base_url, k) {
+            req = req.set(h, &v);
+        }
     }
     let body: serde_json::Value = match req.call() {
         Ok(r) => r
@@ -518,44 +616,104 @@ pub fn list_models(
                         .map(str::to_string)
                 });
             let keyless = key.is_none_or(|k| k.is_empty());
-            return Err(match (code, msg) {
-                (401 | 403, _) if keyless => {
-                    "it lists models only with a key (HTTP 401): paste one".to_string()
-                }
-                (401 | 403, _) => "the endpoint refused the key (HTTP 401/403)".to_string(),
-                (_, Some(m)) => m,
-                (c, None) => format!("HTTP {c}"),
+            // OmniRoute wants one of its own keys (made in its dashboard),
+            // never a provider's: say where to get one.
+            let omni = host_of(base_url).ends_with(":20128");
+            let said = msg
+                .as_ref()
+                .map(|m| format!(" (it said: {m})"))
+                .unwrap_or_default();
+            return Err(match code {
+                401 | 403 if keyless && omni => format!(
+                    "OmniRoute asks for a key{said}: create one in its dashboard (http://127.0.0.1:20128, API Keys) and paste it, or turn Require API key off there"
+                ),
+                401 | 403 if keyless => format!("it lists models only with a key (HTTP {code}){said}: paste one"),
+                401 | 403 if omni => format!(
+                    "OmniRoute refused this key{said}: use a key from its dashboard (http://127.0.0.1:20128, API Keys), not a provider's key or the dashboard password"
+                ),
+                401 | 403 => format!("the endpoint refused the key (HTTP {code}){said}"),
+                c => msg.unwrap_or_else(|| format!("HTTP {c}")),
             });
         }
         Err(e) => return Err(format!("could not connect: {e}")),
     };
-    let mut ids: Vec<String> = body
+    Ok(parse_catalog(&body))
+}
+
+/// The chat models in a model list (OpenAI's `data`, or `models`): each
+/// id once, sorted, with its name, context window and whether it reasons
+/// when the entry says. Embedding, image, audio and other non-chat models
+/// are dropped, by their `type` (OmniRoute's catalog) or their id. A
+/// gateway's second name for a model (OmniRoute lists `cc/x` and
+/// `claude/x`, the second with a `parent`) is left out, so each model
+/// shows once.
+pub fn parse_catalog(body: &serde_json::Value) -> Vec<ModelInfo> {
+    let Some(list) = body
         .get("data")
         .or(body.get("models"))
         .and_then(|d| d.as_array())
-        .map(|a| {
-            a.iter()
-                .filter_map(|m| {
-                    m.get("id")
-                        .or(m.get("name"))
-                        .and_then(|i| i.as_str())
-                        .map(str::to_string)
-                })
-                .collect()
+    else {
+        return vec![];
+    };
+    let mut out: Vec<ModelInfo> = list
+        .iter()
+        .filter(|m| m.get("parent").is_none_or(|p| p.is_null()))
+        .filter(|m| {
+            m.get("type")
+                .and_then(|t| t.as_str())
+                .is_none_or(|t| t == "chat")
         })
-        .unwrap_or_default();
-    ids.retain(|id| {
-        let l = id.to_ascii_lowercase();
-        !(l.contains("embed")
-            || l.contains("whisper")
-            || l.contains("tts")
-            || l.contains("dall-e")
-            || l.contains("moderation")
-            || l.contains("rerank"))
-    });
-    ids.sort();
-    ids.dedup();
-    Ok(ids)
+        .filter_map(|m| {
+            // Gemini's list: `models/<id>`, `displayName`, `inputTokenLimit`,
+            // and only what can `generateContent` is a chat model.
+            let methods = m
+                .get("supportedGenerationMethods")
+                .and_then(|v| v.as_array());
+            if methods.is_some_and(|ms| !ms.iter().any(|x| x == "generateContent")) {
+                return None;
+            }
+            let raw = m.get("id").or(m.get("name")).and_then(|i| i.as_str())?;
+            let id = raw.strip_prefix("models/").unwrap_or(raw).to_string();
+            let name = m
+                .get("display_name")
+                .or(m.get("displayName"))
+                .or(m.get("name").filter(|_| methods.is_none()))
+                .and_then(|n| n.as_str())
+                .filter(|n| *n != id && !n.is_empty())
+                .map(str::to_string);
+            let context = [
+                "context_length",
+                "context_window",
+                "max_context_length",
+                "inputTokenLimit",
+            ]
+            .iter()
+            .find_map(|k| m.get(*k).and_then(|c| c.as_u64()))
+            .filter(|c| *c > 0);
+            let caps = m.get("capabilities");
+            let flag =
+                |k: &str| caps.and_then(|c| c.get(k)).and_then(|v| v.as_bool()) == Some(true);
+            let reasoning = flag("reasoning") || flag("thinking");
+            Some(ModelInfo {
+                id,
+                name,
+                context,
+                reasoning,
+            })
+        })
+        .filter(|m| {
+            let l = m.id.to_ascii_lowercase();
+            !(l.contains("embed")
+                || l.contains("whisper")
+                || l.contains("tts")
+                || l.contains("dall-e")
+                || l.contains("moderation")
+                || l.contains("rerank"))
+        })
+        .collect();
+    out.sort_by(|a, b| a.id.cmp(&b.id));
+    out.dedup_by(|a, b| a.id == b.id);
+    out
 }
 
 impl Endpoints {
@@ -600,6 +758,8 @@ impl Profile {
             Wire::Anthropic => anthropic_url(base, "/v1/models"),
             Wire::Openai if ends_in_version(base) => format!("{base}/models"),
             Wire::Openai => format!("{base}/v1/models"),
+            // One page holds every model.
+            Wire::Gemini => format!("{base}/models?pageSize=1000"),
         }
     }
 
@@ -647,6 +807,11 @@ impl Profile {
             Wire::Anthropic => {
                 anthropic_url(base, self.chat_path.as_deref().unwrap_or("/v1/messages"))
             }
+            // The check and titles ask for a whole answer; chats stream through ForgeCLI.
+            Wire::Gemini => format!(
+                "{base}/models/{}:generateContent",
+                self.model.trim().trim_start_matches("models/")
+            ),
         }
     }
 
@@ -793,20 +958,86 @@ mod tests {
     #[test]
     fn omniroute_is_a_local_preset_on_its_port() {
         let p = PRESETS.iter().find(|p| p.id == "omniroute").unwrap();
+        // As Claude Code reaches it: Anthropic Messages at the root URL.
         assert_eq!(
-            (p.base_url, p.wire, p.key),
-            ("http://127.0.0.1:20128/v1", Wire::Openai, false)
+            (p.base_url, p.wire, p.key, p.catalog),
+            ("http://127.0.0.1:20128", Wire::Anthropic, false, true)
         );
         let prof = Profile {
             base_url: p.base_url.into(),
             wire: p.wire,
             ..test_profile()
         };
-        assert_eq!(
-            prof.chat_url(),
-            "http://127.0.0.1:20128/v1/chat/completions"
-        );
+        assert_eq!(prof.chat_url(), "http://127.0.0.1:20128/v1/messages");
         assert_eq!(prof.models_url(), "http://127.0.0.1:20128/v1/models");
+    }
+
+    #[test]
+    fn a_catalog_keeps_chat_models_once_with_their_names_and_windows() {
+        // OmniRoute's /v1/models in its default (dual) mode.
+        let body = serde_json::json!({ "object": "list", "data": [
+            { "id": "cc/claude-sonnet-4-6", "name": "Claude Sonnet 4.6", "owned_by": "cc",
+              "context_length": 200000, "capabilities": { "reasoning": true, "tool_calling": true } },
+            { "id": "claude/claude-sonnet-4-6", "parent": "cc/claude-sonnet-4-6", "context_length": 200000 },
+            { "id": "kimi/kimi-k2.6", "context_length": 262144 },
+            { "id": "openai/text-embedding-3-small", "type": "embedding" },
+            { "id": "auto/best-coding", "type": "chat" },
+            { "id": "some-embedding-model" },
+            { "id": "kimi/kimi-k2.6" }
+        ]});
+        let c = parse_catalog(&body);
+        let ids: Vec<&str> = c.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            ["auto/best-coding", "cc/claude-sonnet-4-6", "kimi/kimi-k2.6"]
+        );
+        assert_eq!(c[1].name.as_deref(), Some("Claude Sonnet 4.6"));
+        assert_eq!((c[1].context, c[1].reasoning), (Some(200000), true));
+        assert_eq!((c[2].name.as_deref(), c[2].context), (None, Some(262144)));
+        // Ollama's own list.
+        let ollama = serde_json::json!({ "models": [{ "name": "qwen3-coder:30b" }] });
+        assert_eq!(parse_catalog(&ollama)[0].id, "qwen3-coder:30b");
+    }
+
+    #[test]
+    fn a_refused_key_says_what_the_server_said() {
+        use std::io::{Read, Write};
+        // A server that refuses every key as OmniRoute does.
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for s in l.incoming().take(1) {
+                let mut s = s.unwrap();
+                let mut buf = [0u8; 2048];
+                let _ = s.read(&mut buf);
+                let body = r#"{"error":{"message":"Invalid API key","code":"AUTH_002"}}"#;
+                let _ = write!(
+                    s,
+                    "HTTP/1.1 401 Unauthorized\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+            }
+        });
+        let e = list_models(
+            &format!("http://127.0.0.1:{port}"),
+            Wire::Anthropic,
+            Some("sk-not-omniroutes"),
+            &Default::default(),
+        )
+        .unwrap_err();
+        assert!(
+            e.contains("Invalid API key") && e.contains("HTTP 401"),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn the_catalog_flag_is_written_only_when_set() {
+        let mut p = test_profile();
+        assert!(!serde_json::to_string(&p).unwrap().contains("catalog"));
+        p.capabilities.catalog = true;
+        let back: Profile = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+        assert!(back.capabilities.catalog);
     }
 
     fn test_profile() -> Profile {
@@ -835,6 +1066,54 @@ mod tests {
             auth: Auth::None,
             capabilities: Default::default(),
         }
+    }
+
+    #[test]
+    fn gemini_urls_keys_and_model_list() {
+        let mut p = profile(
+            "https://generativelanguage.googleapis.com/v1beta/",
+            Wire::Gemini,
+        );
+        p.model = "models/gemini-3-flash-preview".into();
+        assert_eq!(
+            p.chat_url(),
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent"
+        );
+        assert_eq!(
+            p.models_url(),
+            "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000"
+        );
+        let names = |u: &str| -> Vec<&str> {
+            auth_headers(Wire::Gemini, u, "k")
+                .into_iter()
+                .map(|(h, _)| h)
+                .collect()
+        };
+        assert_eq!(
+            names("https://generativelanguage.googleapis.com/v1beta"),
+            ["x-goog-api-key"]
+        );
+        assert_eq!(
+            names("https://us-central1-aiplatform.googleapis.com/v1/projects/p/locations/us-central1/publishers/google"),
+            ["authorization"]
+        );
+        assert_eq!(
+            names("http://127.0.0.1:20128/v1beta"),
+            ["x-goog-api-key", "authorization"]
+        );
+        let models = parse_catalog(&serde_json::json!({"models": [
+            {"name": "models/gemini-3-flash-preview", "displayName": "Gemini 3 Flash Preview", "inputTokenLimit": 1048576,
+             "supportedGenerationMethods": ["generateContent", "countTokens"]},
+            {"name": "models/gemini-embedding-001", "supportedGenerationMethods": ["embedContent"]},
+            {"name": "models/imagen-4.0-generate-001", "supportedGenerationMethods": ["predict"]}
+        ]}));
+        assert_eq!(models.len(), 1, "{models:?}");
+        assert_eq!(models[0].id, "gemini-3-flash-preview");
+        assert_eq!(models[0].name.as_deref(), Some("Gemini 3 Flash Preview"));
+        assert_eq!(models[0].context, Some(1_048_576));
+        assert!(PRESETS
+            .iter()
+            .any(|p| p.id == "gemini" && p.wire == Wire::Gemini && p.key));
     }
 
     #[test]
@@ -898,6 +1177,7 @@ mod tests {
             effort: true,
             effort_levels: Some(vec![Effort::Max, Effort::Low, Effort::Xhigh]),
             fast: true,
+            catalog: false,
         };
         assert_eq!(p.effort_levels(), [Effort::Low, Effort::Xhigh, Effort::Max]);
         assert_eq!(p.chips(), ["Max", "Ultracode", "Fast"]);

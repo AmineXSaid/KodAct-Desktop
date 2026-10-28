@@ -18,7 +18,7 @@
 
 use gpui::component::input::TextareaState;
 use gpui::{
-    div, prelude::*, px, relative, AnyElement, Context, Entity, FontWeight, Hsla, IntoElement, Render,
+    div, prelude::*, px, relative, AnyElement, Context, Entity, Hsla, IntoElement, Render,
     SharedString, Subscription, Window,
 };
 
@@ -55,8 +55,10 @@ impl ProjectRail {
         });
         let knowledge =
             cx.new(|cx| super::project_knowledge::ProjectKnowledge::new(state.clone(), window, cx));
-        let memory = cx.new(|cx| super::project_memory::ProjectMemory::new(state.clone(), window, cx));
-        let github = cx.new(|cx| super::project_github::ProjectGithub::new(state.clone(), window, cx));
+        let memory =
+            cx.new(|cx| super::project_memory::ProjectMemory::new(state.clone(), window, cx));
+        let github =
+            cx.new(|cx| super::project_github::ProjectGithub::new(state.clone(), window, cx));
         let sharing = cx.new(|cx| super::project_sharing::ProjectSharing::new(state.clone(), cx));
         Self {
             _subs: vec![cx.observe(&state, |_, _, cx| cx.notify())],
@@ -72,7 +74,11 @@ impl ProjectRail {
     }
 
     fn edit(&mut self, brief: &Brief, window: &mut Window, cx: &mut Context<Self>) {
-        let text = if self.mine { &brief.mine } else { &brief.shared };
+        let text = if self.mine {
+            &brief.mine
+        } else {
+            &brief.shared
+        };
         let text = text.trim_end().to_string();
         self.editor.update(cx, |e, cx| {
             e.set_value(text, window, cx);
@@ -103,13 +109,7 @@ fn card(t: &Theme, title: &str) -> gpui::Div {
         .bg(t.colors.surface)
         .border_1()
         .border_color(t.colors.border)
-        .child(
-            div()
-                .text_size(t.text.caption)
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(t.colors.text_muted)
-                .child(title.to_uppercase()),
-        )
+        .child(crate::theme::section_label(t, title))
 }
 
 /// The colour a part of the brief takes in the bar and its legend.
@@ -163,7 +163,12 @@ fn budget(t: &Theme, brief: &Brief, project: &std::path::Path, window: Option<u6
             .items_center()
             .gap(t.space.sm)
             .text_size(t.text.caption)
-            .child(div().size(px(8.)).rounded(t.radius.pill).bg(part_color(p.kind, t)))
+            .child(
+                div()
+                    .size(px(8.))
+                    .rounded(t.radius.pill)
+                    .bg(part_color(p.kind, t)),
+            )
             .child(
                 div()
                     .flex_1()
@@ -268,7 +273,11 @@ impl Render for ProjectRail {
         // Instructions: Shared or Only me, shown, or edited in place.
         let mine = self.mine;
         let text = if mine { &brief.mine } else { &brief.shared };
-        let file = if mine { &brief.mine_path } else { &brief.shared_path };
+        let file = if mine {
+            &brief.mine_path
+        } else {
+            &brief.shared_path
+        };
         let file_name = file
             .strip_prefix(&project.path)
             .map(|r| r.display().to_string())
@@ -306,6 +315,7 @@ impl Render for ProjectRail {
                         .child(
                             div()
                                 .flex_1()
+                                .min_w_0()
                                 .text_size(t.text.caption)
                                 .text_color(t.colors.text_subtle)
                                 .child(format!(
@@ -316,12 +326,12 @@ impl Render for ProjectRail {
                                 )),
                         )
                         .child(
-                            theme::text_button(&t, "Cancel").id("instr-cancel").on_click(
-                                cx.listener(|this, _, _, cx| {
+                            theme::text_button(&t, "Cancel")
+                                .id("instr-cancel")
+                                .on_click(cx.listener(|this, _, _, cx| {
                                     this.editing = false;
                                     cx.notify();
-                                }),
-                            ),
+                                })),
                         )
                         .child(
                             theme::primary_button(&t, "Save")
@@ -377,7 +387,11 @@ impl Render for ProjectRail {
                         .text_size(t.text.caption)
                         .line_height(relative(1.5))
                         .text_color(t.colors.text_body)
-                        .child(if more { format!("{preview}\n…") } else { preview })
+                        .child(if more {
+                            format!("{preview}\n…")
+                        } else {
+                            preview
+                        })
                         .on_click({
                             let b = b.clone();
                             cx.listener(move |this, _, window, cx| this.edit(&b, window, cx))
@@ -402,11 +416,9 @@ impl Render for ProjectRail {
                                     crate::context::short(crate::project_ctx::tokens(text))
                                 )),
                         )
-                        .child(
-                            theme::ghost_button(&t, "Edit")
-                                .id("instr-edit")
-                                .on_click(cx.listener(move |this, _, window, cx| this.edit(&b, window, cx))),
-                        ),
+                        .child(theme::ghost_button(&t, "Edit").id("instr-edit").on_click(
+                            cx.listener(move |this, _, window, cx| this.edit(&b, window, cx)),
+                        )),
                 )
                 .into_any_element()
         };
@@ -431,15 +443,23 @@ impl Render for ProjectRail {
                     .text_size(t.text.body_sm)
                     .text_color(t.colors.text)
                     .hover(|st| st.underline())
-                    .child(icon("icons/list-todo.svg", t.size.icon_sm, t.colors.text_muted))
-                    .child(div().flex_1().child("Rules and memory files"))
+                    .child(icon(
+                        "icons/list-todo.svg",
+                        t.size.icon_sm,
+                        t.colors.text_muted,
+                    ))
+                    .child(div().flex_1().min_w_0().child("Rules and memory files"))
                     .child(
                         div()
                             .text_size(t.text.caption)
                             .text_color(t.colors.text_subtle)
                             .child(format!("{rules} file{}", if rules == 1 { "" } else { "s" })),
                     )
-                    .child(icon("icons/chevron-right.svg", t.size.icon_xs, t.colors.text_subtle))
+                    .child(icon(
+                        "icons/chevron-right.svg",
+                        t.size.icon_xs,
+                        t.colors.text_subtle,
+                    ))
                     .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenRules), cx)),
             );
         rail.child(budget(&t, &brief, &project.path, window))

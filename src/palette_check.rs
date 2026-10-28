@@ -136,7 +136,7 @@ fn surfaces_stack_like_paper_on_the_cream() {
 }
 
 /// One colour per theme: the accent, the links, the switches and the
-/// mark's top are one hue (Ink has none), and the system's own theme is dusty blue.
+/// mark's top are one hue (Ink has none); the system's own theme is ember copper.
 #[test]
 fn each_theme_has_one_colour() {
     let hue = |c: Hsla| {
@@ -166,7 +166,7 @@ fn each_theme_has_one_colour() {
     for (mode, t) in both() {
         let x = &t.extra;
         let chroma = oklab(rgba(x.accent)).1;
-        if t.look != crate::theme::Look::Ink {
+        {
             assert!(chroma > 0.04, "{mode}: the accent has no colour");
             for (name, c) in [
                 ("link", t.colors.primary),
@@ -179,8 +179,6 @@ fn each_theme_has_one_colour() {
                     "{mode}: the {name} is {d:.0}° off the accent"
                 );
             }
-        } else {
-            assert!(chroma < 0.01, "{mode}: Ink has a colour");
         }
         // The accent holds a UI part's 3:1 on the session and on a card,
         // and its label reads on it.
@@ -196,7 +194,7 @@ fn each_theme_has_one_colour() {
         );
     }
     let calm = Theme::light();
-    assert_eq!(rgba(calm.extra.accent), rgba(gpui::rgb(0x41608a).into()));
+    assert_eq!(rgba(calm.extra.accent), rgba(gpui::rgb(0xb4532a).into()));
 }
 
 #[test]
@@ -248,6 +246,17 @@ fn coloured_text_reads_on_its_tint() {
             ("danger", x.danger, Hsla::from(over(x.danger_tint, card))),
             ("warning", x.warning, Hsla::from(over(x.warning_tint, card))),
             ("memory", x.memory, Hsla::from(over(x.memory_tint, card))),
+            // A file or command named in a reply, on the session and on a card.
+            (
+                "inline code",
+                x.code_inline_fg,
+                Hsla::from(over(x.code_inline_bg, x.stage)),
+            ),
+            (
+                "inline code on a card",
+                x.code_inline_fg,
+                Hsla::from(over(x.code_inline_bg, card)),
+            ),
             ("skill", x.skill, card),
             (
                 "ping fast",
@@ -274,7 +283,6 @@ fn coloured_text_reads_on_its_tint() {
             ("edit", x.mode_edit),
             ("plan", x.mode_plan),
             ("bypass", x.mode_bypass),
-            ("expert", x.mode_expert),
         ] {
             let r = contrast(c, card);
             assert!(r >= AA_UI, "{mode}: mode {name} is {r:.2}:1 on a card");

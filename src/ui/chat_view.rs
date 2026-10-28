@@ -36,6 +36,16 @@ pub struct ChatView {
     shown_find: u64,
     /// The jump (tasks, approvals) last scrolled to.
     shown_jump: u64,
+    /// A jump to a block still finding it: its message, and where the
+    /// block turned out to be drawn (`message::Reveal`).
+    reveal: Option<(usize, std::rc::Rc<message::Reveal>)>,
+    /// Frames the reveal has looked for its block; it gives up after a few.
+    reveal_tries: u8,
+    /// The waiting question card's "Other" field, made with the first frame
+    /// (it needs the window), and the question it last showed.
+    other: Option<gpui::Entity<gpui::component::input::InputState>>,
+    other_for: Option<(usize, usize, usize, usize)>,
+    _other_subs: Vec<gpui::Subscription>,
 }
 
 impl ChatView {
@@ -70,6 +80,11 @@ impl ChatView {
             away: false,
             shown_find: 0,
             shown_jump: 0,
+            reveal: None,
+            reveal_tries: 0,
+            other: None,
+            other_for: None,
+            _other_subs: vec![],
         };
         view.sync(cx);
         view
@@ -82,10 +97,17 @@ impl ChatView {
         let s = self.state.read(cx);
         // The last row holds the working line and what you queued.
         let busy = s.busy();
-        let queued = s.chat().and_then(|c| s.queued.get(&c.id)).map_or(0, Vec::len);
+        let queued = s
+            .chat()
+            .and_then(|c| s.queued.get(&c.id))
+            .map_or(0, Vec::len);
         let tail = busy || queued > 0;
         let (id, count, version) = match s.chat() {
-            Some(c) => (Some(c.id), c.messages.len() + tail as usize, (c.version, queued)),
+            Some(c) => (
+                Some(c.id),
+                c.messages.len() + tail as usize,
+                (c.version, queued),
+            ),
             None => (None, 0, (0, 0)),
         };
         if id != self.shown_chat {
@@ -122,13 +144,26 @@ impl ChatView {
         self.shown_find = find.map_or(0, |(seq, _)| seq);
 
         // A jump from the task panel or the approvals list.
-        if let Some((seq, ix)) = self.state.read(cx).jump {
+        // A block in it: the message comes to the top first, so it is laid
+        // out, then the block's row is scrolled to once its place is known.
+        if let Some((seq, ix, block)) = self.state.read(cx).jump {
             if seq != self.shown_jump && ix < count {
                 self.list.scroll_to(gpui::ListOffset {
                     item_ix: ix,
                     offset_in_item: px(0.),
                 });
                 self.away = true;
+                self.reveal_tries = 0;
+                self.reveal = block.map(|block| {
+                    (
+                        ix,
+                        std::rc::Rc::new(message::Reveal {
+                            block,
+                            root: Default::default(),
+                            row: Default::default(),
+                        }),
+                    )
+                });
             }
             self.shown_jump = seq;
         }
@@ -148,6 +183,17 @@ impl ChatView {
         let step = if busy {
             let s = self.state.read(cx);
             s.chat().and_then(|c| {
+                // Between a goal's turns ForgeCLI checks it, then goes on.
+                let between = !matches!(c.messages.last(), Some(Message::Assistant { .. }));
+                if between
+                    && s.goals.get(&c.id).map(|g| g.status) == Some(crate::state::GoalStatus::Working)
+                {
+                    let words = match c.messages.last() {
+                        Some(Message::Notice { .. }) => "Going on toward the goal",
+                        _ => "Checking the goal",
+                    };
+                    return Some((Activity::Waiting, words.to_string(), None));
+                }
                 let (activity, words) = step_of(c, s.mode)?;
                 // The step itself shows in its own row above (Reading a
                 // file, Running the tests): the line says what the work is
@@ -285,7 +331,7 @@ fn step_of(c: &Chat, mode: crate::modes::ModeId) -> Option<(Activity, String)> {
         // A step just ended, or a question was answered: the model thinks
         // about the result and picks what comes next.
         Some(_) => (Activity::Thinking, "Thinking about the result".into()),
-        None => (Activity::Waiting, "Waiting for the model to answer".into()),
+        None => (Activity::Waiting, "Waiting…".into()),
     })
 }
 
@@ -370,6 +416,8 @@ impl ChatView {
         let t = cx.theme().clone();
         let hover = t.colors.hover;
         let busy = self.state.read(cx).busy();
+        // Just past the reading column's right edge, never over a line of
+        // the transcript (narrow, it keeps to the column's corner).
         div()
             .absolute()
             .bottom(t.space.md)
@@ -379,36 +427,61 @@ impl ChatView {
             .justify_center()
             .child(
                 div()
-                    .id("jump-latest")
+                    .w(t.size.column)
+                    .max_w(gpui::relative(1.))
                     .flex()
-                    .items_center()
-                    .gap(t.space.xs)
-                    .h(t.size.control + px(4.))
-                    .px(t.space.md)
-                    .rounded(t.radius.button)
-                    .bg(t.colors.surface)
-                    .border_1()
-                    .border_color(t.colors.border)
-                    .shadow(t.elevation_popover())
-                    .cursor_pointer()
-                    .text_size(t.text.caption)
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(t.colors.text)
-                    .hover(move |d| d.bg(hover))
-                    .child(icon_arrow(&t))
-                    // While a reply plays, the button says there's more coming.
-                    .child(if busy {
-                        "New messages below"
-                    } else {
-                        "Jump to latest"
-                    })
-                    .child(super::kbd(&t, super::shortcut("J")))
-                    .on_click(cx.listener(|this, _, _, cx| this.jump_to_latest(cx)))
-                    .with_animation(
-                        "jump-in",
-                        Animation::new(Duration::from_millis(t.motion_ms))
-                            .with_easing(gpui::ease_in_out),
-                        |d, delta| d.opacity(delta).mb(px(6.) * (1. - delta)),
+                    .justify_end()
+                    .child(
+                        div().mr(-(t.size.button_h + t.space.md)).child(
+                            // A round button, as Claude Code's: the arrow says it all;
+                            // the words and the key are in its tooltip.
+                            div()
+                                .id("jump-latest")
+                                .relative()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .size(t.size.button_h)
+                                .rounded(t.radius.pill)
+                                .bg(t.colors.surface)
+                                .border_1()
+                                .border_color(t.colors.border)
+                                .shadow(t.elevation_popover())
+                                .cursor_pointer()
+                                .hover(move |d| d.bg(hover))
+                                .child(icon_arrow(&t))
+                                // While a reply plays, a dot says there's more coming.
+                                .when(busy, |d| {
+                                    d.child(
+                                        div()
+                                            .absolute()
+                                            .top(px(1.))
+                                            .right(px(1.))
+                                            .size(px(7.))
+                                            .rounded(t.radius.pill)
+                                            .bg(t.extra.accent),
+                                    )
+                                })
+                                .tooltip(move |w, cx| {
+                                    let words = if busy {
+                                        "New messages below"
+                                    } else {
+                                        "Jump to latest"
+                                    };
+                                    gpui::component::tooltip::Tooltip::new(format!(
+                                        "{words} ({})",
+                                        super::shortcut("J")
+                                    ))
+                                    .build(w, cx)
+                                })
+                                .on_click(cx.listener(|this, _, _, cx| this.jump_to_latest(cx)))
+                                .with_animation(
+                                    "jump-in",
+                                    Animation::new(Duration::from_millis(t.motion_ms))
+                                        .with_easing(gpui::ease_in_out),
+                                    |d, delta| d.opacity(delta).mb(px(6.) * (1. - delta)),
+                                ),
+                        ),
                     ),
             )
     }
@@ -418,23 +491,112 @@ fn icon_arrow(t: &crate::theme::Theme) -> gpui::Svg {
     super::icon("icons/arrow-down.svg", t.size.icon_sm, t.colors.text_muted)
 }
 
+impl ChatView {
+    /// A jump's block, once drawn: scroll so its row sits just under the
+    /// top (clear of the task pill). Until then, look again next frame.
+    fn finish_reveal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((ix, r)) = &self.reveal else { return };
+        match (r.root.get(), r.row.get()) {
+            (Some(root), Some(row)) => {
+                let t = cx.theme();
+                let margin = t.space.lg;
+                self.list.scroll_to(gpui::ListOffset {
+                    item_ix: *ix,
+                    offset_in_item: (row - root - margin).max(px(0.)),
+                });
+                self.reveal = None;
+                cx.notify();
+            }
+            // Not drawn (yet): look again, a few frames at most.
+            _ if self.reveal_tries < 8 => {
+                self.reveal_tries += 1;
+                window.request_animation_frame();
+            }
+            _ => self.reveal = None,
+        }
+    }
+}
+
+impl ChatView {
+    /// The "Other" field of the question card waiting on you: made once,
+    /// and showing what you typed for the question the card shows.
+    fn other_field(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::Entity<gpui::component::input::InputState>> {
+        use gpui::component::input::{InputEvent, InputState};
+        let Some((chat, msg, block, step, own)) = self.state.read(cx).waiting_question() else {
+            self.other_for = None;
+            return None;
+        };
+        let input = match &self.other {
+            Some(i) => i.clone(),
+            None => {
+                let i = cx.new(|cx| InputState::new(window, cx).placeholder("Type your answer"));
+                let state = self.state.clone();
+                self._other_subs.push(cx.subscribe_in(
+                    &i,
+                    window,
+                    move |_, i, ev: &InputEvent, _, cx| {
+                        let text = i.read(cx).value().to_string();
+                        match ev {
+                            InputEvent::Change => {
+                                state.update(cx, |s, cx| s.set_own_text(text, cx))
+                            }
+                            // Enter answers this question with it and moves on.
+                            InputEvent::PressEnter { .. } if !text.trim().is_empty() => state
+                                .update(cx, |s, cx| s.answer_in_words(text.trim().to_string(), cx)),
+                            _ => {}
+                        }
+                    },
+                ));
+                self.other = Some(i.clone());
+                i
+            }
+        };
+        let key = (chat, msg, block, step);
+        if self.other_for != Some(key) {
+            self.other_for = Some(key);
+            let text = own.unwrap_or_default();
+            input.update(cx, |i, cx| i.set_value(text, window, cx));
+        }
+        Some(input)
+    }
+}
+
 impl Render for ChatView {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let other = self.other_field(window, cx);
+        let other_msg = self
+            .other_for
+            .map(|(_, m, _, _)| m)
+            .filter(|_| other.is_some());
+        // Paragraphs take their reading order afresh, top to bottom.
+        super::select::begin_frame();
+        self.finish_reveal(window, cx);
+        let reveal = self.reveal.clone();
         let state = self.state.clone();
         let step = self.step.clone();
-        let jump = self.away.then(|| self.jump_button(cx));
+        // Only when there is something below to jump to: a short chat, or
+        // one that stopped following while nothing more came, has none.
+        let below = self.list.is_scrolled_to_end() == Some(false);
+        let jump = (self.away && below).then(|| self.jump_button(cx));
         let list = list(self.list.clone(), move |ix, window, cx| {
             let t = cx.theme().clone();
             let s = state.read(cx);
             let Some(chat) = s.chat() else {
                 return div().into_any_element();
             };
+            let agents = std::rc::Rc::new(s.agents.get(&chat.id).cloned().unwrap_or_default());
             let body = match chat.messages.get(ix) {
                 Some(m) => {
-                    let after_user =
-                        ix == 0 || matches!(chat.messages.get(ix - 1), Some(Message::User { .. }));
                     let ctx = ItemContext {
                         state: state.clone(),
+                        marks: match m {
+                            Message::User { text, .. } => super::autocomplete::marks(text, s, true),
+                            _ => vec![],
+                        },
                         place: s
                             .chat_remote(chat.id)
                             .map(|r| (r.target.label().into(), r.target.icon())),
@@ -443,7 +605,6 @@ impl Render for ChatView {
                         copied: s.copied.clone(),
                         busy: s.busy(),
                         last: ix + 1 == chat.messages.len(),
-                        first_in_turn: after_user && matches!(m, Message::Assistant { .. }),
                         open_doc: s.doc.clone(),
                         scale: window.scale_factor(),
                         rating: s.ratings.get(&(chat.id, ix)).copied(),
@@ -460,6 +621,11 @@ impl Render for ChatView {
                                     matches!(m, Message::TurnEnd { .. } | Message::User { .. })
                                 })
                             }),
+                        after_error: ix > 0
+                            && matches!(
+                                chat.messages.get(ix - 1),
+                                Some(Message::Notice { error: true, .. })
+                            ),
                         in_last_turn: !chat.messages[ix + 1..]
                             .iter()
                             .any(|m| matches!(m, Message::User { .. })),
@@ -479,7 +645,35 @@ impl Render for ChatView {
                             vec![]
                         },
                         versions_open: s.versions_open == Some((chat.id, ix)),
+                        edited_open: s.edited_open.contains(&(chat.id, ix)),
+                        agents: agents.clone(),
                         sources: s.diagram_code.clone(),
+                        zooms: s.diagram_zoom.clone(),
+                        detailed: chat.detailed,
+                        open_groups: s
+                            .open_groups
+                            .iter()
+                            .filter(|(c, m, _)| *c == chat.id && *m == ix)
+                            .map(|(_, _, start)| *start)
+                            .collect(),
+                        flash: s
+                            .flash
+                            .filter(|(c, m, _)| *c == chat.id && *m == ix)
+                            .map(|(_, _, b)| b),
+                        other: other.clone().filter(|_| other_msg == Some(ix)),
+                        thoughts: match m {
+                            Message::Assistant { blocks } => blocks
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, b)| matches!(b, Block::Thinking { .. }))
+                                .filter_map(|(b, _)| Some((b, s.thought_secs(chat.id, ix, b)?)))
+                                .collect(),
+                            _ => vec![],
+                        },
+                        reveal: reveal
+                            .as_ref()
+                            .filter(|(m, _)| *m == ix)
+                            .map(|(_, r)| r.clone()),
                     };
                     // A message rises into place as it arrives (and as it
                     // scrolls back into view), as the reference's sections do.
@@ -494,12 +688,21 @@ impl Render for ChatView {
                     let line = match &step {
                         // The card says it waits on you: no second line.
                         Some((Activity::AwaitingYou, ..)) => div().into_any_element(),
-                        Some((activity, label, detail, since)) => {
-                            working_line(&t, *activity, label, detail.clone(), *since)
-                        }
+                        Some((activity, label, detail, since)) => working_line(
+                            &t,
+                            *activity,
+                            label,
+                            detail.clone(),
+                            *since,
+                            written(chat.messages.last()),
+                        ),
                         None => div().into_any_element(),
                     };
-                    let queued = s.queued.get(&chat.id).map(Vec::as_slice).unwrap_or_default();
+                    let queued = s
+                        .queued
+                        .get(&chat.id)
+                        .map(Vec::as_slice)
+                        .unwrap_or_default();
                     div()
                         .flex()
                         .flex_col()
@@ -525,16 +728,7 @@ impl Render for ChatView {
                 .flex()
                 .justify_center()
                 .px(t.space.xl)
-                // The task pill sits over the top of the transcript: the first
-                // message starts below it.
-                .when(ix == 0, |d| {
-                    let pill = !super::tasks::tasks(&chat.messages).is_empty();
-                    d.pt(if pill {
-                        t.space.xl + t.size.control
-                    } else {
-                        t.space.xl
-                    })
-                })
+                .when(ix == 0, |d| d.pt(t.space.xl))
                 .child(
                     div()
                         .relative()
@@ -557,18 +751,60 @@ impl Render for ChatView {
         })
         .size_full()
         .flex_1();
+        // Scrolled off its top, the transcript fades out under the head, as
+        // Claude Code's does, rather than ending on a cut line.
+        let top = self.list.logical_scroll_top();
+        let scrolled = top.item_ix > 0 || top.offset_in_item > px(0.);
+        let t = cx.theme().clone();
         div()
             .relative()
             .size_full()
             .flex()
             .flex_col()
             .child(list)
+            .when(scrolled, |d| {
+                d.child(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .left_0()
+                        .right_0()
+                        .h(t.size.edge_fade)
+                        .bg(gpui::linear_gradient(
+                            180.,
+                            gpui::linear_color_stop(t.extra.stage, 0.),
+                            gpui::linear_color_stop(t.extra.stage.opacity(0.), 1.),
+                        )),
+                )
+            })
+            // Scrolled up, the words fade out where the composer starts, so
+            // text running under it reads as "there's more". At the end
+            // nothing covers the newest lines.
+            .when(self.away, |d| {
+                d.child(
+                    div()
+                        .absolute()
+                        .left_0()
+                        .right_0()
+                        .bottom_0()
+                        .h(t.size.edge_fade)
+                        .bg(gpui::linear_gradient(
+                            180.,
+                            gpui::linear_color_stop(t.extra.stage.opacity(0.), 0.),
+                            gpui::linear_color_stop(t.extra.stage, 1.),
+                        )),
+                )
+            })
+            // The transcript's scrollbar, over its right edge.
+            .child(div().absolute().inset_0().child(
+                gpui::component::scroll::Scrollbar::vertical(&self.list).id("chat-scrollbar"),
+            ))
             .children(jump)
     }
 }
 
 /// `12s`, `1m 7s`, `1h 3m`.
-fn elapsed(seconds: u64) -> String {
+pub(super) fn elapsed(seconds: u64) -> String {
     match seconds {
         0..=59 => format!("{seconds}s"),
         60..=3599 => format!("{}m {}s", seconds / 60, seconds % 60),
@@ -580,7 +816,7 @@ fn elapsed(seconds: u64) -> String {
 /// working line: the words rest in the muted ink, and a narrow band of
 /// light runs left to right, each letter catching it as it passes: white
 /// at night, a pale shine on paper.
-fn shimmer(label: &str, sweep: f32, t: &crate::theme::Theme) -> StyledText {
+pub(super) fn shimmer(label: &str, sweep: f32, t: &crate::theme::Theme) -> StyledText {
     let n = label.chars().count().max(1) as f32;
     let base = t.colors.text_muted;
     let strength = if t.is_dark { 1. } else { 0.6 };
@@ -615,15 +851,44 @@ fn mix(a: gpui::Hsla, b: gpui::Hsla, k: f32) -> gpui::Hsla {
     .into()
 }
 
-/// Forge's working line: the mark for the kind of work (`activity.rs`: a
-/// page being read, a prompt's cursor, the quill for a plan), then the step
-/// in words and for how long. A light sweeps across the words.
+/// About how many tokens the reply in progress has written: its words,
+/// thoughts and what its calls returned, at four characters a token (the
+/// engine reports the true count when the turn ends).
+fn written(last: Option<&Message>) -> usize {
+    let Some(Message::Assistant { blocks }) = last else {
+        return 0;
+    };
+    let chars: usize = blocks
+        .iter()
+        .map(|b| match b {
+            Block::Text(t) => t.len(),
+            Block::Thinking { text, .. } => text.len(),
+            Block::Tool(c) => c.output.len() + c.target.len(),
+            _ => 0,
+        })
+        .sum();
+    chars / 4
+}
+
+/// `11.5k`, `840`.
+fn tokens(n: usize) -> String {
+    if n >= 1000 {
+        format!("{:.1}k", n as f32 / 1000.)
+    } else {
+        n.to_string()
+    }
+}
+
+/// Forge's working line, as Claude Code's: the ember mark (`activity.rs`),
+/// the step in words with a light sweeping across them, then for how long
+/// and about how much it has written.
 fn working_line(
     t: &crate::theme::Theme,
     activity: Activity,
     label: &str,
     detail: Option<String>,
     since: Instant,
+    written: usize,
 ) -> gpui::AnyElement {
     let theme = t.clone();
     let text = label.to_string();
@@ -634,10 +899,12 @@ fn working_line(
         .gap(t.space.tight)
         .h(px(24.))
         .mt(px(4.))
-        .child(super::activity::mark(
-            activity,
-            t,
+        // Forge's cube turning in the theme's live colour, as on agent rows;
+        // the words say what kind of step it is.
+        .child(super::turning_logo_in(
+            f32::from(t.size.icon),
             SharedString::from(format!("working-mark-{activity:?}")),
+            t.extra.live,
         ))
         .child(div().font_weight(FontWeight::MEDIUM).with_animation(
             SharedString::from(format!("working-{label}")),
@@ -650,9 +917,18 @@ fn working_line(
                 .text_color(t.colors.text_subtle)
                 .child(elapsed(since.elapsed().as_secs())),
         )
+        .when(written > 0, |d| {
+            d.child(
+                div()
+                    .text_color(t.colors.text_subtle)
+                    .child(format!("· ~{} tokens", tokens(written))),
+            )
+        })
         .when_some(detail, |d, step| {
             let step: SharedString = step.into();
-            d.tooltip(move |w, cx| gpui::component::tooltip::Tooltip::new(step.clone()).build(w, cx))
+            d.tooltip(move |w, cx| {
+                gpui::component::tooltip::Tooltip::new(step.clone()).build(w, cx)
+            })
         })
         .into_any_element()
 }
@@ -668,6 +944,12 @@ mod tests {
             "create issue (github)"
         );
         assert_eq!(super::tool_name("TodoWrite"), "TodoWrite");
+    }
+
+    #[test]
+    fn token_counts_read_short() {
+        assert_eq!(super::tokens(840), "840");
+        assert_eq!(super::tokens(11_540), "11.5k");
     }
 
     #[test]

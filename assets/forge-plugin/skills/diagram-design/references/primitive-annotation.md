@@ -7,7 +7,7 @@ Use for editorial asides — the "italic pointer" that marks a detail without co
 ```svg
 <!-- 1. Italic serif text: the `callout` role from style-guide.md -->
 <text x="904" y="36" fill="{ink}" font-size="14" font-style="italic"
-      font-family="{callout}" text-anchor="end">no imports, no configuration</text>
+      font-family="Anthropic Sans Text" text-anchor="end">no imports, no configuration</text>
 <!-- 2. Dashed Bézier leader -->
 <path d="M 820 44 Q 700 84 520 216" fill="none"
       stroke="{ink @ 0.40}" stroke-width="1" stroke-dasharray="4,3"/>

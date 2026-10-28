@@ -6,8 +6,8 @@
 use std::time::Duration;
 
 use gpui::{
-    div, percentage, prelude::*, px, Animation, AnimationExt, AnyElement, Entity, FontWeight,
-    SharedString, Transformation,
+    div, percentage, prelude::*, px, Animation, AnimationExt, AnyElement, Entity, SharedString,
+    Transformation,
 };
 
 use super::icon;
@@ -17,6 +17,8 @@ use crate::theme::{self, Theme};
 /// One task: where its row is, and how it reads.
 pub struct Task {
     pub msg: usize,
+    /// Its row's block in that message.
+    pub block: usize,
     pub kind: ToolKind,
     pub status: ToolStatus,
     pub label: String,
@@ -33,16 +35,20 @@ pub fn tasks(messages: &[Message]) -> Vec<Task> {
     let mut out = vec![];
     for (i, m) in messages.iter().enumerate().skip(from) {
         if let Message::Assistant { blocks } = m {
-            for b in blocks {
+            for (block, b) in blocks.iter().enumerate() {
                 if let Block::Tool(t) = b {
                     // A command reads as its description ("Run the tests"), as its row does.
                     let label = match (&t.note, t.kind) {
+                        (Some(n), _) if t.target.as_ref() == crate::backend::QUESTION_TOOL => {
+                            format!("Asked you {n}")
+                        }
                         (Some(n), ToolKind::Bash) => n.to_string(),
                         (Some(n), ToolKind::Other) => format!("{} · {n}", t.shown_target()),
                         _ => format!("{} {}", t.kind.verb(t.status), t.shown_target()),
                     };
                     out.push(Task {
                         msg: i,
+                        block,
                         kind: t.kind,
                         status: t.status,
                         label,
@@ -58,7 +64,7 @@ pub fn tasks(messages: &[Message]) -> Vec<Task> {
 
 pub(super) fn status_icon(status: ToolStatus, t: &Theme, key: SharedString) -> AnyElement {
     match status {
-        ToolStatus::Running => icon("icons/loader-circle.svg", t.size.icon_sm, t.colors.sky)
+        ToolStatus::Running => icon("icons/loader-circle.svg", t.size.icon_sm, t.extra.live)
             .with_animation(
                 key,
                 Animation::new(Duration::from_millis(900)).repeat(),
@@ -77,6 +83,10 @@ pub(super) fn status_icon(status: ToolStatus, t: &Theme, key: SharedString) -> A
             t.colors.text_subtle,
         )
         .into_any_element(),
+        // Stopped mid-way: neither failed nor done; it may have taken effect.
+        ToolStatus::Interrupted => {
+            icon("icons/circle-pause.svg", t.size.icon_sm, t.extra.warning).into_any_element()
+        }
     }
 }
 
@@ -107,7 +117,14 @@ fn summary(all: usize, running: usize, failed: usize, denied: usize, stopped: us
 }
 
 /// The pill, and the list when open; None when the turn has no tasks.
-pub fn render(t: &Theme, state: &Entity<AppState>, cx: &gpui::App) -> Option<AnyElement> {
+pub fn render(
+    t: &Theme,
+    state: &Entity<AppState>,
+    window: &gpui::Window,
+    // The list: Some(leaving) while it shows or leaves.
+    shown: Option<bool>,
+    cx: &gpui::App,
+) -> Option<AnyElement> {
     let s = state.read(cx);
     let chat = s.chat()?;
     let list = tasks(&chat.messages);
@@ -126,30 +143,38 @@ pub fn render(t: &Theme, state: &Entity<AppState>, cx: &gpui::App) -> Option<Any
     let hover = t.colors.hover;
     let toggle = state.clone();
     // Declined is not done: you said no, or you stopped the agent.
-    let stopped = list.iter().filter(|t| t.stopped).count();
+    let stopped = list
+        .iter()
+        .filter(|t| t.stopped || t.status == ToolStatus::Interrupted)
+        .count();
     let denied = list
         .iter()
-        .filter(|t| t.status == ToolStatus::Declined)
-        .count()
-        - stopped;
+        .filter(|t| t.status == ToolStatus::Declined && !t.stopped)
+        .count();
+    // Only while there is something to watch: work running, or something
+    // that failed or was stopped. Ctrl+Shift+T shows it any time.
+    if running + failed + stopped == 0 && !open {
+        return None;
+    }
     let summary = summary(list.len(), running, failed, denied, stopped);
+    // A quiet title-bar button, never floating over the conversation.
     let pill = div()
         .id("tasks-pill")
+        .occlude()
         .flex()
         .items_center()
         .gap(t.space.xs)
         .h(t.size.control)
-        .px(t.space.md)
+        .px(t.space.sm)
         .rounded(t.radius.button)
-        .bg(t.colors.surface)
-        .border_1()
-        .border_color(t.colors.border)
-        .shadow(t.elevation_popover())
         .cursor_pointer()
         .hover(move |d| d.bg(hover))
         .text_size(t.text.caption)
-        .font_weight(FontWeight::MEDIUM)
-        .text_color(t.colors.text)
+        .text_color(if failed > 0 {
+            t.extra.danger
+        } else {
+            t.colors.text_muted
+        })
         .child(if running > 0 {
             status_icon(ToolStatus::Running, t, "tasks-pill-spin".into())
         } else {
@@ -166,7 +191,7 @@ pub fn render(t: &Theme, state: &Entity<AppState>, cx: &gpui::App) -> Option<Any
             t.colors.text_subtle,
         ))
         .on_click(move |_, _, cx| toggle.update(cx, |s, cx| s.toggle_tasks(cx)));
-    let panel = open.then(|| {
+    let panel = shown.map(|leaving| {
         let mut rows = div()
             .id("tasks-list")
             .flex()
@@ -176,7 +201,7 @@ pub fn render(t: &Theme, state: &Entity<AppState>, cx: &gpui::App) -> Option<Any
             // More tasks than fit: the list keeps the wheel from the chat under it.
             .when(list.len() > 8, super::hold_wheel);
         for (i, task) in list.iter().enumerate() {
-            let (st, msg) = (state.clone(), task.msg);
+            let (st, msg, block) = (state.clone(), task.msg, task.block);
             rows = rows.child(
                 div()
                     .id(("task", i))
@@ -205,11 +230,33 @@ pub fn render(t: &Theme, state: &Entity<AppState>, cx: &gpui::App) -> Option<Any
                             .text_color(t.colors.text)
                             .child(task.label.clone()),
                     )
-                    .on_click(move |_, _, cx| st.update(cx, |s, cx| s.jump_to(msg, cx))),
+                    .on_click(move |_, _, cx| {
+                        st.update(cx, |s, cx| s.jump_to_block(msg, block, cx))
+                    }),
             );
         }
-        theme::popover(t)
+        let close = state.clone();
+        gpui::deferred(super::motion::unfold(
+            theme::fit_window(
+                theme::popover(t).id("tasks-popover"),
+                window,
+                t,
+                t.size.titlebar + t.size.control,
+                None,
+            )
+            .occlude()
+            .absolute()
+            .top(t.size.control + t.space.xs)
+            .right_0()
             .w(px(340.))
+            .on_mouse_down_out(move |_, _, cx| {
+                close.update(cx, |s, cx| {
+                    if s.tasks_open {
+                        s.tasks_open = false;
+                        cx.notify();
+                    }
+                })
+            })
             .child(
                 div()
                     .px(t.space.sm)
@@ -219,17 +266,17 @@ pub fn render(t: &Theme, state: &Entity<AppState>, cx: &gpui::App) -> Option<Any
                     .text_color(t.colors.text_subtle)
                     .child("This turn's tasks · click one to see it"),
             )
-            .child(rows)
+            .child(rows),
+            "tasks-popover",
+            false,
+            leaving,
+            t,
+        ))
+        .with_priority(2)
     });
     Some(
         div()
-            .absolute()
-            .top(t.space.sm)
-            .right(t.space.lg)
-            .flex()
-            .flex_col()
-            .items_end()
-            .gap(t.space.xs)
+            .relative()
             .child(pill)
             .children(panel)
             .into_any_element(),
@@ -261,6 +308,7 @@ mod tests {
             open: false,
             full: false,
             review: Review::Open,
+            images: vec![],
         })
     }
 
@@ -282,9 +330,9 @@ mod tests {
         let t = tasks(&m);
         assert_eq!(
             t.iter()
-                .map(|t| (t.msg, t.label.as_str()))
+                .map(|t| (t.msg, t.block, t.label.as_str()))
                 .collect::<Vec<_>>(),
-            vec![(3, "Edited a.rs"), (3, "Running cargo test")]
+            vec![(3, 0, "Edited a.rs"), (3, 1, "Running cargo test")]
         );
     }
 }

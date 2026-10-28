@@ -34,6 +34,32 @@ pub struct Row {
     /// Failed or unreachable: shown greyed (only when it's the one in use).
     pub disabled: bool,
     pub current: bool,
+    /// A model from a gateway's list: its profile and the model's id.
+    /// Picking it switches that profile to the model.
+    pub pick: Option<(String, String)>,
+    /// The first of a gateway's models: the heading above them.
+    pub group: Option<Group>,
+    /// Failed its test (listed only while failed models are shown): why.
+    pub failed: Option<String>,
+}
+
+/// The heading above a gateway's models.
+pub struct Group {
+    pub title: String,
+    /// How many of its models failed a test (behind the Show switch).
+    pub failed: usize,
+}
+
+/// The most of a gateway's models listed before a search narrows them.
+const CATALOG_SHOWN: usize = 300;
+
+/// A context window as people say it: "200K", "1M".
+fn window_text(tokens: u64) -> String {
+    match tokens {
+        t if t >= 1_000_000 && t % 1_000_000 == 0 => format!("{}M", t / 1_000_000),
+        t if t >= 1_000_000 => format!("{:.1}M", t as f64 / 1_000_000.),
+        t => format!("{}K", (t as f64 / 1000.).round() as u64),
+    }
 }
 
 /// The menu's rows: every pair that answers or hasn't been measured, plus
@@ -74,6 +100,9 @@ pub fn rows(s: &AppState, query: &str) -> (Vec<Row>, usize) {
             ping,
             disabled: !health::is_offered(&check),
             current: current.as_deref() == Some(&p.name),
+            pick: None,
+            group: None,
+            failed: None,
         };
         if row.disabled {
             unavailable.push(row);
@@ -82,7 +111,6 @@ pub fn rows(s: &AppState, query: &str) -> (Vec<Row>, usize) {
         }
     }
     offered.extend(unavailable.into_iter().filter(|r| r.current));
-    let total = offered.len();
     let q = query.trim().to_lowercase();
     if !q.is_empty() {
         offered.retain(|r| {
@@ -90,6 +118,93 @@ pub fn rows(s: &AppState, query: &str) -> (Vec<Row>, usize) {
                 .iter()
                 .any(|f| f.to_lowercase().contains(&q))
         });
+    }
+    // Then each gateway's own models, as Claude Code's `/model` lists a
+    // gateway's: best match first while searching, else by id.
+    let mut total = offered.len();
+    for p in e.profiles.iter().filter(|p| p.capabilities.catalog) {
+        let Some(models) = s.catalogs.get(&p.name) else {
+            continue;
+        };
+        total += models.len();
+        let tests = s.model_tests.get(&health::tests_key(&p.base_url));
+        let verdict = |id: &str| tests.and_then(|t| t.get(id));
+        let failed = models
+            .iter()
+            .filter(|m| verdict(&m.id).is_some_and(|v| !v.servable))
+            .count();
+        let title = match failed {
+            0 => format!("{} · {} models", p.name, models.len()),
+            n => format!(
+                "{} · {} working / {} models",
+                p.name,
+                models.len() - n,
+                models.len()
+            ),
+        };
+        let ids: Vec<String> = models.iter().map(|m| m.id.clone()).collect();
+        let found = endpoints::find_models(&ids, query);
+        let matched = !found.is_empty();
+        let mut group = Some(Group { title, failed });
+        for id in found.into_iter().take(CATALOG_SHOWN) {
+            let Some(m) = models.iter().find(|m| &m.id == id) else {
+                continue;
+            };
+            let in_use = current.as_deref() == Some(&p.name) && p.model == m.id;
+            let tested = verdict(&m.id);
+            let why = tested
+                .filter(|v| !v.servable)
+                .map(|v| v.detail.clone().unwrap_or_else(|| "no reply".into()));
+            // A model that failed its test stays out, unless asked for or in use.
+            if why.is_some() && !s.show_failed_models && !in_use {
+                continue;
+            }
+            let description = [
+                Some(m.id.clone()),
+                m.context.map(|c| format!("{} context", window_text(c))),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" · ");
+            offered.push(Row {
+                name: format!("{}\u{1}{}", p.name, m.id),
+                display: m.name.clone().unwrap_or_else(|| m.id.clone()),
+                description,
+                chips: if m.reasoning { vec!["Thinks"] } else { vec![] },
+                ping: tested.filter(|v| v.servable).map(|v| {
+                    (
+                        health::ping_text(v.ms),
+                        health::ping_tone(v.ms),
+                        format!(
+                            "Answered a test in {} {}",
+                            health::ping_text(v.ms),
+                            health::ago_text(v.checked_at, now)
+                        ),
+                    )
+                }),
+                disabled: false,
+                current: in_use,
+                pick: Some((p.name.clone(), m.id.clone())),
+                group: group.take(),
+                failed: why,
+            });
+        }
+        // Every match failed its test: the heading still offers to show them.
+        if let Some(g) = group.filter(|g| g.failed > 0 && matched) {
+            offered.push(Row {
+                name: format!("{}\u{1}", p.name),
+                display: "Every match failed its test".into(),
+                description: String::new(),
+                chips: vec![],
+                ping: None,
+                disabled: true,
+                current: false,
+                pick: None,
+                group: Some(g),
+                failed: None,
+            });
+        }
     }
     (offered, total)
 }
@@ -162,6 +277,7 @@ pub fn render(
     window: &gpui::Window,
     on_hover: impl Fn(String, &mut gpui::App) + Clone + 'static,
     on_out: impl Fn(gpui::Point<gpui::Pixels>, &mut gpui::App) + 'static,
+    leaving: bool,
 ) -> impl IntoElement {
     let (rows, total) = rows(s, query);
     let checking = s.checking();
@@ -246,6 +362,47 @@ pub fn render(
     } else {
         list = list.child(heading);
         for row in rows {
+            if let Some(g) = &row.group {
+                let toggle = (g.failed > 0).then(|| {
+                    let st = state.clone();
+                    div()
+                        .id(SharedString::from(format!("failed-{}", row.name)))
+                        .flex_none()
+                        .px(px(4.))
+                        .rounded(px(4.))
+                        .cursor_pointer()
+                        .text_color(t.colors.text_muted)
+                        .hover(move |d| d.bg(active_bg))
+                        .child(if s.show_failed_models {
+                            format!("Hide {} that failed", g.failed)
+                        } else {
+                            format!("Show {} that failed", g.failed)
+                        })
+                        .on_click(move |_, _, cx| st.update(cx, |s, cx| s.toggle_failed_models(cx)))
+                });
+                list = list.child(
+                    div()
+                        .px(px(12.))
+                        .pt(px(8.))
+                        .pb(px(2.))
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap(px(8.))
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_subtle)
+                        .child(
+                            div()
+                                .min_w_0()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .child(g.title.clone()),
+                        )
+                        .children(toggle),
+                );
+            }
+            let pick = row.pick.clone();
             let key = row.name.clone();
             let is_active = active == Some(key.as_str());
             let (st, hover) = (state.clone(), on_hover.clone());
@@ -271,7 +428,7 @@ pub fn render(
                     .flex()
                     .items_center()
                     .rounded(px(4.))
-                    .when(row.disabled, |d| d.opacity(0.5))
+                    .when(row.disabled || row.failed.is_some(), |d| d.opacity(0.5))
                     .when(!row.disabled, |d| d.cursor_pointer())
                     .when(is_active, |d| d.bg(active_bg))
                     .when(row.current, |d| {
@@ -325,10 +482,14 @@ pub fn render(
                                     .text_size(t.text.caption)
                                     .text_color(t.colors.text_subtle)
                                     .when(row.disabled, |d| d.text_color(t.colors.text))
+                                    .when(row.failed.is_some(), |d| d.text_color(t.extra.danger))
                                     .overflow_hidden()
                                     .whitespace_nowrap()
                                     .text_ellipsis()
-                                    .child(row.description),
+                                    .child(match &row.failed {
+                                        Some(why) => format!("{} · {why}", row.description),
+                                        None => row.description,
+                                    }),
                             ),
                     )
                     .child(
@@ -344,7 +505,10 @@ pub fn render(
                     .when(!row.disabled, |d| {
                         let name = key.clone();
                         d.on_click(move |_, _, cx| {
-                            st.update(cx, |s, cx| s.select_profile(&name, cx))
+                            st.update(cx, |s, cx| match &pick {
+                                Some((profile, id)) => s.pick_catalog_model(profile, id, cx),
+                                None => s.select_profile(&name, cx),
+                            })
                         })
                     }),
             );
@@ -384,6 +548,7 @@ pub fn render(
                         .child(
                             div()
                                 .flex_1()
+                                .min_w_0()
                                 .flex()
                                 .gap(px(4.))
                                 .text_color(t.colors.text)
@@ -440,7 +605,7 @@ pub fn render(
         )
         .children(effort)
         .child(setup_links(t));
-    super::motion::edge_draw(menu, "models-in", t.colors.primary, 8., t)
+    super::motion::composer_menu(menu, "models", 8., leaving, t)
 }
 
 /// Under the list: the setup guide and the file, one click each.

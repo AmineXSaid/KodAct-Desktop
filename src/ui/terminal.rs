@@ -413,15 +413,11 @@ pub fn block(call: &ToolCall, at: &Where, t: &Theme) -> AnyElement {
 
     // The footer: exit code, size, and the toggle.
     let footer = (!running && call.status != ToolStatus::Declined).then(|| {
-        let code = if call.status == ToolStatus::Failed {
-            1
-        } else {
-            0
-        };
-        let (fg, bg) = if code == 0 {
-            (t.extra.success, t.extra.success_tint)
-        } else {
-            (t.extra.danger, t.extra.danger_tint)
+        // A command stopped mid-way has no exit code to show.
+        let (chip, fg, bg) = match call.status {
+            ToolStatus::Failed => ("exit 1", t.extra.danger, t.extra.danger_tint),
+            ToolStatus::Interrupted => ("stopped", t.extra.warning, t.extra.warning_tint),
+            _ => ("exit 0", t.extra.success, t.extra.success_tint),
         };
         let (state, chat, msg, b) = (at.state.clone(), at.chat, at.msg, at.block);
         let (copier, rerun, output, cmd) = (
@@ -452,7 +448,7 @@ pub fn block(call: &ToolCall, at: &Where, t: &Theme) -> AnyElement {
                     .bg(bg)
                     .text_color(fg)
                     .font_family(t.font_mono.clone())
-                    .child(format!("exit {code}")),
+                    .child(chip),
             )
             .child(format!(
                 "{} line{}",

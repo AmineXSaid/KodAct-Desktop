@@ -65,8 +65,6 @@ fn label_row(
     kind: &str,
     t: &Theme,
 ) -> gpui::Div {
-    let hover = t.colors.hover;
-    let to_save = file.clone();
     div()
         .flex()
         .items_center()
@@ -94,33 +92,62 @@ fn label_row(
                         .child(format!("{kind} · {}", file.kind())),
                 ),
         )
-        .child(
-            div()
-                .id(SharedString::from(format!("file-dl-{key}")))
-                .flex_none()
-                .flex()
-                .items_center()
-                .gap(t.space.xs)
-                .h(t.size.control)
-                .px(t.space.sm)
-                .rounded(t.radius.button)
-                .border_1()
-                .border_color(t.colors.border)
-                .text_size(t.text.caption)
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(t.colors.text)
-                .hover(move |st| st.bg(hover))
-                .child(icon(
-                    "icons/download.svg",
-                    t.size.icon_sm,
-                    t.colors.text_muted,
-                ))
-                .child("Download")
-                .on_click(move |_, _, cx| {
-                    cx.stop_propagation();
-                    state.update(cx, |s, cx| s.download(&to_save, cx));
-                }),
-        )
+        .child(download_button(file, key, state, t))
+}
+
+/// Download: a pill with its icon, saving the file where you choose.
+fn download_button(
+    file: &FileRef,
+    key: &str,
+    state: Entity<AppState>,
+    t: &Theme,
+) -> gpui::Stateful<gpui::Div> {
+    let hover = t.colors.hover;
+    let to_save = file.clone();
+    div()
+        .id(SharedString::from(format!("file-dl-{key}")))
+        .flex_none()
+        .flex()
+        .items_center()
+        .gap(t.space.xs)
+        .h(t.size.control)
+        .px(t.space.sm)
+        .rounded(t.radius.button)
+        .border_1()
+        .border_color(t.colors.border)
+        .bg(t.colors.surface)
+        .text_size(t.text.caption)
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(t.colors.text)
+        .cursor_pointer()
+        .hover(move |st| st.bg(hover))
+        .child(icon(
+            "icons/download.svg",
+            t.size.icon_sm,
+            t.colors.text_muted,
+        ))
+        .child("Download")
+        .on_click(move |_, _, cx| {
+            cx.stop_propagation();
+            state.update(cx, |s, cx| s.download(&to_save, cx));
+        })
+}
+
+/// How a diagram shows in a reply: drawn at `zoom` times its own size (1 is
+/// 100%), and whether its description is open as text. `None`: the compact
+/// card (the Documents list).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DiagramView {
+    pub zoom: f32,
+    pub text_open: bool,
+}
+
+/// The keys a reply's diagram keeps its zoom and text state under.
+pub fn zoom_key(key: &str) -> SharedString {
+    format!("file-diagram-{key}").into()
+}
+pub fn text_key(key: &str) -> SharedString {
+    format!("file-diagram-text-{key}").into()
 }
 
 pub fn render(
@@ -129,9 +156,15 @@ pub fn render(
     state: Entity<AppState>,
     open: bool,
     scale: f32,
+    view: Option<DiagramView>,
     t: &Theme,
 ) -> AnyElement {
     if file.is_diagram() {
+        if let Some(v) = view {
+            if let Some(card) = inline_diagram(file, key, state.clone(), v, scale, t) {
+                return card;
+            }
+        }
         return diagram_card(file, key, state, open, scale, t);
     }
     // Hovered, the edge darkens; open, it stays the accent.
@@ -175,7 +208,240 @@ pub fn render(
         .into_any_element()
 }
 
-/// A diagram's card: the drawing itself on top, then its title and Download.
+/// A diagram in a reply, readable where it is: a bar with its name, zoom
+/// (− 100% +, Fit), Open and Download, then the drawing at its own size
+/// (100%: its labels as drawn), scrolling sideways when wider than the
+/// column, and its description as text on request.
+fn inline_diagram(
+    file: &FileRef,
+    key: &str,
+    state: Entity<AppState>,
+    v: DiagramView,
+    scale: f32,
+    t: &Theme,
+) -> Option<AnyElement> {
+    let svg = crate::diagram::extract_svg(&file.content)?;
+    let svg = super::diagram_view::themed(svg, t.is_dark);
+    let natural = super::diagram_view::natural_width(&svg)?;
+    let frame = f32::from(t.size.column) - 2.;
+    let width = (natural * v.zoom).max(80.);
+    let wider = width > frame + 0.5;
+    let drawing = super::diagram_view::image(&svg, width, scale)?;
+    let zkey = zoom_key(key);
+    let zoom_by = |id: &str, glyph: &'static str, tip: &'static str, by: Option<f32>| {
+        let (state, zkey) = (state.clone(), zkey.clone());
+        icon_button(&format!("{id}-{key}"), glyph, tip, t).on_click(move |_, _, cx| {
+            state.update(cx, |s, cx| s.zoom_diagram(zkey.clone(), by, cx))
+        })
+    };
+    // Fit: the zoom that makes the drawing as wide as the frame.
+    let fit = (frame / natural) / v.zoom;
+    let fit_state = (state.clone(), zkey.clone());
+    let opener = state.clone();
+    let to_open = file.clone();
+    let texter = state.clone();
+    let tkey = text_key(key);
+    let description = crate::diagram::description(&file.content);
+    let hover = t.colors.hover;
+    let bar = div()
+        .flex()
+        .items_center()
+        .gap(t.space.sm)
+        .px(t.space.md)
+        .py(t.space.xs)
+        .border_b_1()
+        .border_color(t.colors.border)
+        .child(icon("icons/network.svg", t.size.icon_sm, t.colors.primary))
+        .child(
+            div()
+                .min_w_0()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(t.colors.text_strong)
+                .child(file.title()),
+        )
+        .child(
+            div()
+                .flex_none()
+                .text_size(t.text.caption)
+                .text_color(t.colors.text_muted)
+                .child(if wider {
+                    "scroll sideways for the rest".to_string()
+                } else {
+                    format!("Diagram · {}", file.kind())
+                }),
+        )
+        .child(div().flex_1())
+        // − 100% +: the middle sets 100% again.
+        .child(
+            div()
+                .flex()
+                .flex_none()
+                .items_center()
+                .gap(px(2.))
+                .px(px(2.))
+                .rounded(t.radius.pill)
+                .border_1()
+                .border_color(t.colors.border)
+                .child(zoom_by(
+                    "zoom-out",
+                    "icons/minus.svg",
+                    "Zoom out",
+                    Some(1. / 1.25),
+                ))
+                .child(
+                    div()
+                        .id(SharedString::from(format!("zoom-reset-{key}")))
+                        .min_w(px(44.))
+                        .h(px(22.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded(t.radius.pill)
+                        .cursor_pointer()
+                        .font_family(t.font_mono.clone())
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text)
+                        .hover(move |d| d.bg(hover))
+                        .tooltip(|window, cx| {
+                            gpui::component::tooltip::Tooltip::new("Its own size (100%)")
+                                .build(window, cx)
+                        })
+                        .child(format!("{}%", (v.zoom * 100.).round()))
+                        .on_click({
+                            let (state, zkey) = (state.clone(), zkey.clone());
+                            move |_, _, cx| {
+                                state.update(cx, |s, cx| s.zoom_diagram(zkey.clone(), None, cx))
+                            }
+                        }),
+                )
+                .child(zoom_by("zoom-in", "icons/plus.svg", "Zoom in", Some(1.25))),
+        )
+        .child(
+            div()
+                .id(SharedString::from(format!("zoom-fit-{key}")))
+                .flex_none()
+                .h(t.size.control)
+                .px(t.space.sm)
+                .flex()
+                .items_center()
+                .rounded(t.radius.pill)
+                .cursor_pointer()
+                .text_size(t.text.caption)
+                .text_color(t.colors.text_muted)
+                .hover(move |d| d.bg(hover))
+                .child("Fit")
+                .on_click(move |_, _, cx| {
+                    fit_state.0.update(cx, |s, cx| {
+                        s.zoom_diagram(fit_state.1.clone(), Some(fit), cx)
+                    })
+                }),
+        )
+        .child(
+            icon_button(
+                &format!("open-{key}"),
+                "icons/maximize-2.svg",
+                "Open beside the chat",
+                t,
+            )
+            .on_click(move |_, _, cx| opener.update(cx, |s, cx| s.open_doc(to_open.clone(), cx))),
+        )
+        .child(download_button(file, key, state.clone(), t));
+    let body = div()
+        .id(SharedString::from(format!("diagram-pan-{key}")))
+        .w_full()
+        .overflow_x_scroll()
+        .bg(t.extra.stage)
+        .child(
+            div()
+                .flex()
+                .when(!wider, |d| d.justify_center())
+                .child(div().flex_none().child(drawing)),
+        );
+    let text = description.map(|desc| {
+        div()
+            .border_t_1()
+            .border_color(t.colors.border)
+            .child(
+                div()
+                    .id(SharedString::from(format!("diagram-text-{key}")))
+                    .flex()
+                    .items_center()
+                    .gap(t.space.xs)
+                    .px(t.space.md)
+                    .py(t.space.sm)
+                    .cursor_pointer()
+                    .text_size(t.text.caption)
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(t.colors.text)
+                    .child(icon(
+                        if v.text_open {
+                            "icons/chevron-down.svg"
+                        } else {
+                            "icons/chevron-right.svg"
+                        },
+                        t.size.icon_sm,
+                        t.colors.text_muted,
+                    ))
+                    .child("Read as text")
+                    .on_click(move |_, _, cx| {
+                        texter.update(cx, |s, cx| s.toggle_diagram_code(tkey.clone(), cx))
+                    }),
+            )
+            .when(v.text_open, |d| {
+                d.child(
+                    div()
+                        .px(t.space.md)
+                        .pb(t.space.md)
+                        .text_color(t.colors.text_body)
+                        .child(desc),
+                )
+            })
+    });
+    Some(
+        div()
+            .id(SharedString::from(format!("file-{key}")))
+            .w_full()
+            .flex()
+            .flex_col()
+            .overflow_hidden()
+            .bg(t.colors.surface)
+            .border_1()
+            .border_color(t.colors.border)
+            .rounded(t.radius.card)
+            .child(bar)
+            .child(body)
+            .children(text)
+            .into_any_element(),
+    )
+}
+
+/// A small icon button in the diagram's bar, its name as a tooltip.
+fn icon_button(
+    id: &str,
+    path: &'static str,
+    tip: &'static str,
+    t: &Theme,
+) -> gpui::Stateful<gpui::Div> {
+    let hover = t.colors.hover;
+    div()
+        .id(SharedString::from(id.to_string()))
+        .flex_none()
+        .size(px(22.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(t.radius.pill)
+        .cursor_pointer()
+        .hover(move |d| d.bg(hover))
+        .tooltip(move |window, cx| gpui::component::tooltip::Tooltip::new(tip).build(window, cx))
+        .child(icon(path, t.size.icon_sm, t.colors.text_muted))
+}
+
+/// A diagram's compact card (the Documents list): the drawing on top, then
+/// its title and Download.
 fn diagram_card(
     file: &FileRef,
     key: &str,

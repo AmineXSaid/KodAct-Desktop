@@ -2154,654 +2154,2604 @@ pub static FOLDERS: &[(&str, &str)] = &[
 
 /// The icons, by asset path.
 pub static SVGS: &[(&str, &[u8])] = &[
-    ("file-icons/3d.svg", include_bytes!("../../assets/file-icons/3d.svg")),
-    ("file-icons/abap.svg", include_bytes!("../../assets/file-icons/abap.svg")),
-    ("file-icons/abc.svg", include_bytes!("../../assets/file-icons/abc.svg")),
-    ("file-icons/actionscript.svg", include_bytes!("../../assets/file-icons/actionscript.svg")),
-    ("file-icons/ada.svg", include_bytes!("../../assets/file-icons/ada.svg")),
-    ("file-icons/adobe-illustrator.svg", include_bytes!("../../assets/file-icons/adobe-illustrator.svg")),
-    ("file-icons/adobe-photoshop.svg", include_bytes!("../../assets/file-icons/adobe-photoshop.svg")),
-    ("file-icons/adobe-swc.svg", include_bytes!("../../assets/file-icons/adobe-swc.svg")),
-    ("file-icons/adonis.svg", include_bytes!("../../assets/file-icons/adonis.svg")),
-    ("file-icons/advpl.svg", include_bytes!("../../assets/file-icons/advpl.svg")),
-    ("file-icons/amplify.svg", include_bytes!("../../assets/file-icons/amplify.svg")),
-    ("file-icons/android.svg", include_bytes!("../../assets/file-icons/android.svg")),
-    ("file-icons/angular.svg", include_bytes!("../../assets/file-icons/angular.svg")),
-    ("file-icons/antlr.svg", include_bytes!("../../assets/file-icons/antlr.svg")),
-    ("file-icons/apiblueprint.svg", include_bytes!("../../assets/file-icons/apiblueprint.svg")),
-    ("file-icons/apollo.svg", include_bytes!("../../assets/file-icons/apollo.svg")),
-    ("file-icons/applescript.svg", include_bytes!("../../assets/file-icons/applescript.svg")),
-    ("file-icons/apps-script.svg", include_bytes!("../../assets/file-icons/apps-script.svg")),
-    ("file-icons/appveyor.svg", include_bytes!("../../assets/file-icons/appveyor.svg")),
-    ("file-icons/architecture.svg", include_bytes!("../../assets/file-icons/architecture.svg")),
-    ("file-icons/arduino.svg", include_bytes!("../../assets/file-icons/arduino.svg")),
-    ("file-icons/asciidoc.svg", include_bytes!("../../assets/file-icons/asciidoc.svg")),
-    ("file-icons/assembly.svg", include_bytes!("../../assets/file-icons/assembly.svg")),
-    ("file-icons/astro.svg", include_bytes!("../../assets/file-icons/astro.svg")),
-    ("file-icons/astro-config.svg", include_bytes!("../../assets/file-icons/astro-config.svg")),
-    ("file-icons/astyle.svg", include_bytes!("../../assets/file-icons/astyle.svg")),
-    ("file-icons/audio.svg", include_bytes!("../../assets/file-icons/audio.svg")),
-    ("file-icons/aurelia.svg", include_bytes!("../../assets/file-icons/aurelia.svg")),
-    ("file-icons/authors.svg", include_bytes!("../../assets/file-icons/authors.svg")),
-    ("file-icons/auto.svg", include_bytes!("../../assets/file-icons/auto.svg")),
-    ("file-icons/autoit.svg", include_bytes!("../../assets/file-icons/autoit.svg")),
-    ("file-icons/azure.svg", include_bytes!("../../assets/file-icons/azure.svg")),
-    ("file-icons/azure-pipelines.svg", include_bytes!("../../assets/file-icons/azure-pipelines.svg")),
-    ("file-icons/babel.svg", include_bytes!("../../assets/file-icons/babel.svg")),
-    ("file-icons/ballerina.svg", include_bytes!("../../assets/file-icons/ballerina.svg")),
-    ("file-icons/bashly-hook.svg", include_bytes!("../../assets/file-icons/bashly-hook.svg")),
-    ("file-icons/bazel.svg", include_bytes!("../../assets/file-icons/bazel.svg")),
-    ("file-icons/beancount.svg", include_bytes!("../../assets/file-icons/beancount.svg")),
-    ("file-icons/bench-js.svg", include_bytes!("../../assets/file-icons/bench-js.svg")),
-    ("file-icons/bench-jsx.svg", include_bytes!("../../assets/file-icons/bench-jsx.svg")),
-    ("file-icons/bench-ts.svg", include_bytes!("../../assets/file-icons/bench-ts.svg")),
-    ("file-icons/bibliography.svg", include_bytes!("../../assets/file-icons/bibliography.svg")),
-    ("file-icons/bibtex-style.svg", include_bytes!("../../assets/file-icons/bibtex-style.svg")),
-    ("file-icons/bicep.svg", include_bytes!("../../assets/file-icons/bicep.svg")),
-    ("file-icons/biome.svg", include_bytes!("../../assets/file-icons/biome.svg")),
-    ("file-icons/bitbucket.svg", include_bytes!("../../assets/file-icons/bitbucket.svg")),
-    ("file-icons/bithound.svg", include_bytes!("../../assets/file-icons/bithound.svg")),
-    ("file-icons/blender.svg", include_bytes!("../../assets/file-icons/blender.svg")),
-    ("file-icons/blink.svg", include_bytes!("../../assets/file-icons/blink.svg")),
-    ("file-icons/blitz.svg", include_bytes!("../../assets/file-icons/blitz.svg")),
-    ("file-icons/bower.svg", include_bytes!("../../assets/file-icons/bower.svg")),
-    ("file-icons/brainfuck.svg", include_bytes!("../../assets/file-icons/brainfuck.svg")),
-    ("file-icons/browserlist.svg", include_bytes!("../../assets/file-icons/browserlist.svg")),
-    ("file-icons/bruno.svg", include_bytes!("../../assets/file-icons/bruno.svg")),
-    ("file-icons/buck.svg", include_bytes!("../../assets/file-icons/buck.svg")),
-    ("file-icons/bucklescript.svg", include_bytes!("../../assets/file-icons/bucklescript.svg")),
-    ("file-icons/buildkite.svg", include_bytes!("../../assets/file-icons/buildkite.svg")),
-    ("file-icons/bun.svg", include_bytes!("../../assets/file-icons/bun.svg")),
-    ("file-icons/c.svg", include_bytes!("../../assets/file-icons/c.svg")),
-    ("file-icons/c3.svg", include_bytes!("../../assets/file-icons/c3.svg")),
-    ("file-icons/cabal.svg", include_bytes!("../../assets/file-icons/cabal.svg")),
-    ("file-icons/caddy.svg", include_bytes!("../../assets/file-icons/caddy.svg")),
-    ("file-icons/cadence.svg", include_bytes!("../../assets/file-icons/cadence.svg")),
-    ("file-icons/cairo.svg", include_bytes!("../../assets/file-icons/cairo.svg")),
-    ("file-icons/cake.svg", include_bytes!("../../assets/file-icons/cake.svg")),
-    ("file-icons/capacitor.svg", include_bytes!("../../assets/file-icons/capacitor.svg")),
-    ("file-icons/capnp.svg", include_bytes!("../../assets/file-icons/capnp.svg")),
-    ("file-icons/cds.svg", include_bytes!("../../assets/file-icons/cds.svg")),
-    ("file-icons/certificate.svg", include_bytes!("../../assets/file-icons/certificate.svg")),
-    ("file-icons/changelog.svg", include_bytes!("../../assets/file-icons/changelog.svg")),
-    ("file-icons/chess.svg", include_bytes!("../../assets/file-icons/chess.svg")),
-    ("file-icons/chrome.svg", include_bytes!("../../assets/file-icons/chrome.svg")),
-    ("file-icons/circleci.svg", include_bytes!("../../assets/file-icons/circleci.svg")),
-    ("file-icons/citation.svg", include_bytes!("../../assets/file-icons/citation.svg")),
-    ("file-icons/clangd.svg", include_bytes!("../../assets/file-icons/clangd.svg")),
-    ("file-icons/claude.svg", include_bytes!("../../assets/file-icons/claude.svg")),
-    ("file-icons/cline.svg", include_bytes!("../../assets/file-icons/cline.svg")),
-    ("file-icons/clojure.svg", include_bytes!("../../assets/file-icons/clojure.svg")),
-    ("file-icons/cloudfoundry.svg", include_bytes!("../../assets/file-icons/cloudfoundry.svg")),
-    ("file-icons/cmake.svg", include_bytes!("../../assets/file-icons/cmake.svg")),
-    ("file-icons/coala.svg", include_bytes!("../../assets/file-icons/coala.svg")),
-    ("file-icons/cobol.svg", include_bytes!("../../assets/file-icons/cobol.svg")),
-    ("file-icons/coconut.svg", include_bytes!("../../assets/file-icons/coconut.svg")),
-    ("file-icons/code-climate.svg", include_bytes!("../../assets/file-icons/code-climate.svg")),
-    ("file-icons/codecov.svg", include_bytes!("../../assets/file-icons/codecov.svg")),
-    ("file-icons/codeowners.svg", include_bytes!("../../assets/file-icons/codeowners.svg")),
-    ("file-icons/coderabbit-ai.svg", include_bytes!("../../assets/file-icons/coderabbit-ai.svg")),
-    ("file-icons/coffee.svg", include_bytes!("../../assets/file-icons/coffee.svg")),
-    ("file-icons/coldfusion.svg", include_bytes!("../../assets/file-icons/coldfusion.svg")),
-    ("file-icons/coloredpetrinets.svg", include_bytes!("../../assets/file-icons/coloredpetrinets.svg")),
-    ("file-icons/command.svg", include_bytes!("../../assets/file-icons/command.svg")),
-    ("file-icons/commitizen.svg", include_bytes!("../../assets/file-icons/commitizen.svg")),
-    ("file-icons/commitlint.svg", include_bytes!("../../assets/file-icons/commitlint.svg")),
-    ("file-icons/concourse.svg", include_bytes!("../../assets/file-icons/concourse.svg")),
-    ("file-icons/conduct.svg", include_bytes!("../../assets/file-icons/conduct.svg")),
-    ("file-icons/console.svg", include_bytes!("../../assets/file-icons/console.svg")),
-    ("file-icons/context.svg", include_bytes!("../../assets/file-icons/context.svg")),
-    ("file-icons/contributing.svg", include_bytes!("../../assets/file-icons/contributing.svg")),
-    ("file-icons/controller.svg", include_bytes!("../../assets/file-icons/controller.svg")),
-    ("file-icons/copilot.svg", include_bytes!("../../assets/file-icons/copilot.svg")),
-    ("file-icons/cpp.svg", include_bytes!("../../assets/file-icons/cpp.svg")),
-    ("file-icons/credits.svg", include_bytes!("../../assets/file-icons/credits.svg")),
-    ("file-icons/crystal.svg", include_bytes!("../../assets/file-icons/crystal.svg")),
-    ("file-icons/csharp.svg", include_bytes!("../../assets/file-icons/csharp.svg")),
-    ("file-icons/css.svg", include_bytes!("../../assets/file-icons/css.svg")),
-    ("file-icons/css-map.svg", include_bytes!("../../assets/file-icons/css-map.svg")),
-    ("file-icons/cucumber.svg", include_bytes!("../../assets/file-icons/cucumber.svg")),
-    ("file-icons/cuda.svg", include_bytes!("../../assets/file-icons/cuda.svg")),
-    ("file-icons/cursor.svg", include_bytes!("../../assets/file-icons/cursor.svg")),
-    ("file-icons/cypress.svg", include_bytes!("../../assets/file-icons/cypress.svg")),
-    ("file-icons/d.svg", include_bytes!("../../assets/file-icons/d.svg")),
-    ("file-icons/dart.svg", include_bytes!("../../assets/file-icons/dart.svg")),
-    ("file-icons/dart_generated.svg", include_bytes!("../../assets/file-icons/dart_generated.svg")),
-    ("file-icons/database.svg", include_bytes!("../../assets/file-icons/database.svg")),
-    ("file-icons/deepsource.svg", include_bytes!("../../assets/file-icons/deepsource.svg")),
-    ("file-icons/denizenscript.svg", include_bytes!("../../assets/file-icons/denizenscript.svg")),
-    ("file-icons/deno.svg", include_bytes!("../../assets/file-icons/deno.svg")),
-    ("file-icons/dependabot.svg", include_bytes!("../../assets/file-icons/dependabot.svg")),
-    ("file-icons/dependencies-update.svg", include_bytes!("../../assets/file-icons/dependencies-update.svg")),
-    ("file-icons/dhall.svg", include_bytes!("../../assets/file-icons/dhall.svg")),
-    ("file-icons/diff.svg", include_bytes!("../../assets/file-icons/diff.svg")),
-    ("file-icons/dinophp.svg", include_bytes!("../../assets/file-icons/dinophp.svg")),
-    ("file-icons/disc.svg", include_bytes!("../../assets/file-icons/disc.svg")),
-    ("file-icons/django.svg", include_bytes!("../../assets/file-icons/django.svg")),
-    ("file-icons/dll.svg", include_bytes!("../../assets/file-icons/dll.svg")),
-    ("file-icons/docker.svg", include_bytes!("../../assets/file-icons/docker.svg")),
-    ("file-icons/doctex-installer.svg", include_bytes!("../../assets/file-icons/doctex-installer.svg")),
-    ("file-icons/document.svg", include_bytes!("../../assets/file-icons/document.svg")),
-    ("file-icons/dotjs.svg", include_bytes!("../../assets/file-icons/dotjs.svg")),
-    ("file-icons/drawio.svg", include_bytes!("../../assets/file-icons/drawio.svg")),
-    ("file-icons/drizzle.svg", include_bytes!("../../assets/file-icons/drizzle.svg")),
-    ("file-icons/drone.svg", include_bytes!("../../assets/file-icons/drone.svg")),
-    ("file-icons/duc.svg", include_bytes!("../../assets/file-icons/duc.svg")),
-    ("file-icons/dune.svg", include_bytes!("../../assets/file-icons/dune.svg")),
-    ("file-icons/edge.svg", include_bytes!("../../assets/file-icons/edge.svg")),
-    ("file-icons/editorconfig.svg", include_bytes!("../../assets/file-icons/editorconfig.svg")),
-    ("file-icons/ejs.svg", include_bytes!("../../assets/file-icons/ejs.svg")),
-    ("file-icons/elixir.svg", include_bytes!("../../assets/file-icons/elixir.svg")),
-    ("file-icons/elm.svg", include_bytes!("../../assets/file-icons/elm.svg")),
-    ("file-icons/email.svg", include_bytes!("../../assets/file-icons/email.svg")),
-    ("file-icons/ember.svg", include_bytes!("../../assets/file-icons/ember.svg")),
-    ("file-icons/epub.svg", include_bytes!("../../assets/file-icons/epub.svg")),
-    ("file-icons/erlang.svg", include_bytes!("../../assets/file-icons/erlang.svg")),
-    ("file-icons/eslint.svg", include_bytes!("../../assets/file-icons/eslint.svg")),
-    ("file-icons/excalidraw.svg", include_bytes!("../../assets/file-icons/excalidraw.svg")),
-    ("file-icons/exe.svg", include_bytes!("../../assets/file-icons/exe.svg")),
-    ("file-icons/fastlane.svg", include_bytes!("../../assets/file-icons/fastlane.svg")),
-    ("file-icons/favicon.svg", include_bytes!("../../assets/file-icons/favicon.svg")),
-    ("file-icons/figma.svg", include_bytes!("../../assets/file-icons/figma.svg")),
-    ("file-icons/file.svg", include_bytes!("../../assets/file-icons/file.svg")),
-    ("file-icons/firebase.svg", include_bytes!("../../assets/file-icons/firebase.svg")),
-    ("file-icons/flash.svg", include_bytes!("../../assets/file-icons/flash.svg")),
-    ("file-icons/flow.svg", include_bytes!("../../assets/file-icons/flow.svg")),
-    ("file-icons/folder.svg", include_bytes!("../../assets/file-icons/folder.svg")),
-    ("file-icons/folder-admin.svg", include_bytes!("../../assets/file-icons/folder-admin.svg")),
-    ("file-icons/folder-animation.svg", include_bytes!("../../assets/file-icons/folder-animation.svg")),
-    ("file-icons/folder-ansible.svg", include_bytes!("../../assets/file-icons/folder-ansible.svg")),
-    ("file-icons/folder-atom.svg", include_bytes!("../../assets/file-icons/folder-atom.svg")),
-    ("file-icons/folder-attachment.svg", include_bytes!("../../assets/file-icons/folder-attachment.svg")),
-    ("file-icons/folder-aws.svg", include_bytes!("../../assets/file-icons/folder-aws.svg")),
-    ("file-icons/folder-azure-pipelines.svg", include_bytes!("../../assets/file-icons/folder-azure-pipelines.svg")),
-    ("file-icons/folder-base.svg", include_bytes!("../../assets/file-icons/folder-base.svg")),
-    ("file-icons/folder-benchmark.svg", include_bytes!("../../assets/file-icons/folder-benchmark.svg")),
-    ("file-icons/folder-bibliography.svg", include_bytes!("../../assets/file-icons/folder-bibliography.svg")),
-    ("file-icons/folder-blender.svg", include_bytes!("../../assets/file-icons/folder-blender.svg")),
-    ("file-icons/folder-bloc.svg", include_bytes!("../../assets/file-icons/folder-bloc.svg")),
-    ("file-icons/folder-cart.svg", include_bytes!("../../assets/file-icons/folder-cart.svg")),
-    ("file-icons/folder-ci.svg", include_bytes!("../../assets/file-icons/folder-ci.svg")),
-    ("file-icons/folder-claude.svg", include_bytes!("../../assets/file-icons/folder-claude.svg")),
-    ("file-icons/folder-client.svg", include_bytes!("../../assets/file-icons/folder-client.svg")),
-    ("file-icons/folder-cloud-functions.svg", include_bytes!("../../assets/file-icons/folder-cloud-functions.svg")),
-    ("file-icons/folder-components.svg", include_bytes!("../../assets/file-icons/folder-components.svg")),
-    ("file-icons/folder-config.svg", include_bytes!("../../assets/file-icons/folder-config.svg")),
-    ("file-icons/folder-connection.svg", include_bytes!("../../assets/file-icons/folder-connection.svg")),
-    ("file-icons/folder-console.svg", include_bytes!("../../assets/file-icons/folder-console.svg")),
-    ("file-icons/folder-contract.svg", include_bytes!("../../assets/file-icons/folder-contract.svg")),
-    ("file-icons/folder-controller.svg", include_bytes!("../../assets/file-icons/folder-controller.svg")),
-    ("file-icons/folder-coverage.svg", include_bytes!("../../assets/file-icons/folder-coverage.svg")),
-    ("file-icons/folder-css.svg", include_bytes!("../../assets/file-icons/folder-css.svg")),
-    ("file-icons/folder-cursor.svg", include_bytes!("../../assets/file-icons/folder-cursor.svg")),
-    ("file-icons/folder-dart.svg", include_bytes!("../../assets/file-icons/folder-dart.svg")),
-    ("file-icons/folder-database.svg", include_bytes!("../../assets/file-icons/folder-database.svg")),
-    ("file-icons/folder-debug.svg", include_bytes!("../../assets/file-icons/folder-debug.svg")),
-    ("file-icons/folder-desktop.svg", include_bytes!("../../assets/file-icons/folder-desktop.svg")),
-    ("file-icons/folder-dist.svg", include_bytes!("../../assets/file-icons/folder-dist.svg")),
-    ("file-icons/folder-docker.svg", include_bytes!("../../assets/file-icons/folder-docker.svg")),
-    ("file-icons/folder-docs.svg", include_bytes!("../../assets/file-icons/folder-docs.svg")),
-    ("file-icons/folder-enum.svg", include_bytes!("../../assets/file-icons/folder-enum.svg")),
-    ("file-icons/folder-expo.svg", include_bytes!("../../assets/file-icons/folder-expo.svg")),
-    ("file-icons/folder-fastlane.svg", include_bytes!("../../assets/file-icons/folder-fastlane.svg")),
-    ("file-icons/folder-favicon.svg", include_bytes!("../../assets/file-icons/folder-favicon.svg")),
-    ("file-icons/folder-filter.svg", include_bytes!("../../assets/file-icons/folder-filter.svg")),
-    ("file-icons/folder-firebase.svg", include_bytes!("../../assets/file-icons/folder-firebase.svg")),
-    ("file-icons/folder-firestore.svg", include_bytes!("../../assets/file-icons/folder-firestore.svg")),
-    ("file-icons/folder-font.svg", include_bytes!("../../assets/file-icons/folder-font.svg")),
-    ("file-icons/folder-forgejo.svg", include_bytes!("../../assets/file-icons/folder-forgejo.svg")),
-    ("file-icons/folder-gh-workflows.svg", include_bytes!("../../assets/file-icons/folder-gh-workflows.svg")),
-    ("file-icons/folder-gitea.svg", include_bytes!("../../assets/file-icons/folder-gitea.svg")),
-    ("file-icons/folder-github.svg", include_bytes!("../../assets/file-icons/folder-github.svg")),
-    ("file-icons/folder-gitlab.svg", include_bytes!("../../assets/file-icons/folder-gitlab.svg")),
-    ("file-icons/folder-global.svg", include_bytes!("../../assets/file-icons/folder-global.svg")),
-    ("file-icons/folder-graphql.svg", include_bytes!("../../assets/file-icons/folder-graphql.svg")),
-    ("file-icons/folder-guard.svg", include_bytes!("../../assets/file-icons/folder-guard.svg")),
-    ("file-icons/folder-gulp.svg", include_bytes!("../../assets/file-icons/folder-gulp.svg")),
-    ("file-icons/folder-home.svg", include_bytes!("../../assets/file-icons/folder-home.svg")),
-    ("file-icons/folder-husky.svg", include_bytes!("../../assets/file-icons/folder-husky.svg")),
-    ("file-icons/folder-i18n.svg", include_bytes!("../../assets/file-icons/folder-i18n.svg")),
-    ("file-icons/folder-images.svg", include_bytes!("../../assets/file-icons/folder-images.svg")),
-    ("file-icons/folder-include.svg", include_bytes!("../../assets/file-icons/folder-include.svg")),
-    ("file-icons/folder-intellij.svg", include_bytes!("../../assets/file-icons/folder-intellij.svg")),
-    ("file-icons/folder-interceptor.svg", include_bytes!("../../assets/file-icons/folder-interceptor.svg")),
-    ("file-icons/folder-interface.svg", include_bytes!("../../assets/file-icons/folder-interface.svg")),
-    ("file-icons/folder-javascript.svg", include_bytes!("../../assets/file-icons/folder-javascript.svg")),
-    ("file-icons/folder-jinja.svg", include_bytes!("../../assets/file-icons/folder-jinja.svg")),
-    ("file-icons/folder-json.svg", include_bytes!("../../assets/file-icons/folder-json.svg")),
-    ("file-icons/folder-jupyter.svg", include_bytes!("../../assets/file-icons/folder-jupyter.svg")),
-    ("file-icons/folder-kusto.svg", include_bytes!("../../assets/file-icons/folder-kusto.svg")),
-    ("file-icons/folder-lefthook.svg", include_bytes!("../../assets/file-icons/folder-lefthook.svg")),
-    ("file-icons/folder-less.svg", include_bytes!("../../assets/file-icons/folder-less.svg")),
-    ("file-icons/folder-lib.svg", include_bytes!("../../assets/file-icons/folder-lib.svg")),
-    ("file-icons/folder-link.svg", include_bytes!("../../assets/file-icons/folder-link.svg")),
-    ("file-icons/folder-liquibase.svg", include_bytes!("../../assets/file-icons/folder-liquibase.svg")),
-    ("file-icons/folder-log.svg", include_bytes!("../../assets/file-icons/folder-log.svg")),
-    ("file-icons/folder-luau.svg", include_bytes!("../../assets/file-icons/folder-luau.svg")),
-    ("file-icons/folder-markdown.svg", include_bytes!("../../assets/file-icons/folder-markdown.svg")),
-    ("file-icons/folder-messages.svg", include_bytes!("../../assets/file-icons/folder-messages.svg")),
-    ("file-icons/folder-metro.svg", include_bytes!("../../assets/file-icons/folder-metro.svg")),
-    ("file-icons/folder-middleware.svg", include_bytes!("../../assets/file-icons/folder-middleware.svg")),
-    ("file-icons/folder-mjml.svg", include_bytes!("../../assets/file-icons/folder-mjml.svg")),
-    ("file-icons/folder-mobile.svg", include_bytes!("../../assets/file-icons/folder-mobile.svg")),
-    ("file-icons/folder-mojo.svg", include_bytes!("../../assets/file-icons/folder-mojo.svg")),
-    ("file-icons/folder-molecule.svg", include_bytes!("../../assets/file-icons/folder-molecule.svg")),
-    ("file-icons/folder-moon.svg", include_bytes!("../../assets/file-icons/folder-moon.svg")),
-    ("file-icons/folder-netlify.svg", include_bytes!("../../assets/file-icons/folder-netlify.svg")),
-    ("file-icons/folder-next.svg", include_bytes!("../../assets/file-icons/folder-next.svg")),
-    ("file-icons/folder-node.svg", include_bytes!("../../assets/file-icons/folder-node.svg")),
-    ("file-icons/folder-nuxt.svg", include_bytes!("../../assets/file-icons/folder-nuxt.svg")),
-    ("file-icons/folder-obsidian.svg", include_bytes!("../../assets/file-icons/folder-obsidian.svg")),
-    ("file-icons/folder-organism.svg", include_bytes!("../../assets/file-icons/folder-organism.svg")),
-    ("file-icons/folder-pdm.svg", include_bytes!("../../assets/file-icons/folder-pdm.svg")),
-    ("file-icons/folder-php.svg", include_bytes!("../../assets/file-icons/folder-php.svg")),
-    ("file-icons/folder-phpmailer.svg", include_bytes!("../../assets/file-icons/folder-phpmailer.svg")),
-    ("file-icons/folder-pipe.svg", include_bytes!("../../assets/file-icons/folder-pipe.svg")),
-    ("file-icons/folder-plugin.svg", include_bytes!("../../assets/file-icons/folder-plugin.svg")),
-    ("file-icons/folder-policy.svg", include_bytes!("../../assets/file-icons/folder-policy.svg")),
-    ("file-icons/folder-powershell.svg", include_bytes!("../../assets/file-icons/folder-powershell.svg")),
-    ("file-icons/folder-prisma.svg", include_bytes!("../../assets/file-icons/folder-prisma.svg")),
-    ("file-icons/folder-project.svg", include_bytes!("../../assets/file-icons/folder-project.svg")),
-    ("file-icons/folder-prompts.svg", include_bytes!("../../assets/file-icons/folder-prompts.svg")),
-    ("file-icons/folder-public.svg", include_bytes!("../../assets/file-icons/folder-public.svg")),
-    ("file-icons/folder-python.svg", include_bytes!("../../assets/file-icons/folder-python.svg")),
-    ("file-icons/folder-pytorch.svg", include_bytes!("../../assets/file-icons/folder-pytorch.svg")),
-    ("file-icons/folder-quasar.svg", include_bytes!("../../assets/file-icons/folder-quasar.svg")),
-    ("file-icons/folder-repository.svg", include_bytes!("../../assets/file-icons/folder-repository.svg")),
-    ("file-icons/folder-resource.svg", include_bytes!("../../assets/file-icons/folder-resource.svg")),
-    ("file-icons/folder-review.svg", include_bytes!("../../assets/file-icons/folder-review.svg")),
-    ("file-icons/folder-robot.svg", include_bytes!("../../assets/file-icons/folder-robot.svg")),
-    ("file-icons/folder-routes.svg", include_bytes!("../../assets/file-icons/folder-routes.svg")),
-    ("file-icons/folder-rust.svg", include_bytes!("../../assets/file-icons/folder-rust.svg")),
-    ("file-icons/folder-sandbox.svg", include_bytes!("../../assets/file-icons/folder-sandbox.svg")),
-    ("file-icons/folder-sass.svg", include_bytes!("../../assets/file-icons/folder-sass.svg")),
-    ("file-icons/folder-scala.svg", include_bytes!("../../assets/file-icons/folder-scala.svg")),
-    ("file-icons/folder-scons.svg", include_bytes!("../../assets/file-icons/folder-scons.svg")),
-    ("file-icons/folder-scripts.svg", include_bytes!("../../assets/file-icons/folder-scripts.svg")),
-    ("file-icons/folder-server.svg", include_bytes!("../../assets/file-icons/folder-server.svg")),
-    ("file-icons/folder-src.svg", include_bytes!("../../assets/file-icons/folder-src.svg")),
-    ("file-icons/folder-src-tauri.svg", include_bytes!("../../assets/file-icons/folder-src-tauri.svg")),
-    ("file-icons/folder-stencil.svg", include_bytes!("../../assets/file-icons/folder-stencil.svg")),
-    ("file-icons/folder-storybook.svg", include_bytes!("../../assets/file-icons/folder-storybook.svg")),
-    ("file-icons/folder-sublime.svg", include_bytes!("../../assets/file-icons/folder-sublime.svg")),
-    ("file-icons/folder-svelte.svg", include_bytes!("../../assets/file-icons/folder-svelte.svg")),
-    ("file-icons/folder-svg.svg", include_bytes!("../../assets/file-icons/folder-svg.svg")),
-    ("file-icons/folder-television.svg", include_bytes!("../../assets/file-icons/folder-television.svg")),
-    ("file-icons/folder-temp.svg", include_bytes!("../../assets/file-icons/folder-temp.svg")),
-    ("file-icons/folder-test.svg", include_bytes!("../../assets/file-icons/folder-test.svg")),
-    ("file-icons/folder-theme.svg", include_bytes!("../../assets/file-icons/folder-theme.svg")),
-    ("file-icons/folder-trash.svg", include_bytes!("../../assets/file-icons/folder-trash.svg")),
-    ("file-icons/folder-typescript.svg", include_bytes!("../../assets/file-icons/folder-typescript.svg")),
-    ("file-icons/folder-update.svg", include_bytes!("../../assets/file-icons/folder-update.svg")),
-    ("file-icons/folder-views.svg", include_bytes!("../../assets/file-icons/folder-views.svg")),
-    ("file-icons/folder-vscode.svg", include_bytes!("../../assets/file-icons/folder-vscode.svg")),
-    ("file-icons/folder-vue.svg", include_bytes!("../../assets/file-icons/folder-vue.svg")),
-    ("file-icons/folder-vue-directives.svg", include_bytes!("../../assets/file-icons/folder-vue-directives.svg")),
-    ("file-icons/folder-vuepress.svg", include_bytes!("../../assets/file-icons/folder-vuepress.svg")),
-    ("file-icons/folder-webpack.svg", include_bytes!("../../assets/file-icons/folder-webpack.svg")),
-    ("file-icons/folder-yarn.svg", include_bytes!("../../assets/file-icons/folder-yarn.svg")),
-    ("file-icons/font.svg", include_bytes!("../../assets/file-icons/font.svg")),
-    ("file-icons/forth.svg", include_bytes!("../../assets/file-icons/forth.svg")),
-    ("file-icons/fortran.svg", include_bytes!("../../assets/file-icons/fortran.svg")),
-    ("file-icons/foxpro.svg", include_bytes!("../../assets/file-icons/foxpro.svg")),
-    ("file-icons/freemarker.svg", include_bytes!("../../assets/file-icons/freemarker.svg")),
-    ("file-icons/fsharp.svg", include_bytes!("../../assets/file-icons/fsharp.svg")),
-    ("file-icons/fusebox.svg", include_bytes!("../../assets/file-icons/fusebox.svg")),
-    ("file-icons/gamemaker.svg", include_bytes!("../../assets/file-icons/gamemaker.svg")),
-    ("file-icons/garden.svg", include_bytes!("../../assets/file-icons/garden.svg")),
-    ("file-icons/gatsby.svg", include_bytes!("../../assets/file-icons/gatsby.svg")),
-    ("file-icons/gcp.svg", include_bytes!("../../assets/file-icons/gcp.svg")),
-    ("file-icons/gemfile.svg", include_bytes!("../../assets/file-icons/gemfile.svg")),
-    ("file-icons/gemini.svg", include_bytes!("../../assets/file-icons/gemini.svg")),
-    ("file-icons/gemini-ai.svg", include_bytes!("../../assets/file-icons/gemini-ai.svg")),
-    ("file-icons/git.svg", include_bytes!("../../assets/file-icons/git.svg")),
-    ("file-icons/github-sponsors.svg", include_bytes!("../../assets/file-icons/github-sponsors.svg")),
-    ("file-icons/gitlab.svg", include_bytes!("../../assets/file-icons/gitlab.svg")),
-    ("file-icons/gitpod.svg", include_bytes!("../../assets/file-icons/gitpod.svg")),
-    ("file-icons/gleam.svg", include_bytes!("../../assets/file-icons/gleam.svg")),
-    ("file-icons/gnuplot.svg", include_bytes!("../../assets/file-icons/gnuplot.svg")),
-    ("file-icons/go.svg", include_bytes!("../../assets/file-icons/go.svg")),
-    ("file-icons/go-mod.svg", include_bytes!("../../assets/file-icons/go-mod.svg")),
-    ("file-icons/godot.svg", include_bytes!("../../assets/file-icons/godot.svg")),
-    ("file-icons/godot-assets.svg", include_bytes!("../../assets/file-icons/godot-assets.svg")),
-    ("file-icons/grafana-alloy.svg", include_bytes!("../../assets/file-icons/grafana-alloy.svg")),
-    ("file-icons/grain.svg", include_bytes!("../../assets/file-icons/grain.svg")),
-    ("file-icons/graphcool.svg", include_bytes!("../../assets/file-icons/graphcool.svg")),
-    ("file-icons/graphql.svg", include_bytes!("../../assets/file-icons/graphql.svg")),
-    ("file-icons/gridsome.svg", include_bytes!("../../assets/file-icons/gridsome.svg")),
-    ("file-icons/groovy.svg", include_bytes!("../../assets/file-icons/groovy.svg")),
-    ("file-icons/grunt.svg", include_bytes!("../../assets/file-icons/grunt.svg")),
-    ("file-icons/gulp.svg", include_bytes!("../../assets/file-icons/gulp.svg")),
-    ("file-icons/hack.svg", include_bytes!("../../assets/file-icons/hack.svg")),
-    ("file-icons/haml.svg", include_bytes!("../../assets/file-icons/haml.svg")),
-    ("file-icons/handlebars.svg", include_bytes!("../../assets/file-icons/handlebars.svg")),
-    ("file-icons/hardhat.svg", include_bytes!("../../assets/file-icons/hardhat.svg")),
-    ("file-icons/harmonix.svg", include_bytes!("../../assets/file-icons/harmonix.svg")),
-    ("file-icons/haskell.svg", include_bytes!("../../assets/file-icons/haskell.svg")),
-    ("file-icons/haxe.svg", include_bytes!("../../assets/file-icons/haxe.svg")),
-    ("file-icons/hcl.svg", include_bytes!("../../assets/file-icons/hcl.svg")),
-    ("file-icons/helm.svg", include_bytes!("../../assets/file-icons/helm.svg")),
-    ("file-icons/heroku.svg", include_bytes!("../../assets/file-icons/heroku.svg")),
-    ("file-icons/hex.svg", include_bytes!("../../assets/file-icons/hex.svg")),
-    ("file-icons/hjson.svg", include_bytes!("../../assets/file-icons/hjson.svg")),
-    ("file-icons/horusec.svg", include_bytes!("../../assets/file-icons/horusec.svg")),
-    ("file-icons/hosts.svg", include_bytes!("../../assets/file-icons/hosts.svg")),
-    ("file-icons/hpp.svg", include_bytes!("../../assets/file-icons/hpp.svg")),
-    ("file-icons/html.svg", include_bytes!("../../assets/file-icons/html.svg")),
-    ("file-icons/http.svg", include_bytes!("../../assets/file-icons/http.svg")),
-    ("file-icons/huff.svg", include_bytes!("../../assets/file-icons/huff.svg")),
-    ("file-icons/hurl.svg", include_bytes!("../../assets/file-icons/hurl.svg")),
-    ("file-icons/i18n.svg", include_bytes!("../../assets/file-icons/i18n.svg")),
-    ("file-icons/idris.svg", include_bytes!("../../assets/file-icons/idris.svg")),
-    ("file-icons/ifanr-cloud.svg", include_bytes!("../../assets/file-icons/ifanr-cloud.svg")),
-    ("file-icons/image.svg", include_bytes!("../../assets/file-icons/image.svg")),
-    ("file-icons/imba.svg", include_bytes!("../../assets/file-icons/imba.svg")),
-    ("file-icons/installation.svg", include_bytes!("../../assets/file-icons/installation.svg")),
-    ("file-icons/ionic.svg", include_bytes!("../../assets/file-icons/ionic.svg")),
-    ("file-icons/istanbul.svg", include_bytes!("../../assets/file-icons/istanbul.svg")),
-    ("file-icons/jar.svg", include_bytes!("../../assets/file-icons/jar.svg")),
-    ("file-icons/java.svg", include_bytes!("../../assets/file-icons/java.svg")),
-    ("file-icons/javaclass.svg", include_bytes!("../../assets/file-icons/javaclass.svg")),
-    ("file-icons/javascript.svg", include_bytes!("../../assets/file-icons/javascript.svg")),
-    ("file-icons/javascript-map.svg", include_bytes!("../../assets/file-icons/javascript-map.svg")),
-    ("file-icons/jenkins.svg", include_bytes!("../../assets/file-icons/jenkins.svg")),
-    ("file-icons/jest.svg", include_bytes!("../../assets/file-icons/jest.svg")),
-    ("file-icons/jinja.svg", include_bytes!("../../assets/file-icons/jinja.svg")),
-    ("file-icons/jsconfig.svg", include_bytes!("../../assets/file-icons/jsconfig.svg")),
-    ("file-icons/json.svg", include_bytes!("../../assets/file-icons/json.svg")),
-    ("file-icons/jsr.svg", include_bytes!("../../assets/file-icons/jsr.svg")),
-    ("file-icons/julia.svg", include_bytes!("../../assets/file-icons/julia.svg")),
-    ("file-icons/jupyter.svg", include_bytes!("../../assets/file-icons/jupyter.svg")),
-    ("file-icons/just.svg", include_bytes!("../../assets/file-icons/just.svg")),
-    ("file-icons/karma.svg", include_bytes!("../../assets/file-icons/karma.svg")),
-    ("file-icons/kcl.svg", include_bytes!("../../assets/file-icons/kcl.svg")),
-    ("file-icons/key.svg", include_bytes!("../../assets/file-icons/key.svg")),
-    ("file-icons/keystatic.svg", include_bytes!("../../assets/file-icons/keystatic.svg")),
-    ("file-icons/kivy.svg", include_bytes!("../../assets/file-icons/kivy.svg")),
-    ("file-icons/kl.svg", include_bytes!("../../assets/file-icons/kl.svg")),
-    ("file-icons/knip.svg", include_bytes!("../../assets/file-icons/knip.svg")),
-    ("file-icons/kotlin.svg", include_bytes!("../../assets/file-icons/kotlin.svg")),
-    ("file-icons/kubernetes.svg", include_bytes!("../../assets/file-icons/kubernetes.svg")),
-    ("file-icons/kusto.svg", include_bytes!("../../assets/file-icons/kusto.svg")),
-    ("file-icons/label.svg", include_bytes!("../../assets/file-icons/label.svg")),
-    ("file-icons/laravel.svg", include_bytes!("../../assets/file-icons/laravel.svg")),
-    ("file-icons/lbx.svg", include_bytes!("../../assets/file-icons/lbx.svg")),
-    ("file-icons/lefthook.svg", include_bytes!("../../assets/file-icons/lefthook.svg")),
-    ("file-icons/lerna.svg", include_bytes!("../../assets/file-icons/lerna.svg")),
-    ("file-icons/less.svg", include_bytes!("../../assets/file-icons/less.svg")),
-    ("file-icons/liara.svg", include_bytes!("../../assets/file-icons/liara.svg")),
-    ("file-icons/lib.svg", include_bytes!("../../assets/file-icons/lib.svg")),
-    ("file-icons/lighthouse.svg", include_bytes!("../../assets/file-icons/lighthouse.svg")),
-    ("file-icons/lilypond.svg", include_bytes!("../../assets/file-icons/lilypond.svg")),
-    ("file-icons/lintstaged.svg", include_bytes!("../../assets/file-icons/lintstaged.svg")),
-    ("file-icons/liquid.svg", include_bytes!("../../assets/file-icons/liquid.svg")),
-    ("file-icons/lisp.svg", include_bytes!("../../assets/file-icons/lisp.svg")),
-    ("file-icons/livescript.svg", include_bytes!("../../assets/file-icons/livescript.svg")),
-    ("file-icons/lock.svg", include_bytes!("../../assets/file-icons/lock.svg")),
-    ("file-icons/log.svg", include_bytes!("../../assets/file-icons/log.svg")),
-    ("file-icons/lolcode.svg", include_bytes!("../../assets/file-icons/lolcode.svg")),
-    ("file-icons/lottie.svg", include_bytes!("../../assets/file-icons/lottie.svg")),
-    ("file-icons/lua.svg", include_bytes!("../../assets/file-icons/lua.svg")),
-    ("file-icons/luau.svg", include_bytes!("../../assets/file-icons/luau.svg")),
-    ("file-icons/lyric.svg", include_bytes!("../../assets/file-icons/lyric.svg")),
-    ("file-icons/makefile.svg", include_bytes!("../../assets/file-icons/makefile.svg")),
-    ("file-icons/markdoc.svg", include_bytes!("../../assets/file-icons/markdoc.svg")),
-    ("file-icons/markdown.svg", include_bytes!("../../assets/file-icons/markdown.svg")),
-    ("file-icons/markdownlint.svg", include_bytes!("../../assets/file-icons/markdownlint.svg")),
-    ("file-icons/markojs.svg", include_bytes!("../../assets/file-icons/markojs.svg")),
-    ("file-icons/mathematica.svg", include_bytes!("../../assets/file-icons/mathematica.svg")),
-    ("file-icons/matlab.svg", include_bytes!("../../assets/file-icons/matlab.svg")),
-    ("file-icons/maven.svg", include_bytes!("../../assets/file-icons/maven.svg")),
-    ("file-icons/mdsvex.svg", include_bytes!("../../assets/file-icons/mdsvex.svg")),
-    ("file-icons/mdx.svg", include_bytes!("../../assets/file-icons/mdx.svg")),
-    ("file-icons/mercurial.svg", include_bytes!("../../assets/file-icons/mercurial.svg")),
-    ("file-icons/merlin.svg", include_bytes!("../../assets/file-icons/merlin.svg")),
-    ("file-icons/mermaid.svg", include_bytes!("../../assets/file-icons/mermaid.svg")),
-    ("file-icons/meson.svg", include_bytes!("../../assets/file-icons/meson.svg")),
-    ("file-icons/metro.svg", include_bytes!("../../assets/file-icons/metro.svg")),
-    ("file-icons/minecraft.svg", include_bytes!("../../assets/file-icons/minecraft.svg")),
-    ("file-icons/minecraft-fabric.svg", include_bytes!("../../assets/file-icons/minecraft-fabric.svg")),
-    ("file-icons/mint.svg", include_bytes!("../../assets/file-icons/mint.svg")),
-    ("file-icons/mjml.svg", include_bytes!("../../assets/file-icons/mjml.svg")),
-    ("file-icons/mocha.svg", include_bytes!("../../assets/file-icons/mocha.svg")),
-    ("file-icons/modernizr.svg", include_bytes!("../../assets/file-icons/modernizr.svg")),
-    ("file-icons/mojo.svg", include_bytes!("../../assets/file-icons/mojo.svg")),
-    ("file-icons/moon.svg", include_bytes!("../../assets/file-icons/moon.svg")),
-    ("file-icons/moonscript.svg", include_bytes!("../../assets/file-icons/moonscript.svg")),
-    ("file-icons/mxml.svg", include_bytes!("../../assets/file-icons/mxml.svg")),
-    ("file-icons/ndst.svg", include_bytes!("../../assets/file-icons/ndst.svg")),
-    ("file-icons/nest.svg", include_bytes!("../../assets/file-icons/nest.svg")),
-    ("file-icons/netlify.svg", include_bytes!("../../assets/file-icons/netlify.svg")),
-    ("file-icons/next.svg", include_bytes!("../../assets/file-icons/next.svg")),
-    ("file-icons/nginx.svg", include_bytes!("../../assets/file-icons/nginx.svg")),
-    ("file-icons/ngrx-actions.svg", include_bytes!("../../assets/file-icons/ngrx-actions.svg")),
-    ("file-icons/ngrx-effects.svg", include_bytes!("../../assets/file-icons/ngrx-effects.svg")),
-    ("file-icons/ngrx-entity.svg", include_bytes!("../../assets/file-icons/ngrx-entity.svg")),
-    ("file-icons/ngrx-reducer.svg", include_bytes!("../../assets/file-icons/ngrx-reducer.svg")),
-    ("file-icons/ngrx-selectors.svg", include_bytes!("../../assets/file-icons/ngrx-selectors.svg")),
-    ("file-icons/ngrx-state.svg", include_bytes!("../../assets/file-icons/ngrx-state.svg")),
-    ("file-icons/nim.svg", include_bytes!("../../assets/file-icons/nim.svg")),
-    ("file-icons/nix.svg", include_bytes!("../../assets/file-icons/nix.svg")),
-    ("file-icons/nodejs.svg", include_bytes!("../../assets/file-icons/nodejs.svg")),
-    ("file-icons/nodemon.svg", include_bytes!("../../assets/file-icons/nodemon.svg")),
-    ("file-icons/npm.svg", include_bytes!("../../assets/file-icons/npm.svg")),
-    ("file-icons/nuget.svg", include_bytes!("../../assets/file-icons/nuget.svg")),
-    ("file-icons/nunjucks.svg", include_bytes!("../../assets/file-icons/nunjucks.svg")),
-    ("file-icons/nuxt.svg", include_bytes!("../../assets/file-icons/nuxt.svg")),
-    ("file-icons/nx.svg", include_bytes!("../../assets/file-icons/nx.svg")),
-    ("file-icons/objective-c.svg", include_bytes!("../../assets/file-icons/objective-c.svg")),
-    ("file-icons/objective-cpp.svg", include_bytes!("../../assets/file-icons/objective-cpp.svg")),
-    ("file-icons/ocaml.svg", include_bytes!("../../assets/file-icons/ocaml.svg")),
-    ("file-icons/odin.svg", include_bytes!("../../assets/file-icons/odin.svg")),
-    ("file-icons/onnx.svg", include_bytes!("../../assets/file-icons/onnx.svg")),
-    ("file-icons/opa.svg", include_bytes!("../../assets/file-icons/opa.svg")),
-    ("file-icons/opam.svg", include_bytes!("../../assets/file-icons/opam.svg")),
-    ("file-icons/opentofu.svg", include_bytes!("../../assets/file-icons/opentofu.svg")),
-    ("file-icons/otne.svg", include_bytes!("../../assets/file-icons/otne.svg")),
-    ("file-icons/oxlint.svg", include_bytes!("../../assets/file-icons/oxlint.svg")),
-    ("file-icons/packship.svg", include_bytes!("../../assets/file-icons/packship.svg")),
-    ("file-icons/palette.svg", include_bytes!("../../assets/file-icons/palette.svg")),
-    ("file-icons/parcel.svg", include_bytes!("../../assets/file-icons/parcel.svg")),
-    ("file-icons/pascal.svg", include_bytes!("../../assets/file-icons/pascal.svg")),
-    ("file-icons/pawn.svg", include_bytes!("../../assets/file-icons/pawn.svg")),
-    ("file-icons/payload.svg", include_bytes!("../../assets/file-icons/payload.svg")),
-    ("file-icons/pdf.svg", include_bytes!("../../assets/file-icons/pdf.svg")),
-    ("file-icons/pdm.svg", include_bytes!("../../assets/file-icons/pdm.svg")),
-    ("file-icons/percy.svg", include_bytes!("../../assets/file-icons/percy.svg")),
-    ("file-icons/perl.svg", include_bytes!("../../assets/file-icons/perl.svg")),
-    ("file-icons/php.svg", include_bytes!("../../assets/file-icons/php.svg")),
-    ("file-icons/php-cs-fixer.svg", include_bytes!("../../assets/file-icons/php-cs-fixer.svg")),
-    ("file-icons/phpstan.svg", include_bytes!("../../assets/file-icons/phpstan.svg")),
-    ("file-icons/phpunit.svg", include_bytes!("../../assets/file-icons/phpunit.svg")),
-    ("file-icons/pinejs.svg", include_bytes!("../../assets/file-icons/pinejs.svg")),
-    ("file-icons/pipeline.svg", include_bytes!("../../assets/file-icons/pipeline.svg")),
-    ("file-icons/pkl.svg", include_bytes!("../../assets/file-icons/pkl.svg")),
-    ("file-icons/plastic.svg", include_bytes!("../../assets/file-icons/plastic.svg")),
-    ("file-icons/playwright.svg", include_bytes!("../../assets/file-icons/playwright.svg")),
-    ("file-icons/plop.svg", include_bytes!("../../assets/file-icons/plop.svg")),
-    ("file-icons/poetry.svg", include_bytes!("../../assets/file-icons/poetry.svg")),
-    ("file-icons/postcss.svg", include_bytes!("../../assets/file-icons/postcss.svg")),
-    ("file-icons/powerpoint.svg", include_bytes!("../../assets/file-icons/powerpoint.svg")),
-    ("file-icons/powershell.svg", include_bytes!("../../assets/file-icons/powershell.svg")),
-    ("file-icons/pre-commit.svg", include_bytes!("../../assets/file-icons/pre-commit.svg")),
-    ("file-icons/prettier.svg", include_bytes!("../../assets/file-icons/prettier.svg")),
-    ("file-icons/prisma.svg", include_bytes!("../../assets/file-icons/prisma.svg")),
-    ("file-icons/processing.svg", include_bytes!("../../assets/file-icons/processing.svg")),
-    ("file-icons/prolog.svg", include_bytes!("../../assets/file-icons/prolog.svg")),
-    ("file-icons/prompt.svg", include_bytes!("../../assets/file-icons/prompt.svg")),
-    ("file-icons/proto.svg", include_bytes!("../../assets/file-icons/proto.svg")),
-    ("file-icons/protractor.svg", include_bytes!("../../assets/file-icons/protractor.svg")),
-    ("file-icons/pug.svg", include_bytes!("../../assets/file-icons/pug.svg")),
-    ("file-icons/puppet.svg", include_bytes!("../../assets/file-icons/puppet.svg")),
-    ("file-icons/purescript.svg", include_bytes!("../../assets/file-icons/purescript.svg")),
-    ("file-icons/python.svg", include_bytes!("../../assets/file-icons/python.svg")),
-    ("file-icons/python-misc.svg", include_bytes!("../../assets/file-icons/python-misc.svg")),
-    ("file-icons/pytorch.svg", include_bytes!("../../assets/file-icons/pytorch.svg")),
-    ("file-icons/qsharp.svg", include_bytes!("../../assets/file-icons/qsharp.svg")),
-    ("file-icons/quarto.svg", include_bytes!("../../assets/file-icons/quarto.svg")),
-    ("file-icons/quasar.svg", include_bytes!("../../assets/file-icons/quasar.svg")),
-    ("file-icons/quokka.svg", include_bytes!("../../assets/file-icons/quokka.svg")),
-    ("file-icons/r.svg", include_bytes!("../../assets/file-icons/r.svg")),
-    ("file-icons/racket.svg", include_bytes!("../../assets/file-icons/racket.svg")),
-    ("file-icons/raml.svg", include_bytes!("../../assets/file-icons/raml.svg")),
-    ("file-icons/razor.svg", include_bytes!("../../assets/file-icons/razor.svg")),
-    ("file-icons/rbxmk.svg", include_bytes!("../../assets/file-icons/rbxmk.svg")),
-    ("file-icons/rc.svg", include_bytes!("../../assets/file-icons/rc.svg")),
-    ("file-icons/react.svg", include_bytes!("../../assets/file-icons/react.svg")),
-    ("file-icons/react_ts.svg", include_bytes!("../../assets/file-icons/react_ts.svg")),
-    ("file-icons/readme.svg", include_bytes!("../../assets/file-icons/readme.svg")),
-    ("file-icons/reason.svg", include_bytes!("../../assets/file-icons/reason.svg")),
-    ("file-icons/red.svg", include_bytes!("../../assets/file-icons/red.svg")),
-    ("file-icons/redux-action.svg", include_bytes!("../../assets/file-icons/redux-action.svg")),
-    ("file-icons/redux-reducer.svg", include_bytes!("../../assets/file-icons/redux-reducer.svg")),
-    ("file-icons/redux-selector.svg", include_bytes!("../../assets/file-icons/redux-selector.svg")),
-    ("file-icons/regedit.svg", include_bytes!("../../assets/file-icons/regedit.svg")),
-    ("file-icons/remark.svg", include_bytes!("../../assets/file-icons/remark.svg")),
-    ("file-icons/remix.svg", include_bytes!("../../assets/file-icons/remix.svg")),
-    ("file-icons/renovate.svg", include_bytes!("../../assets/file-icons/renovate.svg")),
-    ("file-icons/replit.svg", include_bytes!("../../assets/file-icons/replit.svg")),
-    ("file-icons/rescript.svg", include_bytes!("../../assets/file-icons/rescript.svg")),
-    ("file-icons/rescript-interface.svg", include_bytes!("../../assets/file-icons/rescript-interface.svg")),
-    ("file-icons/restql.svg", include_bytes!("../../assets/file-icons/restql.svg")),
-    ("file-icons/riot.svg", include_bytes!("../../assets/file-icons/riot.svg")),
-    ("file-icons/roadmap.svg", include_bytes!("../../assets/file-icons/roadmap.svg")),
-    ("file-icons/roblox.svg", include_bytes!("../../assets/file-icons/roblox.svg")),
-    ("file-icons/robot.svg", include_bytes!("../../assets/file-icons/robot.svg")),
-    ("file-icons/robots.svg", include_bytes!("../../assets/file-icons/robots.svg")),
-    ("file-icons/rocket.svg", include_bytes!("../../assets/file-icons/rocket.svg")),
-    ("file-icons/rojo.svg", include_bytes!("../../assets/file-icons/rojo.svg")),
-    ("file-icons/rollup.svg", include_bytes!("../../assets/file-icons/rollup.svg")),
-    ("file-icons/rome.svg", include_bytes!("../../assets/file-icons/rome.svg")),
-    ("file-icons/routing.svg", include_bytes!("../../assets/file-icons/routing.svg")),
-    ("file-icons/rspec.svg", include_bytes!("../../assets/file-icons/rspec.svg")),
-    ("file-icons/rubocop.svg", include_bytes!("../../assets/file-icons/rubocop.svg")),
-    ("file-icons/ruby.svg", include_bytes!("../../assets/file-icons/ruby.svg")),
-    ("file-icons/ruff.svg", include_bytes!("../../assets/file-icons/ruff.svg")),
-    ("file-icons/rust.svg", include_bytes!("../../assets/file-icons/rust.svg")),
-    ("file-icons/salesforce.svg", include_bytes!("../../assets/file-icons/salesforce.svg")),
-    ("file-icons/san.svg", include_bytes!("../../assets/file-icons/san.svg")),
-    ("file-icons/sas.svg", include_bytes!("../../assets/file-icons/sas.svg")),
-    ("file-icons/sass.svg", include_bytes!("../../assets/file-icons/sass.svg")),
-    ("file-icons/sbt.svg", include_bytes!("../../assets/file-icons/sbt.svg")),
-    ("file-icons/scala.svg", include_bytes!("../../assets/file-icons/scala.svg")),
-    ("file-icons/scheme.svg", include_bytes!("../../assets/file-icons/scheme.svg")),
-    ("file-icons/screwdriver.svg", include_bytes!("../../assets/file-icons/screwdriver.svg")),
-    ("file-icons/search.svg", include_bytes!("../../assets/file-icons/search.svg")),
-    ("file-icons/semgrep.svg", include_bytes!("../../assets/file-icons/semgrep.svg")),
-    ("file-icons/sentry.svg", include_bytes!("../../assets/file-icons/sentry.svg")),
-    ("file-icons/sequelize.svg", include_bytes!("../../assets/file-icons/sequelize.svg")),
-    ("file-icons/serverless.svg", include_bytes!("../../assets/file-icons/serverless.svg")),
-    ("file-icons/settings.svg", include_bytes!("../../assets/file-icons/settings.svg")),
-    ("file-icons/shader.svg", include_bytes!("../../assets/file-icons/shader.svg")),
-    ("file-icons/simulink.svg", include_bytes!("../../assets/file-icons/simulink.svg")),
-    ("file-icons/siyuan.svg", include_bytes!("../../assets/file-icons/siyuan.svg")),
-    ("file-icons/sketch.svg", include_bytes!("../../assets/file-icons/sketch.svg")),
-    ("file-icons/slim.svg", include_bytes!("../../assets/file-icons/slim.svg")),
-    ("file-icons/slint.svg", include_bytes!("../../assets/file-icons/slint.svg")),
-    ("file-icons/slug.svg", include_bytes!("../../assets/file-icons/slug.svg")),
-    ("file-icons/sml.svg", include_bytes!("../../assets/file-icons/sml.svg")),
-    ("file-icons/snakemake.svg", include_bytes!("../../assets/file-icons/snakemake.svg")),
-    ("file-icons/snapcraft.svg", include_bytes!("../../assets/file-icons/snapcraft.svg")),
-    ("file-icons/snowpack.svg", include_bytes!("../../assets/file-icons/snowpack.svg")),
-    ("file-icons/snyk.svg", include_bytes!("../../assets/file-icons/snyk.svg")),
-    ("file-icons/solidity.svg", include_bytes!("../../assets/file-icons/solidity.svg")),
-    ("file-icons/sonarcloud.svg", include_bytes!("../../assets/file-icons/sonarcloud.svg")),
-    ("file-icons/spwn.svg", include_bytes!("../../assets/file-icons/spwn.svg")),
-    ("file-icons/stackblitz.svg", include_bytes!("../../assets/file-icons/stackblitz.svg")),
-    ("file-icons/stan.svg", include_bytes!("../../assets/file-icons/stan.svg")),
-    ("file-icons/steadybit.svg", include_bytes!("../../assets/file-icons/steadybit.svg")),
-    ("file-icons/stencil.svg", include_bytes!("../../assets/file-icons/stencil.svg")),
-    ("file-icons/stitches.svg", include_bytes!("../../assets/file-icons/stitches.svg")),
-    ("file-icons/storybook.svg", include_bytes!("../../assets/file-icons/storybook.svg")),
-    ("file-icons/stryker.svg", include_bytes!("../../assets/file-icons/stryker.svg")),
-    ("file-icons/stylable.svg", include_bytes!("../../assets/file-icons/stylable.svg")),
-    ("file-icons/stylus.svg", include_bytes!("../../assets/file-icons/stylus.svg")),
-    ("file-icons/sublime.svg", include_bytes!("../../assets/file-icons/sublime.svg")),
-    ("file-icons/subtitles.svg", include_bytes!("../../assets/file-icons/subtitles.svg")),
-    ("file-icons/supabase.svg", include_bytes!("../../assets/file-icons/supabase.svg")),
-    ("file-icons/svelte.svg", include_bytes!("../../assets/file-icons/svelte.svg")),
-    ("file-icons/svg.svg", include_bytes!("../../assets/file-icons/svg.svg")),
-    ("file-icons/svgo.svg", include_bytes!("../../assets/file-icons/svgo.svg")),
-    ("file-icons/swagger.svg", include_bytes!("../../assets/file-icons/swagger.svg")),
-    ("file-icons/sway.svg", include_bytes!("../../assets/file-icons/sway.svg")),
-    ("file-icons/swc.svg", include_bytes!("../../assets/file-icons/swc.svg")),
-    ("file-icons/swift.svg", include_bytes!("../../assets/file-icons/swift.svg")),
-    ("file-icons/table.svg", include_bytes!("../../assets/file-icons/table.svg")),
-    ("file-icons/tailwindcss.svg", include_bytes!("../../assets/file-icons/tailwindcss.svg")),
-    ("file-icons/taskfile.svg", include_bytes!("../../assets/file-icons/taskfile.svg")),
-    ("file-icons/tauri.svg", include_bytes!("../../assets/file-icons/tauri.svg")),
-    ("file-icons/tcl.svg", include_bytes!("../../assets/file-icons/tcl.svg")),
-    ("file-icons/teal.svg", include_bytes!("../../assets/file-icons/teal.svg")),
-    ("file-icons/templ.svg", include_bytes!("../../assets/file-icons/templ.svg")),
-    ("file-icons/template.svg", include_bytes!("../../assets/file-icons/template.svg")),
-    ("file-icons/terraform.svg", include_bytes!("../../assets/file-icons/terraform.svg")),
-    ("file-icons/test-js.svg", include_bytes!("../../assets/file-icons/test-js.svg")),
-    ("file-icons/test-jsx.svg", include_bytes!("../../assets/file-icons/test-jsx.svg")),
-    ("file-icons/test-ts.svg", include_bytes!("../../assets/file-icons/test-ts.svg")),
-    ("file-icons/tex.svg", include_bytes!("../../assets/file-icons/tex.svg")),
-    ("file-icons/textlint.svg", include_bytes!("../../assets/file-icons/textlint.svg")),
-    ("file-icons/tilt.svg", include_bytes!("../../assets/file-icons/tilt.svg")),
-    ("file-icons/tldraw.svg", include_bytes!("../../assets/file-icons/tldraw.svg")),
-    ("file-icons/tobi.svg", include_bytes!("../../assets/file-icons/tobi.svg")),
-    ("file-icons/tobimake.svg", include_bytes!("../../assets/file-icons/tobimake.svg")),
-    ("file-icons/todo.svg", include_bytes!("../../assets/file-icons/todo.svg")),
-    ("file-icons/toml.svg", include_bytes!("../../assets/file-icons/toml.svg")),
-    ("file-icons/travis.svg", include_bytes!("../../assets/file-icons/travis.svg")),
-    ("file-icons/tree.svg", include_bytes!("../../assets/file-icons/tree.svg")),
-    ("file-icons/tsconfig.svg", include_bytes!("../../assets/file-icons/tsconfig.svg")),
-    ("file-icons/tsdoc.svg", include_bytes!("../../assets/file-icons/tsdoc.svg")),
-    ("file-icons/tsil.svg", include_bytes!("../../assets/file-icons/tsil.svg")),
-    ("file-icons/tune.svg", include_bytes!("../../assets/file-icons/tune.svg")),
-    ("file-icons/twig.svg", include_bytes!("../../assets/file-icons/twig.svg")),
-    ("file-icons/twine.svg", include_bytes!("../../assets/file-icons/twine.svg")),
-    ("file-icons/typescript.svg", include_bytes!("../../assets/file-icons/typescript.svg")),
-    ("file-icons/typescript-def.svg", include_bytes!("../../assets/file-icons/typescript-def.svg")),
-    ("file-icons/typst.svg", include_bytes!("../../assets/file-icons/typst.svg")),
-    ("file-icons/uml.svg", include_bytes!("../../assets/file-icons/uml.svg")),
-    ("file-icons/unity.svg", include_bytes!("../../assets/file-icons/unity.svg")),
-    ("file-icons/unocss.svg", include_bytes!("../../assets/file-icons/unocss.svg")),
-    ("file-icons/url.svg", include_bytes!("../../assets/file-icons/url.svg")),
-    ("file-icons/uv.svg", include_bytes!("../../assets/file-icons/uv.svg")),
-    ("file-icons/vagrant.svg", include_bytes!("../../assets/file-icons/vagrant.svg")),
-    ("file-icons/vala.svg", include_bytes!("../../assets/file-icons/vala.svg")),
-    ("file-icons/vanilla-extract.svg", include_bytes!("../../assets/file-icons/vanilla-extract.svg")),
-    ("file-icons/varnish.svg", include_bytes!("../../assets/file-icons/varnish.svg")),
-    ("file-icons/vedic.svg", include_bytes!("../../assets/file-icons/vedic.svg")),
-    ("file-icons/velocity.svg", include_bytes!("../../assets/file-icons/velocity.svg")),
-    ("file-icons/vercel.svg", include_bytes!("../../assets/file-icons/vercel.svg")),
-    ("file-icons/verdaccio.svg", include_bytes!("../../assets/file-icons/verdaccio.svg")),
-    ("file-icons/verified.svg", include_bytes!("../../assets/file-icons/verified.svg")),
-    ("file-icons/verilog.svg", include_bytes!("../../assets/file-icons/verilog.svg")),
-    ("file-icons/vfl.svg", include_bytes!("../../assets/file-icons/vfl.svg")),
-    ("file-icons/video.svg", include_bytes!("../../assets/file-icons/video.svg")),
-    ("file-icons/vim.svg", include_bytes!("../../assets/file-icons/vim.svg")),
-    ("file-icons/virtual.svg", include_bytes!("../../assets/file-icons/virtual.svg")),
-    ("file-icons/visualstudio.svg", include_bytes!("../../assets/file-icons/visualstudio.svg")),
-    ("file-icons/vlang.svg", include_bytes!("../../assets/file-icons/vlang.svg")),
-    ("file-icons/vscode.svg", include_bytes!("../../assets/file-icons/vscode.svg")),
-    ("file-icons/vue.svg", include_bytes!("../../assets/file-icons/vue.svg")),
-    ("file-icons/vue-config.svg", include_bytes!("../../assets/file-icons/vue-config.svg")),
-    ("file-icons/vuex-store.svg", include_bytes!("../../assets/file-icons/vuex-store.svg")),
-    ("file-icons/wakatime.svg", include_bytes!("../../assets/file-icons/wakatime.svg")),
-    ("file-icons/wallaby.svg", include_bytes!("../../assets/file-icons/wallaby.svg")),
-    ("file-icons/wally.svg", include_bytes!("../../assets/file-icons/wally.svg")),
-    ("file-icons/watchman.svg", include_bytes!("../../assets/file-icons/watchman.svg")),
-    ("file-icons/webassembly.svg", include_bytes!("../../assets/file-icons/webassembly.svg")),
-    ("file-icons/webhint.svg", include_bytes!("../../assets/file-icons/webhint.svg")),
-    ("file-icons/webpack.svg", include_bytes!("../../assets/file-icons/webpack.svg")),
-    ("file-icons/wepy.svg", include_bytes!("../../assets/file-icons/wepy.svg")),
-    ("file-icons/werf.svg", include_bytes!("../../assets/file-icons/werf.svg")),
-    ("file-icons/windicss.svg", include_bytes!("../../assets/file-icons/windicss.svg")),
-    ("file-icons/wolframlanguage.svg", include_bytes!("../../assets/file-icons/wolframlanguage.svg")),
-    ("file-icons/word.svg", include_bytes!("../../assets/file-icons/word.svg")),
-    ("file-icons/wrangler.svg", include_bytes!("../../assets/file-icons/wrangler.svg")),
-    ("file-icons/xaml.svg", include_bytes!("../../assets/file-icons/xaml.svg")),
-    ("file-icons/xmake.svg", include_bytes!("../../assets/file-icons/xmake.svg")),
-    ("file-icons/xml.svg", include_bytes!("../../assets/file-icons/xml.svg")),
-    ("file-icons/yaml.svg", include_bytes!("../../assets/file-icons/yaml.svg")),
-    ("file-icons/yang.svg", include_bytes!("../../assets/file-icons/yang.svg")),
-    ("file-icons/yarn.svg", include_bytes!("../../assets/file-icons/yarn.svg")),
-    ("file-icons/zeabur.svg", include_bytes!("../../assets/file-icons/zeabur.svg")),
-    ("file-icons/zig.svg", include_bytes!("../../assets/file-icons/zig.svg")),
-    ("file-icons/zip.svg", include_bytes!("../../assets/file-icons/zip.svg")),
+    (
+        "file-icons/3d.svg",
+        include_bytes!("../../assets/file-icons/3d.svg"),
+    ),
+    (
+        "file-icons/abap.svg",
+        include_bytes!("../../assets/file-icons/abap.svg"),
+    ),
+    (
+        "file-icons/abc.svg",
+        include_bytes!("../../assets/file-icons/abc.svg"),
+    ),
+    (
+        "file-icons/actionscript.svg",
+        include_bytes!("../../assets/file-icons/actionscript.svg"),
+    ),
+    (
+        "file-icons/ada.svg",
+        include_bytes!("../../assets/file-icons/ada.svg"),
+    ),
+    (
+        "file-icons/adobe-illustrator.svg",
+        include_bytes!("../../assets/file-icons/adobe-illustrator.svg"),
+    ),
+    (
+        "file-icons/adobe-photoshop.svg",
+        include_bytes!("../../assets/file-icons/adobe-photoshop.svg"),
+    ),
+    (
+        "file-icons/adobe-swc.svg",
+        include_bytes!("../../assets/file-icons/adobe-swc.svg"),
+    ),
+    (
+        "file-icons/adonis.svg",
+        include_bytes!("../../assets/file-icons/adonis.svg"),
+    ),
+    (
+        "file-icons/advpl.svg",
+        include_bytes!("../../assets/file-icons/advpl.svg"),
+    ),
+    (
+        "file-icons/amplify.svg",
+        include_bytes!("../../assets/file-icons/amplify.svg"),
+    ),
+    (
+        "file-icons/android.svg",
+        include_bytes!("../../assets/file-icons/android.svg"),
+    ),
+    (
+        "file-icons/angular.svg",
+        include_bytes!("../../assets/file-icons/angular.svg"),
+    ),
+    (
+        "file-icons/antlr.svg",
+        include_bytes!("../../assets/file-icons/antlr.svg"),
+    ),
+    (
+        "file-icons/apiblueprint.svg",
+        include_bytes!("../../assets/file-icons/apiblueprint.svg"),
+    ),
+    (
+        "file-icons/apollo.svg",
+        include_bytes!("../../assets/file-icons/apollo.svg"),
+    ),
+    (
+        "file-icons/applescript.svg",
+        include_bytes!("../../assets/file-icons/applescript.svg"),
+    ),
+    (
+        "file-icons/apps-script.svg",
+        include_bytes!("../../assets/file-icons/apps-script.svg"),
+    ),
+    (
+        "file-icons/appveyor.svg",
+        include_bytes!("../../assets/file-icons/appveyor.svg"),
+    ),
+    (
+        "file-icons/architecture.svg",
+        include_bytes!("../../assets/file-icons/architecture.svg"),
+    ),
+    (
+        "file-icons/arduino.svg",
+        include_bytes!("../../assets/file-icons/arduino.svg"),
+    ),
+    (
+        "file-icons/asciidoc.svg",
+        include_bytes!("../../assets/file-icons/asciidoc.svg"),
+    ),
+    (
+        "file-icons/assembly.svg",
+        include_bytes!("../../assets/file-icons/assembly.svg"),
+    ),
+    (
+        "file-icons/astro.svg",
+        include_bytes!("../../assets/file-icons/astro.svg"),
+    ),
+    (
+        "file-icons/astro-config.svg",
+        include_bytes!("../../assets/file-icons/astro-config.svg"),
+    ),
+    (
+        "file-icons/astyle.svg",
+        include_bytes!("../../assets/file-icons/astyle.svg"),
+    ),
+    (
+        "file-icons/audio.svg",
+        include_bytes!("../../assets/file-icons/audio.svg"),
+    ),
+    (
+        "file-icons/aurelia.svg",
+        include_bytes!("../../assets/file-icons/aurelia.svg"),
+    ),
+    (
+        "file-icons/authors.svg",
+        include_bytes!("../../assets/file-icons/authors.svg"),
+    ),
+    (
+        "file-icons/auto.svg",
+        include_bytes!("../../assets/file-icons/auto.svg"),
+    ),
+    (
+        "file-icons/autoit.svg",
+        include_bytes!("../../assets/file-icons/autoit.svg"),
+    ),
+    (
+        "file-icons/azure.svg",
+        include_bytes!("../../assets/file-icons/azure.svg"),
+    ),
+    (
+        "file-icons/azure-pipelines.svg",
+        include_bytes!("../../assets/file-icons/azure-pipelines.svg"),
+    ),
+    (
+        "file-icons/babel.svg",
+        include_bytes!("../../assets/file-icons/babel.svg"),
+    ),
+    (
+        "file-icons/ballerina.svg",
+        include_bytes!("../../assets/file-icons/ballerina.svg"),
+    ),
+    (
+        "file-icons/bashly-hook.svg",
+        include_bytes!("../../assets/file-icons/bashly-hook.svg"),
+    ),
+    (
+        "file-icons/bazel.svg",
+        include_bytes!("../../assets/file-icons/bazel.svg"),
+    ),
+    (
+        "file-icons/beancount.svg",
+        include_bytes!("../../assets/file-icons/beancount.svg"),
+    ),
+    (
+        "file-icons/bench-js.svg",
+        include_bytes!("../../assets/file-icons/bench-js.svg"),
+    ),
+    (
+        "file-icons/bench-jsx.svg",
+        include_bytes!("../../assets/file-icons/bench-jsx.svg"),
+    ),
+    (
+        "file-icons/bench-ts.svg",
+        include_bytes!("../../assets/file-icons/bench-ts.svg"),
+    ),
+    (
+        "file-icons/bibliography.svg",
+        include_bytes!("../../assets/file-icons/bibliography.svg"),
+    ),
+    (
+        "file-icons/bibtex-style.svg",
+        include_bytes!("../../assets/file-icons/bibtex-style.svg"),
+    ),
+    (
+        "file-icons/bicep.svg",
+        include_bytes!("../../assets/file-icons/bicep.svg"),
+    ),
+    (
+        "file-icons/biome.svg",
+        include_bytes!("../../assets/file-icons/biome.svg"),
+    ),
+    (
+        "file-icons/bitbucket.svg",
+        include_bytes!("../../assets/file-icons/bitbucket.svg"),
+    ),
+    (
+        "file-icons/bithound.svg",
+        include_bytes!("../../assets/file-icons/bithound.svg"),
+    ),
+    (
+        "file-icons/blender.svg",
+        include_bytes!("../../assets/file-icons/blender.svg"),
+    ),
+    (
+        "file-icons/blink.svg",
+        include_bytes!("../../assets/file-icons/blink.svg"),
+    ),
+    (
+        "file-icons/blitz.svg",
+        include_bytes!("../../assets/file-icons/blitz.svg"),
+    ),
+    (
+        "file-icons/bower.svg",
+        include_bytes!("../../assets/file-icons/bower.svg"),
+    ),
+    (
+        "file-icons/brainfuck.svg",
+        include_bytes!("../../assets/file-icons/brainfuck.svg"),
+    ),
+    (
+        "file-icons/browserlist.svg",
+        include_bytes!("../../assets/file-icons/browserlist.svg"),
+    ),
+    (
+        "file-icons/bruno.svg",
+        include_bytes!("../../assets/file-icons/bruno.svg"),
+    ),
+    (
+        "file-icons/buck.svg",
+        include_bytes!("../../assets/file-icons/buck.svg"),
+    ),
+    (
+        "file-icons/bucklescript.svg",
+        include_bytes!("../../assets/file-icons/bucklescript.svg"),
+    ),
+    (
+        "file-icons/buildkite.svg",
+        include_bytes!("../../assets/file-icons/buildkite.svg"),
+    ),
+    (
+        "file-icons/bun.svg",
+        include_bytes!("../../assets/file-icons/bun.svg"),
+    ),
+    (
+        "file-icons/c.svg",
+        include_bytes!("../../assets/file-icons/c.svg"),
+    ),
+    (
+        "file-icons/c3.svg",
+        include_bytes!("../../assets/file-icons/c3.svg"),
+    ),
+    (
+        "file-icons/cabal.svg",
+        include_bytes!("../../assets/file-icons/cabal.svg"),
+    ),
+    (
+        "file-icons/caddy.svg",
+        include_bytes!("../../assets/file-icons/caddy.svg"),
+    ),
+    (
+        "file-icons/cadence.svg",
+        include_bytes!("../../assets/file-icons/cadence.svg"),
+    ),
+    (
+        "file-icons/cairo.svg",
+        include_bytes!("../../assets/file-icons/cairo.svg"),
+    ),
+    (
+        "file-icons/cake.svg",
+        include_bytes!("../../assets/file-icons/cake.svg"),
+    ),
+    (
+        "file-icons/capacitor.svg",
+        include_bytes!("../../assets/file-icons/capacitor.svg"),
+    ),
+    (
+        "file-icons/capnp.svg",
+        include_bytes!("../../assets/file-icons/capnp.svg"),
+    ),
+    (
+        "file-icons/cds.svg",
+        include_bytes!("../../assets/file-icons/cds.svg"),
+    ),
+    (
+        "file-icons/certificate.svg",
+        include_bytes!("../../assets/file-icons/certificate.svg"),
+    ),
+    (
+        "file-icons/changelog.svg",
+        include_bytes!("../../assets/file-icons/changelog.svg"),
+    ),
+    (
+        "file-icons/chess.svg",
+        include_bytes!("../../assets/file-icons/chess.svg"),
+    ),
+    (
+        "file-icons/chrome.svg",
+        include_bytes!("../../assets/file-icons/chrome.svg"),
+    ),
+    (
+        "file-icons/circleci.svg",
+        include_bytes!("../../assets/file-icons/circleci.svg"),
+    ),
+    (
+        "file-icons/citation.svg",
+        include_bytes!("../../assets/file-icons/citation.svg"),
+    ),
+    (
+        "file-icons/clangd.svg",
+        include_bytes!("../../assets/file-icons/clangd.svg"),
+    ),
+    (
+        "file-icons/claude.svg",
+        include_bytes!("../../assets/file-icons/claude.svg"),
+    ),
+    (
+        "file-icons/cline.svg",
+        include_bytes!("../../assets/file-icons/cline.svg"),
+    ),
+    (
+        "file-icons/clojure.svg",
+        include_bytes!("../../assets/file-icons/clojure.svg"),
+    ),
+    (
+        "file-icons/cloudfoundry.svg",
+        include_bytes!("../../assets/file-icons/cloudfoundry.svg"),
+    ),
+    (
+        "file-icons/cmake.svg",
+        include_bytes!("../../assets/file-icons/cmake.svg"),
+    ),
+    (
+        "file-icons/coala.svg",
+        include_bytes!("../../assets/file-icons/coala.svg"),
+    ),
+    (
+        "file-icons/cobol.svg",
+        include_bytes!("../../assets/file-icons/cobol.svg"),
+    ),
+    (
+        "file-icons/coconut.svg",
+        include_bytes!("../../assets/file-icons/coconut.svg"),
+    ),
+    (
+        "file-icons/code-climate.svg",
+        include_bytes!("../../assets/file-icons/code-climate.svg"),
+    ),
+    (
+        "file-icons/codecov.svg",
+        include_bytes!("../../assets/file-icons/codecov.svg"),
+    ),
+    (
+        "file-icons/codeowners.svg",
+        include_bytes!("../../assets/file-icons/codeowners.svg"),
+    ),
+    (
+        "file-icons/coderabbit-ai.svg",
+        include_bytes!("../../assets/file-icons/coderabbit-ai.svg"),
+    ),
+    (
+        "file-icons/coffee.svg",
+        include_bytes!("../../assets/file-icons/coffee.svg"),
+    ),
+    (
+        "file-icons/coldfusion.svg",
+        include_bytes!("../../assets/file-icons/coldfusion.svg"),
+    ),
+    (
+        "file-icons/coloredpetrinets.svg",
+        include_bytes!("../../assets/file-icons/coloredpetrinets.svg"),
+    ),
+    (
+        "file-icons/command.svg",
+        include_bytes!("../../assets/file-icons/command.svg"),
+    ),
+    (
+        "file-icons/commitizen.svg",
+        include_bytes!("../../assets/file-icons/commitizen.svg"),
+    ),
+    (
+        "file-icons/commitlint.svg",
+        include_bytes!("../../assets/file-icons/commitlint.svg"),
+    ),
+    (
+        "file-icons/concourse.svg",
+        include_bytes!("../../assets/file-icons/concourse.svg"),
+    ),
+    (
+        "file-icons/conduct.svg",
+        include_bytes!("../../assets/file-icons/conduct.svg"),
+    ),
+    (
+        "file-icons/console.svg",
+        include_bytes!("../../assets/file-icons/console.svg"),
+    ),
+    (
+        "file-icons/context.svg",
+        include_bytes!("../../assets/file-icons/context.svg"),
+    ),
+    (
+        "file-icons/contributing.svg",
+        include_bytes!("../../assets/file-icons/contributing.svg"),
+    ),
+    (
+        "file-icons/controller.svg",
+        include_bytes!("../../assets/file-icons/controller.svg"),
+    ),
+    (
+        "file-icons/copilot.svg",
+        include_bytes!("../../assets/file-icons/copilot.svg"),
+    ),
+    (
+        "file-icons/cpp.svg",
+        include_bytes!("../../assets/file-icons/cpp.svg"),
+    ),
+    (
+        "file-icons/credits.svg",
+        include_bytes!("../../assets/file-icons/credits.svg"),
+    ),
+    (
+        "file-icons/crystal.svg",
+        include_bytes!("../../assets/file-icons/crystal.svg"),
+    ),
+    (
+        "file-icons/csharp.svg",
+        include_bytes!("../../assets/file-icons/csharp.svg"),
+    ),
+    (
+        "file-icons/css.svg",
+        include_bytes!("../../assets/file-icons/css.svg"),
+    ),
+    (
+        "file-icons/css-map.svg",
+        include_bytes!("../../assets/file-icons/css-map.svg"),
+    ),
+    (
+        "file-icons/cucumber.svg",
+        include_bytes!("../../assets/file-icons/cucumber.svg"),
+    ),
+    (
+        "file-icons/cuda.svg",
+        include_bytes!("../../assets/file-icons/cuda.svg"),
+    ),
+    (
+        "file-icons/cursor.svg",
+        include_bytes!("../../assets/file-icons/cursor.svg"),
+    ),
+    (
+        "file-icons/cypress.svg",
+        include_bytes!("../../assets/file-icons/cypress.svg"),
+    ),
+    (
+        "file-icons/d.svg",
+        include_bytes!("../../assets/file-icons/d.svg"),
+    ),
+    (
+        "file-icons/dart.svg",
+        include_bytes!("../../assets/file-icons/dart.svg"),
+    ),
+    (
+        "file-icons/dart_generated.svg",
+        include_bytes!("../../assets/file-icons/dart_generated.svg"),
+    ),
+    (
+        "file-icons/database.svg",
+        include_bytes!("../../assets/file-icons/database.svg"),
+    ),
+    (
+        "file-icons/deepsource.svg",
+        include_bytes!("../../assets/file-icons/deepsource.svg"),
+    ),
+    (
+        "file-icons/denizenscript.svg",
+        include_bytes!("../../assets/file-icons/denizenscript.svg"),
+    ),
+    (
+        "file-icons/deno.svg",
+        include_bytes!("../../assets/file-icons/deno.svg"),
+    ),
+    (
+        "file-icons/dependabot.svg",
+        include_bytes!("../../assets/file-icons/dependabot.svg"),
+    ),
+    (
+        "file-icons/dependencies-update.svg",
+        include_bytes!("../../assets/file-icons/dependencies-update.svg"),
+    ),
+    (
+        "file-icons/dhall.svg",
+        include_bytes!("../../assets/file-icons/dhall.svg"),
+    ),
+    (
+        "file-icons/diff.svg",
+        include_bytes!("../../assets/file-icons/diff.svg"),
+    ),
+    (
+        "file-icons/dinophp.svg",
+        include_bytes!("../../assets/file-icons/dinophp.svg"),
+    ),
+    (
+        "file-icons/disc.svg",
+        include_bytes!("../../assets/file-icons/disc.svg"),
+    ),
+    (
+        "file-icons/django.svg",
+        include_bytes!("../../assets/file-icons/django.svg"),
+    ),
+    (
+        "file-icons/dll.svg",
+        include_bytes!("../../assets/file-icons/dll.svg"),
+    ),
+    (
+        "file-icons/docker.svg",
+        include_bytes!("../../assets/file-icons/docker.svg"),
+    ),
+    (
+        "file-icons/doctex-installer.svg",
+        include_bytes!("../../assets/file-icons/doctex-installer.svg"),
+    ),
+    (
+        "file-icons/document.svg",
+        include_bytes!("../../assets/file-icons/document.svg"),
+    ),
+    (
+        "file-icons/dotjs.svg",
+        include_bytes!("../../assets/file-icons/dotjs.svg"),
+    ),
+    (
+        "file-icons/drawio.svg",
+        include_bytes!("../../assets/file-icons/drawio.svg"),
+    ),
+    (
+        "file-icons/drizzle.svg",
+        include_bytes!("../../assets/file-icons/drizzle.svg"),
+    ),
+    (
+        "file-icons/drone.svg",
+        include_bytes!("../../assets/file-icons/drone.svg"),
+    ),
+    (
+        "file-icons/duc.svg",
+        include_bytes!("../../assets/file-icons/duc.svg"),
+    ),
+    (
+        "file-icons/dune.svg",
+        include_bytes!("../../assets/file-icons/dune.svg"),
+    ),
+    (
+        "file-icons/edge.svg",
+        include_bytes!("../../assets/file-icons/edge.svg"),
+    ),
+    (
+        "file-icons/editorconfig.svg",
+        include_bytes!("../../assets/file-icons/editorconfig.svg"),
+    ),
+    (
+        "file-icons/ejs.svg",
+        include_bytes!("../../assets/file-icons/ejs.svg"),
+    ),
+    (
+        "file-icons/elixir.svg",
+        include_bytes!("../../assets/file-icons/elixir.svg"),
+    ),
+    (
+        "file-icons/elm.svg",
+        include_bytes!("../../assets/file-icons/elm.svg"),
+    ),
+    (
+        "file-icons/email.svg",
+        include_bytes!("../../assets/file-icons/email.svg"),
+    ),
+    (
+        "file-icons/ember.svg",
+        include_bytes!("../../assets/file-icons/ember.svg"),
+    ),
+    (
+        "file-icons/epub.svg",
+        include_bytes!("../../assets/file-icons/epub.svg"),
+    ),
+    (
+        "file-icons/erlang.svg",
+        include_bytes!("../../assets/file-icons/erlang.svg"),
+    ),
+    (
+        "file-icons/eslint.svg",
+        include_bytes!("../../assets/file-icons/eslint.svg"),
+    ),
+    (
+        "file-icons/excalidraw.svg",
+        include_bytes!("../../assets/file-icons/excalidraw.svg"),
+    ),
+    (
+        "file-icons/exe.svg",
+        include_bytes!("../../assets/file-icons/exe.svg"),
+    ),
+    (
+        "file-icons/fastlane.svg",
+        include_bytes!("../../assets/file-icons/fastlane.svg"),
+    ),
+    (
+        "file-icons/favicon.svg",
+        include_bytes!("../../assets/file-icons/favicon.svg"),
+    ),
+    (
+        "file-icons/figma.svg",
+        include_bytes!("../../assets/file-icons/figma.svg"),
+    ),
+    (
+        "file-icons/file.svg",
+        include_bytes!("../../assets/file-icons/file.svg"),
+    ),
+    (
+        "file-icons/firebase.svg",
+        include_bytes!("../../assets/file-icons/firebase.svg"),
+    ),
+    (
+        "file-icons/flash.svg",
+        include_bytes!("../../assets/file-icons/flash.svg"),
+    ),
+    (
+        "file-icons/flow.svg",
+        include_bytes!("../../assets/file-icons/flow.svg"),
+    ),
+    (
+        "file-icons/folder.svg",
+        include_bytes!("../../assets/file-icons/folder.svg"),
+    ),
+    (
+        "file-icons/folder-admin.svg",
+        include_bytes!("../../assets/file-icons/folder-admin.svg"),
+    ),
+    (
+        "file-icons/folder-animation.svg",
+        include_bytes!("../../assets/file-icons/folder-animation.svg"),
+    ),
+    (
+        "file-icons/folder-ansible.svg",
+        include_bytes!("../../assets/file-icons/folder-ansible.svg"),
+    ),
+    (
+        "file-icons/folder-atom.svg",
+        include_bytes!("../../assets/file-icons/folder-atom.svg"),
+    ),
+    (
+        "file-icons/folder-attachment.svg",
+        include_bytes!("../../assets/file-icons/folder-attachment.svg"),
+    ),
+    (
+        "file-icons/folder-aws.svg",
+        include_bytes!("../../assets/file-icons/folder-aws.svg"),
+    ),
+    (
+        "file-icons/folder-azure-pipelines.svg",
+        include_bytes!("../../assets/file-icons/folder-azure-pipelines.svg"),
+    ),
+    (
+        "file-icons/folder-base.svg",
+        include_bytes!("../../assets/file-icons/folder-base.svg"),
+    ),
+    (
+        "file-icons/folder-benchmark.svg",
+        include_bytes!("../../assets/file-icons/folder-benchmark.svg"),
+    ),
+    (
+        "file-icons/folder-bibliography.svg",
+        include_bytes!("../../assets/file-icons/folder-bibliography.svg"),
+    ),
+    (
+        "file-icons/folder-blender.svg",
+        include_bytes!("../../assets/file-icons/folder-blender.svg"),
+    ),
+    (
+        "file-icons/folder-bloc.svg",
+        include_bytes!("../../assets/file-icons/folder-bloc.svg"),
+    ),
+    (
+        "file-icons/folder-cart.svg",
+        include_bytes!("../../assets/file-icons/folder-cart.svg"),
+    ),
+    (
+        "file-icons/folder-ci.svg",
+        include_bytes!("../../assets/file-icons/folder-ci.svg"),
+    ),
+    (
+        "file-icons/folder-claude.svg",
+        include_bytes!("../../assets/file-icons/folder-claude.svg"),
+    ),
+    (
+        "file-icons/folder-client.svg",
+        include_bytes!("../../assets/file-icons/folder-client.svg"),
+    ),
+    (
+        "file-icons/folder-cloud-functions.svg",
+        include_bytes!("../../assets/file-icons/folder-cloud-functions.svg"),
+    ),
+    (
+        "file-icons/folder-components.svg",
+        include_bytes!("../../assets/file-icons/folder-components.svg"),
+    ),
+    (
+        "file-icons/folder-config.svg",
+        include_bytes!("../../assets/file-icons/folder-config.svg"),
+    ),
+    (
+        "file-icons/folder-connection.svg",
+        include_bytes!("../../assets/file-icons/folder-connection.svg"),
+    ),
+    (
+        "file-icons/folder-console.svg",
+        include_bytes!("../../assets/file-icons/folder-console.svg"),
+    ),
+    (
+        "file-icons/folder-contract.svg",
+        include_bytes!("../../assets/file-icons/folder-contract.svg"),
+    ),
+    (
+        "file-icons/folder-controller.svg",
+        include_bytes!("../../assets/file-icons/folder-controller.svg"),
+    ),
+    (
+        "file-icons/folder-coverage.svg",
+        include_bytes!("../../assets/file-icons/folder-coverage.svg"),
+    ),
+    (
+        "file-icons/folder-css.svg",
+        include_bytes!("../../assets/file-icons/folder-css.svg"),
+    ),
+    (
+        "file-icons/folder-cursor.svg",
+        include_bytes!("../../assets/file-icons/folder-cursor.svg"),
+    ),
+    (
+        "file-icons/folder-dart.svg",
+        include_bytes!("../../assets/file-icons/folder-dart.svg"),
+    ),
+    (
+        "file-icons/folder-database.svg",
+        include_bytes!("../../assets/file-icons/folder-database.svg"),
+    ),
+    (
+        "file-icons/folder-debug.svg",
+        include_bytes!("../../assets/file-icons/folder-debug.svg"),
+    ),
+    (
+        "file-icons/folder-desktop.svg",
+        include_bytes!("../../assets/file-icons/folder-desktop.svg"),
+    ),
+    (
+        "file-icons/folder-dist.svg",
+        include_bytes!("../../assets/file-icons/folder-dist.svg"),
+    ),
+    (
+        "file-icons/folder-docker.svg",
+        include_bytes!("../../assets/file-icons/folder-docker.svg"),
+    ),
+    (
+        "file-icons/folder-docs.svg",
+        include_bytes!("../../assets/file-icons/folder-docs.svg"),
+    ),
+    (
+        "file-icons/folder-enum.svg",
+        include_bytes!("../../assets/file-icons/folder-enum.svg"),
+    ),
+    (
+        "file-icons/folder-expo.svg",
+        include_bytes!("../../assets/file-icons/folder-expo.svg"),
+    ),
+    (
+        "file-icons/folder-fastlane.svg",
+        include_bytes!("../../assets/file-icons/folder-fastlane.svg"),
+    ),
+    (
+        "file-icons/folder-favicon.svg",
+        include_bytes!("../../assets/file-icons/folder-favicon.svg"),
+    ),
+    (
+        "file-icons/folder-filter.svg",
+        include_bytes!("../../assets/file-icons/folder-filter.svg"),
+    ),
+    (
+        "file-icons/folder-firebase.svg",
+        include_bytes!("../../assets/file-icons/folder-firebase.svg"),
+    ),
+    (
+        "file-icons/folder-firestore.svg",
+        include_bytes!("../../assets/file-icons/folder-firestore.svg"),
+    ),
+    (
+        "file-icons/folder-font.svg",
+        include_bytes!("../../assets/file-icons/folder-font.svg"),
+    ),
+    (
+        "file-icons/folder-forgejo.svg",
+        include_bytes!("../../assets/file-icons/folder-forgejo.svg"),
+    ),
+    (
+        "file-icons/folder-gh-workflows.svg",
+        include_bytes!("../../assets/file-icons/folder-gh-workflows.svg"),
+    ),
+    (
+        "file-icons/folder-gitea.svg",
+        include_bytes!("../../assets/file-icons/folder-gitea.svg"),
+    ),
+    (
+        "file-icons/folder-github.svg",
+        include_bytes!("../../assets/file-icons/folder-github.svg"),
+    ),
+    (
+        "file-icons/folder-gitlab.svg",
+        include_bytes!("../../assets/file-icons/folder-gitlab.svg"),
+    ),
+    (
+        "file-icons/folder-global.svg",
+        include_bytes!("../../assets/file-icons/folder-global.svg"),
+    ),
+    (
+        "file-icons/folder-graphql.svg",
+        include_bytes!("../../assets/file-icons/folder-graphql.svg"),
+    ),
+    (
+        "file-icons/folder-guard.svg",
+        include_bytes!("../../assets/file-icons/folder-guard.svg"),
+    ),
+    (
+        "file-icons/folder-gulp.svg",
+        include_bytes!("../../assets/file-icons/folder-gulp.svg"),
+    ),
+    (
+        "file-icons/folder-home.svg",
+        include_bytes!("../../assets/file-icons/folder-home.svg"),
+    ),
+    (
+        "file-icons/folder-husky.svg",
+        include_bytes!("../../assets/file-icons/folder-husky.svg"),
+    ),
+    (
+        "file-icons/folder-i18n.svg",
+        include_bytes!("../../assets/file-icons/folder-i18n.svg"),
+    ),
+    (
+        "file-icons/folder-images.svg",
+        include_bytes!("../../assets/file-icons/folder-images.svg"),
+    ),
+    (
+        "file-icons/folder-include.svg",
+        include_bytes!("../../assets/file-icons/folder-include.svg"),
+    ),
+    (
+        "file-icons/folder-intellij.svg",
+        include_bytes!("../../assets/file-icons/folder-intellij.svg"),
+    ),
+    (
+        "file-icons/folder-interceptor.svg",
+        include_bytes!("../../assets/file-icons/folder-interceptor.svg"),
+    ),
+    (
+        "file-icons/folder-interface.svg",
+        include_bytes!("../../assets/file-icons/folder-interface.svg"),
+    ),
+    (
+        "file-icons/folder-javascript.svg",
+        include_bytes!("../../assets/file-icons/folder-javascript.svg"),
+    ),
+    (
+        "file-icons/folder-jinja.svg",
+        include_bytes!("../../assets/file-icons/folder-jinja.svg"),
+    ),
+    (
+        "file-icons/folder-json.svg",
+        include_bytes!("../../assets/file-icons/folder-json.svg"),
+    ),
+    (
+        "file-icons/folder-jupyter.svg",
+        include_bytes!("../../assets/file-icons/folder-jupyter.svg"),
+    ),
+    (
+        "file-icons/folder-kusto.svg",
+        include_bytes!("../../assets/file-icons/folder-kusto.svg"),
+    ),
+    (
+        "file-icons/folder-lefthook.svg",
+        include_bytes!("../../assets/file-icons/folder-lefthook.svg"),
+    ),
+    (
+        "file-icons/folder-less.svg",
+        include_bytes!("../../assets/file-icons/folder-less.svg"),
+    ),
+    (
+        "file-icons/folder-lib.svg",
+        include_bytes!("../../assets/file-icons/folder-lib.svg"),
+    ),
+    (
+        "file-icons/folder-link.svg",
+        include_bytes!("../../assets/file-icons/folder-link.svg"),
+    ),
+    (
+        "file-icons/folder-liquibase.svg",
+        include_bytes!("../../assets/file-icons/folder-liquibase.svg"),
+    ),
+    (
+        "file-icons/folder-log.svg",
+        include_bytes!("../../assets/file-icons/folder-log.svg"),
+    ),
+    (
+        "file-icons/folder-luau.svg",
+        include_bytes!("../../assets/file-icons/folder-luau.svg"),
+    ),
+    (
+        "file-icons/folder-markdown.svg",
+        include_bytes!("../../assets/file-icons/folder-markdown.svg"),
+    ),
+    (
+        "file-icons/folder-messages.svg",
+        include_bytes!("../../assets/file-icons/folder-messages.svg"),
+    ),
+    (
+        "file-icons/folder-metro.svg",
+        include_bytes!("../../assets/file-icons/folder-metro.svg"),
+    ),
+    (
+        "file-icons/folder-middleware.svg",
+        include_bytes!("../../assets/file-icons/folder-middleware.svg"),
+    ),
+    (
+        "file-icons/folder-mjml.svg",
+        include_bytes!("../../assets/file-icons/folder-mjml.svg"),
+    ),
+    (
+        "file-icons/folder-mobile.svg",
+        include_bytes!("../../assets/file-icons/folder-mobile.svg"),
+    ),
+    (
+        "file-icons/folder-mojo.svg",
+        include_bytes!("../../assets/file-icons/folder-mojo.svg"),
+    ),
+    (
+        "file-icons/folder-molecule.svg",
+        include_bytes!("../../assets/file-icons/folder-molecule.svg"),
+    ),
+    (
+        "file-icons/folder-moon.svg",
+        include_bytes!("../../assets/file-icons/folder-moon.svg"),
+    ),
+    (
+        "file-icons/folder-netlify.svg",
+        include_bytes!("../../assets/file-icons/folder-netlify.svg"),
+    ),
+    (
+        "file-icons/folder-next.svg",
+        include_bytes!("../../assets/file-icons/folder-next.svg"),
+    ),
+    (
+        "file-icons/folder-node.svg",
+        include_bytes!("../../assets/file-icons/folder-node.svg"),
+    ),
+    (
+        "file-icons/folder-nuxt.svg",
+        include_bytes!("../../assets/file-icons/folder-nuxt.svg"),
+    ),
+    (
+        "file-icons/folder-obsidian.svg",
+        include_bytes!("../../assets/file-icons/folder-obsidian.svg"),
+    ),
+    (
+        "file-icons/folder-organism.svg",
+        include_bytes!("../../assets/file-icons/folder-organism.svg"),
+    ),
+    (
+        "file-icons/folder-pdm.svg",
+        include_bytes!("../../assets/file-icons/folder-pdm.svg"),
+    ),
+    (
+        "file-icons/folder-php.svg",
+        include_bytes!("../../assets/file-icons/folder-php.svg"),
+    ),
+    (
+        "file-icons/folder-phpmailer.svg",
+        include_bytes!("../../assets/file-icons/folder-phpmailer.svg"),
+    ),
+    (
+        "file-icons/folder-pipe.svg",
+        include_bytes!("../../assets/file-icons/folder-pipe.svg"),
+    ),
+    (
+        "file-icons/folder-plugin.svg",
+        include_bytes!("../../assets/file-icons/folder-plugin.svg"),
+    ),
+    (
+        "file-icons/folder-policy.svg",
+        include_bytes!("../../assets/file-icons/folder-policy.svg"),
+    ),
+    (
+        "file-icons/folder-powershell.svg",
+        include_bytes!("../../assets/file-icons/folder-powershell.svg"),
+    ),
+    (
+        "file-icons/folder-prisma.svg",
+        include_bytes!("../../assets/file-icons/folder-prisma.svg"),
+    ),
+    (
+        "file-icons/folder-project.svg",
+        include_bytes!("../../assets/file-icons/folder-project.svg"),
+    ),
+    (
+        "file-icons/folder-prompts.svg",
+        include_bytes!("../../assets/file-icons/folder-prompts.svg"),
+    ),
+    (
+        "file-icons/folder-public.svg",
+        include_bytes!("../../assets/file-icons/folder-public.svg"),
+    ),
+    (
+        "file-icons/folder-python.svg",
+        include_bytes!("../../assets/file-icons/folder-python.svg"),
+    ),
+    (
+        "file-icons/folder-pytorch.svg",
+        include_bytes!("../../assets/file-icons/folder-pytorch.svg"),
+    ),
+    (
+        "file-icons/folder-quasar.svg",
+        include_bytes!("../../assets/file-icons/folder-quasar.svg"),
+    ),
+    (
+        "file-icons/folder-repository.svg",
+        include_bytes!("../../assets/file-icons/folder-repository.svg"),
+    ),
+    (
+        "file-icons/folder-resource.svg",
+        include_bytes!("../../assets/file-icons/folder-resource.svg"),
+    ),
+    (
+        "file-icons/folder-review.svg",
+        include_bytes!("../../assets/file-icons/folder-review.svg"),
+    ),
+    (
+        "file-icons/folder-robot.svg",
+        include_bytes!("../../assets/file-icons/folder-robot.svg"),
+    ),
+    (
+        "file-icons/folder-routes.svg",
+        include_bytes!("../../assets/file-icons/folder-routes.svg"),
+    ),
+    (
+        "file-icons/folder-rust.svg",
+        include_bytes!("../../assets/file-icons/folder-rust.svg"),
+    ),
+    (
+        "file-icons/folder-sandbox.svg",
+        include_bytes!("../../assets/file-icons/folder-sandbox.svg"),
+    ),
+    (
+        "file-icons/folder-sass.svg",
+        include_bytes!("../../assets/file-icons/folder-sass.svg"),
+    ),
+    (
+        "file-icons/folder-scala.svg",
+        include_bytes!("../../assets/file-icons/folder-scala.svg"),
+    ),
+    (
+        "file-icons/folder-scons.svg",
+        include_bytes!("../../assets/file-icons/folder-scons.svg"),
+    ),
+    (
+        "file-icons/folder-scripts.svg",
+        include_bytes!("../../assets/file-icons/folder-scripts.svg"),
+    ),
+    (
+        "file-icons/folder-server.svg",
+        include_bytes!("../../assets/file-icons/folder-server.svg"),
+    ),
+    (
+        "file-icons/folder-src.svg",
+        include_bytes!("../../assets/file-icons/folder-src.svg"),
+    ),
+    (
+        "file-icons/folder-src-tauri.svg",
+        include_bytes!("../../assets/file-icons/folder-src-tauri.svg"),
+    ),
+    (
+        "file-icons/folder-stencil.svg",
+        include_bytes!("../../assets/file-icons/folder-stencil.svg"),
+    ),
+    (
+        "file-icons/folder-storybook.svg",
+        include_bytes!("../../assets/file-icons/folder-storybook.svg"),
+    ),
+    (
+        "file-icons/folder-sublime.svg",
+        include_bytes!("../../assets/file-icons/folder-sublime.svg"),
+    ),
+    (
+        "file-icons/folder-svelte.svg",
+        include_bytes!("../../assets/file-icons/folder-svelte.svg"),
+    ),
+    (
+        "file-icons/folder-svg.svg",
+        include_bytes!("../../assets/file-icons/folder-svg.svg"),
+    ),
+    (
+        "file-icons/folder-television.svg",
+        include_bytes!("../../assets/file-icons/folder-television.svg"),
+    ),
+    (
+        "file-icons/folder-temp.svg",
+        include_bytes!("../../assets/file-icons/folder-temp.svg"),
+    ),
+    (
+        "file-icons/folder-test.svg",
+        include_bytes!("../../assets/file-icons/folder-test.svg"),
+    ),
+    (
+        "file-icons/folder-theme.svg",
+        include_bytes!("../../assets/file-icons/folder-theme.svg"),
+    ),
+    (
+        "file-icons/folder-trash.svg",
+        include_bytes!("../../assets/file-icons/folder-trash.svg"),
+    ),
+    (
+        "file-icons/folder-typescript.svg",
+        include_bytes!("../../assets/file-icons/folder-typescript.svg"),
+    ),
+    (
+        "file-icons/folder-update.svg",
+        include_bytes!("../../assets/file-icons/folder-update.svg"),
+    ),
+    (
+        "file-icons/folder-views.svg",
+        include_bytes!("../../assets/file-icons/folder-views.svg"),
+    ),
+    (
+        "file-icons/folder-vscode.svg",
+        include_bytes!("../../assets/file-icons/folder-vscode.svg"),
+    ),
+    (
+        "file-icons/folder-vue.svg",
+        include_bytes!("../../assets/file-icons/folder-vue.svg"),
+    ),
+    (
+        "file-icons/folder-vue-directives.svg",
+        include_bytes!("../../assets/file-icons/folder-vue-directives.svg"),
+    ),
+    (
+        "file-icons/folder-vuepress.svg",
+        include_bytes!("../../assets/file-icons/folder-vuepress.svg"),
+    ),
+    (
+        "file-icons/folder-webpack.svg",
+        include_bytes!("../../assets/file-icons/folder-webpack.svg"),
+    ),
+    (
+        "file-icons/folder-yarn.svg",
+        include_bytes!("../../assets/file-icons/folder-yarn.svg"),
+    ),
+    (
+        "file-icons/font.svg",
+        include_bytes!("../../assets/file-icons/font.svg"),
+    ),
+    (
+        "file-icons/forth.svg",
+        include_bytes!("../../assets/file-icons/forth.svg"),
+    ),
+    (
+        "file-icons/fortran.svg",
+        include_bytes!("../../assets/file-icons/fortran.svg"),
+    ),
+    (
+        "file-icons/foxpro.svg",
+        include_bytes!("../../assets/file-icons/foxpro.svg"),
+    ),
+    (
+        "file-icons/freemarker.svg",
+        include_bytes!("../../assets/file-icons/freemarker.svg"),
+    ),
+    (
+        "file-icons/fsharp.svg",
+        include_bytes!("../../assets/file-icons/fsharp.svg"),
+    ),
+    (
+        "file-icons/fusebox.svg",
+        include_bytes!("../../assets/file-icons/fusebox.svg"),
+    ),
+    (
+        "file-icons/gamemaker.svg",
+        include_bytes!("../../assets/file-icons/gamemaker.svg"),
+    ),
+    (
+        "file-icons/garden.svg",
+        include_bytes!("../../assets/file-icons/garden.svg"),
+    ),
+    (
+        "file-icons/gatsby.svg",
+        include_bytes!("../../assets/file-icons/gatsby.svg"),
+    ),
+    (
+        "file-icons/gcp.svg",
+        include_bytes!("../../assets/file-icons/gcp.svg"),
+    ),
+    (
+        "file-icons/gemfile.svg",
+        include_bytes!("../../assets/file-icons/gemfile.svg"),
+    ),
+    (
+        "file-icons/gemini.svg",
+        include_bytes!("../../assets/file-icons/gemini.svg"),
+    ),
+    (
+        "file-icons/gemini-ai.svg",
+        include_bytes!("../../assets/file-icons/gemini-ai.svg"),
+    ),
+    (
+        "file-icons/git.svg",
+        include_bytes!("../../assets/file-icons/git.svg"),
+    ),
+    (
+        "file-icons/github-sponsors.svg",
+        include_bytes!("../../assets/file-icons/github-sponsors.svg"),
+    ),
+    (
+        "file-icons/gitlab.svg",
+        include_bytes!("../../assets/file-icons/gitlab.svg"),
+    ),
+    (
+        "file-icons/gitpod.svg",
+        include_bytes!("../../assets/file-icons/gitpod.svg"),
+    ),
+    (
+        "file-icons/gleam.svg",
+        include_bytes!("../../assets/file-icons/gleam.svg"),
+    ),
+    (
+        "file-icons/gnuplot.svg",
+        include_bytes!("../../assets/file-icons/gnuplot.svg"),
+    ),
+    (
+        "file-icons/go.svg",
+        include_bytes!("../../assets/file-icons/go.svg"),
+    ),
+    (
+        "file-icons/go-mod.svg",
+        include_bytes!("../../assets/file-icons/go-mod.svg"),
+    ),
+    (
+        "file-icons/godot.svg",
+        include_bytes!("../../assets/file-icons/godot.svg"),
+    ),
+    (
+        "file-icons/godot-assets.svg",
+        include_bytes!("../../assets/file-icons/godot-assets.svg"),
+    ),
+    (
+        "file-icons/grafana-alloy.svg",
+        include_bytes!("../../assets/file-icons/grafana-alloy.svg"),
+    ),
+    (
+        "file-icons/grain.svg",
+        include_bytes!("../../assets/file-icons/grain.svg"),
+    ),
+    (
+        "file-icons/graphcool.svg",
+        include_bytes!("../../assets/file-icons/graphcool.svg"),
+    ),
+    (
+        "file-icons/graphql.svg",
+        include_bytes!("../../assets/file-icons/graphql.svg"),
+    ),
+    (
+        "file-icons/gridsome.svg",
+        include_bytes!("../../assets/file-icons/gridsome.svg"),
+    ),
+    (
+        "file-icons/groovy.svg",
+        include_bytes!("../../assets/file-icons/groovy.svg"),
+    ),
+    (
+        "file-icons/grunt.svg",
+        include_bytes!("../../assets/file-icons/grunt.svg"),
+    ),
+    (
+        "file-icons/gulp.svg",
+        include_bytes!("../../assets/file-icons/gulp.svg"),
+    ),
+    (
+        "file-icons/hack.svg",
+        include_bytes!("../../assets/file-icons/hack.svg"),
+    ),
+    (
+        "file-icons/haml.svg",
+        include_bytes!("../../assets/file-icons/haml.svg"),
+    ),
+    (
+        "file-icons/handlebars.svg",
+        include_bytes!("../../assets/file-icons/handlebars.svg"),
+    ),
+    (
+        "file-icons/hardhat.svg",
+        include_bytes!("../../assets/file-icons/hardhat.svg"),
+    ),
+    (
+        "file-icons/harmonix.svg",
+        include_bytes!("../../assets/file-icons/harmonix.svg"),
+    ),
+    (
+        "file-icons/haskell.svg",
+        include_bytes!("../../assets/file-icons/haskell.svg"),
+    ),
+    (
+        "file-icons/haxe.svg",
+        include_bytes!("../../assets/file-icons/haxe.svg"),
+    ),
+    (
+        "file-icons/hcl.svg",
+        include_bytes!("../../assets/file-icons/hcl.svg"),
+    ),
+    (
+        "file-icons/helm.svg",
+        include_bytes!("../../assets/file-icons/helm.svg"),
+    ),
+    (
+        "file-icons/heroku.svg",
+        include_bytes!("../../assets/file-icons/heroku.svg"),
+    ),
+    (
+        "file-icons/hex.svg",
+        include_bytes!("../../assets/file-icons/hex.svg"),
+    ),
+    (
+        "file-icons/hjson.svg",
+        include_bytes!("../../assets/file-icons/hjson.svg"),
+    ),
+    (
+        "file-icons/horusec.svg",
+        include_bytes!("../../assets/file-icons/horusec.svg"),
+    ),
+    (
+        "file-icons/hosts.svg",
+        include_bytes!("../../assets/file-icons/hosts.svg"),
+    ),
+    (
+        "file-icons/hpp.svg",
+        include_bytes!("../../assets/file-icons/hpp.svg"),
+    ),
+    (
+        "file-icons/html.svg",
+        include_bytes!("../../assets/file-icons/html.svg"),
+    ),
+    (
+        "file-icons/http.svg",
+        include_bytes!("../../assets/file-icons/http.svg"),
+    ),
+    (
+        "file-icons/huff.svg",
+        include_bytes!("../../assets/file-icons/huff.svg"),
+    ),
+    (
+        "file-icons/hurl.svg",
+        include_bytes!("../../assets/file-icons/hurl.svg"),
+    ),
+    (
+        "file-icons/i18n.svg",
+        include_bytes!("../../assets/file-icons/i18n.svg"),
+    ),
+    (
+        "file-icons/idris.svg",
+        include_bytes!("../../assets/file-icons/idris.svg"),
+    ),
+    (
+        "file-icons/ifanr-cloud.svg",
+        include_bytes!("../../assets/file-icons/ifanr-cloud.svg"),
+    ),
+    (
+        "file-icons/image.svg",
+        include_bytes!("../../assets/file-icons/image.svg"),
+    ),
+    (
+        "file-icons/imba.svg",
+        include_bytes!("../../assets/file-icons/imba.svg"),
+    ),
+    (
+        "file-icons/installation.svg",
+        include_bytes!("../../assets/file-icons/installation.svg"),
+    ),
+    (
+        "file-icons/ionic.svg",
+        include_bytes!("../../assets/file-icons/ionic.svg"),
+    ),
+    (
+        "file-icons/istanbul.svg",
+        include_bytes!("../../assets/file-icons/istanbul.svg"),
+    ),
+    (
+        "file-icons/jar.svg",
+        include_bytes!("../../assets/file-icons/jar.svg"),
+    ),
+    (
+        "file-icons/java.svg",
+        include_bytes!("../../assets/file-icons/java.svg"),
+    ),
+    (
+        "file-icons/javaclass.svg",
+        include_bytes!("../../assets/file-icons/javaclass.svg"),
+    ),
+    (
+        "file-icons/javascript.svg",
+        include_bytes!("../../assets/file-icons/javascript.svg"),
+    ),
+    (
+        "file-icons/javascript-map.svg",
+        include_bytes!("../../assets/file-icons/javascript-map.svg"),
+    ),
+    (
+        "file-icons/jenkins.svg",
+        include_bytes!("../../assets/file-icons/jenkins.svg"),
+    ),
+    (
+        "file-icons/jest.svg",
+        include_bytes!("../../assets/file-icons/jest.svg"),
+    ),
+    (
+        "file-icons/jinja.svg",
+        include_bytes!("../../assets/file-icons/jinja.svg"),
+    ),
+    (
+        "file-icons/jsconfig.svg",
+        include_bytes!("../../assets/file-icons/jsconfig.svg"),
+    ),
+    (
+        "file-icons/json.svg",
+        include_bytes!("../../assets/file-icons/json.svg"),
+    ),
+    (
+        "file-icons/jsr.svg",
+        include_bytes!("../../assets/file-icons/jsr.svg"),
+    ),
+    (
+        "file-icons/julia.svg",
+        include_bytes!("../../assets/file-icons/julia.svg"),
+    ),
+    (
+        "file-icons/jupyter.svg",
+        include_bytes!("../../assets/file-icons/jupyter.svg"),
+    ),
+    (
+        "file-icons/just.svg",
+        include_bytes!("../../assets/file-icons/just.svg"),
+    ),
+    (
+        "file-icons/karma.svg",
+        include_bytes!("../../assets/file-icons/karma.svg"),
+    ),
+    (
+        "file-icons/kcl.svg",
+        include_bytes!("../../assets/file-icons/kcl.svg"),
+    ),
+    (
+        "file-icons/key.svg",
+        include_bytes!("../../assets/file-icons/key.svg"),
+    ),
+    (
+        "file-icons/keystatic.svg",
+        include_bytes!("../../assets/file-icons/keystatic.svg"),
+    ),
+    (
+        "file-icons/kivy.svg",
+        include_bytes!("../../assets/file-icons/kivy.svg"),
+    ),
+    (
+        "file-icons/kl.svg",
+        include_bytes!("../../assets/file-icons/kl.svg"),
+    ),
+    (
+        "file-icons/knip.svg",
+        include_bytes!("../../assets/file-icons/knip.svg"),
+    ),
+    (
+        "file-icons/kotlin.svg",
+        include_bytes!("../../assets/file-icons/kotlin.svg"),
+    ),
+    (
+        "file-icons/kubernetes.svg",
+        include_bytes!("../../assets/file-icons/kubernetes.svg"),
+    ),
+    (
+        "file-icons/kusto.svg",
+        include_bytes!("../../assets/file-icons/kusto.svg"),
+    ),
+    (
+        "file-icons/label.svg",
+        include_bytes!("../../assets/file-icons/label.svg"),
+    ),
+    (
+        "file-icons/laravel.svg",
+        include_bytes!("../../assets/file-icons/laravel.svg"),
+    ),
+    (
+        "file-icons/lbx.svg",
+        include_bytes!("../../assets/file-icons/lbx.svg"),
+    ),
+    (
+        "file-icons/lefthook.svg",
+        include_bytes!("../../assets/file-icons/lefthook.svg"),
+    ),
+    (
+        "file-icons/lerna.svg",
+        include_bytes!("../../assets/file-icons/lerna.svg"),
+    ),
+    (
+        "file-icons/less.svg",
+        include_bytes!("../../assets/file-icons/less.svg"),
+    ),
+    (
+        "file-icons/liara.svg",
+        include_bytes!("../../assets/file-icons/liara.svg"),
+    ),
+    (
+        "file-icons/lib.svg",
+        include_bytes!("../../assets/file-icons/lib.svg"),
+    ),
+    (
+        "file-icons/lighthouse.svg",
+        include_bytes!("../../assets/file-icons/lighthouse.svg"),
+    ),
+    (
+        "file-icons/lilypond.svg",
+        include_bytes!("../../assets/file-icons/lilypond.svg"),
+    ),
+    (
+        "file-icons/lintstaged.svg",
+        include_bytes!("../../assets/file-icons/lintstaged.svg"),
+    ),
+    (
+        "file-icons/liquid.svg",
+        include_bytes!("../../assets/file-icons/liquid.svg"),
+    ),
+    (
+        "file-icons/lisp.svg",
+        include_bytes!("../../assets/file-icons/lisp.svg"),
+    ),
+    (
+        "file-icons/livescript.svg",
+        include_bytes!("../../assets/file-icons/livescript.svg"),
+    ),
+    (
+        "file-icons/lock.svg",
+        include_bytes!("../../assets/file-icons/lock.svg"),
+    ),
+    (
+        "file-icons/log.svg",
+        include_bytes!("../../assets/file-icons/log.svg"),
+    ),
+    (
+        "file-icons/lolcode.svg",
+        include_bytes!("../../assets/file-icons/lolcode.svg"),
+    ),
+    (
+        "file-icons/lottie.svg",
+        include_bytes!("../../assets/file-icons/lottie.svg"),
+    ),
+    (
+        "file-icons/lua.svg",
+        include_bytes!("../../assets/file-icons/lua.svg"),
+    ),
+    (
+        "file-icons/luau.svg",
+        include_bytes!("../../assets/file-icons/luau.svg"),
+    ),
+    (
+        "file-icons/lyric.svg",
+        include_bytes!("../../assets/file-icons/lyric.svg"),
+    ),
+    (
+        "file-icons/makefile.svg",
+        include_bytes!("../../assets/file-icons/makefile.svg"),
+    ),
+    (
+        "file-icons/markdoc.svg",
+        include_bytes!("../../assets/file-icons/markdoc.svg"),
+    ),
+    (
+        "file-icons/markdown.svg",
+        include_bytes!("../../assets/file-icons/markdown.svg"),
+    ),
+    (
+        "file-icons/markdownlint.svg",
+        include_bytes!("../../assets/file-icons/markdownlint.svg"),
+    ),
+    (
+        "file-icons/markojs.svg",
+        include_bytes!("../../assets/file-icons/markojs.svg"),
+    ),
+    (
+        "file-icons/mathematica.svg",
+        include_bytes!("../../assets/file-icons/mathematica.svg"),
+    ),
+    (
+        "file-icons/matlab.svg",
+        include_bytes!("../../assets/file-icons/matlab.svg"),
+    ),
+    (
+        "file-icons/maven.svg",
+        include_bytes!("../../assets/file-icons/maven.svg"),
+    ),
+    (
+        "file-icons/mdsvex.svg",
+        include_bytes!("../../assets/file-icons/mdsvex.svg"),
+    ),
+    (
+        "file-icons/mdx.svg",
+        include_bytes!("../../assets/file-icons/mdx.svg"),
+    ),
+    (
+        "file-icons/mercurial.svg",
+        include_bytes!("../../assets/file-icons/mercurial.svg"),
+    ),
+    (
+        "file-icons/merlin.svg",
+        include_bytes!("../../assets/file-icons/merlin.svg"),
+    ),
+    (
+        "file-icons/mermaid.svg",
+        include_bytes!("../../assets/file-icons/mermaid.svg"),
+    ),
+    (
+        "file-icons/meson.svg",
+        include_bytes!("../../assets/file-icons/meson.svg"),
+    ),
+    (
+        "file-icons/metro.svg",
+        include_bytes!("../../assets/file-icons/metro.svg"),
+    ),
+    (
+        "file-icons/minecraft.svg",
+        include_bytes!("../../assets/file-icons/minecraft.svg"),
+    ),
+    (
+        "file-icons/minecraft-fabric.svg",
+        include_bytes!("../../assets/file-icons/minecraft-fabric.svg"),
+    ),
+    (
+        "file-icons/mint.svg",
+        include_bytes!("../../assets/file-icons/mint.svg"),
+    ),
+    (
+        "file-icons/mjml.svg",
+        include_bytes!("../../assets/file-icons/mjml.svg"),
+    ),
+    (
+        "file-icons/mocha.svg",
+        include_bytes!("../../assets/file-icons/mocha.svg"),
+    ),
+    (
+        "file-icons/modernizr.svg",
+        include_bytes!("../../assets/file-icons/modernizr.svg"),
+    ),
+    (
+        "file-icons/mojo.svg",
+        include_bytes!("../../assets/file-icons/mojo.svg"),
+    ),
+    (
+        "file-icons/moon.svg",
+        include_bytes!("../../assets/file-icons/moon.svg"),
+    ),
+    (
+        "file-icons/moonscript.svg",
+        include_bytes!("../../assets/file-icons/moonscript.svg"),
+    ),
+    (
+        "file-icons/mxml.svg",
+        include_bytes!("../../assets/file-icons/mxml.svg"),
+    ),
+    (
+        "file-icons/ndst.svg",
+        include_bytes!("../../assets/file-icons/ndst.svg"),
+    ),
+    (
+        "file-icons/nest.svg",
+        include_bytes!("../../assets/file-icons/nest.svg"),
+    ),
+    (
+        "file-icons/netlify.svg",
+        include_bytes!("../../assets/file-icons/netlify.svg"),
+    ),
+    (
+        "file-icons/next.svg",
+        include_bytes!("../../assets/file-icons/next.svg"),
+    ),
+    (
+        "file-icons/nginx.svg",
+        include_bytes!("../../assets/file-icons/nginx.svg"),
+    ),
+    (
+        "file-icons/ngrx-actions.svg",
+        include_bytes!("../../assets/file-icons/ngrx-actions.svg"),
+    ),
+    (
+        "file-icons/ngrx-effects.svg",
+        include_bytes!("../../assets/file-icons/ngrx-effects.svg"),
+    ),
+    (
+        "file-icons/ngrx-entity.svg",
+        include_bytes!("../../assets/file-icons/ngrx-entity.svg"),
+    ),
+    (
+        "file-icons/ngrx-reducer.svg",
+        include_bytes!("../../assets/file-icons/ngrx-reducer.svg"),
+    ),
+    (
+        "file-icons/ngrx-selectors.svg",
+        include_bytes!("../../assets/file-icons/ngrx-selectors.svg"),
+    ),
+    (
+        "file-icons/ngrx-state.svg",
+        include_bytes!("../../assets/file-icons/ngrx-state.svg"),
+    ),
+    (
+        "file-icons/nim.svg",
+        include_bytes!("../../assets/file-icons/nim.svg"),
+    ),
+    (
+        "file-icons/nix.svg",
+        include_bytes!("../../assets/file-icons/nix.svg"),
+    ),
+    (
+        "file-icons/nodejs.svg",
+        include_bytes!("../../assets/file-icons/nodejs.svg"),
+    ),
+    (
+        "file-icons/nodemon.svg",
+        include_bytes!("../../assets/file-icons/nodemon.svg"),
+    ),
+    (
+        "file-icons/npm.svg",
+        include_bytes!("../../assets/file-icons/npm.svg"),
+    ),
+    (
+        "file-icons/nuget.svg",
+        include_bytes!("../../assets/file-icons/nuget.svg"),
+    ),
+    (
+        "file-icons/nunjucks.svg",
+        include_bytes!("../../assets/file-icons/nunjucks.svg"),
+    ),
+    (
+        "file-icons/nuxt.svg",
+        include_bytes!("../../assets/file-icons/nuxt.svg"),
+    ),
+    (
+        "file-icons/nx.svg",
+        include_bytes!("../../assets/file-icons/nx.svg"),
+    ),
+    (
+        "file-icons/objective-c.svg",
+        include_bytes!("../../assets/file-icons/objective-c.svg"),
+    ),
+    (
+        "file-icons/objective-cpp.svg",
+        include_bytes!("../../assets/file-icons/objective-cpp.svg"),
+    ),
+    (
+        "file-icons/ocaml.svg",
+        include_bytes!("../../assets/file-icons/ocaml.svg"),
+    ),
+    (
+        "file-icons/odin.svg",
+        include_bytes!("../../assets/file-icons/odin.svg"),
+    ),
+    (
+        "file-icons/onnx.svg",
+        include_bytes!("../../assets/file-icons/onnx.svg"),
+    ),
+    (
+        "file-icons/opa.svg",
+        include_bytes!("../../assets/file-icons/opa.svg"),
+    ),
+    (
+        "file-icons/opam.svg",
+        include_bytes!("../../assets/file-icons/opam.svg"),
+    ),
+    (
+        "file-icons/opentofu.svg",
+        include_bytes!("../../assets/file-icons/opentofu.svg"),
+    ),
+    (
+        "file-icons/otne.svg",
+        include_bytes!("../../assets/file-icons/otne.svg"),
+    ),
+    (
+        "file-icons/oxlint.svg",
+        include_bytes!("../../assets/file-icons/oxlint.svg"),
+    ),
+    (
+        "file-icons/packship.svg",
+        include_bytes!("../../assets/file-icons/packship.svg"),
+    ),
+    (
+        "file-icons/palette.svg",
+        include_bytes!("../../assets/file-icons/palette.svg"),
+    ),
+    (
+        "file-icons/parcel.svg",
+        include_bytes!("../../assets/file-icons/parcel.svg"),
+    ),
+    (
+        "file-icons/pascal.svg",
+        include_bytes!("../../assets/file-icons/pascal.svg"),
+    ),
+    (
+        "file-icons/pawn.svg",
+        include_bytes!("../../assets/file-icons/pawn.svg"),
+    ),
+    (
+        "file-icons/payload.svg",
+        include_bytes!("../../assets/file-icons/payload.svg"),
+    ),
+    (
+        "file-icons/pdf.svg",
+        include_bytes!("../../assets/file-icons/pdf.svg"),
+    ),
+    (
+        "file-icons/pdm.svg",
+        include_bytes!("../../assets/file-icons/pdm.svg"),
+    ),
+    (
+        "file-icons/percy.svg",
+        include_bytes!("../../assets/file-icons/percy.svg"),
+    ),
+    (
+        "file-icons/perl.svg",
+        include_bytes!("../../assets/file-icons/perl.svg"),
+    ),
+    (
+        "file-icons/php.svg",
+        include_bytes!("../../assets/file-icons/php.svg"),
+    ),
+    (
+        "file-icons/php-cs-fixer.svg",
+        include_bytes!("../../assets/file-icons/php-cs-fixer.svg"),
+    ),
+    (
+        "file-icons/phpstan.svg",
+        include_bytes!("../../assets/file-icons/phpstan.svg"),
+    ),
+    (
+        "file-icons/phpunit.svg",
+        include_bytes!("../../assets/file-icons/phpunit.svg"),
+    ),
+    (
+        "file-icons/pinejs.svg",
+        include_bytes!("../../assets/file-icons/pinejs.svg"),
+    ),
+    (
+        "file-icons/pipeline.svg",
+        include_bytes!("../../assets/file-icons/pipeline.svg"),
+    ),
+    (
+        "file-icons/pkl.svg",
+        include_bytes!("../../assets/file-icons/pkl.svg"),
+    ),
+    (
+        "file-icons/plastic.svg",
+        include_bytes!("../../assets/file-icons/plastic.svg"),
+    ),
+    (
+        "file-icons/playwright.svg",
+        include_bytes!("../../assets/file-icons/playwright.svg"),
+    ),
+    (
+        "file-icons/plop.svg",
+        include_bytes!("../../assets/file-icons/plop.svg"),
+    ),
+    (
+        "file-icons/poetry.svg",
+        include_bytes!("../../assets/file-icons/poetry.svg"),
+    ),
+    (
+        "file-icons/postcss.svg",
+        include_bytes!("../../assets/file-icons/postcss.svg"),
+    ),
+    (
+        "file-icons/powerpoint.svg",
+        include_bytes!("../../assets/file-icons/powerpoint.svg"),
+    ),
+    (
+        "file-icons/powershell.svg",
+        include_bytes!("../../assets/file-icons/powershell.svg"),
+    ),
+    (
+        "file-icons/pre-commit.svg",
+        include_bytes!("../../assets/file-icons/pre-commit.svg"),
+    ),
+    (
+        "file-icons/prettier.svg",
+        include_bytes!("../../assets/file-icons/prettier.svg"),
+    ),
+    (
+        "file-icons/prisma.svg",
+        include_bytes!("../../assets/file-icons/prisma.svg"),
+    ),
+    (
+        "file-icons/processing.svg",
+        include_bytes!("../../assets/file-icons/processing.svg"),
+    ),
+    (
+        "file-icons/prolog.svg",
+        include_bytes!("../../assets/file-icons/prolog.svg"),
+    ),
+    (
+        "file-icons/prompt.svg",
+        include_bytes!("../../assets/file-icons/prompt.svg"),
+    ),
+    (
+        "file-icons/proto.svg",
+        include_bytes!("../../assets/file-icons/proto.svg"),
+    ),
+    (
+        "file-icons/protractor.svg",
+        include_bytes!("../../assets/file-icons/protractor.svg"),
+    ),
+    (
+        "file-icons/pug.svg",
+        include_bytes!("../../assets/file-icons/pug.svg"),
+    ),
+    (
+        "file-icons/puppet.svg",
+        include_bytes!("../../assets/file-icons/puppet.svg"),
+    ),
+    (
+        "file-icons/purescript.svg",
+        include_bytes!("../../assets/file-icons/purescript.svg"),
+    ),
+    (
+        "file-icons/python.svg",
+        include_bytes!("../../assets/file-icons/python.svg"),
+    ),
+    (
+        "file-icons/python-misc.svg",
+        include_bytes!("../../assets/file-icons/python-misc.svg"),
+    ),
+    (
+        "file-icons/pytorch.svg",
+        include_bytes!("../../assets/file-icons/pytorch.svg"),
+    ),
+    (
+        "file-icons/qsharp.svg",
+        include_bytes!("../../assets/file-icons/qsharp.svg"),
+    ),
+    (
+        "file-icons/quarto.svg",
+        include_bytes!("../../assets/file-icons/quarto.svg"),
+    ),
+    (
+        "file-icons/quasar.svg",
+        include_bytes!("../../assets/file-icons/quasar.svg"),
+    ),
+    (
+        "file-icons/quokka.svg",
+        include_bytes!("../../assets/file-icons/quokka.svg"),
+    ),
+    (
+        "file-icons/r.svg",
+        include_bytes!("../../assets/file-icons/r.svg"),
+    ),
+    (
+        "file-icons/racket.svg",
+        include_bytes!("../../assets/file-icons/racket.svg"),
+    ),
+    (
+        "file-icons/raml.svg",
+        include_bytes!("../../assets/file-icons/raml.svg"),
+    ),
+    (
+        "file-icons/razor.svg",
+        include_bytes!("../../assets/file-icons/razor.svg"),
+    ),
+    (
+        "file-icons/rbxmk.svg",
+        include_bytes!("../../assets/file-icons/rbxmk.svg"),
+    ),
+    (
+        "file-icons/rc.svg",
+        include_bytes!("../../assets/file-icons/rc.svg"),
+    ),
+    (
+        "file-icons/react.svg",
+        include_bytes!("../../assets/file-icons/react.svg"),
+    ),
+    (
+        "file-icons/react_ts.svg",
+        include_bytes!("../../assets/file-icons/react_ts.svg"),
+    ),
+    (
+        "file-icons/readme.svg",
+        include_bytes!("../../assets/file-icons/readme.svg"),
+    ),
+    (
+        "file-icons/reason.svg",
+        include_bytes!("../../assets/file-icons/reason.svg"),
+    ),
+    (
+        "file-icons/red.svg",
+        include_bytes!("../../assets/file-icons/red.svg"),
+    ),
+    (
+        "file-icons/redux-action.svg",
+        include_bytes!("../../assets/file-icons/redux-action.svg"),
+    ),
+    (
+        "file-icons/redux-reducer.svg",
+        include_bytes!("../../assets/file-icons/redux-reducer.svg"),
+    ),
+    (
+        "file-icons/redux-selector.svg",
+        include_bytes!("../../assets/file-icons/redux-selector.svg"),
+    ),
+    (
+        "file-icons/regedit.svg",
+        include_bytes!("../../assets/file-icons/regedit.svg"),
+    ),
+    (
+        "file-icons/remark.svg",
+        include_bytes!("../../assets/file-icons/remark.svg"),
+    ),
+    (
+        "file-icons/remix.svg",
+        include_bytes!("../../assets/file-icons/remix.svg"),
+    ),
+    (
+        "file-icons/renovate.svg",
+        include_bytes!("../../assets/file-icons/renovate.svg"),
+    ),
+    (
+        "file-icons/replit.svg",
+        include_bytes!("../../assets/file-icons/replit.svg"),
+    ),
+    (
+        "file-icons/rescript.svg",
+        include_bytes!("../../assets/file-icons/rescript.svg"),
+    ),
+    (
+        "file-icons/rescript-interface.svg",
+        include_bytes!("../../assets/file-icons/rescript-interface.svg"),
+    ),
+    (
+        "file-icons/restql.svg",
+        include_bytes!("../../assets/file-icons/restql.svg"),
+    ),
+    (
+        "file-icons/riot.svg",
+        include_bytes!("../../assets/file-icons/riot.svg"),
+    ),
+    (
+        "file-icons/roadmap.svg",
+        include_bytes!("../../assets/file-icons/roadmap.svg"),
+    ),
+    (
+        "file-icons/roblox.svg",
+        include_bytes!("../../assets/file-icons/roblox.svg"),
+    ),
+    (
+        "file-icons/robot.svg",
+        include_bytes!("../../assets/file-icons/robot.svg"),
+    ),
+    (
+        "file-icons/robots.svg",
+        include_bytes!("../../assets/file-icons/robots.svg"),
+    ),
+    (
+        "file-icons/rocket.svg",
+        include_bytes!("../../assets/file-icons/rocket.svg"),
+    ),
+    (
+        "file-icons/rojo.svg",
+        include_bytes!("../../assets/file-icons/rojo.svg"),
+    ),
+    (
+        "file-icons/rollup.svg",
+        include_bytes!("../../assets/file-icons/rollup.svg"),
+    ),
+    (
+        "file-icons/rome.svg",
+        include_bytes!("../../assets/file-icons/rome.svg"),
+    ),
+    (
+        "file-icons/routing.svg",
+        include_bytes!("../../assets/file-icons/routing.svg"),
+    ),
+    (
+        "file-icons/rspec.svg",
+        include_bytes!("../../assets/file-icons/rspec.svg"),
+    ),
+    (
+        "file-icons/rubocop.svg",
+        include_bytes!("../../assets/file-icons/rubocop.svg"),
+    ),
+    (
+        "file-icons/ruby.svg",
+        include_bytes!("../../assets/file-icons/ruby.svg"),
+    ),
+    (
+        "file-icons/ruff.svg",
+        include_bytes!("../../assets/file-icons/ruff.svg"),
+    ),
+    (
+        "file-icons/rust.svg",
+        include_bytes!("../../assets/file-icons/rust.svg"),
+    ),
+    (
+        "file-icons/salesforce.svg",
+        include_bytes!("../../assets/file-icons/salesforce.svg"),
+    ),
+    (
+        "file-icons/san.svg",
+        include_bytes!("../../assets/file-icons/san.svg"),
+    ),
+    (
+        "file-icons/sas.svg",
+        include_bytes!("../../assets/file-icons/sas.svg"),
+    ),
+    (
+        "file-icons/sass.svg",
+        include_bytes!("../../assets/file-icons/sass.svg"),
+    ),
+    (
+        "file-icons/sbt.svg",
+        include_bytes!("../../assets/file-icons/sbt.svg"),
+    ),
+    (
+        "file-icons/scala.svg",
+        include_bytes!("../../assets/file-icons/scala.svg"),
+    ),
+    (
+        "file-icons/scheme.svg",
+        include_bytes!("../../assets/file-icons/scheme.svg"),
+    ),
+    (
+        "file-icons/screwdriver.svg",
+        include_bytes!("../../assets/file-icons/screwdriver.svg"),
+    ),
+    (
+        "file-icons/search.svg",
+        include_bytes!("../../assets/file-icons/search.svg"),
+    ),
+    (
+        "file-icons/semgrep.svg",
+        include_bytes!("../../assets/file-icons/semgrep.svg"),
+    ),
+    (
+        "file-icons/sentry.svg",
+        include_bytes!("../../assets/file-icons/sentry.svg"),
+    ),
+    (
+        "file-icons/sequelize.svg",
+        include_bytes!("../../assets/file-icons/sequelize.svg"),
+    ),
+    (
+        "file-icons/serverless.svg",
+        include_bytes!("../../assets/file-icons/serverless.svg"),
+    ),
+    (
+        "file-icons/settings.svg",
+        include_bytes!("../../assets/file-icons/settings.svg"),
+    ),
+    (
+        "file-icons/shader.svg",
+        include_bytes!("../../assets/file-icons/shader.svg"),
+    ),
+    (
+        "file-icons/simulink.svg",
+        include_bytes!("../../assets/file-icons/simulink.svg"),
+    ),
+    (
+        "file-icons/siyuan.svg",
+        include_bytes!("../../assets/file-icons/siyuan.svg"),
+    ),
+    (
+        "file-icons/sketch.svg",
+        include_bytes!("../../assets/file-icons/sketch.svg"),
+    ),
+    (
+        "file-icons/slim.svg",
+        include_bytes!("../../assets/file-icons/slim.svg"),
+    ),
+    (
+        "file-icons/slint.svg",
+        include_bytes!("../../assets/file-icons/slint.svg"),
+    ),
+    (
+        "file-icons/slug.svg",
+        include_bytes!("../../assets/file-icons/slug.svg"),
+    ),
+    (
+        "file-icons/sml.svg",
+        include_bytes!("../../assets/file-icons/sml.svg"),
+    ),
+    (
+        "file-icons/snakemake.svg",
+        include_bytes!("../../assets/file-icons/snakemake.svg"),
+    ),
+    (
+        "file-icons/snapcraft.svg",
+        include_bytes!("../../assets/file-icons/snapcraft.svg"),
+    ),
+    (
+        "file-icons/snowpack.svg",
+        include_bytes!("../../assets/file-icons/snowpack.svg"),
+    ),
+    (
+        "file-icons/snyk.svg",
+        include_bytes!("../../assets/file-icons/snyk.svg"),
+    ),
+    (
+        "file-icons/solidity.svg",
+        include_bytes!("../../assets/file-icons/solidity.svg"),
+    ),
+    (
+        "file-icons/sonarcloud.svg",
+        include_bytes!("../../assets/file-icons/sonarcloud.svg"),
+    ),
+    (
+        "file-icons/spwn.svg",
+        include_bytes!("../../assets/file-icons/spwn.svg"),
+    ),
+    (
+        "file-icons/stackblitz.svg",
+        include_bytes!("../../assets/file-icons/stackblitz.svg"),
+    ),
+    (
+        "file-icons/stan.svg",
+        include_bytes!("../../assets/file-icons/stan.svg"),
+    ),
+    (
+        "file-icons/steadybit.svg",
+        include_bytes!("../../assets/file-icons/steadybit.svg"),
+    ),
+    (
+        "file-icons/stencil.svg",
+        include_bytes!("../../assets/file-icons/stencil.svg"),
+    ),
+    (
+        "file-icons/stitches.svg",
+        include_bytes!("../../assets/file-icons/stitches.svg"),
+    ),
+    (
+        "file-icons/storybook.svg",
+        include_bytes!("../../assets/file-icons/storybook.svg"),
+    ),
+    (
+        "file-icons/stryker.svg",
+        include_bytes!("../../assets/file-icons/stryker.svg"),
+    ),
+    (
+        "file-icons/stylable.svg",
+        include_bytes!("../../assets/file-icons/stylable.svg"),
+    ),
+    (
+        "file-icons/stylus.svg",
+        include_bytes!("../../assets/file-icons/stylus.svg"),
+    ),
+    (
+        "file-icons/sublime.svg",
+        include_bytes!("../../assets/file-icons/sublime.svg"),
+    ),
+    (
+        "file-icons/subtitles.svg",
+        include_bytes!("../../assets/file-icons/subtitles.svg"),
+    ),
+    (
+        "file-icons/supabase.svg",
+        include_bytes!("../../assets/file-icons/supabase.svg"),
+    ),
+    (
+        "file-icons/svelte.svg",
+        include_bytes!("../../assets/file-icons/svelte.svg"),
+    ),
+    (
+        "file-icons/svg.svg",
+        include_bytes!("../../assets/file-icons/svg.svg"),
+    ),
+    (
+        "file-icons/svgo.svg",
+        include_bytes!("../../assets/file-icons/svgo.svg"),
+    ),
+    (
+        "file-icons/swagger.svg",
+        include_bytes!("../../assets/file-icons/swagger.svg"),
+    ),
+    (
+        "file-icons/sway.svg",
+        include_bytes!("../../assets/file-icons/sway.svg"),
+    ),
+    (
+        "file-icons/swc.svg",
+        include_bytes!("../../assets/file-icons/swc.svg"),
+    ),
+    (
+        "file-icons/swift.svg",
+        include_bytes!("../../assets/file-icons/swift.svg"),
+    ),
+    (
+        "file-icons/table.svg",
+        include_bytes!("../../assets/file-icons/table.svg"),
+    ),
+    (
+        "file-icons/tailwindcss.svg",
+        include_bytes!("../../assets/file-icons/tailwindcss.svg"),
+    ),
+    (
+        "file-icons/taskfile.svg",
+        include_bytes!("../../assets/file-icons/taskfile.svg"),
+    ),
+    (
+        "file-icons/tauri.svg",
+        include_bytes!("../../assets/file-icons/tauri.svg"),
+    ),
+    (
+        "file-icons/tcl.svg",
+        include_bytes!("../../assets/file-icons/tcl.svg"),
+    ),
+    (
+        "file-icons/teal.svg",
+        include_bytes!("../../assets/file-icons/teal.svg"),
+    ),
+    (
+        "file-icons/templ.svg",
+        include_bytes!("../../assets/file-icons/templ.svg"),
+    ),
+    (
+        "file-icons/template.svg",
+        include_bytes!("../../assets/file-icons/template.svg"),
+    ),
+    (
+        "file-icons/terraform.svg",
+        include_bytes!("../../assets/file-icons/terraform.svg"),
+    ),
+    (
+        "file-icons/test-js.svg",
+        include_bytes!("../../assets/file-icons/test-js.svg"),
+    ),
+    (
+        "file-icons/test-jsx.svg",
+        include_bytes!("../../assets/file-icons/test-jsx.svg"),
+    ),
+    (
+        "file-icons/test-ts.svg",
+        include_bytes!("../../assets/file-icons/test-ts.svg"),
+    ),
+    (
+        "file-icons/tex.svg",
+        include_bytes!("../../assets/file-icons/tex.svg"),
+    ),
+    (
+        "file-icons/textlint.svg",
+        include_bytes!("../../assets/file-icons/textlint.svg"),
+    ),
+    (
+        "file-icons/tilt.svg",
+        include_bytes!("../../assets/file-icons/tilt.svg"),
+    ),
+    (
+        "file-icons/tldraw.svg",
+        include_bytes!("../../assets/file-icons/tldraw.svg"),
+    ),
+    (
+        "file-icons/tobi.svg",
+        include_bytes!("../../assets/file-icons/tobi.svg"),
+    ),
+    (
+        "file-icons/tobimake.svg",
+        include_bytes!("../../assets/file-icons/tobimake.svg"),
+    ),
+    (
+        "file-icons/todo.svg",
+        include_bytes!("../../assets/file-icons/todo.svg"),
+    ),
+    (
+        "file-icons/toml.svg",
+        include_bytes!("../../assets/file-icons/toml.svg"),
+    ),
+    (
+        "file-icons/travis.svg",
+        include_bytes!("../../assets/file-icons/travis.svg"),
+    ),
+    (
+        "file-icons/tree.svg",
+        include_bytes!("../../assets/file-icons/tree.svg"),
+    ),
+    (
+        "file-icons/tsconfig.svg",
+        include_bytes!("../../assets/file-icons/tsconfig.svg"),
+    ),
+    (
+        "file-icons/tsdoc.svg",
+        include_bytes!("../../assets/file-icons/tsdoc.svg"),
+    ),
+    (
+        "file-icons/tsil.svg",
+        include_bytes!("../../assets/file-icons/tsil.svg"),
+    ),
+    (
+        "file-icons/tune.svg",
+        include_bytes!("../../assets/file-icons/tune.svg"),
+    ),
+    (
+        "file-icons/twig.svg",
+        include_bytes!("../../assets/file-icons/twig.svg"),
+    ),
+    (
+        "file-icons/twine.svg",
+        include_bytes!("../../assets/file-icons/twine.svg"),
+    ),
+    (
+        "file-icons/typescript.svg",
+        include_bytes!("../../assets/file-icons/typescript.svg"),
+    ),
+    (
+        "file-icons/typescript-def.svg",
+        include_bytes!("../../assets/file-icons/typescript-def.svg"),
+    ),
+    (
+        "file-icons/typst.svg",
+        include_bytes!("../../assets/file-icons/typst.svg"),
+    ),
+    (
+        "file-icons/uml.svg",
+        include_bytes!("../../assets/file-icons/uml.svg"),
+    ),
+    (
+        "file-icons/unity.svg",
+        include_bytes!("../../assets/file-icons/unity.svg"),
+    ),
+    (
+        "file-icons/unocss.svg",
+        include_bytes!("../../assets/file-icons/unocss.svg"),
+    ),
+    (
+        "file-icons/url.svg",
+        include_bytes!("../../assets/file-icons/url.svg"),
+    ),
+    (
+        "file-icons/uv.svg",
+        include_bytes!("../../assets/file-icons/uv.svg"),
+    ),
+    (
+        "file-icons/vagrant.svg",
+        include_bytes!("../../assets/file-icons/vagrant.svg"),
+    ),
+    (
+        "file-icons/vala.svg",
+        include_bytes!("../../assets/file-icons/vala.svg"),
+    ),
+    (
+        "file-icons/vanilla-extract.svg",
+        include_bytes!("../../assets/file-icons/vanilla-extract.svg"),
+    ),
+    (
+        "file-icons/varnish.svg",
+        include_bytes!("../../assets/file-icons/varnish.svg"),
+    ),
+    (
+        "file-icons/vedic.svg",
+        include_bytes!("../../assets/file-icons/vedic.svg"),
+    ),
+    (
+        "file-icons/velocity.svg",
+        include_bytes!("../../assets/file-icons/velocity.svg"),
+    ),
+    (
+        "file-icons/vercel.svg",
+        include_bytes!("../../assets/file-icons/vercel.svg"),
+    ),
+    (
+        "file-icons/verdaccio.svg",
+        include_bytes!("../../assets/file-icons/verdaccio.svg"),
+    ),
+    (
+        "file-icons/verified.svg",
+        include_bytes!("../../assets/file-icons/verified.svg"),
+    ),
+    (
+        "file-icons/verilog.svg",
+        include_bytes!("../../assets/file-icons/verilog.svg"),
+    ),
+    (
+        "file-icons/vfl.svg",
+        include_bytes!("../../assets/file-icons/vfl.svg"),
+    ),
+    (
+        "file-icons/video.svg",
+        include_bytes!("../../assets/file-icons/video.svg"),
+    ),
+    (
+        "file-icons/vim.svg",
+        include_bytes!("../../assets/file-icons/vim.svg"),
+    ),
+    (
+        "file-icons/virtual.svg",
+        include_bytes!("../../assets/file-icons/virtual.svg"),
+    ),
+    (
+        "file-icons/visualstudio.svg",
+        include_bytes!("../../assets/file-icons/visualstudio.svg"),
+    ),
+    (
+        "file-icons/vlang.svg",
+        include_bytes!("../../assets/file-icons/vlang.svg"),
+    ),
+    (
+        "file-icons/vscode.svg",
+        include_bytes!("../../assets/file-icons/vscode.svg"),
+    ),
+    (
+        "file-icons/vue.svg",
+        include_bytes!("../../assets/file-icons/vue.svg"),
+    ),
+    (
+        "file-icons/vue-config.svg",
+        include_bytes!("../../assets/file-icons/vue-config.svg"),
+    ),
+    (
+        "file-icons/vuex-store.svg",
+        include_bytes!("../../assets/file-icons/vuex-store.svg"),
+    ),
+    (
+        "file-icons/wakatime.svg",
+        include_bytes!("../../assets/file-icons/wakatime.svg"),
+    ),
+    (
+        "file-icons/wallaby.svg",
+        include_bytes!("../../assets/file-icons/wallaby.svg"),
+    ),
+    (
+        "file-icons/wally.svg",
+        include_bytes!("../../assets/file-icons/wally.svg"),
+    ),
+    (
+        "file-icons/watchman.svg",
+        include_bytes!("../../assets/file-icons/watchman.svg"),
+    ),
+    (
+        "file-icons/webassembly.svg",
+        include_bytes!("../../assets/file-icons/webassembly.svg"),
+    ),
+    (
+        "file-icons/webhint.svg",
+        include_bytes!("../../assets/file-icons/webhint.svg"),
+    ),
+    (
+        "file-icons/webpack.svg",
+        include_bytes!("../../assets/file-icons/webpack.svg"),
+    ),
+    (
+        "file-icons/wepy.svg",
+        include_bytes!("../../assets/file-icons/wepy.svg"),
+    ),
+    (
+        "file-icons/werf.svg",
+        include_bytes!("../../assets/file-icons/werf.svg"),
+    ),
+    (
+        "file-icons/windicss.svg",
+        include_bytes!("../../assets/file-icons/windicss.svg"),
+    ),
+    (
+        "file-icons/wolframlanguage.svg",
+        include_bytes!("../../assets/file-icons/wolframlanguage.svg"),
+    ),
+    (
+        "file-icons/word.svg",
+        include_bytes!("../../assets/file-icons/word.svg"),
+    ),
+    (
+        "file-icons/wrangler.svg",
+        include_bytes!("../../assets/file-icons/wrangler.svg"),
+    ),
+    (
+        "file-icons/xaml.svg",
+        include_bytes!("../../assets/file-icons/xaml.svg"),
+    ),
+    (
+        "file-icons/xmake.svg",
+        include_bytes!("../../assets/file-icons/xmake.svg"),
+    ),
+    (
+        "file-icons/xml.svg",
+        include_bytes!("../../assets/file-icons/xml.svg"),
+    ),
+    (
+        "file-icons/yaml.svg",
+        include_bytes!("../../assets/file-icons/yaml.svg"),
+    ),
+    (
+        "file-icons/yang.svg",
+        include_bytes!("../../assets/file-icons/yang.svg"),
+    ),
+    (
+        "file-icons/yarn.svg",
+        include_bytes!("../../assets/file-icons/yarn.svg"),
+    ),
+    (
+        "file-icons/zeabur.svg",
+        include_bytes!("../../assets/file-icons/zeabur.svg"),
+    ),
+    (
+        "file-icons/zig.svg",
+        include_bytes!("../../assets/file-icons/zig.svg"),
+    ),
+    (
+        "file-icons/zip.svg",
+        include_bytes!("../../assets/file-icons/zip.svg"),
+    ),
 ];

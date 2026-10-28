@@ -9,9 +9,8 @@
 use gpui::component::input::{self, Input, InputEvent, InputState};
 use gpui::component::Sizable as _;
 use gpui::{
-    div, font, prelude::*, px, Action, AnimationExt, AnyElement, Context, CursorStyle, Div, Entity,
-    FontWeight, IntoElement, Render, ScrollHandle, SharedString, StyledText,
-    Subscription, TextRun, Window,
+    div, font, prelude::*, px, Action, AnyElement, Context, CursorStyle, Div, Entity, FontWeight,
+    IntoElement, Render, ScrollHandle, SharedString, StyledText, Subscription, TextRun, Window,
 };
 
 use super::*;
@@ -159,24 +158,58 @@ pub struct CommandPalette {
 
 /// Fuzzy match: every query character in order. Higher is better: matches at
 /// word starts and in runs score more. Returns the matched byte positions.
+/// When the query also appears whole in the text, that run is used if it
+/// scores at least as well, so "theme" lights up "theme", not "th…e…me".
 pub fn fuzzy(query: &str, text: &str) -> Option<(i32, Vec<usize>)> {
-    if query.is_empty() {
+    let q: Vec<char> = query
+        .chars()
+        .map(|c| c.to_ascii_lowercase())
+        .filter(|c| !c.is_whitespace())
+        .collect();
+    if q.is_empty() {
         return Some((0, vec![]));
     }
     let lower: Vec<(usize, char)> = text
         .char_indices()
         .map(|(i, c)| (i, c.to_ascii_lowercase()))
         .collect();
-    let mut positions = vec![];
-    let mut score = 0;
+    let mut hits = vec![];
     let mut at = 0;
+    for &c in &q {
+        let found = (at..lower.len()).find(|&k| lower[k].1 == c)?;
+        hits.push(found);
+        at = found + 1;
+    }
+    let mut best = (score(&lower, &hits), hits);
+    for start in 0..lower.len().saturating_sub(q.len() - 1) {
+        if (0..q.len()).all(|k| lower[start + k].1 == q[k]) {
+            let run: Vec<usize> = (start..start + q.len()).collect();
+            let s = score(&lower, &run);
+            if s >= best.0 {
+                best = (s, run);
+            }
+            // The first word-start occurrence is the one to show.
+            if start == 0 || !lower[start - 1].1.is_alphanumeric() {
+                break;
+            }
+        }
+    }
+    let positions = best.1.iter().map(|&k| lower[k].0).collect();
+    // Shorter labels win ties.
+    Some((best.0 * 10 - text.len() as i32 / 4, positions))
+}
+
+/// A query found whole in a command's group name ("mode" in "Modes"),
+/// scored under any label match.
+fn group_match(query: &str, group: &str) -> Option<i32> {
+    let q = query.trim().to_lowercase();
+    (q.chars().count() >= 3 && group.to_lowercase().contains(&q)).then_some(-100)
+}
+
+fn score(lower: &[(usize, char)], hits: &[usize]) -> i32 {
+    let mut score = 0;
     let mut prev: Option<usize> = None;
-    for q in query
-        .chars()
-        .map(|c| c.to_ascii_lowercase())
-        .filter(|c| !c.is_whitespace())
-    {
-        let found = (at..lower.len()).find(|&k| lower[k].1 == q)?;
+    for &found in hits {
         let word_start = found == 0 || !lower[found - 1].1.is_alphanumeric();
         score += 1
             + if word_start { 8 } else { 0 }
@@ -185,12 +218,9 @@ pub fn fuzzy(query: &str, text: &str) -> Option<(i32, Vec<usize>)> {
             } else {
                 0
             };
-        positions.push(lower[found].0);
         prev = Some(found);
-        at = found + 1;
     }
-    // Shorter labels win ties.
-    Some((score * 10 - text.len() as i32 / 4, positions))
+    score
 }
 
 impl CommandPalette {
@@ -272,28 +302,6 @@ impl CommandPalette {
                 Box::new(ToggleTheme),
             ),
         ];
-        // One row per theme; the current one is ticked.
-        let current = cx.theme().look;
-        for look in crate::theme::Look::ALL {
-            let action: Box<dyn Action> = match look {
-                crate::theme::Look::Calm => Box::new(ThemeCalm),
-                crate::theme::Look::Terracotta => Box::new(ThemeTerracotta),
-                crate::theme::Look::Patina => Box::new(ThemePatina),
-                crate::theme::Look::Ink => Box::new(ThemeInk),
-                crate::theme::Look::Slate => Box::new(ThemeSlate),
-                crate::theme::Look::Plum => Box::new(ThemePlum),
-            };
-            out.push(act(
-                &format!("Theme: {} · {}", look.name(), look.blurb()),
-                if look == current {
-                    "icons/check.svg"
-                } else {
-                    "icons/sparkles.svg"
-                },
-                None,
-                action,
-            ));
-        }
         out.extend([
             act(
                 if s.browser {
@@ -310,6 +318,18 @@ impl CommandPalette {
                 "icons/cpu.svg",
                 Some(shortcut("/")),
                 Box::new(ToggleModelPicker),
+            ),
+            act(
+                "Go back",
+                "icons/arrow-left.svg",
+                Some("Alt+Left".into()),
+                Box::new(GoBack),
+            ),
+            act(
+                "Go forward",
+                "icons/arrow-right.svg",
+                Some("Alt+Right".into()),
+                Box::new(GoForward),
             ),
             act(
                 "Focus the composer",
@@ -342,6 +362,12 @@ impl CommandPalette {
                 Box::new(OpenProjects),
             ),
             act(
+                "Documents: every file Forge made",
+                "icons/file-text.svg",
+                None,
+                Box::new(OpenDocuments),
+            ),
+            act(
                 "The project map",
                 "icons/map.svg",
                 Some(shortcut("Shift M")),
@@ -352,6 +378,30 @@ impl CommandPalette {
                 "icons/panel-right.svg",
                 Some(shortcut("Shift E")),
                 Box::new(TogglePanel),
+            ),
+            act(
+                "Side panel: Plan",
+                "icons/route.svg",
+                Some(shortcut("1")),
+                Box::new(ShowPlanView),
+            ),
+            act(
+                "Side panel: Agents",
+                "icons/bot.svg",
+                Some(shortcut("2")),
+                Box::new(ShowAgentsView),
+            ),
+            act(
+                "Side panel: Files",
+                "icons/folder.svg",
+                Some(shortcut("3")),
+                Box::new(ShowFilesView),
+            ),
+            act(
+                "Side panel: Browser",
+                "icons/globe.svg",
+                Some(shortcut("4")),
+                Box::new(ShowBrowserView),
             ),
             act(
                 if s.doc_below {
@@ -412,10 +462,28 @@ impl CommandPalette {
                 Box::new(OpenSkills),
             ),
             act(
+                "Install a skill…",
+                "icons/download.svg",
+                Some(shortcut("Shift I")),
+                Box::new(InstallSkill),
+            ),
+            act(
+                "Browse plugin marketplaces…",
+                "icons/puzzle.svg",
+                None,
+                Box::new(OpenMarketplaces),
+            ),
+            act(
                 "Open Hooks…",
                 "icons/webhook.svg",
                 None,
                 Box::new(OpenHooks),
+            ),
+            act(
+                "Open Plugins…",
+                "icons/puzzle.svg",
+                None,
+                Box::new(OpenPlugins),
             ),
             act(
                 "Open MCP servers…",
@@ -577,6 +645,39 @@ impl CommandPalette {
                 Box::new(ShowShortcuts),
             ),
         );
+        // A tool waits in this chat: its card's three answers, with their keys.
+        if let Some((_, _, _, always)) = s.waiting_tool() {
+            let keys = super::message::ASK_KEYS;
+            out.insert(
+                0,
+                act(
+                    "Deny the waiting request",
+                    "icons/circle-slash.svg",
+                    Some(keys.2.into()),
+                    Box::new(DenyWaiting),
+                ),
+            );
+            if always {
+                out.insert(
+                    0,
+                    act(
+                        "Always allow the waiting request",
+                        "icons/circle-check.svg",
+                        Some(keys.1.into()),
+                        Box::new(AlwaysAllowWaiting),
+                    ),
+                );
+            }
+            out.insert(
+                0,
+                act(
+                    "Allow the waiting request",
+                    "icons/circle-check.svg",
+                    Some(keys.0.into()),
+                    Box::new(AllowWaiting),
+                ),
+            );
+        }
         if !s.pending_approvals().is_empty() {
             out.insert(
                 0,
@@ -621,7 +722,11 @@ impl CommandPalette {
             }
             if matches!(
                 f.office(),
-                Some(crate::office::Kind::Docx | crate::office::Kind::Pptx | crate::office::Kind::Xlsx)
+                Some(
+                    crate::office::Kind::Docx
+                        | crate::office::Kind::Pptx
+                        | crate::office::Kind::Xlsx
+                )
             ) {
                 out.push(act(
                     "Export the open file to PDF",
@@ -758,6 +863,50 @@ impl CommandPalette {
                     Box::new(DuplicateChat),
                 ),
                 act(
+                    if c.detailed {
+                        "Show the transcript as usual"
+                    } else {
+                        "Show the transcript in detail"
+                    },
+                    "icons/list-todo.svg",
+                    None,
+                    Box::new(ToggleDetailedView),
+                ),
+                act(
+                    "Continue in a new chat",
+                    "icons/message-square.svg",
+                    None,
+                    Box::new(ContinueInNewChat),
+                ),
+                act(
+                    "Copy this chat as Markdown",
+                    "icons/copy.svg",
+                    None,
+                    Box::new(CopyChatMarkdown),
+                ),
+                act(
+                    "Open the chat's folder",
+                    "icons/folder-open.svg",
+                    None,
+                    Box::new(OpenChatFolder),
+                ),
+                act(
+                    "Open the chat's folder in VS Code",
+                    "icons/code-xml.svg",
+                    None,
+                    Box::new(OpenInVsCode),
+                ),
+                act(
+                    if c.archived {
+                        "Unarchive this chat"
+                    } else {
+                        "Archive this chat"
+                    },
+                    "icons/archive.svg",
+                    None,
+                    Box::new(ArchiveChat),
+                ),
+                act(
                     "Export this chat as Markdown",
                     "icons/file-text.svg",
                     None,
@@ -774,6 +923,24 @@ impl CommandPalette {
                     "icons/share-2.svg",
                     None,
                     Box::new(ShareChat),
+                ),
+                act(
+                    "Show the project's files",
+                    "icons/folder.svg",
+                    None,
+                    Box::new(ToggleFiles),
+                ),
+                act(
+                    "Show the files this chat made",
+                    "icons/file-text.svg",
+                    None,
+                    Box::new(ShowChatFiles),
+                ),
+                act(
+                    "Show the session: where it runs, its context, its changes",
+                    "icons/panel-right.svg",
+                    None,
+                    Box::new(ToggleSession),
                 ),
                 act(
                     "Show the context window",
@@ -836,7 +1003,10 @@ impl CommandPalette {
                 );
             }
             // Messages sent while Forge works, not yet with it.
-            if s.current.and_then(|c| s.queued.get(&c)).is_some_and(|q| !q.is_empty()) {
+            if s.current
+                .and_then(|c| s.queued.get(&c))
+                .is_some_and(|q| !q.is_empty())
+            {
                 chat.insert(
                     0,
                     act(
@@ -882,7 +1052,8 @@ impl CommandPalette {
             .filter(|m| *m != ModeId::Bypass || s.bypass_allowed)
         {
             out.push(Command {
-                label: format!("Mode: {}", m.label()).into(),
+                // A control names its action.
+                label: format!("Switch to {}", m.label()).into(),
                 group: "Modes",
                 icon: m.icon(),
                 hint: (m == s.mode).then(|| "current".into()),
@@ -897,7 +1068,11 @@ impl CommandPalette {
             }
             let hint = (current.as_deref() == Some(row.name.as_str())).then(|| "current".into());
             out.push(Command {
-                label: format!("Model: {} · {}", row.display, row.name).into(),
+                label: match &row.pick {
+                    Some((profile, id)) => format!("Model: {} · {profile} · {id}", row.display),
+                    None => format!("Model: {} · {}", row.display, row.name),
+                }
+                .into(),
                 group: "Models",
                 icon: "icons/cpu.svg",
                 hint,
@@ -931,7 +1106,12 @@ impl CommandPalette {
         let mut scored: Vec<(i32, Command, Vec<usize>)> = self
             .commands(cx)
             .into_iter()
-            .filter_map(|c| fuzzy(q, &c.label).map(|(score, pos)| (score, c, pos)))
+            .filter_map(|c| match fuzzy(q, &c.label) {
+                Some((score, pos)) => Some((score, c, pos)),
+                // "mode" still finds the modes: the group name counts too,
+                // below any match in the label itself.
+                None => group_match(q, c.group).map(|score| (score, c, vec![])),
+            })
             .collect();
         // With nothing typed, Files lists the project's first files.
         if !q.is_empty() || scope == Scope::Files {
@@ -1105,7 +1285,13 @@ impl CommandPalette {
         match cmd.target {
             Target::Action(a) => window.dispatch_action(a, cx),
             Target::Chat(id) => self.state.update(cx, |s, cx| s.open_chat(id, cx)),
-            Target::Model(name) => self.state.update(cx, |s, cx| s.select_profile(&name, cx)),
+            // A gateway's model is "profile\u{1}id".
+            Target::Model(name) => self
+                .state
+                .update(cx, |s, cx| match name.split_once('\u{1}') {
+                    Some((profile, id)) => s.pick_catalog_model(profile, id, cx),
+                    None => s.select_profile(&name, cx),
+                }),
             Target::Mode(m) => self.state.update(cx, |s, cx| s.set_mode(m, cx)),
             Target::File(rel) => self.state.update(cx, |s, cx| s.open_project_file(rel, cx)),
             Target::Message(id, q) => {
@@ -1250,8 +1436,9 @@ pub fn highlighted(label: &SharedString, positions: &[usize], t: &Theme) -> Styl
         runs.push(TextRun {
             len,
             font: f,
+            // A match reads by weight, in the strong ink, not in the accent.
             color: if hit {
-                t.colors.primary
+                t.colors.text_strong
             } else {
                 t.colors.text
             },
@@ -1267,10 +1454,8 @@ pub fn highlighted(label: &SharedString, positions: &[usize], t: &Theme) -> Styl
 impl CommandPalette {
     /// The title bar's search field. Closed, it shows what it searches and
     /// opens on a click; open, you type in it and the results drop below.
-    pub fn field(&mut self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
+    fn field(&mut self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         let t = cx.theme().clone();
-        let open = self.state.read(cx).palette_open;
-        // Every control in the title bar occludes it (see `title_bar`).
         let field = div()
             .id("palette-field")
             .occlude()
@@ -1287,35 +1472,8 @@ impl CommandPalette {
             .child(icon(
                 "icons/search.svg",
                 t.size.icon_sm,
-                if open {
-                    t.colors.text_muted
-                } else {
-                    t.colors.text_subtle
-                },
+                t.colors.text_muted,
             ));
-        if !open {
-            let (edge, ink, fill) = (t.colors.border, t.colors.text_muted, t.colors.surface);
-            return field
-                .bg(t.colors.hover)
-                .border_color(t.colors.hover)
-                .cursor(CursorStyle::IBeam)
-                .text_color(t.colors.text_subtle)
-                .hover(move |st| st.bg(fill).border_color(edge).text_color(ink))
-                .child(
-                    div()
-                        .flex_1()
-                        .whitespace_nowrap()
-                        .overflow_hidden()
-                        .text_ellipsis()
-                        .text_size(t.text.caption)
-                        .child("Search files, chats and commands"),
-                )
-                .child(keys(&t, &shortcut("K")))
-                .on_click(|_, window, cx| {
-                    window.dispatch_action(Box::new(ToggleCommandPalette), cx)
-                })
-                .into_any_element();
-        }
         let dropdown = self.dropdown(window, cx);
         field
             .w(t.size.palette)
@@ -1333,13 +1491,11 @@ impl CommandPalette {
             .capture_action(nav::<input::IndentInline>("tab", cx))
             .capture_action(nav::<input::OutdentInline>("shift-tab", cx))
             .capture_action(nav::<input::Escape>("escape", cx))
-            .capture_action(
-                cx.listener(|this, e: &input::Enter, window, cx| {
-                    if !e.secondary && !e.shift && this.key("enter", window, cx) {
-                        cx.stop_propagation();
-                    }
-                }),
-            )
+            .capture_action(cx.listener(|this, e: &input::Enter, window, cx| {
+                if !e.secondary && !e.shift && this.key("enter", window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
             .child(
                 div()
                     .flex_1()
@@ -1401,7 +1557,7 @@ impl CommandPalette {
                             p,
                             t.size.icon_xs,
                             if on {
-                                t.colors.primary
+                                t.colors.text
                             } else {
                                 t.colors.text_subtle
                             },
@@ -1412,17 +1568,13 @@ impl CommandPalette {
                         d.child(
                             div()
                                 .font_weight(FontWeight::NORMAL)
-                                .text_color(if on {
-                                    t.colors.primary
-                                } else {
-                                    t.colors.text_subtle
-                                })
+                                .text_color(t.colors.text_subtle)
                                 .child(found.counts[i].to_string()),
                         )
                     })
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.set_scope(tab, window, cx)
-                    })),
+                    .on_click(
+                        cx.listener(move |this, _, window, cx| this.set_scope(tab, window, cx)),
+                    ),
             );
         }
 
@@ -1440,7 +1592,11 @@ impl CommandPalette {
             if cmd.group != last_group {
                 last_group = cmd.group;
                 child += 1;
-                let more = found.cut.iter().find(|(g, _)| *g == cmd.group).map(|(_, n)| *n);
+                let more = found
+                    .cut
+                    .iter()
+                    .find(|(g, _)| *g == cmd.group)
+                    .map(|(_, n)| *n);
                 let to = Scope::of(cmd.group);
                 list = list.child(
                     div()
@@ -1455,13 +1611,13 @@ impl CommandPalette {
                         .text_color(t.colors.text_subtle)
                         .child(cmd.group)
                         .children(more.map(|n| {
-                            let ink = t.colors.text_strong;
+                            let ink = t.colors.text;
                             div()
                                 .id(("palette-more", i))
                                 .cursor_pointer()
-                                .text_color(t.colors.primary)
+                                .text_color(t.colors.text_muted)
                                 .hover(move |st| st.text_color(ink))
-                                .child(format!("All {n} ›"))
+                                .child(format!("Show all {n}"))
                                 .on_click(cx.listener(move |this, _, window, cx| {
                                     this.set_scope(to, window, cx)
                                 }))
@@ -1475,6 +1631,7 @@ impl CommandPalette {
             child += 1;
             let row = div()
                 .id(("cmd", i))
+                .group("cmd-row")
                 .flex()
                 .items_center()
                 .gap(t.space.md)
@@ -1494,7 +1651,7 @@ impl CommandPalette {
                     cmd.icon,
                     t.size.icon_sm,
                     if on {
-                        t.colors.primary
+                        t.colors.text
                     } else {
                         t.colors.text_muted
                     },
@@ -1517,7 +1674,16 @@ impl CommandPalette {
                         .flex()
                         .items_baseline(),
                 )
-                .children(cmd.hint.as_ref().map(|h| keys(&t, h)))
+                // Its keys on the row you are on (or point at), not on every row.
+                .children(cmd.hint.as_ref().map(|h| {
+                    div()
+                        .flex_none()
+                        // "current" is state, not a key: always shown.
+                        .when(!on && h.as_ref() != "current", |d| {
+                            d.invisible().group_hover("cmd-row", |st| st.visible())
+                        })
+                        .child(keys(&t, h))
+                }))
                 .on_mouse_move(cx.listener(move |this, _, _, cx| {
                     if this.selected != i {
                         this.selected = i;
@@ -1528,7 +1694,11 @@ impl CommandPalette {
             list = list.child(super::motion::row_in(row, ("cmd-in", i), i, &t));
         }
         if count == 0 {
-            let words = scope(self.query.read(cx).value().as_ref()).1.trim().chars().count();
+            let words = scope(self.query.read(cx).value().as_ref())
+                .1
+                .trim()
+                .chars()
+                .count();
             list = list.child(
                 div()
                     .px(t.space.md)
@@ -1569,14 +1739,17 @@ impl CommandPalette {
             .child(hint(keys(&t, "Enter"), "open"))
             .child(hint(keys(&t, "Esc"), "close"))
             .child(div().flex_1())
-            .child(hint(keys(&t, "Tab"), "next scope"));
+            // Tab moves between scopes: said only while they show.
+            .when(found.typed || found.scope != Scope::All, |d| {
+                d.child(hint(keys(&t, "Tab"), "next scope"))
+            });
 
         div()
             .absolute()
             .top(t.size.control + t.space.xs)
             .left_0()
             .right_0()
-            .child(super::motion::edge_draw(
+            .child(super::motion::spotlight(
                 theme::popover(&t)
                     .id("palette")
                     .occlude()
@@ -1586,13 +1759,15 @@ impl CommandPalette {
                     .overflow_hidden()
                     .cursor(CursorStyle::Arrow)
                     .on_click(|_, _, cx| cx.stop_propagation())
-                    .child(tabs)
+                    // Scopes once there is something to narrow: you typed, or
+                    // picked one (Tab, or a prefix).
+                    .when(found.typed || found.scope != Scope::All, |d| d.child(tabs))
                     .child(list)
                     .child(footer)
                     .relative(),
-                "palette-in",
-                t.colors.primary,
-                0.,
+                "palette",
+                // Closed this frame: drawn once more while it lifts away.
+                !self.state.read(cx).palette_open,
                 &t,
             ))
             .into_any_element()
@@ -1628,7 +1803,6 @@ fn keys(t: &Theme, text: &str) -> Div {
                 .px(px(5.))
                 .rounded(t.radius.small)
                 .border_1()
-                .border_b_2()
                 .border_color(t.colors.border)
                 .bg(t.extra.stage)
                 .text_size(t.text.caption)
@@ -1641,26 +1815,46 @@ fn keys(t: &Theme, text: &str) -> Div {
 /// Behind the open palette: the window under the title bar, dimmed. A click
 /// on it closes the palette.
 impl Render for CommandPalette {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    /// Over a dimmed window, the search field near the top, centred, with its
+    /// results hung below: opened from the sidebar's Search or Ctrl+K.
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
-        let fade = std::time::Duration::from_millis(t.motion_ms);
+        let leaving = !self.state.read(cx).palette_open;
+        let field = self.field(window, cx);
         div()
-            .id("palette-scrim")
-            .occlude()
             .absolute()
-            .top(t.size.titlebar)
+            .top_0()
             .left_0()
             .right_0()
             .bottom_0()
-            .bg(t.extra.scrim)
-            .on_click(cx.listener(|this, _, window, cx| {
-                this.close(cx);
-                window.dispatch_action(Box::new(FocusComposer), cx);
-            }))
-            .with_animation(
-                "palette-scrim-in",
-                gpui::Animation::new(fade).with_easing(gpui::ease_in_out),
-                |d, delta| d.opacity(delta),
+            .child(super::motion::backdrop(
+                div()
+                    .id("palette-scrim")
+                    .occlude()
+                    .absolute()
+                    .top(t.size.titlebar)
+                    .left_0()
+                    .right_0()
+                    .bottom_0()
+                    .bg(t.extra.scrim)
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.close(cx);
+                        window.dispatch_action(Box::new(FocusComposer), cx);
+                    })),
+                "palette-scrim",
+                t.extra.scrim,
+                leaving,
+                &t,
+            ))
+            .child(
+                div()
+                    .absolute()
+                    .top(t.size.titlebar + t.space.xxxl)
+                    .left_0()
+                    .right_0()
+                    .flex()
+                    .justify_center()
+                    .child(field),
             )
     }
 }
@@ -1715,6 +1909,11 @@ mod tests {
         assert!(word > mid, "word starts win: {word} vs {mid}");
         assert_eq!(fuzzy("ch", "New chat").unwrap().1, vec![4, 5]);
         assert_eq!(fuzzy("", "anything").unwrap().1, Vec::<usize>::new());
+        // A whole-word hit beats letters scattered across earlier words.
+        assert_eq!(
+            fuzzy("theme", "Use the Ink theme").unwrap().1,
+            vec![12, 13, 14, 15, 16]
+        );
     }
 }
 

@@ -1,8 +1,9 @@
 //! The status bar at the foot of the window, as in VS Code: the remote
 //! indicator leftmost (`remote_menu.rs`; its quick pick opens above it),
-//! then the project's branch, and the model on the right.
+//! then the project's branch, and the terminal's button on the right (the
+//! model is in the composer).
 
-use gpui::{div, prelude::*, AnyElement, Entity};
+use gpui::{div, prelude::*, px, AnyElement, Entity};
 
 use super::icon;
 use crate::state::AppState;
@@ -14,7 +15,7 @@ pub fn render(
     picker: Entity<super::remote_menu::RemotePicker>,
     t: &Theme,
 ) -> AnyElement {
-    let model = s.active_profile().map(|p| p.display());
+    let (hover, open) = (t.colors.hover, s.terminal_open);
     div()
         .relative()
         .flex_none()
@@ -41,10 +42,41 @@ pub fn render(
             )
         })
         .child(div().flex_1())
-        .children(model.map(|m| div().pr(t.space.md).child(format!("Model: {m}"))))
-        .when(s.remote_menu.is_some(), |d| {
-            d.child(gpui::deferred(picker).with_priority(3))
-        })
+        .child(
+            div()
+                .id("status-terminal")
+                .mr(t.space.sm)
+                .size(t.size.statusbar - px(4.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(t.radius.small)
+                .cursor_pointer()
+                .when(open, |d| d.bg(hover))
+                .hover(move |d| d.bg(hover))
+                .child(icon(
+                    "icons/terminal.svg",
+                    t.size.icon_sm,
+                    if open {
+                        t.colors.text
+                    } else {
+                        t.colors.text_muted
+                    },
+                ))
+                .tooltip(move |w, cx| {
+                    gpui::component::tooltip::Tooltip::new(if open {
+                        "Hide the terminal (Ctrl+`)"
+                    } else {
+                        "Show the terminal (Ctrl+`)"
+                    })
+                    .build(w, cx)
+                })
+                .on_click(|_, window, cx| {
+                    window.dispatch_action(Box::new(crate::ToggleTerminal), cx)
+                }),
+        )
+        // Always there: the picker draws itself while open and as it leaves.
+        .child(gpui::deferred(picker).with_priority(3))
         .into_any_element()
 }
 

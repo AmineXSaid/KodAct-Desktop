@@ -96,7 +96,9 @@ pub fn breakdown(messages: &[Message]) -> Breakdown {
                     .iter()
                     .map(|a| match a.kind {
                         crate::attach::Kind::Image(_) => 1_000,
-                        crate::attach::Kind::Text => a.size.div_ceil(4),
+                        crate::attach::Kind::Text | crate::attach::Kind::Pasted => {
+                            a.size.div_ceil(4)
+                        }
                         // A document's text goes in; a PDF as a document costs about as much.
                         crate::attach::Kind::Pdf | crate::attach::Kind::Document(_) => a
                             .text
@@ -222,6 +224,128 @@ pub fn meter(usage: Option<Usage>, window: Option<u64>) -> Option<Meter> {
     })
 }
 
+/// What fills the context, as ForgeCLI counts it (`get_context_usage`, the
+/// numbers its `/context` shows): each part in tokens, the window, and where
+/// automatic compaction runs. For the Session column's Context card.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ContextUsage {
+    pub window: u64,
+    /// The parts added up (estimates, at four characters a token).
+    pub total: u64,
+    /// What the endpoint measured for the last request; 0 when it hasn't said.
+    pub measured: u64,
+    pub autocompact_at: Option<u64>,
+    /// (name, tokens): system prompt, built-in tools, MCP tools, skills,
+    /// memory files (until they are sent), messages.
+    pub categories: Vec<(String, u64)>,
+    pub tools: Vec<(String, u64)>,
+    pub memory_files: Vec<(String, u64)>,
+    pub skills: Vec<(String, u64)>,
+}
+
+impl ContextUsage {
+    /// ForgeCLI's answer, or None when it isn't one.
+    pub fn from_json(v: &serde_json::Value) -> Option<Self> {
+        let rows = |key: &str, name: &str| -> Vec<(String, u64)> {
+            v[key]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|r| Some((r[name].as_str()?.to_string(), r["tokens"].as_u64()?)))
+                .collect()
+        };
+        Some(Self {
+            window: v["window"].as_u64()?,
+            total: v["total"].as_u64()?,
+            measured: v["measured"].as_u64().unwrap_or(0),
+            autocompact_at: v["autocompactAt"].as_u64(),
+            categories: rows("categories", "name"),
+            tools: rows("tools", "name"),
+            memory_files: rows("memoryFiles", "path"),
+            skills: rows("skills", "name"),
+        })
+    }
+
+    /// What is used: the endpoint's own measure when it gave one, else the
+    /// parts added up.
+    pub fn used(&self) -> u64 {
+        if self.measured > 0 {
+            self.measured
+        } else {
+            self.total
+        }
+    }
+
+    /// What automatic compaction keeps free: the window past where it runs.
+    pub fn buffer(&self) -> u64 {
+        self.autocompact_at
+            .map(|at| self.window.saturating_sub(at))
+            .unwrap_or(0)
+    }
+
+    /// What is left, after the parts and the compaction buffer.
+    pub fn free(&self) -> u64 {
+        self.window
+            .saturating_sub(self.total)
+            .saturating_sub(self.buffer())
+    }
+
+    /// The demo's numbers for a conversation of `messages` tokens: what a
+    /// coding chat's context looks like, so the card can be seen without
+    /// an engine.
+    pub fn demo(messages: u64) -> Self {
+        let tools: Vec<(String, u64)> = [
+            ("Bash", 2_900),
+            ("Edit", 1_400),
+            ("Read", 1_200),
+            ("Write", 900),
+            ("Grep", 1_100),
+            ("Glob", 600),
+            ("WebFetch", 800),
+            ("WebSearch", 700),
+            ("Task", 2_600),
+            ("TodoWrite", 2_100),
+            ("mcp__github__create_issue", 1_900),
+            ("mcp__github__list_prs", 1_600),
+        ]
+        .into_iter()
+        .map(|(n, t)| (n.to_string(), t))
+        .collect();
+        let (builtin, mcp) = tools.iter().fold((0, 0), |(b, m), (n, t)| {
+            if n.starts_with("mcp__") {
+                (b, m + t)
+            } else {
+                (b + t, m)
+            }
+        });
+        let categories = vec![
+            ("System prompt".to_string(), 3_400),
+            ("Built-in tools".to_string(), builtin),
+            ("MCP tools".to_string(), mcp),
+            ("Skills".to_string(), 900),
+            ("Messages".to_string(), messages),
+        ];
+        let total = categories.iter().map(|(_, t)| t).sum();
+        Self {
+            window: 200_000,
+            total,
+            measured: 0,
+            autocompact_at: Some(155_000),
+            categories,
+            tools,
+            memory_files: vec![
+                ("FORGE.md".into(), 1_300),
+                ("~/.forge/FORGE.md".into(), 400),
+            ],
+            skills: vec![
+                ("frontend-design".into(), 300),
+                ("pdf".into(), 250),
+                ("xlsx".into(), 350),
+            ],
+        }
+    }
+}
+
 /// 950, 12.3K, 1.2M.
 pub fn short(n: u64) -> String {
     match n {
@@ -296,6 +420,34 @@ mod tests {
         assert_eq!((big.used, small.used), (50_000, 50_000));
         assert!((big.fraction() - 0.25).abs() < 1e-6);
         assert!(small.fraction() > 1.);
+    }
+
+    #[test]
+    fn forgecli_s_usage_reads_and_adds_up() {
+        let v = serde_json::json!({
+            "model": "m", "window": 200_000, "total": 20_000, "free": 180_000, "measured": 0,
+            "autocompactAt": 155_000,
+            "categories": [{"name": "System prompt", "tokens": 3_000}, {"name": "Messages", "tokens": 17_000}],
+            "tools": [{"name": "Bash", "tokens": 900}],
+            "memoryFiles": [{"path": "FORGE.md", "tokens": 120}],
+            "skills": [],
+        });
+        let u = ContextUsage::from_json(&v).unwrap();
+        assert_eq!(u.categories.len(), 2);
+        assert_eq!((u.used(), u.buffer(), u.free()), (20_000, 45_000, 135_000));
+        assert_eq!(u.memory_files, vec![("FORGE.md".to_string(), 120)]);
+        // The endpoint's own measure wins when it gave one.
+        let measured = ContextUsage {
+            measured: 21_500,
+            ..u
+        };
+        assert_eq!(measured.used(), 21_500);
+        assert_eq!(
+            ContextUsage::from_json(&serde_json::json!({"oops": 1})),
+            None
+        );
+        let d = ContextUsage::demo(5_000);
+        assert_eq!(d.total, d.categories.iter().map(|(_, t)| t).sum::<u64>());
     }
 
     #[test]

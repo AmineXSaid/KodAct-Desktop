@@ -133,7 +133,7 @@ Solid paper fill across `viewBox`. No dot pattern. Each zone box:
 <!-- paper-masked break for the zone label -->
 <rect x="zone_x(i)+20" y="zone_y-8" width="{label_w}" height="16" fill="{paper}"/>
 <text x="zone_x(i)+24" y="zone_y+4" fill="{soft}"
-      font-family="{eyebrow}" letter-spacing="0.14em">{name}</text>
+      font-family="Anthropic Sans Text" letter-spacing="0.14em">{name}</text>
 ```
 
 ### 2.2 Component box
@@ -192,8 +192,8 @@ corridor_x = dst_cx                            # land arrow on dst horizontal ce
 <g transform="translate(left_pad + 20, footer_y(k) + (footer_bar_h - 24)/2)" color="{ink}">
   <use href="#icon-{name}"/>
 </g>
-<text x="left_pad + 56" y="footer_y(k) + 24" font-family="{node-name}" font-size="14" fill="{ink}">{name}</text>
-<text x="left_pad + 56" y="footer_y(k) + 40" font-family="{sublabel}" font-size="12" fill="{muted}">{sub}</text>
+<text x="left_pad + 56" y="footer_y(k) + 24" font-family="Anthropic Sans Text" font-size="14" fill="{ink}">{name}</text>
+<text x="left_pad + 56" y="footer_y(k) + 40" font-family="Anthropic Sans Text" font-size="12" fill="{muted}">{sub}</text>
 ```
 
 Footer bars are layer-wide services. **No connectors emerge from them.** They sit visually below the zones and let the reader see the cross-cutting concerns at a glance.
@@ -267,7 +267,7 @@ The label sits **near the source end** of the connector (not at the mid-segment)
   <rect x="-{w/2}" y="-9" width="{w}" height="18" rx="3" fill="{paper}" stroke="none"/>
   <use href="#icon-{icon}" x="-{w/2 + 4}" y="-6" width="12" height="12" color="{stroke_color}"/>     <!-- if icon set -->
   <text x="{icon ? (-(w/2) + 22) : 0}" y="3" text-anchor="{icon ? 'start' : 'middle'}"
-        font-family="{arrow-label}" font-size="9" font-weight="600"
+        font-family="Anthropic Sans Text" font-size="9" font-weight="600"
         letter-spacing="0.08em" fill="{stroke_color}">{label}</text>
 </g>
 ```

@@ -208,16 +208,15 @@ impl Render for DesignHome {
                     .child(
                         div()
                             .font_family(t.font_display.clone())
-                            .font_weight(t.display_weight)
-                            .text_size(t.size.greeting)
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_size(t.text.heading_sm)
                             .text_color(t.colors.text_strong)
                             .child(crate::i18n::tr("Design")),
                     )
                     .child(
                         div()
-                            .font_family(t.font_serif.clone())
-                            .text_size(t.text.subheading)
-                            .text_color(t.colors.text_body)
+                            .text_size(t.text.body)
+                            .text_color(t.colors.text_muted)
                             .child(crate::i18n::tr("Start from a template, an example, a design system or a skill. Forge sets up the chat, and the page shows beside it as it's made.")),
                     ),
             );

@@ -12,59 +12,66 @@ use gpui::{
 use super::*;
 use crate::theme::{self, Theme};
 
-/// A section's title and its one-line explanation, with its action on the right.
+/// A page's title and what the page is for, with its one primary action
+/// on the right: the title at heading size, so each page has an anchor.
 pub fn header(t: &Theme, title: &str, hint: &str, action: Option<AnyElement>) -> gpui::Div {
     div()
         .flex()
         .items_start()
-        .gap(t.space.md)
+        .gap(t.space.lg)
+        .pb(t.space.sm)
         .child(
             div()
                 .flex_1()
                 .min_w_0()
                 .flex()
                 .flex_col()
-                .gap(px(2.))
+                .gap(t.space.xs)
                 .child(
                     div()
-                        .text_size(t.text.body_sm)
-                        .font_weight(FontWeight::MEDIUM)
+                        .text_size(t.text.heading_sm)
+                        .font_family(t.font_display.clone())
+                        .font_weight(FontWeight::SEMIBOLD)
                         .text_color(t.colors.text_strong)
                         .child(title.to_string()),
                 )
                 .child(
                     div()
-                        .text_size(t.text.caption)
+                        .max_w(t.size.settings_measure)
+                        .text_size(t.text.body_sm)
                         .text_color(t.colors.text_muted)
-                        .line_height(relative(1.4))
+                        .line_height(relative(1.5))
                         .child(hint.to_string()),
                 ),
         )
-        .children(action)
+        .children(action.map(|a| div().flex_none().pt(px(2.)).child(a)))
 }
 
 /// A small group heading inside a list ("You", "Project").
 pub fn group(t: &Theme, label: impl Into<SharedString>) -> gpui::Div {
     div()
-        .pt(t.space.sm)
+        .pt(t.space.md)
+        .px(px(2.))
         .text_size(t.text.caption)
         .font_weight(FontWeight::MEDIUM)
         .text_color(t.colors.text_muted)
         .child(label.into())
 }
 
-/// A list item's card.
+/// A list item's card: on the surface, lifted as the theme lifts cards.
 pub fn card(t: &Theme) -> gpui::Div {
     div()
         .flex()
         .items_center()
         .gap(t.space.md)
-        .px(px(14.))
+        .min_h(px(56.))
+        .px(t.space.lg)
         .py(px(10.))
         .rounded(t.radius.card)
         .border_1()
         .border_color(t.colors.border)
         .bg(t.colors.surface)
+        .shadow(t.elevation_grain())
 }
 
 /// A card's title line and its detail lines.
@@ -110,17 +117,60 @@ pub fn card_text(
         }))
 }
 
-/// The empty state: what goes here and how to add the first one.
+/// The empty state: what goes here and how to add the first one, in a
+/// dashed well (a place waiting for something) with a mark beside it.
 pub fn empty(t: &Theme, text: &str) -> gpui::Div {
+    // "No hooks yet. A hook can…": the first sentence leads, the rest teaches.
+    let (lead, rest) = match text.split_once(". ") {
+        Some((a, b)) => (format!("{a}."), Some(b.to_string())),
+        None => (text.to_string(), None),
+    };
     div()
-        .p(px(18.))
+        .flex()
+        .items_start()
+        .gap(t.space.md)
+        .px(t.space.lg)
+        .py(t.space.lg)
         .rounded(t.radius.card)
         .border_1()
-        .border_color(t.colors.border)
-        .text_size(t.text.body_sm)
-        .text_color(t.colors.text_muted)
-        .line_height(relative(1.45))
-        .child(text.to_string())
+        .border_dashed()
+        .border_color(t.extra.border_strong)
+        .bg(t.extra.sunk.opacity(0.5))
+        .child(
+            div()
+                .flex_none()
+                .size(px(32.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(t.radius.pill)
+                .bg(t.colors.surface)
+                .border_1()
+                .border_color(t.colors.border)
+                .child(icon("icons/plus.svg", t.size.icon_sm, t.colors.text_muted)),
+        )
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .line_height(relative(1.45))
+                .child(
+                    div()
+                        .text_size(t.text.body_sm)
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(t.colors.text_strong)
+                        .child(lead),
+                )
+                .children(rest.map(|r| {
+                    div()
+                        .text_size(t.text.body_sm)
+                        .text_color(t.colors.text_muted)
+                        .child(r)
+                })),
+        )
 }
 
 /// While the files are first read.
@@ -167,13 +217,16 @@ pub fn problems(t: &Theme, list: &[String]) -> Option<gpui::Div> {
     })
 }
 
-/// A form's message: an error to fix, or what happened.
+/// A form's message: an error to fix, or what happened, on its own tint.
 pub fn status(t: &Theme, error: &Option<SharedString>) -> Option<gpui::Div> {
     error.as_ref().map(|e| {
         div()
             .flex()
             .items_start()
             .gap(px(6.))
+            .p(t.space.sm)
+            .rounded(t.radius.field)
+            .bg(t.extra.danger_tint)
             .text_size(t.text.caption)
             .text_color(t.extra.danger)
             .line_height(relative(1.4))
@@ -182,7 +235,7 @@ pub fn status(t: &Theme, error: &Option<SharedString>) -> Option<gpui::Div> {
                 t.size.icon_xs,
                 t.extra.danger,
             )))
-            .child(div().flex_1().child(e.clone()))
+            .child(div().flex_1().min_w_0().child(e.clone()))
     })
 }
 
@@ -209,17 +262,18 @@ pub fn field(t: &Theme, label: &str, hint: Option<&str>, control: AnyElement) ->
         }))
 }
 
-/// A one-line text box.
+/// A one-line text box: a white field with a firm edge, the same height
+/// everywhere in Settings.
 pub fn line(t: &Theme, input: &Entity<InputState>, mono: bool) -> AnyElement {
     div()
-        .h(px(32.))
-        .px(px(2.))
+        .h(t.size.field_h)
+        .px(px(4.))
         .flex()
         .items_center()
-        .rounded(t.radius.button)
-        .bg(t.colors.canvas)
+        .rounded(t.radius.field)
+        .bg(t.colors.surface)
         .border_1()
-        .border_color(t.colors.border)
+        .border_color(t.extra.border_strong)
         .when(mono, |d| d.font_family(t.font_mono.clone()))
         .child(
             div().flex_1().min_w_0().child(
@@ -234,10 +288,10 @@ pub fn line(t: &Theme, input: &Entity<InputState>, mono: bool) -> AnyElement {
 /// A box for a prompt or instructions.
 pub fn area(t: &Theme, input: &Entity<TextareaState>, mono: bool) -> AnyElement {
     div()
-        .rounded(t.radius.button)
-        .bg(t.colors.canvas)
+        .rounded(t.radius.field)
+        .bg(t.colors.surface)
         .border_1()
-        .border_color(t.colors.border)
+        .border_color(t.extra.border_strong)
         .p(t.space.sm)
         .text_size(t.text.body_sm)
         .when(mono, |d| d.font_family(t.font_mono.clone()))
@@ -247,7 +301,8 @@ pub fn area(t: &Theme, input: &Entity<TextareaState>, mono: bool) -> AnyElement 
         .into_any_element()
 }
 
-/// A choice chip (scope, event, transport).
+/// A choice chip (scope, event, transport): a pill to press, the chosen
+/// one in the accent's tint with a check, so the choice reads without colour.
 pub fn chip(
     t: &Theme,
     id: impl Into<gpui::ElementId>,
@@ -262,11 +317,66 @@ pub fn chip(
         .items_center()
         .gap(px(5.))
         .h(t.size.control)
-        .px(px(10.))
+        .pl(if on { px(8.) } else { px(12.) })
+        .pr(px(12.))
         .rounded(t.radius.compact)
         .border_1()
         .border_color(if on {
-            t.colors.primary
+            t.colors.primary.opacity(0.55)
+        } else {
+            t.extra.border_strong
+        })
+        .bg(if on {
+            t.colors.primary_tint
+        } else {
+            t.colors.surface
+        })
+        .text_size(t.text.body_sm)
+        .text_color(if on { t.colors.primary } else { t.colors.text })
+        .when(on, |d| {
+            d.font_weight(FontWeight::MEDIUM).child(icon(
+                "icons/check.svg",
+                t.size.icon_xs,
+                t.colors.primary,
+            ))
+        })
+        .cursor_pointer()
+        .when(!on, |d| d.hover(move |s| s.bg(hover)))
+        .child(label.into())
+}
+
+/// One of several exclusive choices that each need a sentence (a sandbox
+/// mode): a row with a radio mark, its name, and what it means. A label
+/// written "Name: what it means" splits there.
+pub fn option_row(
+    t: &Theme,
+    id: impl Into<gpui::ElementId>,
+    label: &str,
+    on: bool,
+) -> gpui::Stateful<gpui::Div> {
+    let (name, about) = match label.split_once(": ") {
+        // The description reads as its own sentence.
+        Some((n, a)) => {
+            let mut c = a.chars();
+            let a = c
+                .next()
+                .map(|f| f.to_uppercase().chain(c).collect::<String>());
+            (n.to_string(), a)
+        }
+        None => (label.to_string(), None),
+    };
+    let hover = t.colors.hover;
+    div()
+        .id(id)
+        .flex()
+        .items_center()
+        .gap(t.space.md)
+        .px(t.space.md)
+        .py(px(9.))
+        .rounded(t.radius.card)
+        .border_1()
+        .border_color(if on {
+            t.colors.primary.opacity(0.55)
         } else {
             t.colors.border
         })
@@ -275,11 +385,53 @@ pub fn chip(
         } else {
             t.colors.surface
         })
-        .text_size(t.text.caption)
-        .text_color(if on { t.colors.primary } else { t.colors.text })
         .cursor_pointer()
         .when(!on, |d| d.hover(move |s| s.bg(hover)))
-        .child(label.into())
+        // The radio: a ring, filled at its heart when chosen.
+        .child(
+            div()
+                .flex_none()
+                .size(px(16.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(t.radius.pill)
+                .border_1()
+                .border_color(if on {
+                    t.colors.primary
+                } else {
+                    t.extra.border_strong
+                })
+                .bg(t.colors.surface)
+                .when(on, |d| {
+                    d.child(
+                        div()
+                            .size(px(8.))
+                            .rounded(t.radius.pill)
+                            .bg(t.colors.primary),
+                    )
+                }),
+        )
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .child(
+                    div()
+                        .text_size(t.text.body_sm)
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(t.colors.text_strong)
+                        .child(name),
+                )
+                .children(about.map(|a| {
+                    div()
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_muted)
+                        .child(a)
+                })),
+        )
 }
 
 /// A round icon button on a card (edit, delete…), with its tooltip.
@@ -351,17 +503,38 @@ pub fn save_button(t: &Theme, id: &'static str, saving: bool) -> gpui::Stateful<
         .when(saving, |d| d.opacity(0.6))
 }
 
-/// "← Back" above a form.
+/// The way back above a form: a quiet button, an arrow and the page it
+/// returns to ("Endpoints"), that lifts to full ink on hover.
 pub fn back(t: &Theme, id: &'static str, label: &str) -> gpui::Stateful<gpui::Div> {
+    let (hover, strong) = (t.colors.hover, t.colors.text_strong);
     div()
         .id(id)
         .flex()
+        .flex_none()
+        .self_start()
         .items_center()
-        .gap(px(4.))
+        .gap(t.space.xs + px(2.))
+        .h(t.size.row)
+        .pl(t.space.sm)
+        .pr(t.space.md)
+        .rounded(t.radius.button)
+        .border_1()
+        .border_color(t.colors.border)
+        .bg(t.colors.surface)
         .cursor_pointer()
-        .text_size(t.text.caption)
-        .text_color(t.colors.primary)
-        .child(format!("← {label}"))
+        .text_size(t.text.body_sm)
+        .font_weight(gpui::FontWeight::MEDIUM)
+        .text_color(t.colors.text_muted)
+        .hover(move |d| d.bg(hover).text_color(strong))
+        .child(icon(
+            "icons/arrow-left.svg",
+            t.size.icon_sm,
+            t.colors.text_muted,
+        ))
+        .child(label.to_string())
+        .tooltip(|window, cx| {
+            gpui::component::tooltip::Tooltip::new("Back (Esc)").build(window, cx)
+        })
 }
 
 /// A small link-style action ("Open the folder", "Check again").
@@ -418,30 +591,27 @@ pub fn read_key(project: &std::path::Path, key: &str) -> KeyByLayer {
         .collect()
 }
 
-/// The three settings files as chips, with what each one reaches.
+/// The three settings files as one segmented control (the choice is one
+/// of three, as Light or Dark is one of two).
 pub fn layer_chips<V: 'static>(
-    t: &Theme,
+    _t: &Theme,
     id: &'static str,
     current: crate::forge_files::Layer,
     cx: &mut gpui::Context<V>,
     pick: impl Fn(&mut V, crate::forge_files::Layer, &mut gpui::Context<V>) + Copy + 'static,
 ) -> gpui::Div {
     use crate::forge_files::Layer;
-    let mut row = div().flex().flex_wrap().gap(px(6.));
+    let mut seg = super::button::Segmented::new(id, "Saved in");
     for (layer, label) in [
         (Layer::Local, "This project, this PC"),
         (Layer::Project, "This project, shared"),
         (Layer::User, "Every project"),
     ] {
-        row = row.child(
-            chip(
-                t,
-                SharedString::from(format!("{id}-{layer:?}")),
-                label,
-                current == layer,
-            )
-            .on_click(cx.listener(move |this, _, _, cx| pick(this, layer, cx))),
+        seg = seg.option(
+            label,
+            current == layer,
+            cx.listener(move |this, _, _, cx| pick(this, layer, cx)),
         );
     }
-    row
+    div().flex().child(seg)
 }

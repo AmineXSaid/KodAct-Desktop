@@ -20,4 +20,6 @@ already on PATH stays.
 
 Needs `rustup target add x86_64-pc-windows-gnu`, `gcc-mingw-w64-x86-64`,
 `nsis` and Python 3.11+ (the design library's media is fetched once, then
-cached). `FORGECLI_DIR` points at a ForgeCLI checkout (default `../forgecli`).
+cached). `FORGECLI_DIR` points at a ForgeCLI checkout (default `../forgecli`) on its
+`forge-gpui-steering` branch, which has the mid-turn steering protocol the app
+uses; the script stops on a checkout without it.

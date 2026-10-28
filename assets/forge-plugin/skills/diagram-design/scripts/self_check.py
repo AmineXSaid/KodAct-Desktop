@@ -433,9 +433,9 @@ def verify(path: Path, offline: bool = False) -> list[str]:
         finding = reference_error(tag, rel, value)
         if finding:
             errors.append(finding)
-        elif offline and is_approved_google_fonts_stylesheet(value.strip()):
+        elif is_approved_google_fonts_stylesheet(value.strip()):
             errors.append(
-                "offline: file loads Google Fonts; remove the font <link> to use system fonts"
+                "file loads a web font; diagrams use Anthropic Sans only, with no font <link>"
             )
     check_svgs(parser, errors)
     check_scripts(parser, errors)

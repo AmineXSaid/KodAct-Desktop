@@ -1,17 +1,21 @@
 //! The window's views. `workspace` composes them; each file is one component.
 
 pub mod activity;
+pub mod add_menu;
 pub mod agents_editor;
 pub mod agents_view;
 pub mod approvals;
 pub mod askpass;
+pub mod attachment_editor;
 pub mod attachments;
 pub mod autocomplete;
 pub mod browser_view;
 pub mod button;
+pub mod changed_files;
 pub mod chat_menu;
 pub mod chat_view;
 pub mod command_palette;
+pub mod compose_style;
 pub mod composer;
 pub mod confirm;
 pub mod design_bar;
@@ -26,64 +30,73 @@ pub mod diagram_view;
 pub mod doc_changes;
 pub mod doc_comments;
 pub mod doc_find;
-pub mod new_project;
-pub mod project_github;
-pub mod project_defaults;
-pub mod project_sharing;
-pub mod project_knowledge;
-pub mod project_memory;
-pub mod project_rail;
 pub mod doc_pane;
-pub mod dot_field;
+pub mod documents;
 pub mod editor_kit;
 pub mod env_editor;
 pub mod file_card;
 pub mod file_icon;
 pub mod file_icon_map;
 pub mod file_mark;
+pub mod files_pane;
 pub mod find_bar;
+mod forge_cube;
+pub mod goal_bar;
 pub mod guide;
 pub mod hooks_editor;
 pub mod ingot;
+mod lens;
 pub mod markdown;
+pub mod marketplaces;
 pub mod mcp_editor;
 pub mod memory_view;
 pub mod message;
 pub mod mode_menu;
 pub mod pet;
-pub mod question_form;
 pub mod model_menu;
 pub mod motion;
+pub mod new_project;
 pub mod onboarding;
 pub mod opener;
 pub mod permissions_editor;
 pub mod planned;
 pub mod plugins_editor;
 pub mod profiles_editor;
+pub mod project_defaults;
+pub mod project_github;
+pub mod project_knowledge;
 pub mod project_map;
+pub mod project_memory;
+pub mod project_rail;
+pub mod project_sharing;
 pub mod projects;
+pub mod question_card;
 pub mod queued;
 pub mod remote_menu;
 pub mod rules_view;
 pub mod sandbox_editor;
+pub mod select;
+pub mod session_panel;
 pub mod settings;
 pub mod sheet_view;
 pub mod shortcuts;
 pub mod side_chat;
 pub mod sidebar;
 pub mod skeleton;
+pub mod skill_install;
 pub mod skills_editor;
 pub mod slash_commands;
+pub mod source_view;
 pub mod starters;
 pub mod status_bar;
 pub mod tasks;
 pub mod terminal;
 pub mod terminal_dock;
+pub mod title_menus;
 pub mod versions;
-pub mod voxels;
+pub mod work_group;
 pub mod workbench;
 pub mod workspace;
-pub mod writing_hand;
 
 use gpui::{div, prelude::*, svg, App, Div, Hsla, Pixels, SharedString, Svg};
 
@@ -96,12 +109,6 @@ gpui::actions!(
         ToggleSidebar,
         ToggleCommandPalette,
         ToggleTheme,
-        ThemeCalm,
-        ThemeTerracotta,
-        ThemePatina,
-        ThemeInk,
-        ThemeSlate,
-        ThemePlum,
         ToggleBrowser,
         OpenRemoteMenu,
         ConnectWsl,
@@ -129,13 +136,20 @@ gpui::actions!(
         OpenSlashCommands,
         OpenAgents,
         OpenSkills,
+        InstallSkill,
+        OpenMarketplaces,
         OpenHooks,
+        OpenPlugins,
         OpenMcpServers,
         OpenPermissions,
         OpenProfiles,
         OpenGuide,
         ToggleSplit,
         TogglePanel,
+        ShowPlanView,
+        ShowAgentsView,
+        ShowFilesView,
+        ShowBrowserView,
         ShowProjectMap,
         CopyLastReply,
         ChangeName,
@@ -160,12 +174,27 @@ gpui::actions!(
         ShowContext,
         ToggleTasks,
         ShowApprovals,
+        AllowWaiting,
+        AlwaysAllowWaiting,
+        DenyWaiting,
         JumpToLatest,
+        GoBack,
+        GoForward,
         ShowShortcuts,
         RenameChat,
         DuplicateChat,
         ExportChat,
         DeleteChat,
+        ArchiveChat,
+        OpenDocuments,
+        ToggleSession,
+        ToggleFiles,
+        ShowChatFiles,
+        ToggleDetailedView,
+        ContinueInNewChat,
+        CopyChatMarkdown,
+        OpenInVsCode,
+        OpenChatFolder,
         RegenerateReply,
         ContinueReply,
         ZoomIn,
@@ -210,6 +239,18 @@ pub fn logo(size: f32) -> ingot::Ingot {
 /// Reduced motion: the logo at rest.
 pub fn turning_logo(size: f32, id: impl Into<gpui::ElementId>) -> gpui::AnyElement {
     ingot::turning(size, id)
+}
+
+/// The Forge logo turning, painted in `color` (lit from above): the mark of
+/// work in progress in the conversation, in the theme's live colour.
+pub fn turning_logo_in(
+    size: f32,
+    id: impl Into<gpui::ElementId>,
+    color: gpui::Hsla,
+) -> gpui::AnyElement {
+    // Forge for VS Code's working cube: stock struck true, a quarter turn a
+    // beat, drawn a little larger than an icon so its voxels read.
+    forge_cube::working(size * 1.25, id, color)
 }
 
 /// Your avatar, drawn `size` px square at this screen's density.
@@ -305,8 +346,8 @@ pub fn sync_component_theme(cx: &mut App) {
 /// A scroll box inside something that scrolls (a list in Settings, a
 /// tool's output in a reply). GPUI hands each wheel tick to every scroll
 /// box under the pointer, so the page behind moved with the list. This one
-/// keeps the wheel while it has more than it shows; one that fits lets the
-/// page scroll as usual. `handle` is the box's own, kept by its view.
+/// keeps the wheel while it has more to show that way; one that fits, or
+/// is at its end, lets the page scroll as usual. `handle` is the box's own, kept by its view.
 pub fn hold_scroll(
     d: gpui::Stateful<gpui::Div>,
     handle: &gpui::ScrollHandle,
@@ -314,8 +355,17 @@ pub fn hold_scroll(
     let h = handle.clone();
     d.overflow_y_scroll()
         .track_scroll(handle)
-        .on_scroll_wheel(move |_, _, cx| {
-            if h.max_offset().y > gpui::px(0.) {
+        .on_scroll_wheel(move |ev, window, cx| {
+            // At its end the wheel goes on to the page around it, so a list
+            // that fills the view never traps the page.
+            let dy = ev.delta.pixel_delta(window.line_height()).y;
+            let (y, max) = (h.offset().y, h.max_offset().y);
+            let can = if dy < gpui::px(0.) {
+                y > -max + gpui::px(0.5)
+            } else {
+                y < gpui::px(-0.5)
+            };
+            if max > gpui::px(0.) && can {
                 cx.stop_propagation();
             }
         })

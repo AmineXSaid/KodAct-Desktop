@@ -97,6 +97,7 @@ pub fn menu(
     window: &gpui::Window,
     cx: &App,
     on_out: impl Fn(gpui::Point<gpui::Pixels>, &mut App) + 'static,
+    leaving: bool,
 ) -> impl IntoElement {
     let s = state.read(cx);
     let setup = s.design_setup().cloned();
@@ -365,13 +366,11 @@ pub fn menu(
             gpui::anchored()
                 .anchor(gpui::Anchor::BottomLeft)
                 .snap_to_window_with_margin(t.size.viewport_margin)
-                .child(div().pb(t.space.sm).child(super::motion::edge_draw(
-                    menu,
-                    "design-in",
-                    t.colors.primary,
-                    0.,
-                    t,
-                ))),
+                .child(
+                    div()
+                        .pb(t.space.sm)
+                        .child(super::motion::composer_menu(menu, "design", 0., leaving, t)),
+                ),
         )
         .with_priority(2),
     )

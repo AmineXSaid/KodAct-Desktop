@@ -24,7 +24,6 @@ const VERSION: u32 = 1;
 /// are read again from where they were written.
 const INLINE_BYTES: usize = 4 * 1024 * 1024;
 
-
 /// A saved answer's `rule` naming the mode that answered it, not a rule.
 const MODE_PREFIX: &str = "mode:";
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -38,6 +37,12 @@ pub struct SavedChat {
     pub title: String,
     #[serde(default)]
     pub pinned: bool,
+    /// Put away from the sidebar's list.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub archived: bool,
+    /// The transcript shown in detail.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub detailed: bool,
     /// Seconds since the Unix epoch.
     pub updated: u64,
     pub messages: Vec<SavedMessage>,
@@ -108,6 +113,9 @@ pub struct SavedAttachment {
     pub opened_to: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub files: Option<usize>,
+    /// A pasted text's words: it has no file to read them back from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
@@ -141,6 +149,9 @@ pub enum SavedBlock {
         /// `kept` or `reverted` once you chose.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         review: Option<String>,
+        /// The files of the pictures it returned; read again on load.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        images: Vec<String>,
     },
     Permission {
         title: String,
@@ -163,6 +174,9 @@ pub enum SavedBlock {
         /// The call's row in the same message.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         row: Option<usize>,
+        /// AskUserQuestion's questions, with what you chose.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        questions: Vec<crate::state::Question>,
     },
     File {
         name: String,
@@ -286,7 +300,9 @@ fn save_messages(chat: &Chat, project: &Path) -> SavedChat {
             target: c.target.to_string(),
             note: c.note.as_ref().map(|n| n.to_string()),
             status: match c.status {
-                ToolStatus::Running | ToolStatus::Failed => "failed",
+                // Still running when saved: the app closed under it.
+                ToolStatus::Running | ToolStatus::Interrupted => "interrupted",
+                ToolStatus::Failed => "failed",
                 ToolStatus::Done => "done",
                 ToolStatus::Declined => "declined",
             }
@@ -311,6 +327,11 @@ fn save_messages(chat: &Chat, project: &Path) -> SavedChat {
                 Review::Kept => Some("kept".into()),
                 Review::Reverted => Some("reverted".into()),
             },
+            images: c
+                .images
+                .iter()
+                .filter_map(|i| i.path.as_ref().map(|p| p.to_string()))
+                .collect(),
         },
         Block::Permission {
             title,
@@ -333,6 +354,7 @@ fn save_messages(chat: &Chat, project: &Path) -> SavedChat {
                 .map(|d| d.as_secs()),
             row: info.row,
             note: info.note.as_ref().map(|n| n.to_string()),
+            questions: info.questions.clone(),
             verdict: match verdict {
                 // A question nobody answered is denied once the app is gone.
                 Verdict::Pending | Verdict::Denied => "denied",
@@ -362,6 +384,8 @@ fn save_messages(chat: &Chat, project: &Path) -> SavedChat {
         project: project.to_path_buf(),
         title: chat.title.to_string(),
         pinned: chat.pinned,
+        archived: chat.archived,
+        detailed: chat.detailed,
         updated: secs(chat.updated),
         versions: vec![],
         design: chat.design.clone(),
@@ -388,6 +412,9 @@ fn save_messages(chat: &Chat, project: &Path) -> SavedChat {
                             saved_at: a.saved_at.clone(),
                             opened_to: a.extracted.as_ref().map(|x| x.to.clone()),
                             files: a.extracted.as_ref().map(|x| x.count),
+                            text: (a.kind == crate::attach::Kind::Pasted)
+                                .then(|| a.text.as_deref().map(str::to_string))
+                                .flatten(),
                         })
                         .collect(),
                     turn: turn.as_ref().map(|t| t.to_string()),
@@ -432,6 +459,7 @@ pub fn messages_of(saved: &SavedChat) -> Vec<Message> {
             output,
             diff,
             review,
+            images,
         } => Block::Tool(ToolCall {
             kind: kind_of(kind),
             target: target.clone().into(),
@@ -439,6 +467,7 @@ pub fn messages_of(saved: &SavedChat) -> Vec<Message> {
             status: match status.as_str() {
                 "done" => ToolStatus::Done,
                 "declined" => ToolStatus::Declined,
+                "interrupted" => ToolStatus::Interrupted,
                 _ => ToolStatus::Failed,
             },
             output: output.clone().into(),
@@ -460,6 +489,10 @@ pub fn messages_of(saved: &SavedChat) -> Vec<Message> {
                 Some("reverted") => Review::Reverted,
                 _ => Review::Open,
             },
+            images: images
+                .iter()
+                .filter_map(|p| crate::state::ToolImage::from_file(p))
+                .collect(),
         }),
         SavedBlock::Permission {
             title,
@@ -471,6 +504,7 @@ pub fn messages_of(saved: &SavedChat) -> Vec<Message> {
             at,
             row,
             note,
+            questions,
         } => Block::Permission {
             title: title.clone().into(),
             detail: detail.clone().into(),
@@ -487,6 +521,7 @@ pub fn messages_of(saved: &SavedChat) -> Vec<Message> {
                 at: at.map(|s| std::time::UNIX_EPOCH + std::time::Duration::from_secs(s)),
                 row: *row,
                 note: note.clone().map(Into::into),
+                questions: questions.clone(),
                 ..Default::default()
             },
             verdict: match verdict.as_str() {
@@ -547,6 +582,7 @@ pub fn messages_of(saved: &SavedChat) -> Vec<Message> {
                             kind,
                             size: a.size,
                             bytes,
+                            text: a.text.as_deref().map(std::sync::Arc::from),
                             saved_at: a.saved_at.clone(),
                             extracted: a.opened_to.clone().map(|to| {
                                 std::sync::Arc::new(crate::stage::Extracted {
@@ -718,6 +754,7 @@ mod tests {
                         open: true,
                         full: false,
                         review: Review::Open,
+                        images: vec![],
                     }),
                     Block::Permission {
                         title: "Edit?".into(),
@@ -759,6 +796,26 @@ mod tests {
     }
 
     #[test]
+    fn a_pasted_text_keeps_its_words_through_the_transcript() {
+        let mut c = sample();
+        if let Some(Message::User { attachments, .. }) = c.messages.get_mut(0) {
+            attachments.push(crate::attach::pasted_text("line one\nline two", 1, 3).for_history());
+        }
+        let saved = save_form(&c, Path::new("/work/app"));
+        let back: SavedChat =
+            serde_json::from_str(&serde_json::to_string(&saved).unwrap()).unwrap();
+        let m = messages_of(&back);
+        let Message::User { attachments, .. } = &m[0] else {
+            panic!()
+        };
+        let p = attachments
+            .iter()
+            .find(|a| a.kind == crate::attach::Kind::Pasted)
+            .unwrap();
+        assert_eq!(p.text.as_deref(), Some("line one\nline two"));
+    }
+
+    #[test]
     fn a_chat_survives_the_round_trip() {
         let c = sample();
         let saved = save_form(&c, Path::new("/work/app"));
@@ -772,9 +829,10 @@ mod tests {
         let Message::Assistant { blocks } = &m[1] else {
             panic!()
         };
-        // A tool still running when saved was cut off; an unanswered question was denied.
+        // A tool still running when saved was cut off (its outcome unknown); an
+        // unanswered question was denied.
         assert!(
-            matches!(&blocks[2], Block::Tool(t) if t.status == ToolStatus::Failed && t.diff[0].kind == DiffKind::Del)
+            matches!(&blocks[2], Block::Tool(t) if t.status == ToolStatus::Interrupted && t.diff[0].kind == DiffKind::Del)
         );
         assert!(matches!(
             &blocks[3],
@@ -797,6 +855,60 @@ mod tests {
         );
         assert!(
             matches!(&m[0], Message::User { sent, attachments, turn, .. } if secs(*sent) == 1_700_000_000 && attachments[0].name.as_ref() == "r.pdf" && attachments[0].kind == crate::attach::Kind::Pdf && attachments[0].saved_at.as_deref() == Some(".forge/attachments/1/r.pdf") && turn.as_deref() == Some("turn-1"))
+        );
+    }
+
+    #[test]
+    fn a_question_card_comes_back_with_what_you_chose() {
+        use crate::state::{QOption, Question};
+        let mut c = Chat::new(1, 0, "Q".into());
+        let q = |text: &str, picked: Vec<usize>, own: Option<&str>| Question {
+            header: "H".into(),
+            text: text.into(),
+            options: vec![
+                QOption {
+                    label: "Tauri (Recommended)".into(),
+                    description: "d".into(),
+                },
+                QOption {
+                    label: "Leptos".into(),
+                    description: "".into(),
+                },
+            ],
+            multi: false,
+            picked,
+            own: own.map(Into::into),
+        };
+        c.messages.push(Message::Assistant {
+            blocks: vec![Block::Permission {
+                title: "Forge has 2 questions".into(),
+                detail: "Stack?".into(),
+                verdict: Verdict::Allowed,
+                info: PermInfo {
+                    questions: vec![
+                        q("Stack?", vec![0], None),
+                        q("Store?", vec![], Some("Markdown files")),
+                    ],
+                    ..Default::default()
+                },
+            }],
+        });
+        let json = serde_json::to_string(&save_form(&c, Path::new("/w"))).unwrap();
+        let back = messages_of(&serde_json::from_str(&json).unwrap());
+        let Message::Assistant { blocks } = &back[0] else {
+            panic!()
+        };
+        let Block::Permission { verdict, info, .. } = &blocks[0] else {
+            panic!()
+        };
+        assert_eq!(*verdict, Verdict::Allowed);
+        let answers: Vec<_> = info.questions.iter().map(|q| q.answer()).collect();
+        assert_eq!(
+            answers,
+            [
+                Some("Tauri (Recommended)".into()),
+                Some("Markdown files".into())
+            ]
         );
     }
 

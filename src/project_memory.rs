@@ -158,9 +158,18 @@ mod tests {
     fn memory_reads_as_topics_and_diffs_by_fact() {
         let t = topics(MEM);
         assert_eq!(t.len(), 2);
-        assert_eq!(t[0], ("Decisions".into(), vec!["Amounts are integer cents.".into(), "No ORMs.".into()]));
+        assert_eq!(
+            t[0],
+            (
+                "Decisions".into(),
+                vec!["Amounts are integer cents.".into(), "No ORMs.".into()]
+            )
+        );
         let after = format!("{MEM}- Deploys are on Tuesdays.\n");
-        assert_eq!(diff(MEM, &after), (vec!["Deploys are on Tuesdays.".into()], vec![]));
+        assert_eq!(
+            diff(MEM, &after),
+            (vec!["Deploys are on Tuesdays.".into()], vec![])
+        );
         let (added, removed) = diff(MEM, &forget(MEM, "No ORMs."));
         assert!(added.is_empty());
         assert_eq!(removed, vec!["No ORMs.".to_string()]);
@@ -171,8 +180,12 @@ mod tests {
         let m = add(MEM, "Decisions", "Deploys are on Tuesdays.");
         assert_eq!(topics(&m)[0].1.last().unwrap(), "Deploys are on Tuesdays.");
         let m = add(&m, "Tone", "Plain words.");
-        assert_eq!(topics(&m).last().unwrap(), &("Tone".to_string(), vec!["Plain words.".to_string()]));
-        assert!(add("", "Preferences", "Dark mode.").starts_with("# Memory\n\n## Preferences\n- Dark mode."));
+        assert_eq!(
+            topics(&m).last().unwrap(),
+            &("Tone".to_string(), vec!["Plain words.".to_string()])
+        );
+        assert!(add("", "Preferences", "Dark mode.")
+            .starts_with("# Memory\n\n## Preferences\n- Dark mode."));
     }
 
     #[test]

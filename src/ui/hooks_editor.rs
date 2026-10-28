@@ -342,7 +342,7 @@ impl HooksEditor {
                 div()
                     .flex()
                     .gap(px(10.))
-                    .child(div().flex_1().child(kit::field(
+                    .child(div().flex_1().min_w_0().child(kit::field(
                         t,
                         "Command",
                         None,

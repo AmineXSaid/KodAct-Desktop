@@ -25,7 +25,9 @@ mod diagnose;
 mod diagram;
 mod doc_versions;
 mod downloads;
+mod draw;
 mod endpoints;
+mod error_words;
 mod export;
 mod fonts;
 mod i18n;
@@ -52,6 +54,7 @@ mod rules;
 mod secrets;
 mod setting_profiles;
 mod shell_prompt;
+mod skill_install;
 mod stage;
 mod state;
 mod stubs;
@@ -86,6 +89,11 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("secondary-k", ToggleCommandPalette, None),
         KeyBinding::new("secondary-n", NewChat, None),
         KeyBinding::new("secondary-b", ToggleSidebar, None),
+        // Back and forward through the places you were, as Claude Desktop.
+        KeyBinding::new("alt-left", GoBack, None),
+        KeyBinding::new("alt-right", GoForward, None),
+        KeyBinding::new("secondary-[", GoBack, None),
+        KeyBinding::new("secondary-]", GoForward, None),
         KeyBinding::new("secondary-shift-l", ToggleTheme, None),
         KeyBinding::new("secondary-l", FocusComposer, None),
         KeyBinding::new("secondary-/", ToggleModelPicker, None),
@@ -93,6 +101,7 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("secondary-,", OpenSettings, None),
         KeyBinding::new("secondary-shift-r", OpenRules, None),
         KeyBinding::new("secondary-shift-d", OpenDesign, None),
+        KeyBinding::new("secondary-shift-i", InstallSkill, None),
         KeyBinding::new("secondary-shift-p", OpenProjects, None),
         KeyBinding::new("secondary-q", Quit, None),
         KeyBinding::new("f1", ShowShortcuts, None),
@@ -107,6 +116,10 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("secondary-shift-a", ShowApprovals, None),
         KeyBinding::new("secondary-\\", ToggleSplit, Some("Workspace")),
         KeyBinding::new("secondary-shift-e", TogglePanel, Some("Workspace")),
+        KeyBinding::new("secondary-1", ShowPlanView, Some("Workspace")),
+        KeyBinding::new("secondary-2", ShowAgentsView, Some("Workspace")),
+        KeyBinding::new("secondary-3", ShowFilesView, Some("Workspace")),
+        KeyBinding::new("secondary-4", ShowBrowserView, Some("Workspace")),
         KeyBinding::new("secondary-alt-o", OpenRemoteMenu, None),
         KeyBinding::new("ctrl-`", ToggleTerminal, None),
         KeyBinding::new("ctrl-~", NewTerminal, None),
@@ -199,7 +212,6 @@ fn main() {
         .with_assets(assets::Assets)
         .run(|cx: &mut App| {
             gpui::init(cx);
-            assets::load_fonts(cx);
             fonts::choose(cx);
             highlight::warm_up();
             theme::init(cx);

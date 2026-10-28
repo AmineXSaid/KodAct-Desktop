@@ -1,11 +1,11 @@
-//! The composer, one unit: a white card holding a multi-line input that
-//! grows up to a limit, the outlined + (attach) and Send (Stop while a reply
-//! plays), set in a recessed tray that carries the project, the context
-//! meter, the model picker (a popover) and the Modes menu. Enter sends;
-//! Shift+Enter adds a line.
+//! The composer, one surface as Claude's is: a lifted box holding a
+//! multi-line input that grows up to a limit, and under it one row: the +
+//! (attach and tools) and the project on the left, the context meter, the
+//! model picker (a popover) and the Modes menu on the right, then Send
+//! (Stop while a reply plays). Enter sends; Shift+Enter adds a line.
 
 use gpui::component::input::{
-    InlineToken, InlineTokenContext, Input, InputEvent, InputState, Textarea, TextareaState,
+    Editor, EditorState, Input, InputEvent, InputState, TextDecoration, TextDecorationCollection,
 };
 use gpui::{
     div, prelude::*, px, relative, Context, Entity, IntoElement, Render, SharedString,
@@ -18,11 +18,17 @@ use crate::theme::ActiveTheme;
 
 /// The empty box's line: while a question waits, or a reply runs, what
 /// typing does then; else a project's, or a plain chat's.
-fn placeholder(in_folder: bool, asking: bool, busy: bool) -> &'static str {
-    if asking {
+/// `asking`: a question card (`Some(true)`) or a permission card waits;
+/// `in_chat`: the conversation has begun, so the box replies.
+fn placeholder(in_folder: bool, asking: Option<bool>, busy: bool, in_chat: bool) -> &'static str {
+    if asking == Some(true) {
+        "Type your own answer…"
+    } else if asking.is_some() {
         "Or tell Forge what to do instead…"
     } else if busy {
         "Add to the task, or steer Forge…"
+    } else if in_chat {
+        "Reply to Forge, or type / for commands"
     } else if in_folder {
         "What should we build today?"
     } else {
@@ -32,7 +38,11 @@ fn placeholder(in_folder: bool, asking: bool, busy: bool) -> &'static str {
 
 pub struct Composer {
     state: Entity<AppState>,
-    input: Entity<TextareaState>,
+    input: Entity<EditorState>,
+    /// The Markdown and mentions styled in the box (`compose_style`).
+    styling: TextDecorationCollection,
+    /// The tallest the box grows, in lines.
+    max_rows: usize,
     /// The model window's search box, and its row under the keyboard.
     filter: Entity<InputState>,
     /// The design menu's search box, and the tab it was cleared for.
@@ -40,9 +50,17 @@ pub struct Composer {
     design_tab_was: Option<crate::state::DesignTab>,
     active: Option<String>,
     picker_was_open: bool,
+    /// The model, mode and + menus, kept while each leaves.
+    model_presence: super::motion::Presence<()>,
+    modes_presence: super::motion::Presence<()>,
+    add_presence: super::motion::Presence<()>,
+    design_presence: super::motion::Presence<crate::state::DesignTab>,
+    context_presence: super::motion::Presence<()>,
     /// Where the press that just closed a menu happened: the click it ends
     /// in, on that menu's own button, must not open it again.
     dismissed_at: Option<gpui::Point<gpui::Pixels>>,
+    /// The "+" menu is open.
+    add_open: bool,
     /// Holds the keyboard while the model window is open (no search box),
     /// so the arrows move through it instead of the text.
     menu_focus: gpui::FocusHandle,
@@ -57,7 +75,7 @@ pub struct Composer {
     /// caret's place and line height there, in the window.
     ac_anchor: Option<(usize, gpui::Point<gpui::Pixels>, gpui::Pixels)>,
     /// The placeholder shown: (a project's, a question waits, a reply runs).
-    placeholder_now: (bool, bool, bool),
+    placeholder_now: (bool, Option<bool>, bool, bool),
     _subs: Vec<Subscription>,
 }
 
@@ -70,11 +88,18 @@ impl Composer {
             .max(2.) as usize;
         let in_folder = state.read(cx).in_folder();
         let input = cx.new(|cx| {
-            TextareaState::new(window, cx)
-                .auto_grow(1, max_rows)
-                .placeholder(placeholder(in_folder, false, false))
+            // An editor, not a plain textarea: only an editor styles ranges
+            // of its text, which Markdown as you type needs. No line numbers,
+            // no brackets closed for you, wrapped like prose.
+            EditorState::new(window, cx)
+                .line_number(false)
+                .folding(false)
+                .auto_close(false)
+                .soft_wrap(true)
+                .placeholder(placeholder(in_folder, None, false, false))
                 .submit_on_enter(true)
         });
+        let styling = input.update(cx, |i, cx| i.create_decorations_collection(vec![], cx));
         let filter = cx.new(|cx| InputState::new(window, cx).placeholder("Search models…"));
         let design_filter =
             cx.new(|cx| InputState::new(window, cx).placeholder("Search the design library…"));
@@ -87,17 +112,24 @@ impl Composer {
                 // A plain chat asks for anything; a project's, for work on it.
                 // While a question waits, what you type answers it.
                 let s = state.read(cx);
-                let now = (s.in_folder(), s.asking(), s.busy());
+                let in_chat = s.chat().is_some_and(|c| !c.messages.is_empty());
+                let now = (
+                    s.in_folder(),
+                    s.asking().then(|| s.asking_question()),
+                    s.busy(),
+                    in_chat,
+                );
                 if now != this.placeholder_now {
                     this.placeholder_now = now;
                     this.input.update(cx, |i, cx| {
-                        i.set_placeholder(placeholder(now.0, now.1, now.2), window, cx)
+                        i.set_placeholder(placeholder(now.0, now.1, now.2, now.3), window, cx)
                     });
                 }
                 // The model window opening: an empty search, the current row active.
                 let s = state.read(cx);
                 let (open, current) = (s.picker_open, s.active_profile().map(|p| p.name.clone()));
-                let rows = s.endpoints.as_ref().map(|e| e.profiles.len()).unwrap_or(0);
+                // As the menu decides whether it shows its search box.
+                let rows = super::model_menu::rows(s, "").1;
                 if open && !this.picker_was_open {
                     this.active = current;
                     this.filter.update(cx, |f, cx| f.set_value("", window, cx));
@@ -148,7 +180,7 @@ impl Composer {
                     InputEvent::PressEnter { shift: false, .. } => this.submit(window, cx),
                     InputEvent::Change => {
                         this.ac_selected = 0;
-                        this.tokenize(window, cx);
+                        this.restyle(cx);
                         if super::autocomplete::trigger(&this.text(cx)).is_some() {
                             this.state.update(cx, |s, cx| s.ensure_completions(cx));
                         }
@@ -166,20 +198,23 @@ impl Composer {
             design_tab_was: None,
             active: None,
             picker_was_open: false,
+            model_presence: Default::default(),
+            modes_presence: Default::default(),
+            add_presence: Default::default(),
+            design_presence: Default::default(),
+            context_presence: Default::default(),
             dismissed_at: None,
+            add_open: false,
+            styling,
+            max_rows,
             menu_focus: cx.focus_handle(),
             ac_selected: 0,
             ac_closed_for: None,
             ac_took_enter: false,
             ac_anchor: None,
-            placeholder_now: (in_folder, false, false),
+            placeholder_now: (in_folder, None, false, false),
             _subs: subs,
         }
-    }
-
-    /// The text box's focus: the home screen's dot field brightens on it.
-    pub fn focus_handle(&self, cx: &gpui::App) -> gpui::FocusHandle {
-        gpui::Focusable::focus_handle(self.input.read(cx), cx)
     }
 
     pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
@@ -194,40 +229,45 @@ impl Composer {
             let end = gpui::component::RopeExt::offset_to_position(i.text(), text.len());
             i.set_cursor_position(end, window, cx);
         });
-        self.tokenize(window, cx);
+        self.restyle(cx);
         cx.notify();
     }
 
-    /// A finished `/command` leading the message, or `@path` naming a
-    /// project file, becomes one unit in the box: bold, a skill in its own
-    /// colour (`mention_token`). Finished means a space follows it, so a
-    /// word being typed stays text. The message sent is the same text.
-    fn tokenize(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let (text, taken) = {
-            let i = self.input.read(cx);
-            let taken: Vec<std::ops::Range<usize>> =
-                i.tokens().iter().map(|t| t.range()).collect();
-            (i.value().to_string(), taken)
-        };
-        let found = mentions(&text, self.state.read(cx));
-        let fresh: Vec<_> = found
+    /// Style the box's Markdown and mentions as they stand now: a finished
+    /// `/command` leading the message or `@path` naming a project file reads
+    /// as it will once sent (a skill in its own colour), and **bold**,
+    /// *italic*, `code`, headings, quotes, lists and links read as such.
+    fn restyle(&mut self, cx: &mut Context<Self>) {
+        let text = self.input.read(cx).value().to_string();
+        let marks = super::autocomplete::marks(&text, self.state.read(cx), false);
+        let t = cx.theme().clone();
+        let decorations = super::compose_style::styles(&text, &marks, &t)
             .into_iter()
-            .filter(|(r, _)| !taken.iter().any(|t| t.start < r.end && r.start < t.end))
+            .map(|(r, style)| TextDecoration::new(r, style))
             .collect();
-        if fresh.is_empty() {
-            return;
+        self.styling.set(decorations, cx);
+    }
+
+    /// What the "+" menu needs from the composer: closing it, and a press
+    /// outside.
+    fn add_hooks(&self, cx: &mut Context<Self>) -> super::add_menu::Hooks {
+        let me = cx.entity().downgrade();
+        let (close, out) = (me.clone(), me);
+        super::add_menu::Hooks {
+            close: std::rc::Rc::new(move |cx| {
+                let _ = close.update(cx, |c, cx| {
+                    c.add_open = false;
+                    cx.notify();
+                });
+            }),
+            on_out: std::rc::Rc::new(move |pos, cx| {
+                let _ = out.update(cx, |c, cx| {
+                    c.dismissed_at = Some(pos);
+                    c.add_open = false;
+                    cx.notify();
+                });
+            }),
         }
-        self.input.update(cx, |i, cx| {
-            // Replacing a range leaves the caret at its end, before the space
-            // just typed; the text is unchanged, so put the caret back.
-            let caret = i.cursor();
-            // From the end, so the earlier ranges still hold.
-            for (range, token) in fresh.into_iter().rev() {
-                let _ = i.replace_range_with_token(range, token, window, cx);
-            }
-            let at = gpui::component::RopeExt::offset_to_position(i.text(), caret);
-            i.set_cursor_position(at, window, cx);
-        });
     }
 
     fn text(&self, cx: &gpui::App) -> String {
@@ -239,18 +279,24 @@ impl Composer {
             return;
         }
         let text = self.text(cx);
-        // A question waits: what you typed denies it and says what to do
-        // instead.
-        if self.state.read(cx).asking() && !text.trim().is_empty() && crate::state::parse_btw(&text).is_none() {
-            self.state.update(cx, |s, cx| s.deny_current_with_note(text.trim().to_string(), cx));
+        // A question waits: what you typed answers a question card, or
+        // denies a permission card and says what to do instead.
+        if self.state.read(cx).asking()
+            && !text.trim().is_empty()
+            && crate::state::parse_btw(&text).is_none()
+        {
+            self.state
+                .update(cx, |s, cx| s.answer_in_words(text.trim().to_string(), cx));
             self.input.update(cx, |i, cx| i.set_value("", window, cx));
             return;
         }
         // While a reply runs, a message is queued for Forge's next step
         // (`/btw` keeps its side card).
         if self.state.read(cx).busy() && crate::state::parse_btw(&text).is_none() {
-            if !text.trim().is_empty() {
-                self.state.update(cx, |s, cx| s.queue_message(text.trim().to_string(), cx));
+            // Words, pictures or pasted texts: each is a message for the next step.
+            if !text.trim().is_empty() || !self.state.read(cx).attachments.is_empty() {
+                self.state
+                    .update(cx, |s, cx| s.queue_message(text.trim().to_string(), cx));
                 self.input.update(cx, |i, cx| i.set_value("", window, cx));
             }
             return;
@@ -335,6 +381,21 @@ impl Composer {
         true
     }
 
+    /// A paste too long for the box (over `attach::PASTE_CHARS` characters
+    /// or `PASTE_LINES` lines: a log, a file, a transcript) becomes a Pasted
+    /// text card above it, as in Claude's chat box. Shorter text goes in as
+    /// it is. True when it took the paste.
+    fn paste_long(&mut self, cx: &mut Context<Self>) -> bool {
+        let Some(text) = cx.read_from_clipboard().and_then(|c| c.text()) else {
+            return false;
+        };
+        if !crate::attach::is_long_paste(&text) {
+            return false;
+        }
+        self.state.update(cx, |s, cx| s.add_pasted_text(text, cx));
+        true
+    }
+
     /// Paste with an image or copied files on the clipboard attaches them
     /// (text pastes into the box as usual). True when it took the paste.
     fn paste_files(&mut self, cx: &mut Context<Self>) -> bool {
@@ -410,12 +471,15 @@ impl Composer {
                                 .unwrap_or_default();
                             s.effort = super::model_menu::next_effort(&levels, s.effort);
                             cx.notify();
-                        } else if super::model_menu::rows(s, &query)
+                        } else if let Some(r) = super::model_menu::rows(s, &query)
                             .0
-                            .iter()
-                            .any(|r| r.name == key && !r.disabled)
+                            .into_iter()
+                            .find(|r| r.name == key && !r.disabled)
                         {
-                            s.select_profile(&key, cx);
+                            match r.pick {
+                                Some((profile, id)) => s.pick_catalog_model(&profile, &id, cx),
+                                None => s.select_profile(&key, cx),
+                            }
                         }
                     });
                 }
@@ -440,6 +504,39 @@ impl Composer {
 
 impl Render for Composer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // The box grows with what you write, up to `max_rows` lines, then
+        // scrolls. An editor takes the height it is given, so count the
+        // lines as the text wraps at the box's width.
+        let box_height = {
+            let t = cx.theme().clone();
+            let input = self.input.read(cx);
+            let width = input.input_bounds().size.width;
+            let text = input.value();
+            let rows = if width > px(40.) && !text.is_empty() {
+                let run = gpui::TextRun {
+                    len: text.len(),
+                    font: gpui::font(t.font_sans.clone()),
+                    color: t.colors.text,
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                };
+                window
+                    .text_system()
+                    .shape_text(text.clone(), t.text.body, &[run], Some(width), None)
+                    .map(|lines| {
+                        lines
+                            .iter()
+                            .map(|l| l.wrap_boundaries().len() + 1)
+                            .sum::<usize>()
+                    })
+                    .unwrap_or(1)
+            } else {
+                text.split('\n').count()
+            };
+            // The editor's own inset above and below its lines.
+            t.text.body * 1.5 * rows.clamp(1, self.max_rows) as f32 + t.space.sm
+        };
         let t = cx.theme().clone();
         let state = self.state.clone();
         let empty = self.text(cx).trim().is_empty();
@@ -477,7 +574,9 @@ impl Render for Composer {
             me.update(cx, |c, _| c.just_dismissed(ev)).unwrap_or(false)
         };
         let design_trigger = super::design_chips::trigger(&t, &state, cx, skip_design);
-        let design_menu = self.state.read(cx).design_menu.map(|tab| {
+        let design_now = self.state.read(cx).design_menu;
+        let design_out = t.size.menu_out_ms;
+        let design_menu = self.design_presence.frame(design_now, design_out, window).map(|(tab, leaving)| {
             let query = self.design_filter.read(cx).value().to_string();
             let search = div()
                 .mx(px(8.))
@@ -492,16 +591,42 @@ impl Render for Composer {
                 .rounded(px(4.))
                 .bg(t.colors.hover)
                 .into_any_element();
-            super::design_chips::menu(&t, &state, tab, &query, search, window, cx, move |pos, cx| {
-                dismiss_design(pos, Menu::Design, cx)
-            })
+            super::design_chips::menu(
+                &t,
+                &state,
+                tab,
+                &query,
+                search,
+                window,
+                cx,
+                move |pos, cx| dismiss_design(pos, Menu::Design, cx),
+                leaving,
+            )
         });
         let mode_trigger = super::mode_menu::trigger(&t, &state, cx, skip);
-        let modes_menu = self.state.read(cx).modes_open.then(|| {
-            super::mode_menu::menu(&t, &state, window, cx, move |pos, cx| {
-                dismiss_modes(pos, Menu::Modes, cx)
-            })
-        });
+        let out = t.size.menu_out_ms;
+        let modes_now = self.state.read(cx).modes_open.then_some(());
+        let modes_menu = self
+            .modes_presence
+            .frame(modes_now, out, window)
+            .map(|(_, leaving)| {
+                super::mode_menu::menu(
+                    &t,
+                    &state,
+                    window,
+                    cx,
+                    move |pos, cx| dismiss_modes(pos, Menu::Modes, cx),
+                    leaving,
+                )
+            });
+        // The "+": a menu above it (`add_menu`).
+        let add_hooks = self.add_hooks(cx);
+        let add_menu = self
+            .add_presence
+            .frame(self.add_open.then_some(()), out, window)
+            .and_then(|(_, leaving)| {
+                super::add_menu::menu(&t, &state, cx, add_hooks.clone(), leaving)
+            });
         let query = self.filter.read(cx).value().to_string();
         let search = div()
             .m(px(4.))
@@ -524,9 +649,12 @@ impl Render for Composer {
                 }
             });
         };
+        let model_frame =
+            self.model_presence
+                .frame(self.state.read(cx).picker_open.then_some(()), out, window);
         let s = self.state.read(cx);
         let (busy, mode, picker_open) = (s.busy(), s.mode, s.picker_open);
-        let model_menu = picker_open.then(|| {
+        let model_menu = model_frame.map(|(_, leaving)| {
             super::model_menu::render(
                 &t,
                 &state,
@@ -537,11 +665,13 @@ impl Render for Composer {
                 window,
                 on_hover,
                 move |pos, cx| dismiss_models(pos, Menu::Models, cx),
+                leaving,
             )
         });
         let model_name: SharedString = match (&s.endpoints, s.active_profile()) {
             (None, _) => "Model".into(),
-            (Some(_), None) => "Set up an endpoint first".into(),
+            // No endpoint yet: an invitation, not an alarm; the menu sets one up.
+            (Some(_), None) => "Choose a model".into(),
             (Some(_), Some(p)) => p.display().to_string().into(),
         };
         let pill_effort = super::model_menu::pill_effort(&t, s);
@@ -562,6 +692,12 @@ impl Render for Composer {
         });
 
         let pending = super::attachments::pending(&t, &state, cx);
+        let goal = {
+            let s = self.state.read(cx);
+            s.current
+                .and_then(|c| s.goals.get(&c))
+                .map(|g| super::goal_bar::render(&t, &state, g, s.busy()))
+        };
         // The list opens at the word being completed: where the caret was
         // when its sign was typed (the input's last layout), kept while the
         // word is typed on.
@@ -641,11 +777,10 @@ impl Render for Composer {
 
         // In the tray: quiet selectors, washed while open or hovered.
         let quiet = |id: &'static str, open: bool| super::button::selector(&t, id, open);
-        // The tray's buttons give up room, as an ellipsis, when the
-        // composer is narrow (the side panel open), so every one stays.
+        // Narrow (a panel open beside the chat), the names give way first.
         let model_button = quiet("model", picker_open)
-            .flex_shrink(1.)
             .min_w_0()
+            .flex_shrink(1.)
             .aria_label("Model")
             .child(icon("icons/cpu.svg", t.size.icon_sm, t.colors.text_muted))
             .child(
@@ -681,11 +816,15 @@ impl Render for Composer {
             .filter(|p| !p.scratch)
             .map(|p| p.name.clone())
             .unwrap_or_else(|| "Work in a folder".into());
-        let host = self.state.read(cx).current_remote().map(|r| r.target.label());
+        let host = self
+            .state
+            .read(cx)
+            .current_remote()
+            .map(|r| r.target.label());
         let remote = host.is_some();
         let project_button = quiet("project", false)
-            .flex_shrink(1.)
             .min_w_0()
+            .flex_shrink(1.)
             .aria_label("Project")
             .text_color(t.colors.text_muted)
             .child(icon(
@@ -742,13 +881,13 @@ impl Render for Composer {
                 },
             )
             .into();
+            // The ring alone, as Claude Code's; its numbers in the tooltip.
             div()
                 .id("context-meter")
                 .flex()
                 .items_center()
-                .gap(px(5.))
-                .h(t.size.button_sm)
-                .px(px(6.))
+                .justify_center()
+                .size(t.size.button_sm)
                 .text_size(t.text.caption)
                 .text_color(colour)
                 .child(super::context_ring::ring(
@@ -757,13 +896,6 @@ impl Render for Composer {
                     f,
                     t.colors.border,
                     if f > 0.8 { colour } else { t.colors.primary },
-                ))
-                // How much of the model's window the chat fills, in tokens.
-                .child(format!(
-                    "{}{} of {}",
-                    if m.estimated { "~" } else { "" },
-                    crate::context::short(m.used),
-                    crate::context::short(m.window)
                 ))
                 .rounded(t.radius.compact)
                 .cursor_pointer()
@@ -776,17 +908,40 @@ impl Render for Composer {
                 })
                 .on_click(|_, window, cx| window.dispatch_action(Box::new(super::ShowContext), cx))
         });
-        let context_popover = super::context_menu::render(&t, &state, window, cx);
+        let context_shown = self
+            .context_presence
+            .frame(self.state.read(cx).context_open.then_some(()), out, window)
+            .map(|f| f.1);
+        let context_popover = super::context_menu::render(&t, &state, window, context_shown, cx);
 
+        // In a chat the box is as wide as the text above it, on the same
+        // edges; on the new-chat screen it keeps its own width.
+        let in_chat = self
+            .state
+            .read(cx)
+            .chat()
+            .is_some_and(|c| !c.messages.is_empty());
         let composer = div()
             .key_context("Composer")
             .track_focus(&self.menu_focus)
             .relative()
             .w_full()
-            .max_w(t.size.composer_width)
+            .max_w(if in_chat {
+                t.size.column
+            } else {
+                t.size.composer_width
+            })
             .flex()
             .flex_col()
             .gap(px(6.))
+            // Ctrl+F finds in the chat (`find_bar.rs`), not in the text box:
+            // the editor's own search bar would open inside the composer.
+            .capture_action(
+                cx.listener(|_, _: &gpui::component::input::Search, window, cx| {
+                    cx.stop_propagation();
+                    window.dispatch_action(Box::new(super::ToggleFind), cx);
+                }),
+            )
             // The text box's own Escape closes the autocomplete first, keeping the focus.
             .capture_action(
                 cx.listener(|this, _: &gpui::component::input::Escape, _, cx| {
@@ -814,6 +969,14 @@ impl Render for Composer {
                     }
                 },
             ))
+            // Shift+Tab cycles the mode, as in Claude Code. The text box binds
+            // it to outdent, and its binding wins over ours: take it here.
+            .capture_action(cx.listener(
+                |_, _: &gpui::component::input::OutdentInline, window, cx| {
+                    window.dispatch_action(Box::new(super::CycleMode), cx);
+                    cx.stop_propagation();
+                },
+            ))
             .capture_action(cx.listener(
                 |this, _: &gpui::component::input::IndentInline, window, cx| {
                     if this.completion_nav("tab", window, cx) {
@@ -827,13 +990,29 @@ impl Render for Composer {
                         // Stopped here, the box never sends: nothing to swallow later.
                         this.ac_took_enter = false;
                         cx.stop_propagation();
+                        return;
+                    }
+                    // Nothing written and a tool waits: Enter allows it,
+                    // Shift Enter always allows it (the card's keys).
+                    if !e.secondary
+                        && this.text(cx).trim().is_empty()
+                        && this.state.read(cx).attachments.is_empty()
+                    {
+                        let verdict = if e.shift {
+                            crate::state::Verdict::AllowedAlways
+                        } else {
+                            crate::state::Verdict::Allowed
+                        };
+                        if this.state.update(cx, |s, cx| s.answer_waiting(verdict, cx)) {
+                            cx.stop_propagation();
+                        }
                     }
                 }),
             )
             // The text box's own Paste: an image or files are attached instead.
             .capture_action(
                 cx.listener(|this, _: &gpui::component::input::Paste, _, cx| {
-                    if this.paste_files(cx) {
+                    if this.paste_files(cx) || this.paste_long(cx) {
                         cx.stop_propagation();
                     }
                 }),
@@ -847,32 +1026,27 @@ impl Render for Composer {
             .children(model_menu)
             // Painted last, over the cards under the box on the new-chat screen.
             .children(completion.map(|c| gpui::deferred(c).with_priority(2)))
-            // One unit: the white box (what you write, + on the left, send on
-            // the right) resting in a recessed tray that holds the selectors.
+            // One surface: what you write, then one row with everything
+            // about it. It lifts off the page; the mode tints its edge, as it
+            // tints the extension's focus ring, and the keyboard deepens it.
             .child(
                 div()
                     .flex()
                     .flex_col()
-                    .rounded(t.size.composer_radius)
-                    .bg(t.extra.sunk)
-                    .border_1()
-                    .border_color(t.colors.border)
+                    .children(goal)
                     .child(
                         div()
                             .flex()
                             .flex_col()
                             .bg(t.colors.surface)
                             .border_1()
-                            // The mode tints the box's edge, as it tints the extension's
-                            // focus ring; the keyboard deepens it.
                             .border_color(tint.map(|c| c.opacity(0.55)).unwrap_or(if focused {
                                 t.extra.border_strong
                             } else {
                                 t.colors.border
                             }))
                             .rounded(t.size.composer_radius)
-                            // The tray's edge meets the box's: no double hairline.
-                            .m(px(-1.))
+                            .shadow(t.elevation_grain())
                             // Files dropped anywhere on the box are attached.
                             .drag_over::<gpui::ExternalPaths>({
                                 let (edge, wash) = (t.colors.primary, t.colors.primary_tint);
@@ -884,76 +1058,93 @@ impl Render for Composer {
                                     .update(cx, |s, cx| s.add_attachment_paths(paths, cx));
                             }))
                             .children(pending)
-                            .child(
-                                // The text starts where the + under it starts
-                                // (the textarea adds 10px of its own).
-                                div()
-                                    .px(px(4.))
-                                    .pt(t.space.md)
-                                    .pb(t.space.xs)
-                                    .text_size(t.text.body)
-                                    .line_height(relative(1.5))
-                                    .child(
-                                        Textarea::new(&self.input)
-                                            .appearance(false)
-                                            .text_size(t.text.body)
-                                            .token({
-                                                let t = t.clone();
-                                                move |token, _, _| mention_token(&t, token)
-                                            }),
-                                    ),
-                            )
+                            // One line, as Claude Code's box: +, what you
+                            // write, send. They keep to the bottom as it grows.
                             .child(
                                 div()
                                     .flex()
-                                    .items_center()
-                                    .gap(t.space.sm)
-                                    // Equal insets right and below, so send sits
-                                    // square in the box's corner.
-                                    .p(t.space.snug)
+                                    .items_end()
+                                    .gap(t.space.xs)
+                                    .min_h(t.size.composer_line)
+                                    .p(t.space.xs)
+                                    // "+": what to add, and the tools a reply may use.
                                     .child(
-                                        super::button::Button::outlined_icon(
-                                            "attach",
-                                            "icons/plus.svg",
-                                            format!(
-                                                "Attach files and images ({})",
-                                                super::shortcut("U")
-                                            ),
-                                        )
-                                        .large()
-                                        .on_click(
-                                            |_, window, cx| {
-                                                window.dispatch_action(
-                                                    Box::new(super::AttachFiles),
-                                                    cx,
+                                        div()
+                                            .relative()
+                                            .mb(px(2.))
+                                            .child(
+                                                super::button::Button::icon(
+                                                    "attach",
+                                                    "icons/plus.svg",
+                                                    "Add files, connectors and more",
                                                 )
-                                            },
-                                        ),
+                                                // Its name, not over its own open menu.
+                                                .tooltip(!self.add_open)
+                                                .on_click(cx.listener(|this, ev, _, cx| {
+                                                    if this.just_dismissed(ev) {
+                                                        return;
+                                                    }
+                                                    this.add_open = !this.add_open;
+                                                    cx.notify();
+                                                })),
+                                            )
+                                            .children(add_menu),
                                     )
-                                    .child(div().flex_1())
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w_0()
+                                            // One line sits level with + and send;
+                                            // the textarea's own inset is the gap
+                                            // after the +.
+                                            .pt(px(0.))
+                                            .pb(px(8.))
+                                            .ml(-t.space.xs)
+                                            .text_size(t.text.body)
+                                            .line_height(relative(1.5))
+                                            .child(
+                                                Editor::new(&self.input)
+                                                    .appearance(false)
+                                                    .font_family(t.font_sans.clone())
+                                                    .text_size(t.text.body)
+                                                    .line_height(relative(1.5))
+                                                    .h(box_height),
+                                            ),
+                                    )
                                     .child(send),
                             ),
                     )
-                    // The tray: the project, the context meter, the model, the mode.
+                    // Under the box, quiet: the mode and the folder on the
+                    // left; the model, its effort and the context ring on the
+                    // right.
                     .child(
                         div()
-                            .relative()
-                            .children(context_popover)
                             .flex()
                             .items_center()
                             .gap(t.space.xs)
-                            .px(t.space.tight)
-                            .py(t.space.xs)
+                            .pt(t.space.xs)
+                            .min_w_0()
+                            .child(
+                                div()
+                                    .flex_none()
+                                    .relative()
+                                    .child(mode_trigger)
+                                    .children(modes_menu),
+                            )
                             .child(project_button)
                             // A design chat: the chip and its menu above it.
                             .children(design_trigger.map(|d| {
                                 div().relative().flex_none().child(d).children(design_menu)
                             }))
-                            .children(meter)
-                            .child(div().flex_1())
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w(t.space.xs)
+                                    .relative()
+                                    .children(context_popover),
+                            )
                             .child(model_button)
-                            // Modes: the button and its menu above it.
-                            .child(div().relative().child(mode_trigger).children(modes_menu)),
+                            .children(meter),
                     ),
             );
         // Never wider than its own measure, centred wherever it sits.
@@ -967,59 +1158,4 @@ enum Menu {
     Models,
     Modes,
     Design,
-}
-
-/// The finished mentions in `text`, by byte range: a `/name` ForgeCLI runs,
-/// leading the message, and `@path` naming one of the project's files or
-/// folders. Each token's id says its kind (`skill:`, `command:`, `file:`).
-fn mentions(text: &str, s: &AppState) -> Vec<(std::ops::Range<usize>, InlineToken)> {
-    let mut out = vec![];
-    let finished = |end: usize| text[end..].starts_with(char::is_whitespace);
-    if let Some(rest) = text.strip_prefix('/') {
-        let end = 1 + rest.find(char::is_whitespace).unwrap_or(rest.len());
-        let name = &text[1..end];
-        if finished(end) {
-            if let Some(c) = s.completion_commands().into_iter().find(|c| c.name == name) {
-                let kind = if c.group == "Skills" { "skill" } else { "command" };
-                out.push((0..end, InlineToken::new(format!("{kind}:{name}"), &text[..end])));
-            }
-        }
-    }
-    let files = s.completion_files();
-    let mut at = 0;
-    for word in text.split_inclusive(char::is_whitespace) {
-        let start = at;
-        at += word.len();
-        let word = word.trim_end();
-        let Some(path) = word.strip_prefix('@') else {
-            continue;
-        };
-        let end = start + word.len();
-        if path.is_empty() || !finished(end) {
-            continue;
-        }
-        let known = files
-            .iter()
-            .any(|f| f == path || f.trim_end_matches('/') == path.trim_end_matches('/'));
-        if known {
-            out.push((start..end, InlineToken::new(format!("file:{path}"), word)));
-        }
-    }
-    out
-}
-
-/// How a mention shows in the box: its text, bold; a skill in the skills'
-/// colour, a command or a file in the accent.
-fn mention_token(t: &crate::theme::Theme, token: &InlineTokenContext) -> gpui::Div {
-    let skill = token.token().id().starts_with("skill:");
-    div()
-        .flex()
-        .items_center()
-        .h(token.line_height())
-        .font_weight(gpui::FontWeight::SEMIBOLD)
-        .text_color(if skill { t.extra.skill } else { t.colors.primary })
-        .when(token.is_selected(), |d| {
-            d.bg(t.colors.primary_tint).rounded(t.radius.small)
-        })
-        .child(token.token().label().clone())
 }

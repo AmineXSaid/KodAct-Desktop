@@ -295,7 +295,7 @@ impl RulesView {
                     // The section's subhead, in the editorial serif.
                     .child(
                         div()
-                            .font_family(t.font_serif.clone())
+                            .font_family(t.font_display.clone())
                             .text_size(t.text.subheading)
                             .text_color(t.colors.text_body)
                             .child(format!("What Claude Code reads in {where_}, and when. Files read every session cost context every time; the rest load only when they apply.")),
@@ -631,6 +631,7 @@ impl RulesView {
                     copied,
                     scale: 2.,
                     sources: self.state.read(cx).diagram_code.clone(),
+                    zooms: self.state.read(cx).diagram_zoom.clone(),
                 },
             )
         };
@@ -891,6 +892,7 @@ impl Render for RulesView {
                         .child(
                             div()
                                 .flex_1()
+                                .min_w_0()
                                 .child(Input::new(&self.tester).appearance(false).cleanable(true)),
                         ),
                 )

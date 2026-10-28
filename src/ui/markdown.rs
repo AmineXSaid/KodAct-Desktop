@@ -13,9 +13,9 @@
 //! title in the display serif. Both draw tables and task lists.
 
 use gpui::{
-    div, font, prelude::*, px, relative, AnyElement, App, ClipboardItem, ElementId, Entity,
-    FontStyle, FontWeight, InteractiveText, SharedString, StrikethroughStyle, StyledText, TextRun,
-    UnderlineStyle,
+    canvas, div, fill, font, point, prelude::*, px, relative, size, AnyElement, App, Bounds,
+    ClipboardItem, ElementId, Entity, FontStyle, FontWeight, InteractiveText, SharedString,
+    StrikethroughStyle, StyledText, TextLayout, TextRun, UnderlineStyle,
 };
 use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
@@ -65,6 +65,8 @@ pub enum Look {
     Chat,
     /// A document in the side panel.
     Document,
+    /// Text beside the reply (the model's thinking): smaller and muted.
+    Aside,
 }
 
 #[derive(Default)]
@@ -171,6 +173,26 @@ fn fence_ascii_art(src: &str) -> std::borrow::Cow<'_, str> {
     }
 }
 
+/// A file's YAML front matter (`---` lines around it, at the very top) as a
+/// `yaml` code block: Markdown would read it as a rule and one big heading.
+pub fn fence_front_matter(src: &str) -> std::borrow::Cow<'_, str> {
+    let Some(rest) = src
+        .strip_prefix("---\n")
+        .or_else(|| src.strip_prefix("---\r\n"))
+    else {
+        return src.into();
+    };
+    let mut at = 0;
+    for line in rest.split_inclusive('\n') {
+        if matches!(line.trim_end(), "---" | "...") {
+            let (yaml, after) = (&rest[..at], &rest[at + line.len()..]);
+            return format!("```yaml\n{yaml}```\n{after}").into();
+        }
+        at += line.len();
+    }
+    src.into()
+}
+
 fn parse(src: &str) -> Vec<Block> {
     let mut out = vec![];
     let mut spans: Vec<Span> = vec![];
@@ -207,7 +229,8 @@ fn parse(src: &str) -> Vec<Block> {
         }
     };
 
-    let src = fence_ascii_art(src);
+    let src = fence_front_matter(src);
+    let src = fence_ascii_art(&src);
     for ev in Parser::new_ext(
         &src,
         Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS,
@@ -395,6 +418,8 @@ pub struct CopyContext {
     pub scale: f32,
     /// Diagrams showing their source instead of the drawing (`AppState::diagram_code`).
     pub sources: std::sync::Arc<std::collections::HashSet<SharedString>>,
+    /// Diagrams zoomed in or out (`AppState::diagram_zoom`).
+    pub zooms: std::sync::Arc<std::collections::HashMap<SharedString, f32>>,
     /// The reply is still arriving: its newest words fade in at the end.
     pub streaming: bool,
 }
@@ -419,27 +444,221 @@ fn runs_in(
     color: gpui::Hsla,
 ) -> AnyElement {
     let (text, runs) = run_list(spans, t, family, base_weight, color);
-    linked(id, spans, StyledText::new(text).with_runs(runs))
+    linked(id, spans, text, runs, t)
+}
+
+/// Your message, selectable to copy part of it, styled as it was in the
+/// box (`compose_style`): its Markdown, and its mentions bold, a skill in the
+/// skills' colour, a command or file in the accent.
+pub fn selectable_plain(
+    key: SharedString,
+    text: &SharedString,
+    marks: &[(std::ops::Range<usize>, super::autocomplete::Mark)],
+    t: &Theme,
+) -> AnyElement {
+    let run = |len: usize, h: Option<gpui::HighlightStyle>| {
+        let h = h.unwrap_or_default();
+        let mut font = gpui::font(t.font_sans.clone());
+        if let Some(w) = h.font_weight {
+            font.weight = w;
+        }
+        if let Some(st) = h.font_style {
+            font.style = st;
+        }
+        TextRun {
+            len,
+            font,
+            color: h.color.unwrap_or(t.colors.text),
+            background_color: h.background_color,
+            underline: h.underline,
+            strikethrough: h.strikethrough,
+        }
+    };
+    let mut runs = vec![];
+    let mut at = 0;
+    for (r, h) in super::compose_style::styles(text, marks, t) {
+        if r.start > at {
+            runs.push(run(r.start - at, None));
+        }
+        runs.push(run(r.len(), Some(h)));
+        at = r.end;
+    }
+    if at < text.len() || runs.is_empty() {
+        runs.push(run(text.len() - at, None));
+    }
+    let runs = super::select::prepare(&key, text, runs, t.colors.primary_tint);
+    let styled = StyledText::new(text.clone()).with_runs(runs);
+    let layout = styled.layout().clone();
+    super::select::wrap(key, layout, styled.into_any_element())
 }
 
 /// The text, with its links clickable (opened in the system browser) and
-/// their address shown on hover; plain text when it has none.
-fn linked(id: ElementId, spans: &[Span], text: StyledText) -> AnyElement {
+/// their address shown on hover; plain text when it has none. Either way
+/// it can be selected to copy part of it (`select.rs`).
+fn linked(
+    id: ElementId,
+    spans: &[Span],
+    text: String,
+    runs: Vec<TextRun>,
+    t: &Theme,
+) -> AnyElement {
+    let key = SharedString::from(format!("{id:?}"));
+    let runs = super::select::prepare(&key, &text, runs, t.colors.primary_tint);
+    let text = StyledText::new(text).with_runs(runs);
+    let layout = text.layout().clone();
+    let code = code_ranges(spans);
+    let el = linked_text(id, spans, text);
+    let el = if code.is_empty() {
+        el
+    } else {
+        // The chips paint first, so the text sits on them.
+        div()
+            .relative()
+            .child(chips(layout.clone(), code, t))
+            .child(el)
+            .into_any_element()
+    };
+    super::select::wrap(key, layout, el)
+}
+
+/// How far an inline code chip reaches past its first and last glyph. No
+/// padding characters: the wrapper breaks at any space (a no-break one
+/// too), so padding made stray gaps before punctuation and empty rows.
+const CODE_REACH: f32 = 1.5;
+
+/// A span's text as it is laid out: exactly its text (code too).
+fn shown(s: &Span) -> std::borrow::Cow<'_, str> {
+    s.text.as_str().into()
+}
+
+/// Where the code spans sit in the laid-out text.
+fn code_ranges(spans: &[Span]) -> Vec<std::ops::Range<usize>> {
+    let mut out = vec![];
+    let mut at = 0;
+    for s in spans.iter().filter(|s| !s.text.is_empty()) {
+        let len = shown(s).len();
+        if s.code {
+            out.push(at..at + len);
+        }
+        at += len;
+    }
+    out
+}
+
+/// Rounded grounds behind inline code, one per row a span wraps onto: text
+/// runs can only fill square, so these are painted from the laid-out
+/// glyph positions, under the text.
+fn chips(layout: TextLayout, ranges: Vec<std::ops::Range<usize>>, t: &Theme) -> impl IntoElement {
+    let (bg, edge, radius) = (t.extra.code_inline_bg, t.colors.border, t.radius.small);
+    canvas(
+        |_, _, _| {},
+        move |_, _, window, _| {
+            let line = layout.line_height();
+            let text = layout.text();
+            for r in &ranges {
+                for b in rows(&layout, &text, r.clone(), line) {
+                    // A faint ground with a hairline, reaching a little past the glyphs.
+                    let b = Bounds::new(
+                        point(b.origin.x - px(CODE_REACH), b.origin.y),
+                        size(b.size.width + px(CODE_REACH * 2.), b.size.height),
+                    );
+                    window.paint_quad(
+                        fill(b, bg)
+                            .corner_radii(radius)
+                            .border_widths(px(1.))
+                            .border_color(edge),
+                    );
+                }
+            }
+        },
+    )
+    .absolute()
+    .size_full()
+}
+
+/// The bounds a range covers on each row it wraps onto, trimmed to sit
+/// inside the line's height. A row holding only the padding (the wrapper
+/// breaks at any space, a no-break one too) gets none.
+fn rows(
+    layout: &TextLayout,
+    text: &str,
+    r: std::ops::Range<usize>,
+    line: gpui::Pixels,
+) -> Vec<Bounds<gpui::Pixels>> {
+    let mut out: Vec<Bounds<gpui::Pixels>> = vec![];
+    let inset = line * 0.12;
+    // (where the row starts, its last glyph's x, glyphs, any besides padding)
+    let mut row: Option<(gpui::Point<gpui::Pixels>, gpui::Pixels, usize, bool)> = None;
+    let close = |start: gpui::Point<gpui::Pixels>,
+                 end: gpui::Pixels,
+                 ink: bool,
+                 out: &mut Vec<Bounds<gpui::Pixels>>| {
+        if ink && end > start.x {
+            out.push(Bounds::new(
+                point(start.x, start.y + inset),
+                size(end - start.x, line - inset * 2.),
+            ));
+        }
+    };
+    let starts: Vec<usize> = text
+        .get(r.clone())
+        .map(|s| s.char_indices().map(|(i, _)| r.start + i).collect())
+        .unwrap_or_default();
+    for i in starts {
+        let Some(p) = layout.position_for_index(i) else {
+            continue;
+        };
+        let ink = !text[i..].starts_with(char::is_whitespace);
+        row = match row {
+            Some((start, last, n, had)) if start.y == p.y => {
+                Some((start, p.x.max(last), n + 1, had || ink))
+            }
+            Some((start, last, n, had)) => {
+                // Wrapped: the row ends a character past its last start.
+                let step = if n > 1 {
+                    (last - start.x) / (n - 1) as f32
+                } else {
+                    line * 0.5
+                };
+                close(start, last + step, had, &mut out);
+                Some((p, p.x, 1, ink))
+            }
+            None => Some((p, p.x, 1, ink)),
+        };
+    }
+    if let Some((start, last, n, ink)) = row {
+        let end = match layout.position_for_index(r.end) {
+            Some(e) if e.y == start.y => e.x,
+            _ => {
+                last + if n > 1 {
+                    (last - start.x) / (n - 1) as f32
+                } else {
+                    line * 0.5
+                }
+            }
+        };
+        close(start, end, ink, &mut out);
+    }
+    out
+}
+
+fn linked_text(id: ElementId, spans: &[Span], text: StyledText) -> AnyElement {
     let mut ranges: Vec<std::ops::Range<usize>> = vec![];
     let mut urls: Vec<String> = vec![];
     let mut at = 0;
     for s in spans.iter().filter(|s| !s.text.is_empty()) {
+        let len = shown(s).len();
         if let Some(url) = &s.link {
             // Neighbouring spans of one link (bold inside it) join up.
             match (ranges.last_mut(), urls.last()) {
-                (Some(r), Some(u)) if *u == *url && r.end == at => r.end = at + s.text.len(),
+                (Some(r), Some(u)) if *u == *url && r.end == at => r.end = at + len,
                 _ => {
-                    ranges.push(at..at + s.text.len());
+                    ranges.push(at..at + len);
                     urls.push(url.clone());
                 }
             }
         }
-        at += s.text.len();
+        at += len;
     }
     if ranges.is_empty() {
         return text.into_any_element();
@@ -531,13 +750,18 @@ fn run_list(
         if s.text.is_empty() {
             continue;
         }
-        text.push_str(&s.text);
+        let shown = shown(s);
+        text.push_str(&shown);
         let mut f = font(if s.code {
-            t.font_mono.clone()
+            t.font_code_inline.clone()
         } else {
             family.clone()
         });
-        f.weight = if s.bold {
+        // Code keeps the mono face's regular weight, in bold text too: the
+        // mono faces ship Regular and Bold only, and bold mono shouts.
+        f.weight = if s.code {
+            FontWeight::NORMAL
+        } else if s.bold {
             FontWeight::SEMIBOLD
         } else {
             base_weight
@@ -546,14 +770,18 @@ fn run_list(
             f.style = FontStyle::Italic;
         }
         runs.push(TextRun {
-            len: s.text.len(),
+            len: shown.len(),
             font: f,
+            // Inline code (a file, a command) in Forge's coral on a rounded
+            // chip (painted by `chips`): a name set apart at a glance.
             color: if s.link.is_some() {
                 t.colors.primary
+            } else if s.code {
+                t.extra.code_inline_fg
             } else {
                 color
             },
-            background_color: s.code.then_some(t.extra.inset),
+            background_color: None,
             underline: s.link.is_some().then(|| UnderlineStyle {
                 thickness: px(1.),
                 color: Some(t.colors.primary),
@@ -576,7 +804,7 @@ const TAIL_CHARS: usize = 24;
 fn runs_streaming(id: ElementId, spans: &[Span], t: &Theme, color: gpui::Hsla) -> AnyElement {
     let (text, runs) = run_list(spans, t, &t.font_reading, FontWeight::NORMAL, color);
     let runs = fade_tail(&text, runs, TAIL_CHARS);
-    linked(id, spans, StyledText::new(text).with_runs(runs))
+    linked(id, spans, text, runs, t)
 }
 
 /// Splits `runs` so the last `n` characters of `text` step down in opacity
@@ -634,11 +862,18 @@ pub fn render(src: &str, t: &Theme, copy: &CopyContext) -> AnyElement {
 
 pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyElement {
     let doc = look == Look::Document;
+    let aside = look == Look::Aside;
     let blocks = parse(src);
-    let (size, leading) = if doc {
-        (t.size.doc_text, t.size.line_height_doc)
+    let (size, leading) = match look {
+        Look::Document => (t.size.doc_text, t.size.line_height_doc),
+        Look::Aside => (t.text.body_sm, t.size.line_height_chat),
+        Look::Chat => (t.size.chat_text, t.size.line_height_chat),
+    };
+    // Prose in the warm body ink, a shade under headings; an aside quieter.
+    let prose = if aside {
+        t.colors.text_muted
     } else {
-        (t.size.chat_text, t.size.line_height_chat)
+        t.colors.text_body
     };
     let mut col = div()
         .flex()
@@ -659,25 +894,26 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
         };
         let gap = match (prev, kind, doc) {
             (None, _, _) => px(0.),
-            (Some("item"), "item", false) => px(2.),
+            (Some("item"), "item", false) => t.space.xs,
             (Some("item"), "item", true) => px(6.),
-            (_, "heading", false) => t.space.md,
+            (_, "heading", false) => t.space.lg + t.space.xs,
             (_, "heading", true) => t.space.xl + t.space.xs,
-            (Some("heading"), _, false) => t.space.xs,
+            (Some("heading"), _, false) => t.space.sm,
             (Some("heading"), _, true) => t.space.sm + px(2.),
-            (_, "code", false) | (Some("code"), _, false) => t.space.sm,
+            (_, "code", false) | (Some("code"), _, false) => t.space.md,
             (_, "code", true) | (Some("code"), _, true) => t.space.lg,
-            (_, _, false) => t.space.sm - px(2.),
+            // Paragraphs breathe apart, as a page's do.
+            (_, _, false) => t.space.md,
             (_, _, true) => t.space.md,
         };
         prev = Some(kind);
         let id = ElementId::Name(format!("md-{}-{n}", copy.key).into());
         let el: AnyElement = match b {
             Block::Para(spans) if copy.streaming && n == last => div()
-                .child(runs_streaming(id, &spans, t, t.colors.text))
+                .child(runs_streaming(id, &spans, t, prose))
                 .into_any_element(),
             Block::Para(spans) => div()
-                .child(runs(id, &spans, t, FontWeight::NORMAL, t.colors.text))
+                .child(runs(id, &spans, t, FontWeight::NORMAL, prose))
                 .into_any_element(),
             // A document's title is set in the display serif, as the greeting is.
             Block::Heading(1, spans) if doc => div()
@@ -741,15 +977,37 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                         ))
                         .into_any_element(),
                     // Step numbers carry meaning, so they read at 4.5:1.
-                    None => div()
-                        .flex_none()
-                        .min_w(t.space.lg)
-                        .text_color(t.colors.text_muted)
-                        .child(match number {
-                            Some(n) => format!("{n}."),
-                            None => "•".to_string(),
-                        })
-                        .into_any_element(),
+                    None => match number {
+                        Some(n) => div()
+                            .flex_none()
+                            .min_w(t.space.lg)
+                            .text_color(t.colors.text_muted)
+                            .child(format!("{n}."))
+                            .into_any_element(),
+                        // A bullet per level, as a written outline: a dot, a
+                        // ring, a dash. Drawn, not typed, so every face
+                        // shows it round (some draw • square).
+                        None => {
+                            let ink = t.colors.text_muted;
+                            let mark = match depth.min(2) {
+                                0 => div().size(px(5.)).rounded(px(2.5)).bg(ink),
+                                1 => div()
+                                    .size(px(6.))
+                                    .rounded(px(3.))
+                                    .border_1()
+                                    .border_color(ink),
+                                _ => div().w(px(6.)).h(px(1.5)).rounded(px(1.)).bg(ink),
+                            };
+                            div()
+                                .flex_none()
+                                .w(t.space.lg)
+                                .h(px(f32::from(size) * leading))
+                                .flex()
+                                .items_center()
+                                .child(mark)
+                                .into_any_element()
+                        }
+                    },
                 })
                 .child(div().flex_1().min_w_0().child(runs(
                     id,
@@ -759,7 +1017,7 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                     if task == Some(true) {
                         t.colors.text_muted
                     } else {
-                        t.colors.text
+                        prose
                     },
                 )))
                 .into_any_element(),
@@ -767,7 +1025,7 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                 .border_l_2()
                 .border_color(t.colors.border)
                 .pl(t.space.md)
-                .child(runs(id, &spans, t, FontWeight::NORMAL, t.colors.text))
+                .child(runs(id, &spans, t, FontWeight::NORMAL, prose))
                 .into_any_element(),
             Block::Rule => crate::theme::rule(t).mx_0().into_any_element(),
             Block::Code { lang, code } => {
@@ -1002,90 +1260,177 @@ fn diagram_block(
         content: svg.to_string().into(),
         bytes: None,
     };
-    div()
-        .w_full()
+    // Zoomed: drawn at that width, scrolling inside the block when wider
+    // than it. Fitted: at its own size or the column's, whichever is less.
+    let zoom = copy.zooms.get(&key_owned).copied().unwrap_or(1.);
+    let fit = natural.min(inner);
+    let drawing = if (zoom - 1.).abs() < 0.01 {
+        drawing
+    } else {
+        super::diagram_view::image(&svg, fit * zoom, copy.scale)
+    };
+    let zoomer = |id: &str, glyph: &'static str, tip: &'static str, by: Option<f32>| {
+        let (state, key) = (copy.state.clone(), key_owned.clone());
+        tool_button(&format!("{id}-{key_owned}"), glyph, tip, t).on_click(
+            move |_, _, cx: &mut App| state.update(cx, |s, cx| s.zoom_diagram(key.clone(), by, cx)),
+        )
+    };
+    let group: SharedString = format!("diagram-{key}").into();
+    let fit_state = (copy.state.clone(), key_owned.clone());
+    // The tools float over the drawing's corner, shown only while the
+    // pointer is on the diagram, so at rest it is the drawing alone.
+    let tools = div()
+        .absolute()
+        .top(t.space.sm)
+        .right(t.space.sm)
+        .flex()
+        .items_center()
+        .gap(px(2.))
+        .p(px(3.))
+        .rounded(t.radius.button)
         .bg(t.colors.surface)
+        .border_1()
+        .border_color(t.colors.border)
+        .shadow(t.elevation_popover())
+        .invisible()
+        .group_hover(group.clone(), |d| d.visible())
+        .child(zoomer(
+            "zoom-out",
+            "icons/minus.svg",
+            "Zoom out",
+            Some(1. / 1.25),
+        ))
+        .child(
+            div()
+                .id(SharedString::from(format!("zoom-fit-{key}")))
+                .min_w(px(40.))
+                .h(px(24.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(t.radius.button)
+                .cursor_pointer()
+                .text_size(t.text.caption)
+                .text_color(t.colors.text_muted)
+                .hover({
+                    let h = t.colors.hover;
+                    move |d| d.bg(h)
+                })
+                .tooltip(|window, cx| {
+                    gpui::component::tooltip::Tooltip::new("Fit to the column").build(window, cx)
+                })
+                .child(format!("{}%", (zoom * 100.).round()))
+                .on_click(move |_, _, cx: &mut App| {
+                    fit_state
+                        .0
+                        .update(cx, |s, cx| s.zoom_diagram(fit_state.1.clone(), None, cx))
+                }),
+        )
+        .child(zoomer("zoom-in", "icons/plus.svg", "Zoom in", Some(1.25)))
+        .child(div().w(px(1.)).h(px(16.)).mx(px(2.)).bg(t.colors.border))
+        .child(
+            tool_button(
+                &format!("source-{key}"),
+                "icons/code-xml.svg",
+                "Show the code",
+                t,
+            )
+            .on_click(move |_, _, cx: &mut App| {
+                toggler.update(cx, |s, cx| s.toggle_diagram_code(toggle_key.clone(), cx))
+            }),
+        )
+        .child(
+            tool_button(
+                &format!("open-{key}"),
+                "icons/maximize-2.svg",
+                "Open beside the chat",
+                t,
+            )
+            .on_click(move |_, _, cx: &mut App| {
+                opener.update(cx, |s, cx| s.open_doc(to_open.clone(), cx))
+            }),
+        )
+        .child(
+            tool_button(
+                &format!("copy-{key}"),
+                if copied {
+                    "icons/check.svg"
+                } else {
+                    "icons/copy.svg"
+                },
+                if copied { "Copied" } else { "Copy the code" },
+                t,
+            )
+            .on_click(move |_, _, cx: &mut App| {
+                cx.write_to_clipboard(ClipboardItem::new_string(code.clone()));
+                let key = key_owned.clone();
+                copier.update(cx, |s, cx| s.mark_copied(key, cx));
+            }),
+        );
+    let _ = kind;
+    div()
+        .id(SharedString::from(format!("diagram-block-{key}")))
+        .group(group)
+        .relative()
+        .w_full()
+        .bg(t.extra.sunk)
         .border_1()
         .border_color(t.colors.border)
         .rounded(t.radius.card)
         .overflow_hidden()
         .child(
             div()
-                .flex()
-                .items_center()
-                .gap(t.space.xs)
-                .px(t.space.md)
-                .py(t.space.xs)
-                .border_b_1()
-                .border_color(t.colors.border)
-                .text_size(t.text.caption)
-                .text_color(t.colors.text_subtle)
-                .child(icon(
-                    "icons/route.svg",
-                    t.size.icon_xs,
-                    t.colors.text_subtle,
-                ))
+                .id(SharedString::from(format!("diagram-scroll-{key}")))
+                .w_full()
+                .when(zoom > 1.01, |d| d.overflow_x_scroll())
                 .child(
                     div()
-                        .flex_1()
-                        .min_w_0()
-                        .overflow_hidden()
-                        .whitespace_nowrap()
-                        .text_ellipsis()
-                        .child(format!("Diagram · {kind}")),
-                )
-                .child(
-                    header_button(
-                        &format!("source-{key}"),
-                        "icons/code-xml.svg",
-                        "Code",
-                        false,
-                        t,
-                    )
-                    .on_click(move |_, _, cx: &mut App| {
-                        toggler.update(cx, |s, cx| s.toggle_diagram_code(toggle_key.clone(), cx))
-                    }),
-                )
-                .child(
-                    header_button(
-                        &format!("open-{key}"),
-                        "icons/maximize-2.svg",
-                        "Open",
-                        false,
-                        t,
-                    )
-                    .on_click(move |_, _, cx: &mut App| {
-                        opener.update(cx, |s, cx| s.open_doc(to_open.clone(), cx))
-                    }),
-                )
-                .child(
-                    header_button(
-                        &format!("copy-{key}"),
-                        if copied {
-                            "icons/check.svg"
-                        } else {
-                            "icons/copy.svg"
-                        },
-                        if copied { "Copied" } else { "Copy" },
-                        copied,
-                        t,
-                    )
-                    .on_click(move |_, _, cx: &mut App| {
-                        cx.write_to_clipboard(ClipboardItem::new_string(code.clone()));
-                        let key = key_owned.clone();
-                        copier.update(cx, |s, cx| s.mark_copied(key, cx));
-                    }),
+                        .flex()
+                        .when(zoom <= 1.01, |d| d.justify_center())
+                        .px(t.space.lg)
+                        .py(t.space.lg)
+                        // The drawing fades in once it is ready, never a
+                        // blank card snapping full.
+                        .children(drawing.map(|d| {
+                            // Fitted, the drawing takes its width from this
+                            // wrapper; zoomed, it has its own.
+                            let wrap = if zoom <= 1.01 {
+                                div().w_full().flex().justify_center().child(d)
+                            } else {
+                                div().flex_none().child(d)
+                            };
+                            super::motion::rise_in(
+                                wrap,
+                                SharedString::from(format!("diagram-in-{key}")),
+                                0.,
+                                t,
+                            )
+                        })),
                 ),
         )
-        // The drawing, centred, at its own size or the column's, whichever is smaller.
-        .child(
-            div()
-                .flex()
-                .justify_center()
-                .p(t.space.md)
-                .children(drawing),
-        )
+        .child(tools)
         .into_any_element()
+}
+
+/// An icon button in a diagram's floating tools, its name as a tooltip.
+fn tool_button(
+    id: &str,
+    path: &'static str,
+    tip: &'static str,
+    t: &Theme,
+) -> gpui::Stateful<gpui::Div> {
+    let hover = t.colors.hover;
+    div()
+        .id(SharedString::from(id.to_string()))
+        .size(px(24.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(t.radius.button)
+        .cursor_pointer()
+        .hover(move |d| d.bg(hover))
+        .tooltip(move |window, cx| gpui::component::tooltip::Tooltip::new(tip).build(window, cx))
+        .child(icon(path, t.size.icon_sm, t.colors.text_muted))
 }
 
 /// A small text button in a block's header.
@@ -1166,7 +1511,30 @@ pub fn lang_of(path: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn front_matter_reads_as_yaml_not_a_heading() {
+        let out = super::fence_front_matter("---\nname: Forge\ncolors: x\n---\n# Title\n");
+        assert_eq!(out, "```yaml\nname: Forge\ncolors: x\n```\n# Title\n");
+        // A rule later on, or an unclosed block, stays as written.
+        assert_eq!(super::fence_front_matter("Hi\n---\n"), "Hi\n---\n");
+        assert_eq!(super::fence_front_matter("---\nno end"), "---\nno end");
+    }
+
     use super::*;
+
+    #[test]
+    fn a_url_in_code_keeps_its_text() {
+        let b = parse("- Use the OpenAI portal (`https://chat.openai.com`) instead.");
+        let Block::Item { spans, .. } = &b[0] else {
+            panic!("{:?}", b[0])
+        };
+        let all: String = spans.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(
+            all,
+            "Use the OpenAI portal (https://chat.openai.com) instead."
+        );
+    }
 
     #[test]
     fn blocks_and_inline_styles() {
@@ -1210,6 +1578,28 @@ mod tests {
         );
         assert!(matches!(&b[7], Block::Quote(_)));
         assert_eq!(b[8], Block::Rule);
+    }
+
+    #[test]
+    fn inline_code_is_laid_out_as_itself() {
+        let spans = vec![
+            Span {
+                text: "see ".into(),
+                ..Default::default()
+            },
+            Span {
+                text: "a.rs".into(),
+                code: true,
+                ..Default::default()
+            },
+            Span {
+                text: ".".into(),
+                ..Default::default()
+            },
+        ];
+        let laid: String = spans.iter().map(|s| shown(s).into_owned()).collect();
+        assert_eq!(laid, "see a.rs.", "no padding before the full stop");
+        assert_eq!(code_ranges(&spans), vec![4..8]);
     }
 
     #[test]

@@ -59,6 +59,7 @@ table in step.
 | Ctrl/⌘ Shift P | Projects |
 | Ctrl/⌘ Shift R | Rules and memory |
 | Ctrl/⌘ Shift D | Design: start from the library |
+| Ctrl/⌘ Shift I | Install a skill |
 | Ctrl/⌘ Shift A | Chats that need you |
 | Ctrl/⌘ Shift M | The project map |
 | Ctrl/⌘ Alt O | Remote: WSL, SSH host or container |
@@ -68,11 +69,19 @@ table in step.
 | Ctrl/⌘ U | Attach files and images |
 | Ctrl/⌘ Shift T | This turn's tasks |
 | Ctrl/⌘ Shift E | Side panel: plan, files, browser |
+| Ctrl/⌘ 1 | Side panel: Plan |
+| Ctrl/⌘ 2 | Side panel: Agents |
+| Ctrl/⌘ 3 | Side panel: Files |
+| Ctrl/⌘ 4 | Side panel: Browser |
 | Ctrl/⌘ \ | Side panel beside or below the chat |
 | Ctrl/⌘ F | Find in the conversation |
 | Ctrl/⌘ Shift F | Find in the file beside the chat |
 | Alt ↓ | The file beside the chat: next page or slide |
 | Alt ↑ | The file beside the chat: previous page or slide |
+| Alt ← | Back to the chat or page you were on |
+| Alt → | Forward again |
+| Ctrl/⌘ [ | Back (also Alt+Left) |
+| Ctrl/⌘ ] | Forward (also Alt+Right) |
 | Ctrl/⌘ J | Jump to the latest message |
 | Ctrl/⌘ Shift C | Copy the last reply |
 | Ctrl/⌘ / | Choose a model |
@@ -109,6 +118,31 @@ Page Up/Down and Ctrl+Home/End move through the list.
 
 `forge.autoApproveSafeCommands: false` in the settings file makes every
 command ask, in every mode.
+
+### Replies
+
+- **Questions.** When Forge asks you something (AskUserQuestion), it shows a
+  card with the question, its options and a tab per question. Pick an
+  option, or type your own answer in the message box; **Skip** lets Forge go
+  on with its own assumptions. Your answers reach Forge in the call itself,
+  and the card then folds to one line with what you chose. Questions are
+  asked every time, in every mode, so they have no "Always allow".
+- **Work in a row.** Two or more tool calls in a row, with the thinking
+  between them, fold into one line ("Edited 6 files, ran 2 commands"), with
+  the change's size and how many failed or were stopped. It opens to the
+  steps, and each step opens to its change or output. Text Forge writes to
+  you, and anything waiting on you, stands on its own.
+- **Failed and stopped calls.** A failed call says so ("Couldn't write
+  Cargo.toml") with its reason, and its change is marked Not applied. A
+  call cut off by Stop reads "Stopped": it may have taken effect, so check
+  before running it again.
+- **This turn's tasks** (Ctrl/⌘ Shift T): a quiet button in the title bar
+  while work runs or something failed; a click on a task scrolls to its
+  row, opens it and marks it for a moment.
+- **Thinking** folds to "Thought for 12s"; opened, it is set small and muted
+  and a long one scrolls in place.
+- **Background.** A chat sits on a plain background; Settings → General →
+  "Pattern behind chats" brings the new-chat screen's dots behind it too.
 
 ## Projects
 
@@ -192,6 +226,29 @@ ForgeCLI and the scripted model (`cargo test real_ -- --include-ignored`,
 see `src/remote.rs`). WSL runs the same way through `wsl.exe` but has only
 been checked by its unit tests (no Windows machine here).
 
+## Skills and plugins
+
+Skills and plugins made for Claude Code work in Forge unchanged. ForgeCLI
+reads Claude Code's folders (`~/.claude/skills`, a project's `.claude/skills`,
+and `.claude-plugin/plugin.json` in a plugin) and acts on a skill's
+frontmatter as Claude Code does: `$ARGUMENTS`, `${CLAUDE_SKILL_DIR}`,
+`` !`command` `` lines, `allowed-tools`, `model`, `context: fork`, `hooks`.
+This needs a ForgeCLI with that support (its branch `ccr-02a743e1-1gmu4f`,
+built on `forge-gpui-steering`).
+
+- **Install a skill** (Ctrl/⌘ Shift I, or Settings > Skills > Install skill):
+  from a GitHub repository (`owner/repo`, or a link to one folder in it), a git
+  URL, a folder, or a `.zip` / `.skill` file. Forge shows what each skill
+  would run and allow before installing it into `~/.claude/skills` or the
+  project's `.claude/skills`, where Claude Code finds it too. Nothing runs
+  while it installs. An installed skill has Update, which fetches it again.
+- **Plugins** (Settings > Plugins > Marketplaces): add a Claude Code
+  marketplace (a repository with `.claude-plugin/marketplace.json`) and
+  install its plugins. Each goes under ForgeCLI's config folder
+  (`plugins/<marketplace>/<plugin>`) and into your `pluginDirs`.
+- **WSL and SSH**: in a remote project, skills install on that machine, and
+  your own skills have "Copy to this project's machine".
+
 ## Terminal
 
 Ctrl+` (or the terminal button in the title bar) shows a terminal dock on
@@ -245,7 +302,7 @@ Changes apply the next time they're used; no restart.
 
 ## Layout
 
-- `src/theme.rs`: every colour, size, radius and font, and the six themes that set them (each with its own faces, corners, density and depth). Nothing else hardcodes them. Pick one in Settings > General or the command palette ("Theme:").
+- `src/theme.rs`: every colour, size, radius and font, in the app's one look (Calmly smooth, light and dark). Nothing else hardcodes them.
 - `src/state.rs`: the app state, the transcript model, demo chats and the scripted reply.
 - `src/backend.rs`: each chat's `forge` process: launch, the stream-json events, permission answers.
 - `src/forge_files.rs`: ForgeCLI's own files (commands, agents, skills, hooks,
@@ -261,7 +318,7 @@ Changes apply the next time they're used; no restart.
 - `src/browser_mcp.rs`: the browser tools for ForgeCLI's agents, served by this same program
   (`--browser-mcp`): navigate, state (numbered elements), click, type, press, select, hover,
   scroll, text, html, eval, wait, screenshot, console and tabs, on the page the panel shows.
-- `src/assets.rs`: bundled icons (Lucide, ISC) and fonts (Archivo, Hanken Grotesk, Source Serif 4, JetBrains Mono, and the themes' Inter, Geist and Geist Mono, IBM Plex Sans and Mono, Instrument Sans and Serif; all OFL).
+- `src/assets.rs`: bundled icons (Lucide, ISC). No font is bundled: every face is Anthropic Sans, read from the `fonts` folder beside the app (`fonts.rs`).
 - `src/ui/`: one file per part:
   - the window: `workspace` (title bar, welcome), `sidebar`, `chat_view`,
     `message`, `markdown`, `composer`, `command_palette`, `onboarding`,

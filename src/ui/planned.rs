@@ -48,7 +48,7 @@ pub fn render(t: &Theme, p: &Planned) -> impl IntoElement {
                     t.size.icon_xs,
                     t.colors.text_subtle,
                 )))
-                .child(div().flex_1().child(*item)),
+                .child(div().flex_1().min_w_0().child(*item)),
         );
     }
     let note = |label: &str, text: &str, bg| {
