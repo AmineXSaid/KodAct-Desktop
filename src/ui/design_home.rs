@@ -482,6 +482,7 @@ impl Render for DesignHome {
                     .child(
                         div()
                             .flex()
+                            .flex_wrap()
                             .items_center()
                             .justify_between()
                             .gap(t.space.md)

@@ -14,7 +14,7 @@ use gpui::{
 };
 
 use super::browser_view::BrowserView;
-use super::{icon, kbd};
+use super::icon;
 use crate::state::AppState;
 use crate::theme::{self, Theme};
 
@@ -201,15 +201,18 @@ fn row(
     // A binding from main.rs, as this platform writes its keys.
     let hint = hint.map(|b| super::shortcuts::keys(b).join(" "));
     let hover = t.colors.hover;
+    // The app's menu row: its height, inset, corner and type.
     div()
         .id(gpui::ElementId::Name(id.into()))
         .flex()
         .items_center()
         .gap(t.space.sm)
-        .h(t.size.row)
-        .px(t.space.md)
-        .rounded(t.radius.button)
+        .h(t.size.menu_row)
+        .px(t.space.snug)
+        .rounded(t.radius.small)
         .cursor_pointer()
+        .whitespace_nowrap()
+        .text_size(t.text.body_sm)
         .text_color(t.colors.text)
         .hover(move |d| d.bg(hover))
         .child(match path {
@@ -225,14 +228,20 @@ fn row(
                 .text_ellipsis()
                 .child(label.into()),
         )
-        .children(hint.map(|h| kbd(t, h)))
+        .children(hint.map(|h| {
+            div()
+                .flex_none()
+                .text_size(t.text.caption)
+                .text_color(t.colors.text_subtle)
+                .child(h)
+        }))
         .when(checked, |d| {
             d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.primary))
         })
 }
 
 /// A comment's number in its pin's colours: Forge's comments in the
-/// accent, notes for you quieter.
+/// page's ink, notes for you quieter.
 pub fn pin_mark(t: &Theme, n: usize, sent: crate::state::CommentSent) -> gpui::Div {
     let note = sent == crate::state::CommentSent::Note;
     div()
@@ -242,14 +251,16 @@ pub fn pin_mark(t: &Theme, n: usize, sent: crate::state::CommentSent) -> gpui::D
         .items_center()
         .justify_center()
         .rounded_full()
+        // On the page, in the page's ink (as the marks), whatever the
+        // app's theme: a light page under it either way.
         .border_1()
-        .border_color(t.colors.surface)
+        .border_color(t.extra.page_halo)
         .bg(if note {
             t.colors.text_muted
         } else {
-            t.colors.primary
+            t.extra.page_ink
         })
-        .text_color(t.colors.primary_fg)
+        .text_color(t.extra.page_halo)
         .text_size(t.text.caption)
         .font_weight(gpui::FontWeight::SEMIBOLD)
         .child(n.to_string())

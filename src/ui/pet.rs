@@ -175,7 +175,11 @@ impl Render for PetView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // In a chat it perches just above the composer's left edge; on the
         // start screen, in the corner.
-        let in_chat = self.state.read(cx).current.is_some();
+        let s = self.state.read(cx);
+        let in_chat = s.current.is_some();
+        // With the side panel open the reading column has no margin to
+        // stand in: it steps aside until the panel closes.
+        let room = !(in_chat && s.panel.is_some());
         let mood = self.now();
         let pic = self.frames.as_ref().and_then(|f| {
             let list = f
@@ -193,6 +197,6 @@ impl Render for PetView {
             .bottom(px(if in_chat { 112. } else { 24. }))
             .w(px(WIDTH as f32))
             .h(px(h as f32))
-            .children(pic.map(|p| img(p).size_full()))
+            .when(room, |d| d.children(pic.map(|p| img(p).size_full())))
     }
 }

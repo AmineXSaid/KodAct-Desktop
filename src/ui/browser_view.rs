@@ -1094,7 +1094,7 @@ impl Render for BrowserView {
                             .child(if shape == crate::design::marks::Shape::Note { "Note" } else { "Text" }),
                     )
                     .child(Input::new(&self.mark_input).appearance(false).text_size(t.text.body_sm))
-            }))
+            }).map(|card| super::motion::drop_menu(card, "design-mark-words", false, &t)))
             // Marks made: comment on them for Forge, or clear them.
             .when(marks_count > 0 && s.design_pick.is_none() && !selecting, |d| {
                 d.child(
@@ -1105,7 +1105,7 @@ impl Render for BrowserView {
                         .right_0()
                         .flex()
                         .justify_center()
-                        .child(
+                        .child(super::motion::rise_in(
                             crate::theme::popover(&t)
                                 .occlude()
                                 .flex()
@@ -1133,7 +1133,10 @@ impl Render for BrowserView {
                                             this.state.update(cx, |s, cx| s.design_clear_marks(cx))
                                         })),
                                 ),
-                        ),
+                            "design-marks-bar",
+                            6.,
+                            &t,
+                        )),
                 )
             })
             .when(selecting && s.design_pick.is_none(), |d| {
@@ -1145,7 +1148,7 @@ impl Render for BrowserView {
                         .right_0()
                         .flex()
                         .justify_center()
-                        .child(
+                        .child(super::motion::rise_in(
                             crate::theme::popover(&t)
                                 .px(t.space.md)
                                 .py(t.space.xs)
@@ -1156,7 +1159,10 @@ impl Render for BrowserView {
                                 .text_color(t.colors.text)
                                 .child(icon("icons/mouse-pointer-2.svg", t.size.icon_xs, t.colors.primary))
                                 .child("Point at any part and click to comment. Esc to stop."),
-                        ),
+                            "design-select-hint",
+                            6.,
+                            &t,
+                        )),
                 )
             })
             .children(pick_box.map(|(x, y, _, h)| {
