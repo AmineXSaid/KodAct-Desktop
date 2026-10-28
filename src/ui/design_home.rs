@@ -29,6 +29,8 @@ pub struct DesignHome {
     state: Entity<AppState>,
     search: Entity<InputState>,
     shown: usize,
+    /// The routines list shows, above the cards.
+    routines_open: bool,
     /// The previews last asked to be pictured, in order.
     asked: Vec<PathBuf>,
     /// The cards' area's width, as last laid out.
@@ -54,6 +56,7 @@ impl DesignHome {
             state,
             search,
             shown: PAGE,
+            routines_open: false,
             asked: vec![],
             width: Default::default(),
             _subs: subs,
@@ -188,6 +191,7 @@ impl Render for DesignHome {
         let query = self.search.read(cx).value().to_string();
         let s = state.read(cx);
         let tab = s.gallery_tab;
+        let routines = s.routines.clone();
         let ix = s.design_index.clone();
 
         let header = div()
@@ -359,6 +363,96 @@ impl Render for DesignHome {
                     .detach();
                 })
         };
+        // Routines: requests Forge runs on a schedule.
+        let routines_button = theme::ghost_button(
+            &t,
+            format!("{} ({})", crate::i18n::tr("Routines"), routines.len()),
+        )
+        .id("gallery-routines")
+        .on_click(cx.listener(|this, _, _, cx| {
+            this.routines_open = !this.routines_open;
+            cx.notify();
+        }));
+        let routines_list = self.routines_open.then(|| {
+            let hover = t.colors.hover;
+            let rows = routines.iter().map(|r| {
+                let (run, flip, del) = (state.clone(), state.clone(), state.clone());
+                let (a, b, c) = (r.id.clone(), r.id.clone(), r.id.clone());
+                div()
+                    .id(SharedString::from(format!("routine-{}", r.id)))
+                    .flex()
+                    .items_center()
+                    .gap(t.space.md)
+                    .px(t.space.md)
+                    .py(t.space.sm)
+                    .rounded(t.radius.button)
+                    .hover(move |d| d.bg(hover))
+                    .child(icon("icons/clock.svg", t.size.icon_sm, if r.enabled { t.colors.primary } else { t.colors.text_subtle }))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .child(div().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(t.colors.text_strong).child(r.name.clone()))
+                            .child(
+                                div()
+                                    .text_size(t.text.caption)
+                                    .text_color(t.colors.text_muted)
+                                    .child(format!(
+                                        "{}{}",
+                                        r.every.say(),
+                                        r.project
+                                            .as_ref()
+                                            .and_then(|p| p.file_name())
+                                            .map(|n| format!(" · {}", n.to_string_lossy()))
+                                            .unwrap_or_default()
+                                    )),
+                            ),
+                    )
+                    .child(theme::text_button(&t, crate::i18n::tr("Run now")).id(SharedString::from(format!("run-{a}"))).on_click(move |_, _, cx| run.update(cx, |s, cx| s.run_routine(&a, cx))))
+                    .child(theme::text_button(&t, if r.enabled { crate::i18n::tr("Turn off") } else { crate::i18n::tr("Turn on") }).id(SharedString::from(format!("flip-{b}"))).on_click(move |_, _, cx| flip.update(cx, |s, cx| s.toggle_routine(&b, cx))))
+                    .child(theme::text_button(&t, crate::i18n::tr("Delete")).id(SharedString::from(format!("del-{c}"))).on_click(move |_, _, cx| del.update(cx, |s, cx| s.delete_routine(&c, cx))))
+            });
+            let st = state.clone();
+            div()
+                .flex()
+                .flex_col()
+                .gap(t.space.xs)
+                .p(t.space.md)
+                .rounded(t.radius.card)
+                .border_1()
+                .border_color(t.colors.border)
+                .bg(t.colors.surface)
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap(t.space.md)
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .text_size(t.text.caption)
+                                .text_color(t.colors.text_muted)
+                                .child(crate::i18n::tr("Requests Forge runs on a schedule, while it's open, as a new chat in their project. Make one in the composer: /routine weekly on monday at 9:00: refresh the metrics deck")),
+                        )
+                        .child(
+                            theme::ghost_button(&t, crate::i18n::tr("New routine…"))
+                                .flex_none()
+                                .id("routine-new")
+                                .on_click(move |_, _, cx| {
+                                    st.update(cx, |s, cx| {
+                                        s.screen = crate::state::Screen::Chat;
+                                        s.draft = Some("/routine weekly on monday at 9:00: ".into());
+                                        cx.notify();
+                                    })
+                                }),
+                        ),
+                )
+                .children(rows)
+        });
         // A design system of your own, from a website.
         let from_site = (tab == GalleryTab::Systems).then(|| {
             let st = state.clone();
@@ -372,17 +466,27 @@ impl Render for DesignHome {
             .map(|(e, (p, pic))| card(&t, card_w, e, pic.as_ref(), p, &state))
             .collect();
         let more = (total > self.shown).then(|| {
-            theme::ghost_button(&t, format!("{} ({} {})", crate::i18n::tr("Show more"), total - self.shown, crate::i18n::tr("left")))
-                .id("gallery-more")
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.shown += PAGE;
-                    cx.notify();
-                }))
+            theme::ghost_button(
+                &t,
+                format!(
+                    "{} ({} {})",
+                    crate::i18n::tr("Show more"),
+                    total - self.shown,
+                    crate::i18n::tr("left")
+                ),
+            )
+            .id("gallery-more")
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.shown += PAGE;
+                cx.notify();
+            }))
         });
         let empty = (total == 0).then(|| {
-            div()
-                .text_color(t.colors.text_muted)
-                .child(format!("{}: {} · \"{query}\"", crate::i18n::tr("Nothing matches"), tab.label()))
+            div().text_color(t.colors.text_muted).child(format!(
+                "{}: {} · \"{query}\"",
+                crate::i18n::tr("Nothing matches"),
+                tab.label()
+            ))
         });
 
         div()
@@ -410,11 +514,13 @@ impl Render for DesignHome {
                                     .flex()
                                     .items_center()
                                     .gap(t.space.sm)
+                                    .child(routines_button)
                                     .children(from_site)
                                     .child(from_figma)
                                     .child(search),
                             ),
                     )
+                    .children(routines_list)
                     .children(empty)
                     .child(
                         div()

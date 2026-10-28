@@ -75,6 +75,7 @@ impl Workspace {
         let state = cx.new(|cx| {
             let mut s = AppState::new();
             s.load(cx);
+            s.start_routines(cx);
             s
         });
         cx.observe(&state, |_, _, cx| cx.notify()).detach();

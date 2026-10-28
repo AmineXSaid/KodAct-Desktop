@@ -1668,6 +1668,8 @@ pub struct AppState {
     design_index_asked: bool,
     /// The pet beside the chat (`design::pets`), by id; None for none.
     pub pet: Option<String>,
+    /// Requests Forge runs on a schedule (`design::routines`).
+    pub routines: Vec<crate::design::routines::Routine>,
     /// The design gallery's list on show.
     pub gallery_tab: GalleryTab,
     /// Gallery cards' pictures, by preview page (`design::export::thumbnail`),
@@ -2007,6 +2009,7 @@ impl AppState {
             design_index: None,
             design_index_asked: false,
             pet: crate::design::pets::chosen(),
+            routines: crate::design::routines::load(),
             gallery_tab: GalleryTab::Templates,
             design_thumbs: Default::default(),
             design_thumb_queue: Default::default(),
@@ -5619,6 +5622,104 @@ fix everything under 8, render it again to check, then tell me the scores before
         cx.notify();
     }
 
+    /// Make a routine from `<when>: <request>` ("weekly on monday at 9:
+    /// refresh the metrics deck"), in this project, with this chat's design
+    /// setup. It waits for its first time.
+    pub fn add_routine(&mut self, spec: &str, cx: &mut Context<Self>) {
+        use crate::design::routines::{Every, Routine};
+        // The schedule ends at a colon; "at 9:30: …" has one in its time,
+        // so the last colon that leaves a schedule before it.
+        let found = spec.match_indices(':').rev().find_map(|(i, _)| {
+            Every::parse(&spec[..i]).map(|e| (e, spec[i + 1..].trim().to_string()))
+        });
+        let Some((when, prompt)) = found else {
+            return self.show_toast(
+                "A routine is /routine <when>: <request>, e.g. /routine weekly on monday at 9:00: refresh the metrics deck. When: hourly at 15, daily at 9:00, or weekly on a day at a time.",
+                cx,
+            );
+        };
+        if prompt.is_empty() {
+            return self.show_toast("Say what the routine asks for, after the colon.", cx);
+        }
+        let now = chrono::Local::now().timestamp();
+        let project = self
+            .project(self.current_project)
+            .filter(|p| !p.scratch)
+            .map(|p| p.path.clone());
+        let r = Routine {
+            id: format!("r{now}{}", self.routines.len()),
+            name: prompt.chars().take(48).collect(),
+            prompt,
+            every: when.clone(),
+            project,
+            design: self.design_setup().cloned(),
+            enabled: true,
+            last_run: Some(now),
+        };
+        self.routines.push(r);
+        let _ = crate::design::routines::save(&self.routines);
+        self.show_toast(format!("Routine made: it runs {}, while Forge is open. Manage it in Design › Routines.", when.say()), cx);
+        cx.notify();
+    }
+
+    /// Run a routine now: a new chat in its project, set up as it was.
+    pub fn run_routine(&mut self, id: &str, cx: &mut Context<Self>) {
+        let Some(i) = self.routines.iter().position(|r| r.id == id) else { return };
+        let r = self.routines[i].clone();
+        self.routines[i].last_run = Some(chrono::Local::now().timestamp());
+        let _ = crate::design::routines::save(&self.routines);
+        if let Some(path) = &r.project {
+            if let Some(p) = self.projects.iter().find(|p| &p.path == path).map(|p| p.id) {
+                self.select_project(p, cx);
+            }
+        }
+        self.new_chat(cx);
+        if r.design.is_some() {
+            self.set_design(r.design.clone(), cx);
+        }
+        self.send(r.prompt.clone(), cx);
+        self.show_toast(format!("Routine: {}", r.name), cx);
+    }
+
+    pub fn toggle_routine(&mut self, id: &str, cx: &mut Context<Self>) {
+        if let Some(r) = self.routines.iter_mut().find(|r| r.id == id) {
+            r.enabled = !r.enabled;
+            if r.enabled {
+                // Back on: from now, not for the times it was off.
+                r.last_run = Some(chrono::Local::now().timestamp());
+            }
+        }
+        let _ = crate::design::routines::save(&self.routines);
+        cx.notify();
+    }
+
+    pub fn delete_routine(&mut self, id: &str, cx: &mut Context<Self>) {
+        self.routines.retain(|r| r.id != id);
+        let _ = crate::design::routines::save(&self.routines);
+        cx.notify();
+    }
+
+    /// Check the routines every half minute, and run those due (one at a
+    /// time: the next waits for the next check).
+    pub fn start_routines(&mut self, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| loop {
+            let alive = this.update(cx, |s, cx| {
+                let now = chrono::Local::now();
+                let due = s.routines.iter().find(|r| r.due(now)).map(|r| r.id.clone());
+                // Not into a chat that is replying, or a screen you're on
+                // mid-answer: a routine waits until Forge is free.
+                if let (Some(id), false) = (due, s.busy()) {
+                    s.run_routine(&id, cx);
+                }
+            });
+            if alive.is_err() {
+                break;
+            }
+            cx.background_executor().timer(std::time::Duration::from_secs(30)).await;
+        })
+        .detach();
+    }
+
     /// Show a gallery card's example page beside the gallery.
     pub fn design_preview(&mut self, page: &std::path::Path, cx: &mut Context<Self>) {
         self.design_show(page, cx);
@@ -7953,6 +8054,10 @@ fix everything under 8, render it again to check, then tell me the scores before
     /// Add your message, and have Forge answer it (`send_to_forge`).
     pub fn send(&mut self, text: String, cx: &mut Context<Self>) {
         let text = text.trim().to_string();
+        // `/routine <when>: <request>` makes a routine, here.
+        if let Some(spec) = text.strip_prefix("/routine ") {
+            return self.add_routine(spec, cx);
+        }
         // `/btw` opens the side card (and asks), even while a reply runs.
         if let Some(question) = parse_btw(&text) {
             return self.ask_side(question, cx);

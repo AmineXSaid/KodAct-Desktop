@@ -131,6 +131,21 @@ const TABLE: &[(&str, [&str; 3])] = &[
     ("Or type your own answer in the box below.", ["Ou écrivez votre propre réponse dans le champ ci-dessous.", "O escribe tu propia respuesta en el cuadro de abajo.", "Oder schreib deine eigene Antwort unten ins Feld."]),
     ("You answered", ["Vous avez répondu", "Respondiste", "Deine Antwort"]),
     ("You didn't answer", ["Vous n'avez pas répondu", "No respondiste", "Keine Antwort"]),
+    // Routines.
+    ("Routines", ["Routines", "Rutinas", "Routinen"]),
+    ("Run now", ["Lancer maintenant", "Ejecutar ahora", "Jetzt ausführen"]),
+    ("Turn off", ["Désactiver", "Desactivar", "Ausschalten"]),
+    ("Turn on", ["Activer", "Activar", "Einschalten"]),
+    ("Delete", ["Supprimer", "Eliminar", "Löschen"]),
+    ("New routine…", ["Nouvelle routine…", "Nueva rutina…", "Neue Routine…"]),
+    (
+        "Requests Forge runs on a schedule, while it's open, as a new chat in their project. Make one in the composer: /routine weekly on monday at 9:00: refresh the metrics deck",
+        [
+            "Des demandes que Forge exécute selon un horaire, tant qu'il est ouvert, dans une nouvelle conversation de leur projet. Créez-en une dans le champ de saisie : /routine weekly on monday at 9:00: actualise le deck des indicateurs",
+            "Peticiones que Forge ejecuta según un horario, mientras está abierto, como un chat nuevo en su proyecto. Crea una en el cuadro de mensaje: /routine weekly on monday at 9:00: actualiza la presentación de métricas",
+            "Anfragen, die Forge nach Zeitplan ausführt, solange es offen ist, als neuer Chat in ihrem Projekt. Lege eine im Eingabefeld an: /routine weekly on monday at 9:00: aktualisiere das Kennzahlen-Deck",
+        ],
+    ),
     // The language itself.
     ("Language", ["Langue", "Idioma", "Sprache"]),
 ];

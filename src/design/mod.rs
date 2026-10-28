@@ -18,6 +18,7 @@ pub mod pets;
 pub mod pptx;
 pub mod services;
 pub mod prompt;
+pub mod routines;
 pub mod skill_meta;
 pub mod store;
 
