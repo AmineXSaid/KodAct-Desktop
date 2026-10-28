@@ -57,7 +57,11 @@ pub fn render(
                 .child(icon(
                     "icons/terminal.svg",
                     t.size.icon_sm,
-                    if open { t.colors.text } else { t.colors.text_muted },
+                    if open {
+                        t.colors.text
+                    } else {
+                        t.colors.text_muted
+                    },
                 ))
                 .tooltip(move |w, cx| {
                     gpui::component::tooltip::Tooltip::new(if open {
@@ -67,7 +71,9 @@ pub fn render(
                     })
                     .build(w, cx)
                 })
-                .on_click(|_, window, cx| window.dispatch_action(Box::new(crate::ToggleTerminal), cx)),
+                .on_click(|_, window, cx| {
+                    window.dispatch_action(Box::new(crate::ToggleTerminal), cx)
+                }),
         )
         // Always there: the picker draws itself while open and as it leaves.
         .child(gpui::deferred(picker).with_priority(3))

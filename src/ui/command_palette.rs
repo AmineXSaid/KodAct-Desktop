@@ -9,9 +9,8 @@
 use gpui::component::input::{self, Input, InputEvent, InputState};
 use gpui::component::Sizable as _;
 use gpui::{
-    div, font, prelude::*, px, Action, AnyElement, Context, CursorStyle, Div, Entity,
-    FontWeight, IntoElement, Render, ScrollHandle, SharedString, StyledText,
-    Subscription, TextRun, Window,
+    div, font, prelude::*, px, Action, AnyElement, Context, CursorStyle, Div, Entity, FontWeight,
+    IntoElement, Render, ScrollHandle, SharedString, StyledText, Subscription, TextRun, Window,
 };
 
 use super::*;
@@ -303,38 +302,6 @@ impl CommandPalette {
                 Box::new(ToggleTheme),
             ),
         ];
-        // One row per theme; the current one is ticked.
-        let current = cx.theme().look;
-        for look in crate::theme::Look::ALL {
-            let action: Box<dyn Action> = match look {
-                crate::theme::Look::Calm => Box::new(ThemeCalm),
-                crate::theme::Look::Terracotta => Box::new(ThemeTerracotta),
-                crate::theme::Look::Patina => Box::new(ThemePatina),
-                crate::theme::Look::Ink => Box::new(ThemeInk),
-                crate::theme::Look::Slate => Box::new(ThemeSlate),
-                crate::theme::Look::Plum => Box::new(ThemePlum),
-                crate::theme::Look::Layers => Box::new(ThemeLayers),
-                crate::theme::Look::Tray => Box::new(ThemeTray),
-                crate::theme::Look::Studio => Box::new(ThemeStudio),
-                crate::theme::Look::Tiles => Box::new(ThemeTiles),
-                crate::theme::Look::Command => Box::new(ThemeCommand),
-                crate::theme::Look::Premium => Box::new(ThemePremium),
-            };
-            // An action, named as one; the theme's character beside it.
-            out.push(act(
-                &format!("Use the {} theme", look.name()),
-                if look == current {
-                    "icons/check.svg"
-                } else {
-                    "icons/sparkles.svg"
-                },
-                None,
-                action,
-            ));
-            if let Some(last) = out.last_mut() {
-                last.detail = Some(look.blurb().into());
-            }
-        }
         out.extend([
             act(
                 if s.browser {
@@ -352,8 +319,18 @@ impl CommandPalette {
                 Some(shortcut("/")),
                 Box::new(ToggleModelPicker),
             ),
-            act("Go back", "icons/arrow-left.svg", Some("Alt+Left".into()), Box::new(GoBack)),
-            act("Go forward", "icons/arrow-right.svg", Some("Alt+Right".into()), Box::new(GoForward)),
+            act(
+                "Go back",
+                "icons/arrow-left.svg",
+                Some("Alt+Left".into()),
+                Box::new(GoBack),
+            ),
+            act(
+                "Go forward",
+                "icons/arrow-right.svg",
+                Some("Alt+Right".into()),
+                Box::new(GoForward),
+            ),
             act(
                 "Focus the composer",
                 "icons/pencil.svg",
@@ -402,10 +379,30 @@ impl CommandPalette {
                 Some(shortcut("Shift E")),
                 Box::new(TogglePanel),
             ),
-            act("Side panel: Plan", "icons/route.svg", Some(shortcut("1")), Box::new(ShowPlanView)),
-            act("Side panel: Agents", "icons/bot.svg", Some(shortcut("2")), Box::new(ShowAgentsView)),
-            act("Side panel: Files", "icons/folder.svg", Some(shortcut("3")), Box::new(ShowFilesView)),
-            act("Side panel: Browser", "icons/globe.svg", Some(shortcut("4")), Box::new(ShowBrowserView)),
+            act(
+                "Side panel: Plan",
+                "icons/route.svg",
+                Some(shortcut("1")),
+                Box::new(ShowPlanView),
+            ),
+            act(
+                "Side panel: Agents",
+                "icons/bot.svg",
+                Some(shortcut("2")),
+                Box::new(ShowAgentsView),
+            ),
+            act(
+                "Side panel: Files",
+                "icons/folder.svg",
+                Some(shortcut("3")),
+                Box::new(ShowFilesView),
+            ),
+            act(
+                "Side panel: Browser",
+                "icons/globe.svg",
+                Some(shortcut("4")),
+                Box::new(ShowBrowserView),
+            ),
             act(
                 if s.doc_below {
                     "Put the side panel beside the chat"
@@ -421,6 +418,29 @@ impl CommandPalette {
                 "icons/list-todo.svg",
                 Some(shortcut("Shift R")),
                 Box::new(OpenRules),
+            ),
+            act(
+                &format!(
+                    "{}: {} → {}",
+                    crate::i18n::tr("Language"),
+                    crate::i18n::lang().name(),
+                    next_lang().name()
+                ),
+                "icons/globe.svg",
+                None,
+                Box::new(NextLanguage),
+            ),
+            act(
+                if s.pet.is_some() { "Pet: the next one" } else { "Pet: a companion beside the chat" },
+                "icons/sparkles.svg",
+                None,
+                Box::new(NextPet),
+            ),
+            act(
+                "Design: templates, design systems and skills",
+                "icons/pen-tool.svg",
+                Some(shortcut("Shift D")),
+                Box::new(OpenDesign),
             ),
             act(
                 "Open settings",
@@ -440,6 +460,18 @@ impl CommandPalette {
                 "icons/wand-sparkles.svg",
                 None,
                 Box::new(OpenSkills),
+            ),
+            act(
+                "Install a skill…",
+                "icons/download.svg",
+                Some(shortcut("Shift I")),
+                Box::new(InstallSkill),
+            ),
+            act(
+                "Browse plugin marketplaces…",
+                "icons/puzzle.svg",
+                None,
+                Box::new(OpenMarketplaces),
             ),
             act(
                 "Open Hooks…",
@@ -613,6 +645,39 @@ impl CommandPalette {
                 Box::new(ShowShortcuts),
             ),
         );
+        // A tool waits in this chat: its card's three answers, with their keys.
+        if let Some((_, _, _, always)) = s.waiting_tool() {
+            let keys = super::message::ASK_KEYS;
+            out.insert(
+                0,
+                act(
+                    "Deny the waiting request",
+                    "icons/circle-slash.svg",
+                    Some(keys.2.into()),
+                    Box::new(DenyWaiting),
+                ),
+            );
+            if always {
+                out.insert(
+                    0,
+                    act(
+                        "Always allow the waiting request",
+                        "icons/circle-check.svg",
+                        Some(keys.1.into()),
+                        Box::new(AlwaysAllowWaiting),
+                    ),
+                );
+            }
+            out.insert(
+                0,
+                act(
+                    "Allow the waiting request",
+                    "icons/circle-check.svg",
+                    Some(keys.0.into()),
+                    Box::new(AllowWaiting),
+                ),
+            );
+        }
         if !s.pending_approvals().is_empty() {
             out.insert(
                 0,
@@ -657,7 +722,11 @@ impl CommandPalette {
             }
             if matches!(
                 f.office(),
-                Some(crate::office::Kind::Docx | crate::office::Kind::Pptx | crate::office::Kind::Xlsx)
+                Some(
+                    crate::office::Kind::Docx
+                        | crate::office::Kind::Pptx
+                        | crate::office::Kind::Xlsx
+                )
             ) {
                 out.push(act(
                     "Export the open file to PDF",
@@ -666,6 +735,105 @@ impl CommandPalette {
                     Box::new(ExportPdf),
                 ));
             }
+        }
+        // Design chats: the design prompt and tools (`design::prompt`).
+        if crate::design::root().is_some() {
+            use crate::design::prompt::Surface;
+            let now = s.design_setup().map(|d| d.surface);
+            let kinds: [(Surface, &str, Box<dyn Action>); 4] = [
+                (Surface::Any, "Design chat: any design", Box::new(DesignChat)),
+                (Surface::Deck, "Design chat: a deck", Box::new(DesignDeck)),
+                (Surface::Prototype, "Design chat: a prototype", Box::new(DesignPrototype)),
+                (Surface::Document, "Design chat: a document", Box::new(DesignDocument)),
+            ];
+            for (surface, label, action) in kinds {
+                if now != Some(surface) {
+                    out.push(act(label, "icons/sparkles.svg", None, action));
+                }
+            }
+            if now.is_some() {
+                out.push(act("End the design chat", "icons/x.svg", None, Box::new(EndDesignChat)));
+            }
+        }
+        // A deck in the browser, with no document open: its slides.
+        if s.doc.is_none() && s.web_page.deck.is_some() {
+            out.push(act("Next slide", "icons/chevron-down.svg", Some("Alt ↓".into()), Box::new(NextPage)));
+            out.push(act("Previous slide", "icons/chevron-up.svg", Some("Alt ↑".into()), Box::new(PreviousPage)));
+        }
+        // The browser's page: zoom it, present it, save it; and the design's.
+        if s.web.is_some() {
+            out.extend([
+                act("Zoom the page in", "icons/zoom-in.svg", Some(shortcut("=")), Box::new(ZoomIn)),
+                act("Zoom the page out", "icons/zoom-out.svg", Some(shortcut("-")), Box::new(ZoomOut)),
+                act(
+                    "The page at its own size (100%)",
+                    "icons/search.svg",
+                    Some(shortcut("0")),
+                    Box::new(ZoomReset),
+                ),
+                act("Zoom the page to a desktop width", "icons/scan.svg", None, Box::new(ZoomFit)),
+                act(
+                    "Present the page: it fills the window",
+                    "icons/play.svg",
+                    Some("F11".into()),
+                    Box::new(Present),
+                ),
+                act("Save the page as PDF", "icons/file-down.svg", None, Box::new(SavePagePdf)),
+                act("Save the page as PNG", "icons/image.svg", None, Box::new(SavePagePng)),
+                act("Save the deck as PowerPoint", "icons/presentation.svg", None, Box::new(SavePagePptx)),
+                act("Save the deck as editable PowerPoint", "icons/file-pen.svg", None, Box::new(SavePagePptxEditable)),
+                act("Save the page as one HTML file", "icons/file-code.svg", None, Box::new(SavePageHtml)),
+                act("Save the page for Figma (editable layers)", "icons/layers.svg", None, Box::new(SavePageFigma)),
+            ]);
+        }
+        if s.pet.is_some() {
+            out.push(act("Pet: hide it", "icons/x.svg", None, Box::new(HidePet)));
+        }
+        if s.design_on_screen().is_some() {
+            out.push(act(
+                "Review the page: craft, brief, brand, accessibility, copy",
+                "icons/stethoscope.svg",
+                None,
+                Box::new(CritiquePage),
+            ));
+            out.push(act("Ask for a new page", "icons/plus.svg", None, Box::new(NewDesignPage)));
+            out.push(act(
+                if s.design_select {
+                    "Put the comment tool down"
+                } else {
+                    "Comment on part of the page"
+                },
+                "icons/mouse-pointer-2.svg",
+                None,
+                Box::new(CommentTool),
+            ));
+            out.extend([
+                act(
+                    if s.design_outline {
+                        "Hide the page's outline"
+                    } else {
+                        "The page's outline: its headings"
+                    },
+                    "icons/panel-left.svg",
+                    None,
+                    Box::new(PageOutline),
+                ),
+                act("Undo the page's last change", "icons/undo-2.svg", None, Box::new(UndoPage)),
+                act("Redo the page's change", "icons/redo-2.svg", None, Box::new(RedoPage)),
+                act("Duplicate the page", "icons/copy.svg", None, Box::new(DuplicatePage)),
+            ]);
+        }
+        if s.web.is_some() {
+            out.push(act(
+                if s.design_guides {
+                    "Take the layout guides off the page"
+                } else {
+                    "Layout guides: outline every box on the page"
+                },
+                "icons/layout-grid.svg",
+                None,
+                Box::new(LayoutGuides),
+            ));
         }
         // The chat showing: what you can do with it.
         if let Some(c) = s.chat().filter(|c| !c.messages.is_empty()) {
@@ -729,7 +897,11 @@ impl CommandPalette {
                     Box::new(OpenInVsCode),
                 ),
                 act(
-                    if c.archived { "Unarchive this chat" } else { "Archive this chat" },
+                    if c.archived {
+                        "Unarchive this chat"
+                    } else {
+                        "Archive this chat"
+                    },
                     "icons/archive.svg",
                     None,
                     Box::new(ArchiveChat),
@@ -831,7 +1003,10 @@ impl CommandPalette {
                 );
             }
             // Messages sent while Forge works, not yet with it.
-            if s.current.and_then(|c| s.queued.get(&c)).is_some_and(|q| !q.is_empty()) {
+            if s.current
+                .and_then(|c| s.queued.get(&c))
+                .is_some_and(|q| !q.is_empty())
+            {
                 chat.insert(
                     0,
                     act(
@@ -1111,10 +1286,12 @@ impl CommandPalette {
             Target::Action(a) => window.dispatch_action(a, cx),
             Target::Chat(id) => self.state.update(cx, |s, cx| s.open_chat(id, cx)),
             // A gateway's model is "profile\u{1}id".
-            Target::Model(name) => self.state.update(cx, |s, cx| match name.split_once('\u{1}') {
-                Some((profile, id)) => s.pick_catalog_model(profile, id, cx),
-                None => s.select_profile(&name, cx),
-            }),
+            Target::Model(name) => self
+                .state
+                .update(cx, |s, cx| match name.split_once('\u{1}') {
+                    Some((profile, id)) => s.pick_catalog_model(profile, id, cx),
+                    None => s.select_profile(&name, cx),
+                }),
             Target::Mode(m) => self.state.update(cx, |s, cx| s.set_mode(m, cx)),
             Target::File(rel) => self.state.update(cx, |s, cx| s.open_project_file(rel, cx)),
             Target::Message(id, q) => {
@@ -1292,7 +1469,11 @@ impl CommandPalette {
             .rounded(t.radius.field)
             .border_1()
             .text_size(t.text.body)
-            .child(icon("icons/search.svg", t.size.icon_sm, t.colors.text_muted));
+            .child(icon(
+                "icons/search.svg",
+                t.size.icon_sm,
+                t.colors.text_muted,
+            ));
         let dropdown = self.dropdown(window, cx);
         field
             .w(t.size.palette)
@@ -1310,13 +1491,11 @@ impl CommandPalette {
             .capture_action(nav::<input::IndentInline>("tab", cx))
             .capture_action(nav::<input::OutdentInline>("shift-tab", cx))
             .capture_action(nav::<input::Escape>("escape", cx))
-            .capture_action(
-                cx.listener(|this, e: &input::Enter, window, cx| {
-                    if !e.secondary && !e.shift && this.key("enter", window, cx) {
-                        cx.stop_propagation();
-                    }
-                }),
-            )
+            .capture_action(cx.listener(|this, e: &input::Enter, window, cx| {
+                if !e.secondary && !e.shift && this.key("enter", window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
             .child(
                 div()
                     .flex_1()
@@ -1393,9 +1572,9 @@ impl CommandPalette {
                                 .child(found.counts[i].to_string()),
                         )
                     })
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.set_scope(tab, window, cx)
-                    })),
+                    .on_click(
+                        cx.listener(move |this, _, window, cx| this.set_scope(tab, window, cx)),
+                    ),
             );
         }
 
@@ -1413,7 +1592,11 @@ impl CommandPalette {
             if cmd.group != last_group {
                 last_group = cmd.group;
                 child += 1;
-                let more = found.cut.iter().find(|(g, _)| *g == cmd.group).map(|(_, n)| *n);
+                let more = found
+                    .cut
+                    .iter()
+                    .find(|(g, _)| *g == cmd.group)
+                    .map(|(_, n)| *n);
                 let to = Scope::of(cmd.group);
                 list = list.child(
                     div()
@@ -1511,7 +1694,11 @@ impl CommandPalette {
             list = list.child(super::motion::row_in(row, ("cmd-in", i), i, &t));
         }
         if count == 0 {
-            let words = scope(self.query.read(cx).value().as_ref()).1.trim().chars().count();
+            let words = scope(self.query.read(cx).value().as_ref())
+                .1
+                .trim()
+                .chars()
+                .count();
             list = list.child(
                 div()
                     .px(t.space.md)
@@ -1653,8 +1840,12 @@ impl Render for CommandPalette {
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.close(cx);
                         window.dispatch_action(Box::new(FocusComposer), cx);
-                    })), "palette-scrim", t.extra.scrim, leaving, &t),
-            )
+                    })),
+                "palette-scrim",
+                t.extra.scrim,
+                leaving,
+                &t,
+            ))
             .child(
                 div()
                     .absolute()
@@ -1724,4 +1915,20 @@ mod tests {
             vec![12, 13, 14, 15, 16]
         );
     }
+}
+
+/// The language after the one in use.
+fn next_lang() -> crate::i18n::Lang {
+    use crate::i18n::Lang;
+    let now = crate::i18n::lang();
+    let i = Lang::ALL.iter().position(|l| *l == now).unwrap_or(0);
+    Lang::ALL[(i + 1) % Lang::ALL.len()]
+}
+
+/// Use the next language (from the palette).
+pub fn use_next_language(cx: &mut gpui::App) -> crate::i18n::Lang {
+    let next = next_lang();
+    let _ = crate::i18n::choose(next);
+    cx.refresh_windows();
+    next
 }

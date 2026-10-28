@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design Systems 101: course introduction</title>
+<style>
+  :root {
+    --paper: #f6f3ec;
+    --card: #fffdf8;
+    --ink: #1d1b16;
+    --muted: #6b665b;
+    --line: #e4ded1;
+    --accent: #2f5bd3;
+    --accent-soft: #e6ecfb;
+    --warm: #c8643b;
+    --radius: 18px;
+    font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+    color: var(--ink);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--paper); padding: 40px 24px 64px; }
+  .deck { max-width: 1040px; margin: 0 auto; display: grid; gap: 28px; }
+  .slide {
+    aspect-ratio: 16 / 9;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 6% 7%;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+  }
+  .num { position: absolute; top: 5%; right: 6%; font-size: 13px; color: var(--muted); letter-spacing: .08em; }
+  .kicker { font-size: 13px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+  h1 { font-size: clamp(32px, 5.4vw, 60px); line-height: 1.05; letter-spacing: -0.02em; margin-top: 18px; }
+  h2 { font-size: clamp(24px, 3.4vw, 38px); line-height: 1.15; letter-spacing: -0.01em; margin-top: 12px; }
+  p.lede { font-size: clamp(15px, 1.7vw, 20px); color: var(--muted); max-width: 34em; margin-top: 18px; line-height: 1.5; }
+  .title { justify-content: flex-end; background: linear-gradient(135deg, var(--card) 55%, var(--accent-soft)); }
+  .title .meta { display: flex; gap: 28px; margin-top: 36px; font-size: 14px; color: var(--muted); }
+  .title .meta b { display: block; color: var(--ink); font-size: 15px; margin-bottom: 2px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: auto; }
+  .card { border: 1px solid var(--line); border-radius: 14px; padding: 20px; background: var(--paper); }
+  .card .n { font-size: 28px; font-weight: 700; color: var(--accent); }
+  .card h3 { font-size: 17px; margin-top: 10px; }
+  .card p { font-size: 14px; color: var(--muted); margin-top: 6px; line-height: 1.45; }
+  .weeks { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: auto; }
+  .week { border-top: 3px solid var(--line); padding-top: 12px; }
+  .week.now { border-color: var(--accent); }
+  .week span { font-size: 12px; color: var(--muted); letter-spacing: .06em; }
+  .week h4 { font-size: 15px; margin-top: 6px; line-height: 1.3; }
+  .rhythm { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 40px; margin-top: auto; }
+  .rhythm div { display: flex; gap: 14px; align-items: baseline; }
+  .rhythm .day { flex: none; width: 46px; font-size: 13px; font-weight: 600; color: var(--warm); }
+  .rhythm p { font-size: 16px; line-height: 1.45; }
+  .team { display: flex; gap: 24px; margin-top: auto; }
+  .person { flex: 1; display: flex; gap: 14px; align-items: center; }
+  .avatar { flex: none; width: 52px; height: 52px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-weight: 700; }
+  .person b { display: block; font-size: 16px; }
+  .person span { font-size: 13px; color: var(--muted); }
+  .cta { justify-content: center; background: var(--ink); color: var(--card); border-color: var(--ink); }
+  .cta .kicker { color: #9db5f5; }
+  .cta p.lede { color: #c9c4b8; }
+  .button { display: inline-block; margin-top: 30px; padding: 12px 22px; border-radius: 999px; background: var(--card); color: var(--ink); font-weight: 600; font-size: 15px; text-decoration: none; align-self: flex-start; }
+  @media (max-width: 720px) {
+    .slide { aspect-ratio: auto; min-height: 420px; }
+    .grid3, .rhythm { grid-template-columns: 1fr; }
+    .weeks { grid-template-columns: repeat(3, 1fr); row-gap: 18px; }
+    .team { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+<main class="deck">
+
+  <section class="slide title">
+    <span class="num">01 / 06</span>
+    <span class="kicker">Course introduction</span>
+    <h1>Design Systems 101</h1>
+    <p class="lede">Six weeks from scattered screens to one shared language: tokens, components and the habits that keep them alive.</p>
+    <div class="meta">
+      <div><b>Starts</b>Monday 2 November</div>
+      <div><b>Format</b>Live sessions and studio hours</div>
+      <div><b>Cohort</b>24 designers and engineers</div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <span class="num">02 / 06</span>
+    <span class="kicker">What you will leave with</span>
+    <h2>Three things you can use the Monday after</h2>
+    <div class="grid3">
+      <div class="card"><div class="n">1</div><h3>A token set</h3><p>Colour, type and spacing your team agrees on, named for what they mean.</p></div>
+      <div class="card"><div class="n">2</div><h3>Five core components</h3><p>Button, field, card, menu and dialog, each with its states written down.</p></div>
+      <div class="card"><div class="n">3</div><h3>A way to change it</h3><p>How a request becomes a release without the system drifting.</p></div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <span class="num">03 / 06</span>
+    <span class="kicker">The six weeks</span>
+    <h2>One layer at a time, each built on the last</h2>
+    <div class="weeks">
+      <div class="week now"><span>WEEK 1</span><h4>Audit what you have</h4></div>
+      <div class="week"><span>WEEK 2</span><h4>Tokens and naming</h4></div>
+      <div class="week"><span>WEEK 3</span><h4>Type and layout</h4></div>
+      <div class="week"><span>WEEK 4</span><h4>Components and states</h4></div>
+      <div class="week"><span>WEEK 5</span><h4>Docs people read</h4></div>
+      <div class="week"><span>WEEK 6</span><h4>Governance and launch</h4></div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <span class="num">04 / 06</span>
+    <span class="kicker">How each week runs</span>
+    <h2>Learn it on Tuesday, ship it by Friday</h2>
+    <div class="rhythm">
+      <div><span class="day">TUE</span><p>A 60-minute live session: one idea, shown on real products.</p></div>
+      <div><span class="day">WED</span><p>Studio hours: bring your own screens, get them reviewed.</p></div>
+      <div><span class="day">THU</span><p>Pair critique with someone from another team.</p></div>
+      <div><span class="day">FRI</span><p>Hand in one small, finished piece of your system.</p></div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <span class="num">05 / 06</span>
+    <span class="kicker">Who you will work with</span>
+    <h2>Two people who have built systems for a living</h2>
+    <div class="team">
+      <div class="person"><div class="avatar">MA</div><div><b>Maya Alvarez</b><span>Design lead, ten years of product systems</span></div></div>
+      <div class="person"><div class="avatar">TK</div><div><b>Tomás Kowal</b><span>Front-end engineer, component libraries</span></div></div>
+    </div>
+  </section>
+
+  <section class="slide cta">
+    <span class="num">06 / 06</span>
+    <span class="kicker">Before week one</span>
+    <h2>Screenshot ten screens from your product</h2>
+    <p class="lede">Any ten, the messier the better. We start by laying them side by side and counting the buttons.</p>
+    <a class="button" href="#">Upload your screens</a>
+  </section>
+
+</main>
+</body>
+</html>

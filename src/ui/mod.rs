@@ -1,23 +1,28 @@
 //! The window's views. `workspace` composes them; each file is one component.
 
 pub mod activity;
+pub mod add_menu;
 pub mod agents_editor;
 pub mod agents_view;
 pub mod approvals;
 pub mod askpass;
+pub mod attachment_editor;
 pub mod attachments;
 pub mod autocomplete;
 pub mod browser_view;
 pub mod button;
 pub mod changed_files;
 pub mod chat_menu;
-pub mod documents;
-pub mod session_panel;
-pub mod title_menus;
 pub mod chat_view;
 pub mod command_palette;
+pub mod compose_style;
 pub mod composer;
 pub mod confirm;
+pub mod design_bar;
+pub mod design_chips;
+pub mod design_comment;
+pub mod design_home;
+pub mod design_marks;
 pub mod context_menu;
 pub mod context_ring;
 pub mod diagnostics;
@@ -25,68 +30,73 @@ pub mod diagram_view;
 pub mod doc_changes;
 pub mod doc_comments;
 pub mod doc_find;
-pub mod new_project;
-pub mod project_github;
-pub mod project_defaults;
-pub mod project_sharing;
-pub mod project_knowledge;
-pub mod project_memory;
-pub mod project_rail;
 pub mod doc_pane;
-pub mod dot_field;
+pub mod documents;
 pub mod editor_kit;
 pub mod env_editor;
 pub mod file_card;
-pub mod add_menu;
-pub mod compose_style;
-pub mod select;
 pub mod file_icon;
 pub mod file_icon_map;
 pub mod file_mark;
 pub mod files_pane;
 pub mod find_bar;
+mod forge_cube;
+pub mod goal_bar;
 pub mod guide;
 pub mod hooks_editor;
 pub mod ingot;
 mod lens;
-mod forge_cube;
 pub mod markdown;
+pub mod marketplaces;
 pub mod mcp_editor;
 pub mod memory_view;
 pub mod message;
 pub mod mode_menu;
+pub mod pet;
 pub mod model_menu;
 pub mod motion;
+pub mod new_project;
 pub mod onboarding;
 pub mod opener;
 pub mod permissions_editor;
 pub mod planned;
 pub mod plugins_editor;
 pub mod profiles_editor;
+pub mod project_defaults;
+pub mod project_github;
+pub mod project_knowledge;
 pub mod project_map;
+pub mod project_memory;
+pub mod project_rail;
+pub mod project_sharing;
 pub mod projects;
 pub mod question_card;
 pub mod queued;
 pub mod remote_menu;
 pub mod rules_view;
 pub mod sandbox_editor;
+pub mod select;
+pub mod session_panel;
 pub mod settings;
 pub mod sheet_view;
 pub mod shortcuts;
 pub mod side_chat;
 pub mod sidebar;
 pub mod skeleton;
+pub mod skill_install;
 pub mod skills_editor;
 pub mod slash_commands;
+pub mod source_view;
 pub mod starters;
 pub mod status_bar;
 pub mod tasks;
 pub mod terminal;
 pub mod terminal_dock;
+pub mod title_menus;
 pub mod versions;
+pub mod work_group;
 pub mod workbench;
 pub mod workspace;
-pub mod work_group;
 
 use gpui::{div, prelude::*, svg, App, Div, Hsla, Pixels, SharedString, Svg};
 
@@ -99,18 +109,6 @@ gpui::actions!(
         ToggleSidebar,
         ToggleCommandPalette,
         ToggleTheme,
-        ThemeCalm,
-        ThemeTerracotta,
-        ThemePatina,
-        ThemeInk,
-        ThemeSlate,
-        ThemePlum,
-        ThemeLayers,
-        ThemeTray,
-        ThemeStudio,
-        ThemeTiles,
-        ThemeCommand,
-        ThemePremium,
         ToggleBrowser,
         OpenRemoteMenu,
         ConnectWsl,
@@ -138,6 +136,8 @@ gpui::actions!(
         OpenSlashCommands,
         OpenAgents,
         OpenSkills,
+        InstallSkill,
+        OpenMarketplaces,
         OpenHooks,
         OpenPlugins,
         OpenMcpServers,
@@ -155,6 +155,10 @@ gpui::actions!(
         ChangeName,
         ChangeAvatar,
         OpenRules,
+        OpenDesign,
+        NextPet,
+        NextLanguage,
+        HidePet,
         OpenProjects,
         EndpointGuide,
         OpenEndpointsFile,
@@ -170,6 +174,9 @@ gpui::actions!(
         ShowContext,
         ToggleTasks,
         ShowApprovals,
+        AllowWaiting,
+        AlwaysAllowWaiting,
+        DenyWaiting,
         JumpToLatest,
         GoBack,
         GoForward,
@@ -190,6 +197,30 @@ gpui::actions!(
         OpenChatFolder,
         RegenerateReply,
         ContinueReply,
+        ZoomIn,
+        ZoomOut,
+        ZoomReset,
+        ZoomFit,
+        Present,
+        SavePagePdf,
+        SavePagePng,
+        SavePagePptx,
+        SavePagePptxEditable,
+        SavePageHtml,
+        SavePageFigma,
+        NewDesignPage,
+        CommentTool,
+        LayoutGuides,
+        PageOutline,
+        UndoPage,
+        RedoPage,
+        DuplicatePage,
+        CritiquePage,
+        DesignChat,
+        DesignDeck,
+        DesignPrototype,
+        DesignDocument,
+        EndDesignChat,
         Quit,
     ]
 );
@@ -212,7 +243,11 @@ pub fn turning_logo(size: f32, id: impl Into<gpui::ElementId>) -> gpui::AnyEleme
 
 /// The Forge logo turning, painted in `color` (lit from above): the mark of
 /// work in progress in the conversation, in the theme's live colour.
-pub fn turning_logo_in(size: f32, id: impl Into<gpui::ElementId>, color: gpui::Hsla) -> gpui::AnyElement {
+pub fn turning_logo_in(
+    size: f32,
+    id: impl Into<gpui::ElementId>,
+    color: gpui::Hsla,
+) -> gpui::AnyElement {
     // Forge for VS Code's working cube: stock struck true, a quarter turn a
     // beat, drawn a little larger than an icon so its voxels read.
     forge_cube::working(size * 1.25, id, color)
@@ -251,6 +286,31 @@ pub fn soon<E: gpui::StatefulInteractiveElement + gpui::Styled>(el: E, stub: &'s
     el.opacity(0.5).tooltip(move |window, cx| {
         gpui::component::tooltip::Tooltip::new(line.clone()).build(window, cx)
     })
+}
+
+/// A search field as the app draws one (the sidebar's): a recessed box
+/// with a hairline edge that firms on hover, a search icon, the input.
+pub fn search_field(t: &Theme, input: &gpui::Entity<gpui::component::input::InputState>) -> Div {
+    let edge = t.extra.border_strong;
+    div()
+        .flex()
+        .items_center()
+        .gap(t.space.sm)
+        .h(t.size.row + gpui::px(2.))
+        .px(t.space.sm)
+        .rounded(t.radius.field)
+        .border_1()
+        .border_color(t.colors.border)
+        .bg(t.extra.sunk)
+        .hover(move |d| d.border_color(edge))
+        .child(icon("icons/search.svg", t.size.icon_sm, t.colors.text_muted))
+        .child(
+            div().flex_1().min_w_0().child(
+                gpui::component::input::Input::new(input)
+                    .appearance(false)
+                    .text_size(t.text.body_sm),
+            ),
+        )
 }
 
 /// A small key hint, as shown beside menu items.

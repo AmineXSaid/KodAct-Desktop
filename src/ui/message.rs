@@ -252,7 +252,10 @@ fn turn_footer(
                 }),
             )
         });
-    let memory = cx.memory.as_ref().map(|m| memory_line(m, chat, cx.state.clone(), t));
+    let memory = cx
+        .memory
+        .as_ref()
+        .map(|m| memory_line(m, chat, cx.state.clone(), t));
     let row = div()
         .group(group)
         .flex()
@@ -267,7 +270,10 @@ fn turn_footer(
                 .text_color(t.colors.text_subtle)
                 .child(if cx.after_error {
                     // A failed turn made no reply to count.
-                    format!("Failed after {}", took(seconds, None).trim_start_matches("Took "))
+                    format!(
+                        "Failed after {}",
+                        took(seconds, None).trim_start_matches("Took ")
+                    )
                 } else {
                     took(seconds, usage)
                 })
@@ -387,13 +393,90 @@ fn read_and_wrote(u: &crate::context::Usage) -> String {
 
 /// Something the app says: Stop (with Continue on the last one), or an error
 /// (wrapped in full, with Retry and Copy).
+/// A notice that is not an error: an event in the chat's course (a goal
+/// checked or met, the reply stopped, the context compacted). A quiet line,
+/// as Claude's: a tinted mark, the event in a few strong words, then the rest.
+fn event_line(
+    text: &SharedString,
+    interrupted: bool,
+    key: &str,
+    cx: &ItemContext,
+    t: &Theme,
+    link: impl Fn(String, &'static str, &'static str) -> gpui::Stateful<gpui::Div>,
+) -> AnyElement {
+    let words = text.as_ref();
+    let (path, accent, tint) = if words.starts_with("Goal achieved") {
+        ("icons/target.svg", t.extra.success, t.extra.success_tint)
+    } else if words.starts_with("Goal") {
+        ("icons/target.svg", t.colors.primary, t.colors.primary_tint)
+    } else if interrupted {
+        (
+            "icons/circle-pause.svg",
+            t.colors.text_muted,
+            t.colors.hover,
+        )
+    } else if words.starts_with("Compact") {
+        ("icons/layers.svg", t.colors.text_muted, t.colors.hover)
+    } else {
+        ("icons/info.svg", t.colors.text_muted, t.colors.hover)
+    };
+    // "Goal not met yet: what is missing" leads with its event.
+    let (lead, rest) = match words.split_once(": ") {
+        Some((lead, rest)) if lead.len() <= 32 => (format!("{lead}:"), Some(rest.to_string())),
+        _ => (words.to_string(), None),
+    };
+    div()
+        .flex()
+        .items_start()
+        .gap(t.space.sm)
+        .py(t.space.xs)
+        .text_size(t.text.body_sm)
+        .child(
+            div()
+                .flex_none()
+                .size(t.size.icon + px(4.))
+                .rounded_full()
+                .bg(tint)
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(icon(path, t.size.icon_xs, accent)),
+        )
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .pt(px(1.))
+                .line_height(relative(1.5))
+                .text_color(t.colors.text_muted)
+                .child(
+                    gpui::StyledText::new(match &rest {
+                        Some(r) => format!("{lead} {r}"),
+                        None => lead.clone(),
+                    })
+                    .with_highlights([(
+                        0..lead.len(),
+                        gpui::HighlightStyle {
+                            color: Some(t.colors.text_strong),
+                            font_weight: Some(FontWeight::MEDIUM),
+                            ..Default::default()
+                        },
+                    )]),
+                ),
+        )
+        .when(interrupted && cx.last && cx.can_continue, |d| {
+            d.child(
+                link(format!("continue-{key}"), "Continue", "icons/play.svg").on_click(
+                    |_, window, app| window.dispatch_action(Box::new(super::ContinueReply), app),
+                ),
+            )
+        })
+        .into_any_element()
+}
+
 fn notice(text: &SharedString, error: bool, cx: &ItemContext, t: &Theme) -> AnyElement {
     let key = format!("{}-{}", cx.chat, cx.index);
-    let (fg, bg) = if error {
-        (t.extra.danger, t.extra.danger_tint)
-    } else {
-        (t.colors.text_muted, t.colors.hover)
-    };
+    let (fg, bg) = (t.extra.danger, t.extra.danger_tint);
     let interrupted = !error && text.as_ref() == crate::state::INTERRUPTED;
     let copy_key: SharedString = format!("notice-{key}").into();
     let copied = cx.copied.as_ref() == Some(&copy_key);
@@ -418,6 +501,9 @@ fn notice(text: &SharedString, error: bool, cx: &ItemContext, t: &Theme) -> AnyE
             .child(icon(path, t.size.icon_xs, fg))
             .child(label)
     };
+    if !error {
+        return event_line(text, interrupted, &key, cx, t, link);
+    }
     div()
         .flex()
         .items_start()
@@ -457,7 +543,9 @@ fn notice(text: &SharedString, error: bool, cx: &ItemContext, t: &Theme) -> AnyE
                         .text_size(t.text.caption)
                         .text_color(t.colors.text_subtle)
                         .child(text.clone())
-                        .tooltip(move |w, cx| gpui::component::tooltip::Tooltip::new(full.clone()).build(w, cx))
+                        .tooltip(move |w, cx| {
+                            gpui::component::tooltip::Tooltip::new(full.clone()).build(w, cx)
+                        })
                 })
                 .into_any_element(),
             None => div()
@@ -466,13 +554,6 @@ fn notice(text: &SharedString, error: bool, cx: &ItemContext, t: &Theme) -> AnyE
                 .line_height(relative(1.45))
                 .child(text.clone())
                 .into_any_element(),
-        })
-        .when(interrupted && cx.last && cx.can_continue, |d| {
-            d.child(
-                link(format!("continue-{key}"), "Continue", "icons/play.svg").on_click(
-                    |_, window, app| window.dispatch_action(Box::new(super::ContinueReply), app),
-                ),
-            )
         })
         .when(error && cx.in_last_turn && !cx.busy, |d| {
             d.child(
@@ -646,70 +727,36 @@ fn user(
         .into_any_element()
 }
 
-/// Your message in parts: what you wrote, styled as it was in the box, and
-/// each fenced block (code or a log you pasted) as a code block of its own,
-/// with its language's colours and a copy button.
+/// Your message as you typed it, as Claude shows it: plain text, line
+/// breaks kept, only the mentions coloured. Nothing in it is read as
+/// Markdown, so a pasted transcript is never taken for code.
 fn user_parts(text: &SharedString, key: &str, cx: &ItemContext, t: &Theme) -> Vec<AnyElement> {
-    let mut out = vec![];
-    let plain = |r: std::ops::Range<usize>, out: &mut Vec<AnyElement>| {
-        let body = text[r.clone()].trim_matches('\n');
-        if body.trim().is_empty() {
-            return;
-        }
-        let from = r.start + text[r.clone()].find(body).unwrap_or(0);
-        let marks: Vec<_> = cx
-            .marks
-            .iter()
-            .filter(|(m, _)| m.start >= from && m.end <= from + body.len())
-            .map(|(m, k)| (m.start - from..m.end - from, *k))
-            .collect();
-        out.push(markdown::selectable_plain(
-            SharedString::from(format!("user-text-{key}-{}", out.len())),
-            &SharedString::from(body.to_string()),
-            &marks,
-            t,
-        ));
-    };
-    let (mut at, mut open, mut pos) = (0, None::<usize>, 0);
-    for line in text.split_inclusive('\n') {
-        if line.trim_start().starts_with("```") {
-            match open {
-                None => {
-                    plain(at..pos, &mut out);
-                    open = Some(pos);
-                }
-                Some(start) => {
-                    let end = pos + line.len();
-                    out.push(markdown::render(
-                        &text[start..end],
-                        t,
-                        &CopyContext {
-                            state: cx.state.clone(),
-                            key: format!("{}-{}-u{}", cx.chat, cx.index, out.len()),
-                            copied: cx.copied.clone(),
-                            scale: cx.scale,
-                            sources: cx.sources.clone(),
-                            zooms: cx.zooms.clone(),
-                            streaming: false,
-                        },
-                    ));
-                    open = None;
-                    at = end;
-                }
-            }
-        }
-        pos += line.len();
+    let body = text.trim_matches('\n');
+    if body.trim().is_empty() {
+        return vec![];
     }
-    // An unclosed fence stays text.
-    plain(open.unwrap_or(at)..text.len(), &mut out);
-    out
+    let from = text.find(body).unwrap_or(0);
+    let marks: Vec<_> = cx
+        .marks
+        .iter()
+        .filter(|(m, _)| m.start >= from && m.end <= from + body.len())
+        .map(|(m, k)| (m.start - from..m.end - from, *k))
+        .collect();
+    vec![markdown::selectable_plain(
+        SharedString::from(format!("user-text-{key}")),
+        &SharedString::from(body.to_string()),
+        &marks,
+        t,
+    )]
 }
 
 fn assistant(blocks: &[Block], cx: &ItemContext, t: &Theme) -> AnyElement {
     // Answers in a row that say the same thing show as one row.
     let mut rows = vec![];
     // Calls in a row fold into one line (`work_group`).
-    let mut work = super::work_group::runs(blocks, cx.busy && cx.last).into_iter().peekable();
+    let mut work = super::work_group::runs(blocks, cx.busy && cx.last)
+        .into_iter()
+        .peekable();
     let mut b = 0;
     while b < blocks.len() {
         let (from, before) = (b, rows.len());
@@ -869,9 +916,13 @@ pub(super) fn denied_call(blocks: &[Block], b: usize) -> bool {
 /// same answer): 0 when `b` isn't one.
 fn same_answers(blocks: &[Block], b: usize) -> usize {
     let key = |blk: &Block| match blk {
-        Block::Permission { title, verdict, info, .. }
-            if info.questions.is_empty()
-                && matches!(
+        Block::Permission {
+            title,
+            verdict,
+            info,
+            ..
+        } if info.questions.is_empty()
+            && matches!(
                 verdict,
                 Verdict::Allowed | Verdict::AllowedAlways | Verdict::Denied
             ) =>
@@ -917,14 +968,26 @@ pub(super) fn block(blocks: &[Block], b: usize, cx: &ItemContext, t: &Theme) -> 
             verdict,
             info,
         } => permission(title, detail, *verdict, info, blocks, b, cx, t),
-        Block::File(file) => super::file_card::render(
-            file,
-            &format!("{}-{}-{b}", cx.chat, cx.index),
-            cx.state.clone(),
-            cx.open_doc.as_ref() == Some(file),
-            cx.scale,
-            t,
-        ),
+        Block::File(file) => {
+            let key = format!("{}-{}-{b}", cx.chat, cx.index);
+            let view = super::file_card::DiagramView {
+                zoom: cx
+                    .zooms
+                    .get(&super::file_card::zoom_key(&key))
+                    .copied()
+                    .unwrap_or(1.),
+                text_open: cx.sources.contains(&super::file_card::text_key(&key)),
+            };
+            super::file_card::render(
+                file,
+                &key,
+                cx.state.clone(),
+                cx.open_doc.as_ref() == Some(file),
+                cx.scale,
+                Some(view),
+                t,
+            )
+        }
     }
 }
 
@@ -964,7 +1027,9 @@ fn thinking(
     let strong = t.colors.text;
     let label = match (streaming, cx.thoughts.iter().find(|(i, _)| *i == b)) {
         (true, _) => "Thinking".to_string(),
-        (false, Some((_, s))) if *s >= 1 => format!("Thought for {}", super::chat_view::elapsed(*s)),
+        (false, Some((_, s))) if *s >= 1 => {
+            format!("Thought for {}", super::chat_view::elapsed(*s))
+        }
         _ => "Thought".to_string(),
     };
     let key = format!("{}-{}-{b}", cx.chat, cx.index);
@@ -978,7 +1043,11 @@ fn thinking(
                 .role(gpui::accesskit::Role::Button)
                 .aria_label(SharedString::from(format!(
                     "{label}, {}",
-                    if open { "hide the thinking" } else { "show the thinking" }
+                    if open {
+                        "hide the thinking"
+                    } else {
+                        "show the thinking"
+                    }
                 )))
                 .flex()
                 .items_center()
@@ -1177,8 +1246,20 @@ pub(super) fn diff_counts(adds: usize, dels: usize, t: &Theme) -> gpui::Div {
         .gap(t.space.xs)
         .font_family(t.font_mono.clone())
         .text_size(t.text.caption)
-        .when(adds > 0, |d| d.child(chip(format!("+{adds}"), t.extra.success, t.extra.success_tint)))
-        .when(dels > 0, |d| d.child(chip(format!("−{dels}"), t.extra.danger, t.extra.danger_tint)))
+        .when(adds > 0, |d| {
+            d.child(chip(
+                format!("+{adds}"),
+                t.extra.success,
+                t.extra.success_tint,
+            ))
+        })
+        .when(dels > 0, |d| {
+            d.child(chip(
+                format!("−{dels}"),
+                t.extra.danger,
+                t.extra.danger_tint,
+            ))
+        })
 }
 
 /// The pictures calls returned, as thumbnails pushed to the end of their
@@ -1241,7 +1322,11 @@ fn pictures(call: &ToolCall, t: &Theme) -> gpui::Div {
                 .rounded(t.radius.button)
                 .overflow_hidden()
                 .bg(t.colors.canvas)
-                .child(img(i.image.clone()).size_full().object_fit(ObjectFit::Contain))
+                .child(
+                    img(i.image.clone())
+                        .size_full()
+                        .object_fit(ObjectFit::Contain),
+                )
         }))
 }
 
@@ -1276,8 +1361,16 @@ pub(super) fn tool_header(
     // A failed change was never made, a stopped one may not have been: no
     // counts for either.
     let unknown = call.status == ToolStatus::Interrupted;
-    let adds = call.diff.iter().filter(|l| l.kind == DiffKind::Add && !failed && !unknown).count();
-    let dels = call.diff.iter().filter(|l| l.kind == DiffKind::Del && !failed && !unknown).count();
+    let adds = call
+        .diff
+        .iter()
+        .filter(|l| l.kind == DiffKind::Add && !failed && !unknown)
+        .count();
+    let dels = call
+        .diff
+        .iter()
+        .filter(|l| l.kind == DiffKind::Del && !failed && !unknown)
+        .count();
     let shell = call.kind == ToolKind::Bash;
     let has_body = has_body(call);
     let why = failure_line(call).filter(|_| !shell);
@@ -1290,7 +1383,12 @@ pub(super) fn tool_header(
     } else {
         call.kind.verb(call.status)
     };
-    let one_line = |d: gpui::Div| d.min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis();
+    let one_line = |d: gpui::Div| {
+        d.min_w_0()
+            .overflow_hidden()
+            .whitespace_nowrap()
+            .text_ellipsis()
+    };
     div()
         .id(SharedString::from(format!(
             "tool-{}-{}-{b}",
@@ -1315,49 +1413,76 @@ pub(super) fn tool_header(
         .min_h(t.size.quiet_line)
         .text_size(t.text.body_sm)
         .text_color(t.colors.text_muted)
-        .when(has_body, |d| d.cursor_pointer().hover(move |s| s.text_color(strong)))
+        .when(has_body, |d| {
+            d.cursor_pointer().hover(move |s| s.text_color(strong))
+        })
         // A mark only when there is something to say: it runs, waits on
         // you, failed, was stopped or skipped.
         .children(match call.status {
-            _ if waiting => Some(icon("icons/hand.svg", t.size.icon_xs, t.extra.accent).into_any_element()),
+            _ if waiting => {
+                Some(icon("icons/hand.svg", t.size.icon_xs, t.extra.accent).into_any_element())
+            }
             ToolStatus::Done => None,
             ToolStatus::Failed => {
                 // The whole error, on hover.
                 let full = SharedString::from(call.output.trim().to_string());
                 Some(
                     div()
-                        .id(SharedString::from(format!("tool-why-{}-{}-{b}", cx.chat, cx.index)))
+                        .id(SharedString::from(format!(
+                            "tool-why-{}-{}-{b}",
+                            cx.chat, cx.index
+                        )))
                         .flex_none()
                         .child(status_icon(call.status, t))
-                        .tooltip(move |w, cx| gpui::component::tooltip::Tooltip::new(full.clone()).build(w, cx))
+                        .tooltip(move |w, cx| {
+                            gpui::component::tooltip::Tooltip::new(full.clone()).build(w, cx)
+                        })
                         .into_any_element(),
                 )
             }
-            s => Some(div().flex_none().child(status_icon(s, t)).into_any_element()),
+            s => Some(
+                div()
+                    .flex_none()
+                    .child(status_icon(s, t))
+                    .into_any_element(),
+            ),
         })
         .map(|d| match (&call.note, shell) {
             // A command reads as its description; the command itself is in
             // the terminal block it opens to.
-            (Some(note), true) => d.child(one_line(div()).text_color(t.colors.text).child(note.clone())),
+            (Some(note), true) => d.child(
+                one_line(div())
+                    .text_color(t.colors.text)
+                    .child(note.clone()),
+            ),
             _ => d
                 .child(div().flex_none().child(verb))
                 .child(
                     one_line(div())
                         // With a note or a reason, the target keeps its room
                         // and the words after it are cut instead.
-                        .when(call.note.is_some() || why.is_some(), |d| d.flex_none().max_w(px(260.)))
+                        .when(call.note.is_some() || why.is_some(), |d| {
+                            d.flex_none().max_w(px(260.))
+                        })
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(t.colors.text)
                         .child(target_label(call)),
                 )
-                .children(call.note.clone().filter(|_| why.is_none()).map(|n| {
-                    one_line(div()).text_color(t.colors.text_subtle).child(n)
-                })),
+                .children(
+                    call.note
+                        .clone()
+                        .filter(|_| why.is_none())
+                        .map(|n| one_line(div()).text_color(t.colors.text_subtle).child(n)),
+                ),
         })
         // Why it failed, in its own words, cut to the line.
         .children(why.map(|w| {
             one_line(div())
-                .text_color(if unknown { t.extra.warning } else { t.extra.danger })
+                .text_color(if unknown {
+                    t.extra.warning
+                } else {
+                    t.extra.danger
+                })
                 .child(w)
         }))
         .when(adds + dels > 0, |d| d.child(diff_counts(adds, dels, t)))
@@ -1373,9 +1498,10 @@ pub(super) fn tool_header(
             ))
         })
         // Opened, the pictures show whole below instead.
-        .when_some(thumbs(call.images.iter(), t).filter(|_| !call.open), |d, th| {
-            d.child(div().flex_1()).child(th)
-        })
+        .when_some(
+            thumbs(call.images.iter(), t).filter(|_| !call.open),
+            |d, th| d.child(div().flex_1()).child(th),
+        )
         .on_click(toggle(cx, b))
 }
 
@@ -1385,12 +1511,19 @@ const AGENT_STALLED: std::time::Duration = std::time::Duration::from_secs(120);
 /// A sub-agent's line: its state, its kind, its task, what it is doing
 /// now (or what it found), and its steps and time. A click opens the
 /// Agents panel, where it has its whole story and a Stop.
-fn agent_header(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> gpui::Stateful<gpui::Div> {
+fn agent_header(
+    call: &ToolCall,
+    b: usize,
+    cx: &ItemContext,
+    t: &Theme,
+) -> gpui::Stateful<gpui::Div> {
     let task = call.note.clone().unwrap_or_else(|| "A sub-task".into());
     let run = cx.agents.iter().find(|r| r.task == task.as_ref());
     let now = std::time::Instant::now();
     let stalled = run.is_some_and(|r| {
-        r.ended.is_none() && call.status == ToolStatus::Running && now.duration_since(r.heard) >= AGENT_STALLED
+        r.ended.is_none()
+            && call.status == ToolStatus::Running
+            && now.duration_since(r.heard) >= AGENT_STALLED
     });
     let (detail, detail_ink) = match run {
         _ if stalled => (
@@ -1404,7 +1537,12 @@ fn agent_header(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> gpui:
             (None, Some(step)) => (step.label(), t.colors.text_subtle),
             (None, None) => ("Starting".into(), t.colors.text_subtle),
             (Some(_), _) => (
-                r.said.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or_default().to_string(),
+                r.said
+                    .lines()
+                    .map(str::trim)
+                    .find(|l| !l.is_empty())
+                    .unwrap_or_default()
+                    .to_string(),
                 t.colors.text_subtle,
             ),
         },
@@ -1415,16 +1553,30 @@ fn agent_header(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> gpui:
             1 => "1 step".to_string(),
             n => format!("{n} steps"),
         };
-        let took = r.ended.unwrap_or(now).saturating_duration_since(r.started).as_secs();
+        let took = r
+            .ended
+            .unwrap_or(now)
+            .saturating_duration_since(r.started)
+            .as_secs();
         format!("{steps} · {}", super::chat_view::elapsed(took))
     });
     let strong = t.colors.text;
     let state = cx.state.clone();
-    let one_line = |d: gpui::Div| d.min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis();
+    let one_line = |d: gpui::Div| {
+        d.min_w_0()
+            .overflow_hidden()
+            .whitespace_nowrap()
+            .text_ellipsis()
+    };
     div()
-        .id(SharedString::from(format!("tool-{}-{}-{b}", cx.chat, cx.index)))
+        .id(SharedString::from(format!(
+            "tool-{}-{}-{b}",
+            cx.chat, cx.index
+        )))
         .role(gpui::accesskit::Role::Button)
-        .aria_label(SharedString::from(format!("Agent: {task}. {detail}. Open the Agents panel")))
+        .aria_label(SharedString::from(format!(
+            "Agent: {task}. {detail}. Open the Agents panel"
+        )))
         .flex()
         .items_center()
         .gap(t.space.sm)
@@ -1460,9 +1612,24 @@ fn agent_header(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> gpui:
                 .text_color(t.colors.text)
                 .child(task),
         )
-        .child(one_line(div()).flex_1().text_color(detail_ink).child(detail))
-        .children(meta.map(|m| div().flex_none().text_size(t.text.caption).text_color(t.colors.text_subtle).child(m)))
-        .child(icon("icons/chevron-right.svg", t.size.icon_xs, t.colors.text_subtle))
+        .child(
+            one_line(div())
+                .flex_1()
+                .text_color(detail_ink)
+                .child(detail),
+        )
+        .children(meta.map(|m| {
+            div()
+                .flex_none()
+                .text_size(t.text.caption)
+                .text_color(t.colors.text_subtle)
+                .child(m)
+        }))
+        .child(icon(
+            "icons/chevron-right.svg",
+            t.size.icon_xs,
+            t.colors.text_subtle,
+        ))
         .on_click(move |_, _, app| {
             state.update(app, |s, cx| {
                 s.show_panel(crate::state::PanelTab::Agents, cx);
@@ -1475,7 +1642,12 @@ fn agent_header(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> gpui:
 /// headed by its full path (with Keep and Revert), a command's terminal
 /// block, or what went in and came out. A failed call shows its error
 /// first, and the change it would have made, marked as not made.
-pub(super) fn tool_body(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> Option<AnyElement> {
+pub(super) fn tool_body(
+    call: &ToolCall,
+    b: usize,
+    cx: &ItemContext,
+    t: &Theme,
+) -> Option<AnyElement> {
     if !(call.open && has_body(call)) {
         return None;
     }
@@ -1502,7 +1674,11 @@ pub(super) fn tool_body(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) 
             copied: cx.copied.clone(),
             busy: cx.busy,
         };
-        return Some(frame().child(terminal::block(call, &at, t)).into_any_element());
+        return Some(
+            frame()
+                .child(terminal::block(call, &at, t))
+                .into_any_element(),
+        );
     }
     // A file's change is headed by where it is, and what you can do about it.
     let file = matches!(call.kind, ToolKind::Read | ToolKind::Edit | ToolKind::Write);
@@ -1546,7 +1722,11 @@ pub(super) fn tool_body(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) 
                     div()
                         .px(t.space.md)
                         .py(t.space.sm)
-                        .bg(if stopped { t.extra.warning_tint } else { t.extra.danger_tint })
+                        .bg(if stopped {
+                            t.extra.warning_tint
+                        } else {
+                            t.extra.danger_tint
+                        })
                         .font_family(t.font_mono.clone())
                         .text_size(t.text.caption + px(0.5))
                         .text_color(t.colors.text)
@@ -1559,7 +1739,11 @@ pub(super) fn tool_body(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) 
                             .pt(t.space.sm)
                             .text_size(t.text.caption)
                             .text_color(t.colors.text_muted)
-                            .child(if stopped { "May or may not have been applied" } else { "Not applied" }),
+                            .child(if stopped {
+                                "May or may not have been applied"
+                            } else {
+                                "Not applied"
+                            }),
                     )
                     .child(diff_lines(&call.diff, lang, t).opacity(0.75))
                 })
@@ -1579,7 +1763,11 @@ pub(super) fn tool_body(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) 
             .child(io_row(
                 "OUT",
                 call.output.clone(),
-                if call.kind == ToolKind::Read { lang } else { "" },
+                if call.kind == ToolKind::Read {
+                    lang
+                } else {
+                    ""
+                },
                 t,
             ))
             .into_any_element()
@@ -1832,7 +2020,10 @@ fn decider(info: &PermInfo) -> String {
         Decider::Stopped => "the reply was stopped".into(),
         // A long rule (a whole command) is cut: the row stays one line.
         Decider::Rule(r) if r.chars().count() > 48 => {
-            format!("by the rule {}…", r.chars().take(47).collect::<String>().trim_end())
+            format!(
+                "by the rule {}…",
+                r.chars().take(47).collect::<String>().trim_end()
+            )
         }
         Decider::Rule(r) => format!("by the rule {r}"),
         Decider::Mode(m) => format!("by switching to {m}"),
@@ -1920,6 +2111,33 @@ fn answered(
     } else {
         detail.clone()
     };
+    // A plan is named by its heading, in words, not by the call's note.
+    let plan_name = (title.as_ref() == crate::backend::PLAN_ASK_TITLE)
+        .then(|| match info.row.and_then(|r| blocks.get(r)) {
+            Some(Block::Tool(c)) => c
+                .diff
+                .iter()
+                .map(|l| l.text.trim())
+                .find(|l| l.starts_with('#'))
+                .map(|l| l.trim_start_matches('#').trim().to_string()),
+            _ => None,
+        })
+        .map(|n| n.unwrap_or_else(|| "The plan".into()));
+    let subject_row: AnyElement = match plan_name {
+        Some(name) => div()
+            .min_w_0()
+            .truncate()
+            .text_size(t.text.body_sm)
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(t.colors.text_strong)
+            .child(name)
+            .into_any_element(),
+        None => subject(
+            &what,
+            SharedString::from(format!("perm-what-{}-{}-{b}", cx.chat, cx.index)),
+            t,
+        ),
+    };
     div()
         .flex()
         .items_start()
@@ -1956,11 +2174,7 @@ fn answered(
                             info.kind
                                 .map(|k| icon(k.icon(), t.size.icon_xs, t.colors.text_muted)),
                         )
-                        .child(subject(
-                            &what,
-                            SharedString::from(format!("perm-what-{}-{}-{b}", cx.chat, cx.index)),
-                            t,
-                        ))
+                        .child(subject_row)
                         .children(call_note(info, blocks).map(|n| {
                             div()
                                 .flex_none()
@@ -2197,6 +2411,7 @@ fn permission(
     ) {
         return answered(title, detail, verdict, info, blocks, b, cx, t);
     }
+
     if verdict != Verdict::Pending {
         let (label, bg, fg) = match verdict {
             Verdict::Denied => ("Denied", t.extra.danger_tint, t.extra.danger),
@@ -2215,8 +2430,9 @@ fn permission(
             .items_center()
             .gap(t.space.sm)
             .text_color(t.colors.text_muted)
-            .child(theme::pill(t, bg, fg, label))
-            .child(title.clone())
+            .min_w_0()
+            .child(theme::pill(t, bg, fg, label).flex_none())
+            .child(div().min_w_0().truncate().child(title.clone()))
             .into_any_element();
     }
     let id = |name: &str| SharedString::from(format!("perm-{name}-{}-{}-{b}", cx.chat, cx.index));
@@ -2228,112 +2444,231 @@ fn permission(
         _ => None,
     });
     let diff = call.filter(|c| !c.diff.is_empty());
-    let command = call.filter(|c| c.kind == ToolKind::Bash).map(|c| c.target.clone());
+    let command = call
+        .filter(|c| c.kind == ToolKind::Bash)
+        .map(|c| c.target.clone());
     use super::button::Button;
-    // A scrolling well for code: the change, the command, the script.
-    let well = |name: &str, long: bool| {
-        div()
-            .id(id(name))
-            .max_h(px(240.))
-            .overflow_y_scroll()
-            .when(long, super::hold_wheel)
-            .rounded(t.radius.button)
-            .border_1()
-            .border_color(t.colors.border)
-            .bg(t.extra.inset)
+    // What it is about, as the header names it: the verb and its icon.
+    let (verb, glyph): (SharedString, &'static str) = match (call.map(|c| c.kind), is_plan, is_js) {
+        (_, true, _) => ("Plan".into(), "icons/scroll-text.svg"),
+        (_, _, true) => ("Run a script".into(), "icons/file-code.svg"),
+        (Some(ToolKind::Edit), ..) => ("Edit".into(), "icons/pencil.svg"),
+        (Some(ToolKind::Write), ..) => ("Write".into(), "icons/file-plus.svg"),
+        (Some(ToolKind::Bash), ..) => ("Run".into(), "icons/terminal.svg"),
+        (Some(ToolKind::Web | ToolKind::WebSearch), ..) => ("Fetch".into(), "icons/globe.svg"),
+        _ => (title.clone(), "icons/hand.svg"),
     };
-    let subject: AnyElement = if is_js {
-        let long = detail.lines().count() > 10 || detail.len() > 600;
-        well("script", long)
-            .p(t.space.md)
-            .font_family(t.font_mono.clone())
-            .text_size(t.text.body_sm)
-            .child(super::markdown::code_text(detail, "js", t))
-            .into_any_element()
-    } else if let Some(c) = diff {
+    let target = call
+        .filter(|c| !is_plan && !is_js && c.kind != ToolKind::Bash && c.kind != ToolKind::Other)
+        .map(|c| short_path(&c.target));
+    // A change: its size, and whether it makes a new file.
+    let counts = diff.map(|c| {
         let (adds, dels) = c.diff.iter().fold((0, 0), |(a, d), l| match l.kind {
             DiffKind::Add => (a + 1, d),
             DiffKind::Del => (a, d + 1),
             DiffKind::Same => (a, d),
         });
+        let new_file = c.kind == ToolKind::Write
+            && dels == 0
+            && c.diff.iter().all(|l| l.kind == DiffKind::Add);
+        (adds, dels, new_file)
+    });
+    let chip = |text: &'static str| {
         div()
+            .flex_none()
+            .px(t.space.sm)
+            .h(px(18.))
             .flex()
-            .flex_col()
-            .gap(t.space.xs)
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(t.space.sm)
-                    .text_size(t.text.caption)
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .overflow_hidden()
-                            .whitespace_nowrap()
-                            .text_ellipsis()
-                            .font_family(t.font_mono.clone())
-                            .text_color(t.colors.text_muted)
-                            .child(c.target.clone()),
-                    )
-                    .child(diff_counts(adds, dels, t)),
-            )
-            .child(
-                well("diff", c.diff.len() > 12)
-                    .child(diff_lines(&c.diff, markdown::lang_of(&c.target), t)),
-            )
-            .into_any_element()
-    } else if let Some(cmd) = command {
-        well("command", cmd.lines().count() > 10)
-            .p(t.space.md)
-            .font_family(t.font_mono.clone())
-            .text_size(t.text.body_sm)
-            .child(super::markdown::code_text(&cmd, "sh", t))
-            .into_any_element()
-    } else {
-        div()
-            .text_color(t.colors.text_body)
-            .child(detail.clone())
-            .into_any_element()
+            .items_center()
+            .rounded(t.radius.pill)
+            .border_1()
+            .border_color(t.colors.border)
+            .text_size(t.text.caption)
+            .text_color(t.colors.text_muted)
+            .child(text)
     };
+    let header = div()
+        .flex()
+        .items_center()
+        .gap(t.space.sm)
+        .px(t.space.lg)
+        .py(t.space.md)
+        .border_b_1()
+        .border_color(t.colors.border)
+        .child(icon(glyph, t.size.icon_sm, t.colors.primary))
+        .child(
+            div()
+                .flex_none()
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(t.colors.text_strong)
+                .child(verb),
+        )
+        .children(target.map(|path| {
+            div()
+                .min_w_0()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .font_family(t.font_mono.clone())
+                .text_size(t.text.caption)
+                .text_color(t.colors.text_muted)
+                .child(path)
+        }))
+        .when(counts.is_some_and(|c| c.2), |d| d.child(chip("New file")))
+        .children(counts.map(|(a, d, _)| diff_counts(a, d, t)))
+        .child(div().flex_1())
+        .when(!is_plan, |d| d.child(env_badge(&cx.place, t)));
+    // The code it would run or write: a change folds to its first lines
+    // until you open all of it; a command or script shows whole.
+    let folded = !info.open;
+    let subject: Option<AnyElement> = if is_js {
+        let long = detail.lines().count() > 10 || detail.len() > 600;
+        Some(
+            div()
+                .id(id("script"))
+                .max_h(px(240.))
+                .overflow_y_scroll()
+                .when(long, super::hold_wheel)
+                .bg(t.extra.inset)
+                .p(t.space.md)
+                .font_family(t.font_mono.clone())
+                .text_size(t.text.body_sm)
+                .child(super::markdown::code_text(detail, "js", t))
+                .into_any_element(),
+        )
+    } else if let (true, Some(c)) = (is_plan, diff) {
+        // A plan reads as the reply it is: Markdown, not its source.
+        let plan: String = c
+            .diff
+            .iter()
+            .filter(|l| l.kind != DiffKind::Del)
+            .map(|l| l.text.as_ref())
+            .collect::<Vec<_>>()
+            .join("\n");
+        Some(
+            div()
+                .id(id("plan"))
+                .max_h(px(360.))
+                .overflow_y_scroll()
+                .when(plan.lines().count() > 14, super::hold_wheel)
+                .px(t.space.lg)
+                .pt(t.space.md)
+                .child(markdown::render(
+                    &plan,
+                    t,
+                    &CopyContext {
+                        state: cx.state.clone(),
+                        key: format!("plan-{}-{}-{b}", cx.chat, cx.index),
+                        copied: cx.copied.clone(),
+                        scale: cx.scale,
+                        sources: cx.sources.clone(),
+                        zooms: cx.zooms.clone(),
+                        streaming: false,
+                    },
+                ))
+                .into_any_element(),
+        )
+    } else if let Some(c) = diff {
+        let lang = markdown::lang_of(&c.target);
+        let total = c.diff.len();
+        Some(if folded && total > ASK_FOLD {
+            div()
+                .relative()
+                .overflow_hidden()
+                .bg(t.extra.inset)
+                .child(diff_lines(&c.diff[..ASK_FOLD], lang, t))
+                // The cut fades into the card, so it reads as more below.
+                .child(
+                    div()
+                        .absolute()
+                        .left_0()
+                        .right_0()
+                        .bottom_0()
+                        .h(px(28.))
+                        .bg(gpui::linear_gradient(
+                            180.,
+                            gpui::linear_color_stop(t.colors.surface.opacity(0.), 0.),
+                            gpui::linear_color_stop(t.colors.surface, 1.),
+                        )),
+                )
+                .into_any_element()
+        } else {
+            div()
+                .id(id("diff"))
+                .max_h(px(320.))
+                .overflow_y_scroll()
+                .when(total > 16, super::hold_wheel)
+                .bg(t.extra.inset)
+                .child(diff_lines(&c.diff, lang, t))
+                .into_any_element()
+        })
+    } else {
+        command.map(|cmd| {
+            div()
+                .id(id("command"))
+                .max_h(px(240.))
+                .overflow_y_scroll()
+                .when(cmd.lines().count() > 10, super::hold_wheel)
+                .bg(t.extra.inset)
+                .p(t.space.md)
+                .font_family(t.font_mono.clone())
+                .text_size(t.text.body_sm)
+                .child(super::markdown::code_text(&cmd, "sh", t))
+                .into_any_element()
+        })
+    };
+    let more = diff
+        .filter(|_| !is_plan)
+        .map(|c| c.diff.len())
+        .filter(|n| *n > ASK_FOLD)
+        .map(|n| {
+            div()
+                .id(id("more"))
+                .w_full()
+                .px(t.space.lg)
+                .pt(t.space.sm)
+                .text_size(t.text.caption)
+                .text_color(t.colors.primary)
+                .cursor_pointer()
+                .hover(|d| d.underline())
+                .child(if folded {
+                    format!("Show all {n} lines")
+                } else {
+                    "Show fewer lines".to_string()
+                })
+                .on_click(toggle(cx, b))
+        });
     let always = crate::state::always_label(info.offer.as_deref());
     let always_tip = match (&info.offer, info.scope) {
         (Some(rule), Some(scope)) => format!("Adds the rule {rule}, {scope}."),
         (Some(rule), None) => format!("Adds the rule {rule}."),
         _ => "Forge won't ask again for this.".to_string(),
     };
-    let body = div()
-        .flex_1()
-        .min_w_0()
+    // Said in words when nothing above shows it.
+    let words = (subject.is_none() && !detail.is_empty())
+        .then(|| div().text_color(t.colors.text_body).child(detail.clone()));
+    let footer = div()
         .flex()
         .flex_col()
         .gap(t.space.md)
-        .p(t.space.lg)
+        .px(t.space.lg)
+        .pt(t.space.md)
+        .pb(t.space.lg)
+        // The question is the heading of what you answer.
         .child(
             div()
                 .flex()
-                .items_start()
-                .gap(t.space.md)
+                .flex_col()
+                .gap(px(3.))
                 .child(
                     div()
-                        .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .gap(px(3.))
-                        // The question is the heading: no label above it.
-                        .child(
-                            div()
-                                .text_size(t.text.body + px(2.))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(t.colors.text_strong)
-                                .child(title.clone()),
-                        ),
+                        .text_size(t.text.body + px(1.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(t.colors.text_strong)
+                        .child(title.clone()),
                 )
-                .when(!is_plan, |d| d.child(env_badge(&cx.place, t))),
+                .children(words),
         )
-        .child(subject)
         // A long script scrolls: say so, so its end isn't missed.
         .when(
             is_js && (detail.lines().count() > 10 || detail.len() > 600),
@@ -2360,39 +2695,42 @@ fn permission(
                 // asked), or keep planning; as Forge for VS Code has it.
                 .when(is_plan, |d| {
                     d.child(
-                        Button::ghost(id("keep"), "No, keep planning")
-                            .on_click(answer(Verdict::KeepPlanning)),
+                        Button::primary(id("plan-auto"), "Yes, edit automatically")
+                            .on_click(answer(Verdict::PlanAutoAccept)),
                     )
-                    .child(div().flex_1())
                     .child(
                         Button::secondary(id("plan-manual"), "Yes, ask before edits")
                             .on_click(answer(Verdict::PlanApprove)),
                     )
+                    .child(div().flex_1())
                     .child(
-                        Button::primary(id("plan-auto"), "Yes, edit automatically")
-                            .on_click(answer(Verdict::PlanAutoAccept)),
+                        Button::ghost(id("keep"), "No, keep planning")
+                            .on_click(answer(Verdict::KeepPlanning)),
                     )
                 })
-                // A tool: deny it (a quiet way out), allow it this once (the
-                // filled action), or always, named for what it allows. The
-                // broad grant is never the loudest button.
+                // A tool: allow it this once (the one filled action, Enter),
+                // always (named for what it allows, Shift Enter), or deny it
+                // (a quiet way out, Esc). Each key works from an empty composer.
                 .when(!is_plan, |d| {
                     d.child(
-                        Button::ghost(id("deny"), "Deny")
-                            .on_click(answer(Verdict::Denied)),
+                        Button::accent(id("allow"), "Allow")
+                            .hint(ASK_KEYS.0)
+                            .on_click(answer(Verdict::Allowed)),
                     )
-                    .child(div().flex_1())
                     .when(!info.every_time, |d| {
                         d.child(
                             Button::secondary(id("always"), always)
+                                .hint(ASK_KEYS.1)
                                 .describe(always_tip)
                                 .tooltip(true)
                                 .on_click(answer(Verdict::AllowedAlways)),
                         )
                     })
+                    .child(div().flex_1())
                     .child(
-                        Button::accent(id("allow"), "Allow once")
-                            .on_click(answer(Verdict::Allowed)),
+                        Button::ghost(id("deny"), "Deny")
+                            .hint(ASK_KEYS.2)
+                            .on_click(answer(Verdict::Denied)),
                     )
                 }),
         );
@@ -2400,15 +2738,35 @@ fn permission(
     // you; no coloured edge.
     div()
         .flex()
+        .flex_col()
         .overflow_hidden()
         .bg(t.colors.surface)
         .border_1()
         .border_color(t.colors.border)
         .rounded(t.radius.card)
         .shadow(t.elevation_grain())
-        .child(body)
+        .child(header)
+        .children(subject)
+        .children(more)
+        .child(footer)
         .into_any_element()
 }
+
+/// A path as the card's header shows it: its last three parts (the file
+/// and the folders that place it), the rest as "…/".
+fn short_path(path: &str) -> SharedString {
+    let parts: Vec<&str> = path.split(['/', '\\']).filter(|p| !p.is_empty()).collect();
+    if parts.len() <= 3 {
+        return path.to_string().into();
+    }
+    format!("…/{}", parts[parts.len() - 3..].join("/")).into()
+}
+
+/// A waiting change shows this many lines until you open all of it.
+const ASK_FOLD: usize = 4;
+/// The keys that answer a waiting tool from an empty composer: allow,
+/// always allow, deny (`composer.rs`, `workspace.rs`).
+pub const ASK_KEYS: (&str, &str, &str) = ("Enter", "Shift Enter", "Esc");
 
 #[cfg(test)]
 mod tests {
@@ -2422,6 +2780,19 @@ mod tests {
             verdict,
             info: PermInfo::default(),
         }
+    }
+
+    #[test]
+    fn an_asked_path_keeps_its_last_folders() {
+        assert_eq!(
+            super::short_path("/tmp/x/proj/docs/diagrams/a.html").as_ref(),
+            "…/docs/diagrams/a.html"
+        );
+        assert_eq!(super::short_path("src/main.rs").as_ref(), "src/main.rs");
+        assert_eq!(
+            super::short_path(r"C:\Users\me\proj\src\ui\a.rs").as_ref(),
+            "…/src/ui/a.rs"
+        );
     }
 
     #[test]

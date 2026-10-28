@@ -129,7 +129,7 @@ field rows (absolute y):
 ```svg
 <foreignObject x="{field_x}" y="{value_top}" width="140" height="24">
   <div xmlns="http://www.w3.org/1999/xhtml"
-       style="font-family: {sublabel}; color: {muted}; line-height: 1.25;">
+       style="font-family: 'Anthropic Sans Text'}; color: {muted}; line-height: 1.25;">
     {field_value}
   </div>
 </foreignObject>

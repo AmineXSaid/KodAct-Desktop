@@ -32,22 +32,22 @@ colors:
   warning-dark: "#ffc85a"
 typography:
   prose:
-    fontFamily: "Archivo"
+    fontFamily: "Anthropic Sans Text"
     fontSize: "15px"
     fontWeight: 400
     lineHeight: 1.533
   ui:
-    fontFamily: "Archivo"
+    fontFamily: "Anthropic Sans Text"
     fontSize: "13px"
     fontWeight: 400
   caption:
-    fontFamily: "Archivo"
+    fontFamily: "Anthropic Sans Text"
     fontSize: "12px"
     fontWeight: 400
   code:
-    fontFamily: "JetBrains Mono"
+    fontFamily: "Anthropic Sans Text"
   code-inline:
-    fontFamily: "IBM Plex Mono"
+    fontFamily: "Anthropic Sans Text"
 rounded:
   button: "4px"
   card: "4px"
@@ -91,11 +91,11 @@ An Operate surface: an app for long agent sessions, judged against Claude Deskto
 
 ## Typography
 
-One sans for interface and prose (Archivo), in regular and semibold; replies at 15px on 23px lines. Code in JetBrains Mono; a name in prose (a file, a command) in IBM Plex Mono on a faint neutral wash, never coloured. Small text is sentence case: no uppercase labels and no label above a heading.
+One sans for interface and prose (Anthropic Sans Text), in regular and semibold; replies at 15px on 23px lines. Code in Anthropic Sans Text; a name in prose (a file, a command) in Anthropic Sans Text on a faint neutral wash, never coloured. Small text is sentence case: no uppercase labels and no label above a heading.
 
 ## Layout
 
-The transcript and the composer share one 720px column and one edge. Paragraphs 12px apart; tight groups, generous separation. The sidebar is 288px.
+The transcript and the composer share one 760px column and one edge. Paragraphs 12px apart; tight groups, generous separation. The sidebar is 288px.
 
 ## Elevation & Depth
 

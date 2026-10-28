@@ -115,8 +115,12 @@ impl Sidebar {
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
         let s = self.state.read(cx);
-        let (open, all, name, archived) =
-            (s.filter_open, s.all_chats, s.project.clone(), s.show_archived);
+        let (open, all, name, archived) = (
+            s.filter_open,
+            s.all_chats,
+            s.project.clone(),
+            s.show_archived,
+        );
         let hover = t.colors.hover;
         let option = |id: &'static str,
                       label: SharedString,
@@ -136,7 +140,15 @@ impl Sidebar {
                 .text_size(t.text.body_sm)
                 .text_color(t.colors.text)
                 .hover(move |st| st.bg(hover))
-                .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .child(label),
+                )
                 .child(div().w(t.size.icon).when(on, |d| {
                     d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.primary))
                 }))
@@ -241,8 +253,14 @@ impl Sidebar {
                     }),
             )
             .children(shown.map(|leaving| {
-                gpui::deferred(super::motion::unfold(menu, "chat-filter", false, leaving, t))
-                    .with_priority(1)
+                gpui::deferred(super::motion::unfold(
+                    menu,
+                    "chat-filter",
+                    false,
+                    leaving,
+                    t,
+                ))
+                .with_priority(1)
             }))
     }
 }
@@ -264,6 +282,7 @@ impl Render for Sidebar {
         let hover = t.colors.hover;
         let rules_open = s.screen == Screen::Rules;
         let projects_open = matches!(s.screen, Screen::Projects | Screen::Project(_));
+        let design_open = s.screen == Screen::Design;
         let loading = s.loading;
 
         let mut list = div()
@@ -331,11 +350,21 @@ impl Render for Sidebar {
                     // A quiet label, no rule beside it; the filter (shown on
                     // hover, or while it narrows the list), and on Recents a
                     // + for a new chat, as Claude Code's.
-                    .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(group))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .child(group),
+                    )
                     .when(first, |d| {
                         d.children(filter.take().map(|f| {
                             div()
-                                .when(!narrowed, |d| d.invisible().group_hover("group-head", |st| st.visible()))
+                                .when(!narrowed, |d| {
+                                    d.invisible().group_hover("group-head", |st| st.visible())
+                                })
                                 .child(f)
                         }))
                     })
@@ -348,9 +377,14 @@ impl Render for Sidebar {
                                 .rounded(t.radius.small)
                                 .cursor_pointer()
                                 .hover(move |st| st.bg(hover))
-                                .tooltip(|w, cx| gpui::component::tooltip::Tooltip::new("New chat (Ctrl+N)").build(w, cx))
+                                .tooltip(|w, cx| {
+                                    gpui::component::tooltip::Tooltip::new("New chat (Ctrl+N)")
+                                        .build(w, cx)
+                                })
                                 .child(icon("icons/plus.svg", t.size.icon_sm, t.colors.text_muted))
-                                .on_click(|_, window, cx| window.dispatch_action(Box::new(NewChat), cx)),
+                                .on_click(|_, window, cx| {
+                                    window.dispatch_action(Box::new(NewChat), cx)
+                                }),
                         )
                     }),
             );
@@ -412,13 +446,6 @@ impl Render for Sidebar {
                 let pinned = c.pinned;
                 let state = self.state.clone();
                 let state_pin = self.state.clone();
-                // Listing every project's chats: whose each one is. The date
-                // groups already say when.
-                let place: Option<SharedString> = (s.all_chats && c.project != s.current_project)
-                    .then(|| s.project(c.project))
-                    .flatten()
-                    .filter(|p| !p.scratch)
-                    .map(|p| p.name.clone().into());
                 let status = s.status(c);
                 let remote = s.chat_remote(id).map(|r| r.target.icon());
                 let unread = status == ChatStatus::Unread;
@@ -426,111 +453,100 @@ impl Render for Sidebar {
                 let menu_open = s.chat_menu == Some(id);
                 let (state_menu, state_right) = (self.state.clone(), self.state.clone());
                 let row = div()
-                        .id(("chat", id))
-                        .group("row")
-                        .flex()
-                        .items_center()
-                        .gap(t.space.sm)
-                        .h(t.size.row)
-                        .px(t.space.md)
-                        .text_size(t.text.body)
-                        .rounded(t.radius.button)
-                        .cursor_pointer()
-                        .text_color(if selected {
-                            t.colors.text_strong
+                    .id(("chat", id))
+                    .group("row")
+                    .flex()
+                    .items_center()
+                    .gap(t.space.sm)
+                    .h(t.size.row)
+                    .px(t.space.md)
+                    .text_size(t.text.body)
+                    .rounded(t.radius.button)
+                    .cursor_pointer()
+                    .text_color(if selected {
+                        t.colors.text_strong
+                    } else {
+                        t.colors.text_body
+                    })
+                    .relative()
+                    // The open chat: a soft fill, no coloured edge.
+                    .when(selected, |d| crate::theme::selected(&t, d))
+                    .when(!selected && row_hover == Some(id), |d| {
+                        d.child(super::motion::hover_wash(("chat-wash", id), hover, &t))
+                    })
+                    .on_hover(cx.listener(move |this, on: &bool, _, cx| {
+                        let next = match (*on, this.row_hover) {
+                            (true, _) => Some(id),
+                            (false, Some(r)) if r == id => None,
+                            (false, other) => other,
+                        };
+                        if next != this.row_hover {
+                            this.row_hover = next;
+                            cx.notify();
+                        }
+                    }))
+                    .map(|d| {
+                        if editing {
+                            // The title, editable: Enter or a click away keeps it, Esc puts it back.
+                            let cancel = self.state.clone();
+                            d.child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .capture_key_down(move |ev: &gpui::KeyDownEvent, window, cx| {
+                                        if ev.keystroke.key == "escape" {
+                                            cx.stop_propagation();
+                                            cancel.update(cx, |s, cx| s.cancel_rename(cx));
+                                            window.dispatch_action(Box::new(FocusComposer), cx);
+                                        }
+                                    })
+                                    .child(
+                                        Input::new(&self.rename)
+                                            .appearance(false)
+                                            .text_size(t.text.body_sm),
+                                    ),
+                            )
                         } else {
-                            t.colors.text_body
-                        })
-                        .relative()
-                        // The open chat: a soft fill, no coloured edge.
-                        .when(selected, |d| crate::theme::selected(&t, d))
-                        .when(!selected && row_hover == Some(id), |d| {
-                            d.child(super::motion::hover_wash(("chat-wash", id), hover, &t))
-                        })
-                        .on_hover(cx.listener(move |this, on: &bool, _, cx| {
-                            let next = match (*on, this.row_hover) {
-                                (true, _) => Some(id),
-                                (false, Some(r)) if r == id => None,
-                                (false, other) => other,
-                            };
-                            if next != this.row_hover {
-                                this.row_hover = next;
-                                cx.notify();
-                            }
-                        }))
-                        .map(|d| {
-                            if editing {
-                                // The title, editable: Enter or a click away keeps it, Esc puts it back.
-                                let cancel = self.state.clone();
-                                d.child(
-                                    div()
-                                        .flex_1()
-                                        .min_w_0()
-                                        .capture_key_down(
-                                            move |ev: &gpui::KeyDownEvent, window, cx| {
-                                                if ev.keystroke.key == "escape" {
-                                                    cx.stop_propagation();
-                                                    cancel.update(cx, |s, cx| s.cancel_rename(cx));
-                                                    window.dispatch_action(
-                                                        Box::new(FocusComposer),
-                                                        cx,
-                                                    );
-                                                }
-                                            },
-                                        )
-                                        .child(
-                                            Input::new(&self.rename)
-                                                .appearance(false)
-                                                .text_size(t.text.body_sm),
-                                        ),
-                                )
-                            } else {
-                                d.child(
-                                    div()
-                                        .flex_1()
-                                        .min_w_0()
-                                        .overflow_hidden()
-                                        .whitespace_nowrap()
-                                        .text_ellipsis()
-                                        .when(unread, |d| {
-                                            d.font_weight(FontWeight::SEMIBOLD)
-                                                .text_color(t.colors.text_strong)
-                                        })
-                                        // Working, as Claude marks it: a band of
-                                        // light runs along the title.
-                                        .map(|d| {
-                                            if status == ChatStatus::Working {
-                                                let (title, theme) = (c.title.to_string(), t.clone());
-                                                d.with_animation(
-                                                    ("chat-shine", id),
-                                                    Animation::new(Duration::from_millis(2200)).repeat(),
-                                                    move |d, k| {
-                                                        d.child(super::chat_view::shimmer(&title, -0.3 + k * 1.6, &theme))
-                                                    },
-                                                )
-                                                .into_any_element()
-                                            } else {
-                                                d.child(c.title.clone()).into_any_element()
-                                            }
-                                        }),
-                                )
-                                // At the row's end, only when there is something to
-                                // say: whose chat, and working, waiting on you,
-                                // unread, or an error. Hover shows the actions there.
-                                .children(place.map(|p| {
-                                    div()
-                                        .flex_none()
-                                        .max_w(px(96.))
-                                        .overflow_hidden()
-                                        .whitespace_nowrap()
-                                        .text_ellipsis()
-                                        .text_size(t.text.caption)
-                                        .text_color(t.colors.text_subtle)
-                                        .group_hover("row", |st| st.invisible())
-                                        .when(menu_open, |d| d.invisible())
-                                        .child(p)
-                                }))
-                                .when(!matches!(status, ChatStatus::Idle | ChatStatus::Working), |d| {
+                            d.child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .text_ellipsis()
+                                    .when(unread, |d| {
+                                        d.font_weight(FontWeight::SEMIBOLD)
+                                            .text_color(t.colors.text_strong)
+                                    })
+                                    // Working, as Claude marks it: a band of
+                                    // light runs along the title.
+                                    .map(|d| {
+                                        if status == ChatStatus::Working {
+                                            let (title, theme) = (c.title.to_string(), t.clone());
+                                            d.with_animation(
+                                                ("chat-shine", id),
+                                                Animation::new(Duration::from_millis(2200))
+                                                    .repeat(),
+                                                move |d, k| {
+                                                    d.child(super::chat_view::shimmer(
+                                                        &title,
+                                                        -0.3 + k * 1.6,
+                                                        &theme,
+                                                    ))
+                                                },
+                                            )
+                                            .into_any_element()
+                                        } else {
+                                            d.child(c.title.clone()).into_any_element()
+                                        }
+                                    }),
+                            )
+                            // At the row's end, only when there is something to
+                            // say: working, waiting on you,
+                            // unread, or an error. Hover shows the actions there.
+                            .when(
+                                !matches!(status, ChatStatus::Idle | ChatStatus::Working),
+                                |d| {
                                     d.child(
                                         div()
                                             .flex_none()
@@ -538,85 +554,90 @@ impl Render for Sidebar {
                                             .when(menu_open, |d| d.invisible())
                                             .child(status_mark(status, id, &t)),
                                     )
-                                })
-                                // At rest, a chat on another machine shows where,
-                                // as Claude Code marks a cloud session.
-                                .when_some(remote.filter(|_| status == ChatStatus::Idle), |d, glyph| {
-                                    d.child(
-                                        div()
-                                            .flex_none()
-                                            .group_hover("row", |st| st.invisible())
-                                            .when(menu_open, |d| d.invisible())
-                                            .child(icon(glyph, t.size.icon_sm, t.colors.text_subtle)),
-                                    )
-                                })
-                                .child(
-                                    // On hover: pin, and the chat's menu.
+                                },
+                            )
+                            // At rest, a chat on another machine shows where,
+                            // as Claude Code marks a cloud session.
+                            .when_some(remote.filter(|_| status == ChatStatus::Idle), |d, glyph| {
+                                d.child(
                                     div()
-                                        .flex()
                                         .flex_none()
-                                        .gap(px(2.))
-                                        .absolute()
-                                        .right(t.space.xs)
-                                        .invisible()
-                                        .group_hover("row", |st| st.visible())
-                                        .when(menu_open, |d| d.visible())
-                                        .child(
-                                            div()
-                                                .id(("pin", id))
-                                                .p(px(3.))
-                                                .rounded(t.radius.small)
-                                                .hover(move |st| st.bg(hover))
-                                                .child(icon(
-                                                    "icons/pin.svg",
-                                                    t.size.icon_sm,
-                                                    if pinned {
-                                                        t.colors.primary
-                                                    } else {
-                                                        t.colors.text_subtle
-                                                    },
-                                                ))
-                                                .on_click(move |_, _, cx| {
-                                                    cx.stop_propagation();
-                                                    state_pin
-                                                        .update(cx, |s, cx| s.toggle_pin(id, cx));
-                                                }),
-                                        )
-                                        .child(
-                                            div()
-                                                .id(("chat-more", id))
-                                                .p(px(3.))
-                                                .rounded(t.radius.small)
-                                                .hover(move |st| st.bg(hover))
-                                                .when(menu_open, |d| d.bg(hover))
-                                                .child(icon(
-                                                    "icons/ellipsis.svg",
-                                                    t.size.icon_sm,
-                                                    t.colors.text_muted,
-                                                ))
-                                                .on_click(move |ev, _, cx| {
-                                                    cx.stop_propagation();
-                                                    let at = ev.position();
-                                                    state_menu.update(cx, |s, cx| {
-                                                        s.chat_menu_from(id, at, cx)
-                                                    });
-                                                }),
-                                        ),
+                                        .group_hover("row", |st| st.invisible())
+                                        .when(menu_open, |d| d.invisible())
+                                        .child(icon(glyph, t.size.icon_sm, t.colors.text_subtle)),
                                 )
-                            }
-                        })
-                        .relative()
-                        .on_mouse_down(gpui::MouseButton::Right, move |ev, _, cx| {
-                            cx.stop_propagation();
-                            let at = ev.position;
-                            state_right.update(cx, |s, cx| {
-                                s.chat_menu_at = at;
-                                s.open_chat_menu(Some(id), cx)
-                            });
-                        })
-                        .on_click(move |_, _, cx| state.update(cx, |s, cx| s.open_chat(id, cx)));
+                            })
+                            .child(
+                                // On hover: pin, and the chat's menu.
+                                div()
+                                    .flex()
+                                    .flex_none()
+                                    .gap(px(2.))
+                                    .absolute()
+                                    .right(t.space.xs)
+                                    .invisible()
+                                    .group_hover("row", |st| st.visible())
+                                    .when(menu_open, |d| d.visible())
+                                    .child(
+                                        div()
+                                            .id(("pin", id))
+                                            .p(px(3.))
+                                            .rounded(t.radius.small)
+                                            .hover(move |st| st.bg(hover))
+                                            .child(icon(
+                                                "icons/pin.svg",
+                                                t.size.icon_sm,
+                                                if pinned {
+                                                    t.colors.primary
+                                                } else {
+                                                    t.colors.text_subtle
+                                                },
+                                            ))
+                                            .on_click(move |_, _, cx| {
+                                                cx.stop_propagation();
+                                                state_pin.update(cx, |s, cx| s.toggle_pin(id, cx));
+                                            }),
+                                    )
+                                    .child(
+                                        div()
+                                            .id(("chat-more", id))
+                                            .p(px(3.))
+                                            .rounded(t.radius.small)
+                                            .hover(move |st| st.bg(hover))
+                                            .when(menu_open, |d| d.bg(hover))
+                                            .child(icon(
+                                                "icons/ellipsis.svg",
+                                                t.size.icon_sm,
+                                                t.colors.text_muted,
+                                            ))
+                                            .on_click(move |ev, _, cx| {
+                                                cx.stop_propagation();
+                                                let at = ev.position();
+                                                state_menu.update(cx, |s, cx| {
+                                                    s.chat_menu_from(id, at, cx)
+                                                });
+                                            }),
+                                    ),
+                            )
+                        }
+                    })
+                    .relative()
+                    .on_mouse_down(gpui::MouseButton::Right, move |ev, _, cx| {
+                        cx.stop_propagation();
+                        let at = ev.position;
+                        state_right.update(cx, |s, cx| {
+                            s.chat_menu_at = at;
+                            s.open_chat_menu(Some(id), cx)
+                        });
+                    })
+                    .on_click(move |_, _, cx| state.update(cx, |s, cx| s.open_chat(id, cx)));
                 list = list.child(if bump > 0 {
-                    super::motion::row_in(row, SharedString::from(format!("chat-pop-{id}-{bump}")), 0, &t)
+                    super::motion::row_in(
+                        row,
+                        SharedString::from(format!("chat-pop-{id}-{bump}")),
+                        0,
+                        &t,
+                    )
                 } else {
                     row.into_any_element()
                 });
@@ -643,7 +664,11 @@ impl Render for Sidebar {
             } else {
                 (
                     "No chats yet",
-                    format!("Ask anything in the box, or press {} for a new chat.", shortcut("N")).into(),
+                    format!(
+                        "Ask anything in the box, or press {} for a new chat.",
+                        shortcut("N")
+                    )
+                    .into(),
                 )
             };
             list = list
@@ -657,7 +682,11 @@ impl Render for Sidebar {
                         .text_size(t.text.caption)
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(t.colors.text_muted)
-                        .child(div().flex_1().min_w_0().child(if s.show_archived { "Archived" } else { "Chats" }))
+                        .child(div().flex_1().min_w_0().child(if s.show_archived {
+                            "Archived"
+                        } else {
+                            "Chats"
+                        }))
                         // The filter rides the first header; here, this one.
                         .children(filter.take()),
                 )
@@ -672,7 +701,11 @@ impl Render for Sidebar {
                         .border_1()
                         .border_dashed()
                         .border_color(t.colors.border)
-                        .child(icon("icons/message-square.svg", t.size.icon, t.colors.text_muted))
+                        .child(icon(
+                            "icons/message-square.svg",
+                            t.size.icon,
+                            t.colors.text_muted,
+                        ))
                         .child(
                             div()
                                 .flex_1()
@@ -698,7 +731,11 @@ impl Render for Sidebar {
         }
 
         // A row of the nav: its icon in a fixed slot, its name, its key on hover.
-        let nav = |key: &'static str, path: &'static str, label: &'static str, on: bool, keys: Option<SharedString>| {
+        let nav = |key: &'static str,
+                   path: &'static str,
+                   label: &'static str,
+                   on: bool,
+                   keys: Option<SharedString>| {
             div()
                 .id(SharedString::from(format!("nav-{key}")))
                 .group("nav")
@@ -710,7 +747,11 @@ impl Render for Sidebar {
                 .rounded(t.radius.button)
                 .cursor_pointer()
                 .text_size(t.text.body)
-                .text_color(if on { t.colors.text_strong } else { t.colors.text_body })
+                .text_color(if on {
+                    t.colors.text_strong
+                } else {
+                    t.colors.text_body
+                })
                 .when(on, |d| crate::theme::selected(&t, d))
                 .when(!on, |d| d.hover(move |st| st.bg(hover)))
                 .child(
@@ -719,9 +760,25 @@ impl Render for Sidebar {
                         .flex_none()
                         .flex()
                         .justify_center()
-                        .child(icon(path, t.size.icon, if on { t.colors.text_strong } else { t.colors.text_muted })),
+                        .child(icon(
+                            path,
+                            t.size.icon,
+                            if on {
+                                t.colors.text_strong
+                            } else {
+                                t.colors.text_muted
+                            },
+                        )),
                 )
-                .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .child(label),
+                )
                 .children(keys.map(|k| {
                     div()
                         .invisible()
@@ -733,220 +790,275 @@ impl Render for Sidebar {
         let help_open = s.title_menu.is_some_and(|(m, _)| m == TitleMenu::Help);
         let (help, account) = (self.state.clone(), self.state.clone());
 
-        let sheet =
-            div()
-                .size_full()
-                .flex()
-                .flex_col()
-                // Part of the window, not a card on it: the window's own
-                // colour, flush to its edges; the chat is the raised sheet.
-                .overflow_hidden()
-                // Forge's name is in the window's top row; the sidebar opens
-                // with Chat | Code, across its width, then search.
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap(px(2.))
-                        .px(t.space.sm)
-                        .pt(t.space.xs)
-                        .pb(t.space.sm)
-                        .child(div().mb(t.space.sm).child(kind_switch(&t, &self.state, s.sidebar_kind)))
-                        // Search, as Claude Code's sidebar opens with it: a
-                        // field that opens the palette over the window.
-                        .child(
-                            div()
-                                .id("sidebar-search")
-                                .role(gpui::accesskit::Role::Button)
-                                .aria_label("Search files, chats and commands")
-                                .flex()
-                                .items_center()
-                                .gap(t.space.sm)
-                                .h(t.size.row + px(2.))
-                                .px(t.space.sm)
-                                .mb(t.space.sm)
-                                .rounded(t.radius.field)
-                                .border_1()
-                                .border_color(t.colors.border)
-                                .bg(t.extra.sunk)
-                                .cursor_pointer()
-                                .text_size(t.text.body)
-                                .text_color(t.colors.text_muted)
-                                .hover(move |d| d.border_color(t.extra.border_strong))
-                                .child(
-                                    div()
-                                        .w(t.size.icon_lg)
-                                        .flex_none()
-                                        .flex()
-                                        .justify_center()
-                                        .child(icon("icons/search.svg", t.size.icon, t.colors.text_muted)),
-                                )
-                                .child(div().flex_1().min_w_0().child("Search"))
-                                .child(super::kbd(&t, super::shortcut("K")))
-                                .on_click(|_, window, cx| {
-                                    window.dispatch_action(Box::new(ToggleCommandPalette), cx)
-                                }),
-                        )
-                        // New: a plus in a ring, as Claude Code's, never a fill.
-                        .child(
-                            div()
-                                .id("new-chat")
-                                .group("nav")
-                                .role(gpui::accesskit::Role::Button)
-                                .aria_label("New chat")
-                                .flex()
-                                .items_center()
-                                .gap(t.space.sm)
-                                .h(t.size.row)
-                                .px(t.space.sm)
-                                .rounded(t.radius.button)
-                                .cursor_pointer()
-                                .text_size(t.text.body)
-                                .text_color(t.colors.text_body)
-                                .hover(move |st| st.bg(hover))
-                                .child(
-                                    div()
-                                        .w(t.size.icon_lg)
-                                        .flex_none()
-                                        .flex()
-                                        .justify_center()
-                                        .child(
-                                            div()
-                                                .size(t.size.icon_lg)
-                                                .flex()
-                                                .items_center()
-                                                .justify_center()
-                                                .rounded(t.radius.pill)
-                                                .border_1()
-                                                .border_color(t.extra.border_strong)
-                                                .child(icon("icons/plus.svg", t.size.icon_xs, t.colors.text_body)),
-                                        ),
-                                )
-                                .child(div().flex_1().min_w_0().child("New"))
-                                .child(
-                                    div()
-                                        .invisible()
-                                        .group_hover("nav", |st| st.visible())
-                                        .child(kbd(&t, shortcut("N"))),
-                                )
-                                .on_click(|_, window, cx| window.dispatch_action(Box::new(NewChat), cx)),
-                        )
-                        .child(
-                            nav("projects", "icons/folder-open.svg", "Projects", projects_open, Some(shortcut("Shift P")))
-                                .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenProjects), cx)),
-                        )
-                        .child(
-                            nav("documents", "icons/file-text.svg", "Documents", documents_open, None)
-                                .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenDocuments), cx)),
-                        )
-                        .child(
-                            nav("customize", "icons/sliders-horizontal.svg", "Customize", rules_open, Some(shortcut("Shift R")))
-                                .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenRules), cx)),
-                        )
-                        .child(
-                            nav("more", "icons/ellipsis.svg", "More", help_open, None).on_click(move |ev, _, cx| {
-                                let at = ev.position();
-                                help.update(cx, |s, cx| s.toggle_title_menu(TitleMenu::Help, at, cx))
+        let sheet = div()
+            .size_full()
+            .flex()
+            .flex_col()
+            // Part of the window, not a card on it: the window's own
+            // colour, flush to its edges; the chat is the raised sheet.
+            .overflow_hidden()
+            // Forge's name is in the window's top row; the sidebar opens
+            // with Chat | Code, across its width, then search.
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.))
+                    .px(t.space.sm)
+                    .pt(t.space.xs)
+                    .pb(t.space.sm)
+                    .child(
+                        div()
+                            .mb(t.space.sm)
+                            .child(kind_switch(&t, &self.state, s.sidebar_kind)),
+                    )
+                    // Search, as Claude Code's sidebar opens with it: a
+                    // field that opens the palette over the window.
+                    .child(
+                        div()
+                            .id("sidebar-search")
+                            .role(gpui::accesskit::Role::Button)
+                            .aria_label("Search files, chats and commands")
+                            .flex()
+                            .items_center()
+                            .gap(t.space.sm)
+                            .h(t.size.row + px(2.))
+                            .px(t.space.sm)
+                            .mb(t.space.sm)
+                            .rounded(t.radius.field)
+                            .border_1()
+                            .border_color(t.colors.border)
+                            .bg(t.extra.sunk)
+                            .cursor_pointer()
+                            .text_size(t.text.body)
+                            .text_color(t.colors.text_muted)
+                            .hover(move |d| d.border_color(t.extra.border_strong))
+                            .child(
+                                div()
+                                    .w(t.size.icon_lg)
+                                    .flex_none()
+                                    .flex()
+                                    .justify_center()
+                                    .child(icon(
+                                        "icons/search.svg",
+                                        t.size.icon,
+                                        t.colors.text_muted,
+                                    )),
+                            )
+                            .child(div().flex_1().min_w_0().child("Search"))
+                            .child(super::kbd(&t, super::shortcut("K")))
+                            .on_click(|_, window, cx| {
+                                window.dispatch_action(Box::new(ToggleCommandPalette), cx)
                             }),
+                    )
+                    // New: a plus in a ring, as Claude Code's, never a fill.
+                    .child(
+                        div()
+                            .id("new-chat")
+                            .group("nav")
+                            .role(gpui::accesskit::Role::Button)
+                            .aria_label("New chat")
+                            .flex()
+                            .items_center()
+                            .gap(t.space.sm)
+                            .h(t.size.row)
+                            .px(t.space.sm)
+                            .rounded(t.radius.button)
+                            .cursor_pointer()
+                            .text_size(t.text.body)
+                            .text_color(t.colors.text_body)
+                            .hover(move |st| st.bg(hover))
+                            .child(
+                                div()
+                                    .w(t.size.icon_lg)
+                                    .flex_none()
+                                    .flex()
+                                    .justify_center()
+                                    .child(
+                                        div()
+                                            .size(t.size.icon_lg)
+                                            .flex()
+                                            .items_center()
+                                            .justify_center()
+                                            .rounded(t.radius.pill)
+                                            .border_1()
+                                            .border_color(t.extra.border_strong)
+                                            .child(icon(
+                                                "icons/plus.svg",
+                                                t.size.icon_xs,
+                                                t.colors.text_body,
+                                            )),
+                                    ),
+                            )
+                            .child(div().flex_1().min_w_0().child("New"))
+                            .child(
+                                div()
+                                    .invisible()
+                                    .group_hover("nav", |st| st.visible())
+                                    .child(kbd(&t, shortcut("N"))),
+                            )
+                            .on_click(|_, window, cx| {
+                                window.dispatch_action(Box::new(NewChat), cx)
+                            }),
+                    )
+                    .child(
+                        nav(
+                            "projects",
+                            "icons/folder-open.svg",
+                            "Projects",
+                            projects_open,
+                            Some(shortcut("Shift P")),
+                        )
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(Box::new(OpenProjects), cx)
+                        }),
+                    )
+                    .child(
+                        nav(
+                            "documents",
+                            "icons/file-text.svg",
+                            "Documents",
+                            documents_open,
+                            None,
+                        )
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(Box::new(OpenDocuments), cx)
+                        }),
+                    )
+                    .child(
+                        nav(
+                            "design",
+                            "icons/pen-tool.svg",
+                            "Design",
+                            design_open,
+                            Some(shortcut("Shift D")),
+                        )
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(Box::new(OpenDesign), cx)
+                        }),
+                    )
+                    .child(
+                        nav(
+                            "customize",
+                            "icons/sliders-horizontal.svg",
+                            "Customize",
+                            rules_open,
+                            Some(shortcut("Shift R")),
+                        )
+                        .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenRules), cx)),
+                    )
+                    .child(
+                        nav("more", "icons/ellipsis.svg", "More", help_open, None).on_click(
+                            move |ev, _, cx| {
+                                let at = ev.position();
+                                help.update(cx, |s, cx| {
+                                    s.toggle_title_menu(TitleMenu::Help, at, cx)
+                                })
+                            },
                         ),
-                )
-                .map(|d| {
-                    if loading {
-                        d.child(
-                            div()
-                                .flex_1()
-                                .min_h_0()
-                                .child(super::skeleton::chat_list(&t)),
-                        )
-                    } else {
-                        d.child(
-                            div()
-                                .flex_1()
-                                .min_h_0()
-                                .flex()
-                                .flex_col()
-                                .child(list)
-                                .with_animation(
-                                    "chats-in",
-                                    Animation::new(Duration::from_millis(t.motion_ms)),
-                                    |d, delta| d.opacity(delta),
-                                ),
-                        )
-                    }
-                })
-                // You, on one line at the foot: your picture and your name
-                // (the model shows under the composer, not here); it opens
-                // your menu. Settings on the right.
-                .child(
-                    div()
-                        .flex_none()
-                        .flex()
-                        .items_center()
-                        .gap(t.space.xs)
-                        .p(t.space.sm)
-                        .border_t_1()
-                        .border_color(t.colors.border)
-                        .child(
-                            div()
-                                .id("sidebar-account")
-                                .flex_1()
-                                .min_w_0()
-                                .flex()
-                                .items_center()
-                                .gap(t.space.sm)
-                                .h(t.size.row + px(2.))
-                                .px(t.space.sm)
-                                .rounded(t.radius.button)
-                                .cursor_pointer()
-                                .hover(move |st| st.bg(hover))
-                                .child(super::avatar_image(&avatar, 24., window))
-                                .child(
-                                    div()
-                                        .flex_shrink_0()
-                                        .min_w_0()
-                                        .overflow_hidden()
-                                        .whitespace_nowrap()
-                                        .text_ellipsis()
-                                        .text_size(t.text.body)
-                                        .child(
+                    ),
+            )
+            .map(|d| {
+                if loading {
+                    d.child(
+                        div()
+                            .flex_1()
+                            .min_h_0()
+                            .child(super::skeleton::chat_list(&t)),
+                    )
+                } else {
+                    d.child(
+                        div()
+                            .flex_1()
+                            .min_h_0()
+                            .flex()
+                            .flex_col()
+                            .child(list)
+                            .with_animation(
+                                "chats-in",
+                                Animation::new(Duration::from_millis(t.motion_ms)),
+                                |d, delta| d.opacity(delta),
+                            ),
+                    )
+                }
+            })
+            // You, on one line at the foot: your picture and your name
+            // (the model shows under the composer, not here); it opens
+            // your menu. Settings on the right.
+            .child(
+                div()
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .gap(t.space.xs)
+                    .p(t.space.sm)
+                    .border_t_1()
+                    .border_color(t.colors.border)
+                    .child(
+                        div()
+                            .id("sidebar-account")
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .items_center()
+                            .gap(t.space.sm)
+                            .h(t.size.row + px(2.))
+                            .px(t.space.sm)
+                            .rounded(t.radius.button)
+                            .cursor_pointer()
+                            .hover(move |st| st.bg(hover))
+                            .child(super::avatar_image(&avatar, 24., window))
+                            .child(
+                                div()
+                                    .flex_shrink_0()
+                                    .min_w_0()
+                                    .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .text_ellipsis()
+                                    .text_size(t.text.body)
+                                    .child(
+                                        div().flex().gap(t.space.xs).child(
                                             div()
-                                                .flex()
-                                                .gap(t.space.xs)
-                                                .child(
-                                                    div()
-                                                        .font_weight(FontWeight::MEDIUM)
-                                                        .text_color(t.colors.text_strong)
-                                                        .child(name),
-                                                ),
+                                                .font_weight(FontWeight::MEDIUM)
+                                                .text_color(t.colors.text_strong)
+                                                .child(name),
                                         ),
-                                )
-                                .child(icon("icons/chevron-down.svg", t.size.icon_sm, t.colors.text_subtle))
-                                .child(div().flex_1())
-                                .on_click(move |ev, _, cx| {
-                                    let at = ev.position();
-                                    account.update(cx, |s, cx| s.toggle_title_menu(TitleMenu::Account, at, cx))
-                                }),
-                        )
-                        .child(
-                            div()
-                                .id("sidebar-settings")
-                                .size(t.size.control)
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .rounded(t.radius.button)
-                                .cursor_pointer()
-                                .hover(move |st| st.bg(hover))
-                                .tooltip(|w, cx| gpui::component::tooltip::Tooltip::new("Settings (Ctrl+,)").build(w, cx))
-                                .child(icon("icons/settings.svg", t.size.icon, t.colors.text_muted))
-                                .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenSettings), cx)),
-                        ),
-                );
-        div()
-            .w(t.size.sidebar)
-            .flex_none()
-            .h_full()
-            .child(sheet)
+                                    ),
+                            )
+                            .child(icon(
+                                "icons/chevron-down.svg",
+                                t.size.icon_sm,
+                                t.colors.text_subtle,
+                            ))
+                            .child(div().flex_1())
+                            .on_click(move |ev, _, cx| {
+                                let at = ev.position();
+                                account.update(cx, |s, cx| {
+                                    s.toggle_title_menu(TitleMenu::Account, at, cx)
+                                })
+                            }),
+                    )
+                    .child(
+                        div()
+                            .id("sidebar-settings")
+                            .size(t.size.control)
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded(t.radius.button)
+                            .cursor_pointer()
+                            .hover(move |st| st.bg(hover))
+                            .tooltip(|w, cx| {
+                                gpui::component::tooltip::Tooltip::new("Settings (Ctrl+,)")
+                                    .build(w, cx)
+                            })
+                            .child(icon("icons/settings.svg", t.size.icon, t.colors.text_muted))
+                            .on_click(|_, window, cx| {
+                                window.dispatch_action(Box::new(OpenSettings), cx)
+                            }),
+                    ),
+            );
+        div().w(t.size.sidebar).flex_none().h_full().child(sheet)
     }
 }
 
@@ -967,7 +1079,11 @@ pub fn kind_switch(
                    k: SidebarKind| {
         let on = kind == k;
         let state = state.clone();
-        let ink = if on { t.colors.text_strong } else { t.colors.text_muted };
+        let ink = if on {
+            t.colors.text_strong
+        } else {
+            t.colors.text_muted
+        };
         div()
             .id(id)
             .flex_1()
@@ -1092,6 +1208,15 @@ pub fn rail(t: &crate::theme::Theme, screen: Screen) -> impl IntoElement {
         )
         .child(
             nav(
+                "rail-design",
+                "icons/pen-tool.svg",
+                format!("Design ({})", shortcut("Shift D")),
+                screen == Screen::Design,
+            )
+            .on_click(dispatch(Box::new(OpenDesign))),
+        )
+        .child(
+            nav(
                 "rail-rules",
                 "icons/list-todo.svg",
                 format!("Rules and memory ({})", shortcut("Shift R")),
@@ -1118,9 +1243,12 @@ pub fn rail(t: &crate::theme::Theme, screen: Screen) -> impl IntoElement {
 pub fn status_mark(status: ChatStatus, id: usize, t: &crate::theme::Theme) -> gpui::AnyElement {
     let dot = || div().size(px(7.)).rounded(t.radius.pill);
     let inner: gpui::AnyElement = match status {
-        ChatStatus::Working => {
-            super::activity::strike(t.extra.accent, t.extra.mark_heat_white, 12., ("chat-working", id))
-        }
+        ChatStatus::Working => super::activity::strike(
+            t.extra.accent,
+            t.extra.mark_heat_white,
+            12.,
+            ("chat-working", id),
+        ),
         ChatStatus::NeedsYou => dot()
             .bg(t.extra.accent)
             .with_animation(
@@ -1158,4 +1286,3 @@ pub fn ago(minutes: u32) -> String {
         _ => format!("{}d", minutes / 1440),
     }
 }
-

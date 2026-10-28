@@ -1,7 +1,7 @@
 //! Forge's own plugin (`assets/forge-plugin`), given to every ForgeCLI
 //! session with `--plugin-dir`: the Diagram Design skill (MIT,
-//! cathrynlavery/diagram-design, in Forge's skin) and the office-documents
-//! skill. It is built into the app and unpacked once per version into the
+//! cathrynlavery/diagram-design, in Forge's skin), the design skill (decks,
+//! pages and prototypes for the side panel) and the office-documents skill. It is built into the app and unpacked once per version into the
 //! config folder, `plugin/<hash>/forge/`, so a release needs no files beside it.
 
 use std::path::PathBuf;
@@ -79,7 +79,27 @@ mod tests {
             names.contains(&"forge:diagram-design".to_string()),
             "{names:?}"
         );
+        assert!(names.contains(&"forge:design".to_string()), "{names:?}");
         assert!(super::skills().iter().all(|(_, d)| !d.is_empty()));
+    }
+
+    #[test]
+    fn the_plugin_teaches_with_the_expert_skill() {
+        let skills = super::skills();
+        let (_, description) = skills
+            .iter()
+            .find(|(n, _)| n == "forge:expert")
+            .expect("forge:expert is bundled");
+        assert!(description.contains("Teach the user"), "{description}");
+        let names: Vec<&str> = embedded::FILES.iter().map(|(p, _)| *p).collect();
+        for f in ["methods", "shapes", "levels"] {
+            assert!(
+                names.contains(&format!("skills/expert/reference/{f}.md").as_str()),
+                "{f}"
+            );
+        }
+        // Expert is no longer an output style.
+        assert!(!names.iter().any(|n| n.starts_with("output-styles/")));
     }
 
     #[test]

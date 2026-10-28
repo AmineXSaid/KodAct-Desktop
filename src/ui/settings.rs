@@ -282,6 +282,13 @@ impl Settings {
             SettingsTab::Skills => self.skills.update(cx, |e, cx| e.back(cx)),
             SettingsTab::Hooks => self.hooks.update(cx, |e, cx| e.back(cx)),
             SettingsTab::Mcp => self.mcp.update(cx, |e, cx| e.back(cx)),
+            SettingsTab::Plugins if self.state.read(cx).plugins_market => {
+                self.state.update(cx, |s, cx| {
+                    s.plugins_market = false;
+                    cx.notify();
+                });
+                true
+            }
             SettingsTab::Models if self.form => {
                 self.form = false;
                 cx.notify();
@@ -511,7 +518,7 @@ impl Settings {
         // server is on this machine (a local gateway such as OmniRoute).
         let needs_key = match PRESETS.iter().find(|p| Some(p.id) == self.preset) {
             Some(p) => p.key,
-            None => self.wire == Wire::Anthropic && !crate::endpoints::is_loopback(&url),
+            None => self.wire != Wire::Openai && !crate::endpoints::is_loopback(&url),
         };
         if key.is_none() && needs_key {
             self.status = Status::Failed("This endpoint needs a key.".into());
@@ -546,12 +553,17 @@ impl Settings {
             } else {
                 crate::endpoints::Auth::None
             },
-            capabilities: crate::endpoints::Capabilities {
-                catalog: self.catalog,
-                ..old
-                    .as_ref()
-                    .map(|p| p.capabilities.clone())
-                    .unwrap_or_default()
+            capabilities: match old.as_ref() {
+                Some(o) => crate::endpoints::Capabilities {
+                    catalog: self.catalog,
+                    ..o.capabilities.clone()
+                },
+                // Gemini takes effort as its thinking level (ForgeCLI maps it).
+                None => crate::endpoints::Capabilities {
+                    catalog: self.catalog,
+                    effort: self.wire == Wire::Gemini,
+                    ..Default::default()
+                },
             },
         };
         let replaces = self.editing.clone();
@@ -756,140 +768,6 @@ impl Settings {
             .child(div().flex_1().min_w_0().child(child))
     }
 
-    /// The themes, as swatch cards: each previews its canvas, session,
-    /// card and accent in the mode you're in. Picking one applies it at
-    /// once and keeps it for the next launch.
-    fn theme_picker(&self, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
-        let (current, dark) = {
-            let s = self.state.read(cx);
-            (s.look, s.dark)
-        };
-        let mut grid = div().flex().flex_wrap().gap(t.space.sm);
-        for look in theme::Look::ALL {
-            let p = Theme::of(look, dark);
-            let on = look == current;
-            let state = self.state.clone();
-            let hover = t.extra.border_strong;
-            let preview = div()
-                .h(px(64.))
-                .rounded(t.radius.small)
-                .bg(p.extra.pane)
-                .pt(px(8.))
-                .pl(px(8.))
-                .overflow_hidden()
-                .child(
-                    // The session sheet, a card on it, and the one colour.
-                    div()
-                        .size_full()
-                        .rounded_tl(p.radius.card)
-                        .bg(p.extra.stage)
-                        .shadow(p.elevation_grain())
-                        .p(px(8.))
-                        .flex()
-                        .flex_col()
-                        .gap(px(6.))
-                        .child(
-                            div()
-                                .w(px(64.))
-                                .h(px(14.))
-                                .rounded(p.radius.card.min(px(7.)))
-                                .bg(p.colors.surface)
-                                .border_1()
-                                .border_color(p.colors.border),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(6.))
-                                .child(
-                                    div()
-                                        .w(px(34.))
-                                        .h(px(12.))
-                                        .rounded(p.radius.compact.min(px(6.)))
-                                        .bg(p.extra.accent),
-                                )
-                                .child(
-                                    div()
-                                        .w(px(24.))
-                                        .h(px(12.))
-                                        .rounded(p.radius.compact.min(px(6.)))
-                                        .bg(p.extra.fill),
-                                )
-                                .child(super::ingot::mark(14.).marks([
-                                    p.extra.mark_top,
-                                    p.extra.mark_left,
-                                    p.extra.mark_right,
-                                ])),
-                        ),
-                );
-            grid = grid.child(
-                div()
-                    .id(SharedString::from(format!("theme-{}", look.id())))
-                    .role(gpui::accesskit::Role::RadioButton)
-                    .aria_label(look.name())
-                    .w(px(152.))
-                    .p(px(6.))
-                    .flex()
-                    .flex_col()
-                    .gap(px(6.))
-                    .rounded(t.radius.card)
-                    .bg(t.colors.surface)
-                    .border_1()
-                    .border_color(if on {
-                        t.colors.text_strong
-                    } else {
-                        t.colors.border
-                    })
-                    .when(on, |d| d.shadow(t.elevation_grain()))
-                    .cursor_pointer()
-                    .when(!on, |d| d.hover(move |st| st.border_color(hover)))
-                    .child(preview)
-                    .child(
-                        div()
-                            .px(px(2.))
-                            .flex()
-                            .items_center()
-                            .gap(px(6.))
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .font_family(p.font_sans.clone())
-                                    .text_size(t.text.body_sm)
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(t.colors.text_strong)
-                                    .child(look.name()),
-                            )
-                            .when(on, |d| {
-                                d.child(icon(
-                                    "icons/check.svg",
-                                    t.size.icon_sm,
-                                    t.colors.text_strong,
-                                ))
-                            }),
-                    )
-                    .child(
-                        div()
-                            .px(px(2.))
-                            .pb(px(2.))
-                            .text_size(t.text.caption)
-                            .text_color(t.colors.text_muted)
-                            .child(look.blurb()),
-                    )
-                    .on_click(move |_, _, cx| {
-                        state.update(cx, |s, cx| {
-                            s.look = look;
-                            s.save_window();
-                            cx.notify();
-                        });
-                        super::set_theme(look, dark, cx);
-                    }),
-            );
-        }
-        grid.into_any_element()
-    }
-
     fn chip(
         t: &Theme,
         id: impl Into<gpui::ElementId>,
@@ -953,7 +831,6 @@ impl Settings {
                             });
                     })),
             );
-        let theme_picker = self.theme_picker(t, cx);
         let appearance = super::button::Segmented::new("appearance", "Appearance")
             .option("Light", !dark, move |_, window, cx| {
                 if dark {
@@ -1007,9 +884,6 @@ impl Settings {
                     cx.notify();
                 })
             });
-        let (state, pattern) = (self.state.clone(), self.state.read(cx).chat_pattern);
-        let pattern_row = super::button::Switch::new("chat-pattern", pattern, "Pattern behind chats")
-            .on_toggle(move |on, _, cx| state.update(cx, |s, cx| s.set_chat_pattern(on, cx)));
         let browser_row = super::button::Switch::new("browser", browser, "Web browser")
             .on_toggle(|_, window, cx| window.dispatch_action(Box::new(super::ToggleBrowser), cx));
         // Each group is one white card with hairline rows: the setting on
@@ -1031,20 +905,6 @@ impl Settings {
                         "Appearance",
                         Some("Light or dark, for the whole app."),
                         appearance.into_any_element(),
-                        false,
-                    ),
-                    Self::row(
-                        t,
-                        "Theme",
-                        Some("The surfaces and the one colour; every theme comes in light and dark."),
-                        theme_picker,
-                        true,
-                    ),
-                    Self::row(
-                        t,
-                        "Pattern behind chats",
-                        Some("The new-chat screen's dots, also behind a conversation. Off, a chat sits on a plain background."),
-                        pattern_row.into_any_element(),
                         false,
                     ),
                 ],
@@ -1119,25 +979,47 @@ impl Settings {
             let (check, syncing) = crate::health::pair_check(&p.model, s.health.get(&p.name));
             // The check, as a badge: how fast it answered (its tone the ping's),
             // or that it didn't, with why on a line of its own.
-            let (badge_bg, badge_fg, badge, why): (Hsla, Hsla, String, Option<String>) = match &check {
-                crate::health::Check::Answered { ms, .. } => {
-                    let (bg, fg) = match crate::health::ping_tone(*ms) {
-                        crate::health::Tone::Fast => (t.extra.ping_fast_bg, t.extra.ping_fast_fg),
-                        crate::health::Tone::Fair => (t.extra.ping_fair_bg, t.extra.ping_fair_fg),
-                        crate::health::Tone::Slow => (t.extra.ping_slow_bg, t.extra.ping_slow_fg),
-                    };
-                    (bg, fg, format!("Answered · {}", crate::health::ping_text(*ms)), None)
-                }
-                crate::health::Check::Failed { detail }
-                | crate::health::Check::Unreachable { detail } => (
-                    t.extra.danger_tint,
-                    t.extra.danger,
-                    "Didn't answer".into(),
-                    Some(detail.clone()),
-                ),
-                _ if syncing => (t.colors.hover, t.colors.text_muted, "Checking…".into(), None),
-                _ => (t.colors.hover, t.colors.text_muted, "Not checked".into(), None),
-            };
+            let (badge_bg, badge_fg, badge, why): (Hsla, Hsla, String, Option<String>) =
+                match &check {
+                    crate::health::Check::Answered { ms, .. } => {
+                        let (bg, fg) = match crate::health::ping_tone(*ms) {
+                            crate::health::Tone::Fast => {
+                                (t.extra.ping_fast_bg, t.extra.ping_fast_fg)
+                            }
+                            crate::health::Tone::Fair => {
+                                (t.extra.ping_fair_bg, t.extra.ping_fair_fg)
+                            }
+                            crate::health::Tone::Slow => {
+                                (t.extra.ping_slow_bg, t.extra.ping_slow_fg)
+                            }
+                        };
+                        (
+                            bg,
+                            fg,
+                            format!("Answered · {}", crate::health::ping_text(*ms)),
+                            None,
+                        )
+                    }
+                    crate::health::Check::Failed { detail }
+                    | crate::health::Check::Unreachable { detail } => (
+                        t.extra.danger_tint,
+                        t.extra.danger,
+                        "Didn't answer".into(),
+                        Some(detail.clone()),
+                    ),
+                    _ if syncing => (
+                        t.colors.hover,
+                        t.colors.text_muted,
+                        "Checking…".into(),
+                        None,
+                    ),
+                    _ => (
+                        t.colors.hover,
+                        t.colors.text_muted,
+                        "Not checked".into(),
+                        None,
+                    ),
+                };
             let in_use = active.as_deref() == Some(p.name.as_str());
             let (use_state, edit_p, rm_name) = (self.state.clone(), p.clone(), p.name.clone());
             let name = p.name.clone();
@@ -1218,17 +1100,16 @@ impl Settings {
                                         "{} · {} · {}",
                                         p.name,
                                         crate::endpoints::host_of(&p.base_url),
-                                        if p.wire == Wire::Anthropic {
-                                            "Anthropic Messages"
-                                        } else {
-                                            "OpenAI-compatible"
-                                        }
+                                        p.wire.label()
                                     )),
                             )
                             .children(why.map(|w| {
                                 // The reason, as a sentence.
                                 let mut c = w.chars();
-                                let w: String = c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default();
+                                let w: String = c
+                                    .next()
+                                    .map(|f| f.to_uppercase().chain(c).collect())
+                                    .unwrap_or_default();
                                 div()
                                     .pt(px(2.))
                                     .line_clamp(2)
@@ -1241,11 +1122,14 @@ impl Settings {
                     .child(theme::pill(t, badge_bg, badge_fg, badge).flex_none())
                     .when(!in_use, |d| {
                         d.child(
-                            super::button::Button::secondary(SharedString::from(format!("use-{name}")), "Use")
-                                .compact()
-                                .on_click(move |_, _, cx| {
-                                    use_state.update(cx, |s, cx| s.select_profile(&name, cx))
-                                }),
+                            super::button::Button::secondary(
+                                SharedString::from(format!("use-{name}")),
+                                "Use",
+                            )
+                            .compact()
+                            .on_click(move |_, _, cx| {
+                                use_state.update(cx, |s, cx| s.select_profile(&name, cx))
+                            }),
                         )
                     })
                     .child(
@@ -1368,31 +1252,39 @@ impl Settings {
             format!("Running on this PC: {}.", names.join(", "))
         });
         let wire = self.wire;
-        let wire_row = div()
-            .flex()
-            .gap(px(6.))
-            .child(
-                Self::chip(t, "wire-openai", "OpenAI-compatible", wire == Wire::Openai).on_click(
-                    cx.listener(|this, _, _, cx| {
-                        this.wire = Wire::Openai;
+        let wire_row =
+            div()
+                .flex()
+                .gap(px(6.))
+                .child(
+                    Self::chip(t, "wire-openai", "OpenAI-compatible", wire == Wire::Openai)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.wire = Wire::Openai;
+                            this.models.clear();
+                            cx.notify();
+                        })),
+                )
+                .child(
+                    Self::chip(
+                        t,
+                        "wire-anthropic",
+                        "Anthropic Messages",
+                        wire == Wire::Anthropic,
+                    )
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.wire = Wire::Anthropic;
                         this.models.clear();
                         cx.notify();
-                    }),
-                ),
-            )
-            .child(
-                Self::chip(
-                    t,
-                    "wire-anthropic",
-                    "Anthropic Messages",
-                    wire == Wire::Anthropic,
+                    })),
                 )
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.wire = Wire::Anthropic;
-                    this.models.clear();
-                    cx.notify();
-                })),
-            );
+                .child(
+                    Self::chip(t, "wire-gemini", Wire::Gemini.label(), wire == Wire::Gemini)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.wire = Wire::Gemini;
+                            this.models.clear();
+                            cx.notify();
+                        })),
+                );
         let model_section = self.model_picker(t, cx);
         let status = match &self.status {
             Status::Idle => None,
@@ -1460,22 +1352,54 @@ impl Settings {
     fn form_actions(&self, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
         let working = matches!(self.status, Status::Working(_));
         div()
-                    .flex()
-                    .justify_end()
-                    .gap(px(8.))
-                    .child(theme::text_button(t, "Cancel").id("cancel-form").on_click(cx.listener(|this, _, _, cx| {
+            .flex()
+            .justify_end()
+            .gap(px(8.))
+            .child(
+                theme::text_button(t, "Cancel")
+                    .id("cancel-form")
+                    .on_click(cx.listener(|this, _, _, cx| {
                         this.form = false;
                         cx.notify();
-                    })))
-                    .when(self.save_anyway && !working, |d| d.child(theme::ghost_button(t, "Save anyway").id("save-anyway").on_click(cx.listener(|this, _, window, cx| this.check_and_save(true, window, cx)))))
-                    .child(super::button::Button::primary("check-save", if working { "Checking…" } else { "Check and save" }).loading(working).on_click(cx.listener(|this, _, window, cx| this.check_and_save(false, window, cx))))
+                    })),
+            )
+            .when(self.save_anyway && !working, |d| {
+                d.child(
+                    theme::ghost_button(t, "Save anyway")
+                        .id("save-anyway")
+                        .on_click(
+                            cx.listener(|this, _, window, cx| {
+                                this.check_and_save(true, window, cx)
+                            }),
+                        ),
+                )
+            })
+            .child(
+                super::button::Button::primary(
+                    "check-save",
+                    if working {
+                        "Checking…"
+                    } else {
+                        "Check and save"
+                    },
+                )
+                .loading(working)
+                .on_click(
+                    cx.listener(|this, _, window, cx| this.check_and_save(false, window, cx)),
+                ),
+            )
             .into_any_element()
     }
 
     /// A status under the form: its icon, then the message, wrapped inside
     /// the form however long it is (a gateway's error can be a paragraph
     /// with a URL in it), at most four lines; the whole of it in the tooltip.
-    fn status_line(t: &Theme, color: gpui::Hsla, path: &'static str, text: SharedString) -> AnyElement {
+    fn status_line(
+        t: &Theme,
+        color: gpui::Hsla,
+        path: &'static str,
+        text: SharedString,
+    ) -> AnyElement {
         let tip = text.clone();
         div()
             .id("form-status")
@@ -1489,7 +1413,12 @@ impl Settings {
             .text_size(t.text.caption)
             .text_color(color)
             .line_height(relative(1.4))
-            .child(div().flex_none().pt(px(1.)).child(icon(path, t.size.icon_xs, color)))
+            .child(
+                div()
+                    .flex_none()
+                    .pt(px(1.))
+                    .child(icon(path, t.size.icon_xs, color)),
+            )
             .child(
                 div()
                     .flex_1()
@@ -1582,7 +1511,11 @@ impl Settings {
                 super::button::Button::icon(
                     "load-models",
                     "icons/refresh-cw.svg",
-                    if loaded { "Load the list again" } else { "Load the endpoint's models" },
+                    if loaded {
+                        "Load the list again"
+                    } else {
+                        "Load the endpoint's models"
+                    },
                 )
                 .compact()
                 .loading(loading)
@@ -1601,12 +1534,28 @@ impl Settings {
                 .py(t.space.xs)
                 .rounded(t.radius.field)
                 .border_1()
-                .border_color(if empty { t.colors.border } else { t.colors.primary.opacity(0.5) })
-                .bg(if empty { t.colors.canvas } else { t.colors.primary_tint })
+                .border_color(if empty {
+                    t.colors.border
+                } else {
+                    t.colors.primary.opacity(0.5)
+                })
+                .bg(if empty {
+                    t.colors.canvas
+                } else {
+                    t.colors.primary_tint
+                })
                 .child(icon(
-                    if empty { "icons/cpu.svg" } else { "icons/circle-check.svg" },
+                    if empty {
+                        "icons/cpu.svg"
+                    } else {
+                        "icons/circle-check.svg"
+                    },
                     t.size.icon_sm,
-                    if empty { t.colors.text_subtle } else { t.colors.primary },
+                    if empty {
+                        t.colors.text_subtle
+                    } else {
+                        t.colors.primary
+                    },
                 ))
                 .child(
                     div()
@@ -1621,11 +1570,16 @@ impl Settings {
                                 .text_ellipsis()
                                 .text_size(t.text.body_sm)
                                 .font_weight(FontWeight::MEDIUM)
-                                .text_color(if empty { t.colors.text_muted } else { t.colors.text_strong })
+                                .text_color(if empty {
+                                    t.colors.text_muted
+                                } else {
+                                    t.colors.text_strong
+                                })
                                 .child(if empty {
                                     "No model picked yet".to_string()
                                 } else {
-                                    m.and_then(|m| m.name.clone()).unwrap_or_else(|| picked.clone())
+                                    m.and_then(|m| m.name.clone())
+                                        .unwrap_or_else(|| picked.clone())
                                 }),
                         )
                         .child(
@@ -1646,8 +1600,13 @@ impl Settings {
                                 }),
                         ),
                 )
-                .children(m.and_then(|m| m.context).map(|c| chip(window_text(c), t.colors.text_muted)))
-                .when(m.is_some_and(|m| m.reasoning), |d| d.child(chip("Thinks".into(), t.colors.primary)))
+                .children(
+                    m.and_then(|m| m.context)
+                        .map(|c| chip(window_text(c), t.colors.text_muted)),
+                )
+                .when(m.is_some_and(|m| m.reasoning), |d| {
+                    d.child(chip("Thinks".into(), t.colors.primary))
+                })
         };
         // Before the list: the field takes the id itself.
         if !loaded {
@@ -1700,7 +1659,11 @@ impl Settings {
                     .hover(move |st| st.bg(hover))
                     .text_size(t.text.body_sm)
                     .text_color(t.colors.text)
-                    .child(icon("icons/pencil.svg", t.size.icon_sm, t.colors.text_muted))
+                    .child(icon(
+                        "icons/pencil.svg",
+                        t.size.icon_sm,
+                        t.colors.text_muted,
+                    ))
                     .child(
                         div()
                             .flex_1()
@@ -1719,7 +1682,10 @@ impl Settings {
         let mut group = None::<String>;
         for (i, m) in found.iter().take(SHOWN).enumerate() {
             let id = m.to_string();
-            let provider = id.split_once('/').map(|(p, _)| p.to_string()).unwrap_or_default();
+            let provider = id
+                .split_once('/')
+                .map(|(p, _)| p.to_string())
+                .unwrap_or_default();
             // Provider headings while browsing; a search ranks across them.
             if !searching && group.as_deref() != Some(provider.as_str()) {
                 rows = rows.child(
@@ -1730,7 +1696,11 @@ impl Settings {
                         .text_size(t.text.caption)
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(t.colors.text_subtle)
-                        .child(if provider.is_empty() { "Models".to_string() } else { provider.clone() }),
+                        .child(if provider.is_empty() {
+                            "Models".to_string()
+                        } else {
+                            provider.clone()
+                        }),
                 );
                 group = Some(provider);
             }
@@ -1782,7 +1752,11 @@ impl Settings {
                                     .whitespace_nowrap()
                                     .text_ellipsis()
                                     .text_size(t.text.body_sm)
-                                    .text_color(if on { t.colors.text_strong } else { t.colors.text })
+                                    .text_color(if on {
+                                        t.colors.text_strong
+                                    } else {
+                                        t.colors.text
+                                    })
                                     .when(on, |d| d.font_weight(FontWeight::MEDIUM))
                                     .child(name.clone().unwrap_or_else(|| id.clone())),
                             )
@@ -1809,8 +1783,13 @@ impl Settings {
                             }),
                     )
                     .children(ping)
-                    .when(mi.is_some_and(|m| m.reasoning), |d| d.child(chip("Thinks".into(), t.colors.primary)))
-                    .children(mi.and_then(|m| m.context).map(|c| chip(window_text(c), t.colors.text_muted)))
+                    .when(mi.is_some_and(|m| m.reasoning), |d| {
+                        d.child(chip("Thinks".into(), t.colors.primary))
+                    })
+                    .children(
+                        mi.and_then(|m| m.context)
+                            .map(|c| chip(window_text(c), t.colors.text_muted)),
+                    )
                     .child(div().flex_none().w(t.size.icon_sm).when(on, |d| {
                         d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.primary))
                     }))
@@ -1876,7 +1855,11 @@ impl Settings {
                             .border_b_1()
                             .border_color(t.colors.border)
                             .bg(t.colors.canvas)
-                            .child(icon("icons/search.svg", t.size.icon_sm, t.colors.text_subtle))
+                            .child(icon(
+                                "icons/search.svg",
+                                t.size.icon_sm,
+                                t.colors.text_subtle,
+                            ))
                             .child(
                                 div().flex_1().min_w_0().child(
                                     Input::new(&self.model_search)
@@ -1885,8 +1868,21 @@ impl Settings {
                                 ),
                             ),
                     )
-                    .child(self.test_bar(t, to_test, failed_ids.len(), running.is_some(), show_failed, cx))
-                    .child(super::hold_scroll(div().id("model-list").max_h(px(264.)), &self.model_scroll).child(rows)),
+                    .child(self.test_bar(
+                        t,
+                        to_test,
+                        failed_ids.len(),
+                        running.is_some(),
+                        show_failed,
+                        cx,
+                    ))
+                    .child(
+                        super::hold_scroll(
+                            div().id("model-list").max_h(px(264.)),
+                            &self.model_scroll,
+                        )
+                        .child(rows),
+                    ),
             )
             .into_any_element()
     }
@@ -1955,7 +1951,10 @@ impl Settings {
             .and_then(|n| {
                 let s = self.state.read(cx);
                 let e = s.endpoints.as_ref()?;
-                e.profiles.iter().find(|p| &p.name == n).map(|p| (p.headers.clone(), p.chat_path.clone()))
+                e.profiles
+                    .iter()
+                    .find(|p| &p.name == n)
+                    .map(|p| (p.headers.clone(), p.chat_path.clone()))
             })
             .unwrap_or_default();
         let base = Profile {
@@ -1971,7 +1970,8 @@ impl Settings {
             capabilities: Default::default(),
         };
         let key = self.key(cx);
-        self.state.update(cx, |s, cx| s.test_models(base, key, ids, cx));
+        self.state
+            .update(cx, |s, cx| s.test_models(base, key, ids, cx));
     }
 
     fn about(&self, t: &Theme) -> AnyElement {
@@ -2209,27 +2209,29 @@ impl Render for Settings {
                     .bg(t.colors.canvas)
                     .rounded_tr(PANEL_RADIUS - t.size.hairline)
                     .rounded_br(PANEL_RADIUS - t.size.hairline)
-                    .child(div()
-                    .id("settings-body")
-                    .flex_1()
-                    .min_h_0()
-                    .overflow_y_scroll()
-                    .pl(px(40.))
-                    .pr(px(56.))
-                    .pt(px(32.))
-                    .pb(px(40.))
-                    // A new section arrives: it fades in and rises into place
-                    // while the frame and the nav stay where they are.
-                    .child(super::motion::rise_in(
-                        div().child(body),
-                        SharedString::from(format!(
-                            "settings-page-{tab:?}-{}-{}",
-                            self.form,
-                            self.state.read(cx).diagnosis.is_some()
-                        )),
-                        6.,
-                        &t,
-                    )))
+                    .child(
+                        div()
+                            .id("settings-body")
+                            .flex_1()
+                            .min_h_0()
+                            .overflow_y_scroll()
+                            .pl(px(40.))
+                            .pr(px(56.))
+                            .pt(px(32.))
+                            .pb(px(40.))
+                            // A new section arrives: it fades in and rises into place
+                            // while the frame and the nav stay where they are.
+                            .child(super::motion::rise_in(
+                                div().child(body),
+                                SharedString::from(format!(
+                                    "settings-page-{tab:?}-{}-{}",
+                                    self.form,
+                                    self.state.read(cx).diagnosis.is_some()
+                                )),
+                                6.,
+                                &t,
+                            )),
+                    )
                     .children(actions.map(|a| {
                         div()
                             .flex_none()

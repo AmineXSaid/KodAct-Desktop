@@ -15,18 +15,22 @@ mod assets;
 mod attach;
 mod avatars;
 mod backend;
-mod error_words;
 mod browser;
 mod browser_mcp;
 mod commands;
 mod context;
+mod design;
+mod design_mcp;
 mod diagnose;
 mod diagram;
 mod doc_versions;
 mod downloads;
+mod draw;
 mod endpoints;
+mod error_words;
 mod export;
 mod fonts;
+mod i18n;
 mod forge_files;
 mod git_status;
 mod greeting;
@@ -50,6 +54,7 @@ mod rules;
 mod secrets;
 mod setting_profiles;
 mod shell_prompt;
+mod skill_install;
 mod stage;
 mod state;
 mod stubs;
@@ -95,6 +100,8 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("secondary-shift-c", CopyLastReply, None),
         KeyBinding::new("secondary-,", OpenSettings, None),
         KeyBinding::new("secondary-shift-r", OpenRules, None),
+        KeyBinding::new("secondary-shift-d", OpenDesign, None),
+        KeyBinding::new("secondary-shift-i", InstallSkill, None),
         KeyBinding::new("secondary-shift-p", OpenProjects, None),
         KeyBinding::new("secondary-q", Quit, None),
         KeyBinding::new("f1", ShowShortcuts, None),
@@ -121,6 +128,11 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("escape", StopReply, Some("Workspace")),
         // Not Ctrl+Shift+Esc: Windows keeps that for the Task Manager.
         KeyBinding::new("secondary-shift-x", StopAgents, Some("Workspace")),
+        // The browser's page, while it has the keyboard; Present anywhere.
+        KeyBinding::new("secondary-=", ZoomIn, Some("Browser")),
+        KeyBinding::new("secondary--", ZoomOut, Some("Browser")),
+        KeyBinding::new("secondary-0", ZoomReset, Some("Browser")),
+        KeyBinding::new("f11", Present, Some("Workspace")),
     ]);
     // Ctrl+Shift+` as a platform may spell it instead of Ctrl+~ (the
     // sheet lists the key once, as `ctrl-~`).
@@ -170,6 +182,21 @@ fn main() {
         web_view::guard(&args[2..]);
         return;
     }
+    // `--design-check`: load the design library and report on it (`design::check`).
+    if args.get(1).map(String::as_str) == Some("--design-check") {
+        std::process::exit(design::check(&args[2..]));
+    }
+    // `--design-mcp <devtools> <focus-file>`: serve the design tools
+    // (`design_mcp.rs`); an empty devtools address means no browser.
+    if args.get(1).map(String::as_str) == Some("--design-mcp") {
+        let devtools = args.get(2).cloned().unwrap_or_default();
+        let focus = args
+            .get(3)
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(browser::focus_file);
+        design_mcp::serve(&devtools, &focus);
+        return;
+    }
     if args.get(1).map(String::as_str) == Some("--browser-mcp") {
         let devtools = args.get(2).cloned().unwrap_or_default();
         let focus = args
@@ -180,11 +207,11 @@ fn main() {
         return;
     }
     log_crashes();
+    i18n::init();
     gpui::application()
         .with_assets(assets::Assets)
         .run(|cx: &mut App| {
             gpui::init(cx);
-            assets::load_fonts(cx);
             fonts::choose(cx);
             highlight::warm_up();
             theme::init(cx);

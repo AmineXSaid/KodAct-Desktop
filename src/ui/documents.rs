@@ -14,10 +14,15 @@ pub fn all(s: &AppState) -> Vec<(FileRef, usize, SharedString)> {
     let mut out: Vec<(FileRef, usize, SharedString)> = vec![];
     for c in chats {
         for m in c.messages.iter().rev() {
-            let Message::Assistant { blocks } = m else { continue };
+            let Message::Assistant { blocks } = m else {
+                continue;
+            };
             for b in blocks.iter().rev() {
                 if let Block::File(f) = b {
-                    if !out.iter().any(|(o, _, _)| o.name == f.name && o.path == f.path) {
+                    if !out
+                        .iter()
+                        .any(|(o, _, _)| o.name == f.name && o.path == f.path)
+                    {
                         out.push((f.clone(), c.id, c.title.clone()));
                     }
                 }
@@ -32,13 +37,34 @@ pub fn render(t: &Theme, state: &Entity<AppState>, s: &AppState, scale: f32) -> 
     let open = s.doc.as_ref().map(|d| (d.name.clone(), d.path.clone()));
     let count = files.len();
     let list = files.into_iter().enumerate().map(|(i, (f, chat, title))| {
-        let is_open = open.as_ref().is_some_and(|(n, p)| *n == f.name && *p == f.path);
+        let is_open = open
+            .as_ref()
+            .is_some_and(|(n, p)| *n == f.name && *p == f.path);
         let st = state.clone();
+        // A diagram reads where it is listed, as in a reply: drawn at its
+        // size with zoom, Open and Download, not a thumbnail to open first.
+        let key = format!("documents-{i}");
+        let view = super::file_card::DiagramView {
+            zoom: s
+                .diagram_zoom
+                .get(&super::file_card::zoom_key(&key))
+                .copied()
+                .unwrap_or(1.),
+            text_open: s.diagram_code.contains(&super::file_card::text_key(&key)),
+        };
         div()
             .flex()
             .flex_col()
             .gap(t.space.xs)
-            .child(super::file_card::render(&f, &format!("documents-{i}"), state.clone(), is_open, scale, t))
+            .child(super::file_card::render(
+                &f,
+                &key,
+                state.clone(),
+                is_open,
+                scale,
+                Some(view),
+                t,
+            ))
             .child(
                 div()
                     .id(("document-chat", i))

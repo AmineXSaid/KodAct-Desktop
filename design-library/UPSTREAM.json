@@ -1,0 +1,613 @@
+{
+ "open_design": {
+  "repo": "https://github.com/nexu-io/open-design",
+  "commit": "3b0df90f305c8279e748c292accf336d02b924ef",
+  "date": "2026-10-20",
+  "license": "Apache-2.0"
+ },
+ "roots": [
+  "LICENSE",
+  "craft",
+  "skills",
+  "design-systems",
+  "design-templates",
+  "templates",
+  "prompt-templates",
+  "plugins/_official",
+  "plugins/community",
+  "plugins/registry",
+  "plugins/spec",
+  "assets/frames",
+  "assets/prompt-templates",
+  "assets/community-pets",
+  "data/plugin-previews",
+  "figma-plugin",
+  "clipper/capture.js",
+  "clipper/brand-capture.js",
+  "apps/desktop/vendor/dom-to-pptx",
+  "docs/schemas"
+ ],
+ "counts": {
+  "files": 8865,
+  "media_files": 252,
+  "text_files": 8613,
+  "skills": 169,
+  "catalogue_skills": 85,
+  "design_systems": 152,
+  "design_templates": 115,
+  "craft": 11,
+  "official_atoms": 13,
+  "official_scenarios": 14,
+  "official_examples": 188,
+  "official_design_systems": 143,
+  "official_image_templates": 45,
+  "official_video_templates": 63
+ },
+ "skills": [
+  {
+   "stub": "ad-creative",
+   "repo": "https://github.com/coreyhaines31/marketingskills",
+   "commit": "e85f3cbc2e4a79bf33b2a12e9bdd9087d414735b",
+   "path": "skills/ad-creative",
+   "license": "MIT",
+   "license_file": "LICENSE"
+  },
+  {
+   "stub": "algorithmic-art",
+   "repo": "https://github.com/anthropics/skills",
+   "commit": "dbd4588f9e1033efb41dad4bef2f7947c8993d44",
+   "path": "skills/algorithmic-art",
+   "license": "Apache-2.0",
+   "license_file": "skills/algorithmic-art/LICENSE.txt"
+  },
+  {
+   "stub": "artifacts-builder",
+   "repo": "https://github.com/ComposioHQ/awesome-claude-skills",
+   "commit": "be2a406907dbc61b73e6827ded415c96139d13a2",
+   "path": "artifacts-builder",
+   "license": "Apache-2.0",
+   "license_file": "artifacts-builder/LICENSE.txt"
+  },
+  {
+   "stub": "brainstorming",
+   "repo": "https://github.com/obra/superpowers",
+   "commit": "b739a8af570e10a95898f2bdf6cec97467fa6c12",
+   "path": "skills/brainstorming",
+   "license": "MIT",
+   "license_file": "LICENSE"
+  },
+  {
+   "stub": "brand-guidelines",
+   "repo": "https://github.com/anthropics/skills",
+   "commit": "dbd4588f9e1033efb41dad4bef2f7947c8993d44",
+   "path": "skills/brand-guidelines",
+   "license": "Apache-2.0",
+   "license_file": "skills/brand-guidelines/LICENSE.txt"
+  },
+  {
+   "stub": "canvas-design",
+   "repo": "https://github.com/anthropics/skills",
+   "commit": "dbd4588f9e1033efb41dad4bef2f7947c8993d44",
+   "path": "skills/canvas-design",
+   "license": "Apache-2.0",
+   "license_file": "skills/canvas-design/LICENSE.txt"
+  },
+  {
+   "stub": "color-expert",
+   "repo": "https://github.com/meodai/skill.color-expert",
+   "commit": "29188b28ef2a7b374a1ea0fb71303f5252f0d372",
+   "path": "",
+   "license": "CC-BY-4.0",
+   "license_file": "LICENSE"
+  },
+  {
+   "stub": "copywriting",
+   "repo": "https://github.com/coreyhaines31/marketingskills",
+   "commit": "e85f3cbc2e4a79bf33b2a12e9bdd9087d414735b",
+   "path": "skills/copywriting",
+   "license": "MIT",
+   "license_file": "LICENSE"
+  },
+  {
+   "stub": "creative-director",
+   "repo": "https://github.com/smixs/creative-director-skill",
+   "commit": "ac06eb255371da35d1db0a146dbfcca8c8857543",
+   "path": "creative-director",
+   "license": "CC-BY-4.0",
+   "license_file": "LICENSE",
+   "notices": [
+    "NOTICE"
+   ]
+  },
+  {
+   "stub": "d3-visualization",
+   "repo": "https://github.com/jiannanya/snow-d3",
+   "commit": "f9c319c5f5b148f6c1c7d1669bcebb8a97b07b6f",
+   "path": "",
+   "license": "MIT",
+   "license_file": "LICENSE"
+  },
+  {
+   "stub": "design-consultation",
+   "repo": "https://github.com/garrytan/gstack",
+   "commit": "b616d6c53dd8fc0d8db210444b44a131b553b83e",
+   "path": "design-consultation",
+   "license": "MIT",
+   "license_file": "LICENSE",
+   "notices": [
+    "NOTICE.md"
+   ]
+  },
+  {
+   "stub": "design-review",
+   "repo": "https://github.com/garrytan/gstack",
+   "commit": "b616d6c53dd8fc0d8db210444b44a131b553b83e",
+   "path": "design-review",
+   "license": "MIT",
+   "license_file": "LICENSE",
+   "notices": [
+    "NOTICE.md"
+   ]
+  },
+  {
+   "stub": "frontend-dev",
+   "repo": "https://github.com/MiniMax-AI/skills",
+   "commit": "60aaae52bb2af8162732751a4332f62a5fef518b",
+   "path": "skills/frontend-dev",
+   "license": "MIT",
+   "license_file": "LICENSE",
+   "notices": [
+    "CREDITS.md"
+   ]
+  },
+  {
+   "stub": "frontend-slides",
+   "repo": "https://github.com/zarazhangrui/frontend-slides",
+   "commit": "9906a34d640d2111f724544cbc50f7f130569ae1",
+   "path": "plugins/frontend-slides/skills/frontend-slides",
+   "license": "MIT",
+   "license_file": "LICENSE"
+  },
+  {
+   "stub": "gif-sticker-maker",
+   "repo": "https://github.com/MiniMax-AI/skills",
+   "commit": "60aaae52bb2af8162732751a4332f62a5fef518b",
+   "path": "skills/gif-sticker-maker",
+   "license": "MIT",
+   "license_file": "LICENSE",
+   "notices": [
+    "CREDITS.md"
+   ]
+  },
+  {
+   "stub": "hand-drawn-diagrams",
+   "repo": "https://github.com/muthuishere/hand-drawn-diagrams",
+   "commit": "c8ffd6c3febbc0e745ab6691ea81c8703a9829c8",
+   "path": "",
+   "license": "MIT",
+   "license_file": "LICENSE"
+  },
+  {
+   "stub": "imagegen",
+   "repo": "https://github.com/openai/skills",
+   "commit": "49f948faa9258a0c61caceaf225e179651397431",
+   "path": "skills/.system/imagegen",
+   "license": "Apache-2.0",
+   "license_file": "skills/.system/imagegen/LICENSE.txt"
+  },
+  {
+   "stub": "marketing-psychology",
+   "repo": "https://github.com/coreyhaines31/marketingskills",
+   "commit": "e85f3cbc2e4a79bf33b2a12e9bdd9087d414735b",
+   "path": "skills/marketing-psychology",
+   "license": "MIT",
+   "license_file": "LICENSE"
+  },
+  {
+   "stub": "minimax-docx",
+   "repo": "https://github.com/MiniMax-AI/skills",
+   "commit": "60aaae52bb2af8162732751a4332f62a5fef518b",
+   "path": "skills/minimax-docx",
+   "license": "MIT",
+   "license_file": "skills/minimax-docx/LICENSE",
+   "notices": [
+    "CREDITS.md"
+   ]
+  },
+  {
+   "stub": "minimax-pdf",
+   "repo": "https://github.com/MiniMax-AI/skills",
+   "commit": "60aaae52bb2af8162732751a4332f62a5fef518b",
+   "path": "skills/minimax-pdf",
+   "license": "MIT",
+   "license_file": "LICENSE",
+   "notices": [
+    "CREDITS.md"
+   ]
+  },
+  {
+   "stub": "plan-design-review",
+   "repo": "https://github.com/garrytan/gstack",
+   "commit": "b616d6c53dd8fc0d8db210444b44a131b553b83e",
+   "path": "plan-design-review",
+   "license": "MIT",
+   "license_file": "LICENSE",
+   "notices": [
+    "NOTICE.md"
+   ]
+  },
+  {
+   "stub": "pptx-generator",
+   "repo": "https://github.com/MiniMax-AI/skills",
+   "commit": "60aaae52bb2af8162732751a4332f62a5fef518b",
+   "path": "skills/pptx-generator",
+   "license": "MIT",
+   "license_file": "LICENSE",
+   "notices": [
+    "CREDITS.md"
+   ]
+  },
+  {
+   "stub": "screenshot",
+   "repo": "https://github.com/openai/skills",
+   "commit": "49f948faa9258a0c61caceaf225e179651397431",
+   "path": "skills/.curated/screenshot",
+   "license": "Apache-2.0",
+   "license_file": "skills/.curated/screenshot/LICENSE.txt"
+  },
+  {
+   "stub": "shader-dev",
+   "repo": "https://github.com/MiniMax-AI/skills",
+   "commit": "60aaae52bb2af8162732751a4332f62a5fef518b",
+   "path": "skills/shader-dev",
+   "license": "MIT",
+   "license_file": "LICENSE",
+   "notices": [
+    "CREDITS.md"
+   ]
+  },
+  {
+   "stub": "slack-gif-creator",
+   "repo": "https://github.com/anthropics/skills",
+   "commit": "dbd4588f9e1033efb41dad4bef2f7947c8993d44",
+   "path": "skills/slack-gif-creator",
+   "license": "Apache-2.0",
+   "license_file": "skills/slack-gif-creator/LICENSE.txt"
+  },
+  {
+   "stub": "speech",
+   "repo": "https://github.com/openai/skills",
+   "commit": "49f948faa9258a0c61caceaf225e179651397431",
+   "path": "skills/.curated/speech",
+   "license": "Apache-2.0",
+   "license_file": "skills/.curated/speech/LICENSE.txt"
+  },
+  {
+   "stub": "swiftui-design",
+   "repo": "https://github.com/wholiver/swiftui-design-skill",
+   "commit": "2c82638ebd3c801d9d2d12b5f2d6c20495939995",
+   "path": "",
+   "license": "MIT",
+   "license_file": "LICENSE"
+  },
+  {
+   "stub": "theme-factory",
+   "repo": "https://github.com/anthropics/skills",
+   "commit": "dbd4588f9e1033efb41dad4bef2f7947c8993d44",
+   "path": "skills/theme-factory",
+   "license": "Apache-2.0",
+   "license_file": "skills/theme-factory/LICENSE.txt"
+  },
+  {
+   "stub": "ui-ux-pro-max",
+   "repo": "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill",
+   "commit": "56ea9cf174ed86786187daa9de0e6247cb0747e4",
+   "path": ".claude/skills/ui-ux-pro-max",
+   "license": "MIT",
+   "license_file": "LICENSE"
+  },
+  {
+   "stub": "venice-audio-music",
+   "repo": "https://github.com/veniceai/skills",
+   "commit": "5eaeac576c099fcad61b494a07799e5e66d1d334",
+   "path": "skills/venice-audio-music",
+   "license": "MIT",
+   "license_file": "LICENSE"
+  },
+  {
+   "stub": "venice-audio-speech",
+   "repo": "https://github.com/veniceai/skills",
+   "commit": "5eaeac576c099fcad61b494a07799e5e66d1d334",
+   "path": "skills/venice-audio-speech",
+   "license": "MIT",
+   "license_file": "LICENSE"
+  },
+  {
+   "stub": "venice-image-edit",
+   "repo": "https://github.com/veniceai/skills",
+   "commit": "5eaeac576c099fcad61b494a07799e5e66d1d334",
+   "path": "skills/venice-image-edit",
+   "license": "MIT",
+   "license_file": "LICENSE"
+  },
+  {
+   "stub": "venice-image-generate",
+   "repo": "https://github.com/veniceai/skills",
+   "commit": "5eaeac576c099fcad61b494a07799e5e66d1d334",
+   "path": "skills/venice-image-generate",
+   "license": "MIT",
+   "license_file": "LICENSE"
+  },
+  {
+   "stub": "venice-video",
+   "repo": "https://github.com/veniceai/skills",
+   "commit": "5eaeac576c099fcad61b494a07799e5e66d1d334",
+   "path": "skills/venice-video",
+   "license": "MIT",
+   "license_file": "LICENSE"
+  },
+  {
+   "stub": "web-artifacts-builder",
+   "repo": "https://github.com/anthropics/skills",
+   "commit": "dbd4588f9e1033efb41dad4bef2f7947c8993d44",
+   "path": "skills/web-artifacts-builder",
+   "license": "Apache-2.0",
+   "license_file": "skills/web-artifacts-builder/LICENSE.txt"
+  },
+  {
+   "stub": "youtube-clipper",
+   "repo": "https://github.com/op7418/Youtube-clipper-skill",
+   "commit": "f31f077ee0905c95a510a6f34bbd0c3c85b15129",
+   "path": "",
+   "license": "MIT",
+   "license_file": "LICENSE"
+  }
+ ],
+ "not_shipped": [
+  {
+   "stub": "ai-music-album",
+   "repo": "https://github.com/bitwize-music-studio/claude-ai-music-skills",
+   "why": "upstream has 53 skills and none is this one (renamed, split or removed)"
+  },
+  {
+   "stub": "apple-hig",
+   "repo": "https://github.com/raintree-technology/apple-hig-skills",
+   "why": "upstream has 15 skills and none is this one (renamed, split or removed)"
+  },
+  {
+   "stub": "competitive-ads-extractor",
+   "repo": "https://github.com/ComposioHQ/awesome-claude-skills",
+   "why": "no licence file: all rights reserved by default"
+  },
+  {
+   "stub": "design-md",
+   "repo": "https://github.com/google-labs-code/skills",
+   "why": "repository not found on GitHub (private, renamed or removed)"
+  },
+  {
+   "stub": "doc",
+   "repo": "https://github.com/openai/skills",
+   "why": "upstream has 44 skills and none is this one (renamed, split or removed)"
+  },
+  {
+   "stub": "docx",
+   "repo": "https://github.com/anthropics/skills",
+   "why": "proprietary licence (all rights reserved) (skills/docx/LICENSE.txt)"
+  },
+  {
+   "stub": "domain-name-brainstormer",
+   "repo": "https://github.com/ComposioHQ/awesome-claude-skills",
+   "why": "no licence file: all rights reserved by default"
+  },
+  {
+   "stub": "enhance-prompt",
+   "repo": "https://github.com/google-labs-code/skills",
+   "why": "repository not found on GitHub (private, renamed or removed)"
+  },
+  {
+   "stub": "fal-3d",
+   "repo": "https://github.com/fal-ai-community/skills",
+   "why": "upstream has 17 skills and none is this one (renamed, split or removed)"
+  },
+  {
+   "stub": "fal-generate",
+   "repo": "https://github.com/fal-ai-community/skills",
+   "why": "upstream has 17 skills and none is this one (renamed, split or removed)"
+  },
+  {
+   "stub": "fal-image-edit",
+   "repo": "https://github.com/fal-ai-community/skills",
+   "why": "upstream has 17 skills and none is this one (renamed, split or removed)"
+  },
+  {
+   "stub": "fal-kling-o3",
+   "repo": "https://github.com/fal-ai-community/skills",
+   "why": "upstream has 17 skills and none is this one (renamed, split or removed)"
+  },
+  {
+   "stub": "fal-lip-sync",
+   "repo": "https://github.com/fal-ai-community/skills",
+   "why": "upstream has 17 skills and none is this one (renamed, split or removed)"
+  },
+  {
+   "stub": "fal-realtime",
+   "repo": "https://github.com/fal-ai-community/skills",
+   "why": "upstream has 17 skills and none is this one (renamed, split or removed)"
+  },
+  {
+   "stub": "fal-restore",
+   "repo": "https://github.com/fal-ai-community/skills",
+   "why": "upstream has 17 skills and none is this one (renamed, split or removed)"
+  },
+  {
+   "stub": "fal-train",
+   "repo": "https://github.com/fal-ai-community/skills",
+   "why": "upstream has 17 skills and none is this one (renamed, split or removed)"
+  },
+  {
+   "stub": "fal-tryon",
+   "repo": "https://github.com/fal-ai-community/skills",
+   "why": "upstream has 17 skills and none is this one (renamed, split or removed)"
+  },
+  {
+   "stub": "fal-upscale",
+   "repo": "https://github.com/fal-ai-community/skills",
+   "why": "upstream has 17 skills and none is this one (renamed, split or removed)"
+  },
+  {
+   "stub": "fal-video-edit",
+   "repo": "https://github.com/fal-ai-community/skills",
+   "why": "upstream has 17 skills and none is this one (renamed, split or removed)"
+  },
+  {
+   "stub": "fal-vision",
+   "repo": "https://github.com/fal-ai-community/skills",
+   "why": "upstream has 17 skills and none is this one (renamed, split or removed)"
+  },
+  {
+   "stub": "figma-code-connect-components",
+   "repo": "https://github.com/openai/skills",
+   "why": "its own terms, not an open-source licence (skills/.curated/figma-code-connect-components/LICENSE.TXT)"
+  },
+  {
+   "stub": "figma-create-design-system-rules",
+   "repo": "https://github.com/openai/skills",
+   "why": "its own terms, not an open-source licence (skills/.curated/figma-create-design-system-rules/LICENSE.TXT)"
+  },
+  {
+   "stub": "figma-create-new-file",
+   "repo": "https://github.com/openai/skills",
+   "why": "its own terms, not an open-source licence (skills/.curated/figma-create-new-file/LICENSE.TXT)"
+  },
+  {
+   "stub": "figma-generate-design",
+   "repo": "https://github.com/openai/skills",
+   "why": "its own terms, not an open-source licence (skills/.curated/figma-generate-design/LICENSE.TXT)"
+  },
+  {
+   "stub": "figma-generate-library",
+   "repo": "https://github.com/openai/skills",
+   "why": "its own terms, not an open-source licence (skills/.curated/figma-generate-library/LICENSE.TXT)"
+  },
+  {
+   "stub": "figma-implement-design",
+   "repo": "https://github.com/openai/skills",
+   "why": "its own terms, not an open-source licence (skills/.curated/figma-implement-design/LICENSE.txt)"
+  },
+  {
+   "stub": "figma-use",
+   "repo": "https://github.com/openai/skills",
+   "why": "its own terms, not an open-source licence (skills/.curated/figma-use/LICENSE.TXT)"
+  },
+  {
+   "stub": "flutter-animating-apps",
+   "repo": "https://github.com/flutter/skills",
+   "why": "upstream has 31 skills and none is this one (renamed, split or removed)"
+  },
+  {
+   "stub": "frontend-skill",
+   "repo": "https://github.com/openai/skills",
+   "why": "upstream has 44 skills and none is this one (renamed, split or removed)"
+  },
+  {
+   "stub": "full-page-screenshot",
+   "repo": "https://github.com/LewisLiu007/full-page-screenshot",
+   "why": "no licence file: all rights reserved by default"
+  },
+  {
+   "stub": "image-enhancer",
+   "repo": "https://github.com/ComposioHQ/awesome-claude-skills",
+   "why": "no licence file: all rights reserved by default"
+  },
+  {
+   "stub": "imagen",
+   "repo": "https://github.com/sanjay3290/imagen",
+   "why": "repository not found on GitHub (private, renamed or removed)"
+  },
+  {
+   "stub": "nanobanana-ppt",
+   "repo": "https://github.com/op7418/NanoBanana-PPT-Skills",
+   "why": "no licence file: all rights reserved by default"
+  },
+  {
+   "stub": "paywall-upgrade-cro",
+   "repo": "https://github.com/coreyhaines31/marketingskills",
+   "why": "upstream has 52 skills and none is this one (renamed, split or removed)"
+  },
+  {
+   "stub": "pdf",
+   "repo": "https://github.com/anthropics/skills",
+   "why": "proprietary licence (all rights reserved) (skills/pdf/LICENSE.txt)"
+  },
+  {
+   "stub": "pixelbin-media",
+   "repo": "https://github.com/pixelbin-dev/skills",
+   "why": "repository not found on GitHub (private, renamed or removed)"
+  },
+  {
+   "stub": "platform-design",
+   "repo": "https://github.com/ehmo/platform-design-skills",
+   "why": "upstream has 8 skills and none is this one (renamed, split or removed)"
+  },
+  {
+   "stub": "pptx",
+   "repo": "https://github.com/anthropics/skills",
+   "why": "proprietary licence (all rights reserved) (skills/pptx/LICENSE.txt)"
+  },
+  {
+   "stub": "remotion",
+   "repo": "https://github.com/remotion-dev/remotion",
+   "why": "upstream has 87 skills and none is this one (renamed, split or removed)"
+  },
+  {
+   "stub": "replicate",
+   "repo": "https://github.com/replicate/skills",
+   "why": "upstream has 7 skills and none is this one (renamed, split or removed)"
+  },
+  {
+   "stub": "screenshots-marketing",
+   "repo": "https://github.com/Shpigford/screenshots",
+   "why": "repository not found on GitHub (private, renamed or removed)"
+  },
+  {
+   "stub": "shadcn-ui",
+   "repo": "https://github.com/google-labs-code/skills",
+   "why": "repository not found on GitHub (private, renamed or removed)"
+  },
+  {
+   "stub": "slides",
+   "repo": "https://github.com/openai/skills",
+   "why": "upstream has 44 skills and none is this one (renamed, split or removed)"
+  },
+  {
+   "stub": "sora",
+   "repo": "https://github.com/openai/skills",
+   "why": "upstream has 44 skills and none is this one (renamed, split or removed)"
+  },
+  {
+   "stub": "stitch-loop",
+   "repo": "https://github.com/google-labs-code/skills",
+   "why": "repository not found on GitHub (private, renamed or removed)"
+  },
+  {
+   "stub": "threejs",
+   "repo": "https://github.com/CloudAI-X/threejs-skills",
+   "why": "upstream has 13 skills and none is this one (renamed, split or removed)"
+  },
+  {
+   "stub": "ui-skills",
+   "repo": "https://github.com/ibelick/ui-skills",
+   "why": "upstream has 9 skills and none is this one (renamed, split or removed)"
+  },
+  {
+   "stub": "video-downloader",
+   "repo": "https://github.com/ComposioHQ/awesome-claude-skills",
+   "why": "no licence file: all rights reserved by default"
+  },
+  {
+   "stub": "wpds",
+   "repo": "https://github.com/WordPress/skills",
+   "why": "repository not found on GitHub (private, renamed or removed)"
+  }
+ ]
+}

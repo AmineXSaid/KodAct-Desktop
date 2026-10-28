@@ -221,7 +221,11 @@ pub fn render(
                             div()
                                 .text_size(t.text.caption)
                                 .text_color(t.colors.text_muted)
-                                .child(if v.runs.len() == 1 { "agent finished" } else { "agents finished" }),
+                                .child(if v.runs.len() == 1 {
+                                    "agent finished"
+                                } else {
+                                    "agents finished"
+                                }),
                         ),
                 )
                 .child(
@@ -233,12 +237,20 @@ pub fn render(
                         .child(fact(
                             "At work",
                             running.to_string(),
-                            if running > 0 { t.extra.live } else { t.colors.text_muted },
+                            if running > 0 {
+                                t.extra.live
+                            } else {
+                                t.colors.text_muted
+                            },
                         ))
                         .child(fact(
                             "Failed",
                             failed.to_string(),
-                            if failed > 0 { t.extra.danger } else { t.colors.text_muted },
+                            if failed > 0 {
+                                t.extra.danger
+                            } else {
+                                t.colors.text_muted
+                            },
                         ))
                         .child(fact("Steps", steps.to_string(), t.colors.text_strong))
                         .child(fact(
@@ -353,10 +365,7 @@ pub fn render(
             .unwrap_or(now)
             .saturating_duration_since(run.started);
         let (status_icon, status_color): (AnyElement, Hsla) = match status {
-            ToolStatus::Running => (
-                spinner(t, t.extra.live, format!("agent-{i}")),
-                t.extra.live,
-            ),
+            ToolStatus::Running => (spinner(t, t.extra.live, format!("agent-{i}")), t.extra.live),
             ToolStatus::Failed => (
                 icon("icons/circle-x.svg", t.size.icon_sm, t.extra.danger).into_any_element(),
                 t.extra.danger,

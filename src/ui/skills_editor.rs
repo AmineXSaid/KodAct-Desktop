@@ -29,6 +29,8 @@ pub struct SkillsEditor {
     error: Option<SharedString>,
     saving: bool,
     confirm: Option<PathBuf>,
+    /// The Install panel (`skill_install.rs`), shown while `AppState::skills_install`.
+    install: Entity<super::skill_install::SkillInstall>,
     _sub: Subscription,
 }
 
@@ -45,6 +47,8 @@ impl SkillsEditor {
                 TextareaState::new(window, cx)
                     .placeholder("Run pdftotext -layout on the file, then…")
             }),
+            install: cx
+                .new(|cx| super::skill_install::SkillInstall::new(state.clone(), window, cx)),
             state,
             form: None,
             scope: Scope::Project,
@@ -55,6 +59,10 @@ impl SkillsEditor {
     }
 
     pub fn back(&mut self, cx: &mut Context<Self>) -> bool {
+        if self.state.read(cx).skills_install {
+            self.install.update(cx, |i, cx| i.close(cx));
+            return true;
+        }
         let open = self.form.is_some() || self.confirm.is_some();
         self.form = None;
         self.confirm = None;
@@ -138,14 +146,26 @@ impl SkillsEditor {
         let s = self.state.read(cx);
         let project = s.project_dir.clone();
         let catalog = s.engine.catalog.clone();
-        let add = theme::primary_button(t, "New skill")
-            .id("new-skill")
-            .on_click(cx.listener(|this, _, window, cx| this.open(None, window, cx)))
+        let add = div()
+            .flex()
+            .gap(px(8.))
+            .child(
+                theme::ghost_button(t, "Install skill")
+                    .id("install-skill")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.state.update(cx, |s, cx| s.install_skill(cx));
+                    })),
+            )
+            .child(
+                theme::primary_button(t, "New skill")
+                    .id("new-skill")
+                    .on_click(cx.listener(|this, _, window, cx| this.open(None, window, cx))),
+            )
             .into_any_element();
         let mut out = div().flex().flex_col().gap(px(10.)).child(kit::header(
             t,
             "Skills",
-            "A skill is a folder of instructions (and any files they use). Only its name and description sit in the context; Forge reads the rest when the task fits.",
+            "A skill is a folder of instructions (and any files they use). Only its name and description sit in the context; Forge reads the rest when the task fits. Skills installed for Claude Code work here too.",
             Some(add),
         ));
         let Some(catalog) = catalog else {
@@ -271,6 +291,33 @@ impl SkillsEditor {
             .map(|p| (t.extra.danger, format!("SKILL.md has {p}.")));
         let (edit, del, toggle_dir, name) =
             (sk.clone(), sk.dir.clone(), sk.dir.clone(), sk.name.clone());
+        let claude = ff::is_claude_code(&sk.dir);
+        let installed = crate::skill_install::origin(&sk.dir);
+        let project = self.state.read(cx).project_dir.clone();
+        let note = note.or_else(|| {
+            installed.as_ref().map(|o| {
+                // `github.com/owner/repo`, or a folder as people read it.
+                let from = match o.source.split_once("://") {
+                    Some((_, rest)) => rest.to_string(),
+                    None => kit::short(std::path::Path::new(&o.source), &project),
+                };
+                // One line: a long path keeps its end, where the name is.
+                let n = from.chars().count();
+                let from = if n > 64 {
+                    format!("…{}", from.chars().skip(n - 63).collect::<String>())
+                } else {
+                    from
+                };
+                (t.colors.text_muted, format!("From {from}"))
+            })
+        });
+        let remote = self
+            .state
+            .read(cx)
+            .current_remote()
+            .filter(|_| sk.scope == Scope::User);
+        let (update_dir, update_name) = (sk.dir.clone(), sk.name.clone());
+        let copy = sk.clone();
         kit::card(t)
             .when(!enabled, |d| d.opacity(0.65))
             .child(icon(
@@ -279,6 +326,41 @@ impl SkillsEditor {
                 t.colors.text_muted,
             ))
             .child(kit::card_text(t, sk.name.clone(), true, Some(detail), note))
+            .when(claude, |d| d.child(kit::scope_pill(t, "Claude Code")))
+            .when(remote.is_some(), |d| {
+                d.child(
+                    kit::icon_button(
+                        t,
+                        SharedString::from(format!("copy-skill-{key}")),
+                        "icons/share.svg",
+                        "Copy to this project's machine (WSL, SSH)",
+                        false,
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| this.copy_to_remote(&copy, cx))),
+                )
+            })
+            .when(installed.is_some(), |d| {
+                d.child(
+                    kit::icon_button(
+                        t,
+                        SharedString::from(format!("update-skill-{key}")),
+                        "icons/refresh-cw.svg",
+                        "Update",
+                        false,
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        let (dir, name) = (update_dir.clone(), update_name.clone());
+                        this.state.update(cx, |s, cx| {
+                            s.engine_write(
+                                format!("Updated the {name} skill."),
+                                move |_| crate::skill_install::update_skill(&dir),
+                                cx,
+                            )
+                            .detach()
+                        });
+                    })),
+                )
+            })
             .child(
                 kit::chip(
                     t,
@@ -330,6 +412,35 @@ impl SkillsEditor {
                 })),
             )
             .into_any_element()
+    }
+
+    /// Copy one of your skills to the machine the current project is on (WSL, SSH),
+    /// into its `~/.claude/skills`, where ForgeCLI there finds it.
+    fn copy_to_remote(&mut self, sk: &ff::Skill, cx: &mut Context<Self>) {
+        let s = self.state.read(cx);
+        let Some(remote) = s.current_remote() else {
+            return;
+        };
+        let extra = s.remote_extra(&remote.target);
+        let (dir, name) = (sk.dir.clone(), sk.name.clone());
+        let label = remote.target.label();
+        self.state.update(cx, |s, cx| {
+            s.engine_write(
+                format!("Copied the {name} skill to {label}."),
+                move |_| {
+                    let found = crate::skill_install::read_skill(&dir)
+                        .ok_or("its SKILL.md can't be read")?;
+                    let source = crate::skill_install::Source::Folder(dir.clone());
+                    let root = dir.parent().unwrap_or(&dir).to_path_buf();
+                    crate::skill_install::install_skill_remote(
+                        &found, &source, &root, &remote, true, true, &extra,
+                    )
+                    .map(|_| ())
+                },
+                cx,
+            )
+            .detach()
+        });
     }
 
     fn form(&self, t: &Theme, cx: &mut Context<Self>) -> gpui::AnyElement {
@@ -398,6 +509,9 @@ impl SkillsEditor {
 impl Render for SkillsEditor {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
+        if self.state.read(cx).skills_install {
+            return self.install.clone().into_any_element();
+        }
         if self.form.is_some() {
             self.form(&t, cx)
         } else {

@@ -27,22 +27,45 @@ struct Changed {
 fn changes(messages: &[Message]) -> Vec<Changed> {
     let mut out: Vec<(SharedString, Changed)> = vec![];
     for (m, msg) in messages.iter().enumerate() {
-        let Message::Assistant { blocks } = msg else { continue };
+        let Message::Assistant { blocks } = msg else {
+            continue;
+        };
         for (b, block) in blocks.iter().enumerate() {
             let Block::Tool(c) = block else { continue };
             if !matches!(c.kind, ToolKind::Edit | ToolKind::Write) || c.status != ToolStatus::Done {
                 continue;
             }
-            let adds = c.diff.iter().filter(|l| l.kind == crate::state::DiffKind::Add).count();
-            let dels = c.diff.iter().filter(|l| l.kind == crate::state::DiffKind::Del).count();
+            let adds = c
+                .diff
+                .iter()
+                .filter(|l| l.kind == crate::state::DiffKind::Add)
+                .count();
+            let dels = c
+                .diff
+                .iter()
+                .filter(|l| l.kind == crate::state::DiffKind::Del)
+                .count();
             match out.iter_mut().find(|(t, _)| *t == c.target) {
                 Some((_, f)) => {
                     f.adds += adds;
                     f.dels += dels;
                 }
                 None => {
-                    let name = c.target.rsplit(['/', '\\']).next().unwrap_or(&c.target).to_string();
-                    out.push((c.target.clone(), Changed { name: name.into(), adds, dels, at: (m, b) }));
+                    let name = c
+                        .target
+                        .rsplit(['/', '\\'])
+                        .next()
+                        .unwrap_or(&c.target)
+                        .to_string();
+                    out.push((
+                        c.target.clone(),
+                        Changed {
+                            name: name.into(),
+                            adds,
+                            dels,
+                            at: (m, b),
+                        },
+                    ));
                 }
             }
         }
@@ -71,7 +94,13 @@ fn pct(n: u64, of: u64) -> String {
 }
 
 /// A card: its name and a chevron (a click folds it), then its body.
-fn card(t: &Theme, state: &Entity<AppState>, name: &'static str, folded: bool, body: AnyElement) -> AnyElement {
+fn card(
+    t: &Theme,
+    state: &Entity<AppState>,
+    name: &'static str,
+    folded: bool,
+    body: AnyElement,
+) -> AnyElement {
     let hover = t.colors.hover;
     let st = state.clone();
     div()
@@ -97,18 +126,29 @@ fn card(t: &Theme, state: &Entity<AppState>, name: &'static str, folded: bool, b
                 .text_color(t.colors.text_strong)
                 .child(name)
                 .child(icon(
-                    if folded { "icons/chevron-right.svg" } else { "icons/chevron-down.svg" },
+                    if folded {
+                        "icons/chevron-right.svg"
+                    } else {
+                        "icons/chevron-down.svg"
+                    },
                     t.size.icon_xs,
                     t.colors.text_subtle,
                 ))
                 .on_click(move |_, _, cx| st.update(cx, |s, cx| s.fold_session_card(name, cx))),
         )
-        .when(!folded, |d| d.child(div().px(t.space.md).pb(t.space.md).child(body)))
+        .when(!folded, |d| {
+            d.child(div().px(t.space.md).pb(t.space.md).child(body))
+        })
         .into_any_element()
 }
 
 /// A row: an icon in a fixed slot, the words, and something at its end.
-fn row(t: &Theme, glyph: &'static str, words: impl Into<SharedString>, end: Option<AnyElement>) -> gpui::Div {
+fn row(
+    t: &Theme,
+    glyph: &'static str,
+    words: impl Into<SharedString>,
+    end: Option<AnyElement>,
+) -> gpui::Div {
     div()
         .flex()
         .items_center()
@@ -130,7 +170,12 @@ fn row(t: &Theme, glyph: &'static str, words: impl Into<SharedString>, end: Opti
 }
 
 /// A small icon button at a row's end.
-fn end_button(t: &Theme, id: &'static str, glyph: &'static str, tip: &'static str) -> gpui::Stateful<gpui::Div> {
+fn end_button(
+    t: &Theme,
+    id: &'static str,
+    glyph: &'static str,
+    tip: &'static str,
+) -> gpui::Stateful<gpui::Div> {
     let hover = t.colors.hover;
     div()
         .id(id)
@@ -142,7 +187,13 @@ fn end_button(t: &Theme, id: &'static str, glyph: &'static str, tip: &'static st
         .child(icon(glyph, t.size.icon_sm, t.colors.text_muted))
 }
 
-fn environment(t: &Theme, state: &Entity<AppState>, s: &AppState, chat: usize, project: usize) -> AnyElement {
+fn environment(
+    t: &Theme,
+    state: &Entity<AppState>,
+    s: &AppState,
+    chat: usize,
+    project: usize,
+) -> AnyElement {
     let remote = s.chat_remote(chat);
     let place: (&'static str, String) = match &remote {
         Some(r) => (r.target.icon(), r.target.label()),
@@ -157,26 +208,40 @@ fn environment(t: &Theme, state: &Entity<AppState>, s: &AppState, chat: usize, p
             place.0,
             place.1,
             Some(
-                end_button(t, "session-remote", "icons/settings.svg", "Remote connection (Ctrl+Alt+O)")
-                    .on_click(|_, window, cx| window.dispatch_action(Box::new(crate::OpenRemoteMenu), cx))
-                    .into_any_element(),
+                end_button(
+                    t,
+                    "session-remote",
+                    "icons/settings.svg",
+                    "Remote connection (Ctrl+Alt+O)",
+                )
+                .on_click(|_, window, cx| {
+                    window.dispatch_action(Box::new(crate::OpenRemoteMenu), cx)
+                })
+                .into_any_element(),
             ),
         ))
         .child(row(
             t,
             "icons/folder.svg",
-            folder.map_or("No folder: a plain chat".to_string(), |p| p.name.to_string()),
+            folder.map_or("No folder: a plain chat".to_string(), |p| {
+                p.name.to_string()
+            }),
             Some({
                 let st = state.clone();
-                end_button(t, "session-move", "icons/plus.svg", "Move the chat to another project")
-                    .on_click(move |ev, _, cx| {
-                        let at = ev.position();
-                        st.update(cx, |s, cx| {
-                            s.chat_menu_from(chat, at, cx);
-                            s.show_chat_sub(Some(crate::state::ChatSub::Move), cx);
-                        })
+                end_button(
+                    t,
+                    "session-move",
+                    "icons/plus.svg",
+                    "Move the chat to another project",
+                )
+                .on_click(move |ev, _, cx| {
+                    let at = ev.position();
+                    st.update(cx, |s, cx| {
+                        s.chat_menu_from(chat, at, cx);
+                        s.show_chat_sub(Some(crate::state::ChatSub::Move), cx);
                     })
-                    .into_any_element()
+                })
+                .into_any_element()
             }),
         ))
         .when(folder.is_some() && !s.branch.is_empty(), |d| {
@@ -221,9 +286,21 @@ fn context(t: &Theme, state: &Entity<AppState>, s: &AppState, u: &ContextUsage) 
             .gap(t.space.sm)
             .min_h(px(22.))
             .text_size(t.text.body_sm)
-            .text_color(if quiet { t.colors.text_muted } else { t.colors.text })
+            .text_color(if quiet {
+                t.colors.text_muted
+            } else {
+                t.colors.text
+            })
             .child(div().flex_none().size(px(8.)).rounded(px(2.)).bg(swatch))
-            .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(name))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
+                    .child(name),
+            )
             .child(
                 div()
                     .flex_none()
@@ -242,7 +319,11 @@ fn context(t: &Theme, state: &Entity<AppState>, s: &AppState, u: &ContextUsage) 
                     .justify_end()
                     .text_size(t.text.caption)
                     .font_weight(FontWeight::MEDIUM)
-                    .text_color(if quiet { t.colors.text_muted } else { t.colors.text })
+                    .text_color(if quiet {
+                        t.colors.text_muted
+                    } else {
+                        t.colors.text
+                    })
                     .child(pct(n, window)),
             )
     };
@@ -267,12 +348,28 @@ fn context(t: &Theme, state: &Entity<AppState>, s: &AppState, u: &ContextUsage) 
                     .text_size(t.text.body_sm)
                     .text_color(t.colors.text_muted)
                     .child(icon(
-                        if open { "icons/chevron-down.svg" } else { "icons/chevron-right.svg" },
+                        if open {
+                            "icons/chevron-down.svg"
+                        } else {
+                            "icons/chevron-right.svg"
+                        },
                         t.size.icon_xs,
                         t.colors.text_subtle,
                     ))
-                    .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label))
-                    .child(div().text_size(t.text.caption).child(rows.len().to_string()))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .child(label),
+                    )
+                    .child(
+                        div()
+                            .text_size(t.text.caption)
+                            .child(rows.len().to_string()),
+                    )
                     .on_click(move |_, _, cx| st.update(cx, |s, cx| s.fold_session_card(key, cx))),
             )
             .when(open, |d| {
@@ -349,18 +446,24 @@ fn context(t: &Theme, state: &Entity<AppState>, s: &AppState, u: &ContextUsage) 
                 .pt(t.space.xs)
                 .border_t_1()
                 .border_color(t.colors.border)
-                .when(!u.tools.is_empty(), |d| d.child(list("list:tools", "Tools", &u.tools)))
+                .when(!u.tools.is_empty(), |d| {
+                    d.child(list("list:tools", "Tools", &u.tools))
+                })
                 .when(!u.memory_files.is_empty(), |d| {
                     d.child(list("list:memory", "Memory files", &u.memory_files))
                 })
-                .when(!u.skills.is_empty(), |d| d.child(list("list:skills", "Skills", &u.skills))),
+                .when(!u.skills.is_empty(), |d| {
+                    d.child(list("list:skills", "Skills", &u.skills))
+                }),
         )
         .into_any_element()
 }
 
 fn changed(t: &Theme, state: &Entity<AppState>, files: &[Changed], pr: bool) -> AnyElement {
     let hover = t.colors.hover;
-    let (adds, dels) = files.iter().fold((0, 0), |(a, d), f| (a + f.adds, d + f.dels));
+    let (adds, dels) = files
+        .iter()
+        .fold((0, 0), |(a, d), f| (a + f.adds, d + f.dels));
     if files.is_empty() {
         return div()
             .text_size(t.text.body_sm)

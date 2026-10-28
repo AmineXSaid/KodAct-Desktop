@@ -1,8 +1,8 @@
 //! Settings → Plugins: folders bundling commands, agents, skills, hooks and
 //! MCP servers, which ForgeCLI loads from the `pluginDirs` setting (relative
 //! paths are from the project). Forge's own plugin rides along with every
-//! chat. Add a folder, or remove one. ForgeCLI has no plugin marketplace, so
-//! there is nothing to browse: the screen says so instead of offering it.
+//! chat. Add a folder, or remove one; Marketplaces (`marketplaces.rs`)
+//! installs plugins from Claude Code marketplaces.
 
 use gpui::component::input::InputState;
 use gpui::{
@@ -25,6 +25,8 @@ pub struct PluginsEditor {
     found: std::collections::HashMap<String, Option<(String, String)>>,
     reading: bool,
     error: Option<SharedString>,
+    /// The marketplaces panel (`marketplaces.rs`), shown while `AppState::plugins_market`.
+    market: Entity<super::marketplaces::Marketplaces>,
     _subs: Vec<Subscription>,
 }
 
@@ -85,6 +87,7 @@ impl PluginsEditor {
             ),
         ];
         Self {
+            market: cx.new(|cx| super::marketplaces::Marketplaces::new(state.clone(), window, cx)),
             state,
             layer: Layer::Local,
             path,
@@ -197,14 +200,24 @@ impl PluginsEditor {
 impl Render for PluginsEditor {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t: Theme = cx.theme().clone();
+        if self.state.read(cx).plugins_market {
+            return self.market.clone().into_any_element();
+        }
         if self.values.is_none() {
             self.read(cx);
         }
+        let browse =
+            theme::ghost_button(&t, "Marketplaces")
+                .id("open-marketplaces")
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.state.update(cx, |s, cx| s.open_marketplaces(cx))
+                }))
+                .into_any_element();
         let mut out = div().flex().flex_col().gap(px(10.)).child(kit::header(
             &t,
             "Plugins",
-            "A plugin is a folder bundling commands, agents, skills, hooks and MCP servers. ForgeCLI loads the folders listed here into every chat.",
-            None,
+            "A plugin is a folder bundling commands, agents, skills, hooks and MCP servers, Claude Code's plugins included. ForgeCLI loads the folders listed here into every chat.",
+            Some(browse),
         ));
         out = out.child(
             div()
@@ -245,7 +258,7 @@ impl Render for PluginsEditor {
                 .children(kit::status(&t, &self.error)),
         );
         let Some(values) = self.values.clone() else {
-            return out.child(kit::loading(&t));
+            return out.child(kit::loading(&t)).into_any_element();
         };
         let problems: Vec<String> = values.iter().filter_map(|(_, v)| v.clone().err()).collect();
         out = out.children(kit::problems(&t, &problems));
@@ -319,12 +332,6 @@ impl Render for PluginsEditor {
                 ))
                 .child(kit::scope_pill(&t, "Built in")),
         );
-        out.child(
-            div()
-                .text_size(t.text.caption)
-                .text_color(t.colors.text_muted)
-                .line_height(gpui::relative(1.4))
-                .child("Planned: browsing and installing plugins from a marketplace. It waits on ForgeCLI, which loads plugin folders but has no marketplace yet."),
-        )
+        out.into_any_element()
     }
 }

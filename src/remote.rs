@@ -288,6 +288,14 @@ pub fn command(target: &Target, script: &str, args: &[String], extra: &Extra) ->
 /// `~` and `~/…` to the remote home, as a shell function the scripts share.
 const TILDE: &str = r#"x() { case $1 in "~") printf '%s' "$HOME";; "~/"*) printf '%s/%s' "$HOME" "${1#"~/"}";; *) printf '%s' "$1";; esac; }"#;
 
+/// A file the boot script writes before ForgeCLI starts: `HOST_FILE` names
+/// it, `HOST_TEXT` holds it. A design chat's prompt goes this way: too big
+/// for a command line, and too big for the environment (Linux caps one
+/// string at 128 KB, and a big one stops every program starting), so the
+/// script keeps the text in a shell variable it never exports.
+pub const HOST_FILE: &str = "FORGE_HOST_FILE";
+pub const HOST_TEXT: &str = "FORGE_HOST_TEXT";
+
 /// Starts ForgeCLI on the remote: `$1` the folder, `$2` ForgeCLI, the rest
 /// its arguments; the environment comes first on stdin, one `KEY=value` a
 /// line (backslash escapes, see [`env_line`]), ended by an empty line.
@@ -297,7 +305,18 @@ pub fn boot_script() -> String {
 d=$(x "$1"); f=$(x "$2"); shift 2
 n=$#
 while [ "$n" -gt 0 ]; do a=$(x "$1"); shift; set -- "$@" "$a"; n=$((n-1)); done
-while IFS= read -r l && [ -n "$l" ]; do export "$(printf '%b' "$l")"; done
+t=
+while IFS= read -r l && [ -n "$l" ]; do
+  case $l in
+    {HOST_TEXT}=*) t=$(printf '%b' "${{l#{HOST_TEXT}=}}");;
+    *) export "$(printf '%b' "$l")";;
+  esac
+done
+if [ -n "${{{HOST_FILE}:-}}" ]; then
+  h=$(x "${HOST_FILE}"); mkdir -p "${{h%/*}}" && printf '%s' "$t" > "$h"
+  unset {HOST_FILE}
+fi
+unset t
 cd "$d" 2>/dev/null || {{ echo "forge: there is no folder $d on $(uname -n)" >&2; exit 97; }}
 exec "$f" "$@""#
     )
@@ -611,7 +630,9 @@ fn waking(target: &Target, e: &Error) -> bool {
         Error::UnknownHostKey { .. } => false,
         Error::Other(m) => match target {
             Target::Wsl(_) => {
-                !(m.contains("There's no WSL distro") || m.contains("isn't installed") || m.contains("Forge runs remotely"))
+                !(m.contains("There's no WSL distro")
+                    || m.contains("isn't installed")
+                    || m.contains("Forge runs remotely"))
             }
             Target::Container { .. } => m.contains("Docker isn't running") || m.contains("failed"),
             Target::Ssh(_) => false,
@@ -623,7 +644,11 @@ fn waking(target: &Target, e: &Error) -> bool {
 /// stopped, Docker still starting) can fail or hang the first time while it
 /// boots, and answer a moment later. It gets a minute and a half, then two
 /// more tries, as a second click would, saying so meanwhile.
-pub fn probe_waking(target: &Target, extra: &Extra, progress: &dyn Fn(&str)) -> Result<Info, Error> {
+pub fn probe_waking(
+    target: &Target,
+    extra: &Extra,
+    progress: &dyn Fn(&str),
+) -> Result<Info, Error> {
     let limits = [90, 45, 45].map(Duration::from_secs);
     let mut last = None;
     for (i, limit) in limits.into_iter().enumerate() {
@@ -719,7 +744,13 @@ fn parse_listing(text: &str) -> (String, Vec<Entry>) {
 /// A remote file's bytes, up to `max` (bigger files are refused).
 /// Which of `paths` (from `dir`, or absolute) are files that changed at or
 /// after `since` (seconds since the epoch), each as its absolute path there.
-pub fn changed_since(target: &Target, dir: &str, paths: &[String], since: u64, extra: &Extra) -> Vec<String> {
+pub fn changed_since(
+    target: &Target,
+    dir: &str,
+    paths: &[String],
+    since: u64,
+    extra: &Extra,
+) -> Vec<String> {
     let script = format!(
         r#"{TILDE}
 cd "$(x "$1")" 2>/dev/null || exit 3; shift
@@ -756,6 +787,21 @@ cat -- "$f""#
     )
 }
 
+/// Which of `files` are there, each relative to `dir` (or absolute, or from
+/// `~`), checked in one go: a remote page's linked files, for `design_lint`.
+pub fn exist(target: &Target, dir: &str, files: &[String], extra: &Extra) -> Result<Vec<bool>, Error> {
+    let script = format!(
+        r#"{TILDE}
+cd "$(x "$1")" 2>/dev/null || exit 3
+shift
+for f; do if [ -e "$(x "$f")" ]; then echo 1; else echo 0; fi; done"#
+    );
+    let mut args = vec![dir.to_string()];
+    args.extend(files.iter().cloned());
+    let out = run(target, &script, &args, b"", Duration::from_secs(30), extra)?;
+    Ok(String::from_utf8_lossy(&out).lines().map(|l| l == "1").collect())
+}
+
 /// A remote project's files, relative to its folder, for the @ list:
 /// git's view (tracked and untracked, ignored ones left out) where it's a
 /// repository, else every file outside hidden folders.
@@ -783,6 +829,97 @@ cd "$(x "$1")" 2>/dev/null || exit 3
         .filter(|l| !l.is_empty())
         .map(str::to_string)
         .collect())
+}
+
+/// Put `files` (paths inside the folder, and their bytes) on the remote as the
+/// folder `dest`, whole: unpacked beside it first, then swapped in. With
+/// `replace` false, a folder already there is left alone and that is an error.
+pub fn put_dir(
+    target: &Target,
+    dest: &str,
+    files: &[(String, Vec<u8>)],
+    replace: bool,
+    extra: &Extra,
+) -> Result<(), Error> {
+    let refs: Vec<(&str, &[u8])> = files
+        .iter()
+        .map(|(p, b)| (p.as_str(), b.as_slice()))
+        .collect();
+    let mode = if replace { "replace" } else { "keep" };
+    run(
+        target,
+        &put_dir_script(),
+        &[dest.to_string(), mode.to_string()],
+        &tar(&refs),
+        Duration::from_secs(300),
+        extra,
+    )
+    .map(|_| ())
+}
+
+/// [`put_dir`]'s script: `$1` the folder, `$2` `keep` or `replace`, the tar on stdin.
+fn put_dir_script() -> String {
+    format!(
+        r#"{TILDE}
+d=$(x "$1"); t="$d.forge-tmp"
+if [ "$2" = keep ] && [ -e "$d" ]; then echo "$1 is already there" >&2; exit 3; fi
+mkdir -p "$(dirname "$d")" && rm -rf "$t" && mkdir -p "$t" && tar -xf - -C "$t" && rm -rf "$d" && mv "$t" "$d""#
+    )
+}
+
+/// The skills ForgeCLI on the remote loads, from its folders there (Claude
+/// Code's `~/.claude/skills`, yours in `$FORGE_HOME` or `~/.config/forge`,
+/// then the project's `.claude/skills` from its repository root down,
+/// `.agents` and `.forge`): each skill's folder name and its SKILL.md frontmatter.
+pub fn skill_heads(
+    target: &Target,
+    path: &str,
+    extra: &Extra,
+) -> Result<Vec<(String, String)>, Error> {
+    let script = format!(
+        r#"{TILDE}
+d=$(x "$1")
+u=${{FORGE_HOME:-${{XDG_CONFIG_HOME:-$HOME/.config}}/forge}}
+c=${{CLAUDE_CONFIG_DIR:-$HOME/.claude}}
+chain=""; p=$d; found=""
+while [ -n "$p" ]; do
+  chain="$p/.claude/skills
+$chain"
+  if [ -e "$p/.git" ]; then found=1; break; fi
+  [ "$p" = / ] && break
+  p=$(dirname "$p")
+done
+[ -n "$found" ] || chain="$d/.claude/skills"
+IFS='
+'
+for r in "$c/skills" "$u/skills" $chain "$d/.agents/skills" "$d/.forge/skills"; do
+  for f in "$r"/*/SKILL.md; do
+    [ -f "$f" ] || continue
+    printf '\036%s\n' "$(basename "$(dirname "$f")")"
+    head -n 80 "$f" | awk 'NR==1 && !/^---/ {{exit}} {{print}} NR>1 && /^---/ {{exit}}'
+  done
+done
+true"#
+    );
+    let out = run(
+        target,
+        &script,
+        &[path.to_string()],
+        b"",
+        Duration::from_secs(30),
+        extra,
+    )?;
+    Ok(parse_skill_heads(&String::from_utf8_lossy(&out)))
+}
+
+/// [`skill_heads`]' output: a record separator, the folder, then its frontmatter.
+fn parse_skill_heads(out: &str) -> Vec<(String, String)> {
+    out.split('\u{1e}')
+        .filter_map(|rec| {
+            let (folder, head) = rec.split_once('\n')?;
+            (!folder.is_empty()).then(|| (folder.to_string(), head.to_string()))
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------- discovery
@@ -1110,8 +1247,16 @@ fn wait_for_docker(wsl: Option<&str>, progress: &dyn Fn(&str)) -> Result<(), Err
     loop {
         match docker(wsl, &["version", "--format", "{{.Server.Version}}"]) {
             Ok(_) => return Ok(()),
-            Err(e) if start.elapsed() < Duration::from_secs(90)
-                && waking(&Target::Container { name: String::new(), user: None, wsl: wsl.map(str::to_string) }, &e) =>
+            Err(e)
+                if start.elapsed() < Duration::from_secs(90)
+                    && waking(
+                        &Target::Container {
+                            name: String::new(),
+                            user: None,
+                            wsl: wsl.map(str::to_string),
+                        },
+                        &e,
+                    ) =>
             {
                 if !said {
                     progress(match wsl {
@@ -1254,7 +1399,10 @@ fn labelled_source(name: &str, wsl: Option<&str>) -> Result<DevSource, Error> {
 
 /// A WSL folder's dev container definition: (its file's folder, the
 /// definition), the path made absolute (`~` resolved).
-fn find_wsl_devcontainer(distro: &str, path: &str) -> Result<(String, String, DevContainer), Error> {
+fn find_wsl_devcontainer(
+    distro: &str,
+    path: &str,
+) -> Result<(String, String, DevContainer), Error> {
     let target = Target::Wsl(distro.to_string());
     let script = format!(
         r#"{TILDE}
@@ -1297,7 +1445,11 @@ pub fn wsl_has_devcontainer(distro: &str, path: &str) -> bool {
 /// WSL (its Docker builds and runs it, the folder mounted from there).
 /// `fresh` rebuilds it: the old container goes, a Dockerfile is built again
 /// without cache, and the image is pulled again; postCreateCommand runs again.
-pub fn devcontainer_up(src: &DevSource, fresh: bool, progress: &dyn Fn(&str)) -> Result<Remote, Error> {
+pub fn devcontainer_up(
+    src: &DevSource,
+    fresh: bool,
+    progress: &dyn Fn(&str),
+) -> Result<Remote, Error> {
     // The folder (absolute), the definition's folder, and the definition.
     // Docker first: a WSL distro just booted, or Docker Desktop just
     // started, has no daemon for a while, and the first build failed on it.
@@ -1318,7 +1470,9 @@ pub fn devcontainer_up(src: &DevSource, fresh: bool, progress: &dyn Fn(&str)) ->
     let wsl = src.wsl();
     let join = |a: &str, b: &str| match src {
         DevSource::Local(_) => Path::new(a).join(b).to_string_lossy().into_owned(),
-        DevSource::Wsl { .. } => format!("{}/{}", a.trim_end_matches('/'), b.trim_start_matches("./")),
+        DevSource::Wsl { .. } => {
+            format!("{}/{}", a.trim_end_matches('/'), b.trim_start_matches("./"))
+        }
     };
     let base = src.base();
     let mut h = DefaultHasher::new();
@@ -1675,19 +1829,105 @@ pub fn browser_mcp_config(port: u16, token: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_folder_goes_up_whole_and_stays_unless_replaced() {
+        use std::io::Write;
+        let home = std::env::temp_dir().join(format!("forge-put-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(&home).unwrap();
+        let put = |files: &[(&str, &[u8])], mode: &str| {
+            let mut child = std::process::Command::new("sh")
+                .args([
+                    "-c",
+                    &super::put_dir_script(),
+                    "_",
+                    "~/.claude/skills/pdf",
+                    mode,
+                ])
+                .env("HOME", &home)
+                .stdin(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .unwrap();
+            child
+                .stdin
+                .take()
+                .unwrap()
+                .write_all(&super::tar(files))
+                .unwrap();
+            child.wait_with_output().unwrap()
+        };
+        let dir = home.join(".claude/skills/pdf");
+        assert!(put(
+            &[("SKILL.md", b"v1"), ("scripts/x.py", b"print(1)")],
+            "keep"
+        )
+        .status
+        .success());
+        assert_eq!(
+            std::fs::read(dir.join("scripts/x.py")).unwrap(),
+            b"print(1)"
+        );
+        let again = put(&[("SKILL.md", b"v2")], "keep");
+        assert!(
+            !again.status.success()
+                && String::from_utf8_lossy(&again.stderr).contains("already there")
+        );
+        assert!(put(&[("SKILL.md", b"v2")], "replace").status.success());
+        assert_eq!(std::fs::read(dir.join("SKILL.md")).unwrap(), b"v2");
+        assert!(!dir.join("scripts").exists(), "replaced whole");
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn a_remote_s_skills_are_read_from_their_frontmatter() {
+        let out = "\u{1e}tls\n---\nname: tls\ndescription: TLS\n---\n\u{1e}empty\n";
+        let heads = super::parse_skill_heads(out);
+        assert_eq!(
+            heads[0],
+            (
+                "tls".to_string(),
+                "---\nname: tls\ndescription: TLS\n---\n".to_string()
+            )
+        );
+        assert_eq!(heads[1], ("empty".to_string(), String::new()));
+        assert!(super::parse_skill_heads("").is_empty());
+    }
+
     use super::*;
 
     #[test]
     fn a_target_waking_up_is_tried_again_and_a_real_failure_is_not() {
         let wsl = Target::Wsl("Fedora".into());
-        let docker = Target::Container { name: "x".into(), user: None, wsl: None };
+        let docker = Target::Container {
+            name: "x".into(),
+            user: None,
+            wsl: None,
+        };
         let ssh = Target::Ssh("box".into());
         assert!(waking(&wsl, &Error::Timeout("WSL: Fedora".into())));
-        assert!(waking(&wsl, &Error::Other("WSL: Fedora: Wsl/Service/CreateInstance/E_FAIL".into())));
-        assert!(!waking(&wsl, &Error::Other("There's no WSL distro named Fedora.".into())));
-        assert!(waking(&docker, &Error::Other("Docker isn't running. Start Docker Desktop (or the docker service).".into())));
-        assert!(!waking(&docker, &Error::Other("There's no container named x.".into())));
-        assert!(!waking(&ssh, &Error::Other("box refused the connection: is its SSH server running?".into())));
+        assert!(waking(
+            &wsl,
+            &Error::Other("WSL: Fedora: Wsl/Service/CreateInstance/E_FAIL".into())
+        ));
+        assert!(!waking(
+            &wsl,
+            &Error::Other("There's no WSL distro named Fedora.".into())
+        ));
+        assert!(waking(
+            &docker,
+            &Error::Other(
+                "Docker isn't running. Start Docker Desktop (or the docker service).".into()
+            )
+        ));
+        assert!(!waking(
+            &docker,
+            &Error::Other("There's no container named x.".into())
+        ));
+        assert!(!waking(
+            &ssh,
+            &Error::Other("box refused the connection: is its SSH server running?".into())
+        ));
     }
 
     // A dev container that stopped, or was deleted, comes back as VS Code's
@@ -1706,11 +1946,33 @@ mod tests {
     fn documents_made_in_a_container_are_found_by_when_they_changed() {
         let name = "forge-test-docs";
         let _ = docker(None, &["rm", "-f", name]);
-        docker(None, &["run", "-d", "--name", name, "alpine:3.20", "sleep", "infinity"]).unwrap();
+        docker(
+            None,
+            &[
+                "run",
+                "-d",
+                "--name",
+                name,
+                "alpine:3.20",
+                "sleep",
+                "infinity",
+            ],
+        )
+        .unwrap();
         let t = container(name);
         let x = Extra::default();
-        run(&t, "mkdir -p /w/out && touch -d @1000 /w/old.pdf && touch /w/out/new.docx", &[], b"", Duration::from_secs(20), &x).unwrap();
-        let paths = ["old.pdf", "out/new.docx", "missing.xlsx"].map(String::from).to_vec();
+        run(
+            &t,
+            "mkdir -p /w/out && touch -d @1000 /w/old.pdf && touch /w/out/new.docx",
+            &[],
+            b"",
+            Duration::from_secs(20),
+            &x,
+        )
+        .unwrap();
+        let paths = ["old.pdf", "out/new.docx", "missing.xlsx"]
+            .map(String::from)
+            .to_vec();
         let found = changed_since(&t, "/w", &paths, 5000, &x);
         let _ = docker(None, &["rm", "-f", name]);
         assert_eq!(found, ["/w/out/new.docx"]);
@@ -1721,9 +1983,28 @@ mod tests {
     fn a_stopped_container_comes_back() {
         let name = "forge-test-stopped";
         let _ = docker(None, &["rm", "-f", name]);
-        docker(None, &["run", "-d", "--name", name, "alpine:3.20", "sleep", "infinity"]).unwrap();
+        docker(
+            None,
+            &[
+                "run",
+                "-d",
+                "--name",
+                name,
+                "alpine:3.20",
+                "sleep",
+                "infinity",
+            ],
+        )
+        .unwrap();
         docker(None, &["stop", "-t", "1", name]).unwrap();
-        let out = run(&container(name), "echo hi", &[], b"", Duration::from_secs(60), &Extra::default());
+        let out = run(
+            &container(name),
+            "echo hi",
+            &[],
+            b"",
+            Duration::from_secs(60),
+            &Extra::default(),
+        );
         let _ = docker(None, &["rm", "-f", name]);
         assert_eq!(String::from_utf8_lossy(&out.unwrap()).trim(), "hi");
     }
@@ -1734,12 +2015,25 @@ mod tests {
         let root = std::env::temp_dir().join(format!("forge-dc-back-{}", std::process::id()));
         let dir = root.join("proj");
         std::fs::create_dir_all(dir.join(".devcontainer")).unwrap();
-        std::fs::write(dir.join(".devcontainer/devcontainer.json"), r#"{"image":"alpine:3.20"}"#).unwrap();
+        std::fs::write(
+            dir.join(".devcontainer/devcontainer.json"),
+            r#"{"image":"alpine:3.20"}"#,
+        )
+        .unwrap();
         std::env::set_var("FORGE_CONFIG_DIR", root.join("config"));
         let remote = devcontainer_up(&DevSource::Local(dir.clone()), true, &|_| {}).unwrap();
-        let Target::Container { name, .. } = &remote.target else { panic!() };
+        let Target::Container { name, .. } = &remote.target else {
+            panic!()
+        };
         docker(None, &["rm", "-f", name]).unwrap();
-        let out = run(&remote.target, "echo back", &[], b"", Duration::from_secs(120), &Extra::default());
+        let out = run(
+            &remote.target,
+            "echo back",
+            &[],
+            b"",
+            Duration::from_secs(120),
+            &Extra::default(),
+        );
         let _ = docker(None, &["rm", "-f", name]);
         let _ = std::fs::remove_dir_all(&root);
         assert_eq!(String::from_utf8_lossy(&out.unwrap()).trim(), "back");
@@ -1926,6 +2220,32 @@ mod tests {
             home.display()
         );
         assert_eq!(out, want);
+        std::fs::remove_dir_all(home).ok();
+    }
+
+    /// A long file in the environment (a design chat's prompt) is written
+    /// where it's named, and gone from what ForgeCLI inherits.
+    #[cfg(unix)]
+    #[test]
+    fn boot_writes_the_host_file() {
+        let home = std::env::temp_dir().join(format!("forge-boot-file-{}", std::process::id()));
+        std::fs::create_dir_all(&home).unwrap();
+        let text = format!("# Prompt\nwith a \\ and 'quotes' $HOME\n{}", "x".repeat(200_000));
+        let mut prelude = env_line(HOST_FILE, "~/p/design.md");
+        prelude.push_str(&env_line(HOST_TEXT, &text));
+        prelude.push('\n');
+        let mut child = Command::new("sh")
+            .args(["-c", &boot_script(), "sh", "~", "/bin/sh", "-c"])
+            .arg(r#"printf '%s|%s' "${FORGE_HOST_TEXT:-gone}" "${FORGE_HOST_FILE:-gone}""#)
+            .env("HOME", &home)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        child.stdin.take().unwrap().write_all(prelude.as_bytes()).unwrap();
+        let out = String::from_utf8(child.wait_with_output().unwrap().stdout).unwrap();
+        assert_eq!(out, "gone|gone");
+        assert_eq!(std::fs::read_to_string(home.join("p/design.md")).unwrap(), text);
         std::fs::remove_dir_all(home).ok();
     }
 
@@ -2390,9 +2710,10 @@ mod tests {
             }
             std::fs::write(dir.join("hello.txt"), "from the host\n").unwrap();
             let said = std::sync::Mutex::new(vec![]);
-            let remote =
-                devcontainer_up(&DevSource::Local(dir.clone()), false, &|m| said.lock().unwrap().push(m.to_string()))
-                    .unwrap();
+            let remote = devcontainer_up(&DevSource::Local(dir.clone()), false, &|m| {
+                said.lock().unwrap().push(m.to_string())
+            })
+            .unwrap();
             assert_eq!(
                 remote.path,
                 if case == "image" {
@@ -2471,11 +2792,16 @@ mod tests {
         let Target::Container { name, .. } = &first.target else {
             unreachable!()
         };
-        assert_eq!(devcontainer_source(name, None).unwrap(), DevSource::Local(dir.clone()));
+        assert_eq!(
+            devcontainer_source(name, None).unwrap(),
+            DevSource::Local(dir.clone())
+        );
         sh(&first, "touch /tmp/changed-inside");
         let said = std::sync::Mutex::new(vec![]);
-        let again =
-            devcontainer_up(&DevSource::Local(dir.clone()), true, &|m| said.lock().unwrap().push(m.to_string())).unwrap();
+        let again = devcontainer_up(&DevSource::Local(dir.clone()), true, &|m| {
+            said.lock().unwrap().push(m.to_string())
+        })
+        .unwrap();
         assert_eq!(again, first, "same name and folder");
         let said = said.lock().unwrap().clone();
         assert!(said.iter().any(|m| m.contains("Removing")), "{said:?}");
@@ -2649,7 +2975,11 @@ mod wsl_devcontainer_tests {
         let plain = Remote::parse(Path::new("container://web/srv")).unwrap();
         assert_eq!(
             plain.target,
-            Target::Container { name: "web".into(), user: None, wsl: None }
+            Target::Container {
+                name: "web".into(),
+                user: None,
+                wsl: None
+            }
         );
     }
 
@@ -2672,7 +3002,10 @@ mod wsl_devcontainer_tests {
     fn docker_on_wsl_goes_through_wsl_exe() {
         let c = docker_command(Some("Ubuntu"));
         assert_eq!(c.get_program(), "wsl.exe");
-        let args: Vec<_> = c.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        let args: Vec<_> = c
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
         assert_eq!(args, ["-d", "Ubuntu", "--exec", "docker"]);
         assert_eq!(docker_command(None).get_program(), "docker");
     }

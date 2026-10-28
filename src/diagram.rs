@@ -18,6 +18,55 @@ pub fn is_diagram(name: &str, content: &str) -> bool {
     }
 }
 
+/// `svg` with every font it names set in Anthropic Sans Text: each
+/// `font-family` attribute and CSS declaration, whatever face the drawing
+/// asked for. Forge draws in no other face.
+pub fn brand_fonts(svg: &str) -> String {
+    const FACE: &str = "'Anthropic Sans Text'";
+    let mut out = String::with_capacity(svg.len());
+    let mut rest = svg;
+    while let Some(at) = rest.find("font-family") {
+        let after = &rest[at + "font-family".len()..];
+        let lead = after.len() - after.trim_start().len();
+        let sep = after[lead..].chars().next();
+        out.push_str(&rest[..at + "font-family".len() + lead]);
+        let value = &after[lead..];
+        match sep {
+            // An attribute: font-family="…" (or '…').
+            Some('=') => {
+                let v = value[1..].trim_start();
+                let quote = v.chars().next().filter(|q| *q == '"' || *q == '\'');
+                match quote.and_then(|q| v[1..].find(q).map(|end| (q, end))) {
+                    Some((q, end)) => {
+                        let face = if q == '"' {
+                            FACE.to_string()
+                        } else {
+                            FACE.replace('\'', "\"")
+                        };
+                        out.push_str(&format!("={q}{face}{q}"));
+                        rest = &v[1 + end + 1..];
+                    }
+                    None => {
+                        out.push('=');
+                        rest = &value[1..];
+                    }
+                }
+            }
+            // A declaration: font-family: …; up to `;`, `}` or the attribute's quote.
+            Some(':') => {
+                let body = &value[1..];
+                let end = body.find([';', '}', '"', '<']).unwrap_or(body.len());
+                out.push_str(": ");
+                out.push_str(FACE);
+                rest = &body[end..];
+            }
+            _ => rest = value,
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
 /// The first top-level `<svg>…</svg>` in `content`, nested ones included.
 pub fn extract_svg(content: &str) -> Option<&str> {
     let start = content.find("<svg")?;
@@ -171,6 +220,28 @@ fn unescape(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn every_font_a_drawing_names_becomes_anthropic_sans() {
+        let svg = r#"<svg><style>text { font-family: 'Geist', sans-serif; fill: red } .m{font-family:JetBrains Mono}</style><text font-family="Hanken Grotesk, Arial" x="1">a</text><text style="font-family: Inter; font-size: 9px">b</text><text font-family='Lilex'>c</text></svg>"#;
+        let out = super::brand_fonts(svg);
+        for gone in [
+            "Geist",
+            "sans-serif",
+            "JetBrains",
+            "Hanken",
+            "Arial",
+            "Inter",
+            "Lilex",
+        ] {
+            assert!(!out.contains(gone), "{gone} in {out}");
+        }
+        assert_eq!(out.matches("Anthropic Sans Text").count(), 5, "{out}");
+        assert!(
+            out.contains("fill: red") && out.contains("font-size: 9px") && out.contains(r#"x="1""#)
+        );
+        assert_eq!(super::brand_fonts("<svg/>"), "<svg/>");
+    }
+
     use super::*;
 
     const PAGE: &str = r##"<!DOCTYPE html><html><body><p class="eyebrow">Architecture · Diagram Design</p><h1>How a chat reaches a model</h1>
@@ -244,11 +315,17 @@ mod tests {
             "template-dark.html",
         ] {
             let t = std::fs::read_to_string(format!("{root}/assets/{template}")).unwrap();
-            assert!(
-                t.contains("'Hanken Grotesk'") && t.contains("'JetBrains Mono'"),
-                "{template}"
-            );
-            for old in ["Geist", "Instrument", "#bf4520", "#2d3142", "#f5f5f5"] {
+            assert!(t.contains("'Anthropic Sans Text'"), "{template}");
+            for old in [
+                "Geist",
+                "Instrument",
+                "Hanken",
+                "JetBrains",
+                "googleapis",
+                "#bf4520",
+                "#2d3142",
+                "#f5f5f5",
+            ] {
                 assert!(!t.contains(old), "{template} still has {old}");
             }
         }

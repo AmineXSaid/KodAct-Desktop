@@ -213,6 +213,170 @@ fn chip(a: &Attachment, id: SharedString, t: &Theme, remove: Option<OnRemove>) -
         .into_any_element()
 }
 
+/// A pasted text or a picture as Claude's box shows it: a square tile. A
+/// pasted text shows its first words, small and wrapped, over a "Pasted"
+/// badge; a picture fills it. In the box the tile has × (on hover) and a
+/// pencil: edit the text, or draw on the picture (`attachment_editor.rs`).
+fn tile(
+    a: &Attachment,
+    id: SharedString,
+    t: &Theme,
+    remove: Option<OnRemove>,
+    edit: Option<OnRemove>,
+    open: Option<OnRemove>,
+) -> AnyElement {
+    let hover = t.colors.hover;
+    let group: SharedString = format!("{id}-group").into();
+    let side = t.size.attach_tile;
+    let body: AnyElement = match (a.kind, thumbnail(a)) {
+        (_, Some(image)) => img(image)
+            .absolute()
+            .inset_0()
+            .size_full()
+            .object_fit(ObjectFit::Cover)
+            .into_any_element(),
+        _ => {
+            // The first words only: a tile shows a few lines, never the whole paste.
+            let text: String = a
+                .text
+                .as_deref()
+                .unwrap_or_default()
+                .chars()
+                .take(320)
+                .collect::<String>()
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
+            div()
+                .text_size(px(9.))
+                .line_height(gpui::relative(1.35))
+                .text_color(t.colors.text_muted)
+                .line_clamp(5)
+                .overflow_hidden()
+                .child(text)
+                .into_any_element()
+        }
+    };
+    let is_text = a.kind == Kind::Pasted;
+    let badge = is_text.then(|| {
+        div()
+            .flex_none()
+            .px(px(5.))
+            .h(px(16.))
+            .flex()
+            .items_center()
+            .rounded(t.radius.small)
+            .border_1()
+            .border_color(t.colors.border)
+            .bg(t.colors.surface)
+            .text_size(px(10.))
+            .font_weight(gpui::FontWeight::MEDIUM)
+            .text_color(t.colors.text_muted)
+            .child("Pasted")
+    });
+    let pencil = edit.map(|edit| {
+        div()
+            .id(SharedString::from(format!("{id}-edit")))
+            .flex_none()
+            .size(px(20.))
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded(t.radius.small)
+            .bg(t.colors.surface)
+            .border_1()
+            .border_color(t.colors.border)
+            .cursor_pointer()
+            .hover(move |d| d.bg(hover))
+            .tooltip(move |window, cx| {
+                gpui::component::tooltip::Tooltip::new(if is_text {
+                    "Edit the pasted text"
+                } else {
+                    "Draw on the picture"
+                })
+                .build(window, cx)
+            })
+            .child(icon(
+                "icons/pencil.svg",
+                t.size.icon_xs,
+                t.colors.text_muted,
+            ))
+            .on_click(move |_, _, cx| {
+                cx.stop_propagation();
+                edit(cx)
+            })
+    });
+    let x = remove.map(|remove| {
+        div()
+            .id(SharedString::from(format!("{id}-x")))
+            .absolute()
+            .top(px(4.))
+            .right(px(4.))
+            .size(px(18.))
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded_full()
+            .bg(t.colors.surface)
+            .border_1()
+            .border_color(t.colors.border)
+            .cursor_pointer()
+            .invisible()
+            .group_hover(group.clone(), |d| d.visible())
+            .child(icon("icons/x.svg", t.size.icon_xs, t.colors.text_muted))
+            .on_click(move |_, _, cx| {
+                cx.stop_propagation();
+                remove(cx)
+            })
+    });
+    let name = a.name.clone();
+    let summary: SharedString = a.summary().into();
+    div()
+        .id(id.clone())
+        .group(group.clone())
+        .relative()
+        .flex_none()
+        .size(side)
+        .rounded(t.radius.card)
+        .overflow_hidden()
+        .border_1()
+        .border_color(t.colors.border)
+        .bg(t.extra.inset)
+        .when(open.is_some(), |d| d.cursor_pointer())
+        .tooltip(move |window, cx| {
+            gpui::component::tooltip::Tooltip::new(format!("{name}\n{summary}")).build(window, cx)
+        })
+        .child(
+            div()
+                .absolute()
+                .inset_0()
+                .p(px(8.))
+                .flex()
+                .flex_col()
+                .justify_between()
+                // A picture fills the tile: its pencil sits in the bottom corner.
+                .when(!is_text, |d| d.justify_end())
+                .child(body)
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .children(badge)
+                        .when(!is_text, |d| d.child(div()))
+                        .children(pencil),
+                ),
+        )
+        .children(x)
+        .when_some(open, |d, open| d.on_click(move |_, _, cx| open(cx)))
+        .into_any_element()
+}
+
+/// A tile, not a chip: pasted texts and pictures.
+fn tiled(a: &Attachment) -> bool {
+    !a.pending && (a.kind == Kind::Pasted || thumbnail(a).is_some())
+}
+
 /// The composer's pending attachments, each removable.
 pub fn pending(t: &Theme, state: &Entity<AppState>, cx: &gpui::App) -> Option<AnyElement> {
     let list = &state.read(cx).attachments;
@@ -227,14 +391,33 @@ pub fn pending(t: &Theme, state: &Entity<AppState>, cx: &gpui::App) -> Option<An
         .pt(px(10.));
     for (i, a) in list.iter().enumerate() {
         let st = state.clone();
-        row = row.child(chip(
-            a,
-            format!("attach-{i}").into(),
-            t,
-            Some(Box::new(move |cx| {
-                st.update(cx, |s, cx| s.remove_attachment(i, cx))
-            })),
-        ));
+        let remove: OnRemove =
+            Box::new(move |cx| st.update(cx, |s, cx| s.remove_attachment(i, cx)));
+        if tiled(a) {
+            let (st_edit, st_open, id, a2) = (state.clone(), state.clone(), a.id, a.clone());
+            row = row.child(tile(
+                a,
+                format!("attach-{i}").into(),
+                t,
+                Some(remove),
+                Some(Box::new(move |cx| {
+                    st_edit.update(cx, |s, cx| s.edit_attachment(id, cx))
+                })),
+                Some(Box::new(move |cx| {
+                    let a = a2.clone();
+                    st_open.update(cx, |s, cx| {
+                        // A picture opens to draw on; a text to read whole.
+                        if a.kind == Kind::Pasted {
+                            s.open_attachment(a, cx)
+                        } else {
+                            s.edit_attachment(a.id, cx)
+                        }
+                    })
+                })),
+            ));
+        } else {
+            row = row.child(chip(a, format!("attach-{i}").into(), t, Some(remove)));
+        }
     }
     Some(row.into_any_element())
 }
@@ -252,6 +435,23 @@ pub fn sent(
     }
     let mut row = div().flex().flex_wrap().justify_end().gap(t.space.xs);
     for (i, a) in list.iter().enumerate() {
+        if tiled(a) {
+            let (st, a2) = (state.clone(), a.clone());
+            row = row.child(tile(
+                a,
+                format!("sent-{key}-{i}").into(),
+                t,
+                None,
+                None,
+                (a.kind == Kind::Pasted).then(|| -> OnRemove {
+                    Box::new(move |cx| {
+                        let a = a2.clone();
+                        st.update(cx, |s, cx| s.open_attachment(a, cx))
+                    })
+                }),
+            ));
+            continue;
+        }
         let opens = !matches!(a.kind, Kind::Image(_)) && !a.pending;
         let (st, a2) = (state.clone(), a.clone());
         let ring = t.colors.primary;

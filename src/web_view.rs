@@ -26,6 +26,9 @@ use serde_json::{json, Value};
 
 /// The page size before the panel says its own, in CSS pixels.
 pub const VIEWPORT: (u32, u32) = (1280, 800);
+/// Room the headless window has beyond the page: its own bar (139 px) and,
+/// for a while, a warning bar (53 px) take some of its height.
+const WINDOW_SPARE: u32 = 240;
 
 /// What the panel asks of the browser.
 #[derive(Debug, Clone, PartialEq)]
@@ -79,6 +82,15 @@ pub enum Cmd {
     Show(String),
     NewTab(String),
     Close(String),
+    /// A page Forge is designing (`design::live`), in a tab of its own,
+    /// brought to the front: `key` is the file's address. With `draft`, the
+    /// page so far is written into the tab as it streams; without, the file
+    /// itself is loaded, or reloaded when the tab shows it already (which
+    /// keeps the scroll and a deck's slide).
+    Design {
+        key: String,
+        draft: Option<String>,
+    },
     /// The panel's size for the page, in CSS pixels, and the screen's
     /// pixels per CSS pixel: the page lays itself out to fit, and its
     /// pictures come at the screen's density.
@@ -87,6 +99,99 @@ pub enum Cmd {
         height: u32,
         scale: f64,
     },
+    /// Zoom the page, as a browser does (1 is its own size).
+    Zoom(f64),
+    /// Print the page on screen to a PDF at this path (backgrounds kept,
+    /// the page's own paper size when it sets one).
+    Pdf(PathBuf),
+    /// Which part of the page is at this point (CSS pixels in the panel):
+    /// asked now and then as the mouse moves, at once for a click (`pick`).
+    Inspect { x: f64, y: f64, pick: bool },
+    /// Scroll so this point of the page (CSS pixels from its top left) is
+    /// near the top.
+    ScrollTo(f64, f64),
+    /// Outline every box on the page in this CSS colour (layout guides),
+    /// kept through loads and drafts; None takes them off.
+    Guides(Option<String>),
+    /// Tell the panel the page's headings (`Update::Outline`), now and
+    /// after each load, while on.
+    Outline(bool),
+    /// A deck's next (1) or previous (-1) slide: scrolled to when its
+    /// slides are stacked, else by the deck's own arrow keys.
+    Slide(i32),
+    /// Go to slide n (1-based) of a deck (`live::go_to_slide_js`).
+    SlideTo(usize),
+    /// Scroll to the page's nth heading (`h1`–`h3` shown, as the outline
+    /// lists them): it, not where it was, so a page laid out again since
+    /// still lands there.
+    ScrollToHeading(usize),
+    /// Which part of the page is at this point (CSS pixels from the page's
+    /// top left): a new mark's anchor, said as `Update::AnchoredAt`.
+    AnchorAt { id: u64, x: f64, y: f64 },
+    /// The parts (CSS selectors) comments and marks are on: where each is
+    /// now is said as `Update::Anchors` whenever it changes (a zoom, a
+    /// wider panel, an edit), so they follow their part.
+    Anchors(Vec<String>),
+    /// A picture of part of the page (CSS pixels from its top left, as
+    /// x, y, width, height), with a script run before it (to put something
+    /// on the page) and after (to take it off again): `Update::Picture`.
+    Picture {
+        before: String,
+        clip: (f64, f64, f64, f64),
+        after: String,
+    },
+}
+
+/// A heading of the page, for its outline.
+#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
+pub struct Heading {
+    /// 1 to 3, from `h1` to `h3`.
+    pub level: u8,
+    pub text: String,
+    /// Where it is, in CSS pixels from the page's top.
+    pub y: f64,
+}
+
+/// A part of the page, as the comment tool picks it.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PagePart {
+    pub tag: String,
+    /// The start of its text, on one line.
+    pub text: String,
+    /// A CSS selector that finds it again.
+    pub selector: String,
+    /// Where it is, in CSS pixels from the page's top left (scrolling
+    /// doesn't move it).
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+}
+
+impl PagePart {
+    /// What it is, in a few words: `h2 · Three things you can use…`.
+    pub fn label(&self) -> String {
+        let text: String = self.text.chars().take(48).collect();
+        // The page as a whole (a click on its background) says so once.
+        if self.tag == "page" {
+            return self.text.clone();
+        }
+        if text.is_empty() {
+            self.tag.clone()
+        } else if text.len() < self.text.len() {
+            format!("{} · {}…", self.tag, text.trim_end())
+        } else {
+            format!("{} · {text}", self.tag)
+        }
+    }
+}
+
+/// What a picture of the page shows: the area it covers, in CSS pixels
+/// from the page's top left, and how far the page is scrolled.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct FrameInfo {
+    pub area: (f32, f32),
+    pub scroll: (f32, f32),
 }
 
 /// A mouse button, as the page gets it.
@@ -132,6 +237,33 @@ struct Metrics {
     width: u32,
     height: u32,
     scale: f64,
+    /// As a browser zooms: the page lays out in the panel's size divided
+    /// by this, and shows that much larger.
+    zoom: f64,
+}
+
+impl Metrics {
+    /// The page's own size, in its CSS pixels.
+    fn layout(&self) -> (u32, u32) {
+        (
+            (f64::from(self.width) / self.zoom).round() as u32,
+            (f64::from(self.height) / self.zoom).round() as u32,
+        )
+    }
+}
+
+/// The zooms the panel offers, smallest first.
+pub const ZOOMS: [f64; 6] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0];
+
+/// The next zoom in (`step` 1) or out (-1) from `at`, as browsers step:
+/// through these, clamped at the ends.
+pub fn zoom_step(at: f64, step: i32) -> f64 {
+    const STEPS: [f64; 13] = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0];
+    if step > 0 {
+        STEPS.iter().copied().find(|z| *z > at + 0.001).unwrap_or(2.0)
+    } else {
+        STEPS.iter().rev().copied().find(|z| *z < at - 0.001).unwrap_or(0.25)
+    }
 }
 
 /// An open tab: its target id, address and title.
@@ -145,8 +277,23 @@ pub struct TabInfo {
 /// What the browser tells the panel.
 #[derive(Debug)]
 pub enum Update {
-    /// A new picture of the page, decoded for drawing.
-    Frame(Arc<RenderImage>),
+    /// A new picture of the page, decoded for drawing, and what it shows.
+    Frame(Arc<RenderImage>, FrameInfo),
+    /// The part of the page at a point (`Cmd::Inspect`), if there is one;
+    /// `pick` when it was a click.
+    Part { part: Option<PagePart>, pick: bool },
+    /// The page's headings, in order (`Cmd::Outline`).
+    Outline(Vec<Heading>),
+    /// The page is a deck: the slide in view and how many (None: not a
+    /// deck). Said when it changes.
+    Deck(Option<(usize, usize)>),
+    /// The part at a point (`Cmd::AnchorAt`).
+    AnchoredAt(u64, Option<PagePart>),
+    /// Where the tracked parts are now, each as its selector and box (CSS
+    /// pixels from the page's top left); a part not on the page is left out.
+    Anchors(Vec<(String, (f64, f64, f64, f64))>),
+    /// A PNG of part of the page (`Cmd::Picture`), or why not.
+    Picture(Result<Vec<u8>, String>),
     /// The open tabs, and which one is on screen.
     Tabs(Vec<TabInfo>, String),
     /// The page's address and title.
@@ -161,6 +308,8 @@ pub enum Update {
     Downloaded(PathBuf),
     /// A download stopped before it finished: its name.
     DownloadFailed(String),
+    /// The page printed to a PDF (`Cmd::Pdf`): its file, or why not.
+    Printed(Result<PathBuf, String>),
     /// The page's selected text, for the clipboard.
     Copied(String),
     /// The mouse pointer the page wants where the mouse is (CSS names:
@@ -172,7 +321,7 @@ pub enum Update {
 
 /// The running browser: its process and the line to its DevTools thread.
 pub struct WebView {
-    child: Mutex<Child>,
+    child: Arc<Mutex<Child>>,
     cmds: mpsc::Sender<Cmd>,
     /// Where the browser tools connect: `http://127.0.0.1:<port>`.
     pub cdp_url: String,
@@ -186,10 +335,22 @@ impl WebView {
 
 impl Drop for WebView {
     fn drop(&mut self) {
-        // Closing the guard's stdin closes the browser; kill makes sure.
-        let _ = self.child.lock().map(|mut c| {
-            drop(c.stdin.take());
-            c.kill()
+        // Closing the guard's stdin closes the browser. The guard is given
+        // a moment to do it: killed at once, it would leave the browser
+        // running, holding its profile, so the next start fails. Kill
+        // makes sure.
+        // Waited for on a thread of its own, so the window never stops
+        // for it.
+        let child = self.child.clone();
+        let _ = self.child.lock().map(|mut c| drop(c.stdin.take()));
+        std::thread::spawn(move || {
+            let until = Instant::now() + Duration::from_secs(2);
+            while Instant::now() < until
+                && child.lock().is_ok_and(|mut c| matches!(c.try_wait(), Ok(None)))
+            {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            let _ = child.lock().map(|mut c| c.kill());
         });
     }
 }
@@ -216,7 +377,11 @@ pub fn guard(args: &[String]) {
     std::thread::spawn(move || {
         let mut sink = Vec::new();
         let _ = std::io::Read::read_to_end(&mut std::io::stdin(), &mut sink);
-        let _ = watched.lock().map(|mut c| c.kill());
+        let _ = watched.lock().map(|mut c| {
+            let _ = c.kill();
+            // Gone before the guard is, so nothing holds the profile.
+            c.wait()
+        });
         std::process::exit(0);
     });
     loop {
@@ -321,7 +486,7 @@ pub fn find_chromium() -> Option<PathBuf> {
 }
 
 /// Running as root on Linux (a container): Chromium's sandbox won't start.
-fn needs_no_sandbox() -> bool {
+pub(crate) fn needs_no_sandbox() -> bool {
     cfg!(target_os = "linux")
         && std::fs::read_to_string("/proc/self/status").is_ok_and(|s| {
             s.lines()
@@ -332,7 +497,7 @@ fn needs_no_sandbox() -> bool {
 }
 
 /// A free port on this machine for the DevTools server.
-fn free_port() -> Result<u16, String> {
+pub(crate) fn free_port() -> Result<u16, String> {
     std::net::TcpListener::bind("127.0.0.1:0")
         .and_then(|l| l.local_addr())
         .map(|a| a.port())
@@ -359,6 +524,10 @@ pub fn start(
         "--disable-features=Translate,MediaRouter".into(),
         "--hide-scrollbars".into(),
         "--mute-audio".into(),
+        // Its pictures are taken at twice the CSS pixels (they follow this,
+        // not the page's own density), so a zoomed page, and a screen at
+        // 150 %, stay sharp; they are shrunk to the panel's size.
+        "--force-device-scale-factor=2".into(),
         format!("--window-size={},{}", VIEWPORT.0, VIEWPORT.1),
         format!("--user-data-dir={}", profile.display()),
     ];
@@ -419,7 +588,7 @@ pub fn start(
     });
     Ok((
         WebView {
-            child: Mutex::new(child),
+            child: Arc::new(Mutex::new(child)),
             cmds: cmd_tx,
             cdp_url: format!("http://127.0.0.1:{port}"),
         },
@@ -454,6 +623,45 @@ pub(crate) struct Conn {
     pub(crate) dialogs: Vec<String>,
 }
 
+/// Print the page to PDF, read back in pieces: a large PDF in one message
+/// trips the WebSocket reader, so Chrome hands it over as a stream.
+pub(crate) fn print_pdf(
+    c: &mut Conn,
+    s: Option<&str>,
+    events: &mut Vec<Value>,
+) -> Result<Vec<u8>, String> {
+    let r = c.call(
+        s,
+        "Page.printToPDF",
+        json!({ "printBackground": true, "preferCSSPageSize": true, "transferMode": "ReturnAsStream" }),
+        events,
+    )?;
+    let handle = r["stream"]
+        .as_str()
+        .ok_or("the browser gave no PDF")?
+        .to_string();
+    let mut out = vec![];
+    loop {
+        let r = c.call(s, "IO.read", json!({ "handle": handle, "size": 512 * 1024 }), events)?;
+        let data = r["data"].as_str().unwrap_or("");
+        // The last piece can be empty, with end of file.
+        if data.is_empty() {
+        } else if r["base64Encoded"].as_bool() == Some(true) {
+            out.extend(crate::browser::decode_base64(data).ok_or("the PDF came back unreadable")?);
+        } else {
+            out.extend_from_slice(data.as_bytes());
+        }
+        if r["eof"].as_bool() != Some(false) {
+            break;
+        }
+    }
+    let _ = c.call(s, "IO.close", json!({ "handle": handle }), events);
+    if out.is_empty() {
+        return Err("the browser gave an empty PDF".into());
+    }
+    Ok(out)
+}
+
 /// Connect to a DevTools WebSocket (`ws://127.0.0.1:<port>/devtools/…`).
 pub(crate) fn connect(ws_url: &str) -> Result<Conn, String> {
     let host = ws_url
@@ -474,6 +682,14 @@ pub(crate) fn connect(ws_url: &str) -> Result<Conn, String> {
 }
 
 impl Conn {
+    /// How long a read waits for the next message before saying none came.
+    pub(crate) fn set_read_timeout(&self, wait: Duration) -> Result<(), String> {
+        self.ws
+            .get_ref()
+            .set_read_timeout(Some(wait))
+            .map_err(|e| e.to_string())
+    }
+
     pub(crate) fn send(
         &mut self,
         session: Option<&str>,
@@ -594,7 +810,14 @@ fn fit(
     events: &mut Vec<Value>,
 ) -> Result<(), String> {
     let s = Some(session);
-    // A headless window pictures its whole size: make it the panel's.
+    // The page is laid out at the panel's size (below), but after some
+    // loads Chromium pictures the whole window instead, with the page at its
+    // top left (the frames say so, and the panel draws them to scale). The
+    // window is larger than the page, so that picture still holds all of it,
+    // and the pictures are never shrunk to fit.
+    let (width, height) = m.layout();
+    // Pixels per CSS pixel, as drawn: the screen's, times the zoom.
+    let density = m.scale * m.zoom;
     if let Ok(w) = c.call(
         None,
         "Browser.getWindowForTarget",
@@ -604,14 +827,14 @@ fn fit(
         let _ = c.call(
             None,
             "Browser.setWindowBounds",
-            json!({ "windowId": w["windowId"], "bounds": { "width": m.width, "height": m.height } }),
+            json!({ "windowId": w["windowId"], "bounds": { "width": width + WINDOW_SPARE, "height": height + WINDOW_SPARE } }),
             events,
         );
     }
     c.call(
         s,
         "Emulation.setDeviceMetricsOverride",
-        json!({ "width": m.width, "height": m.height, "deviceScaleFactor": m.scale, "mobile": false }),
+        json!({ "width": width, "height": height, "deviceScaleFactor": density, "mobile": false }),
         events,
     )?;
     let _ = c.call(s, "Page.stopScreencast", json!({}), events);
@@ -619,8 +842,8 @@ fn fit(
         s,
         "Page.startScreencast",
         json!({ "format": "jpeg", "quality": 80,
-            "maxWidth": (m.width as f64 * m.scale).round() as u32,
-            "maxHeight": (m.height as f64 * m.scale).round() as u32 }),
+            "maxWidth": (f64::from(width + WINDOW_SPARE) * density).round() as u32,
+            "maxHeight": (f64::from(height + WINDOW_SPARE) * density).round() as u32 }),
         events,
     )?;
     Ok(())
@@ -696,6 +919,7 @@ fn devtools(
         width: VIEWPORT.0,
         height: VIEWPORT.1,
         scale: 1.0,
+        zoom: 1.0,
     };
     let mut tab = attach(&mut c, &first, metrics, &mut events)?;
     let say = |u: Update| {
@@ -728,12 +952,37 @@ fn devtools(
         );
     }
     let log = crate::browser::downloads_log(focus);
+    // Pages Forge is designing, by address: the tab each one has.
+    let mut designs: std::collections::HashMap<String, String> = Default::default();
+    // A page's draft, before its file exists, is shown from a file of its own.
+    let draft_file = crate::design::live::draft_file;
     let mut pending: std::collections::HashMap<String, String> = Default::default();
     // Answers awaited without blocking the loop: the pointer under the
     // mouse, and the selection to copy.
     let (mut cursor_req, mut copy_req) = (None::<u64>, None::<u64>);
     let mut cursor_asked = Instant::now();
     let mut cursor_at: Option<(f64, f64)> = None;
+    // The part of the page under the comment tool: asked as the pointer is.
+    let (mut part_req, mut pick_req) = (None::<u64>, None::<u64>);
+    // Where the comment tool was clicked (viewport CSS pixels), for a
+    // click on the page's own background.
+    let mut pick_at: Option<(f64, f64)> = None;
+    // The page's scroll, as its last picture said.
+    let mut frame_scroll = (0.0f64, 0.0f64);
+    // Layout guides' colour while they are on; the outline, while asked for.
+    let mut guides: Option<String> = None;
+    let (mut outline_on, mut outline_req) = (false, None::<u64>);
+    // The parts comments and marks are on, where they were last said to
+    // be, and the answers awaited: their boxes, and a new mark's part.
+    let mut anchors: Vec<String> = vec![];
+    let mut anchors_now: Vec<(String, (f64, f64, f64, f64))> = vec![];
+    let (mut anchors_req, mut anchors_asked) = (None::<u64>, Instant::now());
+    let mut anchor_at_req: std::collections::HashMap<u64, u64> = Default::default();
+    // Which slide a deck shows, asked a few times a second.
+    let (mut deck_req, mut deck_now) = (None::<u64>, None::<(usize, usize)>);
+    let mut deck_asked = Instant::now();
+    let mut part_asked = Instant::now();
+    let mut part_at: Option<(f64, f64)> = None;
     let mut focus_checked = Instant::now();
     loop {
         // The agent's tools switched tabs: show the one they use.
@@ -752,8 +1001,26 @@ fn devtools(
                 }
             }
         }
-        // What the panel asked for.
-        while let Ok(cmd) = cmds.try_recv() {
+        // What the panel asked for. A page's draft that a later one in the
+        // same batch replaces is skipped: the page shows the newest.
+        let batch: Vec<Cmd> = std::iter::from_fn(|| cmds.try_recv().ok()).collect();
+        let newest: std::collections::HashMap<&str, usize> = batch
+            .iter()
+            .enumerate()
+            .filter_map(|(i, c)| match c {
+                Cmd::Design { key, .. } => Some((key.as_str(), i)),
+                _ => None,
+            })
+            .collect();
+        let stale: Vec<bool> = batch
+            .iter()
+            .enumerate()
+            .map(|(i, c)| matches!(c, Cmd::Design { key, draft: Some(_) } if newest.get(key.as_str()).is_some_and(|&n| n > i)))
+            .collect();
+        for (cmd, stale) in batch.into_iter().zip(stale) {
+            if stale {
+                continue;
+            }
             let s = Some(tab.session.as_str());
             let mouse = |kind: &str, x: f64, y: f64, button: &str, count: u32| json!({ "type": kind, "x": x, "y": y, "button": button, "clickCount": count });
             match cmd {
@@ -893,6 +1160,82 @@ fn devtools(
                     // The tab shows itself when it is created (below).
                     c.send(None, "Target.createTarget", json!({ "url": url }))?;
                 }
+                Cmd::Design { key, draft } => {
+                    // Its tab: the one made for it, else one already on the
+                    // file, else a new one, made and shown here, now, so the
+                    // draft can't land in another tab.
+                    let open = pages(&mut c, &mut events)?;
+                    let target = designs
+                        .get(&key)
+                        .filter(|id| open.iter().any(|t| &t.id == *id))
+                        .cloned()
+                        .or_else(|| {
+                            open.iter()
+                                .find(|t| crate::design::live::page_key(&t.url) == key)
+                                .map(|t| t.id.clone())
+                        });
+                    // A blank tab nobody has used (the one the browser
+                    // starts with) is taken rather than left beside it.
+                    let blank = open.iter().any(|t| {
+                        t.id == tab.target
+                            && (t.url.is_empty() || t.url == "about:blank")
+                            && !designs.values().any(|d| d == &t.id)
+                    });
+                    let target = match target {
+                        Some(id) => id,
+                        None if blank => tab.target.clone(),
+                        None => {
+                            let made = c.call(None, "Target.createTarget", json!({ "url": "about:blank" }), &mut events)?;
+                            made["targetId"].as_str().ok_or("no new tab")?.to_string()
+                        }
+                    };
+                    designs.insert(key.clone(), target.clone());
+                    if target != tab.target {
+                        let old = tab.session.clone();
+                        let _ = c.send(Some(&old), "Page.stopScreencast", json!({}));
+                        tab = attach(&mut c, &target, metrics, &mut events)?;
+                        c.send(None, "Target.activateTarget", json!({ "targetId": target }))?;
+                        write_focus(focus, &tab.target);
+                        report(&mut c, &mut events, &tab.target)?;
+                    }
+                    let s = Some(tab.session.as_str());
+                    let on = open
+                        .iter()
+                        .find(|t| t.id == tab.target)
+                        .map(|t| crate::design::live::page_key(&t.url).to_string())
+                        .unwrap_or_default();
+                    let file = draft_file(&key);
+                    let draft_url = crate::design::live::file_url(&file);
+                    match draft {
+                        // The first draft opens as a file of its own (a
+                        // file:// page, so its pictures load); later ones are
+                        // written into it, keeping the scroll. A draft that
+                        // can't be written is skipped; the file still loads.
+                        Some(page) if on != draft_url => {
+                            if std::fs::write(&file, page).is_ok() {
+                                c.send(s, "Page.navigate", json!({ "url": draft_url }))?;
+                            }
+                        }
+                        Some(page) => {
+                            let js = format!(
+                                "(()=>{{const y=scrollY;document.open();document.write({});document.close();scrollTo(0,y);}})()",
+                                Value::from(page)
+                            );
+                            c.send(s, "Runtime.evaluate", json!({ "expression": js }))?;
+                            // A draft is a new document: its guides again.
+                            if guides.is_some() {
+                                c.send(s, "Runtime.evaluate", json!({ "expression": guides_js(guides.as_deref()) }))?;
+                            }
+                        }
+                        None if on == key => {
+                            c.send(s, "Page.reload", json!({}))?;
+                        }
+                        None => {
+                            let _ = std::fs::remove_file(&file);
+                            c.send(s, "Page.navigate", json!({ "url": key }))?;
+                        }
+                    }
+                }
                 Cmd::Close(id) => {
                     c.send(None, "Target.closeTarget", json!({ "targetId": id }))?;
                 }
@@ -905,9 +1248,135 @@ fn devtools(
                         width: width.max(200),
                         height: height.max(150),
                         scale: scale.clamp(1.0, 3.0),
+                        ..metrics
                     };
                     let (id, s) = (tab.target.clone(), tab.session.clone());
                     fit(&mut c, &id, &s, metrics, &mut events)?;
+                    anchors_asked = Instant::now() - Duration::from_millis(500);
+                    if outline_on {
+                        outline_req = Some(c.send(
+                            Some(s.as_str()),
+                            "Runtime.evaluate",
+                            json!({ "expression": OUTLINE_JS, "returnByValue": true }),
+                        )?);
+                    }
+                }
+                Cmd::Pdf(to) => {
+                    // A deck prints a slide a page (`live::DECK_PRINT_JS`).
+                    let _ = c.call(
+                        s,
+                        "Runtime.evaluate",
+                        json!({ "expression": crate::design::live::DECK_PRINT_JS, "returnByValue": true }),
+                        &mut events,
+                    );
+                    let printed = print_pdf(&mut c, s, &mut events)
+                        .and_then(|pdf| std::fs::write(&to, pdf).map_err(|e| e.to_string()))
+                        .map(|()| to);
+                    let _ = c.call(
+                        s,
+                        "Runtime.evaluate",
+                        json!({ "expression": crate::design::live::DECK_UNPRINT_JS }),
+                        &mut events,
+                    );
+                    say(Update::Printed(printed))?;
+                }
+                Cmd::Inspect { x, y, pick: false } => part_at = Some((x, y)),
+                Cmd::Inspect { x, y, pick: true } => {
+                    pick_at = Some((x, y));
+                    // Its box is where its content is, as its pin's anchor
+                    // will say (`Cmd::Anchors`), so the pin stays put.
+                    let js = format!(
+                        "(() => {{ const j = {}; if (!j) return ''; const p = JSON.parse(j); const e = document.querySelector(p.selector); if (e) [p.x, p.y, p.w, p.h] = ({CONTENT_BOX_JS})(e); return JSON.stringify(p); }})()",
+                        part_js(x, y)
+                    );
+                    pick_req = Some(c.send(
+                        s,
+                        "Runtime.evaluate",
+                        json!({ "expression": js, "returnByValue": true }),
+                    )?);
+                }
+                Cmd::Guides(colour) => {
+                    guides = colour;
+                    c.send(s, "Runtime.evaluate", json!({ "expression": guides_js(guides.as_deref()) }))?;
+                }
+                Cmd::AnchorAt { id, x, y } => {
+                    let js = format!(
+                        "(() => {{ const x = {x} - scrollX, y = {y} - scrollY; const j = ({})(); if (!j) return ''; const p = JSON.parse(j); const e = document.querySelector(p.selector); if (e) [p.x, p.y, p.w, p.h] = ({CONTENT_BOX_JS})(e); return JSON.stringify(p); }})()",
+                        part_fn_js()
+                    );
+                    let req = c.send(s, "Runtime.evaluate", json!({ "expression": js, "returnByValue": true }))?;
+                    anchor_at_req.insert(req, id);
+                }
+                Cmd::Anchors(list) => {
+                    anchors = list;
+                    anchors_now.clear();
+                    anchors_asked = Instant::now() - Duration::from_secs(1);
+                }
+                Cmd::ScrollToHeading(n) => {
+                    let js = format!(
+                        "(() => {{ const h = [...document.querySelectorAll('h1,h2,h3')].filter(e => e.getClientRects().length && (e.innerText || '').trim())[{n}]; if (h) scrollTo({{ top: Math.max(0, h.getBoundingClientRect().top + scrollY - 120), behavior: 'smooth' }}); }})()"
+                    );
+                    c.send(s, "Runtime.evaluate", json!({ "expression": js }))?;
+                }
+                Cmd::SlideTo(n) => {
+                    c.send(s, "Runtime.evaluate", json!({ "expression": crate::design::live::go_to_slide_js(n) }))?;
+                    deck_asked = Instant::now() - Duration::from_millis(250);
+                }
+                Cmd::Slide(step) => {
+                    c.send(s, "Runtime.evaluate", json!({ "expression": crate::design::live::slide_step_js(step) }))?;
+                    // Say where it got to soon, not at the next ask.
+                    deck_asked = Instant::now() - Duration::from_millis(250);
+                }
+                Cmd::Outline(on) => {
+                    outline_on = on;
+                    if on {
+                        outline_req = Some(c.send(
+                            s,
+                            "Runtime.evaluate",
+                            json!({ "expression": OUTLINE_JS, "returnByValue": true }),
+                        )?);
+                    }
+                }
+                Cmd::Picture { before, clip, after } => {
+                    let _ = c.call(s, "Runtime.evaluate", json!({ "expression": before }), &mut events);
+                    let (x, y, w, h) = clip;
+                    let shot = c
+                        .call(
+                            s,
+                            "Page.captureScreenshot",
+                            json!({ "format": "png", "captureBeyondViewport": true,
+                                "clip": { "x": x, "y": y, "width": w, "height": h, "scale": 1 } }),
+                            &mut events,
+                        )
+                        .and_then(|r| {
+                            r["data"]
+                                .as_str()
+                                .and_then(crate::browser::decode_base64)
+                                .ok_or_else(|| "the browser gave no picture".to_string())
+                        });
+                    c.send(s, "Runtime.evaluate", json!({ "expression": after }))?;
+                    say(Update::Picture(shot))?;
+                }
+                Cmd::ScrollTo(x, y) => {
+                    let js = format!(
+                        "scrollTo({{ left: Math.max(0, {x} - 40), top: Math.max(0, {y} - 80), behavior: 'smooth' }})"
+                    );
+                    c.send(s, "Runtime.evaluate", json!({ "expression": js }))?;
+                }
+                Cmd::Zoom(zoom) => {
+                    metrics.zoom = zoom.clamp(0.25, 2.0);
+                    let (id, s) = (tab.target.clone(), tab.session.clone());
+                    fit(&mut c, &id, &s, metrics, &mut events)?;
+                    // The page laid out again: where its parts went, soon,
+                    // and its headings.
+                    anchors_asked = Instant::now() - Duration::from_millis(500);
+                    if outline_on {
+                        outline_req = Some(c.send(
+                            Some(s.as_str()),
+                            "Runtime.evaluate",
+                            json!({ "expression": OUTLINE_JS, "returnByValue": true }),
+                        )?);
+                    }
                 }
             }
         }
@@ -921,6 +1390,33 @@ fn devtools(
                 Some(&tab.session),
                 "Runtime.evaluate",
                 json!({ "expression": cursor_js(x, y), "returnByValue": true }),
+            )?);
+        }
+        if let Some((x, y)) = part_at
+            .filter(|_| part_req.is_none() && part_asked.elapsed() > Duration::from_millis(60))
+        {
+            part_at = None;
+            part_asked = Instant::now();
+            part_req = Some(c.send(
+                Some(&tab.session),
+                "Runtime.evaluate",
+                json!({ "expression": part_js(x, y), "returnByValue": true }),
+            )?);
+        }
+        if !anchors.is_empty() && anchors_req.is_none() && anchors_asked.elapsed() > Duration::from_millis(700) {
+            anchors_asked = Instant::now();
+            anchors_req = Some(c.send(
+                Some(&tab.session),
+                "Runtime.evaluate",
+                json!({ "expression": anchors_js(&anchors), "returnByValue": true }),
+            )?);
+        }
+        if deck_req.is_none() && deck_asked.elapsed() > Duration::from_millis(400) {
+            deck_asked = Instant::now();
+            deck_req = Some(c.send(
+                Some(&tab.session),
+                "Runtime.evaluate",
+                json!({ "expression": crate::design::live::DECK_AT_JS, "returnByValue": true }),
             )?);
         }
         // What the browser said.
@@ -942,6 +1438,62 @@ fn devtools(
                 if let Some(v) = value.filter(|v| !v.is_empty()) {
                     say(Update::Copied(v))?;
                 }
+            } else if Some(id) == anchors_req {
+                anchors_req = None;
+                let boxes: Vec<Option<(f64, f64, f64, f64)>> =
+                    value.and_then(|v| serde_json::from_str(&v).ok()).unwrap_or_default();
+                let now: Vec<_> = anchors
+                    .iter()
+                    .zip(boxes)
+                    .filter_map(|(sel, b)| b.map(|b| (sel.clone(), b)))
+                    .collect();
+                if now != anchors_now {
+                    anchors_now = now.clone();
+                    say(Update::Anchors(now))?;
+                }
+            } else if let Some(mark) = anchor_at_req.remove(&id) {
+                let part = value.and_then(|v| serde_json::from_str::<PagePart>(&v).ok());
+                say(Update::AnchoredAt(mark, part))?;
+            } else if Some(id) == deck_req {
+                deck_req = None;
+                let at = value
+                    .and_then(|v| serde_json::from_str::<(usize, usize)>(&v).ok())
+                    .filter(|(n, of)| *of > 1 && *n >= 1);
+                if at != deck_now {
+                    deck_now = at;
+                    say(Update::Deck(at))?;
+                }
+            } else if Some(id) == outline_req {
+                outline_req = None;
+                let heads = value
+                    .and_then(|v| serde_json::from_str::<Vec<Heading>>(&v).ok())
+                    .unwrap_or_default();
+                say(Update::Outline(heads))?;
+            } else if Some(id) == part_req || Some(id) == pick_req {
+                let pick = Some(id) == pick_req;
+                if pick {
+                    pick_req = None;
+                } else {
+                    part_req = None;
+                }
+                let mut part = value.and_then(|v| serde_json::from_str::<PagePart>(&v).ok());
+                // A click on the page's background (its margins, a gap):
+                // the comment is on the page as a whole.
+                if pick && part.is_none() {
+                    if let Some((x, y)) = pick_at.take() {
+                        let scroll = frame_scroll;
+                        part = Some(PagePart {
+                            tag: "page".into(),
+                            text: "The whole page".into(),
+                            selector: "body".into(),
+                            x: x + scroll.0,
+                            y: y + scroll.1,
+                            w: 0.0,
+                            h: 0.0,
+                        });
+                    }
+                }
+                say(Update::Part { part, pick })?;
             }
             continue;
         }
@@ -1006,11 +1558,36 @@ fn devtools(
                     .and_then(crate::browser::decode_base64)
                     .and_then(|j| decode(&j))
                 {
-                    say(Update::Frame(img))?;
+                    // The area pictured, in CSS pixels: the page's size,
+                    // or, after some loads, the whole window's (see `fit`).
+                    let meta = &p["metadata"];
+                    let num = |k: &str| meta[k].as_f64().unwrap_or(0.0) as f32;
+                    let info = FrameInfo {
+                        area: (num("deviceWidth"), num("deviceHeight")),
+                        scroll: (num("scrollOffsetX"), num("scrollOffsetY")),
+                    };
+                    frame_scroll = (f64::from(info.scroll.0), f64::from(info.scroll.1));
+                    say(Update::Frame(img, info))?;
                 }
             }
             "Page.frameStartedLoading" if on_tab => say(Update::Loading(true))?,
-            "Page.frameStoppedLoading" if on_tab => say(Update::Loading(false))?,
+            "Page.frameStoppedLoading" if on_tab => {
+                say(Update::Loading(false))?;
+                // Where the comments' and marks' parts are on it, soon.
+                anchors_asked = Instant::now() - Duration::from_millis(500);
+                // A page loaded: its guides again, and its headings.
+                let s = Some(tab.session.as_str());
+                if guides.is_some() {
+                    c.send(s, "Runtime.evaluate", json!({ "expression": guides_js(guides.as_deref()) }))?;
+                }
+                if outline_on {
+                    outline_req = Some(c.send(
+                        s,
+                        "Runtime.evaluate",
+                        json!({ "expression": OUTLINE_JS, "returnByValue": true }),
+                    )?);
+                }
+            }
             // A tab the agent (or a link) opened: show it.
             "Target.targetCreated" if p["targetInfo"]["type"] == "page" => {
                 let id = p["targetInfo"]["targetId"]
@@ -1056,6 +1633,73 @@ fn devtools(
         }
     }
 }
+
+/// The part of the page at (x, y), as JSON for `PagePart` (empty over the
+/// page itself): the innermost element there, a selector that finds it
+/// again (by id, else tag, two classes and place, up to six levels), the
+/// start of its text, and its box on the page.
+fn part_js(x: f64, y: f64) -> String {
+    format!("(() => {{ const x = {x}, y = {y}; return ({})(); }})()", part_fn_js())
+}
+
+/// The part of the page at viewport point (`x`, `y`, in scope), as a
+/// function: its tag, text, a selector that finds it again, and its box.
+fn part_fn_js() -> &'static str {
+    r#"() => {
+const e = document.elementFromPoint(x, y);
+if (!e || e === document.body || e === document.documentElement) return '';
+const step = el => {
+  if (el.id) return '#' + CSS.escape(el.id);
+  let s = el.tagName.toLowerCase();
+  for (const c of [...el.classList].slice(0, 2)) s += '.' + CSS.escape(c);
+  const p = el.parentElement;
+  if (p) {
+    const same = [...p.children].filter(c => c.tagName === el.tagName);
+    if (same.length > 1) s += ':nth-of-type(' + (same.indexOf(el) + 1) + ')';
+  }
+  return s;
+};
+const path = [];
+for (let el = e; el && el !== document.body && el !== document.documentElement && path.length < 6; el = el.parentElement) {
+  const s = step(el);
+  path.unshift(s);
+  if (s.startsWith('#')) break;
+}
+const r = e.getBoundingClientRect();
+const text = (e.innerText || e.getAttribute('alt') || e.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+return JSON.stringify({ tag: e.tagName.toLowerCase(), text, selector: path.join(' > '), x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height });
+}"#
+}
+
+/// Where an element's content is (page CSS pixels), as `[x, y, w, h]`: its
+/// text's lines together, which a heading's own box (as wide as its
+/// container) doesn't show; its box when it has no text.
+const CONTENT_BOX_JS: &str = "e => { const r = document.createRange(); r.selectNodeContents(e); let b = r.getBoundingClientRect(); if (!b.width || !b.height) b = e.getBoundingClientRect(); return [b.left + scrollX, b.top + scrollY, b.width, b.height]; }";
+
+/// Where each selector's element's content is now, as JSON: a box, or null
+/// when it isn't on the page.
+fn anchors_js(selectors: &[String]) -> String {
+    format!(
+        "JSON.stringify({}.map(s => {{ try {{ const e = document.querySelector(s); return e ? ({CONTENT_BOX_JS})(e) : null; }} catch (_) {{ return null; }} }}))",
+        serde_json::to_string(selectors).unwrap_or_else(|_| "[]".into())
+    )
+}
+
+/// Put layout guides on the page (an outline round every box, in `colour`),
+/// or take them off.
+fn guides_js(colour: Option<&str>) -> String {
+    match colour {
+        Some(c) => format!(
+            "(() => {{ let s = document.getElementById('forge-guides'); if (!s) {{ s = document.createElement('style'); s.id = 'forge-guides'; (document.head || document.documentElement).appendChild(s); }} s.textContent = '* {{ outline: 1px solid {} !important; outline-offset: -1px !important; }}'; }})()",
+            c.replace(['\'', '\\'], "")
+        ),
+        None => "document.getElementById('forge-guides')?.remove()".to_string(),
+    }
+}
+
+/// The page's headings, h1 to h3, as JSON for `Heading`: the shown ones,
+/// with text, at most 200.
+const OUTLINE_JS: &str = r"JSON.stringify([...document.querySelectorAll('h1,h2,h3')].filter(e => e.getClientRects().length).slice(0, 200).map(e => ({ level: +e.tagName[1], text: (e.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 80), y: e.getBoundingClientRect().top + scrollY })).filter(h => h.text))";
 
 /// The text selected on the page, in a field or out of one.
 const SELECTION_JS: &str = "(() => { const e = document.activeElement; if (e && typeof e.selectionStart === 'number' && typeof e.value === 'string') return e.value.slice(e.selectionStart, e.selectionEnd); return String(getSelection()); })()";
@@ -1111,6 +1755,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn zoom_steps_as_a_browser_does() {
+        assert_eq!(zoom_step(1.0, 1), 1.1);
+        assert_eq!(zoom_step(1.0, -1), 0.9);
+        assert_eq!(zoom_step(0.6, 1), 0.67);
+        assert_eq!(zoom_step(2.0, 1), 2.0);
+        assert_eq!(zoom_step(0.25, -1), 0.25);
+        // The page lays out in the panel's room over the zoom.
+        let m = Metrics { width: 511, height: 643, scale: 1.0, zoom: 0.5 };
+        assert_eq!(m.layout(), (1022, 1286));
+        let m = Metrics { zoom: 2.0, ..m };
+        assert_eq!(m.layout(), (256, 322));
+    }
+
+    #[test]
     fn typed_addresses_become_urls() {
         assert_eq!(address("example.com"), "https://example.com");
         assert_eq!(address("localhost:3000/a"), "http://localhost:3000/a");
@@ -1137,7 +1795,7 @@ mod tests {
         let until = Instant::now() + Duration::from_secs(20);
         while Instant::now() < until && !(loaded && frames > 1) {
             match rx.try_recv() {
-                Ok(Update::Frame(_)) => frames += 1,
+                Ok(Update::Frame(..)) => frames += 1,
                 Ok(Update::Page { url, .. }) => on_page = url.starts_with("data:"),
                 Ok(Update::Loading(false)) => loaded |= on_page,
                 Ok(Update::Closed(why)) => panic!("{why}"),

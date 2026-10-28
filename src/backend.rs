@@ -35,6 +35,9 @@ pub enum Event {
     /// ForgeCLI changed the permission mode itself (a plan approved, plan mode
     /// entered, an answer that set a mode): `system/status`, `permissionMode`.
     ModeChanged(String),
+    /// The chat's `/goal` changed: set, checked, paused, met, given up or
+    /// cleared (`system/goal`).
+    Goal(crate::state::Goal),
     /// A sub-agent's own tool call; `parent` is the call that started it.
     SubTool {
         parent: String,
@@ -55,6 +58,14 @@ pub enum Event {
         id: String,
         name: String,
         input: Value,
+    },
+    /// An HTML page a Write call is writing, as far as it has streamed (the
+    /// live design panel shows it forming): at most every few hundred
+    /// milliseconds, and once more, whole, when the call is complete.
+    Drafting {
+        id: String,
+        path: String,
+        content: String,
     },
     /// A tool call's result.
     ToolResult {
@@ -136,13 +147,17 @@ pub struct Launch {
     pub env: Vec<(String, String)>,
 }
 
-/// The base URL ForgeCLI wants: it adds `/v1/messages` (Messages API) or
-/// `/chat/completions` (OpenAI-compatible) itself.
+/// The base URL ForgeCLI wants: it adds `/v1/messages` (Messages API),
+/// `/chat/completions` (OpenAI-compatible) or `/models/<model>:...` (Gemini)
+/// itself.
 fn cli_base_url(profile: &Profile) -> String {
+    if profile.wire == Wire::Gemini {
+        return profile.base_url.trim().trim_end_matches('/').to_string();
+    }
     let url = profile.chat_url();
     let suffix = match profile.wire {
         Wire::Anthropic => "/v1/messages",
-        Wire::Openai => "/chat/completions",
+        _ => "/chat/completions",
     };
     url.strip_suffix(suffix).unwrap_or(&url).to_string()
 }
@@ -151,8 +166,9 @@ fn cli_base_url(profile: &Profile) -> String {
 /// here. Every diagram is drawn with the Diagram Design skill (`plugin.rs`)
 /// unless the user names another format (Mermaid, ASCII, SVG, ...), which
 /// then wins; Mermaid and SVG blocks still render inline (`mermaid.rs`).
-/// An HTML page Forge writes is rendered, critiqued and revised before the
-/// reply ends (up to three rounds).
+/// Visual design work goes through the design skill. An HTML page Forge
+/// writes is rendered, critiqued and revised before the reply ends (up to
+/// three rounds).
 pub const SURFACE_PROMPT: &str = "You are running inside Forge Desktop, which renders your replies as Markdown and draws diagrams in the chat. \
 Diagram Design is the default for every diagram. When the user asks for a diagram, chart or graph, or one would explain structure \
 or flow better than prose (architecture, a request's path, data flow, states, a sequence of calls, a data model, a timeline, a \
@@ -162,6 +178,7 @@ and name it in your reply. When the user asks for a specific format (Mermaid, AS
 use exactly that format without hesitating. When the diagram-design skill is not available, fall back to a ```mermaid fenced \
 block or an ```svg block with one <svg>; both render inline here (Mermaid: flowchart, sequenceDiagram, stateDiagram-v2, \
 classDiagram, erDiagram, mindmap, pie, gantt, timeline, journey, xychart-beta, quadrantChart, gitGraph). Put ASCII art in a ```text block so it keeps its alignment. \
+For a deck, a page, a prototype, a poster or any other visual design, use the design skill. \
 When you write or change an HTML page (a report, a page, a mockup; diagrams included), review it before you call it done. \
 Look at it rendered: when Forge's browser tools are available (navigate, screenshot), navigate to the file (a file:// URL), \
 take a screenshot, and look at the picture; otherwise read the file back as a reviewer would. Critique it in two passes. Design: hierarchy \
@@ -235,6 +252,12 @@ pub fn launch(
                 env.push(("FORGE_OPENAI_API_KEY".into(), t));
             }
         }
+        Wire::Gemini => {
+            env.push(("FORGE_GEMINI_BASE_URL".into(), base));
+            if let Some(t) = token {
+                env.push(("FORGE_GEMINI_API_KEY".into(), t));
+            }
+        }
     }
     if !profile.headers.is_empty() {
         let lines: Vec<String> = profile
@@ -299,6 +322,9 @@ impl Session {
             "FORGE_AUTH_TOKEN",
             "FORGE_OPENAI_BASE_URL",
             "FORGE_OPENAI_API_KEY",
+            "FORGE_GEMINI_BASE_URL",
+            "FORGE_GEMINI_API_KEY",
+            "FORGE_GEMINI_AUTH_HEADER",
             "FORGE_CUSTOM_HEADERS",
             "FORGE_MODEL",
         ] {
@@ -385,14 +411,12 @@ impl Session {
     }
 
     /// A message sent while a reply runs, for its next step (`priority:
-    /// "next"`): ForgeCLI gives it to the model between tool calls, or
-    /// runs it next when the turn ends first; either way it is echoed back
-    /// under `uuid` when it lands (`Event::UserAccepted`).
-    pub fn queue(&self, text: &str, uuid: &str) -> Result<(), String> {
-        let mut line = user_line(text);
-        line["priority"] = "next".into();
-        line["uuid"] = uuid.into();
-        self.write(line)
+    /// "next"`), with its attachments (`attach::content_blocks`): ForgeCLI
+    /// gives it to the model between tool calls, or runs it next when the
+    /// turn ends first; either way it is echoed back under `uuid` when it
+    /// lands (`Event::UserAccepted`).
+    pub fn queue_content(&self, content: Value, uuid: &str) -> Result<(), String> {
+        self.write(json!({ "type": "user", "message": { "role": "user", "content": content }, "parent_tool_use_id": null, "session_id": "", "priority": "next", "uuid": uuid }))
     }
 
     /// Take back a queued message that hasn't reached the model; the answer
@@ -427,7 +451,14 @@ impl Session {
         suggestions: &Value,
         note: Option<&str>,
     ) -> Result<(), String> {
-        self.write(answer_line(request_id, allow, always, input, suggestions, note))
+        self.write(answer_line(
+            request_id,
+            allow,
+            always,
+            input,
+            suggestions,
+            note,
+        ))
     }
 
     /// Answer AskUserQuestion with what you chose (`questions_answer_line`).
@@ -660,6 +691,9 @@ fn browser_subject(input: &Value) -> Option<String> {
 #[derive(Default)]
 pub struct Parser {
     streamed: bool,
+    /// Write calls streaming in, by content block: their id and input so
+    /// far, and when their draft was last sent.
+    writes: std::collections::HashMap<u64, (String, String, Option<std::time::Instant>)>,
     /// Inside a `<think>` / `<thought>` span a model wrote into its reply
     /// text (Gemma, Qwen, DeepSeek behind an OpenAI-compatible route).
     in_thought: bool,
@@ -667,6 +701,9 @@ pub struct Parser {
     /// of a tag cut across two deltas ("<tho").
     held: String,
 }
+
+/// How often a page being written is shown again while it streams.
+const DRAFT_EVERY: std::time::Duration = std::time::Duration::from_millis(250);
 
 /// The tags a model wraps its reasoning in when it has no thinking block.
 const THOUGHT_OPEN: [&str; 2] = ["<think>", "<thought>"];
@@ -800,6 +837,18 @@ impl Parser {
                 {
                     out.push(Event::Break);
                 }
+                // A Write call starting: follow its input as it streams.
+                let index = ev["index"].as_u64().unwrap_or(0);
+                if ev["type"] == "content_block_start"
+                    && ev["content_block"]["type"] == "tool_use"
+                    && ev["content_block"]["name"] == "Write"
+                {
+                    let id = ev["content_block"]["id"].as_str().unwrap_or_default();
+                    self.writes.insert(index, (id.to_string(), String::new(), None));
+                }
+                if ev["type"] == "content_block_stop" {
+                    self.writes.remove(&index);
+                }
                 if ev["type"] == "content_block_delta" {
                     let d = &ev["delta"];
                     match d["type"].as_str() {
@@ -812,6 +861,24 @@ impl Parser {
                             out.push(Event::Thinking(
                                 d["thinking"].as_str().unwrap_or_default().into(),
                             ));
+                        }
+                        Some("input_json_delta") => {
+                            if let Some((id, json, sent)) = self.writes.get_mut(&index) {
+                                json.push_str(d["partial_json"].as_str().unwrap_or_default());
+                                let due = sent.is_none_or(|t| t.elapsed() >= DRAFT_EVERY);
+                                if let Some((path, content)) = due
+                                    .then(|| crate::design::live::partial_write(json))
+                                    .flatten()
+                                    .filter(|(p, c)| crate::design::live::is_page(p) && !c.is_empty())
+                                {
+                                    *sent = Some(std::time::Instant::now());
+                                    out.push(Event::Drafting {
+                                        id: id.clone(),
+                                        path,
+                                        content,
+                                    });
+                                }
+                            }
                         }
                         _ => {}
                     }
@@ -869,6 +936,11 @@ impl Parser {
                         .to_string())
                 };
                 out.push(Event::ControlReply { request_id, result });
+            }
+            Some("system") if v["subtype"] == "goal" => {
+                if let Some(goal) = crate::state::Goal::from_wire(&v) {
+                    out.push(Event::Goal(goal));
+                }
             }
             Some("system") if v["subtype"] == "status" => {
                 if let Some(m) = v["permissionMode"].as_str() {
@@ -1099,7 +1171,11 @@ pub fn tool_call(name: &str, input: &Value) -> ToolCall {
             (
                 ToolKind::Other,
                 QUESTION_TOOL.to_string(),
-                Some(if n == 1 { "1 question".into() } else { format!("{n} questions") }),
+                Some(if n == 1 {
+                    "1 question".into()
+                } else {
+                    format!("{n} questions")
+                }),
                 vec![],
             )
         }
@@ -1244,6 +1320,39 @@ mod tests {
     }
 
     #[test]
+    fn a_page_being_written_is_drafted_as_it_streams() {
+        let delta = |i: u64, part: &str| json!({"type":"stream_event","parent_tool_use_id":null,"event":{"type":"content_block_delta","index":i,"delta":{"type":"input_json_delta","partial_json":part}}});
+        let start = |i: u64, name: &str| json!({"type":"stream_event","parent_tool_use_id":null,"event":{"type":"content_block_start","index":i,"content_block":{"type":"tool_use","id":format!("w{i}"),"name":name,"input":{}}}});
+        let mut p = Parser::default();
+        let mut feed = |l: Value| p.line(&l.to_string());
+        assert!(feed(start(1, "Write")).is_empty());
+        // Nothing until the path is whole.
+        assert!(feed(delta(1, r#"{"file_path": "site/deck.ht"#)).is_empty());
+        let ev = feed(delta(1, r#"ml", "content": "<h1>Course"#));
+        assert_eq!(
+            ev,
+            [Event::Drafting {
+                id: "w1".into(),
+                path: "site/deck.html".into(),
+                content: "<h1>Course".into()
+            }]
+        );
+        // Then at most every DRAFT_EVERY.
+        assert!(feed(delta(1, " intro</h1>")).is_empty());
+        // Not a page, not a Write, or a sub-agent's: no drafts.
+        feed(start(2, "Write"));
+        assert!(feed(delta(2, r#"{"file_path": "a.md", "content": "x"#)).is_empty());
+        feed(start(3, "Bash"));
+        assert!(feed(delta(3, r#"{"command": "ls"#)).is_empty());
+        let nested = json!({"type":"stream_event","parent_tool_use_id":"t9","event":{"type":"content_block_start","index":4,"content_block":{"type":"tool_use","id":"w4","name":"Write","input":{}}}});
+        feed(nested);
+        assert!(feed(delta(4, r#"{"file_path": "b.html", "content": "x"#)).is_empty());
+        // A finished block is forgotten.
+        feed(json!({"type":"stream_event","parent_tool_use_id":null,"event":{"type":"content_block_stop","index":1}}));
+        assert!(!p.writes.contains_key(&1));
+    }
+
+    #[test]
     fn reasoning_in_thought_tags_becomes_thinking_even_cut_across_deltas() {
         let delta = |t: &str| json!({"type":"stream_event","parent_tool_use_id":null,"event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":t}}});
         let ev = parse(&[
@@ -1252,13 +1361,34 @@ mod tests {
             delta("ught>Hi there!"),
             json!({"type":"result","is_error":false,"duration_ms":10,"usage":{}}),
         ]);
-        let thinking: String = ev.iter().filter_map(|e| match e { Event::Thinking(t) => Some(t.as_str()), _ => None }).collect();
-        let text: String = ev.iter().filter_map(|e| match e { Event::Text(t) => Some(t.as_str()), _ => None }).collect();
+        let thinking: String = ev
+            .iter()
+            .filter_map(|e| match e {
+                Event::Thinking(t) => Some(t.as_str()),
+                _ => None,
+            })
+            .collect();
+        let text: String = ev
+            .iter()
+            .filter_map(|e| match e {
+                Event::Text(t) => Some(t.as_str()),
+                _ => None,
+            })
+            .collect();
         assert_eq!(thinking, "The user said hi. I'll respond naturally.");
         assert_eq!(text, "Hi there!");
         // A plain "<" in a reply is not held back for ever.
-        let ev = parse(&[delta("if a <"), json!({"type":"result","is_error":false,"duration_ms":10,"usage":{}})]);
-        let text: String = ev.iter().filter_map(|e| match e { Event::Text(t) => Some(t.as_str()), _ => None }).collect();
+        let ev = parse(&[
+            delta("if a <"),
+            json!({"type":"result","is_error":false,"duration_ms":10,"usage":{}}),
+        ]);
+        let text: String = ev
+            .iter()
+            .filter_map(|e| match e {
+                Event::Text(t) => Some(t.as_str()),
+                _ => None,
+            })
+            .collect();
         assert_eq!(text, "if a <");
     }
 
@@ -1281,7 +1411,8 @@ mod tests {
             Event::ToolResult {
                 id: "t1".into(),
                 output: "a\nb".into(),
-                is_error: false, images: vec![],
+                is_error: false,
+                images: vec![],
             }
         );
         assert!(
@@ -1360,6 +1491,44 @@ mod tests {
     }
 
     #[test]
+    fn a_goal_reaches_the_app_through_each_of_its_states() {
+        use crate::state::{Goal, GoalStatus};
+        let goal = |v: Value| match parse(&[v]).as_slice() {
+            [Event::Goal(g)] => g.clone(),
+            other => panic!("{other:?}"),
+        };
+        let set = goal(
+            json!({"type":"system","subtype":"goal","condition":"tests pass","status":"active","reason":null}),
+        );
+        assert_eq!(
+            set,
+            Goal {
+                condition: "tests pass".into(),
+                status: GoalStatus::Working,
+                reason: None
+            }
+        );
+        let paused = goal(
+            json!({"type":"system","subtype":"goal","condition":"tests pass","status":"active","paused":"limit","reason":"Goal paused: --max-turns reached."}),
+        );
+        assert_eq!(paused.status, GoalStatus::Paused);
+        let met = goal(
+            json!({"type":"system","subtype":"goal","condition":"tests pass","status":"achieved","reason":"cargo test: 12 passed"}),
+        );
+        assert_eq!(
+            (met.status, met.reason.as_deref()),
+            (GoalStatus::Achieved, Some("cargo test: 12 passed"))
+        );
+        assert_eq!(goal(json!({"type":"system","subtype":"goal","condition":"x","status":"failed","reason":"no access"})).status, GoalStatus::Failed);
+        assert_eq!(
+            goal(json!({"type":"system","subtype":"goal","condition":"x","status":"cleared"}))
+                .status,
+            GoalStatus::Cleared
+        );
+        assert!(parse(&[json!({"type":"system","subtype":"goal","status":"active"})]).is_empty());
+    }
+
+    #[test]
     fn browser_asks_say_what_and_where() {
         let (title, detail) = ask_text(
             "mcp__forge-browser__navigate",
@@ -1395,7 +1564,10 @@ mod tests {
               "options": [{ "label": "folio", "description": "" }, { "label": "notes", "description": "" }] } ] });
         let mut qs = questions(&input);
         assert_eq!(qs.len(), 3);
-        assert_eq!((qs[0].header.as_str(), qs[0].options[1].label.as_str()), ("Stack", "Leptos"));
+        assert_eq!(
+            (qs[0].header.as_str(), qs[0].options[1].label.as_str()),
+            ("Stack", "Leptos")
+        );
         assert!(qs[1].multi && !qs[0].multi);
         assert_eq!(ask_text(QUESTION_TOOL, &input).0, "Forge has 3 questions");
         qs[0].picked = vec![0];
@@ -1442,11 +1614,19 @@ mod tests {
             .get("updatedPermissions")
             .is_none());
         assert_eq!(
-            answer_line("r1", false, false, &input, &sugg, None)["response"]["response"]["behavior"],
+            answer_line("r1", false, false, &input, &sugg, None)["response"]["response"]
+                ["behavior"],
             "deny"
         );
         // Denied with your words: Forge gets them, not just a no.
-        let said = answer_line("r1", false, false, &input, &sugg, Some("Use lib.rs instead"));
+        let said = answer_line(
+            "r1",
+            false,
+            false,
+            &input,
+            &sugg,
+            Some("Use lib.rs instead"),
+        );
         let message = said["response"]["response"]["message"].as_str().unwrap();
         assert!(message.contains("Use lib.rs instead"), "{message}");
     }
@@ -1486,6 +1666,7 @@ mod tests {
         assert!(surface.contains("```mermaid") && surface.contains("ASCII"));
         // An HTML page is looked at, critiqued and revised, three rounds at most.
         assert!(surface.contains("When you write or change an HTML page"));
+        assert!(surface.contains("use the design skill"));
         assert!(surface.contains("after three rounds"));
         let o: Profile = serde_json::from_value(
             json!({"name":"o","baseUrl":"http://127.0.0.1:11434","wire":"openai","model":"q"}),
@@ -1496,6 +1677,18 @@ mod tests {
             "FORGE_OPENAI_BASE_URL".into(),
             "http://127.0.0.1:11434/v1".into()
         )));
+        // Gemini: ForgeCLI's native wire, the base URL as written.
+        let g: Profile = serde_json::from_value(json!({"name":"g","baseUrl":"https://generativelanguage.googleapis.com/v1beta/","wire":"gemini","model":"gemini-3-flash-preview"}))
+        .unwrap();
+        let l = launch(&g, ModeId::Manual, false, Conversation::New(id)).unwrap();
+        assert!(l.env.contains(&(
+            "FORGE_GEMINI_BASE_URL".into(),
+            "https://generativelanguage.googleapis.com/v1beta".into()
+        )));
+        assert!(!l
+            .env
+            .iter()
+            .any(|(k, _)| k == "FORGE_BASE_URL" || k == "FORGE_OPENAI_BASE_URL"));
     }
 
     #[test]

@@ -31,8 +31,7 @@ fn once(ms: u64) -> gpui::Animation {
 
 /// Leaving: slow at first, then gone (the reverse of `ease_out_quint`).
 fn leave(ms: u64) -> gpui::Animation {
-    gpui::Animation::new(std::time::Duration::from_millis(played(ms)))
-        .with_easing(|k: f32| k * k)
+    gpui::Animation::new(std::time::Duration::from_millis(played(ms))).with_easing(|k: f32| k * k)
 }
 
 /// A spring that runs a little past its rest and settles back.
@@ -269,9 +268,8 @@ pub fn notice<E: gpui::Styled + gpui::IntoElement + 'static>(
         )
         .into_any_element()
     } else {
-        let anim = gpui::Animation::new(std::time::Duration::from_millis(played(
-            t.size.toast_in_ms,
-        )));
+        let anim =
+            gpui::Animation::new(std::time::Duration::from_millis(played(t.size.toast_in_ms)));
         el.with_animation(SharedString::from(format!("{id}-in")), anim, |d, k| {
             d.opacity((k * 2.5).min(1.)).mb(px(-18. * (1. - spring(k))))
         })
@@ -306,8 +304,10 @@ pub fn slide_out(
         // Eased both ways, so it is seen leaving rather than snatched away.
         .with_animation(
             SharedString::from(format!("{id}-out")),
-            gpui::Animation::new(std::time::Duration::from_millis(played(t.size.panel_out_ms)))
-                .with_easing(gpui::ease_in_out),
+            gpui::Animation::new(std::time::Duration::from_millis(played(
+                t.size.panel_out_ms,
+            )))
+            .with_easing(gpui::ease_in_out),
             move |d, k| d.w(px(width * (1. - k))).opacity(1. - k * k),
         )
         .into_any_element()
@@ -490,7 +490,16 @@ pub fn sidebar_slide(
         .flex_none()
         .h_full()
         .overflow_hidden()
-        .child(div().absolute().top_0().bottom_0().left_0().w(full).flex().child(pane))
+        .child(
+            div()
+                .absolute()
+                .top_0()
+                .bottom_0()
+                .left_0()
+                .w(full)
+                .flex()
+                .child(pane),
+        )
         .with_animation(id, once(t.size.panel_in_ms), move |d, k| {
             let d = d.w(from + (to - from) * k);
             if opening {
@@ -543,4 +552,3 @@ pub fn side_shade(t: &crate::theme::Theme) -> Option<gpui::AnyElement> {
             .into_any_element(),
     )
 }
-

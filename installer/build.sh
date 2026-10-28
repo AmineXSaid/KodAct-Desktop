@@ -41,8 +41,15 @@ if compgen -G "$here/installer/private-fonts/*.[oOtT][tT][fF]" >/dev/null; then
   fonts=(-DFONTS_DIR="$out/stage/fonts")
 fi
 
+# The design library: its committed files and the media its lock pins
+# (fetched once, cached by hash), checked, and nothing else from the folder.
+python3 -I "$here/scripts/sync_open_design.py" media
+python3 -I "$here/scripts/sync_open_design.py" check
+python3 -I "$here/scripts/sync_open_design.py" stage "$out/stage/design-library"
+
 makensis -V2 -WX \
   "${fonts[@]}" \
+  -DDESIGN_DIR="$out/stage/design-library" \
   -DAPP_EXE="$out/stage/app/Forge.exe" \
   -DCLI_EXE="$out/stage/cli/forge.exe" \
   -DLINUX_CLI="$out/stage/linux/forge" \

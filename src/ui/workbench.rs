@@ -14,11 +14,11 @@ use super::markdown::{self, CopyContext, Look};
 use crate::state::{AppState, Block, FileRef, Message, PanelTab, ToolStatus};
 use crate::theme::Theme;
 
-/// The chat's latest plan, as Markdown.
-pub fn plan(messages: &[Message]) -> Option<String> {
+/// Every plan Forge proposed in the chat, oldest first: each revision after
+/// your feedback is a version of its own.
+pub fn plans(messages: &[Message]) -> Vec<String> {
     tools(messages)
         .filter(|t| t.target == "ExitPlanMode")
-        .last()
         .map(|t| {
             t.diff
                 .iter()
@@ -26,6 +26,31 @@ pub fn plan(messages: &[Message]) -> Option<String> {
                 .collect::<Vec<_>>()
                 .join("\n")
         })
+        .collect()
+}
+
+/// A file name for a plan: its title in lowercase words joined by dashes.
+fn file_stem(title: &str) -> String {
+    let words: Vec<String> = title
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .map(str::to_lowercase)
+        .collect();
+    if words.is_empty() {
+        "plan".into()
+    } else {
+        words.join("-")
+    }
+}
+
+/// A plan's name: its first heading, else "Plan".
+fn plan_title(md: &str) -> String {
+    md.lines()
+        .map(str::trim)
+        .find(|l| l.starts_with('#'))
+        .map(|l| l.trim_start_matches('#').trim().to_string())
+        .filter(|l| !l.is_empty())
+        .unwrap_or_else(|| "Plan".into())
 }
 
 /// The chat's latest task list: (status, text).
@@ -160,11 +185,151 @@ pub struct View<'a> {
     pub width: f32,
     pub below: bool,
     pub scale: f32,
+    /// The plan version shown (None: the latest), and Preview or Source.
+    pub plan_version: Option<usize>,
+    pub source: bool,
 }
+
+/// The bar over a plan, as over a document in Claude's panel: what it is,
+/// its versions, Preview or Markdown, Copy and Download.
+fn plan_bar(
+    t: &Theme,
+    state: &Entity<AppState>,
+    md: &str,
+    at: usize,
+    total: usize,
+    source: bool,
+    copied: bool,
+) -> AnyElement {
+    let title = plan_title(md);
+    let step = |id: &'static str, path: &'static str, tip: &'static str, to: Option<usize>| {
+        let state = state.clone();
+        let on = to.is_some();
+        icon_button(t, id, path, tip)
+            .when(!on, |d| d.opacity(0.35).cursor_default())
+            .on_click(move |_, _, cx| {
+                if let Some(to) = to {
+                    state.update(cx, |s, cx| s.show_plan_version(to, total, cx));
+                }
+            })
+    };
+    let (to_preview, to_source, copier, saver) =
+        (state.clone(), state.clone(), state.clone(), state.clone());
+    let (text, file) = (
+        md.to_string(),
+        FileRef {
+            name: format!("{}.md", file_stem(&title)).into(),
+            path: None,
+            content: md.to_string().into(),
+            bytes: None,
+        },
+    );
+    div()
+        .flex_none()
+        .flex()
+        .items_center()
+        .gap(t.space.sm)
+        .px(t.space.lg)
+        .py(t.space.sm)
+        .border_b_1()
+        .border_color(t.colors.border)
+        .bg(t.colors.surface)
+        .child(
+            div()
+                .flex_none()
+                .size(t.size.control)
+                .rounded(t.radius.button)
+                .bg(t.colors.primary_tint)
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(icon(
+                    "icons/scroll-text.svg",
+                    t.size.icon_sm,
+                    t.colors.primary,
+                )),
+        )
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .child(
+                    div()
+                        .truncate()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(t.colors.text_strong)
+                        .child(title),
+                )
+                .child(
+                    div()
+                        .truncate()
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_muted)
+                        .child(if total > 1 {
+                            format!("Plan · v{} of {total}", at + 1)
+                        } else {
+                            "Plan · Markdown".to_string()
+                        }),
+                ),
+        )
+        .when(total > 1, |d| {
+            d.child(step(
+                "plan-older",
+                "icons/chevron-left.svg",
+                "Earlier version",
+                at.checked_sub(1),
+            ))
+            .child(step(
+                "plan-newer",
+                "icons/chevron-right.svg",
+                "Later version",
+                (at + 1 < total).then_some(at + 1),
+            ))
+        })
+        .child(
+            super::button::Segmented::new("plan-views", "View")
+                .option("Preview", !source, move |_, _, cx| {
+                    to_preview.update(cx, |s, cx| s.set_source_view(false, cx))
+                })
+                .option("Markdown", source, move |_, _, cx| {
+                    to_source.update(cx, |s, cx| s.set_source_view(true, cx))
+                }),
+        )
+        .child(
+            icon_button(
+                t,
+                "plan-copy",
+                if copied {
+                    "icons/check.svg"
+                } else {
+                    "icons/copy.svg"
+                },
+                "Copy the plan",
+            )
+            .on_click(move |_, _, cx| {
+                cx.write_to_clipboard(gpui::ClipboardItem::new_string(text.clone()));
+                copier.update(cx, |s, cx| s.mark_copied(PLAN_COPY.into(), cx));
+            }),
+        )
+        .child(
+            icon_button(t, "plan-download", "icons/download.svg", "Download")
+                .on_click(move |_, _, cx| saver.update(cx, |s, cx| s.download(&file, cx))),
+        )
+        .into_any_element()
+}
+
+const PLAN_COPY: &str = "panel-plan-copy";
 
 pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
     let files = files(v.messages);
-    let plan = plan(v.messages);
+    let all_plans = plans(v.messages);
+    let plan_at = v
+        .plan_version
+        .filter(|i| *i < all_plans.len())
+        .unwrap_or(all_plans.len().saturating_sub(1));
+    let plan = all_plans.get(plan_at).cloned();
     let todos = todos(v.messages);
     let closer = state.clone();
     let header = div()
@@ -182,13 +347,48 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
             let done = todos.iter().filter(|(s, _)| *s == ToolStatus::Done).count();
             let running = v.agents.iter().filter(|r| r.ended.is_none()).count();
             let of = |a: usize, b: usize| (b > 0).then(|| format!("{a}/{b}"));
-            let item = |which, label, icon, readout, live, key| super::lens::Item { which, label, icon, readout, live, key };
+            let item = |which, label, icon, readout, live, key| super::lens::Item {
+                which,
+                label,
+                icon,
+                readout,
+                live,
+                key,
+            };
             super::lens::Lens::new(
                 vec![
-                    item(PanelTab::Plan, "Plan", "icons/route.svg", of(done, todos.len()), false, "1"),
-                    item(PanelTab::Agents, "Agents", "icons/bot.svg", of(v.agents.len() - running, v.agents.len()), running > 0, "2"),
-                    item(PanelTab::Files, "Files", "icons/folder.svg", (!files.is_empty()).then(|| files.len().to_string()), false, "3"),
-                    item(PanelTab::Browser, "Browser", "icons/globe.svg", None, false, "4"),
+                    item(
+                        PanelTab::Plan,
+                        "Plan",
+                        "icons/route.svg",
+                        of(done, todos.len()),
+                        false,
+                        "1",
+                    ),
+                    item(
+                        PanelTab::Agents,
+                        "Agents",
+                        "icons/bot.svg",
+                        of(v.agents.len() - running, v.agents.len()),
+                        running > 0,
+                        "2",
+                    ),
+                    item(
+                        PanelTab::Files,
+                        "Files",
+                        "icons/folder.svg",
+                        (!files.is_empty()).then(|| files.len().to_string()),
+                        false,
+                        "3",
+                    ),
+                    item(
+                        PanelTab::Browser,
+                        "Browser",
+                        "icons/globe.svg",
+                        None,
+                        false,
+                        "4",
+                    ),
                 ],
                 v.tab,
                 state.clone(),
@@ -266,14 +466,27 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
                         },
                     )))
             })
-            .children(plan.map(|md| {
+            .children(plan.as_ref().filter(|_| v.source).map(|md| {
+                super::source_view::render("plan-source", md, "markdown", t)
+            }))
+            .children(plan.as_ref().filter(|_| !v.source).map(|md| {
                 div()
                     .flex()
                     .flex_col()
                     .gap(t.space.sm)
-                    .child(section_title(t, "Plan"))
+                    .when(plan_at + 1 < all_plans.len(), |d| {
+                        d.child(
+                            div()
+                                .text_size(t.text.caption)
+                                .text_color(t.extra.warning)
+                                .child(format!(
+                                    "An earlier version. Forge's latest plan is version {}.",
+                                    all_plans.len()
+                                )),
+                        )
+                    })
                     .child(markdown::render_as(
-                        &md,
+                        md,
                         t,
                         &CopyContext {
                             streaming: false,
@@ -369,6 +582,7 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
         PanelTab::Browser => div().size_full().child(v.browser.clone()).into_any_element(),
     };
 
+    let fills = v.tab == PanelTab::Browser;
     div()
         .flex_none()
         .when(!v.below, |d| d.w(px(v.width)).h_full().border_l_1())
@@ -378,17 +592,30 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
         .bg(t.colors.surface)
         .border_color(t.colors.border)
         .child(header)
+        .children(plan.as_ref().filter(|_| v.tab == PanelTab::Plan).map(|md| {
+            plan_bar(
+                t,
+                &state,
+                md,
+                plan_at,
+                all_plans.len(),
+                v.source,
+                v.copied.as_deref() == Some(PLAN_COPY),
+            )
+        }))
         .child(
             div()
                 .id("panel-body")
                 .flex_1()
                 .min_h_0()
                 .bg(ground)
-                .overflow_y_scroll()
+                // The browser fills the panel and scrolls its own page;
+                // the other views scroll here.
+                .map(|d| if fills { d.flex().flex_col() } else { d.overflow_y_scroll() })
                 // Each view arrives as the capsule lands on it: it fades in
                 // and rises a few pixels into place.
                 .child(super::motion::rise_in(
-                    div().child(body),
+                    div().when(fills, |d| d.flex_1().min_h_0()).child(body),
                     SharedString::from(format!("panel-view-{:?}", v.tab)),
                     6.,
                     t,
@@ -427,7 +654,7 @@ mod tests {
                 ]}),
             ),
         ]);
-        assert_eq!(plan(&m).unwrap(), "# Plan\n\n1. Read\n2. Write");
+        assert_eq!(plans(&m).pop().unwrap(), "# Plan\n\n1. Read\n2. Write");
         let t = todos(&m);
         assert_eq!(t.len(), 3);
         assert_eq!(t[0], (ToolStatus::Done, "Read".into()));

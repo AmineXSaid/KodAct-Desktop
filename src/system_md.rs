@@ -10,7 +10,7 @@ use std::fmt::Write as _;
 use gpui::{Hsla, Pixels};
 
 use crate::palette_check::{contrast, oklab, rgba};
-use crate::theme::Theme;
+use crate::theme::{Look, Theme};
 
 const PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/.interface-design/system.md");
 /// `DESIGN.md` (the DESIGN.md format, read by the impeccable skill), from the
@@ -68,7 +68,7 @@ fn render() -> String {
     let _ = writeln!(w, "**Foundation:** Forge Ember. Warm paper by day: the window and sidebar #ebe8e1, the session a sheet of #f7f5f1 on it, cards white on that. Warm graphite at night: #1b1a19, #242322, cards #2e2d2b. One ink carries the type. One colour, ember copper (#b4532a; #e2895b at night): the decisive action, links, a switch that is on, the mark's top, a waiting dot. Inline code in coral on a faint wash. Everything else is neutral; colour otherwise only for meaning (modes, status).\n");
     let _ = writeln!(w, "**Depth:** nearly flat. Hairlines inside cards; the session and the user's message lift on paper grain (three 1px shadows at 6/4/1% ink); popovers and the permission card a touch more.\n");
     let _ = writeln!(w, "**Shape:** two shapes. Everything you press is a pill (buttons, chips, icon buttons, the new-chat and needs-you pills); everything that holds content is 4px (cards, rows, menus, fields, the composer, the session).\n");
-    let _ = writeln!(w, "**Type:** Hanken Grotesk only (Anthropic Sans where it is installed): 400 for text, 500 for labels, 600 for headings and buttons. Small labels in sentence case, never uppercase and never above a heading. Code in JetBrains Mono.\n");
+    let _ = writeln!(w, "**Type:** Anthropic Sans only, the Text cut for every word (code included) and the Display cut for the greeting and headings: 400 for text, 500 for labels, 600 for headings and buttons. Small labels in sentence case, never uppercase and never above a heading. The app bundles no font; diagrams are redrawn in it whatever they name.\n");
 
     let _ = writeln!(w, "## Tokens\n");
     let sp = &l.space;
@@ -130,9 +130,21 @@ fn render() -> String {
         ("sidebar", z.sidebar, "the sidebar's width"),
         ("column", z.column, "the reading column"),
         ("menu_row", z.menu_row, "a row in a chat's menu"),
-        ("session_panel", z.session_panel, "the Session column beside a chat: environment, context, changes"),
-        ("composer_line", z.composer_line, "the composer box with one line in it: +, the text, send"),
-        ("menu_width", z.menu_width, "a chat menu's width, and its flyouts' least"),
+        (
+            "session_panel",
+            z.session_panel,
+            "the Session column beside a chat: environment, context, changes",
+        ),
+        (
+            "composer_line",
+            z.composer_line,
+            "the composer box with one line in it: +, the text, send",
+        ),
+        (
+            "menu_width",
+            z.menu_width,
+            "a chat menu's width, and its flyouts' least",
+        ),
         (
             "thumb_w",
             z.thumb_w,
@@ -183,6 +195,12 @@ fn render() -> String {
             z.remote_menu,
             "the remote quick pick's width",
         ),
+        ("design_menu", z.design_menu, "the composer's design menu's width"),
+        (
+            "design_menu_list",
+            z.design_menu_list,
+            "the design menu's list at its tallest: every kind of work",
+        ),
         (
             "edge_bar",
             z.edge_bar,
@@ -199,7 +217,6 @@ fn render() -> String {
             "a switch's track (20px tall, 14px thumb)",
         ),
         ("rail", z.rail, "the collapsed sidebar"),
-        ("dot_gap", z.dot_gap, "the home screen's dot grid"),
         (
             "mark_home",
             z.mark_home,
@@ -248,53 +265,39 @@ fn render() -> String {
     }
     let _ = writeln!(w);
 
-    let _ = writeln!(w, "### Themes\nPicked in Settings > General > Theme and kept in `window.json`. Each is a whole look: its surfaces and one colour, and its form (faces, corners, density, depth, how a selected row shows). Calmly smooth is the system's own form; every theme passes `palette_check.rs` in both modes.\n");
-    let _ = writeln!(w, "| Theme | Light canvas / session / accent | Dark canvas / session / accent |\n|---|---|---|");
-    for look in crate::theme::Look::ALL {
-        let (a, b) = (Theme::of(look, false), Theme::of(look, true));
-        let _ = writeln!(
-            w,
-            "| {} ({}) | `{}` / `{}` / `{}` | `{}` / `{}` / `{}` |",
-            look.name(),
-            look.blurb(),
-            hex(a.extra.pane),
-            hex(a.extra.stage),
-            hex(a.extra.accent),
-            hex(b.extra.pane),
-            hex(b.extra.stage),
-            hex(b.extra.accent)
-        );
-    }
-    let _ = writeln!(w);
-    let _ = writeln!(w, "| Theme | Faces (UI / display / code / replies) | Corners button · card · field · composer · pressed | Row · title bar · chat | Depth | Selected row |\n|---|---|---|---|---|---|");
-    for look in crate::theme::Look::ALL {
-        let a = Theme::of(look, false);
-        let (r, z) = (&a.radius, &a.size);
-        let _ = writeln!(
-            w,
-            "| {} | {} / {} / {} / {} | {} · {} · {} · {} · {} | {} · {} · {} | {:?} | {:?} |",
-            look.name(),
-            a.font_sans,
-            a.font_display,
-            a.font_mono,
-            a.font_reading,
-            px(r.button),
-            px(r.card),
-            px(r.field),
-            px(z.composer_radius),
-            if f32::from(r.compact) >= 999. {
-                "pill".to_string()
-            } else {
-                px(r.compact)
-            },
-            px(z.row),
-            px(z.titlebar),
-            px(z.chat_text),
-            a.depth,
-            a.selection,
-        );
-    }
-    let _ = writeln!(w);
+    let _ = writeln!(w, "### Theme\nOne look, Calmly smooth, in light and dark (`window.json` keeps the mode). Every face is Anthropic Sans: Text for every word (interface, replies, code, the terminal, diagrams), Display for the large lines (`fonts.rs`). It passes `palette_check.rs` in both modes.\n");
+    let (a, b) = (Theme::of(Look::Calm, false), Theme::of(Look::Calm, true));
+    let (r, z) = (&a.radius, &a.size);
+    let _ = writeln!(
+        w,
+        "| | Light | Dark |\n|---|---|---|\n| Canvas / session / accent | `{}` / `{}` / `{}` | `{}` / `{}` / `{}` |\n",
+        hex(a.extra.pane),
+        hex(a.extra.stage),
+        hex(a.extra.accent),
+        hex(b.extra.pane),
+        hex(b.extra.stage),
+        hex(b.extra.accent)
+    );
+    let _ = writeln!(
+        w,
+        "Faces (UI / display / code / replies): {} / {} / {} / {}. Corners button · card · field · composer · pressed: {} · {} · {} · {} · {}. Row · title bar · chat: {} · {} · {}.\n",
+        a.font_sans,
+        a.font_display,
+        a.font_mono,
+        a.font_reading,
+        px(r.button),
+        px(r.card),
+        px(r.field),
+        px(z.composer_radius),
+        if f32::from(r.compact) >= 999. {
+            "pill".to_string()
+        } else {
+            px(r.compact)
+        },
+        px(z.row),
+        px(z.titlebar),
+        px(z.chat_text),
+    );
 
     let _ = writeln!(
         w,
@@ -318,7 +321,7 @@ fn render() -> String {
     );
     // Each row: the token, then the pair whose contrast is shown.
     type Pick = fn(&Theme) -> Hsla;
-    let rows: [(&str, Pick, Pick, Pick, &str); 26] = [
+    let rows: [(&str, Pick, Pick, Pick, &str); 27] = [
         (
             "text_strong",
             |t| t.colors.text_strong,
@@ -402,6 +405,13 @@ fn render() -> String {
             |t| t.extra.mark_top,
             |t| t.extra.stage,
             "the ingot mark's top face (`ui/ingot.rs`)",
+        ),
+        (
+            "page_ink",
+            |t| t.extra.page_ink,
+            |t| t.extra.page_ink,
+            |t| t.extra.page_halo,
+            "marks drawn on a design page, on their halo (`ui/design_marks.rs`)",
         ),
         (
             "mark_left",
@@ -520,7 +530,6 @@ fn render() -> String {
     let _ = writeln!(w, "## Patterns\n");
     let _ = writeln!(w, "### Buttons (`ui/button.rs`)\nOne family; every control takes keyboard focus (a `primary` edge shows for the keyboard only), names itself to assistive technology, and swallows clicks while disabled or loading.\n- Primary: {}px tall, padding 0 14px, radius {}px, `fill` with `fill_fg`, 500 weight. One per surface.\n- Secondary and Outlined: `surface`, 1px `border_strong`, `hover` wash.\n- Ghost: clear until hovered. Danger: `fill_danger`, white.\n- Icon: {}px square, radius {}px, a {}px icon in `text_muted`; outlined squares {}px at {}px radius.\n- Send: {}px, radius {}px, `accent` with a white arrow; `accent_soft` with nothing to send; Stop is an ink ring round a square.\n- Switch: {}x{}px pill, {}px thumb sliding over {}ms; `toggle_on` when on, `border_strong` when off.\n- Segmented: a `sunk` track, radius {}px; the chosen segment raised onto `surface` at {}px.\n", px(z.button_h), px(r.button), px(z.hit), px(r.button), px(z.icon), px(z.hit_lg), px(r.control), px(z.hit_lg), px(r.control), px(z.switch_w), px(z.switch_h), px(z.switch_thumb), z.pop_in_ms, px(r.button), px(r.segment));
     let _ = writeln!(w, "### Composer\n- Width: up to {}px, centred\n- One unit: a white box (radius {}px, 1px `border`, `border_strong` while focused, tinted by the mode when one is set) resting in a `sunk` tray\n- Text: {}px; the outlined + bottom left and Send bottom right, {}px from the box's edges\n- The tray: the project, the context ring, the model and the mode as quiet {}px selectors: a 14px icon, the label, a chevron that flips while open; washed on hover, raised onto `surface` with a hairline while open\n", px(z.composer_width), px(z.composer_radius), px(tx.body), px(sp.snug), px(z.button_sm));
-    let _ = writeln!(w, "### Dot Field (`ui/dot_field.rs`)\n- Behind the home screen: a {}px grid of {}px dots in `dot`, gathered in two clouds hugging the content (beside the heading, past the composer's lower right), their outlines warped and density varied by slow noise, faded with a smooth falloff to a quiet margin round the measured content and before every edge\n- About 1.6% of dots in `accent`; fewer still are 5px outlined squares or accent diamonds\n- Painted on one canvas from cached geometry; breathes over 9s, leans up to 4px from the pointer, brightens while the composer has focus; glides to its new place when the layout changes (sidebar, resize, a growing composer); rests when hidden or inactive; still under reduced motion\n- Behind a chat it fills both margins beside the reading column (kept 18px clear of it), at 30% of its home strength (40% in dark); while Forge replies a slow wave runs down through it (crest 80%), easing in and out with the reply; still and faint under reduced motion\n", px(z.dot_gap), px(z.dot));
     let _ = writeln!(w, "### Card Default\n- Border: 1px `border`\n- Padding: {}px\n- Radius: {}px\n- Background: `surface`\n- Usage: tool calls, file cards, code blocks\n", px(sp.xl), px(r.card));
     let _ = writeln!(w, "### Popover\n- Border: 1px `border`, radius {}px, padding {}px\n- Background: `surface`, with the two-layer popover shadow\n- Usage: menus, pickers, the command palette\n", px(r.card), px(sp.xs));
     let _ = writeln!(w, "### File Card\n- A file Forge made, in its reply: up to 440px, `surface`, 1px `border`, radius {}px, padding {}px\n- A 36x44 page tile (radius {}px, concentric with the card) previews it, its type in mono `primary`\n- Title 600 `text_strong`; \"Document · MD\" caption `text_muted`; a bordered Download button\n- Open: the edge turns `primary` at 60%\n", px(r.card), px(sp.sm), px(r.small));
@@ -538,12 +547,12 @@ fn render() -> String {
         ("Paper on paper", "The session is a 4px sheet on the cream canvas with paper grain; the title bar and sidebar have no dividers, the sheet's edge is the split.", "2026-10-18"),
         ("Pills to press, 4px to hold", "The contrast between the two shapes is the system: it says at a glance what acts and what holds.", "2026-10-18"),
         ("Ink pills for the loud neutrals", "New chat and needs-you are ink pills; the accent is kept for the one decision in front of you (Allow once, Send).", "2026-10-18"),
-        ("Archivo for everything", "A single face set in two weights reads as set type; headings in 600 replace the display serif.", "2026-10-18"),
-        ("Hanken Grotesk, not Archivo", "Archivo read boxy and wide as prose; Hanken Grotesk is a warm humanist grotesk, close in spirit to Anthropic Sans, and ships an italic.", "2026-10-23"),
+        ("Anthropic Sans only", "One family everywhere, in its Text and Display cuts: the interface, replies, code, the terminal and diagrams. No other face is bundled or named.", "2026-10-26"),
+        ("One look", "The theme picker and its eleven other looks are gone; Calmly smooth, light and dark, is the app's one look.", "2026-10-26"),
         ("Forge Ember", "Warm paper and warm graphite, the sidebar a step deeper than the session, and one copper heat for the action, the current state and links: the forge's own colour, as calm as Claude Code's.", "2026-10-23"),
         ("A neutral wash for the open row", "The accent stays for the action; the open chat and the open screen lift by a grey wash.", "2026-10-23"),
         ("Composer at 620px", "A comfortable measure for a prompt, the same in a chat and on the welcome page.", "2026-10-11"),
-        ("Composer on the reading column", "In a chat the composer takes the 720px column the reply is read in, so the two line up; on the welcome page it keeps its own measure.", "2026-10-23"),
+        ("Composer on the reading column", "In a chat the composer takes the 760px column the reply is read in, so the two line up; on the welcome page it keeps its own measure.", "2026-10-23"),
         ("No name over a reply", "The user's bubble already separates the turns; a name and mark over every reply only repeated it.", "2026-10-23"),
         ("Deny is quiet", "A permission has one filled action, Allow once; Deny is a ghost button, a way out rather than an alarm.", "2026-10-23"),
         ("Every window leaves as it came", "Each group has its own motion, in and out (`ui/motion.rs`): dialogs rise 14px over a dimming backdrop and sink away (240/170ms); the palette drops from above and lifts away; menus at an anchor unfold and fade back toward it (110ms); the composer's menus draw their jewel edge and fade back down; questions draw their edge in their colour and sink away; side panels and the dock slide in and back out (280/200ms); a notice springs up and drops away. A window that closes is kept a beat (`Presence`) so it leaves rather than vanishes.", "2026-10-25"),
@@ -564,7 +573,10 @@ fn render_design() -> String {
     let q = |c: Hsla| format!("\"{}\"", css(c));
     let _ = writeln!(w, "---");
     let _ = writeln!(w, "name: Forge");
-    let _ = writeln!(w, "description: The desktop app for ForgeCLI: a calm workspace for long agent sessions");
+    let _ = writeln!(
+        w,
+        "description: The desktop app for ForgeCLI: a calm workspace for long agent sessions"
+    );
     let _ = writeln!(w, "colors:");
     for (name, light, dark) in [
         ("canvas", l.colors.canvas, d.colors.canvas),
@@ -589,12 +601,33 @@ fn render_design() -> String {
     let tx = &l.text;
     let _ = writeln!(w, "typography:");
     let _ = writeln!(w, "  prose:\n    fontFamily: \"{}\"\n    fontSize: \"{}px\"\n    fontWeight: 400\n    lineHeight: {:.3}", l.font_reading, px(z.chat_text), z.line_height_chat);
-    let _ = writeln!(w, "  ui:\n    fontFamily: \"{}\"\n    fontSize: \"{}px\"\n    fontWeight: 400", l.font_sans, px(tx.body_sm));
-    let _ = writeln!(w, "  caption:\n    fontFamily: \"{}\"\n    fontSize: \"{}px\"\n    fontWeight: 400", l.font_sans, px(tx.caption));
+    let _ = writeln!(
+        w,
+        "  ui:\n    fontFamily: \"{}\"\n    fontSize: \"{}px\"\n    fontWeight: 400",
+        l.font_sans,
+        px(tx.body_sm)
+    );
+    let _ = writeln!(
+        w,
+        "  caption:\n    fontFamily: \"{}\"\n    fontSize: \"{}px\"\n    fontWeight: 400",
+        l.font_sans,
+        px(tx.caption)
+    );
     let _ = writeln!(w, "  code:\n    fontFamily: \"{}\"", l.font_mono);
-    let _ = writeln!(w, "  code-inline:\n    fontFamily: \"{}\"", l.font_code_inline);
+    let _ = writeln!(
+        w,
+        "  code-inline:\n    fontFamily: \"{}\"",
+        l.font_code_inline
+    );
     let r = &l.radius;
-    let _ = writeln!(w, "rounded:\n  button: \"{}px\"\n  card: \"{}px\"\n  field: \"{}px\"\n  composer: \"{}px\"", px(r.button), px(r.card), px(r.field), px(z.composer_radius));
+    let _ = writeln!(
+        w,
+        "rounded:\n  button: \"{}px\"\n  card: \"{}px\"\n  field: \"{}px\"\n  composer: \"{}px\"",
+        px(r.button),
+        px(r.card),
+        px(r.field),
+        px(z.composer_radius)
+    );
     let sp = &l.space;
     let _ = writeln!(w, "spacing:\n  xs: \"{}px\"\n  sm: \"{}px\"\n  md: \"{}px\"\n  lg: \"{}px\"\n  xl: \"{}px\"\n  xxl: \"{}px\"", px(sp.xs), px(sp.sm), px(sp.md), px(sp.lg), px(sp.xl), px(sp.xxl));
     let _ = writeln!(w, "components:");

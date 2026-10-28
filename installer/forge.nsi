@@ -9,6 +9,7 @@
 ;   %LOCALAPPDATA%\Programs\Forge\bin\forge.exe    ForgeCLI (the app finds it in bin\)
 ;   %LOCALAPPDATA%\Programs\Forge\bin\linux-x86_64\forge   ForgeCLI for Linux, put on
 ;                                     WSL distros, SSH hosts and containers
+;   %LOCALAPPDATA%\Programs\Forge\design-library\  the design library
 ; plus the user's Start menu and desktop shortcuts, an optional PATH entry for
 ; `forge` (the user's), and an uninstaller in Apps & features (the user's).
 
@@ -91,6 +92,18 @@ Section "Forge desktop app" SecApp
   CreateShortcut "$SMPROGRAMS\Forge.lnk" "$INSTDIR\Forge.exe" "" "$INSTDIR\Forge.exe" 0
 SectionEnd
 
+Section "Design library" SecDesign
+  SectionIn RO
+  ; Open Design's skills, templates, design systems and craft rules, which
+  ; Forge's design chats read (design-library/, staged by build.sh with its
+  ; media fetched). Replaced whole, so an update leaves no stale files; only
+  ; a library Forge put there (it has UPSTREAM.json) is ever removed.
+  IfFileExists "$INSTDIR\design-library\UPSTREAM.json" 0 +2
+    RMDir /r "$INSTDIR\design-library"
+  SetOutPath "$INSTDIR\design-library"
+  File /r "${DESIGN_DIR}\*.*"
+SectionEnd
+
 Section "ForgeCLI (forge)" SecCli
   SectionIn RO
   SetOutPath "$INSTDIR\bin"
@@ -112,6 +125,7 @@ SectionEnd
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
   !insertmacro MUI_DESCRIPTION_TEXT ${SecApp} "The Forge desktop chat app."
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecDesign} "Skills, templates and design systems for design chats."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecCli} "ForgeCLI, the engine behind every chat. The app needs it."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecPath} "Run forge from any terminal (your user's PATH)."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} "A Forge icon on the desktop."
@@ -269,6 +283,8 @@ Section "Uninstall"
   Delete "$INSTDIR\Forge.exe"
   Delete "$INSTDIR\forge.ico"
   RMDir /r "$INSTDIR\fonts"
+  IfFileExists "$INSTDIR\design-library\UPSTREAM.json" 0 +2
+    RMDir /r "$INSTDIR\design-library"
   Delete "$INSTDIR\Uninstall.exe"
   RMDir "$INSTDIR"
 

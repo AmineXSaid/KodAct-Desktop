@@ -126,7 +126,11 @@ fn pending(info: &PermInfo, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement
             .child(div().pt(px(2.)).child(icon(
                 mark,
                 t.size.icon_sm,
-                if picked { t.extra.accent } else { t.colors.text_subtle },
+                if picked {
+                    t.extra.accent
+                } else {
+                    t.colors.text_subtle
+                },
             )))
             .child(
                 div()
@@ -149,8 +153,13 @@ fn pending(info: &PermInfo, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement
                             )
                             .when(rec, |d| {
                                 d.child(
-                                    theme::pill(t, t.extra.accent_soft, t.colors.text_strong, "Recommended")
-                                        .text_size(t.text.caption),
+                                    theme::pill(
+                                        t,
+                                        t.extra.accent_soft,
+                                        t.colors.text_strong,
+                                        "Recommended",
+                                    )
+                                    .text_size(t.text.caption),
                                 )
                             }),
                     )
@@ -163,7 +172,9 @@ fn pending(info: &PermInfo, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement
                         )
                     }),
             )
-            .on_click(move |_, _, app| st.update(app, |s, cx| s.pick_option(chat, msg, b, step, o, cx)));
+            .on_click(move |_, _, app| {
+                st.update(app, |s, cx| s.pick_option(chat, msg, b, step, o, cx))
+            });
         rows.push(if picked {
             theme::selected(t, el).into_any_element()
         } else {
@@ -179,7 +190,11 @@ fn pending(info: &PermInfo, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement
         .child(div().pt(px(2.)).child(icon(
             "icons/pencil.svg",
             t.size.icon_sm,
-            if other_on { t.extra.accent } else { t.colors.text_subtle },
+            if other_on {
+                t.extra.accent
+            } else {
+                t.colors.text_subtle
+            },
         )))
         .child(
             div()
@@ -247,7 +262,9 @@ fn pending(info: &PermInfo, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement
             div()
                 .id(id("skip"))
                 .role(gpui::accesskit::Role::Button)
-                .aria_label(SharedString::from("Skip: Forge goes on with its own assumptions"))
+                .aria_label(SharedString::from(
+                    "Skip: Forge goes on with its own assumptions",
+                ))
                 .px(t.space.xs)
                 .text_size(t.text.body_sm)
                 .text_color(t.colors.text_muted)
@@ -260,9 +277,11 @@ fn pending(info: &PermInfo, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement
         )
         .child(div().flex_1())
         .when(step > 0, |d| {
-            d.child(Button::secondary(id("back"), "Back").on_click(move |_, _, app| {
-                back.update(app, |s, cx| s.question_tab(chat, msg, b, step - 1, cx))
-            }))
+            d.child(
+                Button::secondary(id("back"), "Back").on_click(move |_, _, app| {
+                    back.update(app, |s, cx| s.question_tab(chat, msg, b, step - 1, cx))
+                }),
+            )
         })
         .child(if last {
             Button::accent(id("submit"), "Submit answers")
@@ -368,7 +387,11 @@ fn answered(verdict: Verdict, info: &PermInfo, cx: &ItemContext, t: &Theme) -> A
                 .text_color(t.colors.text_muted)
                 .child(head)
                 .when(!meta.is_empty(), |d| {
-                    d.child(div().text_color(t.colors.text_subtle).child(format!("· {}", meta.join(" · "))))
+                    d.child(
+                        div()
+                            .text_color(t.colors.text_subtle)
+                            .child(format!("· {}", meta.join(" · "))),
+                    )
                 }),
         )
         .when(!skipped, |d| {
@@ -388,16 +411,35 @@ fn answered(verdict: Verdict, info: &PermInfo, cx: &ItemContext, t: &Theme) -> A
                         } else {
                             q.header.clone()
                         };
-                        let said = q.answer().map(|a| recommended(&a).0.to_string()).unwrap_or_default();
+                        let said = q
+                            .answer()
+                            .map(|a| recommended(&a).0.to_string())
+                            .unwrap_or_default();
                         div()
                             .flex()
                             .items_start()
                             .gap(t.space.sm)
                             .min_w_0()
                             .text_size(t.text.body_sm)
-                            .child(div().flex_none().text_color(t.colors.text_muted).child(asked))
-                            .child(div().flex_none().text_color(t.colors.text_subtle).child("→"))
-                            .child(div().flex_1().min_w_0().text_color(t.colors.text).child(said))
+                            .child(
+                                div()
+                                    .flex_none()
+                                    .text_color(t.colors.text_muted)
+                                    .child(asked),
+                            )
+                            .child(
+                                div()
+                                    .flex_none()
+                                    .text_color(t.colors.text_subtle)
+                                    .child("→"),
+                            )
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .text_color(t.colors.text)
+                                    .child(said),
+                            )
                     })),
             )
         })

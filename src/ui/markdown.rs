@@ -495,7 +495,13 @@ pub fn selectable_plain(
 /// The text, with its links clickable (opened in the system browser) and
 /// their address shown on hover; plain text when it has none. Either way
 /// it can be selected to copy part of it (`select.rs`).
-fn linked(id: ElementId, spans: &[Span], text: String, runs: Vec<TextRun>, t: &Theme) -> AnyElement {
+fn linked(
+    id: ElementId,
+    spans: &[Span],
+    text: String,
+    runs: Vec<TextRun>,
+    t: &Theme,
+) -> AnyElement {
     let key = SharedString::from(format!("{id:?}"));
     let runs = super::select::prepare(&key, &text, runs, t.colors.primary_tint);
     let text = StyledText::new(text).with_runs(runs);
@@ -515,17 +521,14 @@ fn linked(id: ElementId, spans: &[Span], text: String, runs: Vec<TextRun>, t: &T
     super::select::wrap(key, layout, el)
 }
 
-/// Inline code's padding: a narrow space each side, inside the chip; a
-/// no-break one, so a line never wraps between the padding and the name.
-pub const CODE_PAD: &str = "\u{202F}";
+/// How far an inline code chip reaches past its first and last glyph. No
+/// padding characters: the wrapper breaks at any space (a no-break one
+/// too), so padding made stray gaps before punctuation and empty rows.
+const CODE_REACH: f32 = 1.5;
 
-/// A span's text as it is laid out: code padded inside its chip.
+/// A span's text as it is laid out: exactly its text (code too).
 fn shown(s: &Span) -> std::borrow::Cow<'_, str> {
-    if s.code {
-        format!("{CODE_PAD}{}{CODE_PAD}", s.text).into()
-    } else {
-        s.text.as_str().into()
-    }
+    s.text.as_str().into()
 }
 
 /// Where the code spans sit in the laid-out text.
@@ -546,7 +549,7 @@ fn code_ranges(spans: &[Span]) -> Vec<std::ops::Range<usize>> {
 /// runs can only fill square, so these are painted from the laid-out
 /// glyph positions, under the text.
 fn chips(layout: TextLayout, ranges: Vec<std::ops::Range<usize>>, t: &Theme) -> impl IntoElement {
-    let (bg, radius) = (t.extra.code_inline_bg, t.radius.small);
+    let (bg, edge, radius) = (t.extra.code_inline_bg, t.colors.border, t.radius.small);
     canvas(
         |_, _, _| {},
         move |_, _, window, _| {
@@ -554,7 +557,17 @@ fn chips(layout: TextLayout, ranges: Vec<std::ops::Range<usize>>, t: &Theme) -> 
             let text = layout.text();
             for r in &ranges {
                 for b in rows(&layout, &text, r.clone(), line) {
-                    window.paint_quad(fill(b, bg).corner_radii(radius));
+                    // A faint ground with a hairline, reaching a little past the glyphs.
+                    let b = Bounds::new(
+                        point(b.origin.x - px(CODE_REACH), b.origin.y),
+                        size(b.size.width + px(CODE_REACH * 2.), b.size.height),
+                    );
+                    window.paint_quad(
+                        fill(b, bg)
+                            .corner_radii(radius)
+                            .border_widths(px(1.))
+                            .border_color(edge),
+                    );
                 }
             }
         },
@@ -592,15 +605,21 @@ fn rows(
         .map(|s| s.char_indices().map(|(i, _)| r.start + i).collect())
         .unwrap_or_default();
     for i in starts {
-        let Some(p) = layout.position_for_index(i) else { continue };
-        let ink = !text[i..].starts_with(CODE_PAD);
+        let Some(p) = layout.position_for_index(i) else {
+            continue;
+        };
+        let ink = !text[i..].starts_with(char::is_whitespace);
         row = match row {
             Some((start, last, n, had)) if start.y == p.y => {
                 Some((start, p.x.max(last), n + 1, had || ink))
             }
             Some((start, last, n, had)) => {
                 // Wrapped: the row ends a character past its last start.
-                let step = if n > 1 { (last - start.x) / (n - 1) as f32 } else { line * 0.5 };
+                let step = if n > 1 {
+                    (last - start.x) / (n - 1) as f32
+                } else {
+                    line * 0.5
+                };
                 close(start, last + step, had, &mut out);
                 Some((p, p.x, 1, ink))
             }
@@ -610,7 +629,13 @@ fn rows(
     if let Some((start, last, n, ink)) = row {
         let end = match layout.position_for_index(r.end) {
             Some(e) if e.y == start.y => e.x,
-            _ => last + if n > 1 { (last - start.x) / (n - 1) as f32 } else { line * 0.5 },
+            _ => {
+                last + if n > 1 {
+                    (last - start.x) / (n - 1) as f32
+                } else {
+                    line * 0.5
+                }
+            }
         };
         close(start, end, ink, &mut out);
     }
@@ -845,7 +870,11 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
         Look::Chat => (t.size.chat_text, t.size.line_height_chat),
     };
     // Prose in the warm body ink, a shade under headings; an aside quieter.
-    let prose = if aside { t.colors.text_muted } else { t.colors.text_body };
+    let prose = if aside {
+        t.colors.text_muted
+    } else {
+        t.colors.text_body
+    };
     let mut col = div()
         .flex()
         .flex_col()
@@ -962,7 +991,11 @@ pub fn render_as(src: &str, t: &Theme, copy: &CopyContext, look: Look) -> AnyEle
                             let ink = t.colors.text_muted;
                             let mark = match depth.min(2) {
                                 0 => div().size(px(5.)).rounded(px(2.5)).bg(ink),
-                                1 => div().size(px(6.)).rounded(px(3.)).border_1().border_color(ink),
+                                1 => div()
+                                    .size(px(6.))
+                                    .rounded(px(3.))
+                                    .border_1()
+                                    .border_color(ink),
                                 _ => div().w(px(6.)).h(px(1.5)).rounded(px(1.)).bg(ink),
                             };
                             div()
@@ -1238,8 +1271,9 @@ fn diagram_block(
     };
     let zoomer = |id: &str, glyph: &'static str, tip: &'static str, by: Option<f32>| {
         let (state, key) = (copy.state.clone(), key_owned.clone());
-        tool_button(&format!("{id}-{key_owned}"), glyph, tip, t)
-            .on_click(move |_, _, cx: &mut App| state.update(cx, |s, cx| s.zoom_diagram(key.clone(), by, cx)))
+        tool_button(&format!("{id}-{key_owned}"), glyph, tip, t).on_click(
+            move |_, _, cx: &mut App| state.update(cx, |s, cx| s.zoom_diagram(key.clone(), by, cx)),
+        )
     };
     let group: SharedString = format!("diagram-{key}").into();
     let fit_state = (copy.state.clone(), key_owned.clone());
@@ -1260,7 +1294,12 @@ fn diagram_block(
         .shadow(t.elevation_popover())
         .invisible()
         .group_hover(group.clone(), |d| d.visible())
-        .child(zoomer("zoom-out", "icons/minus.svg", "Zoom out", Some(1. / 1.25)))
+        .child(zoomer(
+            "zoom-out",
+            "icons/minus.svg",
+            "Zoom out",
+            Some(1. / 1.25),
+        ))
         .child(
             div()
                 .id(SharedString::from(format!("zoom-fit-{key}")))
@@ -1277,26 +1316,48 @@ fn diagram_block(
                     let h = t.colors.hover;
                     move |d| d.bg(h)
                 })
-                .tooltip(|window, cx| gpui::component::tooltip::Tooltip::new("Fit to the column").build(window, cx))
+                .tooltip(|window, cx| {
+                    gpui::component::tooltip::Tooltip::new("Fit to the column").build(window, cx)
+                })
                 .child(format!("{}%", (zoom * 100.).round()))
                 .on_click(move |_, _, cx: &mut App| {
-                    fit_state.0.update(cx, |s, cx| s.zoom_diagram(fit_state.1.clone(), None, cx))
+                    fit_state
+                        .0
+                        .update(cx, |s, cx| s.zoom_diagram(fit_state.1.clone(), None, cx))
                 }),
         )
         .child(zoomer("zoom-in", "icons/plus.svg", "Zoom in", Some(1.25)))
         .child(div().w(px(1.)).h(px(16.)).mx(px(2.)).bg(t.colors.border))
-        .child(tool_button(&format!("source-{key}"), "icons/code-xml.svg", "Show the code", t).on_click(
-            move |_, _, cx: &mut App| {
+        .child(
+            tool_button(
+                &format!("source-{key}"),
+                "icons/code-xml.svg",
+                "Show the code",
+                t,
+            )
+            .on_click(move |_, _, cx: &mut App| {
                 toggler.update(cx, |s, cx| s.toggle_diagram_code(toggle_key.clone(), cx))
-            },
-        ))
-        .child(tool_button(&format!("open-{key}"), "icons/maximize-2.svg", "Open beside the chat", t).on_click(
-            move |_, _, cx: &mut App| opener.update(cx, |s, cx| s.open_doc(to_open.clone(), cx)),
-        ))
+            }),
+        )
+        .child(
+            tool_button(
+                &format!("open-{key}"),
+                "icons/maximize-2.svg",
+                "Open beside the chat",
+                t,
+            )
+            .on_click(move |_, _, cx: &mut App| {
+                opener.update(cx, |s, cx| s.open_doc(to_open.clone(), cx))
+            }),
+        )
         .child(
             tool_button(
                 &format!("copy-{key}"),
-                if copied { "icons/check.svg" } else { "icons/copy.svg" },
+                if copied {
+                    "icons/check.svg"
+                } else {
+                    "icons/copy.svg"
+                },
                 if copied { "Copied" } else { "Copy the code" },
                 t,
             )
@@ -1352,7 +1413,12 @@ fn diagram_block(
 }
 
 /// An icon button in a diagram's floating tools, its name as a tooltip.
-fn tool_button(id: &str, path: &'static str, tip: &'static str, t: &Theme) -> gpui::Stateful<gpui::Div> {
+fn tool_button(
+    id: &str,
+    path: &'static str,
+    tip: &'static str,
+    t: &Theme,
+) -> gpui::Stateful<gpui::Div> {
     let hover = t.colors.hover;
     div()
         .id(SharedString::from(id.to_string()))
@@ -1460,9 +1526,14 @@ mod tests {
     #[test]
     fn a_url_in_code_keeps_its_text() {
         let b = parse("- Use the OpenAI portal (`https://chat.openai.com`) instead.");
-        let Block::Item { spans, .. } = &b[0] else { panic!("{:?}", b[0]) };
+        let Block::Item { spans, .. } = &b[0] else {
+            panic!("{:?}", b[0])
+        };
         let all: String = spans.iter().map(|s| s.text.as_str()).collect();
-        assert_eq!(all, "Use the OpenAI portal (https://chat.openai.com) instead.");
+        assert_eq!(
+            all,
+            "Use the OpenAI portal (https://chat.openai.com) instead."
+        );
     }
 
     #[test]
@@ -1507,6 +1578,28 @@ mod tests {
         );
         assert!(matches!(&b[7], Block::Quote(_)));
         assert_eq!(b[8], Block::Rule);
+    }
+
+    #[test]
+    fn inline_code_is_laid_out_as_itself() {
+        let spans = vec![
+            Span {
+                text: "see ".into(),
+                ..Default::default()
+            },
+            Span {
+                text: "a.rs".into(),
+                code: true,
+                ..Default::default()
+            },
+            Span {
+                text: ".".into(),
+                ..Default::default()
+            },
+        ];
+        let laid: String = spans.iter().map(|s| shown(s).into_owned()).collect();
+        assert_eq!(laid, "see a.rs.", "no padding before the full stop");
+        assert_eq!(code_ranges(&spans), vec![4..8]);
     }
 
     #[test]

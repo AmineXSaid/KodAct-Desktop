@@ -126,7 +126,10 @@ mod tests {
         create(&dir, "Launch notes", by_key("writing")).unwrap();
         let text = std::fs::read_to_string(dir.join("FORGE.md")).unwrap();
         assert!(text.starts_with("# Launch notes\n\nA writing project."));
-        assert!(create(&dir, "Again", by_key("blank")).is_err(), "a folder with files isn't reused");
+        assert!(
+            create(&dir, "Again", by_key("blank")).is_err(),
+            "a folder with files isn't reused"
+        );
         let blank = dir.join("blank");
         create(&blank, "x", by_key("blank")).unwrap();
         assert!(!blank.join("FORGE.md").exists());
@@ -136,10 +139,19 @@ mod tests {
 
     #[test]
     fn names_and_clone_folders_are_safe() {
-        assert_eq!(folder_name("  My: project/1 ").as_deref(), Some("My_ project_1"));
+        assert_eq!(
+            folder_name("  My: project/1 ").as_deref(),
+            Some("My_ project_1")
+        );
         assert_eq!(folder_name("..."), None);
         let home = std::path::Path::new("/h");
-        assert_eq!(clone_target(home, "https://github.com/a/forge-gpui.git"), Some(home.join("forge-gpui")));
-        assert_eq!(clone_target(home, "git@github.com:a/tool"), Some(home.join("tool")));
+        assert_eq!(
+            clone_target(home, "https://github.com/a/forge-gpui.git"),
+            Some(home.join("forge-gpui"))
+        );
+        assert_eq!(
+            clone_target(home, "git@github.com:a/tool"),
+            Some(home.join("tool"))
+        );
     }
 }

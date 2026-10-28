@@ -45,22 +45,22 @@ pub struct Composer {
     max_rows: usize,
     /// The model window's search box, and its row under the keyboard.
     filter: Entity<InputState>,
+    /// The design menu's search box, and the tab it was cleared for.
+    design_filter: Entity<InputState>,
+    design_tab_was: Option<crate::state::DesignTab>,
     active: Option<String>,
     picker_was_open: bool,
     /// The model, mode and + menus, kept while each leaves.
     model_presence: super::motion::Presence<()>,
     modes_presence: super::motion::Presence<()>,
     add_presence: super::motion::Presence<()>,
+    design_presence: super::motion::Presence<crate::state::DesignTab>,
     context_presence: super::motion::Presence<()>,
     /// Where the press that just closed a menu happened: the click it ends
     /// in, on that menu's own button, must not open it again.
     dismissed_at: Option<gpui::Point<gpui::Pixels>>,
     /// The "+" menu is open.
     add_open: bool,
-    /// The split "+" menu's chosen row (`add_menu::split`).
-    add_split: usize,
-    /// The search "+" menu's field (`add_menu::search`).
-    add_filter: Entity<InputState>,
     /// Holds the keyboard while the model window is open (no search box),
     /// so the arrows move through it instead of the text.
     menu_focus: gpui::FocusHandle,
@@ -101,7 +101,8 @@ impl Composer {
         });
         let styling = input.update(cx, |i, cx| i.create_decorations_collection(vec![], cx));
         let filter = cx.new(|cx| InputState::new(window, cx).placeholder("Search models…"));
-        let add_filter = cx.new(|cx| InputState::new(window, cx).placeholder("Add or find a tool…"));
+        let design_filter =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Search the design library…"));
         let subs = vec![
             cx.observe_in(&state, window, |this, state, window, cx| {
                 // An edited message comes back here to be changed and sent.
@@ -112,7 +113,12 @@ impl Composer {
                 // While a question waits, what you type answers it.
                 let s = state.read(cx);
                 let in_chat = s.chat().is_some_and(|c| !c.messages.is_empty());
-                let now = (s.in_folder(), s.asking().then(|| s.asking_question()), s.busy(), in_chat);
+                let now = (
+                    s.in_folder(),
+                    s.asking().then(|| s.asking_question()),
+                    s.busy(),
+                    in_chat,
+                );
                 if now != this.placeholder_now {
                     this.placeholder_now = now;
                     this.input.update(cx, |i, cx| {
@@ -142,27 +148,25 @@ impl Composer {
                     this.input.update(cx, |i, cx| i.focus(window, cx));
                 }
                 this.picker_was_open = open;
-                cx.notify();
-            }),
-            // The search "+" menu: typing filters it, Enter runs the first match.
-            cx.subscribe_in(&add_filter, window, |this, f, ev: &InputEvent, window, cx| match ev {
-                InputEvent::Change => cx.notify(),
-                InputEvent::PressEnter { .. } => {
-                    let query = f.read(cx).value().to_string();
-                    // Closed here, on the composer already in hand: going
-                    // back through its entity mid-update would panic.
-                    if let Some(&i) = super::add_menu::matches(&query).first() {
-                        match super::add_menu::action(i) {
-                            Some(action) => {
-                                this.add_open = false;
-                                cx.notify();
-                                window.dispatch_action(action, cx);
-                            }
-                            None => this.state.update(cx, |s, cx| s.toggle_browser(cx)),
-                        }
+                // The design menu on a new tab: an empty search.
+                let tab = state.read(cx).design_menu;
+                if tab != this.design_tab_was {
+                    let was = std::mem::replace(&mut this.design_tab_was, tab);
+                    this.design_filter.update(cx, |f, cx| f.set_value("", window, cx));
+                    // A list's search takes the keys; closing gives them back.
+                    match tab {
+                        Some(crate::state::DesignTab::Work) => {}
+                        Some(_) => this.design_filter.update(cx, |f, cx| f.focus(window, cx)),
+                        None if was.is_some() => this.input.update(cx, |i, cx| i.focus(window, cx)),
+                        None => {}
                     }
                 }
-                _ => {}
+                cx.notify();
+            }),
+            cx.subscribe_in(&design_filter, window, |_, _, ev: &InputEvent, _, cx| {
+                if matches!(ev, InputEvent::Change) {
+                    cx.notify();
+                }
             }),
             cx.subscribe_in(&filter, window, |_, _, ev: &InputEvent, _, cx| {
                 if matches!(ev, InputEvent::Change) {
@@ -190,18 +194,19 @@ impl Composer {
             state,
             input,
             filter,
+            design_filter,
+            design_tab_was: None,
             active: None,
             picker_was_open: false,
             model_presence: Default::default(),
             modes_presence: Default::default(),
             add_presence: Default::default(),
+            design_presence: Default::default(),
             context_presence: Default::default(),
             dismissed_at: None,
             add_open: false,
             styling,
             max_rows,
-            add_split: 0,
-            add_filter,
             menu_focus: cx.focus_handle(),
             ac_selected: 0,
             ac_closed_for: None,
@@ -210,11 +215,6 @@ impl Composer {
             placeholder_now: (in_folder, None, false, false),
             _subs: subs,
         }
-    }
-
-    /// The text box's focus: the home screen's dot field brightens on it.
-    pub fn focus_handle(&self, cx: &gpui::App) -> gpui::FocusHandle {
-        gpui::Focusable::focus_handle(self.input.read(cx), cx)
     }
 
     pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
@@ -248,79 +248,11 @@ impl Composer {
         self.styling.set(decorations, cx);
     }
 
-    /// Ctrl+B, Ctrl+I, Ctrl+E: the selection made bold, italic or code (or
-    /// made plain again). True when it took the key.
-    fn format_key(&mut self, ev: &gpui::KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) -> bool {
-        let k = &ev.keystroke;
-        if !k.modifiers.secondary() || k.modifiers.shift || k.modifiers.alt {
-            return false;
-        }
-        let marker = match k.key.as_str() {
-            "i" => "*",
-            "e" => "`",
-            _ => return false,
-        };
-        // A key that reaches the composer is for its box, unless the model
-        // menu's search has it.
-        if self.state.read(cx).picker_open {
-            return false;
-        }
-        self.format(marker, window, cx);
-        true
-    }
-
-    /// Wrap the selection in `marker`, or unwrap it, as one undoable edit.
-    fn format(&mut self, marker: &str, window: &mut Window, cx: &mut Context<Self>) {
-        self.input.update(cx, |i, cx| {
-            let r = i.selected_range();
-            let value = i.value();
-            let (_, range) = super::compose_style::toggle(&value, r.clone(), marker);
-            let inner = value[r.clone()].to_string();
-            // Unwrapping takes the markers too: the replaced span is wider.
-            let n = marker.len();
-            let (span, with) = if range.start < r.start {
-                (r.start - n..r.end + n, inner)
-            } else {
-                (r.clone(), format!("{marker}{inner}{marker}"))
-            };
-            i.set_selected_range(span, cx);
-            i.replace(with, window, cx);
-            i.set_selected_range(range, cx);
-        });
-        self.restyle(cx);
-    }
-
-    /// Pasted code or logs go in fenced, with their language, the way an
-    /// issue tracker's description takes them. True when it took the paste.
-    fn paste_code(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
-        let Some(text) = cx.read_from_clipboard().and_then(|c| c.text()) else {
-            return false;
-        };
-        let Some(block) = super::compose_style::code_block(&text) else {
-            return false;
-        };
-        self.input.update(cx, |i, cx| {
-            let value = i.value();
-            let r = i.selected_range();
-            let before = &value[..r.start];
-            // Inside a fence already: the text goes in as it is.
-            if before.lines().filter(|l| l.trim_start().starts_with("```")).count() % 2 == 1 {
-                return false;
-            }
-            let lead = if before.is_empty() || before.ends_with('\n') { "" } else { "\n" };
-            let tail = if value[r.end..].starts_with('\n') { "" } else { "\n" };
-            i.replace(format!("{lead}{block}{tail}"), window, cx);
-            true
-        })
-        .then(|| self.restyle(cx))
-        .is_some()
-    }
-
-    /// What the "+" menu needs from the composer: closing it, a press
-    /// outside, the split menu's chosen row, the search menu's field.
+    /// What the "+" menu needs from the composer: closing it, and a press
+    /// outside.
     fn add_hooks(&self, cx: &mut Context<Self>) -> super::add_menu::Hooks {
         let me = cx.entity().downgrade();
-        let (close, out, split) = (me.clone(), me.clone(), me);
+        let (close, out) = (me.clone(), me);
         super::add_menu::Hooks {
             close: std::rc::Rc::new(move |cx| {
                 let _ = close.update(cx, |c, cx| {
@@ -335,16 +267,6 @@ impl Composer {
                     cx.notify();
                 });
             }),
-            split_at: self.add_split,
-            on_split: std::rc::Rc::new(move |i, cx| {
-                let _ = split.update(cx, |c, cx| {
-                    if c.add_split != i {
-                        c.add_split = i;
-                        cx.notify();
-                    }
-                });
-            }),
-            filter: self.add_filter.clone(),
         }
     }
 
@@ -359,16 +281,22 @@ impl Composer {
         let text = self.text(cx);
         // A question waits: what you typed answers a question card, or
         // denies a permission card and says what to do instead.
-        if self.state.read(cx).asking() && !text.trim().is_empty() && crate::state::parse_btw(&text).is_none() {
-            self.state.update(cx, |s, cx| s.answer_in_words(text.trim().to_string(), cx));
+        if self.state.read(cx).asking()
+            && !text.trim().is_empty()
+            && crate::state::parse_btw(&text).is_none()
+        {
+            self.state
+                .update(cx, |s, cx| s.answer_in_words(text.trim().to_string(), cx));
             self.input.update(cx, |i, cx| i.set_value("", window, cx));
             return;
         }
         // While a reply runs, a message is queued for Forge's next step
         // (`/btw` keeps its side card).
         if self.state.read(cx).busy() && crate::state::parse_btw(&text).is_none() {
-            if !text.trim().is_empty() {
-                self.state.update(cx, |s, cx| s.queue_message(text.trim().to_string(), cx));
+            // Words, pictures or pasted texts: each is a message for the next step.
+            if !text.trim().is_empty() || !self.state.read(cx).attachments.is_empty() {
+                self.state
+                    .update(cx, |s, cx| s.queue_message(text.trim().to_string(), cx));
                 self.input.update(cx, |i, cx| i.set_value("", window, cx));
             }
             return;
@@ -450,6 +378,21 @@ impl Composer {
             _ => return false,
         }
         cx.notify();
+        true
+    }
+
+    /// A paste too long for the box (over `attach::PASTE_CHARS` characters
+    /// or `PASTE_LINES` lines: a log, a file, a transcript) becomes a Pasted
+    /// text card above it, as in Claude's chat box. Shorter text goes in as
+    /// it is. True when it took the paste.
+    fn paste_long(&mut self, cx: &mut Context<Self>) -> bool {
+        let Some(text) = cx.read_from_clipboard().and_then(|c| c.text()) else {
+            return false;
+        };
+        if !crate::attach::is_long_paste(&text) {
+            return false;
+        }
+        self.state.update(cx, |s, cx| s.add_pasted_text(text, cx));
         true
     }
 
@@ -581,7 +524,12 @@ impl Render for Composer {
                 window
                     .text_system()
                     .shape_text(text.clone(), t.text.body, &[run], Some(width), None)
-                    .map(|lines| lines.iter().map(|l| l.wrap_boundaries().len() + 1).sum::<usize>())
+                    .map(|lines| {
+                        lines
+                            .iter()
+                            .map(|l| l.wrap_boundaries().len() + 1)
+                            .sum::<usize>()
+                    })
                     .unwrap_or(1)
             } else {
                 text.split('\n').count()
@@ -597,42 +545,72 @@ impl Render for Composer {
         // A menu closes on a press outside it (each listens on itself: it
         // floats above the composer, outside the composer's own box).
         let me = cx.entity().downgrade();
-        let dismiss = move |pos: gpui::Point<gpui::Pixels>, models: bool, cx: &mut gpui::App| {
+        let dismiss = move |pos: gpui::Point<gpui::Pixels>, menu: Menu, cx: &mut gpui::App| {
             let _ = me.update(cx, |c, cx| {
                 c.dismissed_at = Some(pos);
                 c.state.update(cx, |s, cx| {
-                    if models {
-                        s.picker_open = false;
-                    } else {
-                        s.modes_open = false;
-                        s.bypass_warning = false;
+                    match menu {
+                        Menu::Models => s.picker_open = false,
+                        Menu::Modes => {
+                            s.modes_open = false;
+                            s.bypass_warning = false;
+                        }
+                        Menu::Design => s.design_menu = None,
                     }
                     cx.notify();
                 });
             });
         };
-        let (dismiss_models, dismiss_modes) = (dismiss.clone(), dismiss);
+        let (dismiss_models, dismiss_modes, dismiss_design) =
+            (dismiss.clone(), dismiss.clone(), dismiss);
         let me = cx.entity().downgrade();
         let skip = move |ev: &gpui::ClickEvent, cx: &mut gpui::App| -> bool {
             me.update(cx, |c, _| c.just_dismissed(ev)).unwrap_or(false)
         };
 
         // The pieces that read the state are built first.
-        let mode_trigger = super::mode_menu::trigger(&t, &state, cx, skip);
-        let out = t.size.menu_out_ms;
-        let modes_now = self.state.read(cx).modes_open.then_some(());
-        let modes_menu = self.modes_presence.frame(modes_now, out, window).map(|(_, leaving)| {
-            super::mode_menu::menu(
+        let me = cx.entity().downgrade();
+        let skip_design = move |ev: &gpui::ClickEvent, cx: &mut gpui::App| -> bool {
+            me.update(cx, |c, _| c.just_dismissed(ev)).unwrap_or(false)
+        };
+        let design_trigger = super::design_chips::trigger(&t, &state, cx, skip_design);
+        let design_now = self.state.read(cx).design_menu;
+        let design_out = t.size.menu_out_ms;
+        let design_menu = self.design_presence.frame(design_now, design_out, window).map(|(tab, leaving)| {
+            let query = self.design_filter.read(cx).value().to_string();
+            let search = super::search_field(&t, &self.design_filter)
+                .mx(t.space.sm)
+                .mb(t.space.xs)
+                .into_any_element();
+            super::design_chips::menu(
                 &t,
                 &state,
+                tab,
+                &query,
+                search,
                 window,
                 cx,
-                move |pos, cx| dismiss_modes(pos, false, cx),
+                move |pos, cx| dismiss_design(pos, Menu::Design, cx),
                 leaving,
             )
         });
-        // The "+": a menu above it in the theme's style, or the tray inside
-        // the box (`add_menu`).
+        let mode_trigger = super::mode_menu::trigger(&t, &state, cx, skip);
+        let out = t.size.menu_out_ms;
+        let modes_now = self.state.read(cx).modes_open.then_some(());
+        let modes_menu = self
+            .modes_presence
+            .frame(modes_now, out, window)
+            .map(|(_, leaving)| {
+                super::mode_menu::menu(
+                    &t,
+                    &state,
+                    window,
+                    cx,
+                    move |pos, cx| dismiss_modes(pos, Menu::Modes, cx),
+                    leaving,
+                )
+            });
+        // The "+": a menu above it (`add_menu`).
         let add_hooks = self.add_hooks(cx);
         let add_menu = self
             .add_presence
@@ -640,8 +618,6 @@ impl Render for Composer {
             .and_then(|(_, leaving)| {
                 super::add_menu::menu(&t, &state, cx, add_hooks.clone(), leaving)
             });
-        let add_tray = (self.add_open && t.add_menu == crate::theme::AddMenu::Tray)
-            .then(|| super::add_menu::tray(&t, &state, cx, &add_hooks));
         let query = self.filter.read(cx).value().to_string();
         let search = div()
             .m(px(4.))
@@ -664,11 +640,9 @@ impl Render for Composer {
                 }
             });
         };
-        let model_frame = self.model_presence.frame(
-            self.state.read(cx).picker_open.then_some(()),
-            out,
-            window,
-        );
+        let model_frame =
+            self.model_presence
+                .frame(self.state.read(cx).picker_open.then_some(()), out, window);
         let s = self.state.read(cx);
         let (busy, mode, picker_open) = (s.busy(), s.mode, s.picker_open);
         let model_menu = model_frame.map(|(_, leaving)| {
@@ -681,7 +655,7 @@ impl Render for Composer {
                 search,
                 window,
                 on_hover,
-                move |pos, cx| dismiss_models(pos, true, cx),
+                move |pos, cx| dismiss_models(pos, Menu::Models, cx),
                 leaving,
             )
         });
@@ -709,6 +683,12 @@ impl Render for Composer {
         });
 
         let pending = super::attachments::pending(&t, &state, cx);
+        let goal = {
+            let s = self.state.read(cx);
+            s.current
+                .and_then(|c| s.goals.get(&c))
+                .map(|g| super::goal_bar::render(&t, &state, g, s.busy()))
+        };
         // The list opens at the word being completed: where the caret was
         // when its sign was typed (the input's last layout), kept while the
         // word is typed on.
@@ -788,11 +768,15 @@ impl Render for Composer {
 
         // In the tray: quiet selectors, washed while open or hovered.
         let quiet = |id: &'static str, open: bool| super::button::selector(&t, id, open);
+        // Narrow (a panel open beside the chat), the names give way first.
         let model_button = quiet("model", picker_open)
+            .min_w_0()
+            .flex_shrink(1.)
             .aria_label("Model")
             .child(icon("icons/cpu.svg", t.size.icon_sm, t.colors.text_muted))
             .child(
                 div()
+                    .min_w_0()
                     .max_w(px(220.))
                     .overflow_hidden()
                     .whitespace_nowrap()
@@ -823,9 +807,15 @@ impl Render for Composer {
             .filter(|p| !p.scratch)
             .map(|p| p.name.clone())
             .unwrap_or_else(|| "Work in a folder".into());
-        let host = self.state.read(cx).current_remote().map(|r| r.target.label());
+        let host = self
+            .state
+            .read(cx)
+            .current_remote()
+            .map(|r| r.target.label());
         let remote = host.is_some();
         let project_button = quiet("project", false)
+            .min_w_0()
+            .flex_shrink(1.)
             .aria_label("Project")
             .text_color(t.colors.text_muted)
             .child(icon(
@@ -835,6 +825,7 @@ impl Render for Composer {
             ))
             .child(
                 div()
+                    .min_w_0()
                     .max_w(px(180.))
                     .overflow_hidden()
                     .whitespace_nowrap()
@@ -916,22 +907,32 @@ impl Render for Composer {
 
         // In a chat the box is as wide as the text above it, on the same
         // edges; on the new-chat screen it keeps its own width.
-        let in_chat = self.state.read(cx).chat().is_some_and(|c| !c.messages.is_empty());
+        let in_chat = self
+            .state
+            .read(cx)
+            .chat()
+            .is_some_and(|c| !c.messages.is_empty());
         let composer = div()
             .key_context("Composer")
             .track_focus(&self.menu_focus)
             .relative()
             .w_full()
-            .max_w(if in_chat { t.size.column } else { t.size.composer_width })
+            .max_w(if in_chat {
+                t.size.column
+            } else {
+                t.size.composer_width
+            })
             .flex()
             .flex_col()
             .gap(px(6.))
             // Ctrl+F finds in the chat (`find_bar.rs`), not in the text box:
             // the editor's own search bar would open inside the composer.
-            .capture_action(cx.listener(|_, _: &gpui::component::input::Search, window, cx| {
-                cx.stop_propagation();
-                window.dispatch_action(Box::new(super::ToggleFind), cx);
-            }))
+            .capture_action(
+                cx.listener(|_, _: &gpui::component::input::Search, window, cx| {
+                    cx.stop_propagation();
+                    window.dispatch_action(Box::new(super::ToggleFind), cx);
+                }),
+            )
             // The text box's own Escape closes the autocomplete first, keeping the focus.
             .capture_action(
                 cx.listener(|this, _: &gpui::component::input::Escape, _, cx| {
@@ -959,6 +960,14 @@ impl Render for Composer {
                     }
                 },
             ))
+            // Shift+Tab cycles the mode, as in Claude Code. The text box binds
+            // it to outdent, and its binding wins over ours: take it here.
+            .capture_action(cx.listener(
+                |_, _: &gpui::component::input::OutdentInline, window, cx| {
+                    window.dispatch_action(Box::new(super::CycleMode), cx);
+                    cx.stop_propagation();
+                },
+            ))
             .capture_action(cx.listener(
                 |this, _: &gpui::component::input::IndentInline, window, cx| {
                     if this.completion_nav("tab", window, cx) {
@@ -972,28 +981,35 @@ impl Render for Composer {
                         // Stopped here, the box never sends: nothing to swallow later.
                         this.ac_took_enter = false;
                         cx.stop_propagation();
+                        return;
+                    }
+                    // Nothing written and a tool waits: Enter allows it,
+                    // Shift Enter always allows it (the card's keys).
+                    if !e.secondary
+                        && this.text(cx).trim().is_empty()
+                        && this.state.read(cx).attachments.is_empty()
+                    {
+                        let verdict = if e.shift {
+                            crate::state::Verdict::AllowedAlways
+                        } else {
+                            crate::state::Verdict::Allowed
+                        };
+                        if this.state.update(cx, |s, cx| s.answer_waiting(verdict, cx)) {
+                            cx.stop_propagation();
+                        }
                     }
                 }),
             )
             // The text box's own Paste: an image or files are attached instead.
             .capture_action(
-                cx.listener(|this, _: &gpui::component::input::Paste, window, cx| {
-                    if this.paste_files(cx) || this.paste_code(window, cx) {
+                cx.listener(|this, _: &gpui::component::input::Paste, _, cx| {
+                    if this.paste_files(cx) || this.paste_long(cx) {
                         cx.stop_propagation();
                     }
                 }),
             )
-            // Ctrl+B is also the sidebar's: with text selected in the box it
-            // makes it bold instead.
-            .capture_action(cx.listener(|this, _: &super::ToggleSidebar, window, cx| {
-                let selected = !this.input.read(cx).selected_range().is_empty();
-                if selected && gpui::Focusable::focus_handle(this.input.read(cx), cx).is_focused(window) {
-                    this.format("**", window, cx);
-                    cx.stop_propagation();
-                }
-            }))
             .capture_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, window, cx| {
-                if this.completion_key(ev, window, cx) || this.format_key(ev, window, cx) {
+                if this.completion_key(ev, window, cx) {
                     return cx.stop_propagation();
                 }
                 this.menu_key(ev, window, cx)
@@ -1008,6 +1024,7 @@ impl Render for Composer {
                 div()
                     .flex()
                     .flex_col()
+                    .children(goal)
                     .child(
                         div()
                             .flex()
@@ -1031,7 +1048,6 @@ impl Render for Composer {
                                 this.state
                                     .update(cx, |s, cx| s.add_attachment_paths(paths, cx));
                             }))
-                            .children(add_tray)
                             .children(pending)
                             // One line, as Claude Code's box: +, what you
                             // write, send. They keep to the bottom as it grows.
@@ -1055,22 +1071,11 @@ impl Render for Composer {
                                                 )
                                                 // Its name, not over its own open menu.
                                                 .tooltip(!self.add_open)
-                                                .on_click(cx.listener(|this, ev, window, cx| {
+                                                .on_click(cx.listener(|this, ev, _, cx| {
                                                     if this.just_dismissed(ev) {
                                                         return;
                                                     }
                                                     this.add_open = !this.add_open;
-                                                    this.add_split = 0;
-                                                    // The search menu opens on an empty field, typed into.
-                                                    if this.add_open
-                                                        && cx.theme().add_menu
-                                                            == crate::theme::AddMenu::Search
-                                                    {
-                                                        this.add_filter.update(cx, |f, cx| {
-                                                            f.set_value("", window, cx);
-                                                            f.focus(window, cx);
-                                                        });
-                                                    }
                                                     cx.notify();
                                                 })),
                                             )
@@ -1109,9 +1114,26 @@ impl Render for Composer {
                             .items_center()
                             .gap(t.space.xs)
                             .pt(t.space.xs)
-                            .child(div().relative().child(mode_trigger).children(modes_menu))
+                            .min_w_0()
+                            .child(
+                                div()
+                                    .flex_none()
+                                    .relative()
+                                    .child(mode_trigger)
+                                    .children(modes_menu),
+                            )
                             .child(project_button)
-                            .child(div().flex_1().relative().children(context_popover))
+                            // A design chat: the chip and its menu above it.
+                            .children(design_trigger.map(|d| {
+                                div().relative().flex_none().child(d).children(design_menu)
+                            }))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w(t.space.xs)
+                                    .relative()
+                                    .children(context_popover),
+                            )
                             .child(model_button)
                             .children(meter),
                     ),
@@ -1121,3 +1143,10 @@ impl Render for Composer {
     }
 }
 
+/// The composer's menus, for closing the one a press fell outside of.
+#[derive(Clone, Copy)]
+enum Menu {
+    Models,
+    Modes,
+    Design,
+}

@@ -458,7 +458,15 @@ pub fn project_entries(dir: &Path, cap: usize) -> Vec<String> {
 fn left_out(name: &str) -> bool {
     matches!(
         name,
-        ".git" | "node_modules" | "dist" | "build" | ".next" | ".nuxt" | ".DS_Store" | "Thumbs.db" | ".env"
+        ".git"
+            | "node_modules"
+            | "dist"
+            | "build"
+            | ".next"
+            | ".nuxt"
+            | ".DS_Store"
+            | "Thumbs.db"
+            | ".env"
     ) || name.starts_with(".env.")
         || name.ends_with(".log")
 }
@@ -774,11 +782,20 @@ mod tests {
         }
         std::fs::write(dir.join(".gitignore"), "ignored/\n").unwrap();
         let got = project_entries(&dir, 100);
-        for want in [".claude/", ".claude/settings.json", ".gitignore", ".mcp.json", "src/a.rs"] {
+        for want in [
+            ".claude/",
+            ".claude/settings.json",
+            ".gitignore",
+            ".mcp.json",
+            "src/a.rs",
+        ] {
             assert!(got.iter().any(|e| e == want), "missing {want}: {got:?}");
         }
         for gone in ["node_modules", "dist", ".env", "run.log", "ignored"] {
-            assert!(!got.iter().any(|e| e.starts_with(gone)), "listed {gone}: {got:?}");
+            assert!(
+                !got.iter().any(|e| e.starts_with(gone)),
+                "listed {gone}: {got:?}"
+            );
         }
         let _ = std::fs::remove_dir_all(dir);
     }

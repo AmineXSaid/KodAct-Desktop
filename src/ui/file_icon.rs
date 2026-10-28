@@ -104,11 +104,26 @@ mod tests {
     fn icons_are_the_extensions() {
         assert_eq!(asset("main.py", false, "main.py"), "file-icons/python.svg");
         assert_eq!(asset("lib.rs", false, "src/lib.rs"), "file-icons/rust.svg");
-        assert_eq!(asset(".gitignore", false, ".gitignore"), "file-icons/git.svg");
-        assert_eq!(asset("a.spec.ts", false, "a.spec.ts"), "file-icons/test-ts.svg");
-        assert_eq!(asset("weird.zzz", false, "weird.zzz"), "file-icons/file.svg");
-        assert_eq!(asset(".vscode", true, ".vscode"), "file-icons/folder-vscode.svg");
+        assert_eq!(
+            asset(".gitignore", false, ".gitignore"),
+            "file-icons/git.svg"
+        );
+        assert_eq!(
+            asset("a.spec.ts", false, "a.spec.ts"),
+            "file-icons/test-ts.svg"
+        );
+        assert_eq!(
+            asset("weird.zzz", false, "weird.zzz"),
+            "file-icons/file.svg"
+        );
+        assert_eq!(
+            asset(".vscode", true, ".vscode"),
+            "file-icons/folder-vscode.svg"
+        );
         assert_eq!(asset("src", true, "src"), "file-icons/folder-src.svg");
-        assert_eq!(asset("nothing-special", true, "x/nothing-special"), "file-icons/folder.svg");
+        assert_eq!(
+            asset("nothing-special", true, "x/nothing-special"),
+            "file-icons/folder.svg"
+        );
     }
 }

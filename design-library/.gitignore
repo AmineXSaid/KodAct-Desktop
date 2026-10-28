@@ -1,0 +1,21 @@
+# Images, video and audio: pinned by SHA-256 in media.lock.json and fetched
+# by `python3 -I scripts/sync_open_design.py media`, never committed. Keep
+# this list the same as [media] extensions in sync.toml. Case-blind, as the
+# sync is: `Logo.PNG` is media too.
+*.[pP][nN][gG]
+*.[jJ][pP][gG]
+*.[jJ][pP][eE][gG]
+*.[wW][eE][bB][pP]
+*.[gG][iI][fF]
+*.[aA][vV][iI][fF]
+*.[bB][mM][pP]
+*.[iI][cC][oO]
+*.[mM][pP]4
+*.[wW][eE][bB][mM]
+*.[mM][oO][vV]
+*.[mM][pP]3
+*.[wW][aA][vV]
+*.[oO][gG][gG]
+*.[mM]4[aA]
+*.[gG][lL][tT][fF]
+*.[gG][lL][bB]

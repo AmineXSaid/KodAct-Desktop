@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>The Project Guidance Hierarchy</title>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -12,13 +11,13 @@
       --color-ink:     #2d3142;
       --color-muted:   #4f5d75;
       --color-accent:  #bf4520;
-      --font-sans:     'Geist', system-ui, sans-serif;
-      --font-serif:    'Instrument Serif', serif;
-      --font-mono:     'Geist Mono', ui-monospace, monospace;
+      --font-sans:     'Anthropic Sans Text';
+      --font-serif:    'Anthropic Sans Display';
+      --font-mono:     'Anthropic Sans Text';
     }
 
     body {
-      font-family: var(--font-sans);
+      font-family:'Anthropic Sans Text';
       background: var(--color-paper);
       color: var(--color-ink);
       min-height: 100vh;
@@ -31,7 +30,7 @@
     .frame { max-width: 1200px; width: 100%; }
 
     .eyebrow {
-      font-family: var(--font-mono);
+      font-family:'Anthropic Sans Text';
       font-size: 0.66rem;
       font-weight: 500;
       letter-spacing: 0.18em;
@@ -41,7 +40,7 @@
     }
 
     h1 {
-      font-family: var(--font-serif);
+      font-family:'Anthropic Sans Display';
       font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
       font-weight: 400;
       letter-spacing: -0.02em;
@@ -83,19 +82,19 @@
 
         <!-- Level labels on paper-colored masks -->
         <rect x="56" y="52" width="188" height="16" fill="#f5f5f5"/>
-        <text x="64" y="64" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">~/.claude/ (global)</text>
+        <text x="64" y="64" fill="#4f5d75" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.14em">~/.claude/ (global)</text>
 
         <rect x="88" y="88" width="148" height="16" fill="#f5f5f5"/>
-        <text x="96" y="100" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">~/vault/ (notes)</text>
+        <text x="96" y="100" fill="#4f5d75" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.14em">~/vault/ (notes)</text>
 
         <rect x="120" y="124" width="96" height="16" fill="#f5f5f5"/>
-        <text x="128" y="136" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">/business</text>
+        <text x="128" y="136" fill="#4f5d75" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.14em">/business</text>
 
         <rect x="152" y="160" width="108" height="16" fill="#f5f5f5"/>
-        <text x="160" y="172" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">/marketing</text>
+        <text x="160" y="172" fill="#2d3142" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.14em">/marketing</text>
 
         <rect x="184" y="196" width="88" height="16" fill="#f5f5f5"/>
-        <text x="192" y="208" fill="#bf4520" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em" font-weight="600">/project</text>
+        <text x="192" y="208" fill="#bf4520" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.14em" font-weight="600">/project</text>
 
         <!-- File-icon glyphs (simple rect with folded corner) inside each level -->
         <!-- Glyph in level 1 (bottom-right area of outer ring) -->
@@ -120,16 +119,16 @@
         </g>
 
         <!-- Innermost label — human readable -->
-        <text x="500" y="248" fill="#2d3142" font-size="16" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">PROJECT GUIDANCE</text>
-        <text x="500" y="272" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">inherits every level above</text>
+        <text x="500" y="248" fill="#2d3142" font-size="16" font-weight="600" font-family="Anthropic Sans Text" text-anchor="middle">PROJECT GUIDANCE</text>
+        <text x="500" y="272" fill="#4f5d75" font-size="9" font-family="Anthropic Sans Text" text-anchor="middle" letter-spacing="0.08em">inherits every level above</text>
 
         <!-- Annotation top-right: italic callout with curved arrow -->
-        <text x="904" y="36" fill="#2d3142" font-size="14" font-style="italic" font-family="'Instrument Serif', serif" text-anchor="end">no imports, no configuration</text>
+        <text x="904" y="36" fill="#2d3142" font-size="14" font-style="italic" font-family="Anthropic Sans Display" text-anchor="end">no imports, no configuration</text>
         <path d="M 820 44 Q 700 84 520 216" fill="none" stroke="rgba(45,49,66,0.40)" stroke-width="1" stroke-dasharray="4,3"/>
         <circle cx="520" cy="216" r="2" fill="#2d3142"/>
 
         <!-- Annotation bottom-left: italic callout -->
-        <text x="40" y="484" fill="#4f5d75" font-size="14" font-style="italic" font-family="'Instrument Serif', serif">structure IS the index</text>
+        <text x="40" y="484" fill="#4f5d75" font-size="14" font-style="italic" font-family="Anthropic Sans Display">structure IS the index</text>
       </svg>
   </div>
 </body>

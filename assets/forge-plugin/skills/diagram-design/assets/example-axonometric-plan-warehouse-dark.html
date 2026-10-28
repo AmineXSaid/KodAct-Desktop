@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Fulfillment floor · Dock to dock</title>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -12,13 +11,13 @@
       --color-ink:     #f5f5f5;
       --color-muted:   #bfc0c0;
       --color-accent:  #f08a59;
-      --font-sans:     'Geist', system-ui, sans-serif;
-      --font-serif:    'Instrument Serif', serif;
-      --font-mono:     'Geist Mono', ui-monospace, monospace;
+      --font-sans:     'Anthropic Sans Text';
+      --font-serif:    'Anthropic Sans Display';
+      --font-mono:     'Anthropic Sans Text';
     }
 
     body {
-      font-family: var(--font-sans);
+      font-family:'Anthropic Sans Text';
       background: var(--color-paper);
       color: var(--color-ink);
       min-height: 100vh;
@@ -32,7 +31,7 @@
     .diagram-container { width: 100%; overflow-x: auto; }
 
     .eyebrow {
-      font-family: var(--font-mono);
+      font-family:'Anthropic Sans Text';
       font-size: 0.66rem;
       font-weight: 500;
       letter-spacing: 0.18em;
@@ -42,7 +41,7 @@
     }
 
     h1 {
-      font-family: var(--font-serif);
+      font-family:'Anthropic Sans Display';
       font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
       font-weight: 400;
       letter-spacing: -0.02em;
@@ -112,14 +111,14 @@
         <g data-box data-rect="6 294 454 300 0" data-z="6" data-h="22" data-kind="wall"><path data-role="silhouette" d="M 126 201 L 126 201 L 132 198 L 132 198 L 580 422 L 580 422 L 580 444 L 580 444 L 574 447 L 574 447 L 126 223 L 126 223 Z" fill="#393e53"/><path d="M 574 425 L 574 425 L 126 201 L 126 201 L 132 198 L 132 198 L 580 422 L 580 422 Z" fill="rgba(245,245,245,0.10)"/><path d="M 574 425 L 574 425 L 580 422 L 580 422 L 580 444 L 580 444 L 574 447 L 574 447 Z" fill="rgba(45,49,66,0.45)"/><path d="M 126 201 L 126 201 L 574 425 L 574 425 L 580 422 L 580 422 M 574 425 L 574 447" fill="none" stroke="rgba(245,245,245,0.45)" stroke-width="0.8"/><path d="M 126 201 L 126 201 L 132 198 L 132 198 L 580 422 L 580 422 L 580 444 L 580 444 L 574 447 L 574 447 L 126 223 L 126 223 Z" fill="none" stroke="#f5f5f5" stroke-width="1.0" stroke-linejoin="round"/></g>
         <g data-box data-rect="454 170 460 220 0" data-z="6" data-h="22" data-kind="wall"><path data-role="silhouette" d="M 654 385 L 654 385 L 704 360 L 704 360 L 710 363 L 710 363 L 710 385 L 710 385 L 660 410 L 660 410 L 654 407 L 654 407 Z" fill="#393e53"/><path d="M 660 388 L 660 388 L 654 385 L 654 385 L 704 360 L 704 360 L 710 363 L 710 363 Z" fill="rgba(245,245,245,0.10)"/><path d="M 660 388 L 660 388 L 710 363 L 710 363 L 710 385 L 710 385 L 660 410 L 660 410 Z" fill="rgba(45,49,66,0.45)"/><path d="M 654 385 L 654 385 L 660 388 L 660 388 L 710 363 L 710 363 M 660 388 L 660 410" fill="none" stroke="rgba(245,245,245,0.45)" stroke-width="0.8"/><path d="M 654 385 L 654 385 L 704 360 L 704 360 L 710 363 L 710 363 L 710 385 L 710 385 L 660 410 L 660 410 L 654 407 L 654 407 Z" fill="none" stroke="#f5f5f5" stroke-width="1.0" stroke-linejoin="round"/></g>
         <g data-box data-rect="454 260 460 294 0" data-z="6" data-h="22" data-kind="wall"><path data-role="silhouette" d="M 580 422 L 580 422 L 614 405 L 614 405 L 620 408 L 620 408 L 620 430 L 620 430 L 586 447 L 586 447 L 580 444 L 580 444 Z" fill="#393e53"/><path d="M 586 425 L 586 425 L 580 422 L 580 422 L 614 405 L 614 405 L 620 408 L 620 408 Z" fill="rgba(245,245,245,0.10)"/><path d="M 586 425 L 586 425 L 620 408 L 620 408 L 620 430 L 620 430 L 586 447 L 586 447 Z" fill="rgba(45,49,66,0.45)"/><path d="M 580 422 L 580 422 L 586 425 L 586 425 L 620 408 L 620 408 M 586 425 L 586 447" fill="none" stroke="rgba(245,245,245,0.45)" stroke-width="0.8"/><path d="M 580 422 L 580 422 L 614 405 L 614 405 L 620 408 L 620 408 L 620 430 L 620 430 L 586 447 L 586 447 L 580 444 L 580 444 Z" fill="none" stroke="#f5f5f5" stroke-width="1.0" stroke-linejoin="round"/></g>
-        <g data-role="tag" data-name="Receiving" data-at="74 174 6"><rect x="278" y="178" width="84" height="32" rx="2" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/><text data-role="name" x="320" y="194" text-anchor="middle" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif">Receiving</text><text x="320" y="205" text-anchor="middle" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.08em">3 dock doors</text></g>
-        <g data-role="tag" data-name="Storage" data-at="204 162 6"><rect x="428" y="237" width="68" height="32" rx="2" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/><text data-role="name" x="462" y="253" text-anchor="middle" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif">Storage</text><text x="462" y="264" text-anchor="middle" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.08em">6 racks</text></g>
-        <g data-role="tag" data-name="Pick zone" data-at="254 272 6"><rect x="348" y="317" width="108" height="32" rx="2" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/><text data-role="name" x="402" y="333" text-anchor="middle" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif">Pick zone</text><text x="402" y="344" text-anchor="middle" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.08em">carts, flow rack</text></g>
-        <g data-role="tag" data-name="Packing" data-at="338 262 6"><rect x="460" y="354" width="72" height="32" rx="2" fill="#393e53" stroke="#f08a59" stroke-width="0.8"/><text data-role="name" x="496" y="370" text-anchor="middle" fill="#f08a59" font-size="12" font-weight="600" font-family="'Geist', sans-serif">Packing</text><text x="496" y="381" text-anchor="middle" fill="#f08a59" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.08em">3 stations</text></g>
-        <g data-role="tag" data-name="Shipping" data-at="424 186 6"><rect x="616" y="359" width="84" height="32" rx="2" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/><text data-role="name" x="658" y="375" text-anchor="middle" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif">Shipping</text><text x="658" y="386" text-anchor="middle" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.08em">3 dock doors</text></g>
+        <g data-role="tag" data-name="Receiving" data-at="74 174 6"><rect x="278" y="178" width="84" height="32" rx="2" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/><text data-role="name" x="320" y="194" text-anchor="middle" fill="#f5f5f5" font-size="12" font-weight="600" font-family="Anthropic Sans Text">Receiving</text><text x="320" y="205" text-anchor="middle" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.08em">3 dock doors</text></g>
+        <g data-role="tag" data-name="Storage" data-at="204 162 6"><rect x="428" y="237" width="68" height="32" rx="2" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/><text data-role="name" x="462" y="253" text-anchor="middle" fill="#f5f5f5" font-size="12" font-weight="600" font-family="Anthropic Sans Text">Storage</text><text x="462" y="264" text-anchor="middle" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.08em">6 racks</text></g>
+        <g data-role="tag" data-name="Pick zone" data-at="254 272 6"><rect x="348" y="317" width="108" height="32" rx="2" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/><text data-role="name" x="402" y="333" text-anchor="middle" fill="#f5f5f5" font-size="12" font-weight="600" font-family="Anthropic Sans Text">Pick zone</text><text x="402" y="344" text-anchor="middle" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.08em">carts, flow rack</text></g>
+        <g data-role="tag" data-name="Packing" data-at="338 262 6"><rect x="460" y="354" width="72" height="32" rx="2" fill="#393e53" stroke="#f08a59" stroke-width="0.8"/><text data-role="name" x="496" y="370" text-anchor="middle" fill="#f08a59" font-size="12" font-weight="600" font-family="Anthropic Sans Text">Packing</text><text x="496" y="381" text-anchor="middle" fill="#f08a59" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.08em">3 stations</text></g>
+        <g data-role="tag" data-name="Shipping" data-at="424 186 6"><rect x="616" y="359" width="84" height="32" rx="2" fill="#393e53" stroke="rgba(245,245,245,0.12)" stroke-width="0.8"/><text data-role="name" x="658" y="375" text-anchor="middle" fill="#f5f5f5" font-size="12" font-weight="600" font-family="Anthropic Sans Text">Shipping</text><text x="658" y="386" text-anchor="middle" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.08em">3 dock doors</text></g>
         </g>
-        <text x="120" y="500" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">FOCAL ZONE</text>
-        <text x="240" y="500" fill="#bfc0c0" font-size="8.5" font-family="'Geist', sans-serif" font-style="italic">Goods move left to right; packing is where most orders wait, so it gets the accent.</text>
+        <text x="120" y="500" fill="#bfc0c0" font-size="8" font-family="Anthropic Sans Text" letter-spacing="0.18em">FOCAL ZONE</text>
+        <text x="240" y="500" fill="#bfc0c0" font-size="8.5" font-family="Anthropic Sans Text" font-style="italic">Goods move left to right; packing is where most orders wait, so it gets the accent.</text>
       </svg>
     </div>
   </div>

@@ -343,7 +343,10 @@ mod tests {
         // A note is written as Markdown, Always.
         let note = add_text(&p, "Tone of voice", "Plain words.").unwrap();
         assert_eq!(note, format!("{DIR}/tone-of-voice.md"));
-        assert!(compile(&p, 1000).items.iter().any(|i| i.rel == note && i.included));
+        assert!(compile(&p, 1000)
+            .items
+            .iter()
+            .any(|i| i.rel == note && i.included));
         // Removing a copy deletes it; the project's own file stays.
         remove(&p, &copy).unwrap();
         remove(&p, "README.md").unwrap();
@@ -364,7 +367,11 @@ mod tests {
         std::fs::write(p.join(DIR).join("logo.bin"), [0u8, 1, 2, 0]).unwrap();
         let k = compile(&p, 1000);
         assert_eq!(k.items.len(), 2);
-        let bin = k.items.iter().find(|i| i.rel.ends_with("logo.bin")).unwrap();
+        let bin = k
+            .items
+            .iter()
+            .find(|i| i.rel.ends_with("logo.bin"))
+            .unwrap();
         assert_eq!(bin.tokens, 0, "a binary has no words to send");
         let _ = std::fs::remove_dir_all(&p);
     }

@@ -58,6 +58,8 @@ table in step.
 | F2 | Rename this chat |
 | Ctrl/⌘ Shift P | Projects |
 | Ctrl/⌘ Shift R | Rules and memory |
+| Ctrl/⌘ Shift D | Design: start from the library |
+| Ctrl/⌘ Shift I | Install a skill |
 | Ctrl/⌘ Shift A | Chats that need you |
 | Ctrl/⌘ Shift M | The project map |
 | Ctrl/⌘ Alt O | Remote: WSL, SSH host or container |
@@ -86,6 +88,10 @@ table in step.
 | Shift Tab | Next permission mode |
 | Esc | Stop the reply, or close what's open |
 | Ctrl/⌘ Shift X | Stop every agent; the reply goes on |
+| Ctrl/⌘ = | Zoom the page in |
+| Ctrl/⌘ - | Zoom the page out |
+| Ctrl/⌘ 0 | The page at its own size |
+| F11 | Present the page: it fills the window |
 | Enter / Shift Enter | Send / new line |
 
 ### Search
@@ -220,6 +226,29 @@ ForgeCLI and the scripted model (`cargo test real_ -- --include-ignored`,
 see `src/remote.rs`). WSL runs the same way through `wsl.exe` but has only
 been checked by its unit tests (no Windows machine here).
 
+## Skills and plugins
+
+Skills and plugins made for Claude Code work in Forge unchanged. ForgeCLI
+reads Claude Code's folders (`~/.claude/skills`, a project's `.claude/skills`,
+and `.claude-plugin/plugin.json` in a plugin) and acts on a skill's
+frontmatter as Claude Code does: `$ARGUMENTS`, `${CLAUDE_SKILL_DIR}`,
+`` !`command` `` lines, `allowed-tools`, `model`, `context: fork`, `hooks`.
+This needs a ForgeCLI with that support (its branch `ccr-02a743e1-1gmu4f`,
+built on `forge-gpui-steering`).
+
+- **Install a skill** (Ctrl/⌘ Shift I, or Settings > Skills > Install skill):
+  from a GitHub repository (`owner/repo`, or a link to one folder in it), a git
+  URL, a folder, or a `.zip` / `.skill` file. Forge shows what each skill
+  would run and allow before installing it into `~/.claude/skills` or the
+  project's `.claude/skills`, where Claude Code finds it too. Nothing runs
+  while it installs. An installed skill has Update, which fetches it again.
+- **Plugins** (Settings > Plugins > Marketplaces): add a Claude Code
+  marketplace (a repository with `.claude-plugin/marketplace.json`) and
+  install its plugins. Each goes under ForgeCLI's config folder
+  (`plugins/<marketplace>/<plugin>`) and into your `pluginDirs`.
+- **WSL and SSH**: in a remote project, skills install on that machine, and
+  your own skills have "Copy to this project's machine".
+
 ## Terminal
 
 Ctrl+` (or the terminal button in the title bar) shows a terminal dock on
@@ -273,7 +302,7 @@ Changes apply the next time they're used; no restart.
 
 ## Layout
 
-- `src/theme.rs`: every colour, size, radius and font, and the six themes that set them (each with its own faces, corners, density and depth). Nothing else hardcodes them. Pick one in Settings > General or the command palette ("Theme:").
+- `src/theme.rs`: every colour, size, radius and font, in the app's one look (Calmly smooth, light and dark). Nothing else hardcodes them.
 - `src/state.rs`: the app state, the transcript model, demo chats and the scripted reply.
 - `src/backend.rs`: each chat's `forge` process: launch, the stream-json events, permission answers.
 - `src/forge_files.rs`: ForgeCLI's own files (commands, agents, skills, hooks,
@@ -289,7 +318,7 @@ Changes apply the next time they're used; no restart.
 - `src/browser_mcp.rs`: the browser tools for ForgeCLI's agents, served by this same program
   (`--browser-mcp`): navigate, state (numbered elements), click, type, press, select, hover,
   scroll, text, html, eval, wait, screenshot, console and tabs, on the page the panel shows.
-- `src/assets.rs`: bundled icons (Lucide, ISC) and fonts (Archivo, Hanken Grotesk, Source Serif 4, JetBrains Mono, and the themes' Inter, Geist and Geist Mono, IBM Plex Sans and Mono, Instrument Sans and Serif; all OFL).
+- `src/assets.rs`: bundled icons (Lucide, ISC). No font is bundled: every face is Anthropic Sans, read from the `fonts` folder beside the app (`fonts.rs`).
 - `src/ui/`: one file per part:
   - the window: `workspace` (title bar, welcome), `sidebar`, `chat_view`,
     `message`, `markdown`, `composer`, `command_palette`, `onboarding`,

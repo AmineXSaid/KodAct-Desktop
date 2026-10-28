@@ -32,7 +32,8 @@ impl ProjectKnowledge {
         Self {
             _subs: vec![cx.observe(&state, |_, _, cx| cx.notify())],
             state,
-            title: cx.new(|cx| InputState::new(window, cx).placeholder("Title (e.g. Tone of voice)")),
+            title: cx
+                .new(|cx| InputState::new(window, cx).placeholder("Title (e.g. Tone of voice)")),
             note: cx.new(|cx| {
                 TextareaState::new(window, cx)
                     .placeholder("What every chat here should know: facts, decisions, a glossary…")
@@ -102,7 +103,11 @@ impl Render for ProjectKnowledge {
         let scale = window.scale_factor();
         let hover = t.colors.hover;
         let on_demand = k.items.iter().filter(|i| !i.included && !i.missing).count();
-        let over = k.items.iter().filter(|i| i.always && !i.included && !i.missing && i.tokens > 0).count();
+        let over = k
+            .items
+            .iter()
+            .filter(|i| i.always && !i.included && !i.missing && i.tokens > 0)
+            .count();
 
         // The meter: what Always spends of its budget.
         let share = (k.included_tokens as f32 / k.budget.max(1) as f32).min(1.);
@@ -120,8 +125,16 @@ impl Render for ProjectKnowledge {
                     .child(
                         div()
                             .h_full()
-                            .w(relative(if k.included_tokens > 0 { share.max(0.012) } else { 0. }))
-                            .bg(if share > 0.9 { t.extra.warning } else { t.extra.success }),
+                            .w(relative(if k.included_tokens > 0 {
+                                share.max(0.012)
+                            } else {
+                                0.
+                            }))
+                            .bg(if share > 0.9 {
+                                t.extra.warning
+                            } else {
+                                t.extra.success
+                            }),
                     ),
             )
             .child(
@@ -152,7 +165,11 @@ impl Render for ProjectKnowledge {
             } else if item.tokens == 0 {
                 format!("{} · no text to send", size(item.bytes))
             } else {
-                format!("{} · {} tokens", size(item.bytes), crate::context::short(item.tokens))
+                format!(
+                    "{} · {} tokens",
+                    size(item.bytes),
+                    crate::context::short(item.tokens)
+                )
             };
             let (open, flip, drop) = (self.state.clone(), self.state.clone(), self.state.clone());
             let (rel, rel2, rel3) = (item.rel.clone(), item.rel.clone(), item.rel.clone());
@@ -183,7 +200,11 @@ impl Render for ProjectKnowledge {
                                 .whitespace_nowrap()
                                 .text_ellipsis()
                                 .text_size(t.text.body_sm)
-                                .text_color(if item.missing { t.colors.text_subtle } else { t.colors.text })
+                                .text_color(if item.missing {
+                                    t.colors.text_subtle
+                                } else {
+                                    t.colors.text
+                                })
                                 .child(name),
                         )
                         .child(
@@ -192,7 +213,11 @@ impl Render for ProjectKnowledge {
                                 .whitespace_nowrap()
                                 .text_ellipsis()
                                 .text_size(t.text.caption)
-                                .text_color(if note.is_some() { t.extra.warning } else { t.colors.text_subtle })
+                                .text_color(if note.is_some() {
+                                    t.extra.warning
+                                } else {
+                                    t.colors.text_subtle
+                                })
                                 .child(note.map(String::from).unwrap_or_else(|| {
                                     if folder.is_empty() || folder == crate::knowledge::DIR {
                                         detail.clone()
@@ -204,12 +229,17 @@ impl Render for ProjectKnowledge {
                 )
                 .when(item.tokens > 0, |d| {
                     d.child(
-                        kit::chip(&t, ("knowledge-mode", i), if always { "Always" } else { "On demand" }, always)
-                            .on_click(move |_, _, cx| {
-                                cx.stop_propagation();
-                                let rel = rel2.clone();
-                                flip.update(cx, |s, cx| s.knowledge_set_always(id, rel, !always, cx))
-                            }),
+                        kit::chip(
+                            &t,
+                            ("knowledge-mode", i),
+                            if always { "Always" } else { "On demand" },
+                            always,
+                        )
+                        .on_click(move |_, _, cx| {
+                            cx.stop_propagation();
+                            let rel = rel2.clone();
+                            flip.update(cx, |s, cx| s.knowledge_set_always(id, rel, !always, cx))
+                        }),
                     )
                 })
                 .child(

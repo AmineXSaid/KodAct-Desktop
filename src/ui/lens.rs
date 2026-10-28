@@ -63,13 +63,21 @@ impl RenderOnce for Lens {
         let open = self.open;
         let (from, to) = SLIDE.with(|s| {
             let (a, b) = s.get();
-            let next = if b == open { (a, b) } else { (if b == usize::MAX { open } else { b }, open) };
+            let next = if b == open {
+                (a, b)
+            } else {
+                (if b == usize::MAX { open } else { b }, open)
+            };
             s.set(next);
             next
         });
         let x = |k: usize| GAP + k as f32 * (CLOSED_W + GAP);
         let (x0, x1) = (x(from), x(to));
-        let ms = if super::motion::reduced_motion() { 1 } else { t.size.pop_in_ms.max(180) };
+        let ms = if super::motion::reduced_motion() {
+            1
+        } else {
+            t.size.pop_in_ms.max(180)
+        };
         // The capsule itself, under the tabs: it slides from the last open
         // view to this one.
         let capsule = div()
@@ -97,7 +105,8 @@ impl RenderOnce for Lens {
                 .read(cx)
                 .clone();
             let (st, key_st, which) = (self.state.clone(), self.state.clone(), item.which);
-            let tip: SharedString = format!("{}   {}", item.label, super::shortcut(item.key)).into();
+            let tip: SharedString =
+                format!("{}   {}", item.label, super::shortcut(item.key)).into();
             div()
                 .id(id)
                 .relative()
@@ -151,9 +160,17 @@ impl RenderOnce for Lens {
                             .hover(move |s| s.bg(hover))
                             .child(icon(item.icon, t.size.icon, t.colors.text_subtle))
                             .when(item.live, |d| {
-                                d.child(div().absolute().top(px(5.)).right(px(6.)).child(dot(t.extra.live, &t)))
+                                d.child(
+                                    div()
+                                        .absolute()
+                                        .top(px(5.))
+                                        .right(px(6.))
+                                        .child(dot(t.extra.live, &t)),
+                                )
                             })
-                            .tooltip(move |w, cx| gpui::component::tooltip::Tooltip::new(tip.clone()).build(w, cx))
+                            .tooltip(move |w, cx| {
+                                gpui::component::tooltip::Tooltip::new(tip.clone()).build(w, cx)
+                            })
                     }
                 })
                 .on_click(move |_, _, cx| st.update(cx, |s, cx| s.show_panel(which, cx)))

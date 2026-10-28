@@ -1,0 +1,14 @@
+Forge design library
+
+This folder contains Open Design (https://github.com/nexu-io/open-design),
+Copyright the Open Design authors, licensed under the Apache License,
+Version 2.0 (see LICENSE). It is mirrored unchanged from commit
+3b0df90f305c8279e748c292accf336d02b924ef, in its own layout.
+
+Files under forge/ are Forge's own, or copies of Open Design files that
+Forge has changed; each changed copy says, at its top, what it was copied
+from and what was changed.
+
+Folders that carry a licence file of their own (MIT and others), and the
+upstream skills under upstream/, are listed in THIRD_PARTY_LICENSES.md with
+their licences, which apply to the files in them.

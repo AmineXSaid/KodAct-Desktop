@@ -21,6 +21,8 @@ pub const SHORTCUTS: &[(&str, &str, &str)] = &[
     ("f2", "Rename this chat", "Chats"),
     ("secondary-shift-p", "Projects", "Chats"),
     ("secondary-shift-r", "Rules and memory", "Chats"),
+    ("secondary-shift-d", "Design: start from the library", "Chats"),
+    ("secondary-shift-i", "Install a skill", "General"),
     ("secondary-l", "Focus the composer", "Conversation"),
     ("secondary-u", "Attach files and images", "Conversation"),
     ("secondary-shift-t", "This turn's tasks", "Conversation"),
@@ -52,9 +54,21 @@ pub const SHORTCUTS: &[(&str, &str, &str)] = &[
         "Conversation",
     ),
     ("secondary-f", "Find in the conversation", "Conversation"),
-    ("secondary-shift-f", "Find in the file beside the chat", "Conversation"),
-    ("alt-down", "The file beside the chat: next page or slide", "Conversation"),
-    ("alt-up", "The file beside the chat: previous page or slide", "Conversation"),
+    (
+        "secondary-shift-f",
+        "Find in the file beside the chat",
+        "Conversation",
+    ),
+    (
+        "alt-down",
+        "The file beside the chat: next page or slide",
+        "Conversation",
+    ),
+    (
+        "alt-up",
+        "The file beside the chat: previous page or slide",
+        "Conversation",
+    ),
     ("secondary-j", "Jump to the latest message", "Conversation"),
     ("secondary-shift-c", "Copy the last reply", "Conversation"),
     ("secondary-/", "Choose a model", "Conversation"),
@@ -69,16 +83,25 @@ pub const SHORTCUTS: &[(&str, &str, &str)] = &[
         "Stop every agent; the reply goes on",
         "Conversation",
     ),
+    ("secondary-=", "Zoom the page in", "Browser"),
+    ("secondary--", "Zoom the page out", "Browser"),
+    ("secondary-0", "The page at its own size", "Browser"),
+    ("f11", "Present the page: it fills the window", "Browser"),
 ];
 
-pub const GROUPS: [&str; 3] = ["General", "Chats", "Conversation"];
+pub const GROUPS: [&str; 4] = ["General", "Chats", "Conversation", "Browser"];
 
 /// The keys of a binding as this platform writes them: `Ctrl Shift L`, `⌘⇧L`.
 pub fn keys(binding: &str) -> Vec<String> {
     let mac = cfg!(target_os = "macos");
-    binding
-        .split('-')
+    // `secondary--` is the minus key: the last `-` is the key itself.
+    let (mods, minus) = match binding.strip_suffix("--") {
+        Some(mods) => (mods, true),
+        None => (binding, false),
+    };
+    mods.split('-')
         .filter(|p| !p.is_empty())
+        .chain(minus.then_some("-"))
         .map(|p| match p {
             "secondary" => if mac { "⌘" } else { "Ctrl" }.to_string(),
             "ctrl" => if mac { "⌃" } else { "Ctrl" }.to_string(),
@@ -152,81 +175,86 @@ pub fn render(t: &Theme, state: &Entity<AppState>, leaving: bool) -> impl IntoEl
     let hover = t.colors.hover;
     let title: SharedString = "Keyboard shortcuts".into();
     super::motion::backdrop(
-    div()
-        .id("shortcuts-scrim")
-        .absolute()
-        .inset_0()
-        .flex()
-        .items_center()
-        .justify_center()
-        .bg(t.extra.scrim)
-        .on_mouse_down(gpui::MouseButton::Left, move |_, _, cx| {
-            close.update(cx, |s, cx| {
-                s.shortcuts_open = false;
-                cx.notify();
+        div()
+            .id("shortcuts-scrim")
+            .absolute()
+            .inset_0()
+            .flex()
+            .items_center()
+            .justify_center()
+            .bg(t.extra.scrim)
+            .on_mouse_down(gpui::MouseButton::Left, move |_, _, cx| {
+                close.update(cx, |s, cx| {
+                    s.shortcuts_open = false;
+                    cx.notify();
+                })
             })
-        })
-        .child(super::motion::dialog(
-            theme::popover(t)
-                .id("shortcuts")
-                .occlude()
-                .w(px(460.))
-                .max_h(gpui::relative(0.85))
-                .p(t.space.xl)
-                .flex()
-                .flex_col()
-                .gap(t.space.lg)
-                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(t.space.sm)
-                        .child(icon("icons/keyboard.svg", t.size.icon, t.colors.primary))
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .text_size(t.text.subheading)
-                                .font_family(t.font_display.clone())
-                                .font_weight(t.display_weight)
-                                .text_color(t.colors.text_strong)
-                                .child(title),
-                        )
-                        .child(
-                            div()
-                                .id("shortcuts-close")
-                                .size(t.size.control)
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .rounded(t.radius.pill)
-                                .cursor_pointer()
-                                .hover(move |d| d.bg(hover))
-                                .child(icon("icons/x.svg", t.size.icon_sm, t.colors.text_muted))
-                                .on_click(move |_, _, cx| {
-                                    close_btn.update(cx, |s, cx| {
-                                        s.shortcuts_open = false;
-                                        cx.notify();
-                                    })
-                                }),
-                        ),
-                )
-                .child(
-                    div()
-                        .id("shortcuts-list")
-                        .flex_1()
-                        .min_h_0()
-                        .overflow_y_scroll()
-                        .child(groups),
-                )
-                .child(
-                    div()
-                        .text_size(t.text.caption)
-                        .text_color(t.colors.text_subtle)
-                        .child("Every command is also in the palette, with or without a shortcut."),
-                ), "shortcuts", leaving, t),
-),
+            .child(super::motion::dialog(
+                theme::popover(t)
+                    .id("shortcuts")
+                    .occlude()
+                    .w(px(460.))
+                    .max_h(gpui::relative(0.85))
+                    .p(t.space.xl)
+                    .flex()
+                    .flex_col()
+                    .gap(t.space.lg)
+                    .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(t.space.sm)
+                            .child(icon("icons/keyboard.svg", t.size.icon, t.colors.primary))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .text_size(t.text.subheading)
+                                    .font_family(t.font_display.clone())
+                                    .font_weight(t.display_weight)
+                                    .text_color(t.colors.text_strong)
+                                    .child(title),
+                            )
+                            .child(
+                                div()
+                                    .id("shortcuts-close")
+                                    .size(t.size.control)
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .rounded(t.radius.pill)
+                                    .cursor_pointer()
+                                    .hover(move |d| d.bg(hover))
+                                    .child(icon("icons/x.svg", t.size.icon_sm, t.colors.text_muted))
+                                    .on_click(move |_, _, cx| {
+                                        close_btn.update(cx, |s, cx| {
+                                            s.shortcuts_open = false;
+                                            cx.notify();
+                                        })
+                                    }),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .id("shortcuts-list")
+                            .flex_1()
+                            .min_h_0()
+                            .overflow_y_scroll()
+                            .child(groups),
+                    )
+                    .child(
+                        div()
+                            .text_size(t.text.caption)
+                            .text_color(t.colors.text_subtle)
+                            .child(
+                                "Every command is also in the palette, with or without a shortcut.",
+                            ),
+                    ),
+                "shortcuts",
+                leaving,
+                t,
+            )),
         "shortcuts",
         t.extra.scrim,
         leaving,
@@ -284,6 +312,8 @@ mod tests {
             assert_eq!(keys("escape"), vec!["Esc"]);
             assert_eq!(keys("f1"), vec!["F1"]);
             assert_eq!(keys("secondary-,"), vec!["Ctrl", ","]);
+            assert_eq!(keys("secondary--"), vec!["Ctrl", "-"]);
+            assert_eq!(keys("secondary-="), vec!["Ctrl", "="]);
         }
     }
 }

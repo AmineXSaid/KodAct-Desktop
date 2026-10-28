@@ -69,7 +69,9 @@ pub fn without_thinking(reply: &str) -> String {
             .into_iter()
             .filter_map(|(o, c)| rest.find(o).map(|i| (i, o, c)))
             .min_by_key(|(i, ..)| *i);
-        let Some((start, open, close)) = open else { break };
+        let Some((start, open, close)) = open else {
+            break;
+        };
         out.push_str(&rest[..start]);
         match rest[start + open.len()..].find(close) {
             Some(end) => rest = &rest[start + open.len() + end + close.len()..],
@@ -123,7 +125,18 @@ fn request(profile: &Profile, prompt: &str) -> Result<String, String> {
     });
     // Any model may think first (a local model's name doesn't say): leave
     // room for it. One that doesn't stops after the few words asked.
-    if profile.wire == Wire::Openai && crate::endpoints::is_reasoning_model(&profile.model) {
+    if profile.wire == Wire::Gemini {
+        body = serde_json::json!({
+            "contents": [{ "role": "user", "parts": [{ "text": prompt }] }],
+            "generationConfig": { "maxOutputTokens": 1024 },
+        });
+        // Gemini 3 and later think hard by default: a title needs little.
+        let id = profile.model.rsplit('/').next().unwrap_or_default();
+        if id.starts_with("gemini-") && !id.starts_with("gemini-2") && !id.starts_with("gemini-1") {
+            body["generationConfig"]["thinkingConfig"] =
+                serde_json::json!({ "thinkingLevel": "low" });
+        }
+    } else if profile.wire == Wire::Openai && crate::endpoints::is_reasoning_model(&profile.model) {
         body["max_completion_tokens"] = 1024.into();
     } else {
         body["max_tokens"] = 1024.into();
@@ -151,6 +164,18 @@ fn request(profile: &Profile, prompt: &str) -> Result<String, String> {
             .and_then(|c| c.as_str())
             .unwrap_or_default()
             .to_string(),
+        // The answer's text parts, not its thoughts.
+        Wire::Gemini => reply
+            .pointer("/candidates/0/content/parts")
+            .and_then(|p| p.as_array())
+            .map(|parts| {
+                parts
+                    .iter()
+                    .filter(|p| p["thought"] != true)
+                    .filter_map(|p| p["text"].as_str())
+                    .collect::<String>()
+            })
+            .unwrap_or_default(),
     };
     clean(&text).ok_or_else(|| "the model gave no answer".into())
 }
@@ -163,14 +188,26 @@ mod tests {
     fn untitled_chats_are_numbered_after_the_highest() {
         assert_eq!(untitled([]), "Untitled 1");
         assert_eq!(untitled(["Fix the build", "Untitled"]), "Untitled 2");
-        assert_eq!(untitled(["Untitled 2", "Untitled 7", "Untitled notes"]), "Untitled 8");
+        assert_eq!(
+            untitled(["Untitled 2", "Untitled 7", "Untitled notes"]),
+            "Untitled 8"
+        );
     }
 
     #[test]
     fn a_reply_becomes_a_clean_title() {
-        assert_eq!(clean("\"Fixing the greeting test.\"\n").as_deref(), Some("Fixing the greeting test"));
-        assert_eq!(clean("## Title: Budget memo review").as_deref(), Some("Budget memo review"));
-        assert_eq!(clean("  \n**Dark mode palette**").as_deref(), Some("Dark mode palette"));
+        assert_eq!(
+            clean("\"Fixing the greeting test.\"\n").as_deref(),
+            Some("Fixing the greeting test")
+        );
+        assert_eq!(
+            clean("## Title: Budget memo review").as_deref(),
+            Some("Budget memo review")
+        );
+        assert_eq!(
+            clean("  \n**Dark mode palette**").as_deref(),
+            Some("Dark mode palette")
+        );
         assert_eq!(clean(" \n  "), None);
         assert_eq!(clean(&"word ".repeat(40)).unwrap().chars().count(), MAX);
         // A thinking model's reasoning is dropped, closed or cut off.
@@ -184,7 +221,13 @@ mod tests {
             clean("<thought>The user greets me.</thought>\nGreeting the user back").as_deref(),
             Some("Greeting the user back")
         );
-        assert_eq!(clean("<thought>* Input: `<message>HI Gemma</message>`"), None);
-        assert_eq!(clean("Input: `<message>HI Gemma</message>`\nAnswering a greeting").as_deref(), Some("Answering a greeting"));
+        assert_eq!(
+            clean("<thought>* Input: `<message>HI Gemma</message>`"),
+            None
+        );
+        assert_eq!(
+            clean("Input: `<message>HI Gemma</message>`\nAnswering a greeting").as_deref(),
+            Some("Answering a greeting")
+        );
     }
 }

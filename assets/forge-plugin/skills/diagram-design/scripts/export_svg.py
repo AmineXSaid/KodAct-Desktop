@@ -29,18 +29,6 @@ import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-GOOGLE_FONTS_IMPORT = (
-    "@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1"
-    "&amp;family=Geist:wght@400;500;600"
-    "&amp;family=Geist+Mono:wght@400;500;600"
-    "&amp;family=Noto+Serif:ital@0;1"
-    "&amp;family=Noto+Sans+KR:wght@400;500;600"
-    "&amp;family=Noto+Serif+KR:wght@400"
-    "&amp;family=Noto+Sans+TC:wght@400;500;600"
-    "&amp;family=Noto+Serif+TC:wght@400"
-    "&amp;display=swap');"
-)
-
 # Page chrome that must not follow a diagram fragment out of its host document.
 # The bare `svg { width; min-width }` rule is page layout too (see
 # is_chrome_selector); `svg .zone` and `svg text` are diagram rules.
@@ -477,12 +465,13 @@ def leading_accessibility_end(svg: str, pos: int) -> int:
 
 
 def merge_style_into_defs(svg: str, style_css: str, system_fonts: bool = False) -> str:
-    """Ensure one <defs> and place a <style> with fonts + diagram CSS first.
+    """Ensure one <defs> and place a <style> with the diagram CSS first.
 
-    With system_fonts the Google Fonts @import is left out, so the SVG makes no
-    network request and its font stacks fall through to installed faces.
+    No font is loaded: the SVG names Anthropic Sans and makes no network
+    request. `system_fonts` is kept for old callers and changes nothing.
     """
-    parts = [] if system_fonts else [GOOGLE_FONTS_IMPORT]
+    del system_fonts
+    parts = []
     if style_css.strip():
         parts.append(style_css.strip())
     if not parts:
@@ -600,7 +589,7 @@ def has_diagram_stylesheet(svg: str) -> bool:
 def assert_export_gate(svg: str) -> None:
     """Refuse a class-styled fragment that shipped without diagram CSS.
 
-    A fonts-only <style> (Google Fonts @import with no rules) does not count —
+    A <style> with no rules does not count —
     class-based fills would still render as black boxes.
     """
     if re.search(r"\bclass\s*=", svg) and not has_diagram_stylesheet(svg):
@@ -654,7 +643,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--system-fonts",
         action="store_true",
-        help="omit the Google Fonts @import so the SVG makes no network request",
+        help="kept for old callers: the SVG never loads a font",
     )
     args = parser.parse_args(argv)
 

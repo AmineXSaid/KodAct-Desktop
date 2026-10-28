@@ -53,30 +53,45 @@ pub fn render(
     let id = c.id;
     let (hover, danger_hover) = (t.colors.hover, t.extra.danger_tint);
     // One row: its words, then its letter or its ›.
-    let row = |key: &str, label: SharedString, letter: Option<&'static str>, more: bool, danger: bool| {
-        div()
-            .id(SharedString::from(format!("chat-menu-{key}")))
-            .relative()
-            .flex()
-            .items_center()
-            .gap(t.space.md)
-            .h(t.size.menu_row)
-            .px(t.space.snug)
-            .rounded(t.radius.small)
-            .cursor_pointer()
-            .text_size(t.text.body_sm)
-            .text_color(if danger { t.extra.danger } else { t.colors.text })
-            .hover(move |d| d.bg(if danger { danger_hover } else { hover }))
-            .child(div().flex_1().whitespace_nowrap().child(label))
-            .children(letter.map(|l| {
-                div()
-                    .flex_none()
-                    .text_size(t.text.caption)
-                    .text_color(if danger { t.extra.danger } else { t.colors.text_subtle })
-                    .child(l.to_uppercase())
-            }))
-            .when(more, |d| d.child(icon("icons/chevron-right.svg", t.size.icon_xs, t.colors.text_subtle)))
-    };
+    let row =
+        |key: &str, label: SharedString, letter: Option<&'static str>, more: bool, danger: bool| {
+            div()
+                .id(SharedString::from(format!("chat-menu-{key}")))
+                .relative()
+                .flex()
+                .items_center()
+                .gap(t.space.md)
+                .h(t.size.menu_row)
+                .px(t.space.snug)
+                .rounded(t.radius.small)
+                .cursor_pointer()
+                .text_size(t.text.body_sm)
+                .text_color(if danger {
+                    t.extra.danger
+                } else {
+                    t.colors.text
+                })
+                .hover(move |d| d.bg(if danger { danger_hover } else { hover }))
+                .child(div().flex_1().whitespace_nowrap().child(label))
+                .children(letter.map(|l| {
+                    div()
+                        .flex_none()
+                        .text_size(t.text.caption)
+                        .text_color(if danger {
+                            t.extra.danger
+                        } else {
+                            t.colors.text_subtle
+                        })
+                        .child(l.to_uppercase())
+                }))
+                .when(more, |d| {
+                    d.child(icon(
+                        "icons/chevron-right.svg",
+                        t.size.icon_xs,
+                        t.colors.text_subtle,
+                    ))
+                })
+        };
     let act = |f: fn(&mut AppState, usize, &mut gpui::Context<AppState>)| {
         let state = state.clone();
         move |_: &gpui::ClickEvent, _: &mut gpui::Window, cx: &mut gpui::App| {
@@ -128,10 +143,9 @@ pub fn render(
             )
     };
     let check = |on: bool| {
-        div()
-            .w(t.size.icon_sm)
-            .flex_none()
-            .when(on, |d| d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.text)))
+        div().w(t.size.icon_sm).flex_none().when(on, |d| {
+            d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.text))
+        })
     };
     let item = |key: String, label: SharedString| {
         div()
@@ -153,7 +167,11 @@ pub fn render(
     let open_in = {
         let mut items = vec![];
         if !c.remote {
-            items.push(item("folder".into(), "File manager".into()).on_click(act(|s, id, cx| s.open_chat_folder(id, cx))).into_any_element());
+            items.push(
+                item("folder".into(), "File manager".into())
+                    .on_click(act(|s, id, cx| s.open_chat_folder(id, cx)))
+                    .into_any_element(),
+            );
         }
         let st = state.clone();
         items.push(
@@ -169,7 +187,11 @@ pub fn render(
                 .into_any_element(),
         );
         if !c.remote {
-            items.push(item("vscode".into(), "VS Code".into()).on_click(act(|s, id, cx| s.open_chat_in_vscode(id, cx))).into_any_element());
+            items.push(
+                item("vscode".into(), "VS Code".into())
+                    .on_click(act(|s, id, cx| s.open_chat_in_vscode(id, cx)))
+                    .into_any_element(),
+            );
         }
         items
     };
@@ -210,9 +232,15 @@ pub fn render(
             .collect()
     };
     let export = vec![
-        item("md".into(), "Markdown file".into()).on_click(act(|s, id, cx| s.export_chat(id, cx))).into_any_element(),
-        item("json".into(), "JSON file".into()).on_click(act(|s, id, cx| s.export_chat_json(id, cx))).into_any_element(),
-        item("copy-json".into(), "Copy as JSON".into()).on_click(act(|s, id, cx| s.share_chat(id, cx))).into_any_element(),
+        item("md".into(), "Markdown file".into())
+            .on_click(act(|s, id, cx| s.export_chat(id, cx)))
+            .into_any_element(),
+        item("json".into(), "JSON file".into())
+            .on_click(act(|s, id, cx| s.export_chat_json(id, cx)))
+            .into_any_element(),
+        item("copy-json".into(), "Copy as JSON".into())
+            .on_click(act(|s, id, cx| s.share_chat(id, cx)))
+            .into_any_element(),
     ];
     let rule = || theme::rule(t).my(t.space.xs).mx(t.space.xs);
 
@@ -230,33 +258,81 @@ pub fn render(
     .flex()
     .flex_col()
     .child(opener("open-in", "Open in", ChatSub::OpenIn))
-    .child(plain(row("rename", "Rename".into(), Some("r"), false, false)).on_click(act(|s, id, cx| s.start_rename(id, cx))))
-    .child(plain(row("copy", "Copy as Markdown".into(), Some("c"), false, false)).on_click(act(|s, id, cx| s.copy_chat_markdown(id, cx))))
-    .child(plain(row("continue", "Continue in a new chat".into(), None, false, false)).on_click(act(|s, id, cx| s.continue_in_new_chat(id, cx))))
+    .child(
+        plain(row("rename", "Rename".into(), Some("r"), false, false))
+            .on_click(act(|s, id, cx| s.start_rename(id, cx))),
+    )
+    .child(
+        plain(row(
+            "copy",
+            "Copy as Markdown".into(),
+            Some("c"),
+            false,
+            false,
+        ))
+        .on_click(act(|s, id, cx| s.copy_chat_markdown(id, cx))),
+    )
+    .child(
+        plain(row(
+            "continue",
+            "Continue in a new chat".into(),
+            None,
+            false,
+            false,
+        ))
+        .on_click(act(|s, id, cx| s.continue_in_new_chat(id, cx))),
+    )
     .child(rule())
     .child(opener("view", "Transcript view", ChatSub::View))
     .child(
-        plain(row("pin", if c.pinned { "Unpin" } else { "Pin" }.into(), Some("p"), false, false)).on_click(act(|s, id, cx| {
+        plain(row(
+            "pin",
+            if c.pinned { "Unpin" } else { "Pin" }.into(),
+            Some("p"),
+            false,
+            false,
+        ))
+        .on_click(act(|s, id, cx| {
             s.chat_menu = None;
             s.toggle_pin(id, cx);
         })),
     )
     .child(opener("move", "Move to project", ChatSub::Move))
-    .child(plain(row("duplicate", "Duplicate".into(), None, false, false)).on_click(act(|s, id, cx| s.duplicate_chat(id, cx))))
+    .child(
+        plain(row("duplicate", "Duplicate".into(), None, false, false))
+            .on_click(act(|s, id, cx| s.duplicate_chat(id, cx))),
+    )
     .child(opener("export", "Export", ChatSub::Export))
     .when(c.remote, |d| {
-        d.child(plain(row("remote", "Edit remote connection".into(), None, false, false)).on_click(act(|s, _, cx| {
-            s.open_chat_menu(None, cx);
-            s.toggle_remote_menu(cx);
-        })))
+        d.child(
+            plain(row(
+                "remote",
+                "Edit remote connection".into(),
+                None,
+                false,
+                false,
+            ))
+            .on_click(act(|s, _, cx| {
+                s.open_chat_menu(None, cx);
+                s.toggle_remote_menu(cx);
+            })),
+        )
     })
     .child(rule())
     .child(
-        plain(row("archive", if c.archived { "Unarchive" } else { "Archive" }.into(), Some("a"), false, false))
-            .on_click(act(|s, id, cx| s.toggle_archive(id, cx))),
+        plain(row(
+            "archive",
+            if c.archived { "Unarchive" } else { "Archive" }.into(),
+            Some("a"),
+            false,
+            false,
+        ))
+        .on_click(act(|s, id, cx| s.toggle_archive(id, cx))),
     )
-    .child(plain(row("delete", "Delete…".into(), Some("d"), false, true)).on_click(act(|s, id, cx| s.ask_delete(id, cx))))
-    ;
+    .child(
+        plain(row("delete", "Delete…".into(), Some("d"), false, true))
+            .on_click(act(|s, id, cx| s.ask_delete(id, cx))),
+    );
     let open = match sub {
         Some(ChatSub::OpenIn) => Some(flyout(0., 0., open_in)),
         Some(ChatSub::View) => Some(flyout(4., 1., view)),
@@ -270,7 +346,8 @@ pub fn render(
         .children(open)
         .with_animation(
             ("chat-menu-in", id),
-            gpui::Animation::new(std::time::Duration::from_millis(t.motion_ms)).with_easing(gpui::ease_in_out),
+            gpui::Animation::new(std::time::Duration::from_millis(t.motion_ms))
+                .with_easing(gpui::ease_in_out),
             |d, delta| d.opacity(delta),
         )
         .into_any_element()

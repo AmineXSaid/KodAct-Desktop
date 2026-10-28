@@ -58,6 +58,9 @@ pub enum Kind {
     Image(&'static str),
     /// Text, sent inline.
     Text,
+    /// Text you pasted that was too long for the box: its own card, sent
+    /// inline whole (the text is in `Attachment::text`, kept after sending).
+    Pasted,
     Pdf,
     /// An office document, sent as its text.
     Document(Doc),
@@ -73,6 +76,7 @@ impl Kind {
         match self {
             Kind::Image(_) => "Image",
             Kind::Text => "Text",
+            Kind::Pasted => "Pasted text",
             Kind::Pdf => "PDF",
             Kind::Document(Doc::Word) => "Document",
             Kind::Document(Doc::Slides) => "Presentation",
@@ -87,6 +91,7 @@ impl Kind {
         match self {
             Kind::Image(m) => m.to_string(),
             Kind::Text => "text".into(),
+            Kind::Pasted => "pasted".into(),
             Kind::Pdf => "pdf".into(),
             Kind::Document(Doc::Word) => "word".into(),
             Kind::Document(Doc::Slides) => "slides".into(),
@@ -99,6 +104,7 @@ impl Kind {
     pub fn from_key(k: &str) -> Kind {
         match k {
             "text" => Kind::Text,
+            "pasted" => Kind::Pasted,
             "pdf" => Kind::Pdf,
             "word" => Kind::Document(Doc::Word),
             "slides" => Kind::Document(Doc::Slides),
@@ -172,7 +178,7 @@ impl Attachment {
     pub fn icon(&self) -> &'static str {
         match self.kind {
             Kind::Image(_) => "icons/image.svg",
-            Kind::Text => "icons/file-text.svg",
+            Kind::Text | Kind::Pasted => "icons/file-text.svg",
             Kind::Pdf | Kind::Document(Doc::Word) => "icons/file-type.svg",
             Kind::Document(Doc::Slides) => "icons/presentation.svg",
             Kind::Document(Doc::Sheet) => "icons/file-spreadsheet.svg",
@@ -198,6 +204,13 @@ impl Attachment {
             ),
             (Kind::Archive, None) => "Archive, not opened".into(),
             (Kind::File, _) => kind_word(&self.name),
+            (Kind::Pasted, _) => {
+                let n = self.text.as_deref().map(line_count).unwrap_or(0);
+                return format!(
+                    "Pasted text · {n} {}",
+                    if n == 1 { "line" } else { "lines" }
+                );
+            }
             (k, _) => k.label().to_string(),
         };
         format!("{what} · {}", self.size_text())
@@ -670,6 +683,33 @@ fn describe(a: &Attachment, as_document: bool) -> String {
     lines.join("\n")
 }
 
+/// A paste longer than this many characters, or lines, leaves the box and
+/// becomes a Pasted text card (as Claude's chat box does).
+pub const PASTE_CHARS: usize = 1_000;
+pub const PASTE_LINES: usize = 12;
+
+/// Whether a paste is long enough to become a card.
+pub fn is_long_paste(text: &str) -> bool {
+    text.chars().count() > PASTE_CHARS || line_count(text) > PASTE_LINES
+}
+
+/// Lines in a text, a last line without its newline counted too.
+pub fn line_count(text: &str) -> usize {
+    text.lines().count()
+}
+
+/// Text you pasted, as an attachment: its card, and what the model reads.
+pub fn pasted_text(text: &str, n: usize, id: u64) -> Attachment {
+    Attachment {
+        id,
+        name: format!("Pasted text {n}").into(),
+        kind: Kind::Pasted,
+        size: text.len() as u64,
+        text: Some(Arc::from(text)),
+        ..Default::default()
+    }
+}
+
 /// The content of a user message: your text, then each attachment as the
 /// blocks it travels as. `documents`: the endpoint takes PDF document
 /// blocks (Anthropic's wire does; an OpenAI-shaped one drops them).
@@ -681,6 +721,14 @@ pub fn content_blocks(text: &str, attachments: &[Attachment], documents: bool) -
             (Kind::Text, Some(b)) => {
                 let where_ = a.path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| a.name.to_string());
                 blocks.push(json!({ "type": "text", "text": format!("<attached_file path=\"{where_}\">\n{}\n</attached_file>", String::from_utf8_lossy(b)) }));
+            }
+            (Kind::Pasted, _) => {
+                let body = a.text.as_deref().unwrap_or_default();
+                blocks.push(json!({ "type": "text", "text": format!(
+                    "<pasted_text name=\"{}\" lines=\"{}\">\n{body}\n</pasted_text>",
+                    a.name,
+                    line_count(body)
+                ) }));
             }
             (Kind::Pdf, Some(b)) if documents => {
                 blocks.push(json!({ "type": "document", "source": { "type": "base64", "media_type": "application/pdf", "data": base64(b) }, "title": a.name.to_string() }));
@@ -921,6 +969,30 @@ mod tests {
             Kind::Document(Doc::Sheet)
         );
         assert_eq!(Kind::from_key("image/webp"), Kind::Image("image/webp"));
+    }
+
+    #[test]
+    fn a_long_paste_becomes_a_card_and_reaches_the_model_whole() {
+        assert!(!is_long_paste(&"a".repeat(PASTE_CHARS)));
+        assert!(is_long_paste(&"a".repeat(PASTE_CHARS + 1)));
+        assert!(!is_long_paste(&"x\n".repeat(PASTE_LINES)));
+        assert!(is_long_paste(&"x\n".repeat(PASTE_LINES + 1)));
+        // The talk transcript that was taken for JavaScript: prose, sent as prose.
+        let talk = "Let us now look at a couple of SDV-enabled features. We are using the DigitalAuto Playground.\n".repeat(14);
+        assert!(is_long_paste(&talk));
+        let a = pasted_text(&talk, 1, 7);
+        assert_eq!((a.kind, a.name.as_ref()), (Kind::Pasted, "Pasted text 1"));
+        assert_eq!(a.summary(), "Pasted text · 14 lines");
+        let blocks = content_blocks("What is this talking about?", &[a.clone()], true);
+        let sent = blocks[1]["text"].as_str().unwrap();
+        assert!(
+            sent.starts_with("<pasted_text name=\"Pasted text 1\" lines=\"14\">\nLet us now"),
+            "{sent}"
+        );
+        assert!(!sent.contains("```"), "never fenced");
+        // Sent, it keeps its words (a sent message shows and reopens them).
+        assert_eq!(a.for_history().text.as_deref(), Some(talk.as_str()));
+        assert_eq!(Kind::from_key(&Kind::Pasted.key()), Kind::Pasted);
     }
 
     #[test]

@@ -24,7 +24,6 @@ const VERSION: u32 = 1;
 /// are read again from where they were written.
 const INLINE_BYTES: usize = 4 * 1024 * 1024;
 
-
 /// A saved answer's `rule` naming the mode that answered it, not a rule.
 const MODE_PREFIX: &str = "mode:";
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -50,6 +49,13 @@ pub struct SavedChat {
     /// Earlier versions, replaced by an edit or a retry.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub versions: Vec<SavedVersion>,
+    /// A design chat's setup (`design::prompt::Setup`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub design: Option<crate::design::prompt::Setup>,
+    /// Its design pages' comments, marks, order and added pages
+    /// (`design::store`), filled in by the app.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub design_pages: Option<crate::design::store::SavedDesign>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -107,6 +113,9 @@ pub struct SavedAttachment {
     pub opened_to: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub files: Option<usize>,
+    /// A pasted text's words: it has no file to read them back from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
@@ -379,6 +388,8 @@ fn save_messages(chat: &Chat, project: &Path) -> SavedChat {
         detailed: chat.detailed,
         updated: secs(chat.updated),
         versions: vec![],
+        design: chat.design.clone(),
+        design_pages: None,
         messages: chat
             .messages
             .iter()
@@ -401,6 +412,9 @@ fn save_messages(chat: &Chat, project: &Path) -> SavedChat {
                             saved_at: a.saved_at.clone(),
                             opened_to: a.extracted.as_ref().map(|x| x.to.clone()),
                             files: a.extracted.as_ref().map(|x| x.count),
+                            text: (a.kind == crate::attach::Kind::Pasted)
+                                .then(|| a.text.as_deref().map(str::to_string))
+                                .flatten(),
                         })
                         .collect(),
                     turn: turn.as_ref().map(|t| t.to_string()),
@@ -568,6 +582,7 @@ pub fn messages_of(saved: &SavedChat) -> Vec<Message> {
                             kind,
                             size: a.size,
                             bytes,
+                            text: a.text.as_deref().map(std::sync::Arc::from),
                             saved_at: a.saved_at.clone(),
                             extracted: a.opened_to.clone().map(|to| {
                                 std::sync::Arc::new(crate::stage::Extracted {
@@ -781,6 +796,26 @@ mod tests {
     }
 
     #[test]
+    fn a_pasted_text_keeps_its_words_through_the_transcript() {
+        let mut c = sample();
+        if let Some(Message::User { attachments, .. }) = c.messages.get_mut(0) {
+            attachments.push(crate::attach::pasted_text("line one\nline two", 1, 3).for_history());
+        }
+        let saved = save_form(&c, Path::new("/work/app"));
+        let back: SavedChat =
+            serde_json::from_str(&serde_json::to_string(&saved).unwrap()).unwrap();
+        let m = messages_of(&back);
+        let Message::User { attachments, .. } = &m[0] else {
+            panic!()
+        };
+        let p = attachments
+            .iter()
+            .find(|a| a.kind == crate::attach::Kind::Pasted)
+            .unwrap();
+        assert_eq!(p.text.as_deref(), Some("line one\nline two"));
+    }
+
+    #[test]
     fn a_chat_survives_the_round_trip() {
         let c = sample();
         let saved = save_form(&c, Path::new("/work/app"));
@@ -831,8 +866,14 @@ mod tests {
             header: "H".into(),
             text: text.into(),
             options: vec![
-                QOption { label: "Tauri (Recommended)".into(), description: "d".into() },
-                QOption { label: "Leptos".into(), description: "".into() },
+                QOption {
+                    label: "Tauri (Recommended)".into(),
+                    description: "d".into(),
+                },
+                QOption {
+                    label: "Leptos".into(),
+                    description: "".into(),
+                },
             ],
             multi: false,
             picked,
@@ -844,18 +885,31 @@ mod tests {
                 detail: "Stack?".into(),
                 verdict: Verdict::Allowed,
                 info: PermInfo {
-                    questions: vec![q("Stack?", vec![0], None), q("Store?", vec![], Some("Markdown files"))],
+                    questions: vec![
+                        q("Stack?", vec![0], None),
+                        q("Store?", vec![], Some("Markdown files")),
+                    ],
                     ..Default::default()
                 },
             }],
         });
         let json = serde_json::to_string(&save_form(&c, Path::new("/w"))).unwrap();
         let back = messages_of(&serde_json::from_str(&json).unwrap());
-        let Message::Assistant { blocks } = &back[0] else { panic!() };
-        let Block::Permission { verdict, info, .. } = &blocks[0] else { panic!() };
+        let Message::Assistant { blocks } = &back[0] else {
+            panic!()
+        };
+        let Block::Permission { verdict, info, .. } = &blocks[0] else {
+            panic!()
+        };
         assert_eq!(*verdict, Verdict::Allowed);
         let answers: Vec<_> = info.questions.iter().map(|q| q.answer()).collect();
-        assert_eq!(answers, [Some("Tauri (Recommended)".into()), Some("Markdown files".into())]);
+        assert_eq!(
+            answers,
+            [
+                Some("Tauri (Recommended)".into()),
+                Some("Markdown files".into())
+            ]
+        );
     }
 
     #[test]

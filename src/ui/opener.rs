@@ -941,9 +941,8 @@ impl Render for Opener {
         let (bw, bh) = (f32::from(vp.width), f32::from(vp.height).max(1.));
         let bar = f32::from(t.size.titlebar);
         let f = Fit::new(bw, bh);
-        let probe = |s: &str| {
-            f32::from(shape(s, &fonts.word, WORD_SIZE, self.palette.paper, window).width)
-        };
+        let probe =
+            |s: &str| f32::from(shape(s, &fonts.word, WORD_SIZE, self.palette.paper, window).width);
         let word = Word::new(probe("F"), probe("RGE"));
         // The naming screen's hero cube, as `onboarding.rs` lays it out, on the stage.
         let steps_top = bar

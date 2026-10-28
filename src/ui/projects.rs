@@ -104,8 +104,10 @@ impl ProjectsView {
         let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search projects"));
         let edit = cx.new(|cx| InputState::new(window, cx));
         let rail = cx.new(|cx| super::project_rail::ProjectRail::new(state.clone(), window, cx));
-        let new_project = cx.new(|cx| super::new_project::NewProject::new(state.clone(), window, cx));
-        let chat_search = cx.new(|cx| InputState::new(window, cx).placeholder("Search these chats"));
+        let new_project =
+            cx.new(|cx| super::new_project::NewProject::new(state.clone(), window, cx));
+        let chat_search =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Search these chats"));
         let subs = vec![
             cx.observe(&state, |_, _, cx| cx.notify()),
             cx.subscribe(&search, |_, _, ev: &InputEvent, cx| {
@@ -172,7 +174,12 @@ impl ProjectsView {
     }
 
     /// The Projects page's tabs (with counts), search and order.
-    fn toolbar(&self, t: &Theme, counts: (usize, usize, usize), cx: &mut Context<Self>) -> impl IntoElement {
+    fn toolbar(
+        &self,
+        t: &Theme,
+        counts: (usize, usize, usize),
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let hover = t.colors.hover;
         let tab = |label: &'static str, n: usize, which: Tab, cx: &mut Context<Self>| {
             let on = self.tab == which;
@@ -186,8 +193,13 @@ impl ProjectsView {
                 .rounded(t.radius.compact)
                 .cursor_pointer()
                 .text_size(t.text.body_sm)
-                .when(on, |d| crate::theme::selected(t, d).text_color(t.colors.text_strong))
-                .when(!on, |d| d.text_color(t.colors.text_muted).hover(move |st| st.bg(hover)))
+                .when(on, |d| {
+                    crate::theme::selected(t, d).text_color(t.colors.text_strong)
+                })
+                .when(!on, |d| {
+                    d.text_color(t.colors.text_muted)
+                        .hover(move |st| st.bg(hover))
+                })
                 .child(label)
                 .child(
                     div()
@@ -211,7 +223,11 @@ impl ProjectsView {
                 .rounded(t.radius.compact)
                 .cursor_pointer()
                 .text_size(t.text.caption)
-                .text_color(if on { t.colors.text_strong } else { t.colors.text_subtle })
+                .text_color(if on {
+                    t.colors.text_strong
+                } else {
+                    t.colors.text_subtle
+                })
                 .when(on, |d| d.font_weight(FontWeight::SEMIBOLD))
                 .when(!on, |d| d.hover(move |st| st.bg(hover)))
                 .child(label)
@@ -256,8 +272,17 @@ impl ProjectsView {
                     .border_1()
                     .border_color(t.colors.border)
                     .bg(t.colors.surface)
-                    .child(icon("icons/search.svg", t.size.icon_sm, t.colors.text_subtle))
-                    .child(div().flex_1().min_w_0().child(Input::new(&self.search).appearance(false))),
+                    .child(icon(
+                        "icons/search.svg",
+                        t.size.icon_sm,
+                        t.colors.text_subtle,
+                    ))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .child(Input::new(&self.search).appearance(false)),
+                    ),
             )
     }
 }
@@ -591,7 +616,7 @@ impl ProjectsView {
                                     .child(
                                         // The section's subhead, in the editorial serif.
                                         div()
-                                            .font_family(t.font_serif.clone())
+                                            .font_family(t.font_display.clone())
                                             .text_size(t.text.subheading)
                                             .text_color(t.colors.text_body)
                                             .child("A folder with its own chats, rules and memory. Open one to pick up where you left off."),
@@ -669,7 +694,9 @@ impl ProjectsView {
                 q.is_empty()
                     || c.title.to_lowercase().contains(&q)
                     || c.messages.iter().any(|m| match m {
-                        crate::state::Message::User { text, .. } => text.to_lowercase().contains(&q),
+                        crate::state::Message::User { text, .. } => {
+                            text.to_lowercase().contains(&q)
+                        }
                         _ => false,
                     })
             })
@@ -751,7 +778,11 @@ impl ProjectsView {
                     div()
                         .invisible()
                         .group_hover("project-name", |d| d.visible())
-                        .child(icon("icons/pencil.svg", t.size.icon_xs, t.colors.text_subtle)),
+                        .child(icon(
+                            "icons/pencil.svg",
+                            t.size.icon_xs,
+                            t.colors.text_subtle,
+                        )),
                 )
                 .tooltip(|w, cx| gpui::component::tooltip::Tooltip::new("Rename").build(w, cx))
                 .on_click(cx.listener(move |this, _, window, cx| {
@@ -767,7 +798,11 @@ impl ProjectsView {
                 .id("project-description")
                 .cursor_text()
                 .text_size(t.text.body)
-                .text_color(if empty { t.colors.text_subtle } else { t.colors.text_body })
+                .text_color(if empty {
+                    t.colors.text_subtle
+                } else {
+                    t.colors.text_body
+                })
                 .hover(move |st| st.bg(hover))
                 .rounded(t.radius.compact)
                 .child(if empty {
@@ -875,7 +910,11 @@ impl ProjectsView {
                                     } else {
                                         "icons/star.svg"
                                     },
-                                    if pinned { "Unstar" } else { "Star: first in your lists" },
+                                    if pinned {
+                                        "Unstar"
+                                    } else {
+                                        "Star: first in your lists"
+                                    },
                                 )
                                 .on_click(move |_, _, cx| {
                                     pin_state.update(cx, |s, cx| s.toggle_project_pin(id, cx))
@@ -888,9 +927,12 @@ impl ProjectsView {
                                         "icons/archive.svg",
                                         "Archive: off your lists, its chats and files kept",
                                     )
-                                    .on_click(move |_, _, cx| {
-                                        archive_state.update(cx, |s, cx| s.archive_project(id, true, cx))
-                                    }),
+                                    .on_click(
+                                        move |_, _, cx| {
+                                            archive_state
+                                                .update(cx, |s, cx| s.archive_project(id, true, cx))
+                                        },
+                                    ),
                                 )
                             })
                             .child(
@@ -910,9 +952,12 @@ impl ProjectsView {
                                         "icons/x.svg",
                                         "Remove from projects: its chats and files stay",
                                     )
-                                    .on_click(move |_, _, cx| {
-                                        forget_state.update(cx, |s, cx| s.forget_project(id, cx))
-                                    }),
+                                    .on_click(
+                                        move |_, _, cx| {
+                                            forget_state
+                                                .update(cx, |s, cx| s.forget_project(id, cx))
+                                        },
+                                    ),
                                 )
                             }),
                     )
@@ -952,8 +997,14 @@ impl ProjectsView {
                                                 .border_color(t.colors.border)
                                                 .bg(t.colors.surface)
                                                 .text_size(t.text.caption)
-                                                .child(icon("icons/search.svg", t.size.icon_xs, t.colors.text_subtle))
-                                                .child(div().flex_1().min_w_0().child(Input::new(&self.chat_search).appearance(false))),
+                                                .child(icon(
+                                                    "icons/search.svg",
+                                                    t.size.icon_xs,
+                                                    t.colors.text_subtle,
+                                                ))
+                                                .child(div().flex_1().min_w_0().child(
+                                                    Input::new(&self.chat_search).appearance(false),
+                                                )),
                                         )
                                     }),
                             )

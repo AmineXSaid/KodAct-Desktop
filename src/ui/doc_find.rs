@@ -212,7 +212,11 @@ impl Render for DocFind {
                     .gap(t.space.sm)
                     .px(t.space.md)
                     .py(t.space.sm)
-                    .child(icon("icons/search.svg", t.size.icon_sm, t.colors.text_muted))
+                    .child(icon(
+                        "icons/search.svg",
+                        t.size.icon_sm,
+                        t.colors.text_muted,
+                    ))
                     .child(
                         div()
                             .flex_1()

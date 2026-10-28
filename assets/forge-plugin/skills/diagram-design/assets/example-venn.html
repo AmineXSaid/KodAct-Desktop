@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Good design · Desirable × Feasible × Viable</title>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -12,13 +11,13 @@
       --color-ink:     #2d3142;
       --color-muted:   #4f5d75;
       --color-accent:  #bf4520;
-      --font-sans:     'Geist', system-ui, sans-serif;
-      --font-serif:    'Instrument Serif', serif;
-      --font-mono:     'Geist Mono', ui-monospace, monospace;
+      --font-sans:     'Anthropic Sans Text';
+      --font-serif:    'Anthropic Sans Display';
+      --font-mono:     'Anthropic Sans Text';
     }
 
     body {
-      font-family: var(--font-sans);
+      font-family:'Anthropic Sans Text';
       background: var(--color-paper);
       color: var(--color-ink);
       min-height: 100vh;
@@ -31,7 +30,7 @@
     .frame { max-width: 1200px; width: 100%; }
 
     .eyebrow {
-      font-family: var(--font-mono);
+      font-family:'Anthropic Sans Text';
       font-size: 0.66rem;
       font-weight: 500;
       letter-spacing: 0.18em;
@@ -41,7 +40,7 @@
     }
 
     h1 {
-      font-family: var(--font-serif);
+      font-family:'Anthropic Sans Display';
       font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
       font-weight: 400;
       letter-spacing: -0.02em;
@@ -90,20 +89,20 @@
 
         <!-- Set labels — positioned INSIDE each circle's non-overlapping lobe, so the diagram reads like a classic Venn -->
         <!-- Desirable — top lobe (centered inside top of Desirable circle) -->
-        <text x="500" y="96" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Desirable</text>
-        <text x="500" y="112" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">PEOPLE WANT IT</text>
+        <text x="500" y="96" fill="#2d3142" font-size="14" font-weight="600" font-family="Anthropic Sans Text" text-anchor="middle">Desirable</text>
+        <text x="500" y="112" fill="#4f5d75" font-size="9" font-family="Anthropic Sans Text" text-anchor="middle" letter-spacing="0.14em">PEOPLE WANT IT</text>
 
         <!-- Feasible — bottom-left lobe -->
-        <text x="340" y="386" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Feasible</text>
-        <text x="340" y="402" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">WE CAN BUILD IT</text>
+        <text x="340" y="386" fill="#2d3142" font-size="14" font-weight="600" font-family="Anthropic Sans Text" text-anchor="middle">Feasible</text>
+        <text x="340" y="402" fill="#4f5d75" font-size="9" font-family="Anthropic Sans Text" text-anchor="middle" letter-spacing="0.14em">WE CAN BUILD IT</text>
 
         <!-- Viable — bottom-right lobe -->
-        <text x="660" y="386" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Viable</text>
-        <text x="660" y="402" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">BUSINESS SUSTAINS</text>
+        <text x="660" y="386" fill="#2d3142" font-size="14" font-weight="600" font-family="Anthropic Sans Text" text-anchor="middle">Viable</text>
+        <text x="660" y="402" fill="#4f5d75" font-size="9" font-family="Anthropic Sans Text" text-anchor="middle" letter-spacing="0.14em">BUSINESS SUSTAINS</text>
 
         <!-- Focal label: white text on the dark intersection -->
-        <text x="500" y="268" fill="#ffffff" font-size="14" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Shippable</text>
-        <text x="500" y="284" fill="rgba(245,245,245,0.75)" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">THE SWEET SPOT</text>
+        <text x="500" y="268" fill="#ffffff" font-size="14" font-weight="600" font-family="Anthropic Sans Text" text-anchor="middle">Shippable</text>
+        <text x="500" y="284" fill="rgba(245,245,245,0.75)" font-size="9" font-family="Anthropic Sans Text" text-anchor="middle" letter-spacing="0.14em">THE SWEET SPOT</text>
       </svg>
   </div>
 </body>
