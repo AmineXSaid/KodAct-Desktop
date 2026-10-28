@@ -671,19 +671,7 @@ pub fn render(
         })
         .unwrap_or_default();
     let library_menu = sheet(t, 320.)
-        .child(
-            div()
-                .m(t.space.xs)
-                .px(t.space.sm)
-                .py(t.space.xs)
-                .rounded(t.radius.button)
-                .bg(t.extra.inset)
-                .child(
-                    gpui::component::input::Input::new(&filter)
-                        .appearance(false)
-                        .text_size(t.text.body_sm),
-                ),
-        )
+        .child(super::search_field(t, &filter).m(t.space.xs))
         .child(
             div()
                 .px(t.space.md)

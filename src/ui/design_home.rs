@@ -8,7 +8,7 @@
 
 use std::path::PathBuf;
 
-use gpui::component::input::{Input, InputEvent, InputState};
+use gpui::component::input::{InputEvent, InputState};
 use gpui::{
     div, img, prelude::*, px, Context, Entity, FontWeight, IntoElement, ObjectFit, Render,
     SharedString, Subscription, Window,
@@ -221,27 +221,7 @@ impl Render for DesignHome {
                     ),
             );
 
-        let search = div()
-            .w(px(280.))
-            .flex_none()
-            .px(t.space.sm)
-            .rounded(t.radius.button)
-            .border_1()
-            .border_color(t.colors.border)
-            .bg(t.colors.surface)
-            .flex()
-            .items_center()
-            .gap(t.space.xs)
-            .child(icon(
-                "icons/search.svg",
-                t.size.icon_sm,
-                t.colors.text_muted,
-            ))
-            .child(
-                div()
-                    .flex_1()
-                    .child(Input::new(&self.search).appearance(false)),
-            );
+        let search = super::search_field(&t, &self.search).w(px(280.)).flex_none();
 
         let Some(ix) = ix else {
             return div()

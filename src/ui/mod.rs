@@ -288,6 +288,31 @@ pub fn soon<E: gpui::StatefulInteractiveElement + gpui::Styled>(el: E, stub: &'s
     })
 }
 
+/// A search field as the app draws one (the sidebar's): a recessed box
+/// with a hairline edge that firms on hover, a search icon, the input.
+pub fn search_field(t: &Theme, input: &gpui::Entity<gpui::component::input::InputState>) -> Div {
+    let edge = t.extra.border_strong;
+    div()
+        .flex()
+        .items_center()
+        .gap(t.space.sm)
+        .h(t.size.row + gpui::px(2.))
+        .px(t.space.sm)
+        .rounded(t.radius.field)
+        .border_1()
+        .border_color(t.colors.border)
+        .bg(t.extra.sunk)
+        .hover(move |d| d.border_color(edge))
+        .child(icon("icons/search.svg", t.size.icon_sm, t.colors.text_muted))
+        .child(
+            div().flex_1().min_w_0().child(
+                gpui::component::input::Input::new(input)
+                    .appearance(false)
+                    .text_size(t.text.body_sm),
+            ),
+        )
+}
+
 /// A small key hint, as shown beside menu items.
 pub fn kbd(t: &Theme, text: impl Into<SharedString>) -> Div {
     div()

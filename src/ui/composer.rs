@@ -578,18 +578,9 @@ impl Render for Composer {
         let design_out = t.size.menu_out_ms;
         let design_menu = self.design_presence.frame(design_now, design_out, window).map(|(tab, leaving)| {
             let query = self.design_filter.read(cx).value().to_string();
-            let search = div()
-                .mx(px(8.))
-                .mb(px(4.))
-                .child(
-                    Input::new(&self.design_filter)
-                        .appearance(false)
-                        .text_size(t.text.body_sm),
-                )
-                .px(px(8.))
-                .py(px(4.))
-                .rounded(px(4.))
-                .bg(t.colors.hover)
+            let search = super::search_field(&t, &self.design_filter)
+                .mx(t.space.sm)
+                .mb(t.space.xs)
                 .into_any_element();
             super::design_chips::menu(
                 &t,
