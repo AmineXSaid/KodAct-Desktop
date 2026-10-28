@@ -23,10 +23,11 @@ in screenshots in light and dark. Nothing here has been run on Windows yet;
 | Export PPTX (pictures and editable) | Written from scratch; editable text boxes over a text-free picture; speaker notes | `design/pptx.rs` |
 | Export single HTML | Styles, imports, scripts, pictures, fonts and media inline | `design/inline.rs` |
 | Figma | `.od-figma.json` from the library's clipper, for the shipped plugin | Share menu, `design/export.rs` |
-| `.fig` import | Pages, frames, fills, strokes, corners, shadows, text and pictures rebuilt as HTML | `design/fig.rs`; gallery "Open a Figma file…", `design_import_fig` |
+| `.fig` import | Pages, frames, fills, strokes, corners, shadows, text, pictures and vector paths (as SVG) rebuilt as HTML | `design/fig.rs`; gallery "Open a Figma file…", `design_import_fig` |
 | GenUI forms (discovery questions, direction picker) | Forge's questions as a clickable form; answers go back to the agent | `ui/question_form.rs` |
 | Media: images, video, audio | `design_image` (OpenAI or fal), `design_media` (fal video, ElevenLabs narration), your own keys | `design/services.rs` |
-| Deploy | `design_deploy`: Vercel, one self-contained file | `design/services.rs` |
+| Deploy | `design_deploy`: Vercel or Cloudflare Pages (its direct upload), one self-contained file | `design/services.rs` |
+| Deck thumbnail rail | A deck's outline shows its slides as pictures; a click goes to the slide | `ui/browser_view.rs`, `export::slide_thumbs` |
 | Versions, undo and redo of a page | Kept per page | design bar |
 | Present | The page fills the window, slide by slide | F11 |
 
@@ -82,10 +83,6 @@ finished at once.
 - **Real Figma and PowerPoint files:** `.fig` import is tested on files
   the tests write, not one saved by Figma. The PPTX hasn't been opened in
   PowerPoint, and the Figma export hasn't been imported in Figma.
-- **Not built:**
-  - Cloudflare Pages, beside Vercel;
-  - vector paths from `.fig` files (a vector shows as its box);
-  - the deck thumbnail rail;
-  - Open Design's routines, translations and pets.
+- **Not built:** Open Design's routines, translations and pets (D8).
 - **Charts:** a chart drawn only on the slide that shows still prints empty
   on the other slides.

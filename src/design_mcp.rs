@@ -75,9 +75,10 @@ fn tools() -> Vec<Value> {
         tool("design_import_fig", "Open a Figma file (.fig) as an HTML page: its pages, frames, shapes, text and pictures placed as in the file. Saved in the project (designs/<name>/index.html by default); then make it a real page from there.",
             json!({ "path": { "type": "string", "description": "The .fig file: absolute, or from the project's folder." },
                 "to": { "type": "string", "description": "Where to write the page, from the project's folder." } }), &["path"]),
-        tool("design_deploy", "Publish a page on the web (Vercel, with the user's token) as one self-contained file, and return its address. Only when the user asks to publish or share a link.",
+        tool("design_deploy", "Publish a page on the web (Vercel or Cloudflare Pages, with the user's token) as one self-contained file, and return its address. Only when the user asks to publish or share a link.",
             json!({ "path": { "type": "string", "description": "The page's HTML file: absolute, or from the project's folder." },
-                "name": { "type": "string", "description": "The site's name, e.g. course-intro." } }), &["path"]),
+                "name": { "type": "string", "description": "The site's name, e.g. course-intro." },
+                "to": { "type": "string", "enum": ["vercel", "cloudflare"], "description": "Where; leave out for the one with a token." } }), &["path"]),
     ]
 }
 
@@ -363,8 +364,9 @@ impl Tools {
                         .map(|s| s.to_string_lossy().into_owned())
                         .unwrap_or_else(|| "forge-design".into())
                 });
-                let url = crate::design::services::deploy(&page.shown, &name)?;
-                Ok(text(format!("Published {} at {url} (one self-contained file).", page.name)))
+                let host = crate::design::services::host(a["to"].as_str())?;
+                let url = crate::design::services::deploy(&page.shown, &name, host)?;
+                Ok(text(format!("Published {} on {} at {url} (one self-contained file).", page.name, host.label())))
             }
             _ => Err(format!("no tool {name}")),
         }
@@ -443,7 +445,7 @@ impl Tools {
         b.eval(STILL_JS)?;
         let mut shots = || -> Answer {
             for n in from..=to {
-                b.eval(&format!("{} && {SETTLED_JS}", go_to_slide_js(n)))?;
+                b.eval(&format!("{} && {SETTLED_JS}", live::go_to_slide_js(n)))?;
                 let shot = b.run_step("screenshot", &json!({}))?;
                 out.push(json!({ "type": "text", "text": format!("Slide {n} of {count}:") }));
                 out.extend(shot.into_iter().filter(|c| c["type"] == "image"));
@@ -527,29 +529,6 @@ const MOVING_JS: &str = "document.getElementById('forge-still')?.remove()";
 /// copies, added later in the page, aren't counted).
 fn slide_count_js() -> String {
     format!("{}.length", live::deck_slides!())
-}
-
-/// Go to slide n (1-based). Slides stacked down the page are scrolled to;
-/// a deck that shows one at a time is driven by its own keys (Home, then
-/// ArrowRight), as a person would.
-fn go_to_slide_js(n: usize) -> String {
-    format!(
-        r#"(() => {{
-  const slides = {};
-  const el = slides[{n} - 1];
-  if (!el) return false;
-  if ({}) {{
-    el.scrollIntoView({{ block: 'start' }});
-    return true;
-  }}
-  const key = (k) => document.dispatchEvent(new KeyboardEvent('keydown', {{ key: k, code: k, bubbles: true }}));
-  key('Home');
-  for (let i = 1; i < {n}; i++) key('ArrowRight');
-  return true;
-}})()"#,
-        live::deck_slides!(),
-        live::deck_stacked!()
-    )
 }
 
 /// `"3"` → (3, 3), `"2-5"` → (2, 5), at most `SLIDES_MAX` slides.

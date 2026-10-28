@@ -230,36 +230,82 @@ pub fn speech(text: &str, dir: &Path, name: &str) -> Result<PathBuf, String> {
     save_bytes(dir, name, "mp3", &out)
 }
 
-/// Publish `page` on Vercel as one self-contained HTML file (its styles,
-/// scripts and pictures inside): the address it is live at.
-pub fn deploy(page: &Path, name: &str) -> Result<String, String> {
-    let token = env(&["VERCEL_TOKEN"]).ok_or(
-        "Publishing needs a Vercel token: create one at vercel.com/account/tokens and set VERCEL_TOKEN where Forge runs, then start the chat again.",
-    )?;
-    let base = env(&["VERCEL_API_URL"]).unwrap_or_else(|| "https://api.vercel.com".into());
-    let html =
-        std::fs::read_to_string(page).map_err(|e| format!("Can't read {}: {e}", page.display()))?;
-    let one = super::inline::single_file(&html, page, &mut |u| get_bytes(u).ok());
-    let project: String = name
+/// Where a page is published.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Host {
+    Vercel,
+    Cloudflare,
+}
+
+impl Host {
+    pub fn label(self) -> &'static str {
+        match self {
+            Host::Vercel => "Vercel",
+            Host::Cloudflare => "Cloudflare Pages",
+        }
+    }
+}
+
+/// The host to publish on: the one asked for, else the one with a token.
+pub fn host(asked: Option<&str>) -> Result<Host, String> {
+    let cloudflare =
+        env(&["CLOUDFLARE_API_TOKEN"]).is_some() && env(&["CLOUDFLARE_ACCOUNT_ID"]).is_some();
+    match asked.map(str::to_lowercase).as_deref() {
+        Some("vercel") => Ok(Host::Vercel),
+        Some("cloudflare" | "cloudflare-pages" | "pages") => Ok(Host::Cloudflare),
+        Some(other) => Err(format!(
+            "{other} isn't a host Forge publishes to: vercel or cloudflare."
+        )),
+        None if env(&["VERCEL_TOKEN"]).is_some() => Ok(Host::Vercel),
+        None if cloudflare => Ok(Host::Cloudflare),
+        None => Err("Publishing needs a token: VERCEL_TOKEN (vercel.com/account/tokens), or CLOUDFLARE_API_TOKEN (with Pages: Edit) and CLOUDFLARE_ACCOUNT_ID, set where Forge runs; then start the chat again.".into()),
+    }
+}
+
+/// A site name hosts take: lower case letters, digits and single dashes.
+fn site_name(name: &str) -> String {
+    let n: String = name
         .to_lowercase()
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
         .collect::<String>()
-        .trim_matches('-')
+        .split('-')
+        .filter(|p| !p.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
         .chars()
-        .take(90)
+        .take(58)
         .collect();
-    let project = if project.is_empty() {
+    if n.is_empty() {
         "forge-design".into()
     } else {
-        project
-    };
+        n
+    }
+}
+
+/// Publish `page` as one self-contained HTML file (its styles, scripts and
+/// pictures inside) on `host`: the address it is live at.
+pub fn deploy(page: &Path, name: &str, host: Host) -> Result<String, String> {
+    let html =
+        std::fs::read_to_string(page).map_err(|e| format!("Can't read {}: {e}", page.display()))?;
+    let one = super::inline::single_file(&html, page, &mut |u| get_bytes(u).ok());
+    match host {
+        Host::Vercel => deploy_vercel(&one.html, name),
+        Host::Cloudflare => deploy_cloudflare(&one.html, name),
+    }
+}
+
+fn deploy_vercel(html: &str, name: &str) -> Result<String, String> {
+    let token = env(&["VERCEL_TOKEN"]).ok_or(
+        "Publishing on Vercel needs a token: create one at vercel.com/account/tokens and set VERCEL_TOKEN where Forge runs, then start the chat again.",
+    )?;
+    let base = env(&["VERCEL_API_URL"]).unwrap_or_else(|| "https://api.vercel.com".into());
     let r = post(
         &format!("{}/v13/deployments", base.trim_end_matches('/')),
         &format!("Bearer {token}"),
         &json!({
-            "name": project,
-            "files": [{ "file": "index.html", "data": one.html }],
+            "name": site_name(name),
+            "files": [{ "file": "index.html", "data": html }],
             "projectSettings": { "framework": null },
             "target": "production",
         }),
@@ -273,6 +319,117 @@ pub fn deploy(page: &Path, name: &str) -> Result<String, String> {
     } else {
         format!("https://{url}")
     })
+}
+
+/// Cloudflare Pages' key for a file: BLAKE3 of its base64 and its
+/// extension, the first 32 hex digits (as Cloudflare's own tool keys it).
+pub fn pages_hash(bytes: &[u8], ext: &str) -> String {
+    let mut h = blake3::Hasher::new();
+    h.update(crate::attach::base64(bytes).as_bytes());
+    h.update(ext.as_bytes());
+    h.finalize().to_hex()[..32].to_string()
+}
+
+fn get_json(url: &str, auth: &str) -> Result<Value, String> {
+    match ureq::get(url)
+        .timeout(Duration::from_secs(60))
+        .set("Authorization", auth)
+        .call()
+    {
+        Ok(r) => r.into_json::<Value>().map_err(|e| e.to_string()),
+        Err(ureq::Error::Status(code, r)) => Err(format!(
+            "{url} said {code}: {}",
+            r.into_string()
+                .unwrap_or_default()
+                .chars()
+                .take(400)
+                .collect::<String>()
+        )),
+        Err(e) => Err(format!("{url}: {e}")),
+    }
+}
+
+/// Cloudflare Pages' direct upload: the project (made if new), an upload
+/// token, the file uploaded unless Cloudflare has it already, then a
+/// deployment of a manifest naming it.
+fn deploy_cloudflare(html: &str, name: &str) -> Result<String, String> {
+    let token = env(&["CLOUDFLARE_API_TOKEN"]).ok_or(
+        "Publishing on Cloudflare Pages needs CLOUDFLARE_API_TOKEN (with Pages: Edit) where Forge runs.",
+    )?;
+    let account = env(&["CLOUDFLARE_ACCOUNT_ID"])
+        .ok_or("Publishing on Cloudflare Pages needs CLOUDFLARE_ACCOUNT_ID where Forge runs.")?;
+    let base = env(&["CLOUDFLARE_API_URL"])
+        .unwrap_or_else(|| "https://api.cloudflare.com/client/v4".into());
+    let base = base.trim_end_matches('/');
+    let bearer = format!("Bearer {token}");
+    let project = site_name(name);
+    let projects = format!("{base}/accounts/{account}/pages/projects");
+    // Made the first time; an existing project says so, which is fine.
+    let _ = post(
+        &projects,
+        &bearer,
+        &json!({ "name": project, "production_branch": "main" }),
+    );
+    let jwt = get_json(&format!("{projects}/{project}/upload-token"), &bearer)?["result"]["jwt"]
+        .as_str()
+        .ok_or("Cloudflare gave no upload token")?
+        .to_string();
+    let jwt = format!("Bearer {jwt}");
+    let hash = pages_hash(html.as_bytes(), "html");
+    let missing = post(
+        &format!("{base}/pages/assets/check-missing"),
+        &jwt,
+        &json!({ "hashes": [hash] }),
+    )?;
+    let needed = missing["result"]
+        .as_array()
+        .is_none_or(|m| m.iter().any(|h| h.as_str() == Some(hash.as_str())));
+    if needed {
+        post(
+            &format!("{base}/pages/assets/upload"),
+            &jwt,
+            &json!([{ "key": hash, "value": crate::attach::base64(html.as_bytes()),
+                "metadata": { "contentType": "text/html" }, "base64": true }]),
+        )?;
+    }
+    post(
+        &format!("{base}/pages/assets/upsert-hashes"),
+        &jwt,
+        &json!({ "hashes": [hash] }),
+    )?;
+    // The deployment: a form holding the manifest.
+    let boundary = format!("forge-{}", &hash[..16]);
+    let manifest = json!({ "/index.html": hash }).to_string();
+    let body = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"manifest\"\r\n\r\n{manifest}\r\n--{boundary}--\r\n"
+    );
+    let url = format!("{projects}/{project}/deployments");
+    let r = match ureq::post(&url)
+        .timeout(Duration::from_secs(120))
+        .set("Authorization", &bearer)
+        .set(
+            "Content-Type",
+            &format!("multipart/form-data; boundary={boundary}"),
+        )
+        .send_bytes(body.as_bytes())
+    {
+        Ok(r) => r.into_json::<Value>().map_err(|e| e.to_string())?,
+        Err(ureq::Error::Status(code, r)) => {
+            return Err(format!(
+                "{url} said {code}: {}",
+                r.into_string()
+                    .unwrap_or_default()
+                    .chars()
+                    .take(400)
+                    .collect::<String>()
+            ))
+        }
+        Err(e) => return Err(format!("{url}: {e}")),
+    };
+    r["result"]["url"]
+        .as_str()
+        .map(str::to_string)
+        .ok_or_else(|| format!("Cloudflare gave no address: {r}"))
 }
 
 #[cfg(test)]
@@ -350,6 +507,9 @@ mod tests {
             "VERCEL_API_URL",
             "ELEVENLABS_API_KEY",
             "ELEVENLABS_BASE_URL",
+            "CLOUDFLARE_API_TOKEN",
+            "CLOUDFLARE_ACCOUNT_ID",
+            "CLOUDFLARE_API_URL",
         ] {
             std::env::remove_var(k);
         }
@@ -420,13 +580,13 @@ mod tests {
         let _g = ENV.lock().unwrap_or_else(|e| e.into_inner());
         clear();
         let page = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/demo/course-intro.html");
-        assert!(deploy(&page, "x").unwrap_err().contains("VERCEL_TOKEN"));
+        assert!(host(None).unwrap_err().contains("VERCEL_TOKEN"));
         let (addr, seen) = mock(|_, _, _| {
             ("application/json".into(), json!({ "url": "course-intro-abc.vercel.app", "alias": ["course-intro.vercel.app"] }).to_string().into_bytes())
         });
         std::env::set_var("VERCEL_TOKEN", "vt");
         std::env::set_var("VERCEL_API_URL", &addr);
-        let url = deploy(&page, "Course Intro!").unwrap();
+        let url = deploy(&page, "Course Intro!", host(None).unwrap()).unwrap();
         assert_eq!(url, "https://course-intro.vercel.app");
         let (path, auth, body) = seen.lock().unwrap()[0].clone();
         assert_eq!(path, "/v13/deployments");
@@ -477,5 +637,51 @@ mod tests {
         assert!(seen.iter().any(|r| r.2.contains("Welcome to the course.")));
         clear();
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_page_is_published_on_cloudflare_pages() {
+        let _g = ENV.lock().unwrap_or_else(|e| e.into_inner());
+        clear();
+        assert_eq!(pages_hash(b"hi", "html").len(), 32);
+        assert_ne!(pages_hash(b"hi", "html"), pages_hash(b"hi", "css"));
+        assert_eq!(site_name("Course  Intro!"), "course-intro");
+        let page = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/demo/course-intro.html");
+        let (addr, seen) = mock(|_, path, _| {
+            let out = if path.ends_with("/upload-token") {
+                json!({ "success": true, "result": { "jwt": "J" } })
+            } else if path.ends_with("/check-missing") {
+                json!({ "success": true, "result": [] })
+            } else if path.ends_with("/deployments") {
+                json!({ "success": true, "result": { "url": "https://abc.course-intro.pages.dev" } })
+            } else {
+                json!({ "success": true, "result": {} })
+            };
+            ("application/json".into(), out.to_string().into_bytes())
+        });
+        std::env::set_var("CLOUDFLARE_API_TOKEN", "cf");
+        std::env::set_var("CLOUDFLARE_ACCOUNT_ID", "acc");
+        std::env::set_var("CLOUDFLARE_API_URL", &addr);
+        assert_eq!(host(None).unwrap(), Host::Cloudflare);
+        assert!(host(Some("netlify")).is_err());
+        let url = deploy(&page, "Course Intro!", Host::Cloudflare).unwrap();
+        assert_eq!(url, "https://abc.course-intro.pages.dev");
+        let seen = seen.lock().unwrap().clone();
+        let paths: Vec<&str> = seen.iter().map(|r| r.0.as_str()).collect();
+        assert_eq!(
+            paths,
+            [
+                "/accounts/acc/pages/projects",
+                "/accounts/acc/pages/projects/course-intro/upload-token",
+                "/pages/assets/check-missing",
+                "/pages/assets/upsert-hashes",
+                "/accounts/acc/pages/projects/course-intro/deployments",
+            ],
+            "Cloudflare had the file already, so it isn't uploaded again"
+        );
+        assert_eq!(seen[0].1, "Bearer cf");
+        assert_eq!(seen[2].1, "Bearer J");
+        assert!(seen[4].2.contains("name=\"manifest\"") && seen[4].2.contains("/index.html"));
+        clear();
     }
 }

@@ -377,6 +377,53 @@ struct Tree<'a> {
     nodes: HashMap<Guid, &'a Value>,
     kids: HashMap<Guid, Vec<Guid>>,
     images: &'a HashMap<String, Vec<u8>>,
+    /// The document's blobs (vector paths among them), by index.
+    blobs: Vec<Vec<u8>>,
+}
+
+/// The kinds drawn from their paths (`fillGeometry`, `strokeGeometry`).
+const VECTORS: [&str; 5] = [
+    "VECTOR",
+    "STAR",
+    "LINE",
+    "REGULAR_POLYGON",
+    "BOOLEAN_OPERATION",
+];
+
+/// A path blob as SVG path data. Each command is a byte, then its points
+/// as little-endian floats: 0 close, 1 move (x y), 2 line (x y), 3 quad
+/// (x1 y1 x y), 4 cubic (x1 y1 x2 y2 x y).
+pub fn path_d(blob: &[u8]) -> String {
+    let mut d = String::new();
+    let mut at = 0;
+    let f = |at: &mut usize| -> Option<f32> {
+        let b = blob.get(*at..*at + 4)?;
+        *at += 4;
+        Some(f32::from_le_bytes(b.try_into().ok()?))
+    };
+    while at < blob.len() {
+        let cmd = blob[at];
+        at += 1;
+        let (letter, n) = match cmd {
+            0 => ("Z", 0),
+            1 => ("M", 2),
+            2 => ("L", 2),
+            3 => ("Q", 4),
+            4 => ("C", 6),
+            _ => break,
+        };
+        let mut pts = Vec::with_capacity(n);
+        for _ in 0..n {
+            match f(&mut at) {
+                Some(v) => pts.push(format!("{}", (v * 100.0).round() / 100.0)),
+                None => return d.trim().to_string(),
+            }
+        }
+        d.push_str(letter);
+        d.push_str(&pts.join(" "));
+        d.push(' ');
+    }
+    d.trim().to_string()
 }
 
 impl Tree<'_> {
@@ -526,6 +573,64 @@ impl Tree<'_> {
         css
     }
 
+    /// A vector's paths as inline SVG: its fill shape in its fill colour,
+    /// its stroke shape (Figma keeps the stroke as a shape) in its stroke
+    /// colour.
+    fn vector(&self, n: &Value, w: f64, h: f64) -> Option<String> {
+        let solid = |key: &str| {
+            n[key]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|p| p["visible"].as_bool() != Some(false))
+                .find_map(|p| match p["type"].as_str() {
+                    Some("SOLID") => {
+                        Some(css_color(&p["color"], p["opacity"].as_f64().unwrap_or(1.0)))
+                    }
+                    Some(t) if t.starts_with("GRADIENT_") => p["stops"][0]["color"]
+                        .is_object()
+                        .then(|| css_color(&p["stops"][0]["color"], 1.0)),
+                    _ => None,
+                })
+        };
+        let paths = |key: &str, colour: Option<String>| -> String {
+            let Some(colour) = colour else {
+                return String::new();
+            };
+            n[key]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|g| {
+                    let blob = self.blobs.get(g["commandsBlob"].as_u64()? as usize)?;
+                    let d = path_d(blob);
+                    if d.is_empty() {
+                        return None;
+                    }
+                    let rule = match g["windingRule"].as_str() {
+                        Some("ODD") | Some("EVENODD") => "evenodd",
+                        _ => "nonzero",
+                    };
+                    Some(format!(
+                        "<path d=\"{d}\" fill=\"{colour}\" fill-rule=\"{rule}\"/>"
+                    ))
+                })
+                .collect()
+        };
+        let body = format!(
+            "{}{}",
+            paths("fillGeometry", solid("fillPaints")),
+            paths("strokeGeometry", solid("strokePaints"))
+        );
+        (!body.is_empty()).then(|| {
+            format!(
+                "<svg width=\"100%\" height=\"100%\" viewBox=\"0 0 {} {}\" overflow=\"visible\" style=\"display:block\">{body}</svg>",
+                w.max(0.01),
+                h.max(0.01)
+            )
+        })
+    }
+
     fn text(&self, n: &Value) -> String {
         let mut css = String::new();
         if let Some(f) = n["fontName"]["family"].as_str() {
@@ -614,6 +719,20 @@ impl Tree<'_> {
         let mut css =
             format!("position:absolute;left:{x}px;top:{y}px;width:{w}px;height:{h}px;{turn}");
         css.push_str(&self.look(n));
+        if VECTORS.contains(&kind) {
+            if let Some(svg) = self.vector(n, w, h) {
+                // Its look is in the paths; only its opacity stays on the box.
+                let op = n["opacity"]
+                    .as_f64()
+                    .filter(|o| *o < 1.0)
+                    .map(|o| format!("opacity:{o};"))
+                    .unwrap_or_default();
+                out.push_str(&format!(
+                    "<div data-fig=\"{name}\" style=\"position:absolute;left:{x}px;top:{y}px;width:{w}px;height:{h}px;{turn}{op}\">{svg}</div>"
+                ));
+                return;
+            }
+        }
         if kind == "TEXT" {
             css.push_str(&self.text(n));
             let chars = n["textData"]["characters"].as_str().unwrap_or("");
@@ -665,10 +784,25 @@ pub fn to_html(
             (p, v.into_iter().map(|(_, g)| g).collect())
         })
         .collect();
+    let blobs = doc["blobs"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|b| {
+            b.get("bytes")
+                .unwrap_or(b)
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|v| v.as_u64().map(|v| v as u8))
+                .collect()
+        })
+        .collect();
     let tree = Tree {
         nodes,
         kids,
         images,
+        blobs,
     };
     let root = root.ok_or("the file has no document")?;
     let mut body = String::new();
@@ -1050,6 +1184,51 @@ mod tests {
             out.extend_from_slice(&chunk);
         }
         out
+    }
+
+    #[test]
+    fn vectors_are_drawn_from_their_paths() {
+        let mut blob = vec![1u8];
+        for v in [0f32, 0.0] {
+            blob.extend(v.to_le_bytes());
+        }
+        blob.push(2);
+        for v in [24f32, 12.5] {
+            blob.extend(v.to_le_bytes());
+        }
+        blob.push(4);
+        for v in [1f32, 2.0, 3.0, 4.0, 5.0, 6.0] {
+            blob.extend(v.to_le_bytes());
+        }
+        blob.push(0);
+        assert_eq!(path_d(&blob), "M0 0 L24 12.5 C1 2 3 4 5 6 Z");
+        // A cut-off blob gives what it has.
+        assert_eq!(path_d(&blob[..10]), "M0 0");
+        let g = |id: u64| serde_json::json!({ "sessionID": 0, "localID": id });
+        let doc = serde_json::json!({
+            "blobs": [{ "bytes": blob }],
+            "nodeChanges": [
+                { "guid": g(0), "type": "DOCUMENT" },
+                { "guid": g(1), "type": "CANVAS", "name": "Icons", "parentIndex": { "guid": g(0), "position": "a" } },
+                { "guid": g(2), "type": "VECTOR", "name": "Arrow", "parentIndex": { "guid": g(1), "position": "a" },
+                  "size": { "x": 24, "y": 24 }, "transform": { "m00": 1, "m11": 1, "m02": 0, "m12": 0 },
+                  "fillPaints": [{ "type": "SOLID", "color": { "r": 1, "g": 0, "b": 0, "a": 1 } }],
+                  "fillGeometry": [{ "windingRule": "ODD", "commandsBlob": 0 }],
+                  "strokePaints": [{ "type": "SOLID", "color": { "r": 0, "g": 0, "b": 0, "a": 1 } }],
+                  "strokeGeometry": [{ "windingRule": "NONZERO", "commandsBlob": 0 }] },
+                { "guid": g(3), "type": "STAR", "name": "Empty", "parentIndex": { "guid": g(1), "position": "b" },
+                  "size": { "x": 10, "y": 10 }, "transform": { "m00": 1, "m11": 1, "m02": 30, "m12": 0 } }
+            ]
+        });
+        let html = to_html(&doc, &HashMap::new(), "Icons").unwrap();
+        assert!(
+            html.contains("<svg width=\"100%\" height=\"100%\" viewBox=\"0 0 24 24\""),
+            "{html}"
+        );
+        assert!(html.contains("<path d=\"M0 0 L24 12.5 C1 2 3 4 5 6 Z\" fill=\"rgba(255,0,0,1.000)\" fill-rule=\"evenodd\"/>"), "{html}");
+        assert!(html.contains("fill=\"rgba(0,0,0,1.000)\" fill-rule=\"nonzero\""));
+        // A vector with no paths still shows as its box.
+        assert!(html.contains("data-fig=\"Empty\" style=\"position:absolute;left:30px"));
     }
 
     #[test]

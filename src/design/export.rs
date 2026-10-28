@@ -317,6 +317,87 @@ pub fn thumbnail(preview: &Path) -> Result<PathBuf, String> {
     unreachable!()
 }
 
+/// A deck's slides as small pictures (192 wide), for the panel's rail:
+/// cached by the page's file and date like the gallery's. Empty for a page
+/// that isn't a deck.
+pub fn slide_thumbs(page: &Path) -> Result<Vec<PathBuf>, String> {
+    let base = thumb_path(page).ok_or_else(|| format!("No file at {}", page.display()))?;
+    let dir = base.with_extension("slides");
+    if let Ok(rd) = std::fs::read_dir(&dir) {
+        let mut have: Vec<PathBuf> = rd
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|x| x == "jpg"))
+            .collect();
+        if !have.is_empty() {
+            have.sort();
+            return Ok(have);
+        }
+    }
+    let mut guard = CHROME.lock().map_err(|_| "the export browser is stuck")?;
+    if guard.is_none() {
+        *guard = Some(Chrome::start()?);
+    }
+    let chrome = guard.as_mut().expect("started");
+    let (target, s) = chrome.open(page, 1920, 1080)?;
+    let got = (|| -> Result<Vec<Vec<u8>>, String> {
+        let laid = chrome.eval(
+            &s,
+            &LAYOUT_JS.replace("__PRINT__", crate::design::live::DECK_PRINT_JS),
+        )?;
+        if laid.is_null() {
+            return Ok(vec![]);
+        }
+        chrome.call(
+            Some(&s),
+            "Emulation.setEmulatedMedia",
+            json!({ "media": "print" }),
+        )?;
+        let d: Value = chrome
+            .eval(&s, &LAYOUT_JS.replace("__PRINT__", "1"))?
+            .as_str()
+            .and_then(|j| serde_json::from_str(j).ok())
+            .ok_or("the deck couldn't be laid out")?;
+        let (w, h) = (
+            d["w"].as_f64().unwrap_or(1920.0),
+            d["h"].as_f64().unwrap_or(1080.0),
+        );
+        let mut out = vec![];
+        for p in d["slides"].as_array().into_iter().flatten().take(200) {
+            let r = chrome.call(
+                Some(&s),
+                "Page.captureScreenshot",
+                json!({ "format": "jpeg", "quality": 80, "captureBeyondViewport": true, "fromSurface": true,
+                    "clip": { "x": p[0].as_f64().unwrap_or(0.0), "y": p[1].as_f64().unwrap_or(0.0), "width": w, "height": h, "scale": 192.0 / w } }),
+            )?;
+            out.push(
+                r["data"]
+                    .as_str()
+                    .and_then(crate::browser::decode_base64)
+                    .ok_or("the browser gave no picture")?,
+            );
+        }
+        Ok(out)
+    })();
+    chrome.close(&target);
+    drop(guard);
+    let pictures = got?;
+    if pictures.is_empty() {
+        return Ok(vec![]);
+    }
+    let part = dir.with_extension("part");
+    let _ = std::fs::remove_dir_all(&part);
+    std::fs::create_dir_all(&part).map_err(|e| e.to_string())?;
+    for (i, p) in pictures.iter().enumerate() {
+        std::fs::write(part.join(format!("{:03}.jpg", i + 1)), p).map_err(|e| e.to_string())?;
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::rename(&part, &dir).map_err(|e| e.to_string())?;
+    Ok((1..=pictures.len())
+        .map(|i| dir.join(format!("{i:03}.jpg")))
+        .collect())
+}
+
 /// A web address's bytes, for a single HTML file (fonts and CDN files).
 fn fetch(url: &str) -> Option<Vec<u8>> {
     let r = ureq::get(url)
@@ -998,6 +1079,14 @@ mod tests {
         assert!(t.elapsed() < Duration::from_millis(50));
         eprintln!("a thumbnail {first_thumb:?}");
         let _ = std::fs::remove_file(&th);
+        // The rail's pictures: one per slide, then from the cache.
+        let rail = slide_thumbs(&deck()).unwrap();
+        assert_eq!(rail.len(), n);
+        assert_eq!(image::open(&rail[0]).unwrap().width(), 192);
+        let t = Instant::now();
+        assert_eq!(slide_thumbs(&deck()).unwrap(), rail);
+        assert!(t.elapsed() < Duration::from_millis(50));
+        let _ = std::fs::remove_dir_all(rail[0].parent().unwrap());
         // Figma: the plugin's IR, every picture inside it.
         let fig = export(&deck(), Format::Figma, &dir.join("deck.od-figma.json")).unwrap();
         let ir: Value = serde_json::from_str(&std::fs::read_to_string(&fig.path).unwrap()).unwrap();

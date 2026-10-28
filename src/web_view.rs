@@ -119,6 +119,8 @@ pub enum Cmd {
     /// A deck's next (1) or previous (-1) slide: scrolled to when its
     /// slides are stacked, else by the deck's own arrow keys.
     Slide(i32),
+    /// Go to slide n (1-based) of a deck (`live::go_to_slide_js`).
+    SlideTo(usize),
     /// Scroll to the page's nth heading (`h1`–`h3` shown, as the outline
     /// lists them): it, not where it was, so a page laid out again since
     /// still lands there.
@@ -1280,6 +1282,10 @@ fn devtools(
                         "(() => {{ const h = [...document.querySelectorAll('h1,h2,h3')].filter(e => e.getClientRects().length && (e.innerText || '').trim())[{n}]; if (h) scrollTo({{ top: Math.max(0, h.getBoundingClientRect().top + scrollY - 120), behavior: 'smooth' }}); }})()"
                     );
                     c.send(s, "Runtime.evaluate", json!({ "expression": js }))?;
+                }
+                Cmd::SlideTo(n) => {
+                    c.send(s, "Runtime.evaluate", json!({ "expression": crate::design::live::go_to_slide_js(n) }))?;
+                    deck_asked = Instant::now() - Duration::from_millis(250);
                 }
                 Cmd::Slide(step) => {
                     c.send(s, "Runtime.evaluate", json!({ "expression": crate::design::live::slide_step_js(step) }))?;

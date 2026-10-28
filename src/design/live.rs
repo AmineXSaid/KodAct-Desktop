@@ -172,7 +172,6 @@ macro_rules! deck_stacked {
         "(() => { const vis = slides.map(s => s.getBoundingClientRect()).filter(r => r.width && r.height); return vis.length > 1 && Math.abs(vis[1].top - vis[0].top) >= vis[0].height * 0.5; })()"
     };
 }
-pub(crate) use deck_stacked;
 
 /// The slide a deck shows (the visible one nearest the middle of the
 /// window) and how many, as JSON `[n, count]`; "" for a page that isn't a
@@ -252,6 +251,29 @@ pub const DECK_PRINT_JS: &str = concat!(
 })()"#
 );
 
+/// Go to slide n (1-based). Slides stacked down the page are scrolled to;
+/// a deck that shows one at a time is driven by its own keys (Home, then
+/// ArrowRight), as a person would.
+pub fn go_to_slide_js(n: usize) -> String {
+    format!(
+        r#"(() => {{
+  const slides = {};
+  const el = slides[{n} - 1];
+  if (!el) return false;
+  if ({}) {{
+    el.scrollIntoView({{ block: 'start' }});
+    return true;
+  }}
+  const key = (k) => document.dispatchEvent(new KeyboardEvent('keydown', {{ key: k, code: k, bubbles: true }}));
+  key('Home');
+  for (let i = 1; i < {n}; i++) key('ArrowRight');
+  return true;
+}})()"#,
+        deck_slides!(),
+        deck_stacked!()
+    )
+}
+
 /// After the print: the page as it was.
 pub const DECK_UNPRINT_JS: &str = r#"(() => {
   document.getElementById('forge-print')?.remove();
@@ -267,7 +289,11 @@ pub fn comment_message(page: &str, part: &crate::web_view::PagePart, comment: &s
         format!("the <{}>", part.tag)
     } else {
         let text: String = part.text.chars().take(80).collect();
-        let more = if text.len() < part.text.len() { "…" } else { "" };
+        let more = if text.len() < part.text.len() {
+            "…"
+        } else {
+            ""
+        };
         format!("the <{}> \"{}{more}\"", part.tag, text.trim_end())
     };
     format!(
@@ -328,8 +354,14 @@ mod tests {
             comment_message("deck.html", &part, " Shorter, please. "),
             "A comment on deck.html, on the <h2> \"Three things you can use the Monday after\" (`main.deck > section.slide:nth-of-type(2) > h2`):\n\nShorter, please.\n\nRevise that part of the page for it, and keep the rest as it is."
         );
-        assert_eq!(part.label(), "h2 · Three things you can use the Monday after");
-        let long = crate::web_view::PagePart { text: "x".repeat(100), ..part };
+        assert_eq!(
+            part.label(),
+            "h2 · Three things you can use the Monday after"
+        );
+        let long = crate::web_view::PagePart {
+            text: "x".repeat(100),
+            ..part
+        };
         assert!(comment_message("d.html", &long, "c").contains(&format!("\"{}…\"", "x".repeat(80))));
         assert!(long.label().ends_with('…'));
     }

@@ -1695,6 +1695,10 @@ pub struct AppState {
     /// and after each), and which one is on disk: undo and redo.
     pub design_versions:
         std::collections::HashMap<std::path::PathBuf, (Vec<std::sync::Arc<str>>, usize)>,
+    /// A deck's slide pictures for the panel's rail, by page and version
+    /// (`design::export::slide_thumbs`); asked once each.
+    pub design_slides: std::collections::HashMap<(std::path::PathBuf, usize), Vec<std::path::PathBuf>>,
+    design_slides_asked: std::collections::HashSet<(std::path::PathBuf, usize)>,
     /// Pages made beside a chat's own (duplicates), by chat.
     pub design_extra: Vec<(usize, std::path::PathBuf)>,
     /// Each chat's sub-agents, in the order they started (`agents_view.rs`).
@@ -2014,6 +2018,8 @@ impl AppState {
             design_outline: false,
             design_headings: Vec::new(),
             design_versions: Default::default(),
+            design_slides: Default::default(),
+            design_slides_asked: Default::default(),
             design_extra: Vec::new(),
             agents: std::collections::HashMap::new(),
             agents_open: std::collections::HashSet::new(),
@@ -5551,6 +5557,33 @@ fix everything under 8, render it again to check, then tell me the scores before
                     );
                 }
                 Err(e) => s.show_toast(format!("The Figma file couldn't be opened: {e}"), cx),
+            });
+        })
+        .detach();
+    }
+
+    /// The page's version, for its slide pictures: it changes with each of
+    /// Forge's edits.
+    pub fn design_version_of(&self, page: &std::path::Path) -> usize {
+        self.design_versions.get(page).map_or(0, |(list, at)| list.len() * 1000 + at)
+    }
+
+    /// The rail's pictures of the deck on screen, taken in the background
+    /// the first time they're wanted for this version of it.
+    pub fn design_want_slides(&mut self, page: std::path::PathBuf, cx: &mut Context<Self>) {
+        let key = (page.clone(), self.design_version_of(&page));
+        if !self.design_slides_asked.insert(key.clone()) {
+            return;
+        }
+        cx.spawn(async move |this, cx| {
+            let got = cx
+                .background_spawn(async move { crate::design::export::slide_thumbs(&page) })
+                .await;
+            let _ = this.update(cx, |s, cx| {
+                if let Ok(list) = got {
+                    s.design_slides.insert(key, list);
+                    cx.notify();
+                }
             });
         })
         .detach();

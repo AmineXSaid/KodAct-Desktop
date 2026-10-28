@@ -516,7 +516,18 @@ impl Render for BrowserView {
             let at = s.design_headings.iter().rposition(|h| h.y <= top);
             (s.design_headings.clone(), at)
         });
+        // A deck's outline is its slides, as pictures: (pictures when taken,
+        // the slide in view, how many).
+        let slides = (s.design_outline && design_bar.is_some())
+            .then(|| s.design_on_screen())
+            .flatten()
+            .zip(s.web_page.deck)
+            .map(|(page, (at, count))| {
+                let key = (page.clone(), s.design_version_of(&page));
+                (page, s.design_slides.get(&key).cloned(), at, count)
+            });
         let guides_on = s.design_guides;
+        let browser_on = s.browser;
         let selecting = s.design_select && design_bar.is_some();
         // Where a part of the page is in the panel: its CSS box, less the
         // page's scroll, times the zoom.
@@ -1258,6 +1269,72 @@ impl Render for BrowserView {
         };
         // Presenting, the page alone, with a quiet way back and through.
         let present_controls = presenting.then(|| present_controls(&t, cx));
+        // A deck's slides beside it: a click goes to the slide.
+        let slide_rail = slides.map(|(page, pics, at, count)| {
+            if pics.is_none() {
+                let st = self.state.clone();
+                cx.defer(move |cx| st.update(cx, |s, cx| s.design_want_slides(page, cx)));
+            }
+            let hover = t.colors.text_subtle;
+            let pics = pics.unwrap_or_default();
+            div()
+                .id("design-slides")
+                .flex_none()
+                .w(px(200.))
+                .h_full()
+                .overflow_y_scroll()
+                .flex()
+                .flex_col()
+                .gap(t.space.sm)
+                .p(t.space.sm)
+                .bg(t.colors.surface)
+                .border_r_1()
+                .border_color(t.colors.border)
+                .child(
+                    div()
+                        .px(t.space.xs)
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_subtle)
+                        .child(format!("Slides · {count}")),
+                )
+                .children((1..=count).map(|n| {
+                    let state = self.state.clone();
+                    let on = n == at;
+                    div()
+                        .id(("design-slide", n))
+                        .flex_none()
+                        .flex()
+                        .items_start()
+                        .gap(t.space.xs)
+                        .cursor_pointer()
+                        .child(
+                            div()
+                                .w(px(16.))
+                                .flex_none()
+                                .text_size(t.text.caption)
+                                .text_color(if on { t.colors.primary } else { t.colors.text_subtle })
+                                .child(n.to_string()),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .h(px(90.))
+                                .rounded(t.radius.small)
+                                .overflow_hidden()
+                                .bg(t.colors.hover)
+                                .border_2()
+                                .border_color(if on { t.colors.primary } else { t.colors.border })
+                                .when(!on, |d| d.hover(move |s| s.border_color(hover)))
+                                .children(pics.get(n - 1).map(|p| {
+                                    gpui::img(p.clone()).size_full().object_fit(ObjectFit::Cover)
+                                })),
+                        )
+                        .on_click(move |_, _, cx| {
+                            state.update(cx, |s, cx| s.web_send(Cmd::SlideTo(n), cx))
+                        })
+                }))
+        });
+        let outline = if slide_rail.is_some() { None } else { outline };
         // The outline beside the page: a heading's click scrolls to it.
         let outline_rail = outline.map(|(heads, at)| {
             let hover = t.colors.hover;
@@ -1333,6 +1410,7 @@ impl Render for BrowserView {
                     .flex_1()
                     .min_h_0()
                     .flex()
+                    .children(slide_rail)
                     .children(outline_rail)
                     .child(viewport.min_w_0().children(present_controls)),
             )
@@ -1384,12 +1462,12 @@ impl Render for BrowserView {
                             .on_click(move |_, _, cx| cx.open_with_system(&folder))
                     }))
                     .child(icon("icons/bot.svg", t.size.icon_xs, t.colors.text_subtle))
-                    .child(div().flex_1().child(if s.browser {
+                    .child(div().flex_1().child(if browser_on {
                         "Forge can use this browser. Each step asks first."
                     } else {
                         "Only you use this browser. Turn it on for Forge in Settings."
                     }))
-                    .when(!s.browser, |d| {
+                    .when(!browser_on, |d| {
                         d.child(
                             div()
                                 .id("web-agent-on")
