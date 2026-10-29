@@ -942,7 +942,8 @@ pub fn indicator(s: &AppState, state: Entity<AppState>, t: &Theme) -> AnyElement
         Look::Local => (
             gpui::transparent_black(),
             t.colors.text_muted,
-            None,
+            // Named in every state, here too: where the chat runs.
+            Some("Local".into()),
             "icons/plug.svg",
             "Open a remote window: WSL, SSH host or container (Ctrl+Alt+O)".into(),
         ),

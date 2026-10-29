@@ -604,10 +604,17 @@ fn rows(
         .get(r.clone())
         .map(|s| s.char_indices().map(|(i, _)| r.start + i).collect())
         .unwrap_or_default();
+    let left = layout.bounds().origin.x;
     for i in starts {
-        let Some(p) = layout.position_for_index(i) else {
+        let Some(mut p) = layout.position_for_index(i) else {
             continue;
         };
+        // A glyph that starts a wrapped row is reported at the end of the
+        // row before it; the glyph after it shows where it really is.
+        let next = i + text[i..].chars().next().map_or(1, char::len_utf8);
+        if let Some(q) = layout.position_for_index(next).filter(|q| q.y > p.y) {
+            p = point(left, q.y);
+        }
         let ink = !text[i..].starts_with(char::is_whitespace);
         row = match row {
             Some((start, last, n, had)) if start.y == p.y => {
@@ -772,8 +779,9 @@ fn run_list(
         runs.push(TextRun {
             len: shown.len(),
             font: f,
-            // Inline code (a file, a command) in Forge's coral on a rounded
-            // chip (painted by `chips`): a name set apart at a glance.
+            // Inline code (a file, a command) in the strong ink on a rounded
+            // neutral chip (painted by `chips`): set apart by its ground,
+            // never by a colour that could read as a state.
             color: if s.link.is_some() {
                 t.colors.primary
             } else if s.code {

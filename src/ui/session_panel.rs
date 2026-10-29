@@ -516,12 +516,13 @@ fn changed(t: &Theme, state: &Entity<AppState>, files: &[Changed], pr: bool) -> 
                 .hover(move |d| d.bg(hover))
                 .text_size(t.text.body_sm)
                 .text_color(t.colors.text)
-                // The file's own icon, as the VS Code extension shows it.
-                .child(
-                    gpui::img(super::file_icon::asset(&f.name, false, &f.name))
-                        .flex_none()
-                        .size(t.size.icon),
-                )
+                // The kind of file in the muted ink: colour here is for the
+                // change's size, and a brand's red would read as a failure.
+                .child(super::icon(
+                    super::file_icon::for_name(&f.name, false, t).0,
+                    t.size.icon,
+                    t.colors.text_muted,
+                ))
                 .child(
                     div()
                         .flex_1()

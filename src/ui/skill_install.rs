@@ -467,7 +467,7 @@ impl Render for SkillInstall {
             .child(kit::header(
                 &t,
                 "Install skills",
-                "From a GitHub repository (or a link to one folder in it), a git URL, a folder or a .zip. They go where Claude Code keeps skills, so they work there too. Nothing they carry runs while they install.",
+                "From a GitHub repository (or a link to one folder in it), a git URL, a folder or a .zip. Forge keeps them in the same folders as Claude Code, so they work in both. Nothing they carry runs while they install.",
                 None,
             ));
 
@@ -526,7 +526,7 @@ impl Render for SkillInstall {
         }
         let hint = match &remote {
             Some(r) => format!("On {r}, where this project's chats run."),
-            None => "Claude Code reads the same folders.".to_string(),
+            None => "Claude Code uses the same folders, so skills work in both.".to_string(),
         };
         out = out.child(kit::field(
             &t,

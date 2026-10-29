@@ -375,8 +375,8 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
                     ),
                     item(
                         PanelTab::Files,
-                        "Files",
-                        "icons/folder.svg",
+                        "Documents",
+                        "icons/file-text.svg",
                         (!files.is_empty()).then(|| files.len().to_string()),
                         false,
                         "3",

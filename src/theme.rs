@@ -569,7 +569,8 @@ impl ExtraColors {
                 agent: None,
                 memory: rgb(0xe5c77a).into(),
                 memory_tint: rgb(0x3a3220).into(),
-                code_inline_fg: rgb(0xef968b).into(),
+                // The strong ink: a name stands apart by its wash, not a colour.
+                code_inline_fg: rgb(0xf5f2f0).into(),
                 code_inline_bg: Hsla::from(rgb(0xf0e6dc)).opacity(0.09),
                 mode_edit: rgb(0x2da160).into(),
                 mode_plan: rgb(0x428fdc).into(),
@@ -643,7 +644,8 @@ impl ExtraColors {
                 agent: None,
                 memory: rgb(0x75591a).into(),
                 memory_tint: rgb(0xf6ecd2).into(),
-                code_inline_fg: rgb(0xa13430).into(),
+                // The strong ink: a name stands apart by its wash, not a colour.
+                code_inline_fg: rgb(0x1e1e1e).into(),
                 code_inline_bg: Hsla::from(rgb(0x2b2622)).opacity(0.065),
                 mode_edit: rgb(0x108548).into(),
                 mode_plan: rgb(0x1f75cb).into(),

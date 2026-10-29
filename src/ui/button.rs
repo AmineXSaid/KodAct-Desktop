@@ -444,10 +444,12 @@ pub fn send_button(
         SendState::Empty => base
             .aria_label("Send (write something first)")
             .bg(t.extra.accent_soft)
+            // The accent's own arrow on its wash: plainly not ready, still
+            // there to find in both modes.
             .child(icon(
                 "icons/arrow-up.svg",
                 t.size.icon,
-                t.extra.accent_fg.opacity(if t.is_dark { 0.4 } else { 0.9 }),
+                t.colors.primary.opacity(0.75),
             )),
     }
 }

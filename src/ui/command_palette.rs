@@ -392,8 +392,8 @@ impl CommandPalette {
                 Box::new(ShowAgentsView),
             ),
             act(
-                "Side panel: Files",
-                "icons/folder.svg",
+                "Side panel: Documents",
+                "icons/file-text.svg",
                 Some(shortcut("3")),
                 Box::new(ShowFilesView),
             ),

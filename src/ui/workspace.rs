@@ -61,6 +61,10 @@ pub struct Workspace {
     presence: Presences,
     _opener_sub: Option<gpui::Subscription>,
     focus: FocusHandle,
+    /// The panels left the chat less than its narrowest last frame: the
+    /// sidebar gives way once, as they start to, not again after you
+    /// reopen it.
+    crowded: bool,
 }
 
 impl Workspace {
@@ -169,6 +173,7 @@ impl Workspace {
             presence: Presences::default(),
             _opener_sub: opener_sub,
             focus: cx.focus_handle(),
+            crowded: false,
         };
         if playing {
             // The opener has the keyboard; it hands over when it's done.
@@ -589,7 +594,7 @@ impl Workspace {
                 .child(
                     toggle(
                         "show-plan",
-                        "icons/list-todo.svg",
+                        "icons/route.svg",
                         "Plan (Ctrl+Shift+E)",
                         plan_on,
                     )
@@ -828,12 +833,64 @@ impl Render for Workspace {
         let dock_leaving = dock_f.is_some_and(|(_, leaving)| leaving);
         let terminal_open = dock_f.is_some();
         // What is left of the window beside the sidebar is shared by the
-        // chat, the side panel and the dock; the chat keeps its narrowest.
-        let beside = f32::from(window.viewport_size().width)
+        // chat, the Session column, the side panel and the dock; the chat
+        // keeps its narrowest. When even their narrowest leave it less, the
+        // sidebar gives way first (and comes back once they close), then the
+        // Session column floats over the chat instead of taking a column.
+        let session_on = {
+            let s = self.state.read(cx);
+            s.session_open && s.current.is_some()
+        };
+        let window_w = f32::from(window.viewport_size().width);
+        let needs = f32::from(t.size.chat_min)
+            + if session_on {
+                f32::from(t.size.session_panel)
+            } else {
+                0.
+            }
+            + if side_open && !below {
+                f32::from(t.size.doc_pane)
+            } else {
+                0.
+            }
+            + if terminal_open {
+                f32::from(t.size.terminal_min)
+            } else {
+                0.
+            };
+        let crowded = needs > window_w - f32::from(t.size.sidebar);
+        let yielded = self.state.read(cx).sidebar_yielded;
+        let started = crowded && !self.crowded;
+        self.crowded = crowded;
+        let sidebar_open = if sidebar_open && started {
+            self.state.update(cx, |s, cx| {
+                s.sidebar_open = false;
+                s.sidebar_yielded = true;
+                cx.notify();
+            });
+            false
+        } else if yielded && !crowded {
+            self.state.update(cx, |s, cx| {
+                s.sidebar_open = true;
+                s.sidebar_yielded = false;
+                cx.notify();
+            });
+            true
+        } else {
+            sidebar_open
+        };
+        let beside_all = window_w
             - if sidebar_open {
                 f32::from(t.size.sidebar)
             } else {
                 f32::from(t.size.rail)
+            };
+        let session_float = session_on && needs > beside_all;
+        let beside = beside_all
+            - if session_on && !session_float {
+                f32::from(t.size.session_panel)
+            } else {
+                0.
             };
         let dock_want = self.dock_want(window, cx);
         let wide = side_doc
@@ -1142,19 +1199,47 @@ impl Render for Workspace {
                     let w = f32::from(t.size.session_panel);
                     let col =
                         super::session_panel::render(&t, &self.state, self.state.read(cx), chat);
-                    match leaving {
+                    let col = match leaving {
                         true => super::motion::slide_out(col, w, "session-column", &t),
                         false => super::motion::slide_in(col, w, false, &t),
+                    };
+                    // Without room for a column it floats over the chat's
+                    // right edge, a sheet on the stage, until there is.
+                    match session_float {
+                        true => div()
+                            .absolute()
+                            .top_0()
+                            .right_0()
+                            .h_full()
+                            .pl(t.space.md)
+                            .bg(t.extra.stage)
+                            .shadow(t.elevation_grain())
+                            .child(col)
+                            .into_any_element(),
+                        false => col,
                     }
                 });
+            let (session_col, session_over) = match session_float {
+                true => (None, session),
+                false => (session, None),
+            };
             main.child(
                 div()
                     .flex_1()
                     .min_h_0()
                     .flex()
                     .when(below, |d| d.flex_col())
-                    .child(conversation)
-                    .children(session)
+                    .child(
+                        div()
+                            .relative()
+                            .flex_1()
+                            .min_w_0()
+                            .min_h_0()
+                            .flex()
+                            .child(conversation)
+                            .children(session_over),
+                    )
+                    .children(session_col)
                     .children(pane),
             )
         };
@@ -1339,6 +1424,7 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &ToggleSidebar, _, cx| {
                 this.state.update(cx, |s, cx| {
                     s.sidebar_open = !s.sidebar_open;
+                    s.sidebar_yielded = false;
                     cx.notify();
                 })
             }))

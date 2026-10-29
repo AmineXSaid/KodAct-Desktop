@@ -71,7 +71,7 @@ table in step.
 | Ctrl/⌘ Shift E | Side panel: plan, files, browser |
 | Ctrl/⌘ 1 | Side panel: Plan |
 | Ctrl/⌘ 2 | Side panel: Agents |
-| Ctrl/⌘ 3 | Side panel: Files |
+| Ctrl/⌘ 3 | Side panel: Documents |
 | Ctrl/⌘ 4 | Side panel: Browser |
 | Ctrl/⌘ \ | Side panel beside or below the chat |
 | Ctrl/⌘ F | Find in the conversation |

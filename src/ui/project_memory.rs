@@ -68,10 +68,7 @@ impl Render for ProjectMemory {
                 div()
                     .flex_1()
                     .min_w_0()
-                    .text_size(t.text.caption)
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(t.colors.text_muted)
-                    .child("MEMORY"),
+                    .child(crate::theme::section_label(&t, "Memory")),
             )
             .when(count > 0, |d| {
                 d.child(

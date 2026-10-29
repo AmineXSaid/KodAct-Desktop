@@ -32,9 +32,10 @@ pub fn trigger(
     let look = setup
         .and_then(|d| d.system.as_deref())
         .map(|id| title_of(s.design_index.as_deref(), Kind::DesignSystem, id));
-    // An ordinary chat: the icon alone (its tooltip says what it does).
+    // An ordinary chat says what the chip is for; a design chat, what it
+    // makes and in which look.
     let label: Option<SharedString> = match (setup, look) {
-        (None, _) => None,
+        (None, _) => Some("Design".into()),
         (Some(d), None) => Some(d.surface.name().into()),
         (Some(d), Some(look)) => Some(format!("{} · {look}", d.surface.name()).into()),
     };
@@ -54,7 +55,7 @@ pub fn trigger(
         super::button::selector(t, "design-trigger", open)
             .aria_label("Design chat")
             .text_color(fg)
-            .child(icon("icons/sparkles.svg", t.size.icon_sm, fg))
+            .child(icon("icons/pen-tool.svg", t.size.icon_sm, fg))
             .children(label.map(|label| {
                 div()
                     .max_w(px(140.))

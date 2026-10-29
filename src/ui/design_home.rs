@@ -41,7 +41,7 @@ pub struct DesignHome {
 impl DesignHome {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let search = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("Search: pitch deck, editorial, dashboard…")
+            InputState::new(window, cx).placeholder("Search: deck, poster, dashboard…")
         });
         let subs = vec![
             cx.subscribe(&search, |this, _, ev: &InputEvent, cx| {
@@ -163,9 +163,12 @@ fn card(
                         .child(e.title.clone()),
                 )
                 .child(
+                    // Two lines, ending in an ellipsis rather than mid-word.
                     div()
                         .h(px(36.))
                         .overflow_hidden()
+                        .text_ellipsis()
+                        .line_clamp(2)
                         .text_size(t.text.caption)
                         .text_color(t.colors.text_muted)
                         .child(e.description.clone()),

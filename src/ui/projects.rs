@@ -504,8 +504,10 @@ impl ProjectsView {
                 )
                 .child(div().flex_1())
                 .child(
+                    // The branch drops to its own line rather than be cut.
                     div()
                         .flex()
+                        .flex_wrap()
                         .items_center()
                         .gap(t.space.sm)
                         .text_size(t.text.caption)
@@ -515,7 +517,6 @@ impl ProjectsView {
                             current,
                             p.opened_minutes_ago,
                         )))
-                        .child(div().flex_1())
                         .when(!p.branch.is_empty(), |d| {
                             d.child(branch_pill(t, p.branch.clone()))
                         }),
@@ -609,16 +610,15 @@ impl ProjectsView {
                                         div()
                                             .font_family(t.font_display.clone())
                                             .font_weight(t.display_weight)
-                                            .text_size(t.size.greeting)
+                                            .text_size(t.text.heading_sm)
                                             .text_color(t.colors.text_strong)
                                             .child("Projects"),
                                     )
                                     .child(
-                                        // The section's subhead, in the editorial serif.
+                                        // The page's lede, as every page's: body size, muted.
                                         div()
-                                            .font_family(t.font_display.clone())
-                                            .text_size(t.text.subheading)
-                                            .text_color(t.colors.text_body)
+                                            .text_size(t.text.body)
+                                            .text_color(t.colors.text_muted)
                                             .child("A folder with its own chats, rules and memory. Open one to pick up where you left off."),
                                     ),
                             )

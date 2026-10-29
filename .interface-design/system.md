@@ -8,7 +8,7 @@
 
 **Personality:** calmly smooth: a warm editorial workspace, confident and unhurried, closer to a printed quarterly than a dashboard (after the Anchor style reference).
 
-**Foundation:** Forge Ember. Warm paper by day: the window and sidebar #ebe8e1, the session a sheet of #f7f5f1 on it, cards white on that. Warm graphite at night: #1b1a19, #242322, cards #2e2d2b. One ink carries the type. One colour, ember copper (#b4532a; #e2895b at night): the decisive action, links, a switch that is on, the mark's top, a waiting dot. Inline code in coral on a faint wash. Everything else is neutral; colour otherwise only for meaning (modes, status).
+**Foundation:** Forge Ember. Warm paper by day: the window and sidebar #ebe8e1, the session a sheet of #f7f5f1 on it, cards white on that. Warm graphite at night: #1b1a19, #242322, cards #2e2d2b. One ink carries the type. One colour, ember copper (#b4532a; #e2895b at night): the decisive action, links, a switch that is on, the mark's top, a waiting dot. Inline code in the ink on a faint neutral wash. Everything else is neutral; colour otherwise only for meaning (modes, status).
 
 **Depth:** nearly flat. Hairlines inside cards; the session and the user's message lift on paper grain (three 1px shadows at 6/4/1% ink); popovers and the permission card a touch more.
 
@@ -221,4 +221,5 @@ One family; every control takes keyboard focus (a `primary` edge shows for the k
 | Deny is quiet | A permission has one filled action, Allow once; Deny is a ghost button, a way out rather than an alarm. | 2026-10-23 |
 | Every window leaves as it came | Each group has its own motion, in and out (`ui/motion.rs`): dialogs rise 14px over a dimming backdrop and sink away (240/170ms); the palette drops from above and lifts away; menus at an anchor unfold and fade back toward it (110ms); the composer's menus draw their jewel edge and fade back down; questions draw their edge in their colour and sink away; side panels and the dock slide in and back out (280/200ms); a notice springs up and drops away. A window that closes is kept a beat (`Presence`) so it leaves rather than vanishes. | 2026-10-25 |
 | Replies at 15/24, rows 8 apart | Calm sets a reply at 15px on 24px lines and keeps a reply's rows (text, tool lines, cards) 8px apart, as Claude Code does: a third more on screen, read as a tool rather than a document. Paragraphs keep their own gap. | 2026-10-24 |
+| Inline code in the ink | Coral names read as the danger colour and the diff's removals; a name in prose now stands apart by its neutral wash alone, in the strong ink. The files in a list of changes show their kind in the muted ink for the same reason. | 2026-10-29 |
 | Icons on a 12/14/16/20 scale | Desktop density: 14 in rows, 16 in controls, 20 for the composer's +; 12 inside captions. | 2026-10-12 |

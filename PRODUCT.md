@@ -45,7 +45,7 @@ instructions, knowledge and memory.
   radius and font comes from `src/theme.rs` tokens (`.interface-design/system.md`
   and `DESIGN.md` are generated from it). Web tooling (CSS detectors, browser
   live mode) does not apply.
-- Eleven themes, each in light and dark; fonts are bundled (OFL).
+- One look (Calmly smooth), in light and dark; fonts are bundled (OFL).
 - Dependencies must be Apache-2.0, MIT, BSD, ISC or similar; nothing copied
   from GPL code.
 - Terminology: chat, reply, project, folder, endpoint, model, mode (Manual,

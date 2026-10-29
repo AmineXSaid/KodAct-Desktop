@@ -45,15 +45,15 @@ const SECTIONS: [(&str, &str); 4] = [
         "Read at the start of every session, so they cost context every time.",
     ),
     (
-        "When Claude touches matching files",
-        "Rules with path globs. Free until Claude works on a match.",
+        "When Forge touches matching files",
+        "Rules with path globs. Free until Forge works on a match.",
     ),
     (
-        "When Claude works in a folder",
+        "When Forge works in a folder",
         "A CLAUDE.md inside a subfolder.",
     ),
     (
-        "Skills, when Claude decides they fit",
+        "Skills, when Forge decides they fit",
         "Only the description is read up front.",
     ),
 ];
@@ -288,17 +288,16 @@ impl RulesView {
                         div()
                             .font_family(t.font_display.clone())
                             .font_weight(t.display_weight)
-                            .text_size(t.size.greeting)
+                            .text_size(t.text.heading_sm)
                             .text_color(t.colors.text_strong)
                             .child("Rules and memory"),
                     )
-                    // The section's subhead, in the editorial serif.
+                    // The page's lede, as every page's: body size, muted.
                     .child(
                         div()
-                            .font_family(t.font_display.clone())
-                            .text_size(t.text.subheading)
-                            .text_color(t.colors.text_body)
-                            .child(format!("What Claude Code reads in {where_}, and when. Files read every session cost context every time; the rest load only when they apply.")),
+                            .text_size(t.text.body)
+                            .text_color(t.colors.text_muted)
+                            .child(format!("What Forge reads in {where_}, and when. Files read every session cost context every time; the rest load only when they apply.")),
                     ),
             )
             .child(
@@ -551,24 +550,24 @@ impl RulesView {
         };
 
         let explain: AnyElement = match &s.when {
-            When::Always => div().child(format!("Claude reads this at the start of every session: about {} tokens each time.", tokens(s.tokens()))).into_any_element(),
+            When::Always => div().child(format!("Forge reads this at the start of every session: about {} tokens each time.", tokens(s.tokens()))).into_any_element(),
             When::Paths(globs) => div()
                 .flex()
                 .flex_wrap()
                 .items_center()
                 .gap(t.space.xs)
-                .child("Claude reads this when it works on a file matching")
+                .child("Forge reads this when it works on a file matching")
                 .children(globs.iter().map(|g| {
                     div().px(t.space.xs + px(2.)).rounded(t.radius.small).bg(t.extra.inset).font_family(t.font_mono.clone()).text_size(t.text.caption).text_color(t.colors.text_strong).child(g.clone())
                 }))
                 .into_any_element(),
-            When::Folder(dir) => div().child(format!("Claude reads this when it works on files in {dir}/.")).into_any_element(),
+            When::Folder(dir) => div().child(format!("Forge reads this when it works on files in {dir}/.")).into_any_element(),
             When::OnDemand => div()
                 .flex()
                 .flex_col()
                 .gap(t.space.xs)
-                .child("Claude reads this description every session and loads the rest when it decides the skill fits:")
-                .child(div().text_color(t.colors.text_strong).child(s.description.clone().unwrap_or_else(|| "(no description, so Claude can't tell when it fits)".into())))
+                .child("Forge reads this description every session and loads the rest when it decides the skill fits:")
+                .child(div().text_color(t.colors.text_strong).child(s.description.clone().unwrap_or_else(|| "(no description, so Forge can't tell when it fits)".into())))
                 .into_any_element(),
         };
 
@@ -806,7 +805,7 @@ impl RulesView {
             .child(field("Name", None, &self.new_name))
             .when(taken, |d| d.child(div().mt(-t.space.md).text_size(t.text.caption).text_color(t.extra.danger).child(format!("{file} already exists. Open it from the list, or pick another name."))))
             .child(field(
-                "Load when Claude touches",
+                "Load when Forge touches",
                 Some("Globs from the project root, separated by commas. Leave it empty to load the rule in every session."),
                 &self.new_paths,
             ))
@@ -905,7 +904,7 @@ impl Render for RulesView {
                     .flex()
                     .flex_col()
                     .gap(t.space.sm)
-                    .child(div().font_weight(FontWeight::MEDIUM).text_color(t.colors.text_strong).child("Claude Code has no rules for this project yet."))
+                    .child(div().font_weight(FontWeight::MEDIUM).text_color(t.colors.text_strong).child("Forge has no rules for this project yet."))
                     .child(div().text_color(t.colors.text_muted).child(format!(
                         "Add a CLAUDE.md to {where_} for rules every session needs, or a rule that loads only for the files it is about."
                     ))),

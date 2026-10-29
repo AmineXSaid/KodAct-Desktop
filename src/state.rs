@@ -1868,6 +1868,9 @@ pub struct AppState {
     nav_at: Option<Place>,
     nav_stepping: bool,
     pub sidebar_open: bool,
+    /// The sidebar closed itself to give an open panel room; it comes back
+    /// when the panels close (a toggle by hand clears this).
+    pub sidebar_yielded: bool,
     pub search: SharedString,
     /// Endpoint profiles (each one endpoint and its model); None while
     /// they load. No model is built in.
@@ -2314,6 +2317,7 @@ impl AppState {
             nav_stepping: false,
             chats,
             sidebar_open: true,
+            sidebar_yielded: false,
             search: "".into(),
             endpoints: None,
             health: Default::default(),

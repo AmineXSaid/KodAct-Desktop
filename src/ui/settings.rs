@@ -143,7 +143,7 @@ impl Settings {
             cx.new(|cx| InputState::new(window, cx).placeholder(placeholder))
         };
         let name = input("Your name", window, cx);
-        let ep_name = input("kgpt", window, cx);
+        let ep_name = input("Home Ollama", window, cx);
         let ep_url = input("https://api.example.com/v1", window, cx);
         let ep_key = cx.new(|cx| {
             InputState::new(window, cx)
@@ -1331,7 +1331,7 @@ impl Settings {
                             .flex_col()
                             .gap(px(2.))
                             .child(div().text_size(t.text.body_sm).text_color(t.colors.text).child("A gateway: list all its models in the model menu"))
-                            .child(div().text_size(t.text.caption).text_color(t.colors.text_muted).child("As Claude Code's /model lists a gateway's models. For OmniRoute, OpenRouter and the like.")),
+                            .child(div().text_size(t.text.caption).text_color(t.colors.text_muted).child("Every model the gateway offers shows in the model menu. For OmniRoute, OpenRouter and the like.")),
                     ),
             )
             .child(

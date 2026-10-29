@@ -46,7 +46,7 @@ pub const SHORTCUTS: &[(&str, &str, &str)] = &[
     ),
     ("secondary-1", "Side panel: Plan", "Conversation"),
     ("secondary-2", "Side panel: Agents", "Conversation"),
-    ("secondary-3", "Side panel: Files", "Conversation"),
+    ("secondary-3", "Side panel: Documents", "Conversation"),
     ("secondary-4", "Side panel: Browser", "Conversation"),
     (
         "secondary-\\",

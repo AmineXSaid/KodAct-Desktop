@@ -98,11 +98,13 @@ pub fn render(files: &[Changed], open: bool, cx: &ItemContext, t: &Theme) -> Any
             .cursor_pointer()
             .hover(move |d| d.bg(hover))
             .text_size(t.text.body_sm)
-            .child(
-                gpui::img(super::file_icon::asset(name, false, &f.path))
-                    .flex_none()
-                    .size(t.size.icon),
-            )
+            // The kind of file in the muted ink: colour here is for the
+            // change's size, and a brand's red would read as a failure.
+            .child(super::icon(
+                super::file_icon::for_name(name, false, t).0,
+                t.size.icon,
+                t.colors.text_muted,
+            ))
             .child(
                 div()
                     .flex()

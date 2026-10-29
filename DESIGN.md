@@ -110,6 +110,7 @@ Corners from the tokens above; one radius per role. No coloured edge over 1px on
 - **Activity** (tool calls, runs of calls, thinking, answers): quiet lines in the muted ink, 26px high, no icons for what worked; opened, steps indent under a 2px neutral rule.
 - **Your message:** a filled bubble without a frame.
 - **Cards that need you** (permission, question): a lifted card; the primary action in the accent, the rest quiet.
+- **A page's own action** (New project, New rule, Check and save): an ink pill. The accent is kept for the one decision in front of you (Allow, Send).
 - **Menus and popovers:** one style (radius, padding, row height, shadow) from the tokens.
 
 ## Do's and Don'ts

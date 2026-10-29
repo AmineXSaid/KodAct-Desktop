@@ -9,8 +9,8 @@
 
 use gpui::component::input::{Input, InputState, TextareaState};
 use gpui::{
-    div, prelude::*, px, relative, AnyElement, Context, Entity, FontWeight, IntoElement,
-    PathPromptOptions, Render, SharedString, Subscription, Window,
+    div, prelude::*, px, relative, AnyElement, Context, Entity, IntoElement, PathPromptOptions,
+    Render, SharedString, Subscription, Window,
 };
 
 use super::editor_kit as kit;
@@ -330,10 +330,7 @@ impl Render for ProjectKnowledge {
                         div()
                             .flex_1()
                             .min_w_0()
-                            .text_size(t.text.caption)
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(t.colors.text_muted)
-                            .child("KNOWLEDGE"),
+                            .child(crate::theme::section_label(&t, "Knowledge")),
                     )
                     .when(!empty, |d| {
                         d.child(

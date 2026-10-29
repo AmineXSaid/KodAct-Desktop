@@ -514,6 +514,11 @@ impl Render for Sidebar {
                                     .overflow_hidden()
                                     .whitespace_nowrap()
                                     .text_ellipsis()
+                                    // The hover's pin and menu take the
+                                    // row's end: the title ends before them.
+                                    .when(row_hover == Some(id) || menu_open, |d| {
+                                        d.pr(px(48.))
+                                    })
                                     .when(unread, |d| {
                                         d.font_weight(FontWeight::SEMIBOLD)
                                             .text_color(t.colors.text_strong)
@@ -685,7 +690,7 @@ impl Render for Sidebar {
                         .child(div().flex_1().min_w_0().child(if s.show_archived {
                             "Archived"
                         } else {
-                            "Chats"
+                            "Recents"
                         }))
                         // The filter rides the first header; here, this one.
                         .children(filter.take()),
