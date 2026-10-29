@@ -241,27 +241,49 @@ impl Workspace {
     ) {
         let shell = self.state.update(cx, |s, _| s.forge_terminal(kind));
         match shell {
-            Ok(shell) => {
-                let was_open = self.state.read(cx).terminal_open;
-                self.state.update(cx, |s, cx| {
-                    s.terminal_open = true;
-                    s.save_window();
-                    cx.notify();
-                });
-                let dock = self.terminal.clone();
-                if was_open {
-                    dock.update(cx, |d, cx| d.open(Some(shell), window, cx));
-                } else {
-                    // A full-screen program draws for the size it starts
-                    // at: start it once the dock has been laid out.
-                    window.on_next_frame(move |window, _| {
-                        window.on_next_frame(move |window, cx| {
-                            dock.update(cx, |d, cx| d.open(Some(shell), window, cx));
-                        });
+            // A relay just started: the tab opens once it listens.
+            Ok((shell, Some(relay))) => {
+                cx.spawn_in(window, async move |this, cx| {
+                    let waited = cx
+                        .background_executor()
+                        .spawn(async move { relay.wait_ready(std::time::Duration::from_secs(20)) })
+                        .await;
+                    let _ = this.update_in(cx, |this, window, cx| match waited {
+                        Ok(()) => this.open_forge_tab(shell, window, cx),
+                        Err(e) => this.state.update(cx, |s, cx| s.show_toast(e.to_string(), cx)),
                     });
-                }
+                })
+                .detach();
             }
+            Ok((shell, None)) => self.open_forge_tab(shell, window, cx),
             Err(e) => self.state.update(cx, |s, cx| s.show_toast(e, cx)),
+        }
+    }
+
+    /// Show the dock with a ForgeCLI tab running `shell`.
+    fn open_forge_tab(
+        &mut self,
+        shell: crate::term_session::Shell,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let was_open = self.state.read(cx).terminal_open;
+        self.state.update(cx, |s, cx| {
+            s.terminal_open = true;
+            s.save_window();
+            cx.notify();
+        });
+        let dock = self.terminal.clone();
+        if was_open {
+            dock.update(cx, |d, cx| d.open(Some(shell), window, cx));
+        } else {
+            // A full-screen program draws for the size it starts
+            // at: start it once the dock has been laid out.
+            window.on_next_frame(move |window, _| {
+                window.on_next_frame(move |window, cx| {
+                    dock.update(cx, |d, cx| d.open(Some(shell), window, cx));
+                });
+            });
         }
     }
 

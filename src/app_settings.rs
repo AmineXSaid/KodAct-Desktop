@@ -42,7 +42,16 @@
 //!   "forge.noSessionPersistence": false,
 //!   "forge.noInput": false,
 //!   "forge.jsonSchema": {"type": "object"},
-//!   "forge.extraArgs": ["--color", "never"]
+//!   "forge.agents": {"reviewer": {"description": "Reviews diffs", "prompt": "Review."}},
+//!   "forge.mcpConfig": ["~/mcp/team.json"],
+//!   "forge.pluginDirs": ["~/forge-plugins/lint"],
+//!   "forge.appendSystemPrompt": "Answer in British English.",
+//!   "forge.permissionPrompts": "host",
+//!   "forge.verbose": false,
+//!   "forge.quiet": false,
+//!   "forge.color": "never",
+//!   "forge.noTui": false,
+//!   "forge.extraArgs": ["--debug-file", "/tmp/forge.log"]
 //! }
 //! ```
 //!
@@ -62,7 +71,11 @@
 //! logs, the compaction window, hook events in the stream, sessions not kept
 //! on disk (such a chat starts afresh each time its process does), never
 //! asking, and a JSON Schema every reply's structured result follows (shown
-//! under the reply). `forge.extraArgs` takes any other flag, except the ones
+//! under the reply), agents defined inline, more MCP configs and plugin
+//! folders, text added to the system prompt, who answers permission prompts
+//! (`none`: nothing asks, what would is refused), stderr's detail and colour,
+//! and the line prompt in place of ForgeCLI's terminal UI when it opens in
+//! the dock (`forge.noTui`). `forge.extraArgs` takes any other flag, except the ones
 //! the chat itself runs on (print mode, the stream formats, the session and
 //! the permission channel) and skipping permissions, which Settings allows.
 //!
@@ -203,6 +216,39 @@ pub struct Settings {
     /// Any other ForgeCLI flags, as written on a command line.
     #[serde(rename = "forge.extraArgs")]
     pub extra_args: Vec<String>,
+    /// Agents defined here rather than in files (`--agents`): an object, or
+    /// the path of a JSON file.
+    #[serde(rename = "forge.agents")]
+    pub agents: Option<serde_json::Value>,
+    /// More MCP server configs: JSON objects, or files holding them.
+    #[serde(rename = "forge.mcpConfig")]
+    pub mcp_config: Vec<serde_json::Value>,
+    /// More plugin folders.
+    #[serde(rename = "forge.pluginDirs")]
+    pub plugin_dirs: Vec<String>,
+    /// Text added to the system prompt, after Forge's own.
+    #[serde(rename = "forge.appendSystemPrompt")]
+    pub append_system_prompt: Option<String>,
+    /// Who answers permission prompts: `host` (the app) or `none`.
+    #[serde(rename = "forge.permissionPrompts")]
+    pub permission_prompts: Option<String>,
+    /// More detail on ForgeCLI's stderr (the app log).
+    #[serde(rename = "forge.verbose")]
+    pub verbose: bool,
+    /// Only errors on stderr.
+    #[serde(rename = "forge.quiet")]
+    pub quiet: bool,
+    /// Colour on stderr: `auto`, `always` or `never`.
+    #[serde(rename = "forge.color")]
+    pub color: Option<String>,
+    /// ForgeCLI in the dock uses its line prompt, not its terminal UI.
+    #[serde(rename = "forge.noTui")]
+    pub no_tui: bool,
+    /// `agents` and `mcp_config` as ForgeCLI takes them (made by `parse`).
+    #[serde(skip)]
+    agents_arg: Option<String>,
+    #[serde(skip)]
+    mcp_config_args: Vec<String>,
 }
 
 /// Flags a chat's process runs on: Forge passes them itself, and another
@@ -288,6 +334,17 @@ impl Default for Settings {
             no_input: false,
             json_schema: None,
             extra_args: vec![],
+            agents: None,
+            mcp_config: vec![],
+            plugin_dirs: vec![],
+            append_system_prompt: None,
+            permission_prompts: None,
+            verbose: false,
+            quiet: false,
+            color: None,
+            no_tui: false,
+            agents_arg: None,
+            mcp_config_args: vec![],
         }
     }
 }
@@ -392,6 +449,36 @@ impl Settings {
             extra.push(a.to_string());
         }
         s.extra_args = extra;
+        // A path stays a path; an object goes as its JSON.
+        let json_or_path = |v: serde_json::Value| match v {
+            serde_json::Value::String(t) if !t.trim().is_empty() => Some(if t.trim_start().starts_with('{') {
+                t
+            } else {
+                expand_home(t.trim())
+            }),
+            serde_json::Value::Object(_) => Some(v.to_string()),
+            _ => None,
+        };
+        s.agents_arg = s.agents.clone().and_then(json_or_path);
+        s.mcp_config_args = s.mcp_config.iter().cloned().filter_map(json_or_path).collect();
+        s.plugin_dirs = s
+            .plugin_dirs
+            .iter()
+            .map(|d| d.trim())
+            .filter(|d| !d.is_empty())
+            .map(expand_home)
+            .collect();
+        s.append_system_prompt = s.append_system_prompt.filter(|p| !p.trim().is_empty());
+        s.permission_prompts = s
+            .permission_prompts
+            .filter(|p| ["host", "none"].contains(&p.as_str()));
+        s.color = s
+            .color
+            .filter(|c| ["auto", "always", "never"].contains(&c.as_str()));
+        // ForgeCLI takes one or the other.
+        if s.quiet {
+            s.verbose = false;
+        }
         s
     }
 
@@ -484,6 +571,23 @@ impl Settings {
         }
         if let Some(j) = &self.json_schema {
             out.push(format!("--json-schema={j}"));
+        }
+        if let Some(a) = &self.agents_arg {
+            out.push(format!("--agents={a}"));
+        }
+        out.extend(self.mcp_config_args.iter().map(|c| format!("--mcp-config={c}")));
+        out.extend(self.plugin_dirs.iter().map(|d| format!("--plugin-dir={d}")));
+        if let Some(p) = &self.permission_prompts {
+            out.push(format!("--permission-prompts={p}"));
+        }
+        if self.verbose {
+            out.push("--verbose".to_string());
+        }
+        if self.quiet {
+            out.push("--quiet".to_string());
+        }
+        if let Some(c) = &self.color {
+            out.push(format!("--color={c}"));
         }
         out.extend(self.extra_args.iter().cloned());
         out

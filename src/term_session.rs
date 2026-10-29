@@ -128,20 +128,33 @@ fn which(program: &str) -> bool {
 /// A shell on a remote, in the project's folder: `""` for its login shell.
 /// `trust_new_key`: an SSH host the person trusted in this run.
 pub fn remote_shell(r: &Remote, shell: &str, trust_new_key: bool) -> Shell {
-    // Into the folder (`~` expanded there), then the shell, as a login shell.
+    // The shell, as a login shell.
     let start = if shell.is_empty() {
         r#"exec "${SHELL:-sh}" -l"#.to_string()
     } else {
         format!("exec {} -l", sh_quote(shell))
     };
-    let script = format!(
-        r#"case $1 in "~") d=$HOME;; "~/"*) d=$HOME/${{1#"~/"}};; *) d=$1;; esac; cd "$d" 2>/dev/null; {start}"#
-    );
     let label = if shell.is_empty() {
         "Login shell".to_string()
     } else {
         shell.to_string()
     };
+    remote_command(r, &start, label, trust_new_key, &[])
+}
+
+/// A command line run on a remote, in the project's folder, in a terminal.
+/// `reverse`: SSH `-R` forwards (`there:127.0.0.1:here`) for its lifetime.
+pub fn remote_command(
+    r: &Remote,
+    start: &str,
+    label: String,
+    trust_new_key: bool,
+    reverse: &[String],
+) -> Shell {
+    // Into the folder (`~` expanded there), then the command.
+    let script = format!(
+        r#"case $1 in "~") d=$HOME;; "~/"*) d=$HOME/${{1#"~/"}};; *) d=$1;; esac; cd "$d" 2>/dev/null; {start}"#
+    );
     let (program, args): (&str, Vec<String>) = match &r.target {
         Target::Ssh(host) => {
             let mut a = crate::app_settings::get().ssh_args();
@@ -152,6 +165,9 @@ pub fn remote_shell(r: &Remote, shell: &str, trust_new_key: bool) -> Shell {
             ]);
             if trust_new_key {
                 a.extend(["-o".into(), "StrictHostKeyChecking=accept-new".into()]);
+            }
+            for f in reverse {
+                a.extend(["-R".to_string(), f.clone()]);
             }
             a.extend([
                 host.clone(),

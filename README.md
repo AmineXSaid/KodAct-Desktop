@@ -326,6 +326,12 @@ settings" in the command palette writes one with every key):
 | `forge.noSessionPersistence` | `false` | sessions not kept on disk; a chat starts afresh with each process |
 | `forge.noInput` | `false` | never ask: what would ask is refused |
 | `forge.jsonSchema` | none | a JSON Schema each turn's result follows, shown under the reply |
+| `forge.agents` | none | agents defined inline (an object, or a JSON file) |
+| `forge.mcpConfig`, `forge.pluginDirs` | `[]` | more MCP server configs and plugin folders |
+| `forge.appendSystemPrompt` | none | text added after Forge's own system prompt |
+| `forge.permissionPrompts` | `host` | `none`: nothing asks, what would is refused |
+| `forge.verbose`, `forge.quiet`, `forge.color` | off, off, auto | ForgeCLI's stderr in the app log |
+| `forge.noTui` | `false` | ForgeCLI in the dock uses its line prompt |
 | `forge.extraArgs` | `[]` | any other ForgeCLI flag |
 
 Changes apply the next time they're used; no restart.

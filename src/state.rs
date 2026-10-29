@@ -2222,6 +2222,12 @@ pub struct AppState {
     model_routes: std::collections::HashMap<usize, String>,
     /// A relay that couldn't listen on the remote says why here.
     relay_errors: async_channel::Sender<String>,
+    /// The relay carrying model calls for ForgeCLI tabs on each WSL distro
+    /// or container: the port it listens on there, and the relay.
+    terminal_relays: std::collections::HashMap<
+        crate::remote::Target,
+        (u16, std::sync::Arc<crate::relay::Relay>),
+    >,
     /// SSH prompts waiting on you (a password, a key's passphrase); the
     /// first one shows as a dialog (`ui/askpass.rs`).
     pub askpass: std::collections::VecDeque<crate::askpass::Request>,
@@ -2532,6 +2538,7 @@ impl AppState {
             askpass: Default::default(),
             model_routes: Default::default(),
             relay_errors: async_channel::unbounded().0,
+            terminal_relays: Default::default(),
             diagram_code: Default::default(),
             diagram_zoom: Default::default(),
             loading: true,
@@ -10125,6 +10132,18 @@ fix everything under 8, render it again to check, then tell me the scores before
         launch.args.extend(
             forge.forge_args(matches!(conversation, crate::backend::Conversation::New(_))),
         );
+        // Text the person adds to the system prompt joins Forge's own
+        // (ForgeCLI takes `--append-system-prompt` once).
+        if let Some(extra) = &forge.append_system_prompt {
+            if let Some(p) = launch
+                .args
+                .iter_mut()
+                .find(|a| a.as_str() == crate::backend::SURFACE_PROMPT)
+            {
+                p.push_str("\n\n");
+                p.push_str(extra);
+            }
+        }
         // The session's display name is the chat's title.
         if let Some(title) = self
             .chats
@@ -10998,19 +11017,20 @@ impl AppState {
     /// model, endpoint and settings the chats use: its own terminal UI on
     /// the current chat, a shell with `forge` ready for one-shot runs and
     /// its other subcommands, or `forge doctor` / `forge config`.
-    pub fn forge_terminal(&mut self, kind: ForgeTerm) -> Result<crate::term_session::Shell, String> {
-        if self.current_remote().is_some() {
-            return Err("ForgeCLI's own terminal opens for projects on this computer.".into());
-        }
-        let exe = crate::backend::find_cli()
-            .ok_or("ForgeCLI wasn't found. Set FORGE_CLI to its path, or reinstall Forge.")?;
+    /// With it, on WSL or a container, the relay its model calls go through:
+    /// the tab should start once that listens.
+    pub fn forge_terminal(
+        &mut self,
+        kind: ForgeTerm,
+    ) -> Result<(crate::term_session::Shell, Option<std::sync::Arc<crate::relay::Relay>>), String> {
+        let remote = self.current_remote();
         let profile = self
             .active_profile()
             .cloned()
             .ok_or("Choose a model first: ForgeCLI runs on the same endpoint.")?;
-        let (_, dir, _) = self.terminal_place();
+        let (_, dir, trusted) = self.terminal_place();
         let forge = crate::app_settings::get();
-        // The current chat's conversation, when it has one; else a new one.
+        // The current chat's conversation, when it has one.
         let chat = self.current.and_then(|id| {
             self.chats
                 .iter()
@@ -11029,62 +11049,77 @@ impl AppState {
         if let Some(e) = self.effort_for(&profile) {
             launch.args.extend(["--effort".to_string(), e.wire().to_string()]);
         }
-        if let Some(flag) = crate::modes::flag_settings(
+        if let Some(mut flag) = crate::modes::flag_settings(
             self.settings_profile
                 .as_deref()
                 .and_then(crate::setting_profiles::path_of)
                 .as_deref(),
         ) {
+            // A remote ForgeCLI can't read this machine's file: send its settings.
+            if remote.is_some() && !flag.trim_start().starts_with('{') {
+                flag = std::fs::read_to_string(&flag).unwrap_or_else(|_| "{}".into());
+            }
             launch.args.extend(["--settings".to_string(), flag]);
         }
-        let mut launch = crate::backend::interactive(&launch);
+        let launch = crate::backend::interactive(&launch);
+        let mut args = launch.args;
         // The desktop's own note on how replies are drawn doesn't hold there.
-        if let Some(i) = launch
-            .args
-            .iter()
-            .position(|a| a == crate::backend::SURFACE_PROMPT)
-        {
-            launch.args.drain(i - 1..=i);
+        if let Some(i) = args.iter().position(|a| a == crate::backend::SURFACE_PROMPT) {
+            args.drain(i - 1..=i);
         }
-        let program = exe.to_string_lossy().into_owned();
-        let shell = |label: &str, args: Vec<String>, env: Vec<(String, String)>| {
-            crate::term_session::Shell {
-                label: label.into(),
-                program: program.clone(),
-                args,
-                cwd: Some(dir.clone()),
-                env,
-            }
+        if let Some(extra) = &forge.append_system_prompt {
+            args.push(format!("--append-system-prompt={extra}"));
+        }
+        let mut env = launch.env;
+        let label = match kind {
+            ForgeTerm::Ui => "ForgeCLI",
+            ForgeTerm::Shell => "forge shell",
+            ForgeTerm::Doctor => "forge doctor",
+            ForgeTerm::Config => "forge config",
         };
-        Ok(match kind {
+        let args = match kind {
             ForgeTerm::Ui => {
                 // One writer per conversation: the chat's own process stops
                 // while the terminal has it, and resumes it on the next message.
-                if let Some((id, _)) = chat {
-                    if self.replies.contains_key(&id) {
+                if let Some((id, _)) = &chat {
+                    if self.replies.contains_key(id) {
                         return Err("Wait for the reply to finish, or stop it, first.".into());
                     }
-                    self.sessions.remove(&id);
+                    self.sessions.remove(id);
+                    if let Some(title) = self
+                        .chats
+                        .iter()
+                        .find(|c| c.id == *id)
+                        .map(|c| c.title.trim().to_string())
+                        .filter(|t| !t.is_empty())
+                    {
+                        args.push(format!("--name={title}"));
+                    }
+                } else if let Some(i) = args.iter().position(|a| a == "--session-id") {
+                    // No chat open: the folder's latest conversation.
+                    args.drain(i..=i + 1);
+                    args.push("--continue".into());
                 }
-                let mut args = launch.args;
-                if let Some(title) = chat
-                    .and_then(|(id, _)| self.chats.iter().find(|c| c.id == id))
-                    .map(|c| c.title.trim().to_string())
-                    .filter(|t| !t.is_empty())
-                {
-                    args.push(format!("--name={title}"));
+                if forge.no_tui {
+                    args.push("--no-tui".into());
                 }
-                shell("ForgeCLI", args, launch.env)
+                args
             }
-            ForgeTerm::Doctor => shell("forge doctor", vec!["doctor".into(), "--probe".into()], launch.env),
-            ForgeTerm::Config => shell("forge config", vec!["config".into()], launch.env),
+            ForgeTerm::Doctor => vec!["doctor".into(), "--probe".into()],
+            ForgeTerm::Config => vec!["config".into(), "list".into()],
             ForgeTerm::Shell => {
+                env.push(("FORGE_MODEL".into(), profile.model.clone()));
+                vec![]
+            }
+        };
+        let Some(remote) = remote else {
+            let exe = crate::backend::find_cli()
+                .ok_or("ForgeCLI wasn't found. Set FORGE_CLI to its path, or reinstall Forge.")?;
+            if kind == ForgeTerm::Shell {
                 let mut sh = crate::term_session::shells(None, &dir, false)
                     .into_iter()
                     .next()
                     .ok_or("No shell found on this computer.")?;
-                let mut env = launch.env;
-                env.push(("FORGE_MODEL".into(), profile.model.clone()));
                 if let Some(bin) = exe.parent() {
                     let path = std::env::var_os("PATH").unwrap_or_default();
                     let joined = std::env::join_paths(
@@ -11095,9 +11130,88 @@ impl AppState {
                 }
                 sh.label = format!("{} · forge", sh.label);
                 sh.env = env;
-                sh
+                return Ok((sh, None));
             }
-        })
+            return Ok((
+                crate::term_session::Shell {
+                    label: label.into(),
+                    program: exe.to_string_lossy().into_owned(),
+                    args,
+                    cwd: Some(dir),
+                    env,
+                },
+                None,
+            ));
+        };
+        // On a remote: its ForgeCLI, as its chats run it. Model calls come
+        // back here through the proxy, so the real key never leaves.
+        let ready = self.remote_ready.get(&remote.target).cloned().ok_or_else(|| {
+            format!(
+                "Not connected to {} yet: send a message in one of its chats first.",
+                remote.target.label()
+            )
+        })?;
+        let mut args = args;
+        if let Some(i) = args.iter().position(|a| a == "--plugin-dir") {
+            if let Some(d) = args.get_mut(i + 1) {
+                *d = ready.plugin.clone();
+            }
+        }
+        let mut reverse = vec![];
+        let mut relay = None;
+        if let Ok(port) = crate::model_proxy::start() {
+            let (route, remote_env) = proxied_env(&env);
+            let token = crate::model_proxy::add(route);
+            let there = match &remote.target {
+                // An SSH tab forwards its own port, for as long as it runs.
+                crate::remote::Target::Ssh(_) => {
+                    crate::remote::forward_port(&format!("{fresh}-term"), port)
+                }
+                // One relay per distro or container serves all its tabs.
+                target => match self.terminal_relays.get(target) {
+                    Some((there, r)) => {
+                        relay = Some(r.clone());
+                        *there
+                    }
+                    None => {
+                        let there = crate::remote::forward_port(
+                            &format!("{}-terminals", remote.target.label()),
+                            port,
+                        );
+                        let extra = crate::remote::Extra::default();
+                        let r = std::sync::Arc::new(
+                            crate::relay::start(target, &ready.forge, there, port, &extra)
+                                .map_err(|e| e.to_string())?,
+                        );
+                        self.terminal_relays.insert(target.clone(), (there, r.clone()));
+                        relay = Some(r);
+                        there
+                    }
+                },
+            };
+            let base = format!("http://127.0.0.1:{there}/p/{token}");
+            env = remote_env
+                .into_iter()
+                .map(|(k, v)| {
+                    let v = if k.ends_with("BASE_URL") { base.clone() } else { v };
+                    (k, v)
+                })
+                .collect();
+            if kind == ForgeTerm::Shell {
+                env.push(("FORGE_MODEL".into(), profile.model.clone()));
+            }
+            if let crate::remote::Target::Ssh(_) = &remote.target {
+                reverse.push(format!("{there}:127.0.0.1:{port}"));
+            }
+        }
+        let shell = crate::term_session::remote_command(
+            &remote,
+            &remote_forge_line(&ready.forge, &env, kind, &args),
+            label.into(),
+            trusted,
+            &reverse,
+        );
+        Ok((shell, relay))
     }
 
     /// The current project, when it lives on a remote.
@@ -13366,6 +13480,38 @@ fn parse_projects(json: Option<&str>, old: Option<&str>) -> Vec<ProjectRecord> {
         .collect()
 }
 
+/// The command line a remote terminal runs for a ForgeCLI tab: the
+/// remote's `forge` (`~` expanded there), its environment, then the tab's
+/// program (`forge` with `args`, or a login shell with `forge` on the path).
+fn remote_forge_line(forge: &str, env: &[(String, String)], kind: ForgeTerm, args: &[String]) -> String {
+    use crate::remote::sh_quote;
+    let mut line = String::from(
+        r#"x() { case $1 in "~") printf '%s' "$HOME";; "~/"*) printf '%s/%s' "$HOME" "${1#"~/"}";; *) printf '%s' "$1";; esac; }; "#,
+    );
+    line.push_str(&format!("f=\"$(x {})\"; ", sh_quote(forge)));
+    for (k, v) in env {
+        line.push_str(&format!("export {k}={}; ", sh_quote(v)));
+    }
+    if kind == ForgeTerm::Shell {
+        // Installed as `forge-<version>`: a `forge` beside it, then a shell
+        // that isn't a login shell (a profile could reset PATH).
+        line.push_str(
+            r#"ln -sf "$(basename "$f")" "$(dirname "$f")/forge"; export PATH="$(dirname "$f"):$PATH"; exec "${SHELL:-sh}""#,
+        );
+    } else {
+        line.push_str(r#"exec "$f""#);
+        for a in args {
+            line.push(' ');
+            // A path in the remote's home (the plugin) is expanded there.
+            match a.strip_prefix("~/") {
+                Some(rest) => line.push_str(&format!("\"$HOME\"/{}", sh_quote(rest))),
+                None => line.push_str(&sh_quote(a)),
+            }
+        }
+    }
+    line
+}
+
 /// A remote ForgeCLI's model settings with the secrets taken out: the route
 /// the proxy keeps here (the real base URL, the key as the wire sends it,
 /// custom headers), and the environment the remote gets instead (the key a
@@ -13722,6 +13868,18 @@ fn mock_chats() -> Vec<Chat> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_remote_forgecli_tab_runs_its_forge_with_the_proxied_endpoint() {
+        let env = vec![("FORGE_BASE_URL".to_string(), "http://127.0.0.1:9/p/t".to_string())];
+        let args = vec!["--plugin-dir".to_string(), "~/.forge/plugin-1/forge".to_string(), "--name=it's".to_string()];
+        let line = super::remote_forge_line("~/.forge/bin/forge-1", &env, super::ForgeTerm::Ui, &args);
+        assert!(line.contains("f=\"$(x '~/.forge/bin/forge-1')\"; "), "{line}");
+        assert!(line.contains("export FORGE_BASE_URL=http://127.0.0.1:9/p/t; "), "{line}");
+        assert!(line.ends_with(r#"exec "$f" --plugin-dir "$HOME"/.forge/plugin-1/forge '--name=it'\''s'"#), "{line}");
+        let shell = super::remote_forge_line("/opt/forge", &env, super::ForgeTerm::Shell, &[]);
+        assert!(shell.ends_with(r#"ln -sf "$(basename "$f")" "$(dirname "$f")/forge"; export PATH="$(dirname "$f"):$PATH"; exec "${SHELL:-sh}""#), "{shell}");
+    }
+
     #[test]
     fn projects_keep_their_details_and_the_old_list_still_loads() {
         // The old list: folders only, each on your list.

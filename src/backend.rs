@@ -1311,22 +1311,21 @@ pub fn system_notice(v: &Value) -> Option<(String, bool)> {
                 (format!("Hook {name} ran{said}"), false)
             }
         }
+        // ForgeCLI's own words for the error carry its status and URL: say
+        // why in plain words, when that can be told.
         "api_retry" => {
             let attempt = v["attempt"].as_u64().unwrap_or(1);
-            let wait = v["retry_delay_ms"].as_u64().map(|ms| (ms + 500) / 1000);
+            let wait = v["retry_delay_ms"].as_u64().map(|ms| (ms + 999) / 1000);
             (
                 format!(
-                    "The model call failed{}; trying again{} (attempt {attempt}{}).",
-                    v["error_status"]
-                        .as_u64()
-                        .map(|c| format!(" (HTTP {c})"))
+                    "The model call failed{}; trying again{} (attempt {attempt}).",
+                    v["error"]
+                        .as_str()
+                        .and_then(fallback_reason)
+                        .map(|r| format!(" ({r})"))
                         .unwrap_or_default(),
                     wait.filter(|w| *w > 0)
                         .map(|w| format!(" in {w}s"))
-                        .unwrap_or_default(),
-                    v["max_retries"]
-                        .as_u64()
-                        .map(|m| format!(" of {m}"))
                         .unwrap_or_default(),
                 ),
                 false,
@@ -2036,6 +2035,76 @@ mod tests {
         assert!(message.contains("Use lib.rs instead"), "{message}");
     }
 
+    /// Every flag `forge --help` lists (ForgeCLI `ccr-02a743e1-1gmu4f`).
+    const FORGECLI_FLAGS: &[&str] = &[
+        "--add-dir", "--agent", "--agents", "--allow-dangerously-skip-permissions",
+        "--allowedTools", "--append-system-prompt", "--append-system-prompt-file",
+        "--autocompact", "--autonomous", "--bare", "--betas", "--color", "--continue",
+        "--dangerously-skip-permissions", "--debug", "--debug-file", "--disallowedTools",
+        "--effort", "--exclude-dynamic-system-prompt-sections", "--fallback-model",
+        "--fork-session", "--help", "--include-hook-events", "--include-partial-messages",
+        "--input-format", "--json-schema", "--max-budget-usd", "--max-time", "--max-turns",
+        "--mcp-config", "--model", "--name", "--no-input", "--no-session-persistence",
+        "--no-tui", "--output-format", "--permission-mode", "--permission-prompt-tool",
+        "--permission-prompts", "--plugin-dir", "--print", "--quiet", "--replay-user-messages",
+        "--resume", "--safe-mode", "--sandbox", "--session-id", "--setting-sources",
+        "--settings", "--strict-mcp-config", "--system-prompt", "--system-prompt-file",
+        "--tools", "--verbose", "--version", "--worktree",
+    ];
+
+    #[test]
+    fn every_forgecli_flag_reaches_forgecli() {
+        let flag = |a: &String| a.split('=').next().unwrap_or(a).to_string();
+        let mut covered: std::collections::BTreeSet<String> = Default::default();
+        // What every chat's process is started with (`launch`).
+        let p: Profile = serde_json::from_value(json!({"name":"x","baseUrl":"https://gw.example/v1","wire":"anthropic","model":"m1","auth":{"type":"none"}})).unwrap();
+        let id = "0b9a1f2e-3c4d-4e5f-8a6b-7c8d9e0f1a2b";
+        for c in [Conversation::New(id), Conversation::Fork { from: id, id }] {
+            let l = launch(&p, ModeId::Manual, true, c).unwrap();
+            covered.extend(l.args.iter().filter(|a| a.starts_with("--")).map(flag));
+        }
+        covered.insert("--print".into()); // passed as `-p`
+        // Every `forge.*` setting on at once (`app_settings::Settings::forge_args`).
+        let all = crate::app_settings::Settings::parse(&json!({
+            "forge.fallbackModel": "m2", "forge.maxTurns": 5, "forge.maxBudgetUsd": 1.0,
+            "forge.maxTimeMinutes": 5, "forge.worktree": true, "forge.autonomous": true,
+            "forge.addDirs": ["/a"], "forge.agent": "r", "forge.tools": ["Read"],
+            "forge.allowedTools": ["Read"], "forge.disallowedTools": ["Write"],
+            "forge.sandbox": "off", "forge.systemPrompt": "p", "forge.systemPromptFile": "/f",
+            "forge.excludeDynamicSystemPromptSections": true, "forge.strictMcpConfig": true,
+            "forge.settingSources": "user", "forge.bare": true, "forge.safeMode": true,
+            "forge.betas": ["b"], "forge.debug": "", "forge.debugFile": "/d",
+            "forge.autocompact": "auto", "forge.includeHookEvents": true,
+            "forge.noSessionPersistence": true, "forge.noInput": true,
+            "forge.jsonSchema": {"type": "object"}, "forge.agents": {"r": {"prompt": "x"}},
+            "forge.mcpConfig": ["/m.json"], "forge.pluginDirs": ["/p"],
+            "forge.permissionPrompts": "none", "forge.quiet": true, "forge.color": "never"
+        }).to_string());
+        covered.extend(all.forge_args(true).iter().map(flag));
+        // `forge.verbose` (quiet wins when both are set) and a prompt file
+        // (a prompt written out wins).
+        let verbose = crate::app_settings::Settings::parse(
+            r#"{"forge.verbose": true, "forge.systemPromptFile": "/f"}"#,
+        );
+        covered.extend(verbose.forge_args(true).iter().map(flag));
+        // Set by the app around `launch` (`AppState::start_session`,
+        // `AppState::forge_terminal`): the model menu's effort, the chat
+        // title, the settings profile, design and browser tools, the design
+        // prompt (with `forge.appendSystemPrompt` joining Forge's own), and in
+        // the dock the folder's latest conversation and the line prompt.
+        covered.extend(
+            ["--effort", "--name", "--settings", "--mcp-config", "--append-system-prompt-file",
+             "--continue", "--no-tui"]
+                .map(String::from),
+        );
+        // Bypass permissions is ForgeCLI's own skip; `--help` and
+        // `--version` answer in the dock's ForgeCLI shell.
+        covered.extend(["--dangerously-skip-permissions", "--help", "--version"].map(String::from));
+        let missing: Vec<&&str> =
+            FORGECLI_FLAGS.iter().filter(|f| !covered.contains(**f)).collect();
+        assert!(missing.is_empty(), "not reached: {missing:?}");
+    }
+
     #[test]
     fn the_endpoint_goes_in_variables_never_arguments() {
         let p: Profile = serde_json::from_value(json!({"name":"x","baseUrl":"https://gw.example/v1","wire":"anthropic","model":"m1","auth":{"type":"bearer","token":"${env:FORGE_GPUI_TEST_KEY}"}})).unwrap();
@@ -2197,8 +2266,9 @@ mod tests {
         let (t, _) = notice(json!({"type":"system","subtype":"hook_response","hook_event":"Stop","outcome":"success"})).unwrap();
         assert_eq!(t, "Hook Stop ran");
         assert!(notice(json!({"type":"system","subtype":"hook_started","hook_name":"x"})).is_none());
-        let (t, _) = notice(json!({"type":"system","subtype":"api_retry","attempt":2,"max_retries":5,"retry_delay_ms":4000,"error_status":529})).unwrap();
-        assert_eq!(t, "The model call failed (HTTP 529); trying again in 4s (attempt 2 of 5).");
+        // As ForgeCLI's engine sends it (`forge-engine`, `api_retry`).
+        let (t, _) = notice(json!({"type":"system","subtype":"api_retry","attempt":2,"retry_delay_ms":3500,"error":"HTTP 529 (overloaded_error) from http://x/v1/messages: Overloaded"})).unwrap();
+        assert_eq!(t, "The model call failed (it was overloaded); trying again in 4s (attempt 2).");
         let (t, err) = notice(json!({"type":"system","subtype":"background_exit","shells":[{"id":"b1","command":"cargo build","exit_code":101,"seconds":40}]})).unwrap();
         assert_eq!(t, "In the background: cargo build exited with 101 after 40s.");
         assert!(!err);

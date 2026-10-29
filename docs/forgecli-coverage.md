@@ -141,29 +141,47 @@ terminal UI run there, in the dock (below), as do all of these.
 ## ForgeCLI in the terminal dock
 
 What only a terminal has runs in the app's own terminal, with the chats'
-model, endpoint, key, mode and settings (palette):
+model, endpoint, mode and settings (palette). On WSL, SSH and container
+projects the tab runs the remote's ForgeCLI in the project's folder, and its
+model calls come back through the app's proxy (an SSH `-R` forward, or one
+ForgeCLI relay per distro or container, waited for before the tab opens), so
+the real key stays on this computer, as it does for those chats.
 
 | Palette | Runs |
 |---|---|
-| Open this chat in ForgeCLI's terminal UI | `forge --resume <chat>`: the TUI and everything only it has (themes, key bindings, status line, `/terminal-setup`, `/color`, `/focus`, `/copy`...). The chat's own process steps aside so one process writes the conversation; the chat resumes it on its next message (close the tab first) |
-| New terminal with ForgeCLI ready | Your shell, `forge` on the path, `FORGE_MODEL` and the endpoint set: one-shot runs (`forge -p --output-format text\|json`, `--json-schema`, `--quiet`, `--no-input`, `--color`), `forge completion <shell>`, `forge mcp add/list/remove`, `forge mcp serve` (Forge's tools for another MCP client) and any other subcommand |
+| Open this chat in ForgeCLI's terminal UI | `forge --resume <chat> --name <title>` (with no chat open, `--continue`; `forge.noTui` for the line prompt): the TUI and everything only it has (themes, key bindings, status line, `/terminal-setup`, `/color`, `/focus`, `/copy`...). The chat's own process steps aside so one process writes the conversation; the chat resumes it on its next message (close the tab first) |
+| New terminal with ForgeCLI ready | A shell with `forge` on the path, `FORGE_MODEL` and the endpoint set: one-shot runs (`forge -p --output-format text\|json`, `--json-schema`, `--quiet`, `--no-input`, `--color`), `forge --help`, `--version`, `forge completion <shell>`, `forge config get/paths`, `forge mcp add/add-json/remove/get/approve/list`, `forge mcp serve` |
 | Check ForgeCLI and the endpoint | `forge doctor --probe` |
-| Show ForgeCLI's merged settings | `forge config` |
+| Show ForgeCLI's merged settings | `forge config list` |
 
-`forge relay` carries the browser, design tools and model calls to WSL and
-container projects (`src/relay.rs`), so those chats need no open port.
+`forge relay` also carries the browser, design tools and model calls of WSL
+and container chats (`src/relay.rs`). `forge mcp list` is the MCP editor's
+check, and its Approve writes what `forge mcp approve` does.
 
-Seen live on Linux: the TUI resumed the chat's session (`/status` showed its
-id, endpoint and project), a one-shot `--output-format json` run and
-`forge completion bash` in the shell, and `forge doctor --probe` reaching
-the endpoint.
+## Checked
+
+- `backend::tests::every_forgecli_flag_reaches_forgecli`: each of the 56
+  flags `forge --help` lists reaches ForgeCLI from a chat's launch, a
+  `forge.*` setting, or the app around them.
+- Live on Linux, local project: every new setting at once on one chat (the
+  process took them all, the turn ran, the debug log was written); a
+  structured result under the reply; retry lines in an autonomous run on an
+  overloaded model; the TUI resumed the chat's session (`/status`); the
+  shell ran a one-shot JSON run and `forge completion bash`; `forge doctor
+  --probe` and `forge config list`.
+- Live on Linux, container project (`container://forgebox/root/proj`): a
+  chat; the TUI on that chat in the container (the model saw both the chat's
+  and the TUI's message); `forge doctor --probe` through the relay (the key
+  it saw was the placeholder); the shell ran `forge --version`, `forge
+  config paths` and a one-shot JSON run.
 
 ## Notes
 
-- `--include-hook-events` is passed, and `hook_response` lines are read, but
-  this ForgeCLI branch doesn't emit hook events yet: nothing shows until it
-  does. `api_retry` lines are read the same way.
+- `--include-hook-events` is passed with `forge.includeHookEvents` and
+  `hook_response` lines are read, but ForgeCLI at this commit declares the
+  flag and emits nothing for it (`include_hook_events` appears only in
+  `forge-cli/src/args.rs`); hooks still run, and what they say to the model
+  shows in its turn.
+- `api_retry` comes only from autonomous runs (`forge.autonomous`).
 - ForgeCLI only fills `structured_output` when the final reply is JSON that
   parses (`forge-engine`, `TurnResult`).
-- The terminal tabs open for projects on this computer; a remote project's
-  chats still get every flag above.
