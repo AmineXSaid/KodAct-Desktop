@@ -182,8 +182,12 @@ check, and its Approve writes what `forge mcp approve` does.
 - Live on Linux, hooks: a PreToolUse hook's `systemMessage` and a
   PostToolUse hook's error (exit 3) each showed as a line in the chat,
   between the tool steps they ran on.
-- WSL runs only on Windows: its tabs use the same relay path as containers
-  (checked above) with `wsl.exe` in place of `docker`, not run here.
+- WSL runs only on Windows, so not live here: its tabs use the same relay
+  path as containers (live above) with `wsl.exe` in place of `docker`.
+  `state::tests::a_wsl_forgecli_tab_runs_its_forge_in_the_project` checks
+  the command (`wsl.exe -d <distro> --exec sh …`) and runs its script with a
+  real `sh` and a stand-in `forge`: the arguments, `COLORFGBG` and the
+  project's folder all arrive.
 
 ## Notes
 

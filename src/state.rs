@@ -13884,6 +13884,39 @@ mod tests {
     }
 
     #[test]
+    fn a_wsl_forgecli_tab_runs_its_forge_in_the_project() {
+        use crate::remote::{Remote, Target};
+        let r = Remote { target: Target::Wsl("Ubuntu".into()), path: "/tmp".into() };
+        // A stand-in `forge` that says what it was run with.
+        let dir = std::env::temp_dir().join(format!("forge-wsl-tab-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let fake = dir.join("forge-1");
+        std::fs::write(&fake, "#!/bin/sh\necho \"args:$*\"; echo \"bg:$COLORFGBG\"; pwd\n").unwrap();
+        let env = vec![("COLORFGBG".to_string(), "0;15".to_string())];
+        let args = vec!["--resume".to_string(), "abc".to_string(), "--name=it's".to_string()];
+        let line = super::remote_forge_line(&fake.to_string_lossy(), &env, super::ForgeTerm::Ui, &args);
+        let tab = crate::term_session::remote_command(&r, &line, "ForgeCLI".into(), false, &[]);
+        // Into the distro through wsl.exe, a script and the project's folder.
+        assert_eq!(tab.program, "wsl.exe");
+        assert_eq!(&tab.args[..4], ["-d", "Ubuntu", "--exec", "sh"]);
+        assert_eq!(tab.args.last().map(String::as_str), Some("/tmp"));
+        // The script itself, as the distro's sh runs it.
+        if cfg!(unix) {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+            }
+            let out = std::process::Command::new("sh").args(&tab.args[4..]).output().unwrap();
+            let out = String::from_utf8_lossy(&out.stdout).to_string();
+            assert!(out.contains("args:--resume abc --name=it's"), "{out}");
+            assert!(out.contains("bg:0;15"), "{out}");
+            assert!(out.trim_end().ends_with("/tmp"), "{out}");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn projects_keep_their_details_and_the_old_list_still_loads() {
         // The old list: folders only, each on your list.
         let old = super::parse_projects(None, Some("/a\n\n/b\n"));
