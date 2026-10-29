@@ -267,24 +267,14 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let was_open = self.state.read(cx).terminal_open;
         self.state.update(cx, |s, cx| {
             s.terminal_open = true;
             s.save_window();
             cx.notify();
         });
-        let dock = self.terminal.clone();
-        if was_open {
-            dock.update(cx, |d, cx| d.open(Some(shell), window, cx));
-        } else {
-            // A full-screen program draws for the size it starts
-            // at: start it once the dock has been laid out.
-            window.on_next_frame(move |window, _| {
-                window.on_next_frame(move |window, cx| {
-                    dock.update(cx, |d, cx| d.open(Some(shell), window, cx));
-                });
-            });
-        }
+        // A full-screen program draws for the size it starts at: it starts
+        // once the dock, opening or not, has its size.
+        self.terminal.update(cx, |d, cx| d.open_settled(shell, window, cx));
     }
 
     /// The width the dock asks for: its share of the window, held between

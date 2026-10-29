@@ -1,0 +1,271 @@
+From 0183e132f536eae98ce983664520b88a4edc454c Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 29 Oct 2026 15:51:54 +0000
+Subject: [PATCH] Ember logo: Forge Desktop's ink and copper; whole in narrow
+ panes
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- The F-and-cube mark takes Forge Desktop's colours, per background: the
+  F in ink (paper on dark), the cube's top copper over an ink (paper)
+  face and a warm grey one. The brand role (wordmark, keys, prompt mark,
+  status glyph) is the same copper.
+- A pane 41 to 57 columns wide (a desktop's side terminal) shows the small
+  logo, its keys two to a line, instead of none.
+- Lines beside the logo never wrap (a wrapped line opened a gap in it):
+  the endpoint and the folder keep their ends (`…/live/proj`).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01NYxCfae2TEE9hkXEzRbW6j
+---
+ crates/forge-cli/src/tui/brand.rs   | 127 +++++++++++++++++++++-------
+ crates/forge-cli/src/tui/palette.rs |  15 ++--
+ 2 files changed, 106 insertions(+), 36 deletions(-)
+
+diff --git a/crates/forge-cli/src/tui/brand.rs b/crates/forge-cli/src/tui/brand.rs
+index d74e2f6..ec7e0d6 100644
+--- a/crates/forge-cli/src/tui/brand.rs
++++ b/crates/forge-cli/src/tui/brand.rs
+@@ -1,8 +1,8 @@
+ //! Forge's mark in the terminal: the F-and-cube logo, drawn as a pixel sprite
+ //! in half blocks (each cell is two pixels stacked, so the pixels come out
+ //! square), and the two screens it heads: the welcome banner and the
+-//! first-run card. The sprite and its inks are Forge for VS Code's
+-//! (`terminalBrand.ts`), in its Pajamas purples.
++//! first-run card. The sprite is Forge for VS Code's (`terminalBrand.ts`);
++//! its inks are Forge Desktop's ember: ink, warm grey and copper.
+ 
+ use ratatui::style::{Color, Modifier, Style};
+ use ratatui::text::{Line, Span};
+@@ -50,18 +50,29 @@ pub const MARK_SMALL: [&str; 12] = [
+     "OOOOO.OOOO..",
+ ];
+ 
+-/// The logo's inks: hex, and the ANSI colour for 16-colour terminals.
+-fn mark_ink(c: char) -> Option<(u32, Color)> {
+-    Some(match c {
+-        'O' => (0x27243e, Color::Reset),
+-        'H' => (0xac93e6, Color::LightMagenta),
+-        'F' => (0x7b58cf, Color::Magenta),
+-        'D' => (0x5c47a6, Color::Magenta),
+-        'T' => (0xe1d8f9, Color::White),
+-        'G' => (0xf4f0ff, Color::White),
+-        'L' => (0x9475db, Color::LightMagenta),
+-        'S' => (0x493c83, Color::Magenta),
+-        'E' => (0x342d59, Color::Magenta),
++/// The logo's inks for a light or dark background: hex, and the ANSI colour
++/// for 16-colour terminals. Forge's ember: the F in ink (paper on a dark
++/// background), the cube as Forge Desktop's mark, a copper top over an ink
++/// (paper) face and a warm grey one, so the faces part by lightness.
++fn mark_ink(c: char, light: bool) -> Option<(u32, Color)> {
++    Some(match (c, light) {
++        ('O', _) => (0x1e1e1e, Color::Reset),
++        ('H', true) => (0x5a554f, Color::DarkGray),
++        ('F', true) => (0x2b2825, Color::Black),
++        ('D', true) => (0x1e1e1e, Color::Black),
++        ('T', true) => (0x93401c, Color::Yellow),
++        ('G', true) => (0xb4532a, Color::Yellow),
++        ('L', true) => (0x1e1e1e, Color::Black),
++        ('S', true) => (0x8b857e, Color::DarkGray),
++        ('E', true) => (0x5a554f, Color::DarkGray),
++        ('H', false) => (0xf5f2f0, Color::White),
++        ('F', false) => (0xd9d1cb, Color::White),
++        ('D', false) => (0xa8a29b, Color::Gray),
++        ('T', false) => (0xe2895b, Color::LightYellow),
++        ('G', false) => (0xf3b694, Color::LightYellow),
++        ('L', false) => (0xf0e9e5, Color::White),
++        ('S', false) => (0x7d776f, Color::DarkGray),
++        ('E', false) => (0x5a554f, Color::DarkGray),
+         _ => return None,
+     })
+ }
+@@ -69,14 +80,14 @@ fn mark_ink(c: char) -> Option<(u32, Color)> {
+ /// A sprite in half blocks. The outline is drawn only where it reads: on a
+ /// light background, in 256 or 24-bit colour. Without colour the shape is
+ /// drawn in the terminal's own colour.
+-fn sprite(rows: &[&str], ink: fn(char) -> Option<(u32, Color)>, t: &Theme) -> Vec<Line<'static>> {
++fn sprite(rows: &[&str], ink: fn(char, bool) -> Option<(u32, Color)>, t: &Theme) -> Vec<Line<'static>> {
+     let outline = t.color && t.light && t.depth != Depth::Ansi16;
+     let color_of = |c: Option<char>| -> Option<Color> {
+         let c = c?;
+         if c == 'O' && !outline {
+             return None;
+         }
+-        let (hex, ansi) = ink(c)?;
++        let (hex, ansi) = ink(c, t.light)?;
+         if !t.color {
+             return Some(Color::Reset);
+         }
+@@ -129,9 +140,10 @@ pub fn mark(t: &Theme, small: bool) -> Vec<Line<'static>> {
+ /// The logo at text size, for one-line places: `▛◆`.
+ pub fn mark_inline(t: &Theme) -> Vec<Span<'static>> {
+     let (f, cube) = if t.color {
++        let ink = |c| mark_ink(c, t.light).map(|(hex, ansi)| palette::ink(hex, t.depth, ansi));
+         (
+-            Style::default().fg(palette::ink(0x7759c2, t.depth, Color::Magenta)),
+-            Style::default().fg(palette::ink(0xcbbbf2, t.depth, Color::LightMagenta)),
++            ink('F').map(|c| Style::default().fg(c)).unwrap_or_default(),
++            ink('T').map(|c| Style::default().fg(c)).unwrap_or_default(),
+         )
+     } else {
+         (Style::default(), Style::default())
+@@ -170,6 +182,25 @@ fn trim_end(mut l: Line<'static>) -> Line<'static> {
+     l
+ }
+ 
++/// `s` in at most `max` columns, its end kept: `…/live/proj`.
++fn keep_end(s: &str, max: usize) -> String {
++    if width(s) <= max {
++        return s.to_string();
++    }
++    let mut tail: Vec<char> = vec![];
++    let mut w = 1;
++    for c in s.chars().rev() {
++        let cw = width(&c.to_string());
++        if w + cw > max {
++            break;
++        }
++        w += cw;
++        tail.push(c);
++    }
++    tail.reverse();
++    format!("…{}", tail.into_iter().collect::<String>())
++}
++
+ /// What the welcome banner says.
+ pub struct Welcome<'a> {
+     pub version: &'a str,
+@@ -187,8 +218,12 @@ pub const KEYS: [(&str, &str); 4] = [("/", "commands"), ("@", "files"), ("!", "s
+ pub const WELCOME_LINE: &str = "What to do first? Ask about this codebase or we can start writing code.";
+ 
+ fn keys_line(t: &Theme, gap: usize) -> Line<'static> {
++    keys_of(t, &KEYS, gap)
++}
++
++fn keys_of(t: &Theme, keys: &[(&str, &str)], gap: usize) -> Line<'static> {
+     let mut spans = vec![];
+-    for (i, (k, what)) in KEYS.iter().enumerate() {
++    for (i, (k, what)) in keys.iter().enumerate() {
+         if i > 0 {
+             spans.push(Span::raw(" ".repeat(gap)));
+         }
+@@ -207,21 +242,37 @@ pub fn welcome(t: &Theme, w: &Welcome, cols: usize) -> Vec<Line<'static>> {
+         Span::styled("ForgeCLI", t.brand_strong().add_modifier(Modifier::BOLD)),
+         Span::styled(format!("  v{}", w.version), t.dim()),
+     ]);
+-    let runs = Line::from(vec![
+-        Span::styled(w.model.to_string(), t.bold()),
+-        Span::styled(" on ", t.dim()),
+-        Span::raw(w.endpoint.to_string()),
+-    ]);
+-    let cwd = Line::from(Span::styled(w.cwd.to_string(), t.dim()));
++    // Beside the logo a line never wraps (a wrapped line would open a gap
++    // in the logo): the endpoint and the folder keep their ends.
++    let runs_in = |room: usize| {
++        let endpoint = keep_end(w.endpoint, room.saturating_sub(width(w.model) + 4).max(8));
++        Line::from(vec![
++            Span::styled(w.model.to_string(), t.bold()),
++            Span::styled(" on ", t.dim()),
++            Span::raw(endpoint),
++        ])
++    };
++    let cwd_in = |room: usize| Line::from(Span::styled(keep_end(w.cwd, room), t.dim()));
++    // Room beside an art `art_w` wide: two columns in, three between.
++    let room = |art_w: usize| cols.saturating_sub(2 + art_w + 3);
+     let mut out = vec![Line::default()];
+     let text_w = [width(w.model) + 4 + width(w.endpoint), width(w.cwd), 41].into_iter().max().unwrap_or(0);
+     if cols >= 16 + 5 + text_w.min(56) && cols >= 64 {
+-        let text = vec![Line::default(), title, runs, cwd, Line::default(), keys_line(t, 3)];
++        let r = room(16);
++        let text = vec![Line::default(), title, runs_in(r), cwd_in(r), Line::default(), keys_line(t, 3)];
+         out.extend(beside(mark(t, false), 16, text));
+     } else if cols >= 12 + 5 + 41 {
+-        let text = vec![title, runs, cwd, Line::default(), keys_line(t, 2)];
++        let r = room(12);
++        let text = vec![title, runs_in(r), cwd_in(r), Line::default(), keys_line(t, 2)];
++        out.extend(beside(mark(t, true), 12, text));
++    } else if cols >= 12 + 5 + 24 {
++        // A narrow pane (a side terminal): the small logo still, the keys
++        // two to a line.
++        let r = room(12);
++        let text = vec![title, runs_in(r), cwd_in(r), keys_of(t, &KEYS[..2], 2), keys_of(t, &KEYS[2..], 2)];
+         out.extend(beside(mark(t, true), 12, text));
+     } else {
++        let (runs, cwd) = (runs_in(usize::MAX), cwd_in(usize::MAX));
+         for l in [title, runs, cwd] {
+             let mut spans = vec![Span::raw("  ")];
+             spans.extend(l.spans);
+@@ -408,9 +459,14 @@ mod tests {
+         assert_eq!(m.len(), 8);
+         assert!(m.iter().all(|l| l.spans.iter().map(|s| width(&s.content)).sum::<usize>() <= 16));
+         assert_eq!(mark(&DARK, true).len(), 6);
+-        // The F's top bar is a full row of upper/lower halves in brand purples.
++        // The F's top bar is a full row in the F's paper on a dark background.
+         let top = &m[1];
+-        assert!(top.spans.iter().any(|s| s.style.fg == Some(Color::Rgb(0x7b, 0x58, 0xcf))), "{top:?}");
++        assert!(top.spans.iter().any(|s| s.style.fg == Some(Color::Rgb(0xd9, 0xd1, 0xcb))), "{top:?}");
++        // On a light one the F is ink, and the cube's top is copper.
++        let light = mark(&Theme { light: true, ..DARK }, false);
++        assert!(light[1].spans.iter().any(|s| s.style.fg == Some(Color::Rgb(0x2b, 0x28, 0x25))), "{light:?}");
++        let copper = Some(Color::Rgb(0x93, 0x40, 0x1c));
++        assert!(light.iter().flat_map(|l| &l.spans).any(|s| s.style.fg == copper || s.style.bg == copper));
+     }
+ 
+     #[test]
+@@ -438,6 +494,19 @@ mod tests {
+         }
+         assert!(plain(&welcome(&DARK, &w, 100)).join("\n").contains("/ commands   @ files   ! shell   ? shortcuts"));
+         assert!(plain(&welcome(&DARK, &w, 40)).iter().all(|l| !l.contains('▀')), "no logo when narrow");
++        // A side pane (the desktop's terminal dock): the small logo, the keys two to a line.
++        let side = plain(&welcome(&DARK, &w, 54));
++        assert!(side.iter().any(|l| l.contains('▀')), "{side:?}");
++        assert!(side.iter().any(|l| l.ends_with("/ commands  @ files")), "{side:?}");
++        assert!(side.iter().any(|l| l.ends_with("! shell  ? shortcuts")), "{side:?}");
++        assert!(side.iter().all(|l| width(l) <= 54), "{side:?}");
++        // A long folder stays on its line beside the logo, its end kept.
++        let deep = Welcome { cwd: "/tmp/claude-0/-home-user-forge-gpui/3b3af639/scratchpad/live/proj", ..w };
++        let lines = plain(&welcome(&DARK, &deep, 54));
++        assert!(lines.iter().any(|l| l.ends_with("/live/proj") && l.contains('…')), "{lines:?}");
++        let art_rows = lines.iter().filter(|l| l.contains('▀') || l.contains('▄') || l.contains('█')).count();
++        assert_eq!(art_rows, 6, "the small logo whole: {lines:?}");
++        assert_eq!(keep_end("abcdef", 4), "…def");
+     }
+ 
+     #[test]
+diff --git a/crates/forge-cli/src/tui/palette.rs b/crates/forge-cli/src/tui/palette.rs
+index 720e626..b0ea099 100644
+--- a/crates/forge-cli/src/tui/palette.rs
++++ b/crates/forge-cli/src/tui/palette.rs
+@@ -94,10 +94,11 @@ impl Role {
+ // The roles, each from a Forge token (`src/webview/src/styles/forge-tokens.css`
+ // in Forge for VS Code) and its Pajamas stop.
+ 
+-/// `--forge-brand`: the logo, the prompt mark, the spinner, selections.
+-pub const BRAND: Role = role(0x9475db, 0x7759c2, Color::LightMagenta, Color::Magenta);
+-/// `--forge-brand-hover`: the brand a step brighter, for emphasis.
+-pub const BRAND_STRONG: Role = role(0xac93e6, 0x5c47a6, Color::LightMagenta, Color::Magenta);
++/// The brand: the prompt mark, the spinner, selections, the keys. Forge
++/// Desktop's copper (its `mark_top` and link), as the logo's cube top.
++pub const BRAND: Role = role(0xe2895b, 0x93401c, Color::LightYellow, Color::Yellow);
++/// The brand a step brighter, for emphasis: the wordmark.
++pub const BRAND_STRONG: Role = role(0xeb9d74, 0x86391a, Color::LightYellow, Color::Yellow);
+ /// `--forge-text-muted`: secondary text.
+ pub const MUTED: Role = role(0xa5a3a3, 0x646163, Color::Gray, Color::DarkGray);
+ /// `--forge-text-subtle`: placeholders, hints.
+@@ -204,9 +205,9 @@ mod tests {
+ 
+     #[test]
+     fn roles_differ_for_light_and_dark_backgrounds() {
+-        assert_eq!(BRAND.color(Depth::True, false), Color::Rgb(0x94, 0x75, 0xdb));
+-        assert_eq!(BRAND.color(Depth::True, true), Color::Rgb(0x77, 0x59, 0xc2));
+-        assert_eq!(BRAND.color(Depth::Ansi16, false), Color::LightMagenta);
++        assert_eq!(BRAND.color(Depth::True, false), Color::Rgb(0xe2, 0x89, 0x5b));
++        assert_eq!(BRAND.color(Depth::True, true), Color::Rgb(0x93, 0x40, 0x1c));
++        assert_eq!(BRAND.color(Depth::Ansi16, false), Color::LightYellow);
+         assert!(matches!(BRAND.color(Depth::Ansi256, false), Color::Indexed(_)));
+     }
+ }
+-- 
+2.43.0
+

@@ -207,6 +207,32 @@ impl TerminalDock {
         cx.notify();
     }
 
+    /// Start `shell` once the grid has held one size for two frames: a
+    /// full-screen program (ForgeCLI's terminal UI) draws for the size it
+    /// starts at, and a dock that is still opening hasn't got its size yet.
+    /// After a second it starts anyway.
+    pub fn open_settled(&mut self, shell: Shell, window: &mut Window, cx: &mut Context<Self>) {
+        self.settle(shell, gpui::Size::default(), 0, window, cx);
+    }
+
+    fn settle(
+        &mut self,
+        shell: Shell,
+        last: gpui::Size<Pixels>,
+        frames: u32,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let now = self.grid.get().size;
+        if (now.width > px(0.) && now == last) || frames >= 60 {
+            return self.open(Some(shell), window, cx);
+        }
+        window.refresh();
+        cx.on_next_frame(window, move |this, window, cx| {
+            this.settle(shell, now, frames + 1, window, cx)
+        });
+    }
+
     /// "Show in terminal": an Agent tab with a command and what it printed,
     /// read-only, badged with where it ran.
     pub fn show_feed(
@@ -839,15 +865,33 @@ impl TerminalDock {
         let (cw, ch) = cell(window, &t);
         let focused = self.focus.is_focused(window);
         let Some(s) = self.session().cloned() else {
+            // The grid's place is measured here too, so the first terminal
+            // starts at the size it will have (`open_settled`).
+            let grid = self.grid.clone();
             return div()
                 .flex_1()
-                .min_w_0()
-                .p(t.space.lg)
-                .text_color(t.colors.text_muted)
+                .min_h_0()
+                .flex()
+                .px(t.space.sm)
+                .pt(t.space.xs)
                 .child(
-                    self.error
-                        .clone()
-                        .unwrap_or_else(|| "No terminal open.".into()),
+                    div()
+                        .relative()
+                        .flex_1()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .child(
+                            canvas(move |bounds, _, _| grid.set(bounds), |_, _, _, _| {})
+                                .absolute()
+                                .inset_0(),
+                        )
+                        .child(
+                            div().p(t.space.md).text_color(t.colors.text_muted).child(
+                                self.error
+                                    .clone()
+                                    .unwrap_or_else(|| "No terminal open.".into()),
+                            ),
+                        ),
                 )
                 .into_any_element();
         };
@@ -858,6 +902,10 @@ impl TerminalDock {
         let sel_bg = k.prompt.opacity(0.3);
         let mono = t.font_mono.clone();
         let mut rows: Vec<AnyElement> = vec![];
+        // Block elements (`▀ ▄ █ ▛`…), drawn as cell-filling rectangles as a
+        // terminal draws them, not as font glyphs, which fall short of the
+        // line height and leave stripes: (row, column, part, colour).
+        let mut blocks: Vec<(usize, usize, Part, Hsla)> = vec![];
         let (cursor, cursor_char, cursor_row) = {
             let term = s.term.lock();
             let content = term.renderable_content();
@@ -897,7 +945,16 @@ impl TerminalDock {
                 {
                     b = sel_bg;
                 }
-                let ch_ = if c.cell.c == '\0' { ' ' } else { c.cell.c };
+                let mut ch_ = if c.cell.c == '\0' { ' ' } else { c.cell.c };
+                let block = block_parts(ch_);
+                if let Some(parts) = &block {
+                    let col = c.point.column.0;
+                    if b != bg {
+                        blocks.push((row, col, (0., 0., 1., 1., 1.), b));
+                    }
+                    blocks.extend(parts.iter().map(|p| (row, col, *p, f)));
+                    ch_ = ' ';
+                }
                 let len = ch_.len_utf8();
                 text[row].push(ch_);
                 let mut fnt = font(mono.clone());
@@ -907,7 +964,7 @@ impl TerminalDock {
                 if flags.contains(Flags::ITALIC) {
                     fnt.style = gpui::FontStyle::Italic;
                 }
-                let back = (b != bg).then_some(b);
+                let back = (b != bg && block.is_none()).then_some(b);
                 let underline =
                     flags
                         .intersects(Flags::ALL_UNDERLINES)
@@ -1009,6 +1066,19 @@ impl TerminalDock {
                         .inset_0(),
                     )
                     .children(rows)
+                    .children(blocks.into_iter().map(|(row, col, (x, y, w, h, a), color)| {
+                        // Edges on whole pixels, so neighbouring cells meet.
+                        let (cw, ch) = (f32::from(cw), f32::from(ch));
+                        let (l, r) = ((cw * (col as f32 + x)).round(), (cw * (col as f32 + x + w)).round());
+                        let (t_, b_) = ((ch * (row as f32 + y)).round(), (ch * (row as f32 + y + h)).round());
+                        div()
+                            .absolute()
+                            .left(px(l))
+                            .top(px(t_))
+                            .w(px(r - l))
+                            .h(px(b_ - t_))
+                            .bg(color.opacity(a))
+                    }))
                     .children(cursor.map(|(col, row)| {
                         let at = div()
                             .absolute()
@@ -1130,6 +1200,52 @@ impl Render for TerminalDock {
                 }
             }))
     }
+}
+
+/// A part of a cell, as fractions of it: x, y, width, height, and opacity.
+type Part = (f32, f32, f32, f32, f32);
+
+/// The rectangles a block element (U+2580–U+259F) fills in its cell, or
+/// None for any other character.
+fn block_parts(c: char) -> Option<Vec<Part>> {
+    let full = |a: f32| vec![(0., 0., 1., 1., a)];
+    // Quadrants: upper left, upper right, lower left, lower right.
+    let quads = |ul: bool, ur: bool, ll: bool, lr: bool| {
+        [(ul, 0., 0.), (ur, 0.5, 0.), (ll, 0., 0.5), (lr, 0.5, 0.5)]
+            .into_iter()
+            .filter(|(on, _, _)| *on)
+            .map(|(_, x, y)| (x, y, 0.5, 0.5, 1.))
+            .collect::<Vec<Part>>()
+    };
+    let n = c as u32;
+    Some(match n {
+        0x2580 => vec![(0., 0., 1., 0.5, 1.)],
+        // Lower eighths: ▁ to ▇.
+        0x2581..=0x2587 => {
+            let h = (n - 0x2580) as f32 / 8.;
+            vec![(0., 1. - h, 1., h, 1.)]
+        }
+        0x2588 => full(1.),
+        // Left eighths: ▉ (seven) to ▏ (one).
+        0x2589..=0x258f => vec![(0., 0., (0x2590 - n) as f32 / 8., 1., 1.)],
+        0x2590 => vec![(0.5, 0., 0.5, 1., 1.)],
+        0x2591 => full(0.25),
+        0x2592 => full(0.5),
+        0x2593 => full(0.75),
+        0x2594 => vec![(0., 0., 1., 0.125, 1.)],
+        0x2595 => vec![(0.875, 0., 0.125, 1., 1.)],
+        0x2596 => quads(false, false, true, false),
+        0x2597 => quads(false, false, false, true),
+        0x2598 => quads(true, false, false, false),
+        0x2599 => quads(true, false, true, true),
+        0x259a => quads(true, false, false, true),
+        0x259b => quads(true, true, true, false),
+        0x259c => quads(true, true, false, true),
+        0x259d => quads(false, true, false, false),
+        0x259e => quads(false, true, true, false),
+        0x259f => quads(false, true, true, true),
+        _ => return None,
+    })
 }
 
 /// Keys that keep their app meaning inside the terminal.
@@ -1298,6 +1414,20 @@ fn resolve(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn block_elements_fill_their_cells() {
+        assert_eq!(block_parts('▀'), Some(vec![(0., 0., 1., 0.5, 1.)]));
+        assert_eq!(block_parts('█'), Some(vec![(0., 0., 1., 1., 1.)]));
+        assert_eq!(block_parts('▄'), Some(vec![(0., 0.5, 1., 0.5, 1.)]));
+        assert_eq!(block_parts('▌'), Some(vec![(0., 0., 0.5, 1., 1.)]));
+        // ▛: every quadrant but the lower right.
+        assert_eq!(block_parts('▛').unwrap().len(), 3);
+        assert!(!block_parts('▛').unwrap().contains(&(0.5, 0.5, 0.5, 0.5, 1.)));
+        assert_eq!(block_parts('▒'), Some(vec![(0., 0., 1., 1., 0.5)]));
+        assert_eq!(block_parts('a'), None);
+        assert_eq!(block_parts('─'), None);
+    }
     use gpui::Modifiers;
 
     fn k(key: &str, ctrl: bool, shift: bool, alt: bool, ch: Option<&str>) -> Keystroke {

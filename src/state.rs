@@ -11071,6 +11071,9 @@ impl AppState {
             args.push(format!("--append-system-prompt={extra}"));
         }
         let mut env = launch.env;
+        // The dock's background, as terminals say it (`fg;bg`): ForgeCLI picks
+        // its light or dark inks, the logo's among them, from it.
+        env.push(("COLORFGBG".into(), if self.dark { "15;0" } else { "0;15" }.into()));
         let label = match kind {
             ForgeTerm::Ui => "ForgeCLI",
             ForgeTerm::Shell => "forge shell",
