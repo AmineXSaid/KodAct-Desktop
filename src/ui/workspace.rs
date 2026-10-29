@@ -1512,6 +1512,9 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &RemoveQueued, _, cx| {
                 this.state.update(cx, |s, cx| s.remove_all_queued(cx))
             }))
+            .on_action(cx.listener(|this, _: &SendQueuedNow, _, cx| {
+                this.state.update(cx, |s, cx| s.send_queued_now(cx))
+            }))
             .on_action(cx.listener(|this, _: &StopReply, window, cx| {
                 let (palette, picker) = {
                     let s = this.state.read(cx);

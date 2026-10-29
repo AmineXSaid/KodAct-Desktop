@@ -201,7 +201,7 @@ pub struct Theme {
     pub font_sans: SharedString, // Anthropic Sans Text: every word the app sets (`fonts.rs`)
     pub motion_ms: u64,          // 200ms ease for hovers/transitions
     // Forge additions (see the section at the end of the tokens).
-    pub font_mono: SharedString, // code, paths, commands: Anthropic Sans Text too
+    pub font_mono: SharedString, // code, paths, commands: the system's monospace (`fonts::MONO`)
     pub font_code_inline: SharedString, // a name in prose: the same face
     pub font_display: SharedString, // large lines (the greeting, headings): Anthropic Sans Display
     pub display_weight: FontWeight, // 600: headings are set in the heavier of the two cuts
@@ -262,7 +262,7 @@ impl Theme {
             },
             font_sans: crate::fonts::TEXT.into(),
             motion_ms: 200,
-            font_mono: crate::fonts::TEXT.into(),
+            font_mono: crate::fonts::MONO.into(),
             font_code_inline: crate::fonts::TEXT.into(),
             font_display: crate::fonts::DISPLAY.into(),
             display_weight: FontWeight::SEMIBOLD,

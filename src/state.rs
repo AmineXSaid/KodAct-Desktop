@@ -9510,7 +9510,35 @@ fix everything under 8, render it again to check, then tell me the scores before
 
     /// Stop the reply being played (the composer's Stop, Escape).
     pub fn stop(&mut self, cx: &mut Context<Self>) {
+        if let Some(id) = self.current {
+            self.stop_turn(id, false, cx);
+        }
+    }
+
+    /// Send now: the reply stops where it is, and what you queued goes to
+    /// Forge as its next turn instead of waiting for its next step. ForgeCLI
+    /// runs a queued message next when the turn ends first, so the queue
+    /// stays with it; the demo has no queue of its own and sends it afresh.
+    pub fn send_queued_now(&mut self, cx: &mut Context<Self>) {
         let Some(id) = self.current else { return };
+        if demo_mode() || !self.sessions.contains_key(&id) {
+            let Some(list) = self.queued.remove(&id).filter(|l| !l.is_empty()) else {
+                return;
+            };
+            let text = list
+                .iter()
+                .map(|q| q.text.to_string())
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            self.stop_turn(id, false, cx);
+            return self.send(text, cx);
+        }
+        self.stop_turn(id, true, cx);
+    }
+
+    /// Stop `id`'s reply; `keep_queued` leaves what you queued with Forge
+    /// (Send now) rather than back in the box (Stop).
+    fn stop_turn(&mut self, id: usize, keep_queued: bool, cx: &mut Context<Self>) {
         if self.replies.remove(&id).is_none() {
             return;
         }
@@ -9527,8 +9555,11 @@ fix everything under 8, render it again to check, then tell me the scores before
             self.answer(id, ask.msg, ask.block, Verdict::Denied, cx);
             self.set_decider(id, ask.msg, ask.block, Decider::Stopped);
         }
-        // What you queued goes back in the box, as Claude does on Esc.
-        self.restore_queued(id, cx);
+        // What you queued goes back in the box, as Claude does on Esc;
+        // Send now leaves it with Forge, to run next.
+        if !keep_queued {
+            self.restore_queued(id, cx);
+        }
         // Design comments waiting for the reply stay on the page as notes:
         // Forge didn't get them.
         if self.design_held.remove(&id).is_some() {

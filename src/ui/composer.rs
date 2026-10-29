@@ -96,6 +96,11 @@ impl Composer {
                 .folding(false)
                 .auto_close(false)
                 .soft_wrap(true)
+                // A message box, not a source file: no empty rows reserved
+                // under the last line (they made a scroll bar for one line)
+                // and no margin that scrolls the text away from the caret.
+                .scroll_beyond_last_line(Some(0))
+                .cursor_surrounding_lines(Some(0))
                 .placeholder(placeholder(in_folder, None, false, false))
                 .submit_on_enter(true)
         });
@@ -510,7 +515,12 @@ impl Render for Composer {
         let box_height = {
             let t = cx.theme().clone();
             let input = self.input.read(cx);
-            let width = input.input_bounds().size.width;
+            // The editor's own wrap width and line height once it has laid
+            // out (fonts differ between systems); the box's until then.
+            let width = input
+                .text_bounds()
+                .map_or(input.input_bounds().size.width, |b| b.size.width);
+            let line = input.line_height().unwrap_or(t.text.body * 1.5);
             let text = input.value();
             let rows = if width > px(40.) && !text.is_empty() {
                 let run = gpui::TextRun {
@@ -535,7 +545,7 @@ impl Render for Composer {
                 text.split('\n').count()
             };
             // The editor's own inset above and below its lines.
-            t.text.body * 1.5 * rows.clamp(1, self.max_rows) as f32 + t.space.sm
+            line * rows.clamp(1, self.max_rows) as f32 + t.space.sm
         };
         let t = cx.theme().clone();
         let state = self.state.clone();

@@ -28,6 +28,16 @@ fn hex(c: Hsla) -> String {
     }
 }
 
+/// The code face as the docs name it: every system's own monospace, the
+/// same text whichever system generates them (`fonts::MONO`).
+fn mono(face: &str) -> String {
+    if face == crate::fonts::MONO {
+        "Consolas, Menlo, DejaVu Sans Mono".to_string()
+    } else {
+        face.to_string()
+    }
+}
+
 /// A colour as CSS: hex when opaque, `rgba()` when not (DESIGN.md wants CSS).
 fn css(c: Hsla) -> String {
     let c = rgba(c);
@@ -68,7 +78,7 @@ fn render() -> String {
     let _ = writeln!(w, "**Foundation:** Forge Ember. Warm paper by day: the window and sidebar #ebe8e1, the session a sheet of #f7f5f1 on it, cards white on that. Warm graphite at night: #1b1a19, #242322, cards #2e2d2b. One ink carries the type. One colour, ember copper (#b4532a; #e2895b at night): the decisive action, links, a switch that is on, the mark's top, a waiting dot. Inline code in the ink on a faint neutral wash. Everything else is neutral; colour otherwise only for meaning (modes, status).\n");
     let _ = writeln!(w, "**Depth:** nearly flat. Hairlines inside cards; the session and the user's message lift on paper grain (three 1px shadows at 6/4/1% ink); popovers and the permission card a touch more.\n");
     let _ = writeln!(w, "**Shape:** two shapes. Everything you press is a pill (buttons, chips, icon buttons, the new-chat and needs-you pills); everything that holds content is 4px (cards, rows, menus, fields, the composer, the session).\n");
-    let _ = writeln!(w, "**Type:** Anthropic Sans only, the Text cut for every word (code included) and the Display cut for the greeting and headings: 400 for text, 500 for labels, 600 for headings and buttons. Small labels in sentence case, never uppercase and never above a heading. The app bundles no font; diagrams are redrawn in it whatever they name.\n");
+    let _ = writeln!(w, "**Type:** Anthropic Sans for every word, the Text cut and the Display cut for the greeting and headings, and the system's monospace for code, the terminal and paths, so columns and ASCII drawings line up: 400 for text, 500 for labels, 600 for headings and buttons. Small labels in sentence case, never uppercase and never above a heading. The app bundles no font; diagrams are redrawn in it whatever they name.\n");
 
     let _ = writeln!(w, "## Tokens\n");
     let sp = &l.space;
@@ -99,7 +109,8 @@ fn render() -> String {
     let _ = writeln!(
         w,
         "Display: {} 600 (the greeting, headings)\nCode: {}",
-        l.font_display, l.font_mono
+        l.font_display,
+        mono(&l.font_mono)
     );
     let tx = &l.text;
     let _ = writeln!(
@@ -283,7 +294,7 @@ fn render() -> String {
         "Faces (UI / display / code / replies): {} / {} / {} / {}. Corners button · card · field · composer · pressed: {} · {} · {} · {} · {}. Row · title bar · chat: {} · {} · {}.\n",
         a.font_sans,
         a.font_display,
-        a.font_mono,
+        mono(&a.font_mono),
         a.font_reading,
         px(r.button),
         px(r.card),
@@ -557,6 +568,7 @@ fn render() -> String {
         ("Deny is quiet", "A permission has one filled action, Allow once; Deny is a ghost button, a way out rather than an alarm.", "2026-10-23"),
         ("Every window leaves as it came", "Each group has its own motion, in and out (`ui/motion.rs`): dialogs rise 14px over a dimming backdrop and sink away (240/170ms); the palette drops from above and lifts away; menus at an anchor unfold and fade back toward it (110ms); the composer's menus draw their jewel edge and fade back down; questions draw their edge in their colour and sink away; side panels and the dock slide in and back out (280/200ms); a notice springs up and drops away. A window that closes is kept a beat (`Presence`) so it leaves rather than vanishes.", "2026-10-25"),
         ("Replies at 15/24, rows 8 apart", "Calm sets a reply at 15px on 24px lines and keeps a reply's rows (text, tool lines, cards) 8px apart, as Claude Code does: a third more on screen, read as a tool rather than a document. Paragraphs keep their own gap.", "2026-10-24"),
+        ("Code in the system's monospace", "Anthropic Sans is proportional, so ASCII diagrams and aligned comments in code blocks fell out of line. Code blocks, the terminal and paths now take the monospace each system ships (Consolas, Menlo, DejaVu Sans Mono); none is bundled. Inline names in prose stay in Anthropic Sans.", "2026-10-29"),
         ("Inline code in the ink", "Coral names read as the danger colour and the diff's removals; a name in prose now stands apart by its neutral wash alone, in the strong ink. The files in a list of changes show their kind in the muted ink for the same reason.", "2026-10-29"),
         ("Icons on a 12/14/16/20 scale", "Desktop density: 14 in rows, 16 in controls, 20 for the composer's +; 12 inside captions.", "2026-10-12"),
     ] {
@@ -614,7 +626,7 @@ fn render_design() -> String {
         l.font_sans,
         px(tx.caption)
     );
-    let _ = writeln!(w, "  code:\n    fontFamily: \"{}\"", l.font_mono);
+    let _ = writeln!(w, "  code:\n    fontFamily: \"{}\"", mono(&l.font_mono));
     let _ = writeln!(
         w,
         "  code-inline:\n    fontFamily: \"{}\"",
@@ -640,7 +652,7 @@ fn render_design() -> String {
     let _ = writeln!(w, "> Generated from `src/theme.rs` by `src/system_md.rs`, with `.interface-design/system.md`. Change a token in theme.rs, then run `UPDATE_SYSTEM_MD=1 cargo test system_md`. The product record is `PRODUCT.md`; the theme above is the default one, light and dark, and every other theme keeps the same roles.\n");
     let _ = writeln!(w, "## Overview\n\nAn Operate surface: an app for long agent sessions, judged against Claude Desktop's calm. The reply is the hero; everything around it (the agent's activity, the chrome, the menus) is quieter than the words. Restraint, precision and one accent, not decoration.\n");
     let _ = writeln!(w, "## Colors\n\n- **Neutrals** carry everything: a canvas, a slightly different sidebar layer, a surface for the few things that hold content (your messages, an opened change, a card that needs you), and five inks from strong to subtle.\n- **The accent** is only for the primary action, the current selection and state (a waiting dot, a switch that is on). Never for decoration or an inactive control.\n- **Status colours** (success, danger, warning) only mean status: a failed call, a stopped one, a change's size.\n- Text holds 4.5:1 against its ground in every theme (`src/palette_check.rs`).\n");
-    let _ = writeln!(w, "## Typography\n\nOne sans for interface and prose ({}), in regular and semibold; replies at {}px on {:.0}px lines. Code in {}; a name in prose (a file, a command) in {} on a faint neutral wash, never coloured. Small text is sentence case: no uppercase labels and no label above a heading.\n", l.font_sans, px(z.chat_text), f32::from(z.chat_text) * z.line_height_chat, l.font_mono, l.font_code_inline);
+    let _ = writeln!(w, "## Typography\n\nOne sans for interface and prose ({}), in regular and semibold; replies at {}px on {:.0}px lines. Code in {}; a name in prose (a file, a command) in {} on a faint neutral wash, never coloured. Small text is sentence case: no uppercase labels and no label above a heading.\n", l.font_sans, px(z.chat_text), f32::from(z.chat_text) * z.line_height_chat, mono(&l.font_mono), l.font_code_inline);
     let _ = writeln!(w, "## Layout\n\nThe transcript and the composer share one {}px column and one edge. Paragraphs {}px apart; tight groups, generous separation. The sidebar is {}px.\n", px(z.column), px(sp.md), px(z.sidebar));
     let _ = writeln!(w, "## Elevation & Depth\n\nNearly flat. Lift (`elevation_grain`) only for what holds content you act on: the composer, a card that needs you; popovers a touch more. No glows, no hard offset shadows.\n");
     let _ = writeln!(w, "## Shapes\n\nCorners from the tokens above; one radius per role. No coloured edge over 1px on cards or rows: a selected row is a soft fill.\n");

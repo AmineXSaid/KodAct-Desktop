@@ -88,6 +88,7 @@ table in step.
 | Shift Tab | Next permission mode |
 | Esc | Stop the reply, or close what's open |
 | Ctrl/⌘ Shift X | Stop every agent; the reply goes on |
+| Ctrl/⌘ Shift Enter | Send what you queued now, stopping the reply |
 | Ctrl/⌘ = | Zoom the page in |
 | Ctrl/⌘ - | Zoom the page out |
 | Ctrl/⌘ 0 | The page at its own size |

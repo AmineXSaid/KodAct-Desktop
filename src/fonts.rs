@@ -1,8 +1,10 @@
-//! Which faces Forge draws with: Anthropic Sans, and nothing else.
+//! Which faces Forge draws with: Anthropic Sans, and the system's own
+//! monospace for code.
 //!
-//! Its Text cut sets every word (interface, replies, code, the terminal,
-//! diagrams); its Display cut sets the large lines. The app bundles no
-//! font. Anthropic Sans is read from the `fonts` folder beside the app,
+//! Its Text cut sets every word (interface, replies, diagrams); its Display
+//! cut sets the large lines. Code blocks, the terminal and paths take the
+//! monospace every system ships (`MONO`), so columns and ASCII drawings line
+//! up. The app bundles no font. Anthropic Sans is read from the `fonts` folder beside the app,
 //! where the installer puts it (`installer/private-fonts`, a personal
 //! build's, never committed), from Forge's `fonts` folder next to its
 //! settings, and from the system.
@@ -15,6 +17,14 @@ use gpui::App;
 pub const TEXT: &str = "Anthropic Sans Text";
 /// The greeting and headings.
 pub const DISPLAY: &str = "Anthropic Sans Display";
+/// Code, the terminal and paths: the monospace the system ships, so every
+/// character takes one column.
+#[cfg(target_os = "windows")]
+pub const MONO: &str = "Consolas";
+#[cfg(target_os = "macos")]
+pub const MONO: &str = "Menlo";
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+pub const MONO: &str = "DejaVu Sans Mono";
 
 /// A user font file larger than this is skipped, and at most this many are read.
 const MAX_FILE: u64 = 16 * 1024 * 1024;

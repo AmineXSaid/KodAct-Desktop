@@ -132,6 +132,7 @@ gpui::actions!(
         StopAgents,
         EditQueued,
         RemoveQueued,
+        SendQueuedNow,
         OpenSettings,
         OpenSlashCommands,
         OpenAgents,

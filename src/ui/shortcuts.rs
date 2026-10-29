@@ -83,6 +83,11 @@ pub const SHORTCUTS: &[(&str, &str, &str)] = &[
         "Stop every agent; the reply goes on",
         "Conversation",
     ),
+    (
+        "secondary-shift-enter",
+        "Send what you queued now, stopping the reply",
+        "Conversation",
+    ),
     ("secondary-=", "Zoom the page in", "Browser"),
     ("secondary--", "Zoom the page out", "Browser"),
     ("secondary-0", "The page at its own size", "Browser"),

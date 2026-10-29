@@ -14,7 +14,7 @@
 
 **Shape:** two shapes. Everything you press is a pill (buttons, chips, icon buttons, the new-chat and needs-you pills); everything that holds content is 4px (cards, rows, menus, fields, the composer, the session).
 
-**Type:** Anthropic Sans only, the Text cut for every word (code included) and the Display cut for the greeting and headings: 400 for text, 500 for labels, 600 for headings and buttons. Small labels in sentence case, never uppercase and never above a heading. The app bundles no font; diagrams are redrawn in it whatever they name.
+**Type:** Anthropic Sans for every word, the Text cut and the Display cut for the greeting and headings, and the system's monospace for code, the terminal and paths, so columns and ASCII drawings line up: 400 for text, 500 for labels, 600 for headings and buttons. Small labels in sentence case, never uppercase and never above a heading. The app bundles no font; diagrams are redrawn in it whatever they name.
 
 ## Tokens
 
@@ -29,7 +29,7 @@ Scale: 1px (a line's ends), 4px (key caps), 4px (rows and squarer buttons), 4px 
 ### Typography
 Interface: Anthropic Sans Text in 400 and 600 only, bundled (OFL); headings in 600
 Display: Anthropic Sans Display 600 (the greeting, headings)
-Code: Anthropic Sans Text
+Code: Consolas, Menlo, DejaVu Sans Mono
 Scale: 12 caption, 13 UI and chat, 14 input, 18 subheading, 20 heading, 32 greeting, 36 home heading
 Weights: 400, 500 (labels, buttons), 600 (headings, the project name)
 Prose line height: 1.5333333
@@ -89,7 +89,7 @@ One look, Calmly smooth, in light and dark (`window.json` keeps the mode). Every
 |---|---|---|
 | Canvas / session / accent | `#ebe8e1` / `#f7f5f1` / `#b4532a` | `#1b1a19` / `#242322` / `#e2895b` |
 
-Faces (UI / display / code / replies): Anthropic Sans Text / Anthropic Sans Display / Anthropic Sans Text / Anthropic Sans Text. Corners button · card · field · composer · pressed: 4 · 4 · 4 · 4 · pill. Row · title bar · chat: 30 · 36 · 14.
+Faces (UI / display / code / replies): Anthropic Sans Text / Anthropic Sans Display / Consolas, Menlo, DejaVu Sans Mono / Anthropic Sans Text. Corners button · card · field · composer · pressed: 4 · 4 · 4 · 4 · pill. Row · title bar · chat: 30 · 36 · 14.
 
 ### Terminal
 The dock's 16 colours, on `stage` (`palette_check.rs` holds them to AA).
@@ -221,5 +221,6 @@ One family; every control takes keyboard focus (a `primary` edge shows for the k
 | Deny is quiet | A permission has one filled action, Allow once; Deny is a ghost button, a way out rather than an alarm. | 2026-10-23 |
 | Every window leaves as it came | Each group has its own motion, in and out (`ui/motion.rs`): dialogs rise 14px over a dimming backdrop and sink away (240/170ms); the palette drops from above and lifts away; menus at an anchor unfold and fade back toward it (110ms); the composer's menus draw their jewel edge and fade back down; questions draw their edge in their colour and sink away; side panels and the dock slide in and back out (280/200ms); a notice springs up and drops away. A window that closes is kept a beat (`Presence`) so it leaves rather than vanishes. | 2026-10-25 |
 | Replies at 15/24, rows 8 apart | Calm sets a reply at 15px on 24px lines and keeps a reply's rows (text, tool lines, cards) 8px apart, as Claude Code does: a third more on screen, read as a tool rather than a document. Paragraphs keep their own gap. | 2026-10-24 |
+| Code in the system's monospace | Anthropic Sans is proportional, so ASCII diagrams and aligned comments in code blocks fell out of line. Code blocks, the terminal and paths now take the monospace each system ships (Consolas, Menlo, DejaVu Sans Mono); none is bundled. Inline names in prose stay in Anthropic Sans. | 2026-10-29 |
 | Inline code in the ink | Coral names read as the danger colour and the diff's removals; a name in prose now stands apart by its neutral wash alone, in the strong ink. The files in a list of changes show their kind in the muted ink for the same reason. | 2026-10-29 |
 | Icons on a 12/14/16/20 scale | Desktop density: 14 in rows, 16 in controls, 20 for the composer's +; 12 inside captions. | 2026-10-12 |

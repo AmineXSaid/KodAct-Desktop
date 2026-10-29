@@ -128,6 +128,7 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("escape", StopReply, Some("Workspace")),
         // Not Ctrl+Shift+Esc: Windows keeps that for the Task Manager.
         KeyBinding::new("secondary-shift-x", StopAgents, Some("Workspace")),
+        KeyBinding::new("secondary-shift-enter", SendQueuedNow, Some("Workspace")),
         // The browser's page, while it has the keyboard; Present anywhere.
         KeyBinding::new("secondary-=", ZoomIn, Some("Browser")),
         KeyBinding::new("secondary--", ZoomOut, Some("Browser")),

@@ -14,7 +14,9 @@ There is one look (`theme::Look::Calm`, Calmly smooth): its colours
 (`Look::tint`, light and dark) and its form (`Look::form`: corners, row and
 title-bar height, chat text). It keeps its rule (pills to press, 4px to
 hold) and passes `palette_check.rs` and the button tests in both modes.
-Every face is Anthropic Sans (`fonts.rs`): never name or bundle another.
+Every face is Anthropic Sans (`fonts.rs`), except code, the terminal and paths,
+which take the system's monospace (`fonts::MONO`): never bundle a font or name
+another face.
 
 After changing a token, regenerate `.interface-design/system.md` with
 `UPDATE_SYSTEM_MD=1 cargo test system_md` (the test fails while it is stale),

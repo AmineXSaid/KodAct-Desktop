@@ -1019,6 +1019,19 @@ impl CommandPalette {
                 chat.insert(
                     0,
                     act(
+                        "Send the queued messages now: stop the reply",
+                        "icons/arrow-up.svg",
+                        Some(
+                            crate::ui::shortcuts::keys("secondary-shift-enter")
+                                .join(" ")
+                                .into(),
+                        ),
+                        Box::new(SendQueuedNow),
+                    ),
+                );
+                chat.insert(
+                    0,
+                    act(
                         "Edit the last queued message",
                         "icons/pencil.svg",
                         None,
