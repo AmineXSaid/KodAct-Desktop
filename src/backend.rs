@@ -324,6 +324,66 @@ pub fn launch(
 
 // ---------------------------------------------------------------- the process
 
+/// Hook runs, read from ForgeCLI's stderr (`forge.includeHookEvents`, which
+/// adds `--verbose --debug=hooks`): ForgeCLI logs each run (`forge_hooks:
+/// running hooks event=… matcher=…`), then says what its hooks said (a
+/// message, an error, a block) as plain lines, before its next log line.
+/// Its stream has no hook events of its own yet.
+#[derive(Default)]
+struct HookLog {
+    /// The run being read: its event, what it matched, and what it said.
+    run: Option<(String, Option<String>, Vec<String>)>,
+}
+
+impl HookLog {
+    /// One stderr line; a run's notice once the next log line shows it ended.
+    fn line(&mut self, line: &str) -> Option<Event> {
+        let line = line.trim_end();
+        if !is_log_line(line) {
+            if let Some((_, _, said)) = &mut self.run {
+                if !line.trim().is_empty() {
+                    said.push(line.trim().to_string());
+                }
+            }
+            return None;
+        }
+        let done = self.flush();
+        if let Some(rest) = line.split_once("forge_hooks: running hooks").map(|(_, r)| r) {
+            let field = |k: &str| {
+                rest.split_once(&format!("{k}="))
+                    .map(|(_, v)| v.split_whitespace().next().unwrap_or_default().to_string())
+            };
+            let event = field("event").unwrap_or_default().trim_matches('"').to_string();
+            let matcher = field("matcher")
+                .and_then(|m| m.strip_prefix("Some(").map(str::to_string))
+                .map(|m| m.trim_end_matches(')').trim_matches('"').to_string());
+            self.run = Some((event, matcher, vec![]));
+        }
+        done
+    }
+
+    /// The run being read, as a notice.
+    fn flush(&mut self) -> Option<Event> {
+        let (event, matcher, said) = self.run.take()?;
+        let what = match matcher.filter(|m| !m.is_empty()) {
+            Some(m) => format!("{event} hook on {m}"),
+            None => format!("{event} hook"),
+        };
+        let text = if said.is_empty() {
+            format!("{what} ran.")
+        } else {
+            format!("{what}: {}", one_line(&said.join(" · "), 240))
+        };
+        Some(Event::Notice { text, error: false })
+    }
+}
+
+/// A line of ForgeCLI's debug log (`2026-10-29T12:56:12.998519Z DEBUG …`).
+fn is_log_line(line: &str) -> bool {
+    let b = line.as_bytes();
+    b.len() > 20 && b[..4].iter().all(u8::is_ascii_digit) && b[4] == b'-' && b[10] == b'T'
+}
+
 /// One chat's running `forge`. Dropping it ends the process.
 pub struct Session {
     stdin: Arc<Mutex<Option<ChildStdin>>>,
@@ -335,7 +395,8 @@ impl Session {
     pub fn spawn(exe: &Path, launch: &Launch, cwd: &Path) -> Result<Session, String> {
         let mut cmd = Command::new(exe);
         cmd.args(&launch.args).current_dir(cwd);
-        Self::start(cmd, launch, &[], &exe.display().to_string())
+        let hooks = launch.args.iter().any(|a| a == "--include-hook-events");
+        Self::start(cmd, launch, &[], &exe.display().to_string(), hooks)
     }
 
     /// ForgeCLI in a remote project (`remote.rs`): started through WSL, SSH
@@ -352,14 +413,17 @@ impl Session {
             args: vec![],
             env: vec![],
         };
-        Self::start(cmd, &none, &prelude, &remote.target.label())
+        let hooks = launch.args.iter().any(|a| a == "--include-hook-events");
+        Self::start(cmd, &none, &prelude, &remote.target.label(), hooks)
     }
 
+    /// `hooks`: read hook runs from stderr (see [`HookLog`]).
     fn start(
         mut cmd: Command,
         launch: &Launch,
         prelude: &[u8],
         what: &str,
+        hooks: bool,
     ) -> Result<Session, String> {
         cmd.stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -405,14 +469,34 @@ impl Session {
         // stderr: kept (its end) for when the process exits early.
         let tail = Arc::new(Mutex::new(String::new()));
         let err_tail = tail.clone();
+        let hook_tx = tx.clone();
         let err_thread = std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
+            let mut log = HookLog::default();
+            let mut partial = String::new();
             while let Ok(n) = stderr.read(&mut buf) {
                 if n == 0 {
                     break;
                 }
+                let text = String::from_utf8_lossy(&buf[..n]);
+                let mut kept = text.to_string();
+                if hooks {
+                    // Whole lines to the hook reader; its debug log stays
+                    // out of what an early exit shows.
+                    partial.push_str(&text);
+                    kept.clear();
+                    while let Some(i) = partial.find('\n') {
+                        let line: String = partial.drain(..=i).collect();
+                        if let Some(ev) = log.line(&line) {
+                            let _ = hook_tx.send_blocking(ev);
+                        }
+                        if !is_log_line(&line) {
+                            kept.push_str(&line);
+                        }
+                    }
+                }
                 let mut t = err_tail.lock().unwrap();
-                t.push_str(&String::from_utf8_lossy(&buf[..n]));
+                t.push_str(&kept);
                 if t.len() > 8192 {
                     let cut = t.len() - 4096;
                     let cut = (cut..t.len())
@@ -420,6 +504,9 @@ impl Session {
                         .unwrap_or(t.len());
                     t.drain(..cut);
                 }
+            }
+            if let Some(ev) = log.flush() {
+                let _ = hook_tx.send_blocking(ev);
             }
         });
 
@@ -2216,6 +2303,41 @@ mod tests {
             ["--model", "m", "--permission-mode", "plan", "--resume", "abc", "--sandbox=off"]
         );
         assert_eq!(i.env, l.env);
+    }
+
+    #[test]
+    fn hook_runs_read_from_forgecli_stderr() {
+        // As ForgeCLI writes it with --verbose --debug=hooks.
+        let lines = [
+            "forge: warning: Forge doesn't know the model mock-model",
+            "2026-10-29T12:56:12.998425Z DEBUG forge_engine::exec: tool call tool=\"TodoWrite\"",
+            "2026-10-29T12:56:12.998519Z DEBUG forge_hooks: running hooks event=\"PostToolUse\" matcher=Some(\"TodoWrite\") hooks=1",
+            "PostToolUse hook error (exit 3): boom",
+            "2026-10-29T12:56:13.013753Z DEBUG forge_engine::engine: model response ms=10",
+            "2026-10-29T12:56:13.084105Z DEBUG forge_hooks: running hooks event=\"PreToolUse\" matcher=Some(\"Bash\") hooks=1",
+            "lint hook: Bash looks fine",
+            "2026-10-29T12:56:13.093005Z DEBUG forge_engine::exec: tool call tool=\"Bash\"",
+            "2026-10-29T12:56:14.000000Z DEBUG forge_hooks: running hooks event=\"Stop\" matcher=None hooks=1",
+        ];
+        let mut log = HookLog::default();
+        let mut events: Vec<Event> = lines.iter().filter_map(|l| log.line(l)).collect();
+        events.extend(log.flush());
+        let mut said: Vec<String> = events
+            .into_iter()
+            .map(|e| match e {
+                Event::Notice { text, error } => {
+                    assert!(!error);
+                    text
+                }
+                _ => unreachable!(),
+            })
+            .collect();
+        assert_eq!(said.remove(0), "PostToolUse hook on TodoWrite: PostToolUse hook error (exit 3): boom");
+        assert_eq!(said.remove(0), "PreToolUse hook on Bash: lint hook: Bash looks fine");
+        assert_eq!(said.remove(0), "Stop hook ran.");
+        assert!(said.is_empty());
+        // A warning outside a hook run is not a hook's.
+        assert!(HookLog::default().line("forge: warning: something").is_none());
     }
 
     #[test]

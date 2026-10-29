@@ -562,6 +562,15 @@ impl Settings {
         }
         if self.include_hook_events {
             out.push("--include-hook-events".to_string());
+            // Hook runs reach the app on stderr: ForgeCLI's log of each run
+            // and its hooks' messages (`backend::HookLog`).
+            if self.debug.is_none() {
+                out.push("--debug=hooks".to_string());
+            }
+            let quiet = self.quiet || self.extra_args.iter().any(|a| a == "--quiet" || a == "-q");
+            if !quiet && !self.verbose {
+                out.push("--verbose".to_string());
+            }
         }
         if self.no_session_persistence {
             out.push("--no-session-persistence".to_string());

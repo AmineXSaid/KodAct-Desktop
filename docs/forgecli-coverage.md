@@ -105,7 +105,7 @@ chat at once and the turn ran.
 | `forge.betas` | `--betas` |
 | `forge.debug`, `forge.debugFile` | `--debug`, `--debug-file` |
 | `forge.autocompact` | `--autocompact` |
-| `forge.includeHookEvents` | `--include-hook-events`; hook results show as lines (`hook_response`) |
+| `forge.includeHookEvents` | `--include-hook-events`, with `--debug=hooks --verbose`: each hook run shows as a line (below) |
 | `forge.noSessionPersistence` | `--no-session-persistence`; such a chat starts afresh with each process |
 | `forge.noInput` | `--no-input` |
 | `forge.jsonSchema` | `--json-schema`; the turn's `structured_output` shows under the reply |
@@ -174,14 +174,27 @@ check, and its Approve writes what `forge mcp approve` does.
   and the TUI's message); `forge doctor --probe` through the relay (the key
   it saw was the placeholder); the shell ran `forge --version`, `forge
   config paths` and a one-shot JSON run.
+- Live on Linux, SSH project (`ssh://box/…`, an `sshd` on 127.0.0.1 run
+  from the scratchpad): a chat; the TUI on that chat over SSH, its model
+  calls on an `ssh -R` forward to the proxy (the model saw both messages);
+  `forge doctor --probe` (the placeholder key); the shell ran `forge
+  --version` and `forge mcp list`.
+- Live on Linux, hooks: a PreToolUse hook's `systemMessage` and a
+  PostToolUse hook's error (exit 3) each showed as a line in the chat,
+  between the tool steps they ran on.
+- WSL runs only on Windows: its tabs use the same relay path as containers
+  (checked above) with `wsl.exe` in place of `docker`, not run here.
 
 ## Notes
 
-- `--include-hook-events` is passed with `forge.includeHookEvents` and
-  `hook_response` lines are read, but ForgeCLI at this commit declares the
-  flag and emits nothing for it (`include_hook_events` appears only in
-  `forge-cli/src/args.rs`); hooks still run, and what they say to the model
-  shows in its turn.
+- Hook runs: ForgeCLI at this commit declares `--include-hook-events` but
+  sends no hook events on its stream. It logs each run (`forge_hooks:
+  running hooks event=… matcher=…`) with `--debug=hooks`, and with
+  `--verbose` writes what its hooks said (a message, an error, a block,
+  "Stopped by hook") to stderr; the app reads both (`backend::HookLog`) and
+  shows each run as "PreToolUse hook on Bash: …". `hook_response` stream
+  events are read too, for when ForgeCLI sends them. With `forge.quiet`
+  only the runs show, not what the hooks said.
 - `api_retry` comes only from autonomous runs (`forge.autonomous`).
 - ForgeCLI only fills `structured_output` when the final reply is JSON that
   parses (`forge-engine`, `TurnResult`).
