@@ -157,6 +157,17 @@ pub enum Effort {
 }
 
 impl Effort {
+    /// ForgeCLI's name for it (`--effort`).
+    pub fn wire(self) -> &'static str {
+        match self {
+            Effort::Low => "low",
+            Effort::Medium => "medium",
+            Effort::High => "high",
+            Effort::Xhigh => "xhigh",
+            Effort::Max => "max",
+        }
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Effort::Low => "Low",

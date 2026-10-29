@@ -49,7 +49,7 @@ instructions, knowledge and memory.
 - Dependencies must be Apache-2.0, MIT, BSD, ISC or similar; nothing copied
   from GPL code.
 - Terminology: chat, reply, project, folder, endpoint, model, mode (Manual,
-  Edit automatically, Plan, Bypass, Expert), permission, question, task,
+  Edit automatically, Auto, Plan, Don't ask, Bypass), permission, question, task,
   side panel, terminal dock.
 
 ## Brand Commitments

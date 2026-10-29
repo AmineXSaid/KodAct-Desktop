@@ -209,6 +209,31 @@ const BUILTIN: &[(&str, &str, &str, bool)] = &[
     ("help", "", "Show help and the available commands", false),
 ];
 
+/// ForgeCLI's commands the desktop does itself, with its own controls, or
+/// that would pull the chat out from under it: `/` never offers them, even
+/// when a session lists them (`from_catalog`).
+pub const HANDLED: &[&str] = &[
+    "exit", "quit", "clear", "reset", "new", "resume", "continue", "branch", "cd", "rewind",
+    "checkpoint", "undo", "model", "rename", "btw",
+];
+
+/// A session's commands as ForgeCLI lists them (the `initialize` answer's
+/// `commands`: `{name, description, argumentHint}`).
+pub fn from_catalog(rows: &serde_json::Value) -> Vec<Command> {
+    rows.as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|r| {
+            let name = r["name"].as_str()?.trim_start_matches('/').to_string();
+            (!name.is_empty()).then(|| Command {
+                name,
+                args: r["argumentHint"].as_str().unwrap_or_default().to_string(),
+                description: r["description"].as_str().unwrap_or_default().to_string(),
+            })
+        })
+        .collect()
+}
+
 /// ForgeCLI's built-in commands the desktop offers.
 pub fn builtin() -> Vec<Command> {
     BUILTIN
@@ -384,6 +409,25 @@ pub fn is_immediate(text: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_session_catalog_reads_as_commands() {
+        let rows = serde_json::json!([
+            {"name": "compact", "description": "Free context", "argumentHint": "[instructions]"},
+            {"name": "deploy", "description": "Ship it", "argumentHint": ""},
+            {"name": "mcp__docs__summarize", "description": "MCP prompt", "argumentHint": ""},
+            {"name": "", "description": "nameless"},
+            {"description": "no name"}
+        ]);
+        let c = super::from_catalog(&rows);
+        assert_eq!(c.len(), 3);
+        assert_eq!(c[0].args, "[instructions]");
+        assert_eq!(c[2].name, "mcp__docs__summarize");
+        // What the desktop does itself never reaches `/`.
+        for name in ["clear", "resume", "rewind", "model", "btw", "cd"] {
+            assert!(super::HANDLED.contains(&name), "{name}");
+        }
+    }
+
     use super::*;
 
     #[test]

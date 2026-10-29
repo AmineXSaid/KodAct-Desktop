@@ -33,6 +33,9 @@ pub struct SavedChat {
     /// The ForgeCLI conversation exists on disk: the next message resumes it.
     #[serde(default)]
     pub resumable: bool,
+    /// A copy's source conversation, until its first process forks it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fork_of: Option<String>,
     pub project: PathBuf,
     pub title: String,
     #[serde(default)]
@@ -381,6 +384,7 @@ fn save_messages(chat: &Chat, project: &Path) -> SavedChat {
         version: VERSION,
         session: chat.session.clone(),
         resumable: chat.resumable,
+        fork_of: chat.fork_of.clone().filter(|_| !chat.resumable),
         project: project.to_path_buf(),
         title: chat.title.to_string(),
         pinned: chat.pinned,

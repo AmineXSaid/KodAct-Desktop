@@ -187,6 +187,107 @@ fn end_button(
         .child(icon(glyph, t.size.icon_sm, t.colors.text_muted))
 }
 
+fn mcp_servers(
+    t: &Theme,
+    state: &Entity<AppState>,
+    s: &AppState,
+    chat: usize,
+    servers: &[crate::state::LiveServer],
+) -> AnyElement {
+    let hover = t.colors.hover;
+    let button = |id: String, glyph: &'static str, tip: String| {
+        div()
+            .id(SharedString::from(id))
+            .p(px(3.))
+            .rounded(t.radius.small)
+            .cursor_pointer()
+            .hover(move |d| d.bg(hover))
+            .tooltip(move |w, cx| gpui::component::tooltip::Tooltip::new(tip.clone()).build(w, cx))
+            .child(icon(glyph, t.size.icon_sm, t.colors.text_muted))
+    };
+    div()
+        .flex()
+        .flex_col()
+        .children(servers.iter().map(|sv| {
+            let busy = s.mcp_busy.as_deref() == Some(sv.name.as_str());
+            let off = sv.status == "disabled";
+            let (dot, said) = match sv.status.as_str() {
+                _ if busy => (t.colors.text_subtle, "working…".to_string()),
+                "connected" => (
+                    t.extra.success,
+                    if sv.tools == 1 {
+                        "1 tool".to_string()
+                    } else {
+                        format!("{} tools", sv.tools)
+                    },
+                ),
+                "failed" => (
+                    t.extra.danger,
+                    sv.error.clone().unwrap_or_else(|| "couldn't start".into()),
+                ),
+                "disabled" => (t.colors.text_subtle, "off".to_string()),
+                _ => (t.colors.text_subtle, "starting".to_string()),
+            };
+            let (st_r, st_t) = (state.clone(), state.clone());
+            let (n_r, n_t) = (sv.name.clone(), sv.name.clone());
+            div()
+                .flex()
+                .items_center()
+                .gap(t.space.sm)
+                .min_h(t.size.menu_row)
+                .text_size(t.text.body_sm)
+                .child(div().flex_none().size(px(7.)).rounded(t.radius.pill).bg(dot))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .child(
+                            div()
+                                .flex()
+                                .gap(t.space.xs)
+                                .child(div().text_color(t.colors.text).child(sv.name.clone()))
+                                .child(div().text_color(t.colors.text_muted).child(said)),
+                        ),
+                )
+                .when(!busy && !off, |d| {
+                    d.child(
+                        button(
+                            format!("mcp-reconnect-{}", sv.name),
+                            "icons/refresh-cw.svg",
+                            format!("Restart {}", sv.name),
+                        )
+                        .on_click(move |_, _, cx| {
+                            st_r.update(cx, |s, cx| {
+                                s.mcp_server_action(chat, n_r.clone(), None, cx)
+                            })
+                        }),
+                    )
+                })
+                .when(!busy, |d| {
+                    d.child(
+                        button(
+                            format!("mcp-toggle-{}", sv.name),
+                            if off { "icons/plug.svg" } else { "icons/unplug.svg" },
+                            if off {
+                                format!("Turn {} on", sv.name)
+                            } else {
+                                format!("Turn {} off: its tools leave this chat", sv.name)
+                            },
+                        )
+                        .on_click(move |_, _, cx| {
+                            st_t.update(cx, |s, cx| {
+                                s.mcp_server_action(chat, n_t.clone(), Some(off), cx)
+                            })
+                        }),
+                    )
+                })
+        }))
+        .into_any_element()
+}
+
 fn environment(
     t: &Theme,
     state: &Entity<AppState>,
@@ -587,5 +688,22 @@ pub fn render(t: &Theme, state: &Entity<AppState>, s: &AppState, chat: usize) ->
             folded("Changes"),
             changed(t, state, &files, in_folder && !s.busy()),
         ))
+        // The session's MCP servers, live: how each is doing, with a
+        // restart and an off switch (ForgeCLI's `mcp_status`, `mcp_reconnect`,
+        // `mcp_toggle`). Only when it has any.
+        .children(
+            s.live_servers
+                .get(&chat)
+                .filter(|l| !l.is_empty())
+                .map(|servers| {
+                    card(
+                        t,
+                        state,
+                        "MCP servers",
+                        folded("MCP servers"),
+                        mcp_servers(t, state, s, chat, servers),
+                    )
+                }),
+        )
         .into_any_element()
 }

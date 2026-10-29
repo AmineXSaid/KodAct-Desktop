@@ -114,8 +114,15 @@ Page Up/Down and Ctrl+Home/End move through the list.
   only read or only write files inside the project (`echo … > notes.txt`,
   `mkdir`). Deleting (`rm`, `git rm`), moving over a path, raising privileges
   (`sudo`) and rewriting or pushing history still ask.
+- **Auto** edits inside the project and runs routine development commands
+  without asking; risky or unrecognised commands still ask.
 - **Plan** explores and proposes; it edits nothing until you approve.
+- **Don't ask** never asks: what your permission rules allow runs, anything
+  that would ask is refused. For unattended work.
 - **Bypass permissions** asks for nothing, once allowed in Settings.
+
+Shift+Tab goes round Manual, Edit automatically and Plan (and Bypass once
+allowed); Auto and Don't ask are picked from the menu.
 
 `forge.autoApproveSafeCommands: false` in the settings file makes every
 command ask, in every mode.
@@ -298,8 +305,20 @@ settings" in the command palette writes one with every key):
 | `terminal.fontSize` | `13` | the terminal's text size |
 | `terminal.cursorStyle` | `block` | `block`, `bar` or `underline` |
 | `forge.autoApproveSafeCommands` | `true` | commands that only read (any mode) or only edit project files (Edit automatically) run without asking |
+| `forge.fallbackModel` | none | models to fall back to when the chosen one is overloaded (`--fallback-model`, comma-separated) |
+| `forge.maxTurns` | none | most agentic turns a chat's session may take (`--max-turns`) |
+| `forge.maxBudgetUsd` | none | most a session may spend, in US dollars (`--max-budget-usd`) |
+| `forge.maxTimeMinutes` | none | a time limit Forge is told and warned near (`--max-time`) |
+| `forge.worktree` | `false` | each new chat works in its own git worktree (`--worktree`) |
+| `forge.autonomous` | `false` | runs attempt rather than ask: no question or plan tools (`--autonomous`) |
+| `forge.maxThinkingTokens` | none | thinking budget of models that take tokens, at least 1024 |
+| `forge.addDirs` | `[]` | folders outside the project Forge may work in (`--add-dir`) |
+| `forge.agent` | none | the agent every chat runs as (`--agent`) |
 
 Changes apply the next time they're used; no restart.
+
+Every ForgeCLI capability and where the app offers it (or why not):
+[docs/forgecli-coverage.md](docs/forgecli-coverage.md).
 
 ## Layout
 

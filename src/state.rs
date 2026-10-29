@@ -264,7 +264,19 @@ impl ToolCall {
             "TodoWrite" => "task list".into(),
             crate::backend::QUESTION_TOOL => "questions".into(),
             "Task" | "Agent" => "agent".into(),
-            _ => self.target.clone(),
+            "KillShell" => "stop a background shell".into(),
+            "CronCreate" => "scheduled task".into(),
+            "CronList" => "scheduled tasks".into(),
+            "CronDelete" => "cancel a scheduled task".into(),
+            "ScheduleWakeup" => "next wake-up".into(),
+            "EnterPlanMode" => "plan mode".into(),
+            "Advisor" => "advisor".into(),
+            "ListMcpResourcesTool" => "MCP resources".into(),
+            // An MCP tool as `server · tool`.
+            t => match t.strip_prefix("mcp__").and_then(|r| r.split_once("__")) {
+                Some((server, tool)) => format!("{server} · {}", tool.replace('_', " ")).into(),
+                None => self.target.clone(),
+            },
         }
     }
 }
@@ -964,6 +976,10 @@ pub struct Chat {
     pub session: String,
     /// ForgeCLI has written this conversation: the next process resumes it.
     pub resumable: bool,
+    /// A copy's source conversation: its first process forks it
+    /// (`--resume <it> --fork-session`), so the copy's model knows what
+    /// the copied messages say.
+    pub fork_of: Option<String>,
     /// When it last changed, for the sidebar's dates and the history's order.
     pub updated: SystemTime,
     /// Earlier versions of the conversation, replaced by an edit or a retry.
@@ -1142,6 +1158,7 @@ impl Chat {
             unread: false,
             session: crate::history::new_id(),
             resumable: false,
+            fork_of: None,
             updated: SystemTime::now(),
             versions: vec![],
             design: None,
@@ -1525,6 +1542,9 @@ struct Live {
     /// Started as a design chat with this setup (its prompt and tools are
     /// fixed for a process).
     design: Option<crate::design::prompt::Setup>,
+    /// Started with this reasoning effort (`--effort`; none: the model's
+    /// own), fixed for a process.
+    effort: Option<crate::endpoints::Effort>,
     /// Relays carrying the remote's ports back here (WSL, containers):
     /// they end with the session.
     _relays: Vec<std::sync::Arc<crate::relay::Relay>>,
@@ -1771,6 +1791,41 @@ pub enum Request {
     },
     /// What fills the chat's context, for the Session column.
     ContextUsage { chat: usize },
+    /// What the session offers: its commands for the `/` menu.
+    Catalog { chat: usize },
+    /// The session's MCP servers, for the Session column.
+    McpStatus { chat: usize },
+    /// A server restarted, or turned off or on: then the list again.
+    McpAction { chat: usize, server: String },
+}
+
+/// One of a live session's MCP servers, as ForgeCLI reports it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LiveServer {
+    pub name: String,
+    /// `connected`, `failed`, `pending` or `disabled`.
+    pub status: String,
+    pub tools: usize,
+    pub error: Option<String>,
+}
+
+impl LiveServer {
+    /// `mcp_status`'s `mcpServers`.
+    pub fn list(v: &serde_json::Value) -> Vec<LiveServer> {
+        v["mcpServers"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|s| {
+                Some(LiveServer {
+                    name: s["name"].as_str()?.to_string(),
+                    status: s["status"].as_str().unwrap_or("pending").to_string(),
+                    tools: s["tools"].as_array().map_or(0, Vec::len),
+                    error: s["error"].as_str().map(str::to_string),
+                })
+            })
+            .collect()
+    }
 }
 
 /// The queued messages a replayed message of yours carries, taken out of
@@ -2204,6 +2259,13 @@ pub struct AppState {
     custom_commands: Option<(std::path::PathBuf, Vec<crate::commands::Command>)>,
     /// The skills `/` offers, read with the custom commands.
     skill_commands: Vec<crate::commands::Command>,
+    /// Each live session's own commands, as ForgeCLI listed them
+    /// (`initialize`): what `/` adds to the app's list.
+    live_commands: std::collections::HashMap<usize, Vec<crate::commands::Command>>,
+    /// Each live session's MCP servers (`mcp_status`), for the Session column.
+    pub live_servers: std::collections::HashMap<usize, Vec<LiveServer>>,
+    /// The server whose restart or switch is under way.
+    pub mcp_busy: Option<String>,
     /// A read of either is under way.
     pub completions_loading: bool,
     /// The context window's breakdown is open (the composer's meter).
@@ -2478,6 +2540,9 @@ impl AppState {
             find_request: None,
             custom_commands: None,
             skill_commands: vec![],
+            live_commands: Default::default(),
+            live_servers: Default::default(),
+            mcp_busy: None,
             completions_loading: false,
             context_open: false,
             versions_open: None,
@@ -2987,6 +3052,7 @@ impl AppState {
                 messages,
                 session: c.session,
                 resumable: c.resumable,
+                fork_of: c.fork_of,
                 updated,
                 versions,
                 design: c.design,
@@ -7237,6 +7303,36 @@ fix everything under 8, render it again to check, then tell me the scores before
         .detach();
     }
 
+    /// The commands the chat's ForgeCLI listed that the app's own list
+    /// lacks, without the ones the app does itself (`commands::HANDLED`).
+    fn live_extra_commands(&self) -> Vec<CompletionCommand> {
+        let Some(live) = self.current.and_then(|c| self.live_commands.get(&c)) else {
+            return vec![];
+        };
+        let known: std::collections::HashSet<String> = self
+            .custom_commands
+            .iter()
+            .flat_map(|(_, c)| c.iter())
+            .chain(self.skill_commands.iter())
+            .map(|c| c.name.to_lowercase())
+            .chain(crate::commands::builtin().into_iter().map(|c| c.name.to_lowercase()))
+            .collect();
+        live.iter()
+            .filter(|c| !known.contains(&c.name.to_lowercase()))
+            .filter(|c| !crate::commands::HANDLED.contains(&c.name.as_str()))
+            .map(|c| CompletionCommand {
+                name: c.name.clone(),
+                args: c.args.clone(),
+                description: c.description.clone(),
+                group: if c.name.starts_with("mcp__") {
+                    "MCP prompts"
+                } else {
+                    "From ForgeCLI"
+                },
+            })
+            .collect()
+    }
+
     /// The commands `/` offers: the project's own, then ForgeCLI's.
     pub fn completion_commands(&self) -> Vec<CompletionCommand> {
         let custom = self
@@ -7274,6 +7370,9 @@ fix everything under 8, render it again to check, then tell me the scores before
                         group: "ForgeCLI",
                     }),
             )
+            // What the chat's ForgeCLI listed that the app doesn't: your own
+            // skills and commands, a plugin's, an MCP server's prompts.
+            .chain(self.live_extra_commands().into_iter())
             // Forge's own: a side question (`parse_btw`), answered in a
             // card over the chat, which leaves the conversation as it is.
             .chain([CompletionCommand {
@@ -7974,6 +8073,30 @@ fix everything under 8, render it again to check, then tell me the scores before
         if let Request::StopAgents { chat, ids } = req {
             return self.on_stop_reply(chat, &ids, result, cx);
         }
+        if let Request::McpStatus { chat } = req {
+            if let Ok(v) = result {
+                self.live_servers.insert(chat, LiveServer::list(&v));
+            }
+            return cx.notify();
+        }
+        if let Request::McpAction { chat, server } = req {
+            self.mcp_busy = None;
+            if let Err(e) = result {
+                self.show_toast(format!("{server}: {e}"), cx);
+            }
+            self.ask_mcp_status(chat);
+            return cx.notify();
+        }
+        if let Request::Catalog { chat } = req {
+            // An older ForgeCLI answers without `commands`: `/` keeps the
+            // app's own list.
+            let commands = result
+                .ok()
+                .map(|v| crate::commands::from_catalog(&v["commands"]))
+                .unwrap_or_default();
+            self.live_commands.insert(chat, commands);
+            return cx.notify();
+        }
         if let Request::ContextUsage { chat } = req {
             // An older ForgeCLI doesn't know the request: the card keeps
             // the composer's measure.
@@ -8054,7 +8177,10 @@ fix everything under 8, render it again to check, then tell me the scores before
             (
                 Request::StopAgents { .. }
                 | Request::CancelQueued { .. }
-                | Request::ContextUsage { .. },
+                | Request::ContextUsage { .. }
+                | Request::Catalog { .. }
+                | Request::McpStatus { .. }
+                | Request::McpAction { .. },
                 _,
             ) => {}
             (_, Err(e)) => self.show_toast(format!("Couldn't revert: {e}"), cx),
@@ -8165,6 +8291,39 @@ fix everything under 8, render it again to check, then tell me the scores before
 
     /// Ask chat `chat`'s ForgeCLI what fills its context; the answer lands
     /// in `context_usage`. Nothing to ask without a running session.
+    /// Ask the chat's ForgeCLI how its MCP servers are doing.
+    pub fn ask_mcp_status(&mut self, chat: usize) {
+        if let Some(Ok(id)) = self.sessions.get(&chat).map(|l| l.session.mcp_status()) {
+            self.requests.insert(id, Request::McpStatus { chat });
+        }
+    }
+
+    /// Restart one of the chat's MCP servers (`reconnect`), or turn it on
+    /// or off; the list is asked again when ForgeCLI answers.
+    pub fn mcp_server_action(
+        &mut self,
+        chat: usize,
+        server: String,
+        action: Option<bool>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(live) = self.sessions.get(&chat) else {
+            return;
+        };
+        let sent = match action {
+            None => live.session.mcp_reconnect(&server),
+            Some(on) => live.session.mcp_toggle(&server, on),
+        };
+        match sent {
+            Ok(id) => {
+                self.mcp_busy = Some(server.clone());
+                self.requests.insert(id, Request::McpAction { chat, server });
+            }
+            Err(e) => self.show_toast(format!("{server}: {e}"), cx),
+        }
+        cx.notify();
+    }
+
     pub fn ask_context_usage(&mut self, chat: usize) {
         if let Some(Ok(id)) = self.sessions.get(&chat).map(|l| l.session.context_usage()) {
             self.requests.insert(id, Request::ContextUsage { chat });
@@ -8177,6 +8336,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         if self.session_open {
             if let Some(chat) = self.current {
                 self.ask_context_usage(chat);
+                self.ask_mcp_status(chat);
             }
         }
         cx.notify();
@@ -8454,6 +8614,10 @@ fix everything under 8, render it again to check, then tell me the scores before
             format!("{} (copy)", c.title).into(),
         );
         copy.messages = messages;
+        // Its ForgeCLI conversation starts as a fork of this one's.
+        if c.resumable {
+            copy.fork_of = Some(c.session.clone());
+        }
         self.next_id += 1;
         let at = self.chats.iter().position(|c| c.id == id).unwrap_or(0);
         let new_id = copy.id;
@@ -9819,6 +9983,12 @@ fix everything under 8, render it again to check, then tell me the scores before
         if resumable && self.sessions.get(&id).is_some_and(|l| l.design != design) {
             self.sessions.remove(&id);
         }
+        // So is the reasoning effort (`--effort`): a new level restarts it,
+        // resuming the conversation, before this message.
+        let effort = self.effort_for(&profile);
+        if self.sessions.get(&id).is_some_and(|l| l.effort != effort) {
+            self.sessions.remove(&id);
+        }
         // A remote project's first message connects (and installs ForgeCLI
         // there if needed) in the background, then sends.
         if !self.sessions.contains_key(&id) {
@@ -9895,6 +10065,12 @@ fix everything under 8, render it again to check, then tell me the scores before
         self.turn_started.insert(id, std::time::Instant::now());
     }
 
+    /// The effort a session on `profile` runs at: the model menu's, when
+    /// the model takes it.
+    fn effort_for(&self, profile: &crate::endpoints::Profile) -> Option<crate::endpoints::Effort> {
+        self.effort.filter(|e| profile.effort_levels().contains(e))
+    }
+
     fn start_session(
         &mut self,
         id: usize,
@@ -9908,13 +10084,33 @@ fix everything under 8, render it again to check, then tell me the scores before
             .find(|c| c.id == id)
             .map(|c| (c.session.clone(), c.resumable))
             .unwrap_or_else(|| (crate::history::new_id(), false));
-        let conversation = if resumable {
-            crate::backend::Conversation::Resume(&session_id)
-        } else {
-            crate::backend::Conversation::New(&session_id)
+        let fork_of = self
+            .chats
+            .iter()
+            .find(|c| c.id == id)
+            .and_then(|c| c.fork_of.clone());
+        let conversation = match (&fork_of, resumable) {
+            (_, true) => crate::backend::Conversation::Resume(&session_id),
+            (Some(from), false) => crate::backend::Conversation::Fork {
+                from,
+                id: &session_id,
+            },
+            (None, false) => crate::backend::Conversation::New(&session_id),
         };
         let mut launch =
             crate::backend::launch(&profile, self.mode, self.bypass_allowed, conversation)?;
+        // Forge's own settings for every session: a fallback model, limits,
+        // a worktree per new chat, unattended runs (`app_settings.rs`).
+        let forge = crate::app_settings::get();
+        launch.args.extend(
+            forge.forge_args(matches!(conversation, crate::backend::Conversation::New(_))),
+        );
+        launch.env.extend(forge.forge_env());
+        // The effort chosen in the model menu, when this model takes one.
+        let effort = self.effort_for(&profile);
+        if let Some(e) = effort {
+            launch.args.extend(["--effort".to_string(), e.wire().to_string()]);
+        }
         // The web browser: Forge's own browser tools (this executable, as
         // an MCP server) on the browser in the side panel. A remote agent
         // reaches them over HTTP, forwarded back to this machine.
@@ -10106,6 +10302,13 @@ fix everything under 8, render it again to check, then tell me the scores before
             }
         });
         self.stale_turns.remove(&id);
+        // What it offers, for the `/` menu (skills, plugin commands, MCP prompts).
+        if let Ok(request) = session.initialize() {
+            self.requests.insert(request, Request::Catalog { chat: id });
+        }
+        if let Ok(request) = session.mcp_status() {
+            self.requests.insert(request, Request::McpStatus { chat: id });
+        }
         self.sessions.insert(
             id,
             Live {
@@ -10114,6 +10317,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                 profile,
                 generation,
                 design: self.chats.iter().find(|c| c.id == id).and_then(|c| c.design.clone()),
+                effort,
                 _relays: relays,
             },
         );
@@ -10260,15 +10464,13 @@ fix everything under 8, render it again to check, then tell me the scores before
                 }
                 cx.notify();
             }
+            Event::Notice { text, error } => {
+                self.notice(chat, text, error);
+                self.mark_dirty(chat, cx);
+                cx.notify();
+            }
             Event::ModeChanged(m) => {
-                let mode = match m.as_str() {
-                    "acceptEdits" => Some(ModeId::AcceptEdits),
-                    "plan" => Some(ModeId::Plan),
-                    "bypassPermissions" => Some(ModeId::Bypass),
-                    "default" => Some(ModeId::Manual),
-                    _ => None,
-                };
-                if let Some(mode) = mode {
+                if let Some(mode) = ModeId::from_cli(&m) {
                     self.mode_reported(chat, mode);
                     cx.notify();
                 }
@@ -10490,6 +10692,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                 }
                 // The turn changed what fills the context: ask again.
                 self.ask_context_usage(chat);
+                self.ask_mcp_status(chat);
                 let seconds = if ms > 0 {
                     ms as f32 / 1000.
                 } else {

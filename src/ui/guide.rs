@@ -26,7 +26,7 @@ const SECTIONS: &[(&str, &[&str])] = &[
     (
         "Modes",
         &[
-            "The mode says how much Forge may do without asking. Manual asks before each edit; Edit automatically makes edits without asking; Plan explores and presents a plan before editing. To be taught as you go, in any mode, type /forge:expert and what you want to learn. Shift+Tab cycles the mode inside a chat; Settings → General picks where new chats start.",
+            "The mode says how much Forge may do without asking. Manual asks before each edit; Edit automatically makes edits without asking; Auto also runs routine commands and asks only for risky ones; Plan explores and presents a plan before editing; Don't ask never asks and skips what your rules don't allow. To be taught as you go, in any mode, type /forge:expert and what you want to learn. Shift+Tab cycles the mode inside a chat; Settings → General picks where new chats start.",
         ],
     ),
     (

@@ -16,7 +16,8 @@ use crate::theme::Theme;
 pub fn tint(t: &Theme, mode: ModeId) -> Option<Hsla> {
     match mode {
         ModeId::Manual => None,
-        ModeId::AcceptEdits => Some(t.extra.mode_edit),
+        // Auto and Don't ask act without asking, as Edit automatically does.
+        ModeId::AcceptEdits | ModeId::Auto | ModeId::DontAsk => Some(t.extra.mode_edit),
         ModeId::Plan => Some(t.extra.mode_plan),
         ModeId::Bypass => Some(t.extra.mode_bypass),
     }

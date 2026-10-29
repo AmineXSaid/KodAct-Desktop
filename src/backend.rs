@@ -38,6 +38,10 @@ pub enum Event {
     /// The chat's `/goal` changed: set, checked, paused, met, given up or
     /// cleared (`system/goal`).
     Goal(crate::state::Goal),
+    /// Something ForgeCLI did that the chat says in a line (`system`
+    /// events: a compaction, a model fallback, a subtask, the loop guard):
+    /// its text, and whether it reads as a problem.
+    Notice { text: String, error: bool },
     /// A sub-agent's own tool call; `parent` is the call that started it.
     SubTool {
         parent: String,
@@ -193,6 +197,8 @@ after three rounds. Then tell the user, in a line or two, what the review change
 pub enum Conversation<'a> {
     New(&'a str),
     Resume(&'a str),
+    /// A copy: `from`'s conversation, carried on under `id`.
+    Fork { from: &'a str, id: &'a str },
 }
 
 pub fn launch(
@@ -234,6 +240,13 @@ pub fn launch(
     match conversation {
         Conversation::New(id) => args.extend(["--session-id".to_string(), id.to_string()]),
         Conversation::Resume(id) => args.extend(["--resume".to_string(), id.to_string()]),
+        Conversation::Fork { from, id } => args.extend([
+            "--resume".to_string(),
+            from.to_string(),
+            "--fork-session".to_string(),
+            "--session-id".to_string(),
+            id.to_string(),
+        ]),
     }
     let mut env = vec![];
     let base = cli_base_url(profile);
@@ -423,6 +436,31 @@ impl Session {
     /// (`{"cancelled": bool}`) arrives as `Event::ControlReply`.
     pub fn cancel_queued(&self, uuid: &str) -> Result<String, String> {
         self.control(json!({ "subtype": "cancel_queued", "uuid": uuid }))
+    }
+
+    /// The session's MCP servers and how each is doing (`mcp_status`); the
+    /// answer arrives as `Event::ControlReply`.
+    pub fn mcp_status(&self) -> Result<String, String> {
+        self.control(json!({ "subtype": "mcp_status" }))
+    }
+
+    /// Restart one of the session's MCP servers from its config.
+    pub fn mcp_reconnect(&self, server: &str) -> Result<String, String> {
+        self.control(json!({ "subtype": "mcp_reconnect", "serverName": server }))
+    }
+
+    /// Turn one of the session's MCP servers off or back on (ForgeCLI keeps
+    /// the choice, as `/mcp enable|disable` does).
+    pub fn mcp_toggle(&self, server: &str, enabled: bool) -> Result<String, String> {
+        self.control(json!({ "subtype": "mcp_toggle", "serverName": server, "enabled": enabled }))
+    }
+
+    /// Ask ForgeCLI what this session offers (`initialize`): its commands
+    /// with their descriptions (built-ins, custom commands, skills, MCP
+    /// prompts), output styles and models. The answer arrives as
+    /// `Event::ControlReply`.
+    pub fn initialize(&self) -> Result<String, String> {
+        self.control(json!({ "subtype": "initialize" }))
     }
 
     /// Ask what fills the context (ForgeCLI's `/context` numbers); the answer
@@ -942,6 +980,11 @@ impl Parser {
                     out.push(Event::Goal(goal));
                 }
             }
+            Some("system") if !nested && system_notice(&v).is_some() => {
+                if let Some((text, error)) = system_notice(&v) {
+                    out.push(Event::Notice { text, error });
+                }
+            }
             Some("system") if v["subtype"] == "status" => {
                 if let Some(m) = v["permissionMode"].as_str() {
                     out.push(Event::ModeChanged(m.to_string()));
@@ -1034,6 +1077,180 @@ impl Parser {
     }
 }
 
+/// Why a model was passed over, in words: ForgeCLI's reason carries the HTTP
+/// status, error type and URL, which say nothing to most people.
+fn fallback_reason(raw: &str) -> Option<&'static str> {
+    let r = raw.to_ascii_lowercase();
+    if r.contains("529") || r.contains("overloaded") || r.contains("503") {
+        Some("it was overloaded")
+    } else if r.contains("429") || r.contains("rate limit") || r.contains("rate_limit") {
+        Some("it hit a rate limit")
+    } else if r.contains("404") || r.contains("not_found") || r.contains("not found") {
+        Some("the endpoint doesn't have it")
+    } else if r.contains("timed out") || r.contains("timeout") {
+        Some("it didn't answer in time")
+    } else {
+        None
+    }
+}
+
+/// What a `system` event ForgeCLI sends a host says in the chat, in plain
+/// words, and whether it reads as a problem; `None` for the ones the app
+/// shows elsewhere (`init`, `status`, `goal`) or that only steer the model.
+/// None of them is the turn failing (an error line offers Retry): they say
+/// what Forge did, so they read as notes.
+pub fn system_notice(v: &Value) -> Option<(String, bool)> {
+    let s = |k: &str| v[k].as_str().unwrap_or_default();
+    let thousands = |n: u64| {
+        if n >= 1000 {
+            format!("{}k", (n + 500) / 1000)
+        } else {
+            n.to_string()
+        }
+    };
+    let plural = |n: u64, one: &str, many: &str| {
+        if n == 1 {
+            format!("1 {one}")
+        } else {
+            format!("{n} {many}")
+        }
+    };
+    Some(match v["subtype"].as_str()? {
+        // One you asked for has its own line when its turn ends (`COMPACTED`).
+        "compact_boundary" if v["compact_metadata"]["trigger"] == "manual" => return None,
+        "compact_boundary" => {
+            let m = &v["compact_metadata"];
+            let before = m["pre_tokens"].as_u64().unwrap_or(0);
+            let size = if before > 0 {
+                format!(" It held about {} tokens.", thousands(before))
+            } else {
+                String::new()
+            };
+            (
+                format!("The conversation was compacted to free context: Forge now works from a summary of it.{size}"),
+                false,
+            )
+        }
+        "model_fallback" => (
+            format!(
+                "{} was unavailable, so this turn goes on with {}.{}",
+                s("from"),
+                s("to"),
+                v["reason"]
+                    .as_str()
+                    .and_then(fallback_reason)
+                    .map(|r| format!(" ({r})"))
+                    .unwrap_or_default()
+            ),
+            false,
+        ),
+        "subtask" => {
+            let task = s("task");
+            match s("status") {
+                "started" => (format!("Subtask started in the background: {task}"), false),
+                status => {
+                    let calls = v["num_tool_calls"].as_u64().unwrap_or(0);
+                    let secs = v["duration_ms"].as_u64().unwrap_or(0) / 1000;
+                    let mut text = format!(
+                        "Subtask {}: {task} ({}, {secs}s).",
+                        if status == "completed" { "finished" } else { status },
+                        plural(calls, "tool call", "tool calls"),
+                    );
+                    text.push_str(if v["handed_back"] == false {
+                        " Its conversation was closed, so the report isn't passed on."
+                    } else {
+                        " Its report goes to Forge with your next message."
+                    });
+                    (text, false)
+                }
+            }
+        }
+        "loop_guard" => (
+            match s("kind") {
+                "repeated_failure" => format!(
+                    "{} failed {} in a row, so Forge was told to change its approach.",
+                    s("tool"),
+                    plural(v["count"].as_u64().unwrap_or(0), "time", "times")
+                ),
+                "no_progress" => format!(
+                    "{} gave the same result {}, so Forge was told to try something else.",
+                    s("tool"),
+                    plural(v["count"].as_u64().unwrap_or(0), "time", "times")
+                ),
+                "oscillating_edits" => format!(
+                    "Edits to {} kept undoing each other, so Forge was told to stop and rethink.",
+                    s("file")
+                ),
+                _ => format!(
+                    "{} tool calls failed in a row, so Forge was told to step back.",
+                    v["count"].as_u64().unwrap_or(0)
+                ),
+            },
+            false,
+        ),
+        "verification" => (
+            match s("kind") {
+                "last_check_failed" => format!(
+                    "The last check ({}) failed, so Forge was reminded before finishing.",
+                    s("command")
+                ),
+                _ => {
+                    let n = v["files"].as_array().map_or(0, Vec::len) as u64;
+                    format!(
+                        "Forge changed {} without running a check, so it was reminded to verify before finishing.",
+                        if n == 0 {
+                            "files".to_string()
+                        } else {
+                            plural(n, "file", "files")
+                        }
+                    )
+                }
+            },
+            false,
+        ),
+        "background_exit" => {
+            let shells = v["shells"].as_array().cloned().unwrap_or_default();
+            let lines: Vec<String> = shells
+                .iter()
+                .map(|sh| {
+                    let how = match sh["exit_code"].as_i64() {
+                        Some(0) => "finished".to_string(),
+                        Some(c) => format!("exited with {c}"),
+                        None => "stopped".to_string(),
+                    };
+                    format!(
+                        "{} {how} after {}s",
+                        sh["command"].as_str().unwrap_or("A background command"),
+                        sh["seconds"].as_u64().unwrap_or(0)
+                    )
+                })
+                .collect();
+            (format!("In the background: {}.", lines.join("; ")), false)
+        }
+        "background_wait" => (
+            format!(
+                "Forge waits up to {}s for {} still running in the background.",
+                v["limit_ms"].as_u64().unwrap_or(0) / 1000,
+                plural(
+                    v["shells"].as_array().map_or(0, Vec::len) as u64,
+                    "command",
+                    "commands"
+                )
+            ),
+            false,
+        ),
+        "tool_input_repaired" => (
+            format!(
+                "{} was called with input it couldn't read ({}), so Forge was asked to send it again.",
+                s("tool"),
+                s("problem")
+            ),
+            false,
+        ),
+        _ => return None,
+    })
+}
+
 /// A tool result's text: a string, or the text blocks of a list.
 fn result_text(c: &Value) -> String {
     match c {
@@ -1113,7 +1330,17 @@ pub fn tool_call(name: &str, input: &Value) -> ToolCall {
             input["description"].as_str().map(str::to_string),
             vec![],
         ),
-        "Grep" | "Glob" | "LS" => {
+        "LS" => (
+            ToolKind::Search,
+            input["path"]
+                .as_str()
+                .filter(|p| !p.is_empty())
+                .unwrap_or(".")
+                .to_string(),
+            None,
+            vec![],
+        ),
+        "Grep" | "Glob" => {
             let mut t = s("pattern");
             if let Some(p) = input["path"].as_str().filter(|p| !p.is_empty()) {
                 t = format!("{t} in {p}");
@@ -1179,6 +1406,89 @@ pub fn tool_call(name: &str, input: &Value) -> ToolCall {
                 vec![],
             )
         }
+        // Background shells: reading one's output, stopping one.
+        "BashOutput" => (
+            ToolKind::Bash,
+            format!("output of shell {}", s("bash_id")),
+            input["filter"].as_str().map(|f| format!("lines matching {f}")),
+            vec![],
+        ),
+        "KillShell" => (
+            ToolKind::Other,
+            "KillShell".to_string(),
+            Some(format!("shell {}", s("shell_id"))),
+            vec![],
+        ),
+        // The schedule (`/loop`): a task on a cron, the list, one cancelled,
+        // and Forge pacing itself.
+        "CronCreate" => (
+            ToolKind::Other,
+            "CronCreate".to_string(),
+            Some(format!(
+                "{}{}: {}",
+                s("cron"),
+                if input["recurring"] == false { ", once" } else { "" },
+                one_line(&s("prompt"), 80)
+            )),
+            vec![],
+        ),
+        "CronList" => (ToolKind::Other, "CronList".to_string(), None, vec![]),
+        "CronDelete" => (
+            ToolKind::Other,
+            "CronDelete".to_string(),
+            Some(s("id")),
+            vec![],
+        ),
+        "ScheduleWakeup" => (
+            ToolKind::Other,
+            "ScheduleWakeup".to_string(),
+            Some(if input["stop"] == true {
+                "the loop stops".to_string()
+            } else {
+                let secs = input["delaySeconds"].as_u64().unwrap_or(0);
+                let when = if secs >= 3600 {
+                    format!("in {} h", secs / 3600)
+                } else if secs >= 60 {
+                    format!("in {} min", secs / 60)
+                } else {
+                    format!("in {secs} s")
+                };
+                match input["reason"].as_str().filter(|r| !r.is_empty()) {
+                    Some(r) => format!("{when}: {}", one_line(r, 80)),
+                    None => when,
+                }
+            }),
+            vec![],
+        ),
+        "EnterPlanMode" => (
+            ToolKind::Other,
+            "EnterPlanMode".to_string(),
+            Some("Switched to Plan mode".to_string()),
+            vec![],
+        ),
+        // A second model's advice (`/advisor`).
+        "Advisor" => (
+            ToolKind::Other,
+            "Advisor".to_string(),
+            input["question"]
+                .as_str()
+                .or(input["prompt"].as_str())
+                .map(|q| one_line(q, 80)),
+            vec![],
+        ),
+        // An MCP server's resources: the list, or one by its URI.
+        "ListMcpResourcesTool" => (
+            ToolKind::Other,
+            "ListMcpResourcesTool".to_string(),
+            input["server"].as_str().map(str::to_string),
+            vec![],
+        ),
+        "ReadMcpResourceTool" => (
+            ToolKind::Read,
+            s("uri"),
+            input["server"].as_str().map(|v| format!("from {v}")),
+            vec![],
+        ),
         // A skill reads as its name, without its plugin's prefix.
         "Skill" => {
             let skill = s("skill");
@@ -1210,6 +1520,16 @@ pub fn tool_call(name: &str, input: &Value) -> ToolCall {
         full: false,
         review: Review::Open,
         images: vec![],
+    }
+}
+
+/// `text` on one line, cut to `max` characters.
+fn one_line(text: &str, max: usize) -> String {
+    let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if flat.chars().count() > max {
+        format!("{}…", flat.chars().take(max).collect::<String>())
+    } else {
+        flat
     }
 }
 
@@ -1719,6 +2039,99 @@ mod tests {
         assert_eq!(
             tool_call("Task", &json!({"description":"look"})).kind,
             ToolKind::Other
+        );
+    }
+
+    /// ForgeCLI's `system` events reach the chat as plain lines; the ones
+    /// shown elsewhere or meant only for the model don't.
+    #[test]
+    fn forgecli_events_read_as_lines_in_the_chat() {
+        let notice = |line: Value| {
+            let mut p = Parser::default();
+            p.line(&line.to_string())
+                .into_iter()
+                .find_map(|e| match e {
+                    Event::Notice { text, error } => Some((text, error)),
+                    _ => None,
+                })
+        };
+        let (t, err) = notice(json!({"type":"system","subtype":"compact_boundary","compact_metadata":{"trigger":"auto","pre_tokens":152400}})).unwrap();
+        assert!(t.contains("compacted") && t.contains("152k") && !err, "{t}");
+        assert!(notice(json!({"type":"system","subtype":"compact_boundary","compact_metadata":{"trigger":"manual"}})).is_none());
+        let (t, err) = notice(json!({"type":"system","subtype":"model_fallback","from":"big","to":"small","reason":"HTTP 529 (overloaded_error) from http://x/v1/messages: Overloaded"})).unwrap();
+        assert_eq!(t, "big was unavailable, so this turn goes on with small. (it was overloaded)");
+        let (t, _) = notice(json!({"type":"system","subtype":"model_fallback","from":"big","to":"small","reason":"socket closed"})).unwrap();
+        assert_eq!(t, "big was unavailable, so this turn goes on with small.");
+        assert!(!err);
+        let (t, _) = notice(json!({"type":"system","subtype":"subtask","id":"s1","status":"started","task":"audit deps"})).unwrap();
+        assert_eq!(t, "Subtask started in the background: audit deps");
+        let (t, err) = notice(json!({"type":"system","subtype":"subtask","status":"completed","task":"audit deps","num_tool_calls":4,"duration_ms":31000,"handed_back":true})).unwrap();
+        assert!(t.starts_with("Subtask finished: audit deps (4 tool calls, 31s).") && !err, "{t}");
+        let (t, err) = notice(json!({"type":"system","subtype":"loop_guard","kind":"repeated_failure","tool":"Bash","count":3})).unwrap();
+        assert!(t.starts_with("Bash failed 3 times in a row") && !err, "{t}");
+        let (t, _) = notice(json!({"type":"system","subtype":"verification","kind":"unchecked","files":["a.rs","b.rs"]})).unwrap();
+        assert!(t.contains("2 files"), "{t}");
+        let (t, err) = notice(json!({"type":"system","subtype":"background_exit","shells":[{"id":"b1","command":"cargo build","exit_code":101,"seconds":40}]})).unwrap();
+        assert_eq!(t, "In the background: cargo build exited with 101 after 40s.");
+        assert!(!err);
+        let (t, _) = notice(json!({"type":"system","subtype":"tool_input_repaired","tool":"Edit","problem":"invalid JSON"})).unwrap();
+        assert!(t.starts_with("Edit was called with input it couldn't read"), "{t}");
+        // Shown elsewhere, or only for the model.
+        for sub in ["init", "status", "goal", "todo_reminder", "next_step_reminder", "attempt_reminder"] {
+            assert!(notice(json!({"type":"system","subtype":sub})).is_none(), "{sub}");
+        }
+    }
+
+    /// Every tool ForgeCLI offers (its `system/init` `tools`, plus Advisor
+    /// and the MCP resource tools when they apply) reads as words, never as
+    /// its identifier, and says what it acts on.
+    #[test]
+    fn every_forgecli_tool_reads_as_words() {
+        let calls = [
+            ("Bash", json!({"command": "cargo test"})),
+            ("BashOutput", json!({"bash_id": "b1"})),
+            ("KillShell", json!({"shell_id": "b1"})),
+            ("Glob", json!({"pattern": "**/*.rs"})),
+            ("Grep", json!({"pattern": "fn main"})),
+            ("LS", json!({"path": "src"})),
+            ("Read", json!({"file_path": "a.rs"})),
+            ("Edit", json!({"file_path": "a.rs", "old_string": "a", "new_string": "b"})),
+            ("MultiEdit", json!({"file_path": "a.rs", "edits": []})),
+            ("Write", json!({"file_path": "a.rs", "content": "x"})),
+            ("NotebookEdit", json!({"notebook_path": "n.ipynb"})),
+            ("TodoWrite", json!({"todos": []})),
+            ("AskUserQuestion", json!({"questions": []})),
+            ("EnterPlanMode", json!({})),
+            ("ExitPlanMode", json!({"plan": "1. x"})),
+            ("WebFetch", json!({"url": "https://example.com"})),
+            ("WebSearch", json!({"query": "rust"})),
+            ("Skill", json!({"skill": "simplify"})),
+            ("CronCreate", json!({"cron": "*/5 * * * *", "prompt": "check CI", "recurring": true})),
+            ("CronList", json!({})),
+            ("CronDelete", json!({"id": "t1"})),
+            ("ScheduleWakeup", json!({"delaySeconds": 1200, "reason": "watching CI", "prompt": "x"})),
+            ("Task", json!({"description": "look", "prompt": "p", "subagent_type": "Explore"})),
+            ("Advisor", json!({"question": "Is this safe?"})),
+            ("ListMcpResourcesTool", json!({"server": "docs"})),
+            ("ReadMcpResourceTool", json!({"server": "docs", "uri": "docs://a"})),
+            ("mcp__github__list_issues", json!({})),
+        ];
+        for (name, input) in calls {
+            let shown = tool_call(name, &input).shown_target();
+            assert!(
+                !shown.is_empty() && shown.as_ref() != name || name == "Bash",
+                "{name} shows as {shown:?}"
+            );
+            assert!(!shown.contains("mcp__"), "{name} shows as {shown:?}");
+        }
+        assert_eq!(tool_call("LS", &json!({"path": "src"})).target.as_ref(), "src");
+        let c = tool_call("ScheduleWakeup", &json!({"delaySeconds": 1200, "reason": "watching CI"}));
+        assert_eq!(c.note.as_deref(), Some("in 20 min: watching CI"));
+        let c = tool_call("CronCreate", &json!({"cron": "0 9 * * 1", "prompt": "standup", "recurring": false}));
+        assert_eq!(c.note.as_deref(), Some("0 9 * * 1, once: standup"));
+        assert_eq!(
+            tool_call("mcp__github__list_issues", &json!({})).shown_target().as_ref(),
+            "github · list issues"
         );
     }
 }
