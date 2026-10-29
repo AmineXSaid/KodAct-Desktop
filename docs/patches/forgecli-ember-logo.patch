@@ -1,4 +1,4 @@
-From 0183e132f536eae98ce983664520b88a4edc454c Mon Sep 17 00:00:00 2001
+From e730842d9ff9852760b81df80ed509a174d0908e Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Thu, 29 Oct 2026 15:51:54 +0000
 Subject: [PATCH] Ember logo: Forge Desktop's ink and copper; whole in narrow
@@ -11,20 +11,20 @@ Content-Transfer-Encoding: 8bit
   F in ink (paper on dark), the cube's top copper over an ink (paper)
   face and a warm grey one. The brand role (wordmark, keys, prompt mark,
   status glyph) is the same copper.
-- A pane 41 to 57 columns wide (a desktop's side terminal) shows the small
-  logo, its keys two to a line, instead of none.
+- A pane 45 to 63 columns wide (a desktop's side terminal) shows the whole
+  logo, its keys two to a line; 41 to 44, the small one; under 41, none.
 - Lines beside the logo never wrap (a wrapped line opened a gap in it):
   the endpoint and the folder keep their ends (`…/live/proj`).
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01NYxCfae2TEE9hkXEzRbW6j
 ---
- crates/forge-cli/src/tui/brand.rs   | 127 +++++++++++++++++++++-------
+ crates/forge-cli/src/tui/brand.rs   | 135 +++++++++++++++++++++-------
  crates/forge-cli/src/tui/palette.rs |  15 ++--
- 2 files changed, 106 insertions(+), 36 deletions(-)
+ 2 files changed, 113 insertions(+), 37 deletions(-)
 
 diff --git a/crates/forge-cli/src/tui/brand.rs b/crates/forge-cli/src/tui/brand.rs
-index d74e2f6..ec7e0d6 100644
+index d74e2f6..86dfb47 100644
 --- a/crates/forge-cli/src/tui/brand.rs
 +++ b/crates/forge-cli/src/tui/brand.rs
 @@ -1,8 +1,8 @@
@@ -150,7 +150,7 @@ index d74e2f6..ec7e0d6 100644
          if i > 0 {
              spans.push(Span::raw(" ".repeat(gap)));
          }
-@@ -207,21 +242,37 @@ pub fn welcome(t: &Theme, w: &Welcome, cols: usize) -> Vec<Line<'static>> {
+@@ -207,21 +242,38 @@ pub fn welcome(t: &Theme, w: &Welcome, cols: usize) -> Vec<Line<'static>> {
          Span::styled("ForgeCLI", t.brand_strong().add_modifier(Modifier::BOLD)),
          Span::styled(format!("  v{}", w.version), t.dim()),
      ]);
@@ -179,15 +179,17 @@ index d74e2f6..ec7e0d6 100644
 -        let text = vec![Line::default(), title, runs, cwd, Line::default(), keys_line(t, 3)];
 +        let r = room(16);
 +        let text = vec![Line::default(), title, runs_in(r), cwd_in(r), Line::default(), keys_line(t, 3)];
++        out.extend(beside(mark(t, false), 16, text));
++    } else if cols >= 16 + 5 + 24 {
++        // A narrow pane (a side terminal): the whole logo still, its text
++        // kept to the room beside it, the keys two to a line.
++        let r = room(16);
++        let text = vec![Line::default(), title, runs_in(r), cwd_in(r), Line::default(), keys_of(t, &KEYS[..2], 2), keys_of(t, &KEYS[2..], 2)];
          out.extend(beside(mark(t, false), 16, text));
-     } else if cols >= 12 + 5 + 41 {
+-    } else if cols >= 12 + 5 + 41 {
 -        let text = vec![title, runs, cwd, Line::default(), keys_line(t, 2)];
-+        let r = room(12);
-+        let text = vec![title, runs_in(r), cwd_in(r), Line::default(), keys_line(t, 2)];
-+        out.extend(beside(mark(t, true), 12, text));
 +    } else if cols >= 12 + 5 + 24 {
-+        // A narrow pane (a side terminal): the small logo still, the keys
-+        // two to a line.
++        // Narrower: the small logo.
 +        let r = room(12);
 +        let text = vec![title, runs_in(r), cwd_in(r), keys_of(t, &KEYS[..2], 2), keys_of(t, &KEYS[2..], 2)];
          out.extend(beside(mark(t, true), 12, text));
@@ -196,7 +198,7 @@ index d74e2f6..ec7e0d6 100644
          for l in [title, runs, cwd] {
              let mut spans = vec![Span::raw("  ")];
              spans.extend(l.spans);
-@@ -408,9 +459,14 @@ mod tests {
+@@ -408,9 +460,14 @@ mod tests {
          assert_eq!(m.len(), 8);
          assert!(m.iter().all(|l| l.spans.iter().map(|s| width(&s.content)).sum::<usize>() <= 16));
          assert_eq!(mark(&DARK, true).len(), 6);
@@ -213,11 +215,11 @@ index d74e2f6..ec7e0d6 100644
      }
  
      #[test]
-@@ -438,6 +494,19 @@ mod tests {
+@@ -438,6 +495,24 @@ mod tests {
          }
          assert!(plain(&welcome(&DARK, &w, 100)).join("\n").contains("/ commands   @ files   ! shell   ? shortcuts"));
          assert!(plain(&welcome(&DARK, &w, 40)).iter().all(|l| !l.contains('▀')), "no logo when narrow");
-+        // A side pane (the desktop's terminal dock): the small logo, the keys two to a line.
++        // A side pane (the desktop's terminal dock): the whole logo, the keys two to a line.
 +        let side = plain(&welcome(&DARK, &w, 54));
 +        assert!(side.iter().any(|l| l.contains('▀')), "{side:?}");
 +        assert!(side.iter().any(|l| l.ends_with("/ commands  @ files")), "{side:?}");
@@ -228,7 +230,12 @@ index d74e2f6..ec7e0d6 100644
 +        let lines = plain(&welcome(&DARK, &deep, 54));
 +        assert!(lines.iter().any(|l| l.ends_with("/live/proj") && l.contains('…')), "{lines:?}");
 +        let art_rows = lines.iter().filter(|l| l.contains('▀') || l.contains('▄') || l.contains('█')).count();
-+        assert_eq!(art_rows, 6, "the small logo whole: {lines:?}");
++        assert_eq!(art_rows, 8, "the whole logo, unbroken: {lines:?}");
++        // Narrower still, the small logo, also unbroken.
++        let small = plain(&welcome(&DARK, &deep, 42));
++        let art_rows = small.iter().filter(|l| l.contains('▀') || l.contains('▄') || l.contains('█')).count();
++        assert_eq!(art_rows, 6, "{small:?}");
++        assert!(small.iter().all(|l| width(l) <= 42), "{small:?}");
 +        assert_eq!(keep_end("abcdef", 4), "…def");
      }
  

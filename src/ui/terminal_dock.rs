@@ -84,7 +84,10 @@ fn cell(window: &Window, t: &Theme) -> (Pixels, Pixels) {
         .advance(id, size, 'm')
         .map(|s| s.width)
         .unwrap_or(size * 0.6);
-    (w, (size * 1.4).round())
+    // Two cell widths high, so a half block is a square: pixel art drawn in
+    // half blocks (ForgeCLI's logo) keeps its proportions. Never under
+    // 1.15 lines, for text.
+    (w, (w * 2.).round().max((size * 1.15).round()))
 }
 
 impl TerminalDock {
