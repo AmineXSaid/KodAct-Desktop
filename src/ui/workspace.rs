@@ -231,6 +231,40 @@ impl Workspace {
         self.terminal.update(cx, |d, cx| d.open(None, window, cx));
     }
 
+    /// A ForgeCLI tab in the dock (`AppState::forge_terminal`), or a toast
+    /// saying why not.
+    fn forge_terminal(
+        &mut self,
+        kind: crate::state::ForgeTerm,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let shell = self.state.update(cx, |s, _| s.forge_terminal(kind));
+        match shell {
+            Ok(shell) => {
+                let was_open = self.state.read(cx).terminal_open;
+                self.state.update(cx, |s, cx| {
+                    s.terminal_open = true;
+                    s.save_window();
+                    cx.notify();
+                });
+                let dock = self.terminal.clone();
+                if was_open {
+                    dock.update(cx, |d, cx| d.open(Some(shell), window, cx));
+                } else {
+                    // A full-screen program draws for the size it starts
+                    // at: start it once the dock has been laid out.
+                    window.on_next_frame(move |window, _| {
+                        window.on_next_frame(move |window, cx| {
+                            dock.update(cx, |d, cx| d.open(Some(shell), window, cx));
+                        });
+                    });
+                }
+            }
+            Err(e) => self.state.update(cx, |s, cx| s.show_toast(e, cx)),
+        }
+    }
+
     /// The width the dock asks for: its share of the window, held between
     /// its narrowest and three fifths.
     fn dock_want(&self, window: &Window, cx: &Context<Self>) -> f32 {
@@ -1838,6 +1872,18 @@ impl Render for Workspace {
             .on_action(
                 cx.listener(|this, _: &NewTerminal, window, cx| this.new_terminal(window, cx)),
             )
+            .on_action(cx.listener(|this, _: &OpenForgeCli, window, cx| {
+                this.forge_terminal(crate::state::ForgeTerm::Ui, window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &OpenForgeCliShell, window, cx| {
+                this.forge_terminal(crate::state::ForgeTerm::Shell, window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &ForgeCliDoctor, window, cx| {
+                this.forge_terminal(crate::state::ForgeTerm::Doctor, window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &ForgeCliConfig, window, cx| {
+                this.forge_terminal(crate::state::ForgeTerm::Config, window, cx)
+            }))
             .on_action(cx.listener(|this, _: &FocusTerminal, window, cx| {
                 if this.state.read(cx).terminal_open && this.terminal.read(cx).has_tabs() {
                     this.terminal.update(cx, |d, cx| d.focus(window, cx));

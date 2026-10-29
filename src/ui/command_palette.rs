@@ -550,6 +550,30 @@ impl CommandPalette {
                 Box::new(NewTerminal),
             ),
             act(
+                "Open this chat in ForgeCLI's terminal UI",
+                "icons/terminal.svg",
+                None,
+                Box::new(OpenForgeCli),
+            ),
+            act(
+                "New terminal with ForgeCLI ready (forge -p, subcommands)",
+                "icons/terminal.svg",
+                None,
+                Box::new(OpenForgeCliShell),
+            ),
+            act(
+                "Check ForgeCLI and the endpoint (forge doctor)",
+                "icons/stethoscope.svg",
+                None,
+                Box::new(ForgeCliDoctor),
+            ),
+            act(
+                "Show ForgeCLI's merged settings (forge config)",
+                "icons/file-cog.svg",
+                None,
+                Box::new(ForgeCliConfig),
+            ),
+            act(
                 "Show the last command in the terminal",
                 "icons/terminal.svg",
                 None,

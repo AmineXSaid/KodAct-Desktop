@@ -31,6 +31,8 @@ pub struct Shell {
     pub args: Vec<String>,
     /// Where it starts (a local terminal; a remote one starts through its command).
     pub cwd: Option<PathBuf>,
+    /// More environment, over the app's own (ForgeCLI's endpoint and key).
+    pub env: Vec<(String, String)>,
 }
 
 /// The shells a new terminal can run, the default first: this computer's,
@@ -67,6 +69,7 @@ pub fn shells(
                             program: want,
                             args: vec![],
                             cwd: local_dir.is_dir().then(|| local_dir.to_path_buf()),
+                            env: vec![],
                         },
                     );
                 }
@@ -83,6 +86,7 @@ fn local_shells(dir: &std::path::Path) -> Vec<Shell> {
         program: program.into(),
         args: args.iter().map(|a| a.to_string()).collect(),
         cwd: cwd.clone(),
+        env: vec![],
     };
     let mut out = vec![];
     if cfg!(windows) {
@@ -194,6 +198,7 @@ pub fn remote_shell(r: &Remote, shell: &str, trust_new_key: bool) -> Shell {
         program: program.into(),
         args,
         cwd: None,
+        env: vec![],
     }
 }
 
@@ -314,6 +319,9 @@ impl Session {
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
         for (k, v) in &dressed.env {
+            cmd.env(k, v);
+        }
+        for (k, v) in &shell.env {
             cmd.env(k, v);
         }
         let child = pty
@@ -459,6 +467,7 @@ mod tests {
             program: "sh".into(),
             args: vec![],
             cwd: Some(dir),
+            env: vec![],
         };
         let s = Session::start(shell, Size { cols: 80, rows: 24 }, 1000, || {}).unwrap();
         s.input(b"printf '\\033[31mred\\033[0m %s\\n' hello-forge\r");
@@ -488,6 +497,7 @@ mod tests {
             program: "cmd.exe".into(),
             args: vec![],
             cwd: Some(std::env::temp_dir()),
+            env: vec![],
         };
         let s = Session::start(shell, Size { cols: 80, rows: 24 }, 1000, || {}).unwrap();
         s.input(b"echo hello-forge-win\r");
@@ -626,6 +636,7 @@ mod tests {
             program: String::new(),
             args: vec![],
             cwd: None,
+            env: vec![],
         };
         let s = Session::replay(
             shell,

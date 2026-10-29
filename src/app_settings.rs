@@ -22,7 +22,27 @@
 //!   "forge.autonomous": false,
 //!   "forge.maxThinkingTokens": 16000,
 //!   "forge.addDirs": ["~/shared/design-tokens"],
-//!   "forge.agent": "reviewer"
+//!   "forge.agent": "reviewer",
+//!   "forge.tools": ["Read", "Grep", "Glob"],
+//!   "forge.allowedTools": ["Bash(git status)"],
+//!   "forge.disallowedTools": ["WebFetch"],
+//!   "forge.sandbox": "workspace-write",
+//!   "forge.systemPrompt": "You are a careful reviewer.",
+//!   "forge.systemPromptFile": "~/prompts/review.md",
+//!   "forge.excludeDynamicSystemPromptSections": false,
+//!   "forge.strictMcpConfig": false,
+//!   "forge.settingSources": "user,project",
+//!   "forge.bare": false,
+//!   "forge.safeMode": false,
+//!   "forge.betas": ["context-1m-2025-08-07"],
+//!   "forge.debug": "api,hooks",
+//!   "forge.debugFile": "~/forge-debug.log",
+//!   "forge.autocompact": "200k",
+//!   "forge.includeHookEvents": true,
+//!   "forge.noSessionPersistence": false,
+//!   "forge.noInput": false,
+//!   "forge.jsonSchema": {"type": "object"},
+//!   "forge.extraArgs": ["--color", "never"]
 //! }
 //! ```
 //!
@@ -35,6 +55,16 @@
 //! (`FORGE_MAX_THINKING_TOKENS`), folders outside the project Forge may work
 //! in (`--add-dir`), and an agent every chat runs as, its prompt and tools
 //! (`--agent`).
+//!
+//! The rest pass ForgeCLI's own flags under their own names: which tools are
+//! offered, allowed and denied, the shell sandbox, the system prompt, which
+//! settings and MCP servers load, minimal and safe starts, API betas, debug
+//! logs, the compaction window, hook events in the stream, sessions not kept
+//! on disk (such a chat starts afresh each time its process does), never
+//! asking, and a JSON Schema every reply's structured result follows (shown
+//! under the reply). `forge.extraArgs` takes any other flag, except the ones
+//! the chat itself runs on (print mode, the stream formats, the session and
+//! the permission channel) and skipping permissions, which Settings allows.
 //!
 //! ```json
 //! ```
@@ -113,6 +143,108 @@ pub struct Settings {
     /// The agent every chat runs as (`.forge/agents/<name>.md`).
     #[serde(rename = "forge.agent")]
     pub agent: Option<String>,
+    /// The built-in tools offered (`[]` offers none).
+    #[serde(rename = "forge.tools")]
+    pub tools: Option<Vec<String>>,
+    /// Tool rules allowed without asking, as permission rules write them.
+    #[serde(rename = "forge.allowedTools")]
+    pub allowed_tools: Vec<String>,
+    /// Tool rules always refused.
+    #[serde(rename = "forge.disallowedTools")]
+    pub disallowed_tools: Vec<String>,
+    /// The shell sandbox: `off`, `read-only` or `workspace-write`.
+    #[serde(rename = "forge.sandbox")]
+    pub sandbox: Option<String>,
+    /// A system prompt in place of ForgeCLI's own.
+    #[serde(rename = "forge.systemPrompt")]
+    pub system_prompt: Option<String>,
+    /// The same, read from a file.
+    #[serde(rename = "forge.systemPromptFile")]
+    pub system_prompt_file: Option<String>,
+    /// Per-machine prompt sections move into the first message.
+    #[serde(rename = "forge.excludeDynamicSystemPromptSections")]
+    pub exclude_dynamic_sections: bool,
+    /// Only the MCP servers Forge passes (the browser, design tools).
+    #[serde(rename = "forge.strictMcpConfig")]
+    pub strict_mcp_config: bool,
+    /// Which settings files load: `user`, `project`, `local`, comma-separated.
+    #[serde(rename = "forge.settingSources")]
+    pub setting_sources: Option<String>,
+    /// No hooks or memory files.
+    #[serde(rename = "forge.bare")]
+    pub bare: bool,
+    /// Every customization off.
+    #[serde(rename = "forge.safeMode")]
+    pub safe_mode: bool,
+    /// API beta headers.
+    #[serde(rename = "forge.betas")]
+    pub betas: Vec<String>,
+    /// Debug logging, optionally filtered (`""` for everything).
+    #[serde(rename = "forge.debug")]
+    pub debug: Option<String>,
+    /// Where debug logs go.
+    #[serde(rename = "forge.debugFile")]
+    pub debug_file: Option<String>,
+    /// The auto-compact window: `auto`, or 100k to 1M tokens.
+    #[serde(rename = "forge.autocompact")]
+    pub autocompact: Option<String>,
+    /// Hooks report in the chat as they run.
+    #[serde(rename = "forge.includeHookEvents")]
+    pub include_hook_events: bool,
+    /// Sessions are not kept on disk; a chat can't be resumed.
+    #[serde(rename = "forge.noSessionPersistence")]
+    pub no_session_persistence: bool,
+    /// Never ask: what would ask is refused.
+    #[serde(rename = "forge.noInput")]
+    pub no_input: bool,
+    /// A JSON Schema each turn's structured result follows.
+    #[serde(rename = "forge.jsonSchema")]
+    pub json_schema: Option<serde_json::Value>,
+    /// Any other ForgeCLI flags, as written on a command line.
+    #[serde(rename = "forge.extraArgs")]
+    pub extra_args: Vec<String>,
+}
+
+/// Flags a chat's process runs on: Forge passes them itself, and another
+/// value would break the conversation. Skipping permissions goes through
+/// Settings (Bypass permissions), behind its warning.
+const RESERVED_FLAGS: &[&str] = &[
+    "-p",
+    "--print",
+    "--input-format",
+    "--output-format",
+    "--include-partial-messages",
+    "--replay-user-messages",
+    "--permission-prompt-tool",
+    "--permission-prompts",
+    "--session-id",
+    "-r",
+    "--resume",
+    "-c",
+    "--continue",
+    "--fork-session",
+    "--no-tui",
+    "--dangerously-skip-permissions",
+    "--allow-dangerously-skip-permissions",
+    "--permission-mode",
+    "--model",
+    // Forge sets these once per chat; ForgeCLI takes each once.
+    "--append-system-prompt",
+    "--append-system-prompt-file",
+    "--settings",
+    "--effort",
+    "-n",
+    "--name",
+    "-v",
+    "--version",
+    "-h",
+    "--help",
+];
+
+/// Whether `arg` (`--flag` or `--flag=value`) is one a chat runs on.
+fn reserved(arg: &str) -> bool {
+    let flag = arg.split('=').next().unwrap_or(arg);
+    RESERVED_FLAGS.contains(&flag)
 }
 
 impl Default for Settings {
@@ -136,6 +268,26 @@ impl Default for Settings {
             max_thinking_tokens: None,
             add_dirs: vec![],
             agent: None,
+            tools: None,
+            allowed_tools: vec![],
+            disallowed_tools: vec![],
+            sandbox: None,
+            system_prompt: None,
+            system_prompt_file: None,
+            exclude_dynamic_sections: false,
+            strict_mcp_config: false,
+            setting_sources: None,
+            bare: false,
+            safe_mode: false,
+            betas: vec![],
+            debug: None,
+            debug_file: None,
+            autocompact: None,
+            include_hook_events: false,
+            no_session_persistence: false,
+            no_input: false,
+            json_schema: None,
+            extra_args: vec![],
         }
     }
 }
@@ -186,6 +338,60 @@ impl Settings {
                 && !a.starts_with('-')
                 && a.chars().all(|c| c.is_alphanumeric() || "-_.:".contains(c))
         });
+        let words = |v: &[String]| -> Vec<String> {
+            v.iter()
+                .map(|x| x.trim().to_string())
+                .filter(|x| !x.is_empty())
+                .collect()
+        };
+        s.tools = s.tools.as_deref().map(words);
+        s.allowed_tools = words(&s.allowed_tools);
+        s.disallowed_tools = words(&s.disallowed_tools);
+        s.betas = words(&s.betas);
+        s.sandbox = s
+            .sandbox
+            .filter(|m| ["off", "read-only", "workspace-write"].contains(&m.as_str()));
+        s.system_prompt = s.system_prompt.filter(|p| !p.trim().is_empty());
+        s.system_prompt_file = s
+            .system_prompt_file
+            .filter(|p| !p.trim().is_empty())
+            .map(|p| expand_home(p.trim()));
+        s.debug_file = s
+            .debug_file
+            .filter(|p| !p.trim().is_empty())
+            .map(|p| expand_home(p.trim()));
+        s.setting_sources = s.setting_sources.map(|v| v.replace(' ', "")).filter(|v| {
+            !v.is_empty()
+                && v.split(',')
+                    .all(|x| ["user", "project", "local"].contains(&x))
+        });
+        s.autocompact = s
+            .autocompact
+            .map(|a| a.trim().to_string())
+            .filter(|a| !a.is_empty() && !a.starts_with('-'));
+        s.debug = s.debug.map(|d| d.trim().to_string()).filter(|d| !d.starts_with('-'));
+        // A schema written as text is read as JSON; a string that isn't is dropped.
+        s.json_schema = s.json_schema.and_then(|j| match j {
+            serde_json::Value::String(t) => serde_json::from_str(&t).ok(),
+            serde_json::Value::Null => None,
+            j => Some(j),
+        });
+        // A reserved flag takes its value with it, when that value stands alone.
+        let mut extra = vec![];
+        let mut skip = false;
+        for a in s.extra_args.iter().map(|a| a.trim()).filter(|a| !a.is_empty()) {
+            if skip && !a.starts_with('-') {
+                skip = false;
+                continue;
+            }
+            skip = false;
+            if reserved(a) {
+                skip = !a.contains('=');
+                continue;
+            }
+            extra.push(a.to_string());
+        }
+        s.extra_args = extra;
         s
     }
 
@@ -226,6 +432,60 @@ impl Settings {
         if let Some(a) = &self.agent {
             out.push(format!("--agent={a}"));
         }
+        if let Some(tools) = &self.tools {
+            if tools.is_empty() {
+                out.push("--tools=".to_string());
+            }
+            out.extend(tools.iter().map(|t| format!("--tools={t}")));
+        }
+        out.extend(self.allowed_tools.iter().map(|t| format!("--allowedTools={t}")));
+        out.extend(self.disallowed_tools.iter().map(|t| format!("--disallowedTools={t}")));
+        if let Some(m) = &self.sandbox {
+            out.push(format!("--sandbox={m}"));
+        }
+        if let Some(p) = &self.system_prompt {
+            out.push(format!("--system-prompt={p}"));
+        } else if let Some(f) = &self.system_prompt_file {
+            out.push(format!("--system-prompt-file={f}"));
+        }
+        if self.exclude_dynamic_sections {
+            out.push("--exclude-dynamic-system-prompt-sections".to_string());
+        }
+        if self.strict_mcp_config {
+            out.push("--strict-mcp-config".to_string());
+        }
+        if let Some(v) = &self.setting_sources {
+            out.push(format!("--setting-sources={v}"));
+        }
+        if self.bare {
+            out.push("--bare".to_string());
+        }
+        if self.safe_mode {
+            out.push("--safe-mode".to_string());
+        }
+        out.extend(self.betas.iter().map(|b| format!("--betas={b}")));
+        if let Some(d) = &self.debug {
+            out.push(format!("--debug={d}"));
+        }
+        if let Some(f) = &self.debug_file {
+            out.push(format!("--debug-file={f}"));
+        }
+        if let Some(a) = &self.autocompact {
+            out.push(format!("--autocompact={a}"));
+        }
+        if self.include_hook_events {
+            out.push("--include-hook-events".to_string());
+        }
+        if self.no_session_persistence {
+            out.push("--no-session-persistence".to_string());
+        }
+        if self.no_input {
+            out.push("--no-input".to_string());
+        }
+        if let Some(j) = &self.json_schema {
+            out.push(format!("--json-schema={j}"));
+        }
+        out.extend(self.extra_args.iter().cloned());
         out
     }
 
@@ -376,6 +636,55 @@ mod tests {
         );
         assert!(Settings::parse(r#"{"forge.agent": "--bare"}"#).forge_args(true).is_empty());
         assert!(Settings::parse(r#"{"forge.agent": "a b"}"#).forge_args(true).is_empty());
+    }
+
+    #[test]
+    fn every_session_flag_has_a_key() {
+        let s = Settings::parse(
+            r#"{"forge.tools": ["Read", " "], "forge.allowedTools": ["Bash(git status)"],
+                "forge.disallowedTools": ["WebFetch"], "forge.sandbox": "read-only",
+                "forge.systemPrompt": "Be brief.", "forge.systemPromptFile": "/p.md",
+                "forge.excludeDynamicSystemPromptSections": true, "forge.strictMcpConfig": true,
+                "forge.settingSources": "user, project", "forge.bare": true, "forge.safeMode": true,
+                "forge.betas": ["b1"], "forge.debug": "api", "forge.debugFile": "/d.log",
+                "forge.autocompact": "200k", "forge.includeHookEvents": true,
+                "forge.noSessionPersistence": true, "forge.noInput": true,
+                "forge.jsonSchema": "{\"type\":\"object\"}",
+                "forge.extraArgs": ["--color", "never", "--output-format", "json", "-p",
+                                    "--session-id=x", "--dangerously-skip-permissions", "--quiet"]}"#,
+        );
+        assert_eq!(
+            s.forge_args(false),
+            [
+                "--tools=Read",
+                "--allowedTools=Bash(git status)",
+                "--disallowedTools=WebFetch",
+                "--sandbox=read-only",
+                "--system-prompt=Be brief.",
+                "--exclude-dynamic-system-prompt-sections",
+                "--strict-mcp-config",
+                "--setting-sources=user,project",
+                "--bare",
+                "--safe-mode",
+                "--betas=b1",
+                "--debug=api",
+                "--debug-file=/d.log",
+                "--autocompact=200k",
+                "--include-hook-events",
+                "--no-session-persistence",
+                "--no-input",
+                r#"--json-schema={"type":"object"}"#,
+                "--color",
+                "never",
+                "--quiet",
+            ]
+        );
+        // No tools at all, and values ForgeCLI would refuse.
+        let n = Settings::parse(
+            r#"{"forge.tools": [], "forge.sandbox": "everything", "forge.settingSources": "all",
+                "forge.jsonSchema": "not json", "forge.systemPromptFile": "/f.md"}"#,
+        );
+        assert_eq!(n.forge_args(true), ["--tools=", "--system-prompt-file=/f.md"]);
     }
 
     use super::*;

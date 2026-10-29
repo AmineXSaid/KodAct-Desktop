@@ -314,10 +314,25 @@ settings" in the command palette writes one with every key):
 | `forge.maxThinkingTokens` | none | thinking budget of models that take tokens, at least 1024 |
 | `forge.addDirs` | `[]` | folders outside the project Forge may work in (`--add-dir`) |
 | `forge.agent` | none | the agent every chat runs as (`--agent`) |
+| `forge.tools`, `forge.allowedTools`, `forge.disallowedTools` | none | tools offered, allowed without asking, refused |
+| `forge.sandbox` | none | `off`, `read-only` or `workspace-write` (`--sandbox`) |
+| `forge.systemPrompt`, `forge.systemPromptFile` | none | a system prompt in place of ForgeCLI's own |
+| `forge.excludeDynamicSystemPromptSections`, `forge.strictMcpConfig`, `forge.bare`, `forge.safeMode` | `false` | ForgeCLI's flags of the same names |
+| `forge.settingSources` | all | which settings files load (`user,project,local`) |
+| `forge.betas` | `[]` | API beta headers |
+| `forge.debug`, `forge.debugFile` | none | debug logging (a filter such as `api,hooks`) and its file |
+| `forge.autocompact` | auto | the compaction window (`200k`) |
+| `forge.includeHookEvents` | `false` | hooks report in the chat as they run |
+| `forge.noSessionPersistence` | `false` | sessions not kept on disk; a chat starts afresh with each process |
+| `forge.noInput` | `false` | never ask: what would ask is refused |
+| `forge.jsonSchema` | none | a JSON Schema each turn's result follows, shown under the reply |
+| `forge.extraArgs` | `[]` | any other ForgeCLI flag |
 
 Changes apply the next time they're used; no restart.
 
-Every ForgeCLI capability and where the app offers it (or why not):
+ForgeCLI's own terminal UI, a shell with `forge` ready, `forge doctor` and
+`forge config` open in the terminal dock from the palette. Every ForgeCLI
+capability and where the app offers it:
 [docs/forgecli-coverage.md](docs/forgecli-coverage.md).
 
 ## Layout

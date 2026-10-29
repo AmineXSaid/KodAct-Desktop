@@ -959,6 +959,19 @@ pub enum Message {
     },
 }
 
+/// What a ForgeCLI tab in the terminal dock runs (`AppState::forge_terminal`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ForgeTerm {
+    /// ForgeCLI's own terminal UI, on the current chat's conversation.
+    Ui,
+    /// A shell with `forge` on the path and the chats' endpoint.
+    Shell,
+    /// `forge doctor --probe`.
+    Doctor,
+    /// `forge config`.
+    Config,
+}
+
 pub struct Chat {
     pub id: usize,
     /// The project it belongs to.
@@ -10089,6 +10102,14 @@ fix everything under 8, render it again to check, then tell me the scores before
             .iter()
             .find(|c| c.id == id)
             .and_then(|c| c.fork_of.clone());
+        let forge = crate::app_settings::get();
+        // A session not kept on disk can't be resumed or forked: each
+        // process starts the conversation afresh.
+        let (resumable, fork_of) = if forge.no_session_persistence {
+            (false, None)
+        } else {
+            (resumable, fork_of)
+        };
         let conversation = match (&fork_of, resumable) {
             (_, true) => crate::backend::Conversation::Resume(&session_id),
             (Some(from), false) => crate::backend::Conversation::Fork {
@@ -10101,10 +10122,19 @@ fix everything under 8, render it again to check, then tell me the scores before
             crate::backend::launch(&profile, self.mode, self.bypass_allowed, conversation)?;
         // Forge's own settings for every session: a fallback model, limits,
         // a worktree per new chat, unattended runs (`app_settings.rs`).
-        let forge = crate::app_settings::get();
         launch.args.extend(
             forge.forge_args(matches!(conversation, crate::backend::Conversation::New(_))),
         );
+        // The session's display name is the chat's title.
+        if let Some(title) = self
+            .chats
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| c.title.trim().to_string())
+            .filter(|t| !t.is_empty())
+        {
+            launch.args.push(format!("--name={title}"));
+        }
         launch.env.extend(forge.forge_env());
         // The effort chosen in the model menu, when this model takes one.
         let effort = self.effort_for(&profile);
@@ -10962,6 +10992,112 @@ impl AppState {
             })
             .unwrap_or_else(|| std::path::PathBuf::from("."));
         (remote, dir, trusted)
+    }
+
+    /// A terminal tab running ForgeCLI itself, on this computer, with the
+    /// model, endpoint and settings the chats use: its own terminal UI on
+    /// the current chat, a shell with `forge` ready for one-shot runs and
+    /// its other subcommands, or `forge doctor` / `forge config`.
+    pub fn forge_terminal(&mut self, kind: ForgeTerm) -> Result<crate::term_session::Shell, String> {
+        if self.current_remote().is_some() {
+            return Err("ForgeCLI's own terminal opens for projects on this computer.".into());
+        }
+        let exe = crate::backend::find_cli()
+            .ok_or("ForgeCLI wasn't found. Set FORGE_CLI to its path, or reinstall Forge.")?;
+        let profile = self
+            .active_profile()
+            .cloned()
+            .ok_or("Choose a model first: ForgeCLI runs on the same endpoint.")?;
+        let (_, dir, _) = self.terminal_place();
+        let forge = crate::app_settings::get();
+        // The current chat's conversation, when it has one; else a new one.
+        let chat = self.current.and_then(|id| {
+            self.chats
+                .iter()
+                .find(|c| c.id == id && c.resumable && !forge.no_session_persistence)
+                .map(|c| (id, c.session.clone()))
+        });
+        let fresh = crate::history::new_id();
+        let conversation = match (&chat, kind) {
+            (Some((_, session)), ForgeTerm::Ui) => crate::backend::Conversation::Resume(session),
+            _ => crate::backend::Conversation::New(&fresh),
+        };
+        let mut launch =
+            crate::backend::launch(&profile, self.mode, self.bypass_allowed, conversation)?;
+        launch.args.extend(forge.forge_args(chat.is_none()));
+        launch.env.extend(forge.forge_env());
+        if let Some(e) = self.effort_for(&profile) {
+            launch.args.extend(["--effort".to_string(), e.wire().to_string()]);
+        }
+        if let Some(flag) = crate::modes::flag_settings(
+            self.settings_profile
+                .as_deref()
+                .and_then(crate::setting_profiles::path_of)
+                .as_deref(),
+        ) {
+            launch.args.extend(["--settings".to_string(), flag]);
+        }
+        let mut launch = crate::backend::interactive(&launch);
+        // The desktop's own note on how replies are drawn doesn't hold there.
+        if let Some(i) = launch
+            .args
+            .iter()
+            .position(|a| a == crate::backend::SURFACE_PROMPT)
+        {
+            launch.args.drain(i - 1..=i);
+        }
+        let program = exe.to_string_lossy().into_owned();
+        let shell = |label: &str, args: Vec<String>, env: Vec<(String, String)>| {
+            crate::term_session::Shell {
+                label: label.into(),
+                program: program.clone(),
+                args,
+                cwd: Some(dir.clone()),
+                env,
+            }
+        };
+        Ok(match kind {
+            ForgeTerm::Ui => {
+                // One writer per conversation: the chat's own process stops
+                // while the terminal has it, and resumes it on the next message.
+                if let Some((id, _)) = chat {
+                    if self.replies.contains_key(&id) {
+                        return Err("Wait for the reply to finish, or stop it, first.".into());
+                    }
+                    self.sessions.remove(&id);
+                }
+                let mut args = launch.args;
+                if let Some(title) = chat
+                    .and_then(|(id, _)| self.chats.iter().find(|c| c.id == id))
+                    .map(|c| c.title.trim().to_string())
+                    .filter(|t| !t.is_empty())
+                {
+                    args.push(format!("--name={title}"));
+                }
+                shell("ForgeCLI", args, launch.env)
+            }
+            ForgeTerm::Doctor => shell("forge doctor", vec!["doctor".into(), "--probe".into()], launch.env),
+            ForgeTerm::Config => shell("forge config", vec!["config".into()], launch.env),
+            ForgeTerm::Shell => {
+                let mut sh = crate::term_session::shells(None, &dir, false)
+                    .into_iter()
+                    .next()
+                    .ok_or("No shell found on this computer.")?;
+                let mut env = launch.env;
+                env.push(("FORGE_MODEL".into(), profile.model.clone()));
+                if let Some(bin) = exe.parent() {
+                    let path = std::env::var_os("PATH").unwrap_or_default();
+                    let joined = std::env::join_paths(
+                        std::iter::once(bin.to_path_buf()).chain(std::env::split_paths(&path)),
+                    )
+                    .map_err(|e| e.to_string())?;
+                    env.push(("PATH".into(), joined.to_string_lossy().into_owned()));
+                }
+                sh.label = format!("{} · forge", sh.label);
+                sh.env = env;
+                sh
+            }
+        })
     }
 
     /// The current project, when it lives on a remote.

@@ -151,6 +151,42 @@ pub struct Launch {
     pub env: Vec<(String, String)>,
 }
 
+/// A chat's launch as ForgeCLI's own terminal UI runs it: the same model,
+/// mode, endpoint, settings and session, less what only a host speaks (print
+/// mode, the stream formats, the permission channel, echoed messages).
+pub fn interactive(launch: &Launch) -> Launch {
+    // Flags dropped, and whether each takes the next argument with it.
+    const HOST: &[(&str, bool)] = &[
+        ("-p", false),
+        ("--input-format", true),
+        ("--output-format", true),
+        ("--include-partial-messages", false),
+        ("--replay-user-messages", false),
+        ("--include-hook-events", false),
+        ("--permission-prompt-tool", true),
+        ("--no-input", false),
+        ("--json-schema", true),
+        ("--no-session-persistence", false),
+    ];
+    let mut args = vec![];
+    let mut it = launch.args.iter();
+    while let Some(a) = it.next() {
+        let flag = a.split('=').next().unwrap_or(a);
+        match HOST.iter().find(|(f, _)| *f == flag) {
+            Some((_, takes)) => {
+                if *takes && !a.contains('=') {
+                    it.next();
+                }
+            }
+            None => args.push(a.clone()),
+        }
+    }
+    Launch {
+        args,
+        env: launch.env.clone(),
+    }
+}
+
 /// The base URL ForgeCLI wants: it adds `/v1/messages` (Messages API),
 /// `/chat/completions` (OpenAI-compatible) or `/models/<model>:...` (Gemini)
 /// itself.
@@ -1059,6 +1095,13 @@ impl Parser {
                             .to_string()
                     }
                 });
+                // With `forge.jsonSchema`: the turn's structured result,
+                // under the reply.
+                if let Some(j) = v.get("structured_output").filter(|j| !j.is_null()) {
+                    let pretty = serde_json::to_string_pretty(j).unwrap_or_default();
+                    out.push(Event::Break);
+                    out.push(Event::Text(format!("\n\n```json\n{pretty}\n```\n")));
+                }
                 out.push(Event::TurnEnd {
                     ms: v["duration_ms"].as_u64().unwrap_or(0),
                     usage: usage.filter(|u| u.total() > 0),
@@ -1247,6 +1290,48 @@ pub fn system_notice(v: &Value) -> Option<(String, bool)> {
             ),
             false,
         ),
+        // With `forge.includeHookEvents`: each hook as it finishes (its
+        // start says nothing a finish doesn't).
+        "hook_response" => {
+            let name = [s("hook_name"), s("hook_event")]
+                .into_iter()
+                .find(|n| !n.is_empty())
+                .unwrap_or("A hook");
+            let failed = matches!(s("outcome"), "error" | "failed" | "cancelled")
+                || v["exit_code"].as_i64().is_some_and(|c| c != 0);
+            let said = [s("stderr"), s("stdout"), s("output")]
+                .into_iter()
+                .map(str::trim)
+                .find(|t| !t.is_empty())
+                .map(|t| format!(": {}", one_line(t, 160)))
+                .unwrap_or_default();
+            if failed {
+                (format!("Hook {name} failed{said}"), false)
+            } else {
+                (format!("Hook {name} ran{said}"), false)
+            }
+        }
+        "api_retry" => {
+            let attempt = v["attempt"].as_u64().unwrap_or(1);
+            let wait = v["retry_delay_ms"].as_u64().map(|ms| (ms + 500) / 1000);
+            (
+                format!(
+                    "The model call failed{}; trying again{} (attempt {attempt}{}).",
+                    v["error_status"]
+                        .as_u64()
+                        .map(|c| format!(" (HTTP {c})"))
+                        .unwrap_or_default(),
+                    wait.filter(|w| *w > 0)
+                        .map(|w| format!(" in {w}s"))
+                        .unwrap_or_default(),
+                    v["max_retries"]
+                        .as_u64()
+                        .map(|m| format!(" of {m}"))
+                        .unwrap_or_default(),
+                ),
+                false,
+            )
+        }
         _ => return None,
     })
 }
@@ -2045,6 +2130,42 @@ mod tests {
     /// ForgeCLI's `system` events reach the chat as plain lines; the ones
     /// shown elsewhere or meant only for the model don't.
     #[test]
+    fn the_terminal_ui_gets_the_chat_without_the_host_protocol() {
+        let l = Launch {
+            args: ["-p", "--input-format", "stream-json", "--output-format", "stream-json",
+                "--include-partial-messages", "--permission-prompt-tool", "stdio", "--model", "m",
+                "--permission-mode", "plan", "--replay-user-messages", "--resume", "abc",
+                "--json-schema={}", "--no-input", "--sandbox=off"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
+            env: vec![("FORGE_API_KEY".into(), "k".into())],
+        };
+        let i = interactive(&l);
+        assert_eq!(
+            i.args,
+            ["--model", "m", "--permission-mode", "plan", "--resume", "abc", "--sandbox=off"]
+        );
+        assert_eq!(i.env, l.env);
+    }
+
+    #[test]
+    fn a_structured_result_shows_under_the_reply() {
+        let ev = parse(&[json!({"type":"result","is_error":false,"duration_ms":5,"usage":{},"structured_output":{"ok":true}})]);
+        let text: String = ev
+            .iter()
+            .filter_map(|e| match e {
+                Event::Text(t) => Some(t.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert!(text.contains("```json\n{\n  \"ok\": true\n}\n```"), "{text}");
+        assert!(matches!(ev.last(), Some(Event::TurnEnd { .. })));
+        let plain = parse(&[json!({"type":"result","is_error":false,"duration_ms":5,"usage":{}})]);
+        assert!(!plain.iter().any(|e| matches!(e, Event::Text(_))));
+    }
+
+    #[test]
     fn forgecli_events_read_as_lines_in_the_chat() {
         let notice = |line: Value| {
             let mut p = Parser::default();
@@ -2071,6 +2192,13 @@ mod tests {
         assert!(t.starts_with("Bash failed 3 times in a row") && !err, "{t}");
         let (t, _) = notice(json!({"type":"system","subtype":"verification","kind":"unchecked","files":["a.rs","b.rs"]})).unwrap();
         assert!(t.contains("2 files"), "{t}");
+        let (t, _) = notice(json!({"type":"system","subtype":"hook_response","hook_name":"PostToolUse:Edit","outcome":"error","exit_code":2,"stderr":"lint failed\nmore"})).unwrap();
+        assert_eq!(t, "Hook PostToolUse:Edit failed: lint failed more");
+        let (t, _) = notice(json!({"type":"system","subtype":"hook_response","hook_event":"Stop","outcome":"success"})).unwrap();
+        assert_eq!(t, "Hook Stop ran");
+        assert!(notice(json!({"type":"system","subtype":"hook_started","hook_name":"x"})).is_none());
+        let (t, _) = notice(json!({"type":"system","subtype":"api_retry","attempt":2,"max_retries":5,"retry_delay_ms":4000,"error_status":529})).unwrap();
+        assert_eq!(t, "The model call failed (HTTP 529); trying again in 4s (attempt 2 of 5).");
         let (t, err) = notice(json!({"type":"system","subtype":"background_exit","shells":[{"id":"b1","command":"cargo build","exit_code":101,"seconds":40}]})).unwrap();
         assert_eq!(t, "In the background: cargo build exited with 101 after 40s.");
         assert!(!err);

@@ -1,6 +1,6 @@
 # ForgeCLI coverage
 
-What ForgeCLI can do, and where Forge GPUI offers it. Checked against
+Every ForgeCLI capability, and where Forge GPUI offers it. Checked against
 ForgeCLI branch `ccr-02a743e1-1gmu4f` (commit 9badc14), driven live through
 `forge -p --input-format stream-json` with a scripted model.
 
@@ -39,6 +39,9 @@ editors write those same files, so they need no flag of their own.
 | `loop_guard`, `verification` | Notice lines |
 | `background_exit`, `background_wait` | Notice lines; the task list updates |
 | `tool_input_repaired` | Notice line |
+| `hook_response` (with `forge.includeHookEvents`) | "Hook … ran" / "failed", with its output |
+| `api_retry` | Notice: the failed call and the next attempt |
+| `result.structured_output` (with `forge.jsonSchema`) | A JSON block under the reply |
 
 Notices are plain lines in the transcript (no Retry). `microcompact`, `todos`
 and `permission_mode` only live in ForgeCLI's transcript files; a resumed
@@ -77,16 +80,43 @@ chip.
 
 ## Launch options (`settings.json`)
 
+Every flag a chat's process can carry has a key; each was passed to a live
+chat at once and the turn ran.
+
 | Key | Flag |
 |---|---|
 | `forge.fallbackModel` | `--fallback-model` |
 | `forge.maxTurns` | `--max-turns` |
 | `forge.maxBudgetUsd` | `--max-budget-usd` |
 | `forge.maxTimeMinutes` | `--max-time` |
+| `forge.worktree` | `--worktree` |
 | `forge.autonomous` | `--autonomous` |
+| `forge.maxThinkingTokens` | `FORGE_MAX_THINKING_TOKENS` (`set_max_thinking_tokens`) |
 | `forge.addDirs` | `--add-dir` (one per folder) |
 | `forge.agent` | `--agent` |
+| `forge.tools` | `--tools` (`[]` offers none) |
+| `forge.allowedTools`, `forge.disallowedTools` | `--allowedTools`, `--disallowedTools` |
+| `forge.sandbox` | `--sandbox` (`off`, `read-only`, `workspace-write`) |
+| `forge.systemPrompt`, `forge.systemPromptFile` | `--system-prompt`, `--system-prompt-file` |
+| `forge.excludeDynamicSystemPromptSections` | `--exclude-dynamic-system-prompt-sections` |
+| `forge.strictMcpConfig` | `--strict-mcp-config` |
+| `forge.settingSources` | `--setting-sources` |
+| `forge.bare`, `forge.safeMode` | `--bare`, `--safe-mode` |
+| `forge.betas` | `--betas` |
+| `forge.debug`, `forge.debugFile` | `--debug`, `--debug-file` |
+| `forge.autocompact` | `--autocompact` |
+| `forge.includeHookEvents` | `--include-hook-events`; hook results show as lines (`hook_response`) |
+| `forge.noSessionPersistence` | `--no-session-persistence`; such a chat starts afresh with each process |
+| `forge.noInput` | `--no-input` |
+| `forge.jsonSchema` | `--json-schema`; the turn's `structured_output` shows under the reply |
+| `forge.extraArgs` | any other flag (`--color never`, `--verbose`) |
 | Model menu effort | `--effort` |
+| Chat title | `--name` |
+
+`forge.extraArgs` drops the flags the chat runs on (print mode, the stream
+formats, the session, the permission channel and mode, the model, and the
+prompt and settings Forge passes once), and skipping permissions, which goes
+through Settings → Bypass permissions behind its warning.
 
 ## Configuration files
 
@@ -105,20 +135,35 @@ and leaves them out (`commands::HANDLED`): `/exit`, `/quit`, `/clear`,
 `/reset`, `/new` (New chat), `/resume`, `/continue` (the sidebar), `/branch`
 (Duplicate), `/cd` (a chat stays in its project; open another project
 instead), `/rewind`, `/checkpoint`, `/undo` (Revert), `/model` (model menu),
-`/rename` (chat title), `/btw` (side chat).
+`/rename` (chat title), `/btw` (side chat). Commands ForgeCLI keeps to its
+terminal UI run there, in the dock (below), as do all of these.
 
-## Left out, on purpose
+## ForgeCLI in the terminal dock
 
-- Terminal-only features: the TUI, its themes, key bindings, status line and
-  `/terminal-setup`. ForgeCLI keeps them out of the host catalogue.
-- `--output-format text|json`, `--json-schema`, `--no-input`, `--quiet`,
-  `--color`: one-shot shell use; the app always speaks stream-json.
-- `--name`: the app names chats itself.
-- `--include-hook-events`: ForgeCLI emits nothing for it yet; hook output
-  that reaches the model shows in the turn.
-- `--bare`, `--safe-mode`, `--setting-sources`, `--strict-mcp-config`,
-  `--system-prompt`, `--exclude-dynamic-system-prompt-sections`, `--betas`,
-  `--debug`, `--no-session-persistence`: for troubleshooting ForgeCLI from a
-  shell. Chats must persist to be reopened.
-- Subcommands `doctor`, `config`, `completion` (also `/doctor` and `/config`
-  in a chat), `relay` and `mcp serve` (plumbing for other hosts).
+What only a terminal has runs in the app's own terminal, with the chats'
+model, endpoint, key, mode and settings (palette):
+
+| Palette | Runs |
+|---|---|
+| Open this chat in ForgeCLI's terminal UI | `forge --resume <chat>`: the TUI and everything only it has (themes, key bindings, status line, `/terminal-setup`, `/color`, `/focus`, `/copy`...). The chat's own process steps aside so one process writes the conversation; the chat resumes it on its next message (close the tab first) |
+| New terminal with ForgeCLI ready | Your shell, `forge` on the path, `FORGE_MODEL` and the endpoint set: one-shot runs (`forge -p --output-format text\|json`, `--json-schema`, `--quiet`, `--no-input`, `--color`), `forge completion <shell>`, `forge mcp add/list/remove`, `forge mcp serve` (Forge's tools for another MCP client) and any other subcommand |
+| Check ForgeCLI and the endpoint | `forge doctor --probe` |
+| Show ForgeCLI's merged settings | `forge config` |
+
+`forge relay` carries the browser, design tools and model calls to WSL and
+container projects (`src/relay.rs`), so those chats need no open port.
+
+Seen live on Linux: the TUI resumed the chat's session (`/status` showed its
+id, endpoint and project), a one-shot `--output-format json` run and
+`forge completion bash` in the shell, and `forge doctor --probe` reaching
+the endpoint.
+
+## Notes
+
+- `--include-hook-events` is passed, and `hook_response` lines are read, but
+  this ForgeCLI branch doesn't emit hook events yet: nothing shows until it
+  does. `api_retry` lines are read the same way.
+- ForgeCLI only fills `structured_output` when the final reply is JSON that
+  parses (`forge-engine`, `TurnResult`).
+- The terminal tabs open for projects on this computer; a remote project's
+  chats still get every flag above.

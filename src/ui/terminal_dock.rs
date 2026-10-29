@@ -231,6 +231,7 @@ impl TerminalDock {
             program: String::new(),
             args: vec![],
             cwd: None,
+            env: vec![],
         };
         let session = Session::replay(
             shell,
