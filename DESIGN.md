@@ -119,4 +119,4 @@ Corners from the tokens above; one radius per role. No coloured edge over 1px on
 - Don't put a kicker or eyebrow above a heading.
 - Don't use mono as a technical costume: mono is for code, paths in changes, and data.
 - Don't use colour for what isn't primary, selected or a state.
-- Don't add motion that isn't a state change; transitions stay within 150 to 250ms.
+- Don't add motion that isn't a state change; transitions take 120, 200 or 280ms, nothing else.
