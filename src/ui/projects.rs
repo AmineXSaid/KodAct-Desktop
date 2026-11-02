@@ -30,6 +30,12 @@ pub struct ProjectsView {
     search: Entity<InputState>,
     tab: Tab,
     sort: Sort,
+    /// The list's search shows (its icon was pressed, or it holds words).
+    searching: bool,
+    /// The sort menu is open.
+    sort_open: bool,
+    /// A project page's ⋯ menu is open.
+    actions_open: bool,
     /// A project's name or description being edited in place.
     edit: Entity<InputState>,
     editing: Option<(usize, Field)>,
@@ -45,7 +51,6 @@ pub struct ProjectsView {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Tab {
     All,
-    Starred,
     Archived,
 }
 
@@ -75,7 +80,6 @@ fn shown(
         .filter(|p| p.saved && !p.scratch)
         .filter(|p| match tab {
             Tab::All => !p.archived,
-            Tab::Starred => p.pinned && !p.archived,
             Tab::Archived => p.archived,
         })
         .filter(|p| {
@@ -133,6 +137,9 @@ impl ProjectsView {
             search,
             tab: Tab::All,
             sort: Sort::Recent,
+            searching: false,
+            sort_open: false,
+            actions_open: false,
             edit,
             editing: None,
             rail,
@@ -171,119 +178,6 @@ impl ProjectsView {
             Field::Description => s.describe_project(id, &value, cx),
         });
         cx.notify();
-    }
-
-    /// The Projects page's tabs (with counts), search and order.
-    fn toolbar(
-        &self,
-        t: &Theme,
-        counts: (usize, usize, usize),
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
-        let hover = t.colors.hover;
-        let tab = |label: &'static str, n: usize, which: Tab, cx: &mut Context<Self>| {
-            let on = self.tab == which;
-            div()
-                .id(SharedString::from(format!("projects-tab-{label}")))
-                .flex()
-                .items_center()
-                .gap(t.space.xs)
-                .h(t.size.control)
-                .px(t.space.md)
-                .rounded(t.radius.compact)
-                .cursor_pointer()
-                .text_size(t.text.body_sm)
-                .when(on, |d| {
-                    crate::theme::selected(t, d).text_color(t.colors.text_strong)
-                })
-                .when(!on, |d| {
-                    d.text_color(t.colors.text_muted)
-                        .hover(move |st| st.bg(hover))
-                })
-                .child(label)
-                .child(
-                    div()
-                        .text_size(t.text.caption)
-                        .text_color(t.colors.text_subtle)
-                        .child(n.to_string()),
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.tab = which;
-                    cx.notify();
-                }))
-        };
-        let order = |label: &'static str, which: Sort, cx: &mut Context<Self>| {
-            let on = self.sort == which;
-            div()
-                .id(SharedString::from(format!("projects-sort-{label}")))
-                .px(t.space.sm)
-                .h(t.size.control)
-                .flex()
-                .items_center()
-                .rounded(t.radius.compact)
-                .cursor_pointer()
-                .text_size(t.text.caption)
-                .text_color(if on {
-                    t.colors.text_strong
-                } else {
-                    t.colors.text_subtle
-                })
-                .when(on, |d| d.font_weight(FontWeight::SEMIBOLD))
-                .when(!on, |d| d.hover(move |st| st.bg(hover)))
-                .child(label)
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.sort = which;
-                    cx.notify();
-                }))
-        };
-        div()
-            .flex()
-            .flex_wrap()
-            .items_center()
-            .gap(t.space.sm)
-            .child(tab("All", counts.0, Tab::All, cx))
-            .child(tab("Starred", counts.1, Tab::Starred, cx))
-            .child(tab("Archived", counts.2, Tab::Archived, cx))
-            .child(div().flex_1())
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(2.))
-                    .child(
-                        div()
-                            .pr(t.space.xs)
-                            .text_size(t.text.caption)
-                            .text_color(t.colors.text_subtle)
-                            .child("Sort"),
-                    )
-                    .child(order("Recent", Sort::Recent, cx))
-                    .child(order("Name", Sort::Name, cx))
-                    .child(order("Created", Sort::Created, cx)),
-            )
-            .child(
-                div()
-                    .w(px(220.))
-                    .flex()
-                    .items_center()
-                    .gap(t.space.xs)
-                    .px(t.space.sm)
-                    .rounded(t.radius.field)
-                    .border_1()
-                    .border_color(t.colors.border)
-                    .bg(t.colors.surface)
-                    .child(icon(
-                        "icons/search.svg",
-                        t.size.icon_sm,
-                        t.colors.text_subtle,
-                    ))
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .child(Input::new(&self.search).appearance(false)),
-                    ),
-            )
     }
 }
 
@@ -352,46 +246,66 @@ pub fn project_meta(chats: usize, current: bool, opened_minutes_ago: u32) -> Str
     )
 }
 
-fn branch_pill(t: &Theme, branch: SharedString) -> impl IntoElement {
+/// A project's tile in the list: its folder (or where a remote one lives)
+/// on a soft square, as a row's lead.
+fn tile(t: &Theme, path: &std::path::Path) -> impl IntoElement {
+    let glyph = crate::remote::Remote::parse(path)
+        .map(|r| r.target.icon())
+        .unwrap_or("icons/folder.svg");
     div()
-        .min_w_0()
-        .overflow_hidden()
+        .flex_none()
+        .size(t.size.hit)
         .flex()
         .items_center()
-        .gap(t.space.xs)
-        .px(t.space.sm)
-        .py(px(1.))
-        .rounded(t.radius.pill)
+        .justify_center()
+        .rounded(t.radius.card)
         .bg(t.colors.hover)
-        .font_family(t.font_mono.clone())
+        .child(icon(glyph, t.size.icon_sm, t.colors.text_muted))
+}
+
+/// A quiet outlined label beside a name ("Open now").
+fn badge(t: &Theme, text: &'static str) -> impl IntoElement {
+    div()
+        .flex_none()
+        .px(t.space.tight)
+        .rounded(t.radius.pill)
+        .border_1()
+        .border_color(t.colors.border)
         .text_size(t.text.caption)
         .text_color(t.colors.text_muted)
-        .child(icon(
-            "icons/git-branch.svg",
-            t.size.icon_xs,
-            t.colors.text_muted,
-        ))
-        .child(
-            div()
-                .min_w_0()
-                .overflow_hidden()
-                .whitespace_nowrap()
-                .text_ellipsis()
-                .child(branch),
-        )
+        .child(text)
+}
+
+/// When a project was last opened, as a day: "Today", "Yesterday",
+/// "Oct 12", or "Oct 12, 2024" in another year.
+fn day(opened_at: u64) -> String {
+    use chrono::{Datelike, Local, TimeZone};
+    let Some(when) = Local.timestamp_opt(opened_at as i64, 0).single() else {
+        return String::new();
+    };
+    let today = Local::now().date_naive();
+    let d = when.date_naive();
+    if d == today {
+        "Today".into()
+    } else if Some(d) == today.pred_opt() {
+        "Yesterday".into()
+    } else if d.year() == today.year() {
+        when.format("%b %-d").to_string()
+    } else {
+        when.format("%b %-d, %Y").to_string()
+    }
 }
 
 impl ProjectsView {
+    /// The Projects page, after Claude's: the title with its few tools
+    /// (search, sort, New project) on one line, then the projects in two
+    /// columns of quiet rows: a tile, the name, when you last opened it, and
+    /// the pin. Pinned ones come first and keep their pin in view.
     fn list(&self, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
-        let counts = {
-            let all = &self.state.read(cx).projects;
-            let n = |tab| shown(all, tab, self.sort, "").len();
-            (n(Tab::All), n(Tab::Starred), n(Tab::Archived))
-        };
-        let toolbar = self.toolbar(t, counts, cx);
+        let archived = shown(&self.state.read(cx).projects, Tab::Archived, self.sort, "").len();
         let s = self.state.read(cx);
         let home = crate::rules::home_dir();
-        let (hover_border, hover_bg) = (t.colors.text_subtle, t.colors.hover);
+        let (hover_bg, row_bg) = (t.colors.hover, t.colors.surface);
         let query = self.search.read(cx).value().to_string();
         let projects = shown(&s.projects, self.tab, self.sort, &query);
         let tab = self.tab;
@@ -402,128 +316,124 @@ impl ProjectsView {
             .cloned()
             .collect();
         let none_shown = projects.is_empty();
-        let cards = projects.into_iter().enumerate().map(|(i, p)| {
-            let chats = s.chats.iter().filter(|c| c.project == p.id).count();
-            let current = p.id == s.current_project;
-            let state = self.state.clone();
-            let (star, restore) = (self.state.clone(), self.state.clone());
-            let id = p.id;
-            let starred = p.pinned;
-            let path = match crate::remote::Remote::parse(&p.path) {
-                Some(r) => format!("{} · {}", r.target.label(), r.path),
-                None => crate::rules::display_path(&p.path, home.as_deref()),
-            };
-            let card = div()
-                .id(("project-card", p.id))
-                .w(px(280.))
-                .min_h(px(148.))
-                .flex()
-                .flex_col()
-                .gap(t.space.sm)
-                .p(t.space.lg)
-                .bg(t.colors.surface)
-                .border_1()
-                .border_color(if current {
-                    t.colors.primary.opacity(0.45)
-                } else {
-                    t.colors.border
-                })
-                .rounded(t.radius.card)
-                .cursor_pointer()
-                .hover(move |st| st.border_color(hover_border))
-                .child(
-                    div()
-                        .flex()
-                        .items_start()
-                        .gap(t.space.md)
-                        .child(project_tile(t, &p.name, &p.path, px(36.)))
-                        .child(div().flex_1())
-                        .when(tab != Tab::Archived, |d| {
-                            d.child(
-                                super::button::Button::icon(
-                                    SharedString::from(format!("project-star-{id}")),
-                                    if starred {
-                                        "icons/star-filled.svg"
-                                    } else {
-                                        "icons/star.svg"
-                                    },
-                                    if starred { "Unstar" } else { "Star" },
-                                )
-                                .compact()
+        let rows: Vec<AnyElement> = projects
+            .into_iter()
+            .enumerate()
+            .map(|(i, p)| {
+                let current = p.id == s.current_project;
+                let (state, pin, restore) =
+                    (self.state.clone(), self.state.clone(), self.state.clone());
+                let id = p.id;
+                let pinned = p.pinned;
+                let group: SharedString = format!("project-row-{id}").into();
+                let tip: SharedString = match crate::remote::Remote::parse(&p.path) {
+                    Some(r) => format!("{} · {}", r.target.label(), r.path),
+                    None => crate::rules::display_path(&p.path, home.as_deref()),
+                }
+                .into();
+                let row = div()
+                    .id(("project-card", p.id))
+                    .group(group.clone())
+                    .w_full()
+                    .min_w_0()
+                    .flex()
+                    .items_center()
+                    .gap(t.space.md)
+                    .px(t.space.md)
+                    .py(t.space.sm + px(2.))
+                    .rounded(t.radius.card)
+                    .bg(row_bg)
+                    .border_1()
+                    .border_color(t.colors.border)
+                    .cursor_pointer()
+                    .hover(move |st| st.bg(hover_bg))
+                    .tooltip(move |w, cx| {
+                        gpui::component::tooltip::Tooltip::new(tip.clone()).build(w, cx)
+                    })
+                    .child(tile(t, &p.path))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(t.space.sm)
+                                    .min_w_0()
+                                    .child(
+                                        div()
+                                            .min_w_0()
+                                            .overflow_hidden()
+                                            .whitespace_nowrap()
+                                            .text_ellipsis()
+                                            .font_weight(FontWeight::MEDIUM)
+                                            .text_color(t.colors.text_strong)
+                                            .child(p.name.clone()),
+                                    )
+                                    .when(current, |d| d.child(badge(t, "Open now"))),
+                            )
+                            .child(
+                                div()
+                                    .text_size(t.text.caption)
+                                    .text_color(t.colors.text_subtle)
+                                    .child(day(p.opened_at)),
+                            ),
+                    )
+                    .when(tab == Tab::Archived, |d| {
+                        d.child(
+                            theme::text_button(t, "Restore")
+                                .id(("project-restore", id))
+                                .text_size(t.text.caption)
                                 .on_click(move |_, _, cx| {
                                     cx.stop_propagation();
-                                    star.update(cx, |s, cx| s.toggle_project_pin(id, cx))
+                                    restore.update(cx, |s, cx| s.archive_project(id, false, cx))
                                 }),
-                            )
-                        })
-                        .when(tab == Tab::Archived, |d| {
-                            d.child(
-                                theme::text_button(t, "Restore")
-                                    .id(("project-restore", id))
-                                    .text_size(t.text.caption)
-                                    .on_click(move |_, _, cx| {
-                                        cx.stop_propagation();
-                                        restore.update(cx, |s, cx| s.archive_project(id, false, cx))
-                                    }),
-                            )
-                        }),
-                )
-                .child(
-                    div()
-                        .flex_none()
-                        .pt(t.space.xs)
-                        .overflow_hidden()
-                        .whitespace_nowrap()
-                        .text_ellipsis()
-                        .text_size(t.text.body)
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(t.colors.text_strong)
-                        .child(p.name.clone()),
-                )
-                .when(!p.description.is_empty(), |d| {
-                    d.child(
-                        div()
-                            .flex_none()
-                            .overflow_hidden()
-                            .whitespace_nowrap()
-                            .text_ellipsis()
-                            .text_size(t.text.body_sm)
-                            .text_color(t.colors.text_body)
-                            .child(p.description.clone()),
-                    )
-                })
-                .child(
-                    div()
-                        .flex_none()
-                        .overflow_hidden()
-                        .whitespace_nowrap()
-                        .text_ellipsis()
-                        .text_size(t.text.caption)
-                        .text_color(t.colors.text_subtle)
-                        .child(path),
-                )
-                .child(div().flex_1())
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(t.space.sm)
-                        .text_size(t.text.caption)
-                        .text_color(t.colors.text_muted)
-                        .child(div().flex_none().whitespace_nowrap().child(project_meta(
-                            chats,
-                            current,
-                            p.opened_minutes_ago,
-                        )))
-                        .child(div().flex_1())
-                        .when(!p.branch.is_empty(), |d| {
-                            d.child(branch_pill(t, p.branch.clone()))
-                        }),
-                )
-                .on_click(move |_, _, cx| state.update(cx, |s, cx| s.show_project(id, cx)));
-            // The cards rise onto the page one after another, like Notion's.
-            super::motion::row_in(card, ("project-card-in", id), i, t)
-        });
+                        )
+                    })
+                    // The pin: always there on a pinned project, on hover
+                    // on the others.
+                    .when(tab != Tab::Archived, |d| {
+                        d.child(
+                            div()
+                                .when(!pinned, |d| {
+                                    d.invisible().group_hover(group.clone(), |st| st.visible())
+                                })
+                                .child(
+                                    super::button::Button::icon(
+                                        SharedString::from(format!("project-pin-{id}")),
+                                        "icons/pin.svg",
+                                        if pinned { "Unpin" } else { "Pin to the top" },
+                                    )
+                                    .compact()
+                                    .on_click(
+                                        move |_, _, cx| {
+                                            cx.stop_propagation();
+                                            pin.update(cx, |s, cx| s.toggle_project_pin(id, cx))
+                                        },
+                                    ),
+                                ),
+                        )
+                    })
+                    .on_click(move |_, _, cx| state.update(cx, |s, cx| s.show_project(id, cx)));
+                super::motion::row_in(row, ("project-card-in", id), i, t).into_any_element()
+            })
+            .collect();
+        // Two columns: rows of two, the last one alone if odd.
+        let mut grid = div().flex().flex_col().gap(t.space.sm);
+        let mut rows = rows.into_iter();
+        while let Some(a) = rows.next() {
+            let b = rows.next();
+            grid = grid.child(
+                div()
+                    .flex()
+                    .gap(t.space.sm)
+                    .child(div().flex_1().min_w_0().flex().flex_col().child(a))
+                    .child(div().flex_1().min_w_0().flex().flex_col().children(b)),
+            );
+        }
         // Folders you connected to but didn't make projects: one line each.
         let connected_rows = connected.into_iter().map(|p| {
             let (open, save) = (self.state.clone(), self.state.clone());
@@ -541,7 +451,7 @@ impl ProjectsView {
                 .rounded(t.radius.button)
                 .cursor_pointer()
                 .hover(move |st| st.bg(hover_bg))
-                .child(project_tile(t, &p.name, &p.path, px(28.)))
+                .child(tile(t, &p.path))
                 .child(
                     div()
                         .flex_1()
@@ -576,6 +486,144 @@ impl ProjectsView {
         let has_connected = s.projects.iter().any(|p| !p.saved && !p.scratch);
         let sheet_open = s.new_project_open;
         let state = self.state.clone();
+
+        // The tools beside the title: search (it opens in place), sort (a
+        // small menu, which also holds the archive), New project.
+        let searching = self.searching || !query.trim().is_empty();
+        let search = searching.then(|| {
+            div()
+                .w(px(220.))
+                .flex()
+                .items_center()
+                .gap(t.space.xs)
+                .h(t.size.control)
+                .px(t.space.sm)
+                .rounded(t.radius.field)
+                .border_1()
+                .border_color(t.colors.border)
+                .bg(t.colors.surface)
+                .child(icon(
+                    "icons/search.svg",
+                    t.size.icon_sm,
+                    t.colors.text_subtle,
+                ))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .child(Input::new(&self.search).appearance(false)),
+                )
+        });
+        let search_button = (!searching).then(|| {
+            super::button::Button::icon("projects-search", "icons/search.svg", "Search projects")
+                .on_click(cx.listener(|this, _, window, cx| {
+                    this.searching = true;
+                    this.search.update(cx, |i, cx| i.focus(window, cx));
+                    cx.notify();
+                }))
+        });
+        let sort_item = |label: &'static str, on: bool, id: &'static str| {
+            div()
+                .id(id)
+                .flex()
+                .items_center()
+                .gap(t.space.sm)
+                .h(t.size.row)
+                .px(t.space.sm)
+                .rounded(t.radius.button)
+                .cursor_pointer()
+                .text_color(t.colors.text)
+                .hover(move |st| st.bg(hover_bg))
+                .child(div().flex_1().child(label))
+                .child(div().w(t.size.icon_sm).when(on, |d| {
+                    d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.text))
+                }))
+        };
+        let sort_menu = self.sort_open.then(|| {
+            let pick = |sort: Sort| {
+                cx.listener(move |this: &mut Self, _: &gpui::ClickEvent, _, cx| {
+                    this.sort = sort;
+                    this.sort_open = false;
+                    cx.notify();
+                })
+            };
+            theme::popover(t)
+                .id("projects-sort-menu")
+                .absolute()
+                .top(t.size.control + t.space.xs)
+                .right_0()
+                .w(px(200.))
+                .on_mouse_down_out(cx.listener(|this, _, _, cx| {
+                    this.sort_open = false;
+                    cx.notify();
+                }))
+                .child(
+                    div()
+                        .px(t.space.sm)
+                        .py(t.space.xs)
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_subtle)
+                        .child("Sort by"),
+                )
+                .child(
+                    sort_item("Last opened", self.sort == Sort::Recent, "sort-recent")
+                        .on_click(pick(Sort::Recent)),
+                )
+                .child(
+                    sort_item("Name", self.sort == Sort::Name, "sort-name")
+                        .on_click(pick(Sort::Name)),
+                )
+                .child(
+                    sort_item("Date created", self.sort == Sort::Created, "sort-created")
+                        .on_click(pick(Sort::Created)),
+                )
+                .child(theme::rule(t).my(t.space.xs))
+                .child(
+                    sort_item(
+                        if tab == Tab::Archived {
+                            "Back to projects"
+                        } else {
+                            "Archived"
+                        },
+                        false,
+                        "sort-archived",
+                    )
+                    .when(tab != Tab::Archived, |d| {
+                        d.child(
+                            div()
+                                .text_size(t.text.caption)
+                                .text_color(t.colors.text_subtle)
+                                .child(archived.to_string()),
+                        )
+                    })
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.tab = if this.tab == Tab::Archived {
+                            Tab::All
+                        } else {
+                            Tab::Archived
+                        };
+                        this.sort_open = false;
+                        cx.notify();
+                    })),
+                )
+        });
+        let sort_button = div()
+            .relative()
+            .child(
+                super::button::Button::icon(
+                    "projects-sort",
+                    "icons/arrow-up-down.svg",
+                    "Sort, or show archived",
+                )
+                .tooltip(!self.sort_open)
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.sort_open = !this.sort_open;
+                    cx.notify();
+                })),
+            )
+            // Deferred: it paints over the rows below the title.
+            .children(sort_menu.map(|m| gpui::deferred(m).with_priority(1)));
+
         div()
             .id("projects-page")
             .flex_1()
@@ -584,51 +632,42 @@ impl ProjectsView {
             .flex()
             .justify_center()
             .px(t.space.xxl)
-            .pt(t.space.xxl)
+            .pt(t.space.xxl + t.space.lg)
             .pb(t.space.xxl)
             .child(
                 div()
                     .w_full()
-                    .max_w(px(900.))
+                    .max_w(t.size.column)
                     .flex()
                     .flex_col()
                     .gap(t.space.xl)
                     .child(
                         div()
                             .flex()
-                            .items_end()
-                            .gap(t.space.lg)
+                            .items_center()
+                            .gap(t.space.sm)
                             .child(
                                 div()
                                     .flex_1()
                                     .min_w_0()
-                                    .flex()
-                                    .flex_col()
-                                    .gap(t.space.xs)
-                                    .child(
-                                        div()
-                                            .font_family(t.font_display.clone())
-                                            .font_weight(t.display_weight)
-                                            .text_size(t.size.greeting)
-                                            .text_color(t.colors.text_strong)
-                                            .child("Projects"),
-                                    )
-                                    .child(
-                                        // The section's subhead, in the editorial serif.
-                                        div()
-                                            .font_family(t.font_display.clone())
-                                            .text_size(t.text.subheading)
-                                            .text_color(t.colors.text_body)
-                                            .child("A folder with its own chats, rules and memory. Open one to pick up where you left off."),
-                                    ),
+                                    .font_family(t.font_display.clone())
+                                    .font_weight(t.display_weight)
+                                    .text_size(t.text.heading_sm + px(4.))
+                                    .text_color(t.colors.text_strong)
+                                    .child(if tab == Tab::Archived {
+                                        "Archived projects"
+                                    } else {
+                                        "Projects"
+                                    }),
                             )
+                            .children(search)
+                            .children(search_button)
+                            .child(sort_button)
                             .child(
                                 theme::primary_button(t, "New project")
                                     .id("open-folder")
                                     .flex_none()
-                                    .flex()
-                                    .items_center()
-                                    .gap(t.space.xs)
+                                    .ml(t.space.xs)
                                     .on_click(move |_, _, cx| {
                                         state.update(cx, |s, cx| {
                                             s.new_project_open = !s.new_project_open;
@@ -638,25 +677,22 @@ impl ProjectsView {
                             ),
                     )
                     .when(sheet_open, |d| d.child(self.new_project.clone()))
-                    .child(toolbar)
                     .when(none_shown, |d| {
-                        d.child(
-                            div()
-                                .py(t.space.xl)
-                                .text_color(t.colors.text_subtle)
-                                .child(if !query.trim().is_empty() {
-                                    format!("No project matches “{}”.", query.trim())
-                                } else {
-                                    match tab {
-                                        Tab::All => "No projects yet. New project opens a folder as one.".into(),
-                                        Tab::Starred => "Star a project to keep it at the top.".into(),
-                                        Tab::Archived => "Nothing archived.".into(),
+                        d.child(div().py(t.space.xl).text_color(t.colors.text_subtle).child(
+                            if !query.trim().is_empty() {
+                                format!("No project matches “{}”.", query.trim())
+                            } else {
+                                match tab {
+                                    Tab::All => {
+                                        "No projects yet. New project opens a folder as one.".into()
                                     }
-                                }),
-                        )
+                                    Tab::Archived => "Nothing archived.".into(),
+                                }
+                            },
+                        ))
                     })
-                    .child(div().flex().flex_wrap().gap(t.space.lg).children(cards))
-                    .when(has_connected, |d| {
+                    .child(grid)
+                    .when(has_connected && tab == Tab::All, |d| {
                         d.child(
                             div()
                                 .flex()
@@ -682,7 +718,6 @@ impl ProjectsView {
         let Some(p) = s.project(id).cloned() else {
             return div().into_any_element();
         };
-        let home = crate::rules::home_dir();
         let hover = t.colors.hover;
         let all_chats = s.chats.iter().filter(|c| c.project == id).count();
         let q = self.chat_search.read(cx).value().trim().to_lowercase();
@@ -763,8 +798,9 @@ impl ProjectsView {
                 .items_center()
                 .gap(t.space.xs)
                 .cursor_text()
-                .text_size(t.text.heading_sm)
-                .font_weight(FontWeight::SEMIBOLD)
+                .font_family(t.font_display.clone())
+                .font_weight(t.display_weight)
+                .text_size(t.text.heading_sm + px(4.))
                 .text_color(t.colors.text_strong)
                 .child(
                     div()
@@ -863,36 +899,8 @@ impl ProjectsView {
                         div()
                             .flex()
                             .items_center()
-                            .gap(t.space.md)
-                            .child(project_tile(t, &p.name, &p.path, px(44.)))
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .flex()
-                                    .flex_col()
-                                    .gap(px(2.))
-                                    .child(name)
-                                    .child(
-                                        div()
-                                            .flex()
-                                            .items_center()
-                                            .gap(t.space.sm)
-                                            .child(
-                                                div()
-                                                    .font_family(t.font_mono.clone())
-                                                    .text_size(t.text.caption)
-                                                    .text_color(t.colors.text_subtle)
-                                                    .child(crate::rules::display_path(
-                                                        &p.path,
-                                                        home.as_deref(),
-                                                    )),
-                                            )
-                                            .when(!p.branch.is_empty(), |d| {
-                                                d.child(branch_pill(t, p.branch.clone()))
-                                            }),
-                                    ),
-                            )
+                            .gap(t.space.xs)
+                            .child(div().flex_1().min_w_0().child(name))
                             .when(!saved, |d| {
                                 d.child(
                                     theme::ghost_button(t, "Save as project")
@@ -905,61 +913,76 @@ impl ProjectsView {
                             .child(
                                 super::button::Button::icon(
                                     "project-pin",
-                                    if pinned {
-                                        "icons/star-filled.svg"
-                                    } else {
-                                        "icons/star.svg"
-                                    },
-                                    if pinned {
-                                        "Unstar"
-                                    } else {
-                                        "Star: first in your lists"
-                                    },
+                                    "icons/pin.svg",
+                                    if pinned { "Unpin" } else { "Pin: first in your lists" },
                                 )
                                 .on_click(move |_, _, cx| {
                                     pin_state.update(cx, |s, cx| s.toggle_project_pin(id, cx))
                                 }),
                             )
-                            .when(saved && removable, |d| {
-                                d.child(
-                                    super::button::Button::icon(
-                                        "project-archive",
-                                        "icons/archive.svg",
-                                        "Archive: off your lists, its chats and files kept",
-                                    )
-                                    .on_click(
-                                        move |_, _, cx| {
-                                            archive_state
-                                                .update(cx, |s, cx| s.archive_project(id, true, cx))
-                                        },
-                                    ),
-                                )
-                            })
                             .child(
-                                super::button::Button::icon(
-                                    "project-map",
-                                    "icons/map.svg",
-                                    "Map: its folders, and what this chat changed",
-                                )
-                                .on_click(|_, window, cx| {
-                                    window.dispatch_action(Box::new(ShowProjectMap), cx)
-                                }),
-                            )
-                            .when(saved && removable, |d| {
-                                d.child(
-                                    super::button::Button::icon(
-                                        "project-forget",
-                                        "icons/x.svg",
-                                        "Remove from projects: its chats and files stay",
+                                div()
+                                    .relative()
+                                    .child(
+                                        super::button::Button::icon(
+                                            "project-more",
+                                            "icons/ellipsis.svg",
+                                            "More: map, archive, remove",
+                                        )
+                                        .tooltip(!self.actions_open)
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.actions_open = !this.actions_open;
+                                            cx.notify();
+                                        })),
                                     )
-                                    .on_click(
-                                        move |_, _, cx| {
-                                            forget_state
-                                                .update(cx, |s, cx| s.forget_project(id, cx))
-                                        },
-                                    ),
-                                )
-                            }),
+                                    .children(self.actions_open.then(|| gpui::deferred({
+                                        let item = |id: &'static str, glyph: &'static str, label: &'static str| {
+                                            div()
+                                                .id(id)
+                                                .flex()
+                                                .items_center()
+                                                .gap(t.space.sm)
+                                                .h(t.size.row)
+                                                .px(t.space.sm)
+                                                .rounded(t.radius.button)
+                                                .cursor_pointer()
+                                                .text_color(t.colors.text)
+                                                .hover(move |st| st.bg(hover))
+                                                .child(icon(glyph, t.size.icon_sm, t.colors.text_muted))
+                                                .child(label)
+                                        };
+                                        theme::popover(t)
+                                            .id("project-more-menu")
+                                            .absolute()
+                                            .top(t.size.control + t.space.xs)
+                                            .right_0()
+                                            .w(px(220.))
+                                            .on_mouse_down_out(cx.listener(|this, _, _, cx| {
+                                                this.actions_open = false;
+                                                cx.notify();
+                                            }))
+                                            .child(item("project-map", "icons/map.svg", "Map of its folders").on_click(
+                                                cx.listener(|this, _, window, cx| {
+                                                    this.actions_open = false;
+                                                    window.dispatch_action(Box::new(ShowProjectMap), cx)
+                                                }),
+                                            ))
+                                            .when(saved && removable, |d| {
+                                                d.child(item("project-archive", "icons/archive.svg", "Archive").on_click(
+                                                    cx.listener(move |this, _, _, cx| {
+                                                        this.actions_open = false;
+                                                        archive_state.update(cx, |s, cx| s.archive_project(id, true, cx))
+                                                    }),
+                                                ))
+                                                .child(item("project-forget", "icons/x.svg", "Remove from projects").on_click(
+                                                    cx.listener(move |this, _, _, cx| {
+                                                        this.actions_open = false;
+                                                        forget_state.update(cx, |s, cx| s.forget_project(id, cx))
+                                                    }),
+                                                ))
+                                            })
+                                    }).with_priority(1))),
+                            ),
                     )
                     .child(description)
                     .child(self.composer.clone())
@@ -968,7 +991,7 @@ impl ProjectsView {
                             .flex()
                             .flex_col()
                             .gap(px(2.))
-                            .child(
+                            .when(all_chats > 0, |d| d.child(
                                 div()
                                     .flex()
                                     .items_center()
@@ -982,7 +1005,7 @@ impl ProjectsView {
                                             .text_size(t.text.caption)
                                             .font_weight(FontWeight::MEDIUM)
                                             .text_color(t.colors.text_subtle)
-                                            .child(format!("Chats in {}", p.name)),
+                                            .child("Chats"),
                                     )
                                     .when(all_chats > 3, |d| {
                                         d.child(
@@ -1007,7 +1030,7 @@ impl ProjectsView {
                                                 )),
                                         )
                                     }),
-                            )
+                            ))
                             .when(rows.is_empty() && !q.is_empty(), |d| {
                                 d.child(
                                     div()
@@ -1017,14 +1040,19 @@ impl ProjectsView {
                                         .child(format!("No chat here mentions “{q}”.")),
                                 )
                             })
+                            // No chats yet: what a project is for, centred and quiet.
                             .when(rows.is_empty() && q.is_empty(), |d| {
                                 d.child(
                                     div()
-                                        .px(t.space.md)
-                                        .py(t.space.md)
-                                        .text_color(t.colors.text_subtle)
+                                        .pt(t.space.xxl + t.space.lg)
+                                        .flex()
+                                        .flex_col()
+                                        .items_center()
+                                        .gap(t.space.md)
+                                        .text_color(t.colors.text_muted)
+                                        .child(icon("icons/message-square.svg", t.size.icon_lg, t.colors.text_muted))
                                         .child(
-                                            "No chats here yet. Ask something above to start one.",
+                                            "Forge reads the same instructions, files and memory every time you chat in this project.",
                                         ),
                                 )
                             })

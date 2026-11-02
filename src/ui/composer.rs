@@ -76,7 +76,7 @@ pub struct Composer {
     /// caret's place and line height there, in the window.
     ac_anchor: Option<(usize, gpui::Point<gpui::Pixels>, gpui::Pixels)>,
     /// The placeholder shown: (a project's, a question waits, a reply runs).
-    placeholder_now: (bool, Option<bool>, bool, bool),
+    placeholder_now: (bool, Option<bool>, bool, bool, Option<SharedString>),
     _subs: Vec<Subscription>,
 }
 
@@ -114,17 +114,26 @@ impl Composer {
                 // While a question waits, what you type answers it.
                 let s = state.read(cx);
                 let in_chat = s.chat().is_some_and(|c| !c.messages.is_empty());
+                // On a project's page the box starts a chat there, and says so.
+                let page = match s.screen {
+                    crate::state::Screen::Project(id) => s.project(id).map(|p| p.name.clone()),
+                    _ => None,
+                };
                 let now = (
                     s.in_folder(),
                     s.asking().then(|| s.asking_question()),
                     s.busy(),
                     in_chat,
+                    page,
                 );
                 if now != this.placeholder_now {
+                    let line: SharedString = match &now.4 {
+                        Some(name) if !now.3 => format!("New chat in {name}").into(),
+                        _ => placeholder(now.0, now.1, now.2, now.3).into(),
+                    };
                     this.placeholder_now = now;
-                    this.input.update(cx, |i, cx| {
-                        i.set_placeholder(placeholder(now.0, now.1, now.2, now.3), window, cx)
-                    });
+                    this.input
+                        .update(cx, |i, cx| i.set_placeholder(line, window, cx));
                 }
                 // The model window opening: an empty search, the current row active.
                 let s = state.read(cx);
@@ -215,7 +224,7 @@ impl Composer {
             ac_closed_for: None,
             ac_took_enter: false,
             ac_anchor: None,
-            placeholder_now: (in_folder, None, false, false),
+            placeholder_now: (in_folder, None, false, false, None),
             _subs: subs,
         }
     }
