@@ -445,28 +445,27 @@ impl SkillsEditor {
 
     fn form(&self, t: &Theme, cx: &mut Context<Self>) -> gpui::AnyElement {
         let editing = matches!(self.form, Some(Some(_)));
-        let mut scopes = div().flex().gap(px(6.));
-        for (scope, label) in [
-            (Scope::Project, "This project (.forge/skills)"),
-            (Scope::User, "Yours, every project"),
-        ] {
-            scopes = scopes.child(
-                kit::chip(
-                    t,
-                    SharedString::from(format!("skill-scope-{}", scope.label())),
-                    label,
-                    self.scope == scope,
-                )
-                // A skill's folder stays where it is when edited.
-                .when(editing && self.scope != scope, |d| d.opacity(0.5))
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    if !matches!(this.form, Some(Some(_))) {
-                        this.scope = scope;
-                        cx.notify();
-                    }
-                })),
-            );
-        }
+        // A skill's folder stays where it is when edited: no other choice then.
+        let options: Vec<(Scope, &str)> = [
+            (Scope::Project, kit::SCOPE_SHARED),
+            (Scope::User, kit::SCOPE_ALL),
+        ]
+        .into_iter()
+        .filter(|(s, _)| !editing || *s == self.scope)
+        .collect();
+        let scopes = kit::choice(
+            "skill-scope",
+            "Saved in",
+            &options,
+            self.scope,
+            cx,
+            |this, s, cx| {
+                if !matches!(this.form, Some(Some(_))) {
+                    this.scope = s;
+                    cx.notify();
+                }
+            },
+        );
         div()
             .flex()
             .flex_col()

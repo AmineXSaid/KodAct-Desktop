@@ -273,26 +273,10 @@ impl HooksEditor {
 
     fn form(&self, t: &Theme, cx: &mut Context<Self>) -> gpui::AnyElement {
         let editing = matches!(self.form, Some(Some(_)));
-        let mut layers = div().flex().flex_wrap().gap(px(6.));
-        for layer in [Layer::Project, Layer::Local, Layer::User] {
-            let label = match layer {
-                Layer::Project => "Project (shared)",
-                Layer::Local => "Project, this PC only",
-                Layer::User => "Yours, every project",
-            };
-            layers = layers.child(
-                kit::chip(
-                    t,
-                    SharedString::from(format!("hook-layer-{layer:?}")),
-                    label,
-                    self.layer == layer,
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.layer = layer;
-                    cx.notify();
-                })),
-            );
-        }
+        let layers = kit::layer_chips(t, "hook-layer", self.layer, cx, |this, l, cx| {
+            this.layer = l;
+            cx.notify();
+        });
         let mut events = div().flex().flex_wrap().gap(px(6.));
         for (event, _, _) in ff::HOOK_EVENTS {
             events = events.child(

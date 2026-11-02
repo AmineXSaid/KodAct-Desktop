@@ -198,21 +198,17 @@ impl Render for PermissionsEditor {
             this.layer = l;
             cx.notify();
         });
-        let mut kinds = div().flex().gap(px(6.));
-        for (kind, label) in KINDS {
-            kinds = kinds.child(
-                kit::chip(
-                    &t,
-                    SharedString::from(format!("perm-kind-{kind}")),
-                    label,
-                    self.kind == kind,
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.kind = kind;
-                    cx.notify();
-                })),
-            );
-        }
+        let kinds = kit::choice(
+            "perm-kind",
+            "The rule",
+            &KINDS,
+            self.kind,
+            cx,
+            |this, k, cx| {
+                this.kind = k;
+                cx.notify();
+            },
+        );
         let add_row = div()
             .flex()
             .items_center()

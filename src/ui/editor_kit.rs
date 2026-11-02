@@ -601,16 +601,44 @@ pub fn layer_chips<V: 'static>(
     pick: impl Fn(&mut V, crate::forge_files::Layer, &mut gpui::Context<V>) + Copy + 'static,
 ) -> gpui::Div {
     use crate::forge_files::Layer;
-    let mut seg = super::button::Segmented::new(id, "Saved in");
-    for (layer, label) in [
-        (Layer::Local, "This project, this PC"),
-        (Layer::Project, "This project, shared"),
-        (Layer::User, "Every project"),
-    ] {
+    choice(
+        id,
+        "Saved in",
+        &[
+            (Layer::Local, SCOPE_ME),
+            (Layer::Project, SCOPE_SHARED),
+            (Layer::User, SCOPE_ALL),
+        ],
+        current,
+        cx,
+        pick,
+    )
+}
+
+/// Where a setting is kept, in the same words on every page: the project
+/// for you alone, the project for everyone on it (in the repository), or
+/// every project you open.
+pub const SCOPE_ME: &str = "This project, just me";
+pub const SCOPE_SHARED: &str = "This project, shared";
+pub const SCOPE_ALL: &str = "All my projects";
+
+/// One choice of a few short options, as a segmented control: the app's
+/// one control for it (chips are for picking several, or from a long list).
+pub fn choice<V: 'static, T: PartialEq + Copy + 'static>(
+    id: impl Into<gpui::ElementId>,
+    label: &'static str,
+    options: &[(T, &str)],
+    current: T,
+    cx: &mut gpui::Context<V>,
+    pick: impl Fn(&mut V, T, &mut gpui::Context<V>) + Copy + 'static,
+) -> gpui::Div {
+    let mut seg = super::button::Segmented::new(id, label);
+    for (value, text) in options {
+        let value = *value;
         seg = seg.option(
-            label,
-            current == layer,
-            cx.listener(move |this, _, _, cx| pick(this, layer, cx)),
+            text.to_string(),
+            current == value,
+            cx.listener(move |this, _, _, cx| pick(this, value, cx)),
         );
     }
     div().flex().child(seg)
