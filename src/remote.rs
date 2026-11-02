@@ -1849,12 +1849,11 @@ mod tests {
                 .stderr(std::process::Stdio::piped())
                 .spawn()
                 .unwrap();
-            child
-                .stdin
-                .take()
-                .unwrap()
-                .write_all(&super::tar(files))
-                .unwrap();
+            // "keep" may leave without reading the archive: a broken pipe
+            // then is the script's answer, not a failure.
+            if let Err(e) = child.stdin.take().unwrap().write_all(&super::tar(files)) {
+                assert_eq!(e.kind(), std::io::ErrorKind::BrokenPipe, "{e}");
+            }
             child.wait_with_output().unwrap()
         };
         let dir = home.join(".claude/skills/pdf");
