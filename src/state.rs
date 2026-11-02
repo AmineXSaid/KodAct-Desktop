@@ -1828,6 +1828,8 @@ pub struct AppState {
     pub sidebar_kind: SidebarKind,
     /// The title bar's project switcher, and the sidebar's chat filter, are open.
     pub switcher_open: bool,
+    /// The composer's project menu (the same list as the switcher, above its chip).
+    pub project_menu: bool,
     pub filter_open: bool,
     /// The current project's name, shown in the title bar.
     pub project: SharedString,
@@ -2307,6 +2309,7 @@ impl AppState {
             context_usage: Default::default(),
             sidebar_kind: SidebarKind::default(),
             switcher_open: false,
+            project_menu: false,
             filter_open: false,
             screen: Screen::Chat,
             current: None,
@@ -3219,6 +3222,7 @@ impl AppState {
         self.project_dir = path;
         self.branch = branch;
         self.switcher_open = false;
+        self.project_menu = false;
         if keep {
             self.save_projects(cx);
         }

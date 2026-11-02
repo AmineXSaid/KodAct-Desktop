@@ -55,6 +55,7 @@ pub struct Composer {
     modes_presence: super::motion::Presence<()>,
     add_presence: super::motion::Presence<()>,
     design_presence: super::motion::Presence<crate::state::DesignTab>,
+    project_presence: super::motion::Presence<()>,
     context_presence: super::motion::Presence<()>,
     /// Where the press that just closed a menu happened: the click it ends
     /// in, on that menu's own button, must not open it again.
@@ -152,7 +153,8 @@ impl Composer {
                 let tab = state.read(cx).design_menu;
                 if tab != this.design_tab_was {
                     let was = std::mem::replace(&mut this.design_tab_was, tab);
-                    this.design_filter.update(cx, |f, cx| f.set_value("", window, cx));
+                    this.design_filter
+                        .update(cx, |f, cx| f.set_value("", window, cx));
                     // A list's search takes the keys; closing gives them back.
                     match tab {
                         Some(crate::state::DesignTab::Work) => {}
@@ -202,6 +204,7 @@ impl Composer {
             modes_presence: Default::default(),
             add_presence: Default::default(),
             design_presence: Default::default(),
+            project_presence: Default::default(),
             context_presence: Default::default(),
             dismissed_at: None,
             add_open: false,
@@ -439,6 +442,24 @@ impl Composer {
         matches!(ev, gpui::ClickEvent::Mouse(m) if Some(m.down.position) == at)
     }
 
+    /// Esc in the box: close whichever menu floats over it. True when one was open.
+    fn close_menus(&mut self, cx: &mut Context<Self>) -> bool {
+        let s = self.state.read(cx);
+        let open = self.add_open || s.modes_open || s.design_menu.is_some() || s.project_menu;
+        if open {
+            self.add_open = false;
+            self.state.update(cx, |s, cx| {
+                s.modes_open = false;
+                s.bypass_warning = false;
+                s.design_menu = None;
+                s.project_menu = false;
+                cx.notify();
+            });
+            cx.notify();
+        }
+        open
+    }
+
     /// The model window's keys: arrows move (wrapping, through the effort
     /// row), Enter picks, Esc clears the search, then closes.
     fn menu_key(&mut self, ev: &gpui::KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -556,13 +577,14 @@ impl Render for Composer {
                             s.bypass_warning = false;
                         }
                         Menu::Design => s.design_menu = None,
+                        Menu::Project => s.project_menu = false,
                     }
                     cx.notify();
                 });
             });
         };
-        let (dismiss_models, dismiss_modes, dismiss_design) =
-            (dismiss.clone(), dismiss.clone(), dismiss);
+        let (dismiss_models, dismiss_modes, dismiss_design, dismiss_project) =
+            (dismiss.clone(), dismiss.clone(), dismiss.clone(), dismiss);
         let me = cx.entity().downgrade();
         let skip = move |ev: &gpui::ClickEvent, cx: &mut gpui::App| -> bool {
             me.update(cx, |c, _| c.just_dismissed(ev)).unwrap_or(false)
@@ -576,24 +598,27 @@ impl Render for Composer {
         let design_trigger = super::design_chips::trigger(&t, &state, cx, skip_design);
         let design_now = self.state.read(cx).design_menu;
         let design_out = t.size.menu_out_ms;
-        let design_menu = self.design_presence.frame(design_now, design_out, window).map(|(tab, leaving)| {
-            let query = self.design_filter.read(cx).value().to_string();
-            let search = super::search_field(&t, &self.design_filter)
-                .mx(t.space.sm)
-                .mb(t.space.xs)
-                .into_any_element();
-            super::design_chips::menu(
-                &t,
-                &state,
-                tab,
-                &query,
-                search,
-                window,
-                cx,
-                move |pos, cx| dismiss_design(pos, Menu::Design, cx),
-                leaving,
-            )
-        });
+        let design_menu = self
+            .design_presence
+            .frame(design_now, design_out, window)
+            .map(|(tab, leaving)| {
+                let query = self.design_filter.read(cx).value().to_string();
+                let search = super::search_field(&t, &self.design_filter)
+                    .mx(t.space.sm)
+                    .mb(t.space.xs)
+                    .into_any_element();
+                super::design_chips::menu(
+                    &t,
+                    &state,
+                    tab,
+                    &query,
+                    search,
+                    window,
+                    cx,
+                    move |pos, cx| dismiss_design(pos, Menu::Design, cx),
+                    leaving,
+                )
+            });
         let mode_trigger = super::mode_menu::trigger(&t, &state, cx, skip);
         let out = t.size.menu_out_ms;
         let modes_now = self.state.read(cx).modes_open.then_some(());
@@ -799,7 +824,35 @@ impl Render for Composer {
                     window.dispatch_action(Box::new(ToggleModelPicker), cx);
                 }
             }));
-        // The project this chat works in: opens Projects to choose another.
+        // The project this chat works in: its menu lists the others, All
+        // projects and New project…, above the chip (the title bar's
+        // switcher, lifted).
+        let project_now = self.state.read(cx).project_menu.then_some(());
+        let project_menu = self
+            .project_presence
+            .frame(project_now, t.size.menu_out_ms, window)
+            .map(|(_, leaving)| {
+                let body = super::workspace::switcher_menu(&state, window, cx, px(140.))
+                    .on_mouse_down_out(move |ev, _, cx| {
+                        dismiss_project(ev.position, Menu::Project, cx)
+                    });
+                div().absolute().top_0().left_0().child(
+                    gpui::deferred(
+                        gpui::anchored()
+                            .anchor(gpui::Anchor::BottomLeft)
+                            .snap_to_window_with_margin(t.size.viewport_margin)
+                            .child(div().pb(t.space.sm).child(super::motion::composer_menu(
+                                body, "project", 0., leaving, &t,
+                            ))),
+                    )
+                    .with_priority(2),
+                )
+            });
+        let me = cx.entity().downgrade();
+        let skip_project = move |ev: &gpui::ClickEvent, cx: &mut gpui::App| -> bool {
+            me.update(cx, |c, _| c.just_dismissed(ev)).unwrap_or(false)
+        };
+        let project_open = project_now.is_some();
         let project_name: SharedString = self
             .state
             .read(cx)
@@ -812,7 +865,6 @@ impl Render for Composer {
             .read(cx)
             .current_remote()
             .map(|r| r.target.label());
-        let remote = host.is_some();
         let project_button = quiet("project", false)
             .min_w_0()
             .flex_shrink(1.)
@@ -832,21 +884,26 @@ impl Render for Composer {
                     .text_ellipsis()
                     .child(project_name),
             )
-            .child(super::button::chevron(&t, false))
-            .tooltip(move |window, cx| {
-                gpui::component::tooltip::Tooltip::new(match &host {
-                    Some(h) => format!("Open another folder on {h}"),
-                    None => format!("Choose the project ({})", super::shortcut("Shift P")),
+            .child(super::button::chevron(&t, project_open))
+            // No tooltip over its own open menu.
+            .when(!project_open, |d| {
+                d.tooltip(move |window, cx| {
+                    gpui::component::tooltip::Tooltip::new(match &host {
+                        Some(h) => format!("Projects, or another folder on {h}"),
+                        None => "Choose the project".to_string(),
+                    })
+                    .build(window, cx)
                 })
-                .build(window, cx)
             })
-            // On a host, the folder's own browser there (the connection
-            // stays); here, Projects.
-            .on_click(move |_, window, cx| {
-                if remote {
-                    window.dispatch_action(Box::new(ChangeRemoteFolder), cx)
-                } else {
-                    window.dispatch_action(Box::new(OpenProjects), cx)
+            .on_click({
+                let state = state.clone();
+                move |ev, _, cx| {
+                    if !skip_project(ev, cx) {
+                        state.update(cx, |s, cx| {
+                            s.project_menu = !s.project_menu;
+                            cx.notify();
+                        })
+                    }
                 }
             });
         let focused = gpui::Focusable::focus_handle(self.input.read(cx), cx).is_focused(window);
@@ -933,16 +990,26 @@ impl Render for Composer {
                     window.dispatch_action(Box::new(super::ToggleFind), cx);
                 }),
             )
-            // The text box's own Escape closes the autocomplete first, keeping the focus.
+            // The text box's own Escape closes the autocomplete first, then
+            // a menu open over the box (+, modes), keeping the focus.
             .capture_action(
                 cx.listener(|this, _: &gpui::component::input::Escape, _, cx| {
                     if let Some((trig, _)) = this.completion(cx) {
                         this.ac_closed_for = Some(this.text(cx)[trig.start..].to_string());
                         cx.stop_propagation();
                         cx.notify();
+                    } else if this.close_menus(cx) {
+                        cx.stop_propagation();
                     }
                 }),
             )
+            // Focus on a chip instead of the box: Esc arrives as StopReply,
+            // and a menu open over the box closes before a reply stops.
+            .capture_action(cx.listener(|this, _: &super::StopReply, _, cx| {
+                if this.close_menus(cx) {
+                    cx.stop_propagation();
+                }
+            }))
             // The text box binds ↑ ↓ Tab and Enter to its own actions, which
             // run before any key listener: while the list is open they move
             // through it and pick from it instead.
@@ -1122,7 +1189,14 @@ impl Render for Composer {
                                     .child(mode_trigger)
                                     .children(modes_menu),
                             )
-                            .child(project_button)
+                            .child(
+                                div()
+                                    .relative()
+                                    .min_w_0()
+                                    .flex_shrink(1.)
+                                    .child(project_button)
+                                    .children(project_menu),
+                            )
                             // A design chat: the chip and its menu above it.
                             .children(design_trigger.map(|d| {
                                 div().relative().flex_none().child(d).children(design_menu)
@@ -1149,4 +1223,5 @@ enum Menu {
     Models,
     Modes,
     Design,
+    Project,
 }

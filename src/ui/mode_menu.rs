@@ -87,13 +87,16 @@ pub fn trigger(
                 .child(mode.label()),
         )
         .child(super::button::chevron(t, open))
-        .tooltip({
+        // Not over its own open menu.
+        .when(!open, |d| {
             let tip: SharedString = format!(
                 "{}. Click to change, or press Shift+Tab to cycle.",
                 mode.description()
             )
             .into();
-            move |window, cx| gpui::component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
+            d.tooltip(move |window, cx| {
+                gpui::component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
+            })
         })
         .on_click(move |ev, _, cx| {
             if skip(ev, cx) {
