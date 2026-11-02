@@ -179,6 +179,12 @@ impl Render for ConfirmWindow {
                 .items_center()
                 .justify_center()
                 .bg(t.extra.scrim)
+                // Esc arrives as the workspace's StopReply (its binding wins
+                // over a key listener); Enter as a key.
+                .on_action(cx.listener(|this, _: &super::StopReply, window, cx| {
+                    this.cancel(window, cx);
+                    cx.stop_propagation();
+                }))
                 .on_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| {
                     match ev.keystroke.key.as_str() {
                         "escape" => this.cancel(window, cx),
