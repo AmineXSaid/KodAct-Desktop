@@ -118,7 +118,8 @@ const SECTIONS: &[Section] = &[
         "Workspace",
         &[
             (SettingsTab::Sandbox, "icons/box.svg", "Sandbox"),
-            (SettingsTab::Network, "icons/network.svg", "Network"),
+            // Network waits on ForgeCLI (a proxy, extra certificates): listed
+            // once a setting there would change something (`planned.rs`).
             (
                 SettingsTab::Environments,
                 "icons/server.svg",

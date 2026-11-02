@@ -1257,6 +1257,9 @@ pub enum SettingsTab {
     Mcp,
     Permissions,
     Sandbox,
+    /// Not listed until ForgeCLI reads a proxy and extra certificates
+    /// (`planned::NETWORK`): a page there would change nothing yet.
+    #[allow(dead_code)]
     Network,
     Environments,
     Memory,

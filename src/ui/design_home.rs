@@ -40,9 +40,8 @@ pub struct DesignHome {
 
 impl DesignHome {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let search = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("Search: pitch deck, editorial, dashboard…")
-        });
+        let search =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Search the whole library"));
         let subs = vec![
             cx.subscribe(&search, |this, _, ev: &InputEvent, cx| {
                 if matches!(ev, InputEvent::Change) {
@@ -105,21 +104,10 @@ fn card(
                 .size_full()
                 .object_fit(ObjectFit::Cover)
                 .into_any_element(),
-            Some(Thumb::Queued) => div()
-                .text_size(t.text.caption)
-                .text_color(t.colors.text_subtle)
-                .child(crate::i18n::tr("Drawing…"))
-                .into_any_element(),
-            _ => icon(
-                match kind {
-                    Kind::DesignSystem => "icons/sliders-horizontal.svg",
-                    Kind::Skill => "icons/wand-sparkles.svg",
-                    _ => "icons/layers.svg",
-                },
-                t.size.icon_lg,
-                t.colors.text_subtle,
-            )
-            .into_any_element(),
+            // No picture (yet, or ever): a cover set in type, its kind
+            // above its name, never an empty square or a "drawing" note.
+            // The picture replaces it once drawn.
+            _ => cover(t, kind, &e.title),
         });
     let use_it = {
         let (state, id) = (state.clone(), id.clone());
@@ -171,17 +159,57 @@ fn card(
                         .child(e.description.clone()),
                 ),
         )
+        // Preview on the left, Use on the right, on every card alike.
         .child(
             div()
                 .flex()
                 .items_center()
-                .justify_end()
+                .justify_between()
                 .gap(t.space.xs)
                 .px(t.space.sm)
                 .py(t.space.xs)
-                .children(look)
+                .child(div().children(look))
                 .child(use_it),
         )
+}
+
+/// A cover set in type for an entry with no picture: its kind small at
+/// the top, its name in the display cut at the foot, on the inset paper.
+fn cover(t: &Theme, kind: Kind, title: &str) -> gpui::AnyElement {
+    let (glyph, word) = match kind {
+        Kind::DesignSystem => ("icons/sliders-horizontal.svg", "Design system"),
+        Kind::Skill => ("icons/wand-sparkles.svg", "Skill"),
+        Kind::Template => ("icons/layers.svg", "Template"),
+        _ => ("icons/layers.svg", "Example"),
+    };
+    div()
+        .size_full()
+        .p(t.space.md)
+        .flex()
+        .flex_col()
+        .justify_between()
+        .bg(t.extra.inset)
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(t.space.tight)
+                .text_size(t.text.caption)
+                .text_color(t.colors.text_subtle)
+                .child(icon(glyph, t.size.icon_xs, t.colors.text_subtle))
+                .child(word),
+        )
+        .child(
+            div()
+                .font_family(t.font_display.clone())
+                .font_weight(t.display_weight)
+                .text_size(t.text.subheading)
+                .line_height(gpui::relative(1.2))
+                .text_color(t.colors.text_strong)
+                .line_clamp(3)
+                .child(title.to_string()),
+        )
+        .into_any_element()
 }
 
 impl Render for DesignHome {
@@ -221,7 +249,9 @@ impl Render for DesignHome {
                     ),
             );
 
-        let search = super::search_field(&t, &self.search).w(px(280.)).flex_none();
+        let search = super::search_field(&t, &self.search)
+            .w(px(300.))
+            .flex_none();
 
         let Some(ix) = ix else {
             return div()
@@ -268,10 +298,23 @@ impl Render for DesignHome {
             .iter()
             .map(|p| p.as_ref().and_then(|p| s.design_thumbs.get(p).cloned()))
             .collect();
+        // A search looks in every list: each tab counts what matches, so
+        // the one that has it is plain to see.
         let counts: Vec<(GalleryTab, usize)> = GalleryTab::ALL
             .iter()
-            .map(|g| (*g, ix.of(g.kind()).filter(|e| !e.hidden).count()))
+            .map(|g| {
+                let n = ix
+                    .of(g.kind())
+                    .filter(|e| !e.hidden && matches(e, &query))
+                    .count();
+                (*g, n)
+            })
             .collect();
+        let elsewhere = counts
+            .iter()
+            .filter(|(g, n)| *g != tab && *n > 0)
+            .max_by_key(|(_, n)| *n)
+            .copied();
         // Ask for the pictures of what shows, in order, when that changes.
         let wanted: Vec<PathBuf> = previews.iter().flatten().cloned().collect();
         if wanted != self.asked {
@@ -438,11 +481,21 @@ impl Render for DesignHome {
             }))
         });
         let empty = (total == 0).then(|| {
-            div().text_color(t.colors.text_muted).child(format!(
-                "{}: {} · \"{query}\"",
-                crate::i18n::tr("Nothing matches"),
-                tab.label()
-            ))
+            let st = state.clone();
+            div()
+                .flex()
+                .items_center()
+                .gap(t.space.md)
+                .text_color(t.colors.text_muted)
+                .child(format!(
+                    "Nothing in {} matches \u{201c}{query}\u{201d}.",
+                    tab.label()
+                ))
+                .children(elsewhere.map(|(g, n)| {
+                    theme::ghost_button(&t, format!("Show {} ({n})", g.label()))
+                        .id("gallery-elsewhere")
+                        .on_click(move |_, _, cx| st.update(cx, |s, cx| s.set_gallery_tab(g, cx)))
+                }))
         });
 
         div()
