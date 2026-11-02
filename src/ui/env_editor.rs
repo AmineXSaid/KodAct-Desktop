@@ -28,7 +28,7 @@ impl EnvEditor {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let text = cx.new(|cx| {
             TextareaState::new(window, cx)
-                .placeholder("DATABASE_URL=postgres://localhost/test\nRUST_LOG=info")
+                .placeholder("e.g. RUST_LOG=info\n       DATABASE_URL=postgres://localhost/test")
         });
         let subs = vec![
             cx.observe(&state, |this, state, cx| {

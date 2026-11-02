@@ -140,7 +140,7 @@ impl Render for SandboxEditor {
             kit::option_row(
                 &t,
                 "sandbox-unset",
-                "Not set here: another file decides, or none does",
+                "Not set here: the other places decide, and with none, no sandbox",
                 mode.is_none(),
             )
             .on_click(cx.listener(|this, _, _, cx| {

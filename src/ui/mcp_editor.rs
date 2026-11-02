@@ -47,12 +47,12 @@ impl McpEditor {
         Self {
             _sub: cx.observe(&state, |_, _, cx| cx.notify()),
             name: cx.new(|cx| InputState::new(window, cx).placeholder("github")),
-            command: cx.new(|cx| InputState::new(window, cx).placeholder("npx")),
+            command: cx.new(|cx| InputState::new(window, cx).placeholder("e.g. npx")),
             args: cx.new(|cx| {
-                InputState::new(window, cx).placeholder("-y @modelcontextprotocol/server-github")
+                InputState::new(window, cx).placeholder("e.g. -y @modelcontextprotocol/server-github")
             }),
             url: cx
-                .new(|cx| InputState::new(window, cx).placeholder("https://mcp.example.com/mcp")),
+                .new(|cx| InputState::new(window, cx).placeholder("e.g. https://mcp.example.com/mcp")),
             pairs: cx.new(|cx| TextareaState::new(window, cx)),
             state,
             form: None,

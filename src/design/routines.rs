@@ -48,6 +48,18 @@ fn time(at: &str) -> Option<NaiveTime> {
     NaiveTime::parse_from_str(at.trim(), "%H:%M").ok()
 }
 
+fn full_day(w: Weekday) -> &'static str {
+    match w {
+        Weekday::Mon => "Monday",
+        Weekday::Tue => "Tuesday",
+        Weekday::Wed => "Wednesday",
+        Weekday::Thu => "Thursday",
+        Weekday::Fri => "Friday",
+        Weekday::Sat => "Saturday",
+        Weekday::Sun => "Sunday",
+    }
+}
+
 fn weekday(day: &str) -> Option<Weekday> {
     day.trim().to_lowercase().get(..3)?.parse().ok()
 }
@@ -92,9 +104,12 @@ impl Every {
 
     pub fn say(&self) -> String {
         match self {
-            Every::Hour { minute } => format!("hourly at :{minute:02}"),
-            Every::Day { at } => format!("daily at {at}"),
-            Every::Week { day, at } => format!("weekly on {day} at {at}"),
+            Every::Hour { minute } => format!("every hour at :{minute:02}"),
+            Every::Day { at } => format!("every day at {at}"),
+            Every::Week { day, at } => {
+                let name = weekday(day).map_or_else(|| day.clone(), |w| full_day(w).to_string());
+                format!("every {name} at {at}")
+            }
         }
     }
 

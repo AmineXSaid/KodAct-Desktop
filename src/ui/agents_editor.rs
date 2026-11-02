@@ -41,7 +41,7 @@ impl AgentsEditor {
             name: cx.new(|cx| InputState::new(window, cx).placeholder("reviewer")),
             description: cx.new(|cx| {
                 InputState::new(window, cx)
-                    .placeholder("Reviews a diff for bugs. Use it after a change is made.")
+                    .placeholder("e.g. Reviews a diff for bugs. Use it after a change is made.")
             }),
             model: cx.new(|cx| InputState::new(window, cx).placeholder("Empty: the chat's model")),
             prompt: cx.new(|cx| {

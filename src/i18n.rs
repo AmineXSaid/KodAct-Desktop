@@ -140,11 +140,11 @@ const TABLE: &[(&str, [&str; 3])] = &[
     ("Delete", ["Supprimer", "Eliminar", "Löschen"]),
     ("New routine…", ["Nouvelle routine…", "Nueva rutina…", "Neue Routine…"]),
     (
-        "Requests Forge runs on a schedule, while it's open, as a new chat in their project. Make one in the composer: /routine weekly on monday at 9:00: refresh the metrics deck",
+        "Requests Forge runs on a schedule, while it's open, each as a new chat in this project.",
         [
-            "Des demandes que Forge exécute selon un horaire, tant qu'il est ouvert, dans une nouvelle conversation de leur projet. Créez-en une dans le champ de saisie : /routine weekly on monday at 9:00: actualise le deck des indicateurs",
-            "Peticiones que Forge ejecuta según un horario, mientras está abierto, como un chat nuevo en su proyecto. Crea una en el cuadro de mensaje: /routine weekly on monday at 9:00: actualiza la presentación de métricas",
-            "Anfragen, die Forge nach Zeitplan ausführt, solange es offen ist, als neuer Chat in ihrem Projekt. Lege eine im Eingabefeld an: /routine weekly on monday at 9:00: aktualisiere das Kennzahlen-Deck",
+            "Des demandes que Forge exécute selon un horaire, tant qu'il est ouvert, chacune dans une nouvelle conversation de ce projet.",
+            "Peticiones que Forge ejecuta según un horario, mientras está abierto, cada una como un chat nuevo en este proyecto.",
+            "Anfragen, die Forge nach Zeitplan ausführt, solange es offen ist, jede als neuer Chat in diesem Projekt.",
         ],
     ),
     // The language itself.

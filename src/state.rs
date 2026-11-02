@@ -6406,7 +6406,7 @@ fix everything under 8, render it again to check, then tell me the scores before
     /// refresh the metrics deck"), in this project, with this chat's design
     /// setup. It waits for its first time.
     pub fn add_routine(&mut self, spec: &str, cx: &mut Context<Self>) {
-        use crate::design::routines::{Every, Routine};
+        use crate::design::routines::Every;
         // The schedule ends at a colon; "at 9:30: …" has one in its time,
         // so the last colon that leaves a schedule before it.
         let found = spec.match_indices(':').rev().find_map(|(i, _)| {
@@ -6421,6 +6421,19 @@ fix everything under 8, render it again to check, then tell me the scores before
         if prompt.is_empty() {
             return self.show_toast("Say what the routine asks for, after the colon.", cx);
         }
+        self.make_routine(when, prompt, cx);
+    }
+
+    /// Make a routine that asks `prompt` on schedule `when`, in this
+    /// project, with this chat's design setup (the Routines form, and
+    /// `/routine` once read). It waits for its first time.
+    pub fn make_routine(
+        &mut self,
+        when: crate::design::routines::Every,
+        prompt: String,
+        cx: &mut Context<Self>,
+    ) {
+        use crate::design::routines::Routine;
         let now = chrono::Local::now().timestamp();
         let project = self
             .project(self.current_project)

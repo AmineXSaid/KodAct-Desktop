@@ -41,11 +41,11 @@ impl SkillsEditor {
             name: cx.new(|cx| InputState::new(window, cx).placeholder("pdf")),
             description: cx.new(|cx| {
                 InputState::new(window, cx)
-                    .placeholder("Reads PDF files. Use it when the user shares or mentions a PDF.")
+                    .placeholder("e.g. Reads PDF files. Use it when the user shares or mentions a PDF.")
             }),
             body: cx.new(|cx| {
                 TextareaState::new(window, cx)
-                    .placeholder("Run pdftotext -layout on the file, then…")
+                    .placeholder("e.g. Run pdftotext -layout on the file, then…")
             }),
             install: cx
                 .new(|cx| super::skill_install::SkillInstall::new(state.clone(), window, cx)),
