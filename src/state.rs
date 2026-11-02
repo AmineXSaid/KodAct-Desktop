@@ -1743,6 +1743,8 @@ pub enum Confirm {
         msg: usize,
         files: Vec<String>,
     },
+    /// Allow Bypass permissions (it runs every tool without asking)?
+    Bypass,
 }
 
 /// A command `/` offers, and the group it is listed under.

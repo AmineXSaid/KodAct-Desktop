@@ -252,9 +252,12 @@ fn inline_diagram(
         .border_b_1()
         .border_color(t.colors.border)
         .child(icon("icons/network.svg", t.size.icon_sm, t.colors.primary))
+        // In a narrow column the hint gives way first; the title keeps
+        // enough to read and shortens last.
         .child(
             div()
-                .min_w_0()
+                .min_w(px(96.))
+                .flex_shrink(0.1)
                 .overflow_hidden()
                 .whitespace_nowrap()
                 .text_ellipsis()
@@ -264,7 +267,11 @@ fn inline_diagram(
         )
         .child(
             div()
-                .flex_none()
+                .min_w_0()
+                .flex_shrink(1.)
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
                 .text_size(t.text.caption)
                 .text_color(t.colors.text_muted)
                 .child(if wider {

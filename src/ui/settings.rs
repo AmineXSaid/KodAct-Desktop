@@ -877,8 +877,14 @@ impl Settings {
         let bypass_row = super::button::Switch::new("bypass", bypass, "Bypass permissions")
             .on_toggle(move |on, _, cx| {
                 state.update(cx, |s, cx| {
-                    s.bypass_allowed = on;
-                    if !on && s.default_mode == crate::modes::ModeId::Bypass {
+                    // Turning it on asks first (the confirm window); off is at once.
+                    if on {
+                        s.confirm = Some(crate::state::Confirm::Bypass);
+                        cx.notify();
+                        return;
+                    }
+                    s.bypass_allowed = false;
+                    if s.default_mode == crate::modes::ModeId::Bypass {
                         s.default_mode = crate::modes::ModeId::Manual;
                     }
                     cx.notify();
