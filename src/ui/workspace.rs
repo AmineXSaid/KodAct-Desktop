@@ -2069,9 +2069,18 @@ fn greeting_line(line: &str, t: &crate::theme::Theme) -> impl IntoElement {
                 .min_w_0()
                 .font_family(t.font_display.clone())
                 .font_weight(t.display_weight)
-                .text_size(t.size.home_heading)
+                // A long line steps down the scale rather than breaking: a
+                // greeting is one line, never a word (or a "?") left over.
+                .text_size(if line.chars().count() > 26 {
+                    t.size.greeting
+                } else {
+                    t.size.home_heading
+                })
                 .text_color(t.colors.text_strong)
                 .line_height(gpui::relative(1.1))
+                .whitespace_nowrap()
+                .overflow_hidden()
+                .text_ellipsis()
                 .child(line.to_string()),
         )
 }
