@@ -946,7 +946,7 @@ impl Render for Sidebar {
                     .child(
                         nav(
                             "design",
-                            "icons/pen-tool.svg",
+                            "icons/pencil-ruler.svg",
                             "Design",
                             design_open,
                             Some(shortcut("Shift D")),
@@ -1225,7 +1225,7 @@ pub fn rail(t: &crate::theme::Theme, screen: Screen) -> impl IntoElement {
         .child(
             nav(
                 "rail-design",
-                "icons/pen-tool.svg",
+                "icons/pencil-ruler.svg",
                 format!("Design ({})", shortcut("Shift D")),
                 screen == Screen::Design,
             )

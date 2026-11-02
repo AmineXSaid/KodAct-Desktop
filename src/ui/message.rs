@@ -329,7 +329,7 @@ fn memory_line(
         .gap(t.space.xs)
         .text_size(t.text.caption)
         .text_color(t.colors.text_muted)
-        .child(icon("icons/brain.svg", t.size.icon_xs, t.colors.coral))
+        .child(icon("icons/notebook-pen.svg", t.size.icon_xs, t.colors.coral))
         .child(
             div()
                 .min_w_0()
@@ -1058,13 +1058,13 @@ fn thinking(
                 .text_color(t.colors.text_muted)
                 .hover(move |s| s.text_color(strong))
                 .when(streaming, |d| {
-                    d.child(
-                        icon("icons/sparkles.svg", t.size.icon_xs, t.extra.accent).with_animation(
-                            SharedString::from(format!("think-pulse-{key}")),
-                            Animation::new(Duration::from_millis(1600)).repeat(),
-                            |svg, d| svg.opacity(0.45 + 0.55 * (d * std::f32::consts::PI).sin()),
-                        ),
-                    )
+                    // Thinking: Forge's own strike mark, as on the working line.
+                    d.child(super::activity::strike(
+                        t.extra.accent,
+                        t.extra.mark_heat_white,
+                        f32::from(t.size.icon_xs),
+                        SharedString::from(format!("think-strike-{key}")),
+                    ))
                 })
                 .child(label)
                 .child(icon(

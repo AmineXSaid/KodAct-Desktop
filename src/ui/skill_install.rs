@@ -421,7 +421,7 @@ impl SkillInstall {
             .items_start()
             .when(!on, |d| d.opacity(0.7))
             .child(div().pt(px(2.)).child(icon(
-                "icons/wand-sparkles.svg",
+                "icons/scroll-text.svg",
                 t.size.icon,
                 t.colors.text_muted,
             )))

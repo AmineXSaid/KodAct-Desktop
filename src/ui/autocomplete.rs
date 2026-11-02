@@ -229,7 +229,7 @@ pub fn items(trig: &Trigger, s: &AppState) -> Vec<Item> {
             };
             let text = format!("/{} ", c.name);
             let icon = if c.group == "Skills" {
-                "icons/wand-sparkles.svg"
+                "icons/scroll-text.svg"
             } else {
                 "icons/terminal.svg"
             };

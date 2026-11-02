@@ -73,7 +73,7 @@ fn kind_icon(kind: Kind) -> &'static str {
         Kind::Import => "icons/at-sign.svg",
         Kind::Rule => "icons/list-todo.svg",
         Kind::Folder => "icons/folder-open.svg",
-        Kind::Skill => "icons/sparkles.svg",
+        Kind::Skill => "icons/scroll-text.svg",
     }
 }
 

@@ -200,7 +200,7 @@ impl SkillsEditor {
             out = out.child(
                 kit::card(t)
                     .child(icon(
-                        "icons/wand-sparkles.svg",
+                        "icons/scroll-text.svg",
                         t.size.icon,
                         t.colors.text_muted,
                     ))
@@ -321,7 +321,7 @@ impl SkillsEditor {
         kit::card(t)
             .when(!enabled, |d| d.opacity(0.65))
             .child(icon(
-                "icons/wand-sparkles.svg",
+                "icons/scroll-text.svg",
                 t.size.icon,
                 t.colors.text_muted,
             ))

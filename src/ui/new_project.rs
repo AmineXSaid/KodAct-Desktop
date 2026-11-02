@@ -178,7 +178,7 @@ impl Render for NewProject {
         let chosen = crate::templates::by_key(self.template);
         let fresh = way(
             &t,
-            "icons/sparkles.svg",
+            "icons/folder-plus.svg",
             "Start fresh",
             "A new folder for any kind of work. A template gives Forge its first instructions.",
         )

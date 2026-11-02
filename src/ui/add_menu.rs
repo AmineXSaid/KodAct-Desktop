@@ -54,7 +54,7 @@ const ITEMS: [Item; 6] = [
     },
     Item {
         key: "skills",
-        glyph: "icons/sparkles.svg",
+        glyph: "icons/scroll-text.svg",
         label: "Skills",
         does: Does::Act(|| Box::new(super::OpenSkills)),
     },

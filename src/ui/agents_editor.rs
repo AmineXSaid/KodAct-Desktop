@@ -279,7 +279,7 @@ impl AgentsEditor {
         });
         let (edit, del) = (a.clone(), a.path.clone());
         kit::card(t)
-            .child(icon("icons/bot.svg", t.size.icon, t.colors.text_muted))
+            .child(icon("icons/boxes.svg", t.size.icon, t.colors.text_muted))
             .child(kit::card_text(
                 t,
                 a.name.clone(),

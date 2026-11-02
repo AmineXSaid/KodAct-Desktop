@@ -158,7 +158,7 @@ pub fn render(t: &Theme, d: &Diagnosis, state: &Entity<AppState>) -> impl IntoEl
                     .border_1()
                     .border_color(t.colors.border)
                     .cursor_pointer()
-                    .child(icon("icons/sparkles.svg", t.size.icon, t.colors.text_muted))
+                    .child(icon("icons/stethoscope.svg", t.size.icon, t.colors.text_muted))
                     .child(kit::card_text(
                         t,
                         SharedString::from("Streaming, tools, images, thinking"),

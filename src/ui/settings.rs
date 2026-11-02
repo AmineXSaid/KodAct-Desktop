@@ -103,8 +103,8 @@ const SECTIONS: &[Section] = &[
                 "icons/square-slash.svg",
                 "Slash commands",
             ),
-            (SettingsTab::Agents, "icons/bot.svg", "Agents"),
-            (SettingsTab::Skills, "icons/wand-sparkles.svg", "Skills"),
+            (SettingsTab::Agents, "icons/boxes.svg", "Agents"),
+            (SettingsTab::Skills, "icons/scroll-text.svg", "Skills"),
             (SettingsTab::Hooks, "icons/webhook.svg", "Hooks"),
             (SettingsTab::Mcp, "icons/plug.svg", "MCP servers"),
             (
@@ -125,7 +125,7 @@ const SECTIONS: &[Section] = &[
                 "icons/server.svg",
                 "Environments",
             ),
-            (SettingsTab::Memory, "icons/brain.svg", "Memory and rules"),
+            (SettingsTab::Memory, "icons/notebook-pen.svg", "Memory and rules"),
             (SettingsTab::Plugins, "icons/puzzle.svg", "Plugins"),
         ],
     ),
@@ -1059,11 +1059,7 @@ impl Settings {
                             .border_1()
                             .border_color(t.colors.border)
                             .child(icon(
-                                if p.wire == Wire::Anthropic {
-                                    "icons/sparkles.svg"
-                                } else {
-                                    "icons/cpu.svg"
-                                },
+                                "icons/cpu.svg",
                                 t.size.icon,
                                 t.colors.text_muted,
                             )),

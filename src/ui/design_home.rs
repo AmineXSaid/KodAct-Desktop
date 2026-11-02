@@ -374,7 +374,7 @@ fn card(
 fn cover(t: &Theme, kind: Kind, title: &str) -> gpui::AnyElement {
     let (glyph, word) = match kind {
         Kind::DesignSystem => ("icons/sliders-horizontal.svg", "Design system"),
-        Kind::Skill => ("icons/wand-sparkles.svg", "Skill"),
+        Kind::Skill => ("icons/scroll-text.svg", "Skill"),
         Kind::Template => ("icons/layers.svg", "Template"),
         _ => ("icons/layers.svg", "Example"),
     };

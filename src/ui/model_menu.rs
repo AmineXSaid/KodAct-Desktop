@@ -544,7 +544,7 @@ pub fn render(
                         .cursor_pointer()
                         .when(is_active, |d| d.bg(active_bg))
                         .on_mouse_move(move |_, _, cx| hover(EFFORT_ROW.to_string(), cx))
-                        .child(icon("icons/brain.svg", t.size.icon_sm, t.colors.text_muted))
+                        .child(icon("icons/gauge.svg", t.size.icon_sm, t.colors.text_muted))
                         .child(
                             div()
                                 .flex_1()

@@ -54,7 +54,7 @@ pub fn trigger(
         super::button::selector(t, "design-trigger", open)
             .aria_label("Design chat")
             .text_color(fg)
-            .child(icon("icons/sparkles.svg", t.size.icon_sm, fg))
+            .child(icon("icons/pencil-ruler.svg", t.size.icon_sm, fg))
             .children(label.map(|label| {
                 div()
                     .max_w(px(140.))

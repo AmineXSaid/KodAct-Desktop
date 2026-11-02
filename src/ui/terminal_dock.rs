@@ -653,7 +653,7 @@ impl TerminalDock {
                             t.colors.text_subtle,
                         )
                     } else if tab.session.is_replay() {
-                        icon("icons/sparkles.svg", t.size.icon_xs, t.colors.primary)
+                        icon("icons/history.svg", t.size.icon_xs, t.colors.primary)
                     } else {
                         icon("icons/terminal.svg", t.size.icon_xs, t.colors.text_muted)
                     })

@@ -1218,7 +1218,7 @@ impl Render for BrowserView {
                             )
                             .into_any_element()
                     } else {
-                        icon("icons/sparkles.svg", t.size.icon_xs, t.colors.primary).into_any_element()
+                        icon("icons/pencil-ruler.svg", t.size.icon_xs, t.colors.primary).into_any_element()
                     })
                     .child(
                         div()
@@ -1465,7 +1465,7 @@ impl Render for BrowserView {
                             })
                             .on_click(move |_, _, cx| cx.open_with_system(&folder))
                     }))
-                    .child(icon("icons/bot.svg", t.size.icon_xs, t.colors.text_subtle))
+                    .child(icon("icons/boxes.svg", t.size.icon_xs, t.colors.text_subtle))
                     .child(div().flex_1().min_w_0().child(if browser_on {
                         "Forge can use this browser. Each step asks first."
                     } else {

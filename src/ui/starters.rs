@@ -38,7 +38,7 @@ pub const STARTERS: [Starter; 4] = [
         prompt: "Find the most important code in this project that has the fewest tests, and add focused unit tests for it. Run them.",
     },
     Starter {
-        icon: "icons/wand-sparkles.svg",
+        icon: "icons/lightbulb.svg",
         title: "Suggest improvements",
         hint: "Three refactors, smallest first",
         prompt: "Suggest the three most valuable refactors in this project, smallest first, with what each one changes. Then make the first one.",
