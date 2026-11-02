@@ -669,7 +669,7 @@ fn finish_at(
         // In with a short ease-out: it fades and settles 16px from the right.
         .with_animation(
             SharedString::from(format!("doc-in-{}", file.name)),
-            Animation::new(Duration::from_millis(220)).with_easing(gpui::ease_out_quint()),
+            Animation::new(Duration::from_millis(t.motion_ms)).with_easing(gpui::ease_out_quint()),
             |d, k| d.opacity(k).relative().left(px(16. * (1. - k))),
         )
         .into_any_element()

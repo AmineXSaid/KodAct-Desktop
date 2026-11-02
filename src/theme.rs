@@ -833,15 +833,17 @@ pub struct Sizes {
     pub greeting: Pixels,           // 32: the new-chat greeting, Anthropic Sans Display 600
     pub statusbar: Pixels,          // 26: the status bar at the foot of the window
     pub figure: Pixels,             // 28: one figure that leads a view (agents finished)
-    pub panel_in_ms: u64,           // 280: the side panel sliding in
-    pub pop_in_ms: u64,             // 160: a menu or dialog rising into place
+    // Motion uses three durations only: fast 120 (leaving, small things
+    // arriving), base 200 (most arrivals, hovers), slow 280 (the side panel).
+    pub panel_in_ms: u64,           // 280 slow: the side panel sliding in
+    pub pop_in_ms: u64,             // 120 fast: a menu rising into place
     pub stagger_ms: u64,            // 18: each row of an opening list starting after the one above
-    pub edge_draw_ms: u64,          // 140: a window's jewel edge drawing down as it opens
-    pub window_in_ms: u64,          // 240: a dialog rising into place over its dimmed backdrop
-    pub window_out_ms: u64,         // 170: a dialog sinking away
-    pub menu_out_ms: u64,           // 110: a menu or the palette fading back toward its anchor
-    pub panel_out_ms: u64,          // 200: a side panel sliding back out
-    pub toast_in_ms: u64,           // 260: a notice springing up from the foot
+    pub edge_draw_ms: u64,          // 120 fast: a window's jewel edge drawing down as it opens
+    pub window_in_ms: u64,          // 200 base: a dialog rising into place over its dimmed backdrop
+    pub window_out_ms: u64,         // 120 fast: a dialog sinking away
+    pub menu_out_ms: u64,           // 120 fast: a menu or the palette fading back toward its anchor
+    pub panel_out_ms: u64,          // 200 base: a side panel sliding back out
+    pub toast_in_ms: u64,           // 200 base: a notice springing up from the foot
     pub edge_bar: Pixels,           // 3: that jewel edge's width
     pub remote_menu: Pixels,        // 288: the remote quick pick's width
     pub terminal_text: Pixels,      // 13: the terminal dock's monospace
@@ -918,14 +920,14 @@ impl Default for Sizes {
             statusbar: px(26.),
             figure: px(28.),
             panel_in_ms: 280,
-            pop_in_ms: 160,
+            pop_in_ms: 120,
             stagger_ms: 18,
-            edge_draw_ms: 140,
-            window_in_ms: 240,
-            window_out_ms: 170,
-            menu_out_ms: 110,
+            edge_draw_ms: 120,
+            window_in_ms: 200,
+            window_out_ms: 120,
+            menu_out_ms: 120,
             panel_out_ms: 200,
-            toast_in_ms: 260,
+            toast_in_ms: 200,
             edge_bar: px(3.),
             remote_menu: px(288.),
             terminal_text: px(13.),

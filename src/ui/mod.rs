@@ -52,6 +52,7 @@ pub mod mcp_editor;
 pub mod memory_view;
 pub mod message;
 pub mod mode_menu;
+pub mod heat_rail;
 pub mod pet;
 pub mod model_menu;
 pub mod motion;
