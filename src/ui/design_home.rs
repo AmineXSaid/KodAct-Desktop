@@ -560,10 +560,22 @@ impl Render for DesignHome {
                 })
         };
         // Routines: requests Forge runs on a schedule.
+        // It opens the list above the cards: a chevron says so, the count
+        // says how many there are.
         let routines_button = theme::ghost_button(
             &t,
-            format!("{} ({})", crate::i18n::tr("Routines"), routines.len()),
+            format!("{} · {}", crate::i18n::tr("Routines"), routines.len()),
         )
+        .gap(t.space.xs)
+        .child(icon(
+            if self.routines_open {
+                "icons/chevron-up.svg"
+            } else {
+                "icons/chevron-down.svg"
+            },
+            t.size.icon_xs,
+            t.colors.text_muted,
+        ))
         .id("gallery-routines")
         .on_click(cx.listener(|this, _, _, cx| {
             this.routines_open = !this.routines_open;

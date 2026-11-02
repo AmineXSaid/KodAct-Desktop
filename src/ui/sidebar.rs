@@ -432,8 +432,26 @@ impl Render for Sidebar {
                         .on_click(move |_, _, cx| state.update(cx, |s, cx| s.show_project(id, cx))),
                 );
             }
+            let mut age_was = None;
             for (local, c) in rows.into_iter().enumerate() {
                 let id = c.id;
+                // In Recents a quiet label where the age changes; the
+                // newest rows sit under Recents itself.
+                if group == "Recents" {
+                    let age = age_of(c.updated);
+                    if local > 0 && age_was != Some(age) {
+                        list = list.child(
+                            div()
+                                .px(t.space.md)
+                                .pt(t.space.sm)
+                                .pb(px(2.))
+                                .text_size(t.text.caption)
+                                .text_color(t.colors.text_subtle)
+                                .child(age),
+                        );
+                    }
+                    age_was = Some(age);
+                }
                 // Risen to the top of its group since last time: it rises
                 // into place there.
                 let was = self.places.insert(id, place);
@@ -933,9 +951,7 @@ impl Render for Sidebar {
                             design_open,
                             Some(shortcut("Shift D")),
                         )
-                        .on_click(|_, window, cx| {
-                            window.dispatch_action(Box::new(OpenDesign), cx)
-                        }),
+                        .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenDesign), cx)),
                     )
                     .child(
                         nav(
@@ -1284,5 +1300,47 @@ pub fn ago(minutes: u32) -> String {
         1..=59 => format!("{minutes}m"),
         60..=1439 => format!("{}h", minutes / 60),
         _ => format!("{}d", minutes / 1440),
+    }
+}
+
+/// How long ago a chat last moved, as Recents groups it.
+fn age_of(updated: std::time::SystemTime) -> &'static str {
+    let secs = std::time::SystemTime::now()
+        .duration_since(updated)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    age_label(secs, seconds_into_today())
+}
+
+/// Seconds since local midnight.
+fn seconds_into_today() -> u64 {
+    use chrono::Timelike;
+    chrono::Local::now().num_seconds_from_midnight() as u64
+}
+
+fn age_label(ago: u64, into_today: u64) -> &'static str {
+    const DAY: u64 = 86_400;
+    if ago <= into_today {
+        "Today"
+    } else if ago <= into_today + DAY {
+        "Yesterday"
+    } else if ago <= into_today + 7 * DAY {
+        "Previous 7 days"
+    } else {
+        "Earlier"
+    }
+}
+
+#[cfg(test)]
+mod age_tests {
+    use super::age_label;
+
+    #[test]
+    fn recents_group_by_calendar_day() {
+        let noon = 12 * 3600;
+        assert_eq!(age_label(3600, noon), "Today");
+        assert_eq!(age_label(noon + 3600, noon), "Yesterday");
+        assert_eq!(age_label(noon + 3 * 86_400, noon), "Previous 7 days");
+        assert_eq!(age_label(noon + 30 * 86_400, noon), "Earlier");
     }
 }

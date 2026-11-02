@@ -253,7 +253,7 @@ fn chip(
 ) -> gpui::Div {
     div()
         .px(px(5.))
-        .rounded(px(4.))
+        .rounded(t.radius.button)
         .bg(bg)
         .when_some(border, |d, b| d.border_1().border_color(b))
         .text_color(fg)
@@ -304,7 +304,7 @@ pub fn render(
             .flex()
             .items_center()
             .justify_center()
-            .rounded(px(4.))
+            .rounded(t.radius.button)
             .cursor_pointer()
             .hover(move |d| d.bg(active_bg))
             .tooltip(move |window, cx| {
@@ -369,7 +369,7 @@ pub fn render(
                         .id(SharedString::from(format!("failed-{}", row.name)))
                         .flex_none()
                         .px(px(4.))
-                        .rounded(px(4.))
+                        .rounded(t.radius.button)
                         .cursor_pointer()
                         .text_color(t.colors.text_muted)
                         .hover(move |d| d.bg(active_bg))
@@ -427,7 +427,7 @@ pub fn render(
                     .py(px(4.))
                     .flex()
                     .items_center()
-                    .rounded(px(4.))
+                    .rounded(t.radius.button)
                     .when(row.disabled || row.failed.is_some(), |d| d.opacity(0.5))
                     .when(!row.disabled, |d| d.cursor_pointer())
                     .when(is_active, |d| d.bg(active_bg))
@@ -540,7 +540,7 @@ pub fn render(
                         .flex()
                         .items_center()
                         .gap(px(8.))
-                        .rounded(px(4.))
+                        .rounded(t.radius.button)
                         .cursor_pointer()
                         .when(is_active, |d| d.bg(active_bg))
                         .on_mouse_move(move |_, _, cx| hover(EFFORT_ROW.to_string(), cx))
@@ -663,7 +663,7 @@ fn slider(
         .w(px(w))
         .h(px(18.))
         .flex_none()
-        .rounded(px(9.))
+        .rounded(t.radius.pill)
         .bg(t.colors.hover)
         .border_1()
         .border_color(t.colors.border);
@@ -685,7 +685,7 @@ fn slider(
                 .child(
                     div()
                         .size(px(4.))
-                        .rounded(px(2.))
+                        .rounded_full()
                         .bg(t.colors.text_subtle.opacity(0.6)),
                 )
                 .on_click(move |_, _, cx| {
@@ -704,7 +704,7 @@ fn slider(
                 .left(px(inset + step * i as f32 - 1.))
                 .top(px(1.))
                 .size(px(thumb))
-                .rounded(px(7.))
+                .rounded_full()
                 .bg(effort_tone(t, current).opacity(0.9))
                 .border_1()
                 .border_color(t.colors.surface),

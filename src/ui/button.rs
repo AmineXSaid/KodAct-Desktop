@@ -441,13 +441,15 @@ pub fn send_button(
                 .child(icon("icons/arrow-up.svg", t.size.icon, p.fg))
                 .on_click(on_click)
         }
+        // Nothing to send yet: a quiet neutral disc, plainly there but not
+        // offering itself (the accent waits for words).
         SendState::Empty => base
             .aria_label("Send (write something first)")
-            .bg(t.extra.accent_soft)
+            .bg(t.colors.hover)
             .child(icon(
                 "icons/arrow-up.svg",
                 t.size.icon,
-                t.extra.accent_fg.opacity(if t.is_dark { 0.4 } else { 0.9 }),
+                t.colors.text_subtle,
             )),
     }
 }

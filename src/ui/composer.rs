@@ -653,7 +653,7 @@ impl Render for Composer {
             )
             .px(px(8.))
             .py(px(4.))
-            .rounded(px(4.))
+            .rounded(t.radius.button)
             .bg(t.colors.hover)
             .into_any_element();
         let this = cx.entity().downgrade();

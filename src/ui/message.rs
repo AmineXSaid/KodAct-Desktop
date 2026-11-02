@@ -2111,6 +2111,12 @@ fn answered(
     } else {
         detail.clone()
     };
+    // A bare absolute path reads as the card showed it: its last folders.
+    let what = if is_bare_path(&what) {
+        short_path(&what)
+    } else {
+        what
+    };
     // A plan is named by its heading, in words, not by the call's note.
     let plan_name = (title.as_ref() == crate::backend::PLAN_ASK_TITLE)
         .then(|| match info.row.and_then(|r| blocks.get(r)) {
@@ -2762,6 +2768,14 @@ fn short_path(path: &str) -> SharedString {
     format!("…/{}", parts[parts.len() - 3..].join("/")).into()
 }
 
+/// One absolute path and nothing else ("/home/me/proj/notes.txt",
+/// "C:\\work\\a.rs"): a command or a sentence is left as written.
+fn is_bare_path(s: &str) -> bool {
+    let s = s.trim();
+    let rooted = s.starts_with('/') || s.as_bytes().get(1) == Some(&b':');
+    rooted && !s.contains(char::is_whitespace) && s.contains(['/', '\\'])
+}
+
 /// A waiting change shows this many lines until you open all of it.
 const ASK_FOLD: usize = 4;
 /// The keys that answer a waiting tool from an empty composer: allow,
@@ -2780,6 +2794,14 @@ mod tests {
             verdict,
             info: PermInfo::default(),
         }
+    }
+
+    #[test]
+    fn only_a_bare_path_is_shortened() {
+        assert!(super::is_bare_path("/tmp/x/proj/notes.txt"));
+        assert!(super::is_bare_path("C:\\work\\proj\\a.rs"));
+        assert!(!super::is_bare_path("rm junk.txt"));
+        assert!(!super::is_bare_path("Delete /tmp/junk.txt"));
     }
 
     #[test]

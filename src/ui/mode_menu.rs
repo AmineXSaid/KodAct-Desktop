@@ -29,7 +29,7 @@ fn key(t: &Theme, text: &'static str) -> impl IntoElement {
         .py(px(1.))
         .border_1()
         .border_color(t.colors.border)
-        .rounded(px(3.))
+        .rounded(t.radius.small)
         .child(text)
 }
 
@@ -138,7 +138,7 @@ pub fn menu(
                 .flex()
                 .items_center()
                 .gap(px(10.))
-                .rounded(px(4.))
+                .rounded(t.radius.button)
                 .cursor_pointer()
                 .when(picked, |d| d.bg(active_bg))
                 .hover(move |d| d.bg(active_bg))
