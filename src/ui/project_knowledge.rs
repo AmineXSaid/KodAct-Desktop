@@ -4,7 +4,8 @@
 //! spends against its budget.
 //!
 //! Add files with the picker or by dropping them on the card; write a note
-//! in place. A click opens a file in the side panel; × takes it out (a copy
+//! in place; or add from GitHub: a repository's files and folders, picked
+//! from its tree, synced on demand (`github_knowledge.rs`). A click opens a file in the side panel; × takes it out (a copy
 //! Forge made is deleted, a file of the project's own stays).
 
 use gpui::component::input::{Input, InputState, TextareaState};
@@ -24,13 +25,36 @@ pub struct ProjectKnowledge {
     title: Entity<InputState>,
     note: Entity<TextareaState>,
     writing: bool,
+    /// Adding from GitHub: the repository typed, its tree once read, what
+    /// is ticked and which folders are open.
+    gh_open: bool,
+    gh_input: Entity<InputState>,
+    gh_loading: bool,
+    gh_error: Option<String>,
+    gh_tree: Option<crate::github_knowledge::Tree>,
+    gh_picked: std::collections::BTreeSet<String>,
+    gh_dirs: std::collections::BTreeSet<String>,
     _subs: Vec<Subscription>,
 }
 
 impl ProjectKnowledge {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let gh_input = cx.new(|cx| {
+            InputState::new(window, cx).placeholder("e.g. owner/repo, or a github.com link")
+        });
         Self {
-            _subs: vec![cx.observe(&state, |_, _, cx| cx.notify())],
+            _subs: vec![
+                cx.observe(&state, |_, _, cx| cx.notify()),
+                // Enter in the repository field reads it.
+                cx.subscribe(
+                    &gh_input,
+                    |this, _, ev: &gpui::component::input::InputEvent, cx| {
+                        if matches!(ev, gpui::component::input::InputEvent::PressEnter { .. }) {
+                            this.gh_look(cx);
+                        }
+                    },
+                ),
+            ],
             state,
             title: cx
                 .new(|cx| InputState::new(window, cx).placeholder("Title (e.g. Tone of voice)")),
@@ -39,7 +63,400 @@ impl ProjectKnowledge {
                     .placeholder("What every chat here should know: facts, decisions, a glossary…")
             }),
             writing: false,
+            gh_open: false,
+            gh_input,
+            gh_loading: false,
+            gh_error: None,
+            gh_tree: None,
+            gh_picked: Default::default(),
+            gh_dirs: Default::default(),
         }
+    }
+
+    /// Read the typed repository's tree, off the UI thread.
+    fn gh_look(&mut self, cx: &mut Context<Self>) {
+        let typed = self.gh_input.read(cx).value().to_string();
+        let Some(r) = crate::github_knowledge::parse(&typed) else {
+            self.gh_error =
+                Some("Type a repository as owner/repo, or paste its github.com link.".into());
+            return cx.notify();
+        };
+        self.gh_loading = true;
+        self.gh_error = None;
+        self.gh_tree = None;
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let folder = r.folder.clone();
+            let got = cx
+                .background_spawn(async move { crate::github_knowledge::tree(&r) })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.gh_loading = false;
+                match got {
+                    Ok(t) => {
+                        this.gh_picked.clear();
+                        this.gh_dirs.clear();
+                        // A link into a folder opens on it, ticked.
+                        if let Some(f) = folder {
+                            let mut open = String::new();
+                            for part in f.split('/') {
+                                if !open.is_empty() {
+                                    open.push('/');
+                                }
+                                open.push_str(part);
+                                this.gh_dirs.insert(open.clone());
+                            }
+                            this.gh_picked.insert(f);
+                        }
+                        this.gh_tree = Some(t);
+                    }
+                    Err(e) => this.gh_error = Some(e),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Whether `path` is ticked, itself or through a folder above it.
+    fn gh_ticked(&self, path: &str) -> bool {
+        self.gh_picked.contains(path)
+            || self
+                .gh_picked
+                .iter()
+                .any(|p| path.starts_with(&format!("{p}/")))
+    }
+
+    /// Tick or untick `path`. Unticking a path under a ticked folder ticks
+    /// that folder's other children instead, down to it.
+    fn gh_toggle(&mut self, path: &str, cx: &mut Context<Self>) {
+        let Some(tree) = &self.gh_tree else { return };
+        if self.gh_ticked(path) {
+            if let Some(top) = self
+                .gh_picked
+                .iter()
+                .find(|p| path.starts_with(&format!("{p}/")))
+                .cloned()
+            {
+                // Open the ticked folder down to `path`, ticking what's beside it.
+                self.gh_picked.remove(&top);
+                let mut at = top;
+                while at != path {
+                    let next = path[at.len() + 1..]
+                        .split('/')
+                        .next()
+                        .map(|seg| format!("{at}/{seg}"))
+                        .unwrap_or_default();
+                    for n in &tree.nodes {
+                        let child = n.path.strip_prefix(&format!("{at}/"));
+                        if child.is_some_and(|c| !c.contains('/')) && n.path != next {
+                            self.gh_picked.insert(n.path.clone());
+                        }
+                    }
+                    at = next;
+                }
+            } else {
+                self.gh_picked.remove(path);
+            }
+        } else {
+            let under = format!("{path}/");
+            self.gh_picked.retain(|p| !p.starts_with(&under));
+            self.gh_picked.insert(path.to_string());
+        }
+        cx.notify();
+    }
+
+    fn gh_close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.gh_open = false;
+        self.gh_tree = None;
+        self.gh_error = None;
+        self.gh_picked.clear();
+        self.gh_dirs.clear();
+        self.gh_input
+            .update(cx, |i, cx| i.set_value("", window, cx));
+        cx.notify();
+    }
+
+    /// The picker: the repository field, then its tree to tick.
+    fn gh_panel(&self, id: usize, t: &crate::theme::Theme, cx: &mut Context<Self>) -> AnyElement {
+        let hover = t.colors.hover;
+        let field = div()
+            .flex()
+            .items_center()
+            .gap(t.space.sm)
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .child(kit::line(t, &self.gh_input, false)),
+            )
+            .child(
+                theme::ghost_button(
+                    t,
+                    if self.gh_loading {
+                        "Reading…"
+                    } else {
+                        "Look"
+                    },
+                )
+                .id("gh-look")
+                .on_click(cx.listener(|this, _, _, cx| this.gh_look(cx))),
+            );
+        let mut list = div()
+            .id("gh-tree")
+            .flex()
+            .flex_col()
+            .max_h(px(320.))
+            .overflow_y_scroll()
+            .rounded(t.radius.field)
+            .border_1()
+            .border_color(t.colors.border)
+            .bg(t.colors.canvas)
+            .py(t.space.xs);
+        let mut summary = None;
+        if let Some(tree) = &self.gh_tree {
+            for (i, n) in tree.nodes.iter().enumerate() {
+                // Shown when every folder above it is open.
+                let parents: Vec<&str> = n
+                    .path
+                    .match_indices('/')
+                    .map(|(i, _)| &n.path[..i])
+                    .collect();
+                if !parents.iter().all(|p| self.gh_dirs.contains(*p)) {
+                    continue;
+                }
+                let depth = parents.len() as f32;
+                let name = n.path.rsplit('/').next().unwrap_or(&n.path).to_string();
+                let ticked = self.gh_ticked(&n.path);
+                let partial = !ticked
+                    && n.dir
+                    && self
+                        .gh_picked
+                        .iter()
+                        .any(|p| p.starts_with(&format!("{}/", n.path)));
+                let open = self.gh_dirs.contains(&n.path);
+                let (path, path2) = (n.path.clone(), n.path.clone());
+                let dir = n.dir;
+                list = list.child(
+                    div()
+                        .id(("gh-node", i))
+                        .flex()
+                        .items_center()
+                        .gap(t.space.tight)
+                        .h(t.size.row)
+                        .pl(t.space.sm + px(16. * depth))
+                        .pr(t.space.sm)
+                        .cursor_pointer()
+                        .hover(move |st| st.bg(hover))
+                        .child(
+                            div()
+                                .id(("gh-chevron", i))
+                                .w(t.size.icon_sm)
+                                .flex_none()
+                                .when(dir, |d| {
+                                    d.child(icon(
+                                        if open {
+                                            "icons/chevron-down.svg"
+                                        } else {
+                                            "icons/chevron-right.svg"
+                                        },
+                                        t.size.icon_xs,
+                                        t.colors.text_subtle,
+                                    ))
+                                    .on_click(cx.listener(
+                                        move |this, _, _, cx| {
+                                            cx.stop_propagation();
+                                            if !this.gh_dirs.remove(&path2) {
+                                                this.gh_dirs.insert(path2.clone());
+                                            }
+                                            cx.notify();
+                                        },
+                                    ))
+                                }),
+                        )
+                        .child(icon(
+                            if ticked {
+                                "icons/square-check.svg"
+                            } else if partial {
+                                "icons/square-minus.svg"
+                            } else {
+                                "icons/square.svg"
+                            },
+                            t.size.icon_sm,
+                            if ticked || partial {
+                                t.colors.primary
+                            } else {
+                                t.colors.text_subtle
+                            },
+                        ))
+                        .child(icon(
+                            if dir {
+                                "icons/folder.svg"
+                            } else {
+                                "icons/file-text.svg"
+                            },
+                            t.size.icon_xs,
+                            t.colors.text_muted,
+                        ))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .text_size(t.text.body_sm)
+                                .text_color(t.colors.text)
+                                .child(name),
+                        )
+                        .when(!dir, |d| {
+                            d.child(
+                                div()
+                                    .flex_none()
+                                    .text_size(t.text.caption)
+                                    .text_color(if n.size > crate::github_knowledge::FILE_MAX {
+                                        t.extra.warning
+                                    } else {
+                                        t.colors.text_subtle
+                                    })
+                                    .child(if n.size > crate::github_knowledge::FILE_MAX {
+                                        "too large".to_string()
+                                    } else {
+                                        size(n.size)
+                                    }),
+                            )
+                        })
+                        .on_click(cx.listener(move |this, _, _, cx| this.gh_toggle(&path, cx))),
+                );
+            }
+            let picks: Vec<String> = self.gh_picked.iter().cloned().collect();
+            let files = crate::github_knowledge::expand(&tree.nodes, &picks);
+            let bytes: u64 = tree
+                .nodes
+                .iter()
+                .filter(|n| files.contains(&n.path))
+                .map(|n| n.size)
+                .sum();
+            let capped = files.len() >= crate::github_knowledge::FILES_MAX;
+            let ready = !files.is_empty();
+            let tree2 = tree.clone();
+            // The count on its own line, the buttons under it: the rail is
+            // too narrow for both side by side.
+            summary = Some(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .justify_end()
+                    .gap(t.space.sm)
+                    .child(
+                        div()
+                            .w_full()
+                            .text_size(t.text.caption)
+                            .text_color(t.colors.text_muted)
+                            .child(match files.len() {
+                                0 => format!(
+                                    "{} · {}: tick files or folders",
+                                    tree.repo, tree.reference
+                                ),
+                                n => format!(
+                                    "{n} file{} · {}{}",
+                                    if n == 1 { "" } else { "s" },
+                                    size(bytes),
+                                    if capped { " · the first 300" } else { "" }
+                                ),
+                            }),
+                    )
+                    .child(
+                        theme::text_button(t, "Cancel")
+                            .id("gh-cancel")
+                            .on_click(cx.listener(|this, _, window, cx| this.gh_close(window, cx))),
+                    )
+                    .child(
+                        theme::primary_button(t, "Add to knowledge")
+                            .id("gh-add")
+                            .when(!ready, |d| d.opacity(0.5))
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                let picks: Vec<String> = this.gh_picked.iter().cloned().collect();
+                                if picks.is_empty() {
+                                    return;
+                                }
+                                let tree = tree2.clone();
+                                this.state.update(cx, |s, cx| {
+                                    s.knowledge_github_add(id, tree, picks, cx)
+                                });
+                                this.gh_close(window, cx);
+                            })),
+                    ),
+            );
+        }
+        let has_tree = self.gh_tree.is_some();
+        let truncated = self.gh_tree.as_ref().is_some_and(|t| t.truncated);
+        div()
+            .flex()
+            .flex_col()
+            .gap(t.space.sm)
+            .p(t.space.md)
+            .rounded(t.radius.field)
+            .bg(t.extra.inset)
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(t.space.sm)
+                    .child(icon("icons/folder-git-2.svg", t.size.icon_sm, t.colors.text_muted))
+                    .child(
+                        div()
+                            .flex_1()
+                            .text_size(t.text.body_sm)
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(t.colors.text_strong)
+                            .child("Add from GitHub"),
+                    )
+                    .when(!has_tree, |d| {
+                        d.child(
+                            theme::text_button(t, "Cancel")
+                                .id("gh-cancel-top")
+                                .on_click(cx.listener(|this, _, window, cx| this.gh_close(window, cx))),
+                        )
+                    }),
+            )
+            .child(field)
+            .children(self.gh_error.clone().map(|e| {
+                div()
+                    .text_size(t.text.caption)
+                    .text_color(t.extra.danger)
+                    .child(e)
+            }))
+            .when(!has_tree && self.gh_error.is_none(), |d| {
+                d.child(
+                    div()
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_subtle)
+                        .line_height(relative(1.4))
+                        .child("Forge copies the files you tick into this project, so every chat can read them; Sync brings them up to the branch's latest. Private repositories need gh signed in (gh auth login)."),
+                )
+            })
+            // The tree rises in once GitHub has listed it.
+            .when(has_tree, |d| {
+                let key = self.gh_tree.as_ref().map(|t| t.commit.clone()).unwrap_or_default();
+                d.child(super::motion::rise_in(
+                    list,
+                    SharedString::from(format!("gh-tree-in-{key}")),
+                    4.,
+                    t,
+                ))
+            })
+            .when(truncated, |d| {
+                d.child(
+                    div()
+                        .text_size(t.text.caption)
+                        .text_color(t.extra.warning)
+                        .child("This repository is very large: GitHub listed part of it. Paste a link to a folder to see all of that folder."),
+                )
+            })
+            .children(summary)
+            .into_any_element()
     }
 
     fn pick(&self, id: usize, cx: &mut Context<Self>) {
@@ -148,123 +565,133 @@ impl Render for ProjectKnowledge {
                     )),
             );
 
-        let rows = k.items.iter().enumerate().map(|(i, item)| {
-            let name = item.rel.rsplit('/').next().unwrap_or(&item.rel).to_string();
-            let folder = item
-                .rel
-                .rsplit_once('/')
-                .map(|(d, _)| d.to_string())
-                .unwrap_or_default();
-            let mark: AnyElement = match crate::office::Kind::of(&name) {
-                Some(kind) => super::file_mark::render(kind, 20., scale),
-                None => icon("icons/file-text.svg", t.size.icon_sm, t.colors.text_muted)
-                    .into_any_element(),
-            };
-            let detail = if item.missing {
-                "missing from the folder".to_string()
-            } else if item.tokens == 0 {
-                format!("{} · no text to send", size(item.bytes))
-            } else {
-                format!(
-                    "{} · {} tokens",
-                    size(item.bytes),
-                    crate::context::short(item.tokens)
-                )
-            };
-            let (open, flip, drop) = (self.state.clone(), self.state.clone(), self.state.clone());
-            let (rel, rel2, rel3) = (item.rel.clone(), item.rel.clone(), item.rel.clone());
-            let always = item.always;
-            let note = (item.always && !item.included && item.tokens > 0)
-                .then_some("Over the budget: read on demand");
-            div()
-                .id(("knowledge-row", i))
-                .group("knowledge-row")
-                .flex()
-                .items_center()
-                .gap(t.space.sm)
-                .px(t.space.sm)
-                .py(t.space.xs)
-                .rounded(t.radius.button)
-                .cursor_pointer()
-                .hover(move |st| st.bg(hover))
-                .child(div().w(px(20.)).flex().justify_center().child(mark))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .child(
-                            div()
-                                .overflow_hidden()
-                                .whitespace_nowrap()
-                                .text_ellipsis()
-                                .text_size(t.text.body_sm)
-                                .text_color(if item.missing {
-                                    t.colors.text_subtle
-                                } else {
-                                    t.colors.text
-                                })
-                                .child(name),
-                        )
-                        .child(
-                            div()
-                                .overflow_hidden()
-                                .whitespace_nowrap()
-                                .text_ellipsis()
-                                .text_size(t.text.caption)
-                                .text_color(if note.is_some() {
-                                    t.extra.warning
-                                } else {
-                                    t.colors.text_subtle
-                                })
-                                .child(note.map(String::from).unwrap_or_else(|| {
-                                    if folder.is_empty() || folder == crate::knowledge::DIR {
-                                        detail.clone()
-                                    } else {
-                                        format!("{folder} · {detail}")
-                                    }
-                                })),
-                        ),
-                )
-                .when(item.tokens > 0, |d| {
-                    d.child(
-                        kit::chip(
-                            &t,
-                            ("knowledge-mode", i),
-                            if always { "Always" } else { "On demand" },
-                            always,
-                        )
-                        .on_click(move |_, _, cx| {
-                            cx.stop_propagation();
-                            let rel = rel2.clone();
-                            flip.update(cx, |s, cx| s.knowledge_set_always(id, rel, !always, cx))
-                        }),
+        // A repository's files show as the repository, below.
+        let github_dir = ".forge/knowledge/github/";
+        let rows = k
+            .items
+            .iter()
+            .enumerate()
+            .filter(|(_, i)| !i.rel.starts_with(github_dir))
+            .map(|(i, item)| {
+                let name = item.rel.rsplit('/').next().unwrap_or(&item.rel).to_string();
+                let folder = item
+                    .rel
+                    .rsplit_once('/')
+                    .map(|(d, _)| d.to_string())
+                    .unwrap_or_default();
+                let mark: AnyElement = match crate::office::Kind::of(&name) {
+                    Some(kind) => super::file_mark::render(kind, 20., scale),
+                    None => icon("icons/file-text.svg", t.size.icon_sm, t.colors.text_muted)
+                        .into_any_element(),
+                };
+                let detail = if item.missing {
+                    "missing from the folder".to_string()
+                } else if item.tokens == 0 {
+                    format!("{} · no text to send", size(item.bytes))
+                } else {
+                    format!(
+                        "{} · {} tokens",
+                        size(item.bytes),
+                        crate::context::short(item.tokens)
                     )
-                })
-                .child(
-                    div()
-                        .invisible()
-                        .group_hover("knowledge-row", |d| d.visible())
-                        .child(
-                            super::button::Button::icon(
-                                SharedString::from(format!("knowledge-remove-{i}")),
-                                "icons/x.svg",
-                                "Take it out of the knowledge",
+                };
+                let (open, flip, drop) =
+                    (self.state.clone(), self.state.clone(), self.state.clone());
+                let (rel, rel2, rel3) = (item.rel.clone(), item.rel.clone(), item.rel.clone());
+                let always = item.always;
+                let note = (item.always && !item.included && item.tokens > 0)
+                    .then_some("Over the budget: read on demand");
+                div()
+                    .id(("knowledge-row", i))
+                    .group("knowledge-row")
+                    .flex()
+                    .items_center()
+                    .gap(t.space.sm)
+                    .px(t.space.sm)
+                    .py(t.space.xs)
+                    .rounded(t.radius.button)
+                    .cursor_pointer()
+                    .hover(move |st| st.bg(hover))
+                    .child(div().w(px(20.)).flex().justify_center().child(mark))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .child(
+                                div()
+                                    .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .text_ellipsis()
+                                    .text_size(t.text.body_sm)
+                                    .text_color(if item.missing {
+                                        t.colors.text_subtle
+                                    } else {
+                                        t.colors.text
+                                    })
+                                    .child(name),
                             )
-                            .compact()
+                            .child(
+                                div()
+                                    .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .text_ellipsis()
+                                    .text_size(t.text.caption)
+                                    .text_color(if note.is_some() {
+                                        t.extra.warning
+                                    } else {
+                                        t.colors.text_subtle
+                                    })
+                                    .child(note.map(String::from).unwrap_or_else(|| {
+                                        if folder.is_empty() || folder == crate::knowledge::DIR {
+                                            detail.clone()
+                                        } else {
+                                            format!("{folder} · {detail}")
+                                        }
+                                    })),
+                            ),
+                    )
+                    .when(item.tokens > 0, |d| {
+                        d.child(
+                            kit::chip(
+                                &t,
+                                ("knowledge-mode", i),
+                                if always { "Always" } else { "On demand" },
+                                always,
+                            )
                             .on_click(move |_, _, cx| {
                                 cx.stop_propagation();
-                                let rel = rel3.clone();
-                                drop.update(cx, |s, cx| s.knowledge_remove(id, rel, cx))
+                                let rel = rel2.clone();
+                                flip.update(cx, |s, cx| {
+                                    s.knowledge_set_always(id, rel, !always, cx)
+                                })
                             }),
-                        ),
-                )
-                .on_click(move |_, _, cx| {
-                    let rel = rel.clone();
-                    open.update(cx, |s, cx| s.open_project_file(rel, cx))
-                })
-        });
+                        )
+                    })
+                    .child(
+                        div()
+                            .invisible()
+                            .group_hover("knowledge-row", |d| d.visible())
+                            .child(
+                                super::button::Button::icon(
+                                    SharedString::from(format!("knowledge-remove-{i}")),
+                                    "icons/x.svg",
+                                    "Take it out of the knowledge",
+                                )
+                                .compact()
+                                .on_click(move |_, _, cx| {
+                                    cx.stop_propagation();
+                                    let rel = rel3.clone();
+                                    drop.update(cx, |s, cx| s.knowledge_remove(id, rel, cx))
+                                }),
+                            ),
+                    )
+                    .on_click(move |_, _, cx| {
+                        let rel = rel.clone();
+                        open.update(cx, |s, cx| s.open_project_file(rel, cx))
+                    })
+            });
 
         let writer = self.writing.then(|| {
             div()
@@ -302,6 +729,105 @@ impl Render for ProjectKnowledge {
                 )
         });
 
+        let repos = s
+            .project_brief
+            .as_ref()
+            .filter(|(b, _)| *b == id)
+            .map(|(_, b)| b.github.clone())
+            .unwrap_or_default();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let repo_rows = repos.into_iter().enumerate().map(|(i, src)| {
+            let (sync, drop) = (self.state.clone(), self.state.clone());
+            let (r1, r2) = (src.repo.clone(), src.repo.clone());
+            let minutes = (now.saturating_sub(src.synced_at) / 60) as u32;
+            let when = if minutes == 0 {
+                "synced just now".to_string()
+            } else {
+                format!("synced {} ago", super::sidebar::ago(minutes))
+            };
+            div()
+                .id(("knowledge-repo", i))
+                .group("knowledge-repo")
+                .flex()
+                .items_center()
+                .gap(t.space.sm)
+                .px(t.space.sm)
+                .py(t.space.xs)
+                .rounded(t.radius.button)
+                .hover(move |st| st.bg(hover))
+                .child(div().w(px(20.)).flex().justify_center().child(icon(
+                    "icons/folder-git-2.svg",
+                    t.size.icon_sm,
+                    t.colors.text_muted,
+                )))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .child(
+                            div()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .text_size(t.text.body_sm)
+                                .text_color(t.colors.text)
+                                .child(src.repo.clone()),
+                        )
+                        .child(
+                            div()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .text_size(t.text.caption)
+                                .text_color(t.colors.text_subtle)
+                                .child(format!(
+                                    "{} · {} file{} · {when}",
+                                    src.reference,
+                                    src.files.len(),
+                                    if src.files.len() == 1 { "" } else { "s" }
+                                )),
+                        ),
+                )
+                .child(
+                    theme::text_button(&t, "Sync")
+                        .id(("knowledge-repo-sync", i))
+                        .text_size(t.text.caption)
+                        .on_click(move |_, _, cx| {
+                            let repo = r1.clone();
+                            sync.update(cx, |s, cx| s.knowledge_github_sync(id, repo, cx))
+                        }),
+                )
+                .child(
+                    div()
+                        .invisible()
+                        .group_hover("knowledge-repo", |d| d.visible())
+                        .child(
+                            super::button::Button::icon(
+                                SharedString::from(format!("knowledge-repo-remove-{i}")),
+                                "icons/x.svg",
+                                "Take this repository out of the knowledge",
+                            )
+                            .compact()
+                            .on_click(move |_, _, cx| {
+                                let repo = r2.clone();
+                                drop.update(cx, |s, cx| s.knowledge_github_remove(id, repo, cx))
+                            }),
+                        ),
+                )
+        });
+        let gh_panel = self.gh_open.then(|| {
+            super::motion::rise_in(
+                div().child(self.gh_panel(id, &t, cx)),
+                "gh-panel-in",
+                6.,
+                &t,
+            )
+        });
         let empty = k.items.is_empty();
         div()
             .id("knowledge-card")
@@ -333,7 +859,7 @@ impl Render for ProjectKnowledge {
                             .text_size(t.text.caption)
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(t.colors.text_muted)
-                            .child("KNOWLEDGE"),
+                            .child("Knowledge"),
                     )
                     .when(!empty, |d| {
                         d.child(
@@ -372,12 +898,14 @@ impl Render for ProjectKnowledge {
                         .child("Drop specs, briefs or data here. Forge reads them when they matter; set the ones every chat needs to Always."),
                 )
             })
-            .child(div().flex().flex_col().gap(px(2.)).children(rows))
+            .child(div().flex().flex_col().gap(px(2.)).children(rows).children(repo_rows))
             .children(writer)
-            .when(!self.writing, |d| {
+            .children(gh_panel)
+            .when(!self.writing && !self.gh_open, |d| {
                 d.child(
                     div()
                         .flex()
+                        .flex_wrap()
                         .gap(t.space.sm)
                         .child(
                             theme::ghost_button(&t, "Add files")
@@ -390,6 +918,15 @@ impl Render for ProjectKnowledge {
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.writing = true;
                                     this.title.update(cx, |i, cx| i.focus(window, cx));
+                                    cx.notify();
+                                })),
+                        )
+                        .child(
+                            theme::ghost_button(&t, "Add from GitHub")
+                                .id("knowledge-github")
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.gh_open = true;
+                                    this.gh_input.update(cx, |i, cx| i.focus(window, cx));
                                     cx.notify();
                                 })),
                         ),

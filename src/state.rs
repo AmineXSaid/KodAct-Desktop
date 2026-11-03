@@ -3762,6 +3762,63 @@ impl AppState {
         );
     }
 
+    /// Add the picked files and folders of a GitHub repository's `tree` to
+    /// project `id`'s knowledge (`github_knowledge.rs`).
+    pub fn knowledge_github_add(
+        &mut self,
+        id: usize,
+        tree: crate::github_knowledge::Tree,
+        picks: Vec<String>,
+        cx: &mut Context<Self>,
+    ) {
+        let repo = tree.repo.clone();
+        self.knowledge_change(
+            id,
+            move |p| {
+                crate::github_knowledge::add(p, &tree, &picks).map(|n| match n {
+                    1 => format!("Added 1 file from {repo} to the knowledge."),
+                    n => format!("Added {n} files from {repo} to the knowledge."),
+                })
+            },
+            cx,
+        );
+    }
+
+    /// Bring a GitHub repository's files in project `id`'s knowledge up to
+    /// its branch's latest.
+    pub fn knowledge_github_sync(&mut self, id: usize, repo: String, cx: &mut Context<Self>) {
+        self.knowledge_change(
+            id,
+            move |p| {
+                crate::github_knowledge::sync(p, &repo).map(|d| {
+                    if d.unchanged {
+                        format!("{repo} is up to date.")
+                    } else if d.removed > 0 {
+                        format!(
+                            "Synced {repo}: {} files, {} gone upstream taken out.",
+                            d.updated, d.removed
+                        )
+                    } else {
+                        format!("Synced {repo}: {} files.", d.updated)
+                    }
+                })
+            },
+            cx,
+        );
+    }
+
+    /// Take a GitHub repository, and its files, out of project `id`'s knowledge.
+    pub fn knowledge_github_remove(&mut self, id: usize, repo: String, cx: &mut Context<Self>) {
+        self.knowledge_change(
+            id,
+            move |p| {
+                crate::github_knowledge::remove(p, &repo)
+                    .map(|_| format!("Took {repo} out of the knowledge."))
+            },
+            cx,
+        );
+    }
+
     /// Add a note you wrote to project `id`'s knowledge.
     pub fn knowledge_add_text(
         &mut self,

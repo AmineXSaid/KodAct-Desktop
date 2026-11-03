@@ -88,7 +88,7 @@ impl Run {
     }
 }
 
-fn command(program: &str, dir: &Path) -> Command {
+pub(crate) fn command(program: &str, dir: &Path) -> Command {
     let mut c = Command::new(program);
     c.current_dir(dir)
         .env("GIT_TERMINAL_PROMPT", "0")
@@ -106,7 +106,7 @@ fn command(program: &str, dir: &Path) -> Command {
 }
 
 /// Run a program in `dir`; its output, or what went wrong in a line.
-fn run(program: &str, dir: &Path, args: &[&str]) -> Result<String, String> {
+pub(crate) fn run(program: &str, dir: &Path, args: &[&str]) -> Result<String, String> {
     let out = command(program, dir)
         .args(args)
         .output()

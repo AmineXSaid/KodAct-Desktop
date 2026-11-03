@@ -36,6 +36,12 @@ pub struct ProjectsView {
     sort_open: bool,
     /// A project page's ⋯ menu is open.
     actions_open: bool,
+    /// The two menus leave as they came (`motion::Presence`): this frame's
+    /// state, `Some(leaving)` while drawn.
+    sort_presence: super::motion::Presence<()>,
+    actions_presence: super::motion::Presence<()>,
+    sort_frame: Option<bool>,
+    actions_frame: Option<bool>,
     /// A project's name or description being edited in place.
     edit: Entity<InputState>,
     editing: Option<(usize, Field)>,
@@ -140,6 +146,10 @@ impl ProjectsView {
             searching: false,
             sort_open: false,
             actions_open: false,
+            sort_presence: Default::default(),
+            actions_presence: Default::default(),
+            sort_frame: None,
+            actions_frame: None,
             edit,
             editing: None,
             rail,
@@ -539,7 +549,7 @@ impl ProjectsView {
                     d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.text))
                 }))
         };
-        let sort_menu = self.sort_open.then(|| {
+        let sort_menu = self.sort_frame.is_some().then(|| {
             let pick = |sort: Sort| {
                 cx.listener(move |this: &mut Self, _: &gpui::ClickEvent, _, cx| {
                     this.sort = sort;
@@ -622,7 +632,17 @@ impl ProjectsView {
                 })),
             )
             // Deferred: it paints over the rows below the title.
-            .children(sort_menu.map(|m| gpui::deferred(m).with_priority(1)));
+            .children(sort_menu.map(|m| {
+                let leaving = self.sort_frame == Some(true);
+                gpui::deferred(super::motion::unfold(
+                    m,
+                    "projects-sort-menu",
+                    false,
+                    leaving,
+                    t,
+                ))
+                .with_priority(1)
+            }));
 
         div()
             .id("projects-page")
@@ -935,7 +955,7 @@ impl ProjectsView {
                                             cx.notify();
                                         })),
                                     )
-                                    .children(self.actions_open.then(|| gpui::deferred({
+                                    .children(self.actions_frame.is_some().then(|| gpui::deferred(super::motion::unfold({
                                         let item = |id: &'static str, glyph: &'static str, label: &'static str| {
                                             div()
                                                 .id(id)
@@ -981,7 +1001,7 @@ impl ProjectsView {
                                                     }),
                                                 ))
                                             })
-                                    }).with_priority(1))),
+                                    }, "project-more-menu", false, self.actions_frame == Some(true), t)).with_priority(1))),
                             ),
                     )
                     .child(description)
@@ -1074,8 +1094,17 @@ impl ProjectsView {
 }
 
 impl Render for ProjectsView {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
+        let out = t.size.menu_out_ms;
+        self.sort_frame = self
+            .sort_presence
+            .frame(self.sort_open.then_some(()), out, window)
+            .map(|f| f.1);
+        self.actions_frame = self
+            .actions_presence
+            .frame(self.actions_open.then_some(()), out, window)
+            .map(|f| f.1);
         match self.state.read(cx).screen {
             Screen::Project(id) => self.project(id, &t, cx),
             _ => self.list(&t, cx),

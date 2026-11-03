@@ -620,7 +620,12 @@ impl Render for ProjectRail {
                     .text_ellipsis()
                     .child(place),
             )
-            .children(card)
+            // The opened card rises into place under the list, each time a
+            // row opens it.
+            .children(card.map(|c| {
+                let key = open.map_or(0, |p| p as usize);
+                super::motion::rise_in(div().child(c), ("rail-card-in", key), 6., &t)
+            }))
             .into_any_element()
     }
 }

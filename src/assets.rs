@@ -27,6 +27,8 @@ icons!(
     "sticky-note",
     "pen-tool",
     "pencil-ruler",
+    "folder-git-2",
+    "square-minus",
     "arrow-up-down",
     "boxes",
     "notebook-pen",
