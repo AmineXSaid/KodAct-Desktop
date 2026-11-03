@@ -187,11 +187,6 @@ fn main() {
     if args.get(1).map(String::as_str) == Some("--design-check") {
         std::process::exit(design::check(&args[2..]));
     }
-    // `--design-capture <site>…`: capture sites as your own design systems
-    // (`design::capture_cli`).
-    if args.get(1).map(String::as_str) == Some("--design-capture") {
-        std::process::exit(design::capture_cli(&args[2..]));
-    }
     // `--design-mcp <devtools> <focus-file>`: serve the design tools
     // (`design_mcp.rs`); an empty devtools address means no browser.
     if args.get(1).map(String::as_str) == Some("--design-mcp") {

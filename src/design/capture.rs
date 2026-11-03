@@ -223,12 +223,6 @@ pub fn brand(read: Read, url: &str) -> Brand {
         .map(|i| &i.0)
         .find(|c| **c != text && chroma(c) < 0.1 && contrast(c, &background) >= 3.0)
         .cloned();
-    // Long grey copy can outweigh the main ink; muted is the quieter of
-    // the two, whichever covers more.
-    let (text, muted) = match muted {
-        Some(m) if contrast(&m, &background) > contrast(&text, &background) => (m, Some(text)),
-        m => (text, m),
-    };
     // The accent: the colourful one that buttons use, else the most used
     // colourful one anywhere.
     let button = read
@@ -276,7 +270,13 @@ pub fn brand(read: Read, url: &str) -> Brand {
         .unwrap_or(url)
         .trim_start_matches("www.")
         .to_string();
-    let name = brand_name(&read.title, &host);
+    let name = read
+        .title
+        .split([' ', '|', '-', '–', '—', ':'])
+        .find(|w| w.len() > 1)
+        .map(str::to_string)
+        .filter(|_| !read.title.trim().is_empty())
+        .unwrap_or_else(|| host.clone());
     Brand {
         name,
         source: url.to_string(),
@@ -294,73 +294,6 @@ pub fn brand(read: Read, url: &str) -> Brand {
         button,
         vars: read.vars,
         css_failed: read.css_failed,
-    }
-}
-
-/// The brand's name from the page title: the part of it that names the
-/// site (`Pricing | Acme` → `Acme`), else its first part (`Kiln Studio:
-/// pots` → `Kiln Studio`), else the host.
-fn brand_name(title: &str, host: &str) -> String {
-    let squash = |s: &str| -> String {
-        s.chars()
-            .filter(char::is_ascii_alphanumeric)
-            .map(|c| c.to_ascii_lowercase())
-            .collect()
-    };
-    let label = squash(host.split('.').next().unwrap_or(host));
-    let mut cut = title.to_string();
-    for sep in [" |", "| ", " - ", " – ", " — ", ": ", " · "] {
-        cut = cut.replace(sep, "\u{1}");
-    }
-    let parts: Vec<&str> = cut
-        .split('\u{1}')
-        .map(|p| p.trim_matches(|c: char| c.is_whitespace() || "|-–—:·".contains(c)))
-        .filter(|p| !p.is_empty())
-        .collect();
-    let fits = |p: &&&str| p.chars().count() <= 32;
-    parts
-        .iter()
-        .filter(fits)
-        .find(|p| !label.is_empty() && squash(p) == label)
-        .or_else(|| parts.first().filter(fits))
-        .map(|p| p.to_string())
-        .unwrap_or_else(|| host.to_string())
-}
-
-/// The generic family to fall back to after `font`.
-fn generic(font: &str) -> &'static str {
-    let f = font.to_ascii_lowercase();
-    if ["mono", "code", "courier", "consolas", "menlo"]
-        .iter()
-        .any(|k| f.contains(k))
-    {
-        "ui-monospace, monospace"
-    } else if f.contains("sans") {
-        "system-ui, sans-serif"
-    } else if [
-        "serif",
-        "georgia",
-        "times",
-        "garamond",
-        "playfair",
-        "merriweather",
-        "lora",
-        "baskerville",
-        "caslon",
-        "didot",
-        "bodoni",
-        "tiempos",
-        "freight",
-        "canela",
-        "charter",
-        "cambria",
-    ]
-    .iter()
-    .any(|k| f.contains(k))
-    {
-        "Georgia, serif"
-    } else {
-        "system-ui, sans-serif"
     }
 }
 
@@ -520,113 +453,15 @@ pub fn tokens_css(b: &Brand) -> String {
     for (i, c) in b.accents.iter().skip(1).enumerate() {
         put(&format!("color-accent-{}", i + 2), &Some(c.clone()));
     }
-    // Named as the library's systems name them.
     put(
-        "font-body",
-        &b.fonts.first().map(|f| {
-            let back = generic(f);
-            let back = back.strip_prefix(&format!("{f}, ")).unwrap_or(back);
-            format!("\"{f}\", {back}")
-        }),
+        "font-sans",
+        &b.fonts
+            .first()
+            .map(|f| format!("\"{f}\", system-ui, sans-serif")),
     );
     put("radius", &b.radius.map(|r| format!("{r}px")));
     out.push_str("}\n");
     out
-}
-
-/// A page that shows the brand as read: its colour roles, its type at the
-/// sizes in use, its button, and the site as captured (`capture.png`
-/// beside it). The gallery takes its card picture from it.
-pub fn preview_html(b: &Brand) -> String {
-    let esc = |s: &str| {
-        s.replace('&', "&amp;")
-            .replace('<', "&lt;")
-            .replace('>', "&gt;")
-            .replace('"', "&quot;")
-    };
-    let font = b
-        .fonts
-        .first()
-        .map(|f| format!("\"{}\", {}", esc(f), generic(f)))
-        .unwrap_or_else(|| "system-ui, sans-serif".into());
-    let surface = b.surface.clone().unwrap_or_else(|| b.background.clone());
-    let muted = b.muted.clone().unwrap_or_else(|| b.text.clone());
-    // No border read: a faint wash of the muted ink.
-    let line = b
-        .border
-        .clone()
-        .unwrap_or_else(|| format!("color-mix(in srgb, {muted} 28%, transparent)"));
-    let mut roles: Vec<(&str, String)> = vec![("Background", b.background.clone())];
-    roles.extend(b.surface.clone().map(|c| ("Surface", c)));
-    roles.push(("Text", b.text.clone()));
-    roles.extend(b.muted.clone().map(|c| ("Muted", c)));
-    roles.extend(b.border.clone().map(|c| ("Border", c)));
-    for (i, c) in b.accents.iter().enumerate() {
-        roles.push((if i == 0 { "Accent" } else { "Accent, more" }, c.clone()));
-    }
-    let swatches: String = roles
-        .iter()
-        .map(|(role, c)| {
-            format!(
-                "<div class=\"sw\"><div class=\"chip\" style=\"background:{c}\"></div><b>{role}</b><code>{c}</code></div>"
-            )
-        })
-        .collect();
-    let mut sizes = b.sizes.clone();
-    sizes.sort_unstable_by(|a, b| b.cmp(a));
-    let specimen: String = sizes
-        .iter()
-        .take(5)
-        .map(|px| format!("<div class=\"ty\"><code>{px}px</code><span style=\"font-size:{px}px\">{}</span></div>", esc(&b.name)))
-        .collect();
-    let button = b
-        .button
-        .as_ref()
-        .map(|k| {
-            format!(
-                "<a class=\"btn\" style=\"background:{};color:{};border-radius:{}px;padding:{}\">{}</a>",
-                k.bg.clone().unwrap_or_default(),
-                k.color.clone().unwrap_or_else(|| b.background.clone()),
-                k.radius,
-                esc(&k.padding),
-                esc(if k.text.trim().is_empty() { "Button" } else { k.text.trim() })
-            )
-        })
-        .unwrap_or_default();
-    let radius = b.radius.unwrap_or(8);
-    format!(
-        r#"<!doctype html>
-<html><head><meta charset="utf-8"><title>{name}</title>
-<style>
-body{{margin:0;background:{bg};color:{text};font-family:{font};}}
-main{{max-width:1120px;margin:0 auto;padding:48px 40px;}}
-h1{{font-size:44px;margin:0 0 6px;font-weight:600;}}
-.src{{color:{muted};margin:0 0 36px;font-size:15px;}}
-h2{{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:{muted};margin:36px 0 14px;font-weight:600;}}
-.grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;}}
-.sw{{background:{surface};border:1px solid {line};border-radius:{radius}px;padding:10px;display:flex;flex-direction:column;gap:6px;font-size:13px;}}
-.chip{{height:64px;border-radius:{inner}px;border:1px solid {line};}}
-code{{font-family:ui-monospace,monospace;font-size:12px;color:{muted};}}
-.ty{{display:flex;align-items:baseline;gap:18px;padding:8px 0;border-bottom:1px solid {line};white-space:nowrap;overflow:hidden;}}
-.ty code{{width:48px;flex:none;}}
-.btn{{display:inline-block;text-decoration:none;font-size:15px;}}
-img{{width:100%;border:1px solid {line};border-radius:{radius}px;display:block;}}
-</style></head>
-<body><main>
-<h1>{name}</h1>
-<p class="src">Read from {source}</p>
-<h2>Colour roles</h2><div class="grid">{swatches}</div>
-<h2>Type</h2>{specimen}
-<h2>Button</h2>{button}
-<h2>As captured</h2><img src="capture.png" alt="">
-</main></body></html>
-"#,
-        name = esc(&b.name),
-        source = esc(&b.source),
-        bg = b.background,
-        text = b.text,
-        inner = radius.saturating_sub(4),
-    )
 }
 
 /// Where a capture of `url` goes in `project`: `brand/<host>/`.
@@ -659,34 +494,6 @@ mod tests {
 
     fn map(v: &[(&str, f64)]) -> BTreeMap<String, f64> {
         v.iter().map(|(k, n)| (k.to_string(), *n)).collect()
-    }
-
-    #[test]
-    fn the_name_is_the_part_of_the_title_that_names_the_site() {
-        assert_eq!(brand_name("Pricing | Acme", "acme.test"), "Acme");
-        assert_eq!(
-            brand_name("ElevenLabs: AI voices", "elevenlabs.io"),
-            "ElevenLabs"
-        );
-        assert_eq!(brand_name("Kiln Studio", "127.0.0.1:8765"), "Kiln Studio");
-        assert_eq!(
-            brand_name("Kiln Studio – hand-thrown pots", "kiln.test"),
-            "Kiln Studio"
-        );
-        assert_eq!(brand_name("Real-time UI", "rt.test"), "Real-time UI");
-        assert_eq!(brand_name("", "acme.test"), "acme.test");
-    }
-
-    #[test]
-    fn muted_is_the_quieter_ink_even_when_it_covers_more() {
-        let read = Read {
-            ink: map(&[("#6b6259", 9000.0), ("#231f1b", 2000.0)]),
-            body_bg: Some("#f6f1ea".into()),
-            ..Read::default()
-        };
-        let b = brand(read, "https://kiln.test");
-        assert_eq!(b.text, "#231f1b");
-        assert_eq!(b.muted.as_deref(), Some("#6b6259"));
     }
 
     #[test]
@@ -727,17 +534,9 @@ mod tests {
         assert!(md.contains("## 2. Color Palette & Roles"));
         assert!(md.contains("**Accent** (`#ff385c`)"));
         assert!(md.contains("Primary button"));
-        let page = preview_html(&b);
-        assert!(page.contains("background:#ff385c"));
-        assert!(page.contains("<h1>Acme</h1>"));
-        assert!(page.contains("src=\"capture.png\""));
         let css = tokens_css(&b);
         assert!(css.contains("--color-accent: #ff385c;"));
-        assert!(css.contains("--font-body: \"Inter\", system-ui, sans-serif;"));
-        assert_eq!(generic("Georgia"), "Georgia, serif");
-        assert_eq!(generic("Source Serif 4"), "Georgia, serif");
-        assert_eq!(generic("IBM Plex Sans"), "system-ui, sans-serif");
-        assert_eq!(generic("JetBrains Mono"), "ui-monospace, monospace");
+        assert!(css.contains("--font-sans: \"Inter\""));
         assert_eq!(
             folder(Path::new("/p"), "https://www.acme.test/en?x=1"),
             Path::new("/p/brand/acme.test")

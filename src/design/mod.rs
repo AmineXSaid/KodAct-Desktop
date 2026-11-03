@@ -16,9 +16,9 @@ pub mod marks;
 pub mod od_subset;
 pub mod pets;
 pub mod pptx;
+pub mod services;
 pub mod prompt;
 pub mod routines;
-pub mod services;
 pub mod skill_meta;
 pub mod store;
 pub mod trace;
@@ -45,109 +45,6 @@ pub fn root() -> Option<PathBuf> {
     let dev = cfg!(debug_assertions)
         .then(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("design-library"));
     [beside, dev].into_iter().flatten().find(|p| is_lib(p))
-}
-
-/// The design systems you captured from sites yourself
-/// (`forge-gpui --design-capture`): `FORGE_DESIGN_SYSTEMS`, else
-/// `<config>/design-systems`. They stay on this computer, beside the
-/// library and never in it: each is a reading of someone else's brand,
-/// for your own reference.
-pub fn own_systems() -> Option<PathBuf> {
-    if let Some(d) = std::env::var_os("FORGE_DESIGN_SYSTEMS") {
-        return Some(PathBuf::from(d));
-    }
-    // Tests read only the library they were given.
-    if cfg!(test) {
-        return None;
-    }
-    crate::profile::dir().map(|d| d.join("design-systems"))
-}
-
-/// `forge-gpui --design-capture [--into <folder>] <site>…`: capture each
-/// site's brand (`export::capture_at`) as one of your own design systems,
-/// `<folder>/<host>/` (default `own_systems`), which Design → Design
-/// systems then lists under "Captured by you". Exits 1 when any failed.
-pub fn capture_cli(args: &[String]) -> i32 {
-    #[cfg(windows)]
-    attach_console();
-    let (into, sites) = match args {
-        [flag, dir, rest @ ..] if flag == "--into" => (Some(PathBuf::from(dir)), rest),
-        rest => (own_systems(), rest),
-    };
-    let Some(into) = into else {
-        eprintln!(
-            "No folder for your design systems: set FORGE_DESIGN_SYSTEMS or pass --into <folder>."
-        );
-        return 1;
-    };
-    // `@list.txt`: one address per line (blank lines and `#` notes skipped).
-    let mut list: Vec<String> = vec![];
-    for a in sites {
-        match a.strip_prefix('@') {
-            Some(file) => match std::fs::read_to_string(file) {
-                Ok(text) => list.extend(sites_in(&text)),
-                Err(e) => {
-                    eprintln!("Can't read {file}: {e}");
-                    return 1;
-                }
-            },
-            None => list.push(a.clone()),
-        }
-    }
-    let sites = &list[..];
-    if sites.is_empty() {
-        eprintln!("Usage: forge-gpui --design-capture [--into <folder>] <site>… or @<list.txt>");
-        return 1;
-    }
-    let mut failed = 0;
-    for site in sites {
-        let got = export::capture_at(site, |url| {
-            let host = capture::folder(Path::new(""), url);
-            into.join(host.file_name().unwrap_or_default())
-        });
-        match got {
-            Ok(c) => {
-                let b = &c.brand;
-                println!(
-                    "{site}: {} · {} colours, {} fonts → {}",
-                    b.name,
-                    1 + b.accents.len()
-                        + [&b.surface, &b.muted, &b.border]
-                            .iter()
-                            .filter(|o| o.is_some())
-                            .count(),
-                    b.fonts.len(),
-                    c.folder.display()
-                );
-                if !b.css_failed.is_empty() {
-                    println!(
-                        "  {} stylesheet(s) didn't load: read without them",
-                        b.css_failed.len()
-                    );
-                }
-            }
-            Err(e) => {
-                failed += 1;
-                println!("{site}: failed: {e}");
-            }
-        }
-    }
-    println!(
-        "{} of {} captured into {}",
-        sites.len() - failed,
-        sites.len(),
-        into.display()
-    );
-    i32::from(failed > 0)
-}
-
-/// The addresses in a list file: one per line, without blanks or `#` notes.
-fn sites_in(text: &str) -> Vec<String> {
-    text.lines()
-        .map(|l| l.split('#').next().unwrap_or("").trim())
-        .filter(|l| !l.is_empty())
-        .map(str::to_string)
-        .collect()
 }
 
 /// `forge-gpui --design-check`: load the whole library and print what is in
@@ -229,16 +126,5 @@ fn attach_console() {
 
 /// A `file://` address's path, its %-escapes decoded.
 pub fn inline_path(url_path: &str) -> std::path::PathBuf {
-    std::path::PathBuf::from(inline::decode(
-        url_path.split(['?', '#']).next().unwrap_or(url_path),
-    ))
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn a_site_list_skips_blanks_and_notes() {
-        let got = super::sites_in("# brands\nhttps://a.test\n\n  b.test  # the shop\n");
-        assert_eq!(got, ["https://a.test", "b.test"]);
-    }
+    std::path::PathBuf::from(inline::decode(url_path.split(['?', '#']).next().unwrap_or(url_path)))
 }

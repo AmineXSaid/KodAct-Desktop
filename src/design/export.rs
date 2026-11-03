@@ -194,12 +194,6 @@ pub struct Captured {
 /// `brand/<host>/` (`design::capture`): `DESIGN.md`, `tokens.css`, the
 /// logo when there is one, and a picture of the site.
 pub fn capture(url: &str, project: &Path) -> Result<Captured, String> {
-    capture_at(url, |url| super::capture::folder(project, url))
-}
-
-/// Capture the site at `url` into the folder `folder_of` names for its
-/// full address (`capture` puts it in a project's `brand/<host>/`).
-pub fn capture_at(url: &str, folder_of: impl FnOnce(&str) -> PathBuf) -> Result<Captured, String> {
     use super::capture as cap;
     let url = if url.contains("://") {
         url.to_string()
@@ -224,7 +218,7 @@ pub fn capture_at(url: &str, folder_of: impl FnOnce(&str) -> PathBuf) -> Result<
     chrome.close(&target);
     drop(guard);
     let (read, picture) = got?;
-    let folder = folder_of(&url);
+    let folder = cap::folder(project, &url);
     std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
     // The logo, as the site has it; else its icon.
     let icon = read.icon.clone().map(|src| cap::Logo {
@@ -263,8 +257,6 @@ pub fn capture_at(url: &str, folder_of: impl FnOnce(&str) -> PathBuf) -> Result<
     std::fs::write(folder.join("tokens.css"), cap::tokens_css(&brand))
         .map_err(|e| e.to_string())?;
     std::fs::write(folder.join("capture.png"), &picture).map_err(|e| e.to_string())?;
-    std::fs::write(folder.join("preview.html"), cap::preview_html(&brand))
-        .map_err(|e| e.to_string())?;
     Ok(Captured {
         folder,
         brand,
