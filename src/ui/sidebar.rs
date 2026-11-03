@@ -976,7 +976,7 @@ impl Render for Sidebar {
                         nav(
                             "customize",
                             "icons/sliders-horizontal.svg",
-                            "Customize",
+                            "Rules and memory",
                             rules_open,
                             Some(shortcut("Shift R")),
                         )

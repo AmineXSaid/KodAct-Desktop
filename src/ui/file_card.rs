@@ -96,7 +96,7 @@ fn label_row(
 }
 
 /// Download: a pill with its icon, saving the file where you choose.
-fn download_button(
+pub fn download_button(
     file: &FileRef,
     key: &str,
     state: Entity<AppState>,
