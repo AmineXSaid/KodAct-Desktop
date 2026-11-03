@@ -1247,8 +1247,9 @@ impl Render for BrowserView {
                     )
             }))
             // Forge at the wheel: a badge over the page.
+            // It rises into place when Forge takes the wheel.
             .when(agent && design.is_none(), |d| {
-                d.child(
+                d.child(super::motion::rise_in(
                     crate::theme::popover(&t)
                         .occlude()
                         .absolute()
@@ -1270,7 +1271,10 @@ impl Render for BrowserView {
                             ),
                         )
                         .child("Forge is using the browser"),
-                )
+                    "web-agent-badge-in",
+                    6.,
+                    &t,
+                ))
             });
 
         // A page this chat designed has the design bar for its toolbar.

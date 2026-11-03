@@ -988,15 +988,6 @@ pub enum TitleMenu {
     Account,
 }
 
-/// Which chats the sidebar lists, as Claude Code's Chat and Code: plain
-/// chats, or chats that work in a folder.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub enum SidebarKind {
-    Chat,
-    #[default]
-    Code,
-}
-
 /// The chat menu's submenus.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ChatSub {
@@ -1827,8 +1818,6 @@ pub struct AppState {
     pub session_folded: Vec<&'static str>,
     /// What fills each chat's context, as ForgeCLI last counted it.
     pub context_usage: std::collections::HashMap<usize, crate::context::ContextUsage>,
-    /// The sidebar lists plain chats or chats in a folder.
-    pub sidebar_kind: SidebarKind,
     /// The title bar's project switcher, and the sidebar's chat filter, are open.
     pub switcher_open: bool,
     /// The composer's project menu (the same list as the switcher, above its chip).
@@ -2310,7 +2299,6 @@ impl AppState {
             session_open: false,
             session_folded: vec![],
             context_usage: Default::default(),
-            sidebar_kind: SidebarKind::default(),
             switcher_open: false,
             project_menu: false,
             filter_open: false,
@@ -4038,60 +4026,10 @@ impl AppState {
         }
         self.current = Some(id);
         self.sync_mode();
-        self.follow_kind();
         if let Some(c) = self.chat_mut(id) {
             c.unread = false;
         }
         cx.notify();
-    }
-
-    /// The sidebar shows the kind of chat now open (plain, or in a folder).
-    fn follow_kind(&mut self) {
-        self.sidebar_kind = if self.in_folder() {
-            SidebarKind::Code
-        } else {
-            SidebarKind::Chat
-        };
-    }
-
-    /// Switch the sidebar between plain chats and chats in a folder.
-    pub fn set_sidebar_kind(&mut self, kind: SidebarKind, cx: &mut Context<Self>) {
-        self.sidebar_kind = kind;
-        cx.notify();
-    }
-
-    /// New, as the sidebar's kind says: a plain chat, or a chat in the
-    /// folder you're in (else the one you worked in last; with none, the
-    /// Projects page, to open one).
-    pub fn new_in_kind(&mut self, cx: &mut Context<Self>) {
-        if self.sidebar_kind == SidebarKind::Chat {
-            return self.new_plain_chat(cx);
-        }
-        let folder = if self.in_folder() {
-            Some(self.current_project)
-        } else {
-            self.chats
-                .iter()
-                .filter(|c| self.project(c.project).is_some_and(|p| !p.scratch))
-                .max_by_key(|c| c.updated)
-                .map(|c| c.project)
-                .or_else(|| {
-                    self.projects
-                        .iter()
-                        .find(|p| !p.scratch && p.saved)
-                        .map(|p| p.id)
-                })
-        };
-        match folder {
-            Some(id) => {
-                self.select_project(id, cx);
-                self.new_chat(cx);
-            }
-            None => {
-                self.screen = Screen::Projects;
-                self.show_toast("Open a folder to start a chat that works in it.", cx);
-            }
-        }
     }
 
     /// Plain chats' place.
@@ -4117,7 +4055,6 @@ impl AppState {
     pub fn new_chat(&mut self, cx: &mut Context<Self>) {
         self.screen = Screen::Chat;
         self.current = None;
-        self.follow_kind();
         self.doc = None;
         self.find = None;
         self.greeting_seed = self.greeting_seed.wrapping_add(1);

@@ -102,7 +102,14 @@ pub fn render(
                     .child(div().text_size(t.text.caption).line_height(relative(1.45)).text_color(t.colors.text_body).child(row.preview.clone())),
             );
         }
-        theme::popover(t).w(px(420.)).p(t.space.sm).flex().flex_col().gap(t.space.xs).child(div().px(t.space.xs).text_size(t.text.caption).text_color(t.colors.text_subtle).child("Read-only. Restore brings that version back; the one showing now is kept as a version.")).child(list)
+        // It unfolds under its button, as the app's inline menus do.
+        super::motion::unfold(
+            theme::popover(t).w(px(420.)).p(t.space.sm).flex().flex_col().gap(t.space.xs).child(div().px(t.space.xs).text_size(t.text.caption).text_color(t.colors.text_subtle).child("Read-only. Restore brings that version back; the one showing now is kept as a version.")).child(list),
+            &format!("versions-{chat}-{msg}"),
+            false,
+            false,
+            t,
+        )
     });
     div()
         .flex()

@@ -1087,7 +1087,8 @@ impl ProjectsView {
             .min_w_0()
             .min_h_0()
             .flex()
-            .child(page)
+            // The page rises into place as it opens, once per project.
+            .child(super::motion::rise_in(page, ("project-page-in", id), 8., t))
             .when(!doc_open, |d| d.child(self.rail.clone()))
             .into_any_element()
     }

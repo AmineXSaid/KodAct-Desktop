@@ -1198,7 +1198,7 @@ impl Render for Workspace {
                 })
             }))
             .on_action(cx.listener(|this, _: &NewChat, window, cx| {
-                this.state.update(cx, |s, cx| s.new_in_kind(cx));
+                this.state.update(cx, |s, cx| s.new_plain_chat(cx));
                 this.focus_composer(window, cx);
             }))
             .on_action(cx.listener(|this, _: &ShowProjectMap, _, cx| {
