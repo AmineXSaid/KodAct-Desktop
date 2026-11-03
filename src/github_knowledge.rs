@@ -323,8 +323,9 @@ pub fn tree(r: &RepoRef) -> Result<Tree, String> {
         })
         .collect();
     if let Some(f) = &r.folder {
+        // The folder itself stays, so its files hang under it.
         let under = format!("{f}/");
-        nodes.retain(|n| n.path.starts_with(&under));
+        nodes.retain(|n| n.path == *f || n.path.starts_with(&under));
     }
     nodes.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(Tree {
