@@ -867,7 +867,7 @@ impl ProjectsView {
             .child(
                 div()
                     .w_full()
-                    .max_w(t.size.column)
+                    .max_w(t.size.composer_width)
                     .flex()
                     .flex_col()
                     .gap(t.space.lg)
