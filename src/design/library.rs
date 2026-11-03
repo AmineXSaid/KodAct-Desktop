@@ -241,6 +241,9 @@ pub fn is_media(path: &Path) -> bool {
         .is_some_and(|e| MEDIA.contains(&e.to_ascii_lowercase().as_str()))
 }
 
+/// The category of the design systems you captured yourself.
+pub const OWN_CATEGORY: &str = "Captured by you";
+
 impl Index {
     pub fn load(root: &Path) -> Index {
         let read_json = |name: &str| {
@@ -270,6 +273,9 @@ impl Index {
         ix.load_plugins("plugins/_official/video-templates", Kind::VideoTemplate);
         ix.load_plugins("plugins/community", Kind::Community);
         ix.load_design_systems();
+        if let Some(own) = super::own_systems() {
+            ix.load_own_systems(&own);
+        }
         ix.load_craft();
         ix.link_upstream_skills();
         ix.resolve_skill_refs();
@@ -681,6 +687,68 @@ impl Index {
                 dir,
                 manifest: card,
                 kit,
+                ..Entry::default()
+            });
+        }
+    }
+
+    /// One entry per design system you captured (`own_systems`): each
+    /// folder in `own` with a `DESIGN.md`, named for its site. Its paths
+    /// are absolute, as it is outside the library root.
+    fn load_own_systems(&mut self, own: &Path) {
+        let mut folders: Vec<PathBuf> = std::fs::read_dir(own)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.join("DESIGN.md").is_file())
+            .collect();
+        folders.sort();
+        for dir in folders {
+            let Some(folder) = dir.file_name().and_then(|n| n.to_str()).map(str::to_string) else {
+                continue;
+            };
+            if folder.starts_with(['_', '.']) || self.get(Kind::DesignSystem, &folder).is_some() {
+                continue;
+            }
+            let design = dir.join("DESIGN.md");
+            let Some(doc) = self.read_doc(&design) else {
+                continue;
+            };
+            let title = heading(&doc.body)
+                .map(|h| {
+                    h.trim_start_matches("Design System Captured from ")
+                        .trim()
+                        .to_string()
+                })
+                .filter(|h| !h.is_empty())
+                .unwrap_or_else(|| folder.clone());
+            // What section 1 says of it, else its own summary line.
+            let description = doc
+                .body
+                .split("\n## ")
+                .nth(1)
+                .and_then(|sec| sec.split("\n\n").nth(1))
+                .map(|p| p.replace('`', "").trim().to_string())
+                .filter(|p| !p.is_empty())
+                .unwrap_or_else(|| summarize(&doc.body));
+            let preview = Some(dir.join("preview.html")).filter(|p| p.is_file());
+            self.entries.push(Entry {
+                id: folder.clone(),
+                name: folder.clone(),
+                kind: Some(Kind::DesignSystem),
+                title,
+                description,
+                preview,
+                mode: Some("design-system".into()),
+                surface: Some("web".into()),
+                category: Some(OWN_CATEGORY.into()),
+                tags: vec!["captured".into()],
+                skill: Some(design),
+                license: Some(format!(
+                    "Captured from {folder} for your own reference; not part of the library"
+                )),
+                dir,
                 ..Entry::default()
             });
         }
@@ -1558,6 +1626,37 @@ mod tests {
                 assert!(permissive.contains(&l.as_str()), "{}: {l}", e.dir.display());
             }
         }
+    }
+
+    #[test]
+    fn your_captured_systems_join_the_design_systems() {
+        let tmp = std::env::temp_dir().join(format!("forge-design-own-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let (lib, own) = (tmp.join("lib"), tmp.join("own"));
+        std::fs::create_dir_all(&lib).unwrap();
+        std::fs::write(lib.join("UPSTREAM.json"), "{}").unwrap();
+        let site = own.join("kiln.test");
+        std::fs::create_dir_all(&site).unwrap();
+        std::fs::write(
+            site.join("DESIGN.md"),
+            "# Design System Captured from Kiln Studio\n\n> Source: https://kiln.test/\n\n## 1. Visual Theme\n\nA warm light canvas.\n",
+        )
+        .unwrap();
+        // Not a system: no DESIGN.md.
+        std::fs::create_dir_all(own.join("half")).unwrap();
+        let mut ix = Index::load(&lib);
+        ix.load_own_systems(&own);
+        let e = ix.get(Kind::DesignSystem, "kiln.test").expect("listed");
+        assert_eq!(e.title, "Kiln Studio");
+        assert_eq!(e.category.as_deref(), Some(OWN_CATEGORY));
+        assert_eq!(e.description, "A warm light canvas.");
+        // Absolute, so the library root doesn't move it.
+        assert_eq!(
+            ix.root.join(e.skill.as_ref().unwrap()),
+            site.join("DESIGN.md")
+        );
+        assert!(ix.get(Kind::DesignSystem, "half").is_none());
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]
