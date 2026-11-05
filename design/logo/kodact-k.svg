@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="7 3 60 60">
+  <!-- KodAct's mark: the K, typed at a prompt, the cursor after it.
+       The stem, the upper arm, the leg (cut apart where they meet), and the
+       underscore cursor, which blinks while KodAct works. One colour. -->
+  <path fill="currentColor" d="M12 11H21V53H12ZM21 33.4L41.6 11H53.8L27.1 40Z"/>
+  <path fill="currentColor" d="M27.1 27.4L34 20.3L46 35.8V53H39Z"/>
+  <rect id="cursor" x="50" y="46.5" width="15" height="6.5" fill="currentColor"/>
+</svg>
