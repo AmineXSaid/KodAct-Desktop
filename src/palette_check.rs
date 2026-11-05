@@ -172,7 +172,11 @@ fn each_theme_has_one_colour() {
             for (name, c) in [
                 ("link", t.colors.primary),
                 ("switch", x.toggle_on),
-                ("mark top", x.mark_top),
+                // The mark's lime: the tile on ink, the glyphs in the ink tile on paper.
+                (
+                    "mark lime",
+                    if t.is_dark { x.mark_top } else { x.mark_left },
+                ),
                 ("live", x.live),
                 ("filled button", x.fill),
             ] {
@@ -348,14 +352,15 @@ fn terminal_colours_read_on_the_dock() {
 fn the_mark_reads_on_every_surface() {
     for (mode, t) in both() {
         let x = &t.extra;
-        // KodAct's tile: its cursor bar and run triangle (ink, `mark_left`)
-        // read on the lime tile (`mark_top`) as text does.
+        // KodAct's tile: its cursor bar and run triangle (`mark_left`) read
+        // on the tile (`mark_top`) as text does.
         let glyph = contrast(x.mark_left, x.mark_top);
         assert!(glyph >= AA_TEXT, "{mode}: the mark's glyph is {glyph:.2}:1");
-        // The tile, or the olive shadow under it (`mark_right`), holds a UI
-        // part's 3:1 on every surface it sits on, so the mark has an edge.
+        // The tile, and the symbol alone (both `mark_top`), hold a UI part's
+        // 3:1 on every surface they sit on, with no shadow: the mark takes
+        // the opposite of its ground.
         for (ground, g) in grounds(&t) {
-            let edge = contrast(x.mark_top, g).max(contrast(x.mark_right, g));
+            let edge = contrast(x.mark_top, g);
             assert!(
                 edge >= AA_UI,
                 "{mode}: the mark's edge is {edge:.2}:1 on {ground}"

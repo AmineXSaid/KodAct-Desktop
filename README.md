@@ -348,12 +348,13 @@ Changes apply the next time they're used; no restart.
     `skills_editor`, `hooks_editor`, `mcp_editor`, `permissions_editor`,
     `sandbox_editor`, `env_editor`, `memory_view`, `plugins_editor`,
     `planned` (Network), `guide`, and `editor_kit`, the pieces they share;
-  - the brand: `mark` (KodAct CLI's mark and wordmark: the lime tile with its
-    cursor bar and run triangle, at rest and at work, and the name in the
-    CLI's pixel letters, "Kod" and "Act"; drawn as SVG layers tinted from the
-    theme) and `opener` (the mark's beat as the window opens, under a second).
-- `scripts/make_ico.py`: `assets/kodact.ico`, KodAct's tile, each size Windows
-  asks for drawn on its own (on the CLI's pixel grid where it fits).
+  - the brand: `mark` (KodAct CLI's mark and wordmark: the cursor bar and
+    run triangle, alone or in its tile, each the opposite of its ground; at
+    rest and at work, and the name in the CLI's pixel letters, "Kod" and
+    "Act"; drawn as SVG layers tinted from the theme; see
+    `design/kodact-identity.html` for where each one goes) and `opener` (the mark's beat as the window opens, under a second).
+- `scripts/make_ico.py`: `assets/kodact.ico`, KodAct's ink tile with the lime
+  symbol, each size Windows asks for drawn on its own.
 - `scripts/screenshots.sh`: light and dark screenshots of every screen (see below).
 - `.github/workflows/windows.yml`: fmt, clippy (`-D warnings`) and tests on
   Linux for every push and pull request; the Windows build and tests.

@@ -125,8 +125,10 @@ impl Look {
     /// Its surfaces and colour in one mode.
     fn tint(self, dark: bool) -> Tint {
         // KodAct CLI's roles (`tui/palette.rs`): the ink of its tiles for
-        // grounds, lime #c6ff3d for the brand (its tile #b5ea2c by day, and
+        // grounds, lime #c6ff3d for the brand (#b5ea2c as a fill by day, and
         // olive #4a7200 for the brand drawn as a line or a word on paper).
+        // The mark takes the opposite of the ground: lime on ink, ink on
+        // paper (`mark_top`).
         if dark {
             Tint {
                 canvas: 0x0f1113,
@@ -153,7 +155,7 @@ impl Look {
                 link: 0x4a7200,
                 link_hover: 0x3d5f00,
                 live: 0x4a7200,
-                mark_top: 0xb5ea2c,
+                mark_top: 0x101214,
             }
         }
     }
@@ -467,16 +469,13 @@ pub struct ExtraColors {
     pub accent: Hsla,
     pub accent_soft: Hsla, // the send button with nothing to send; a soft wash
     pub accent_fg: Hsla,
-    // KodAct's mark (`ui/mark.rs`): the tile (`mark_top`), the ink of its
-    // cursor bar and run triangle (`mark_left`), and its shadow, one pixel
-    // down and right (`mark_right`), which gives it an edge on paper.
+    // KodAct's mark (`ui/mark.rs`), each colour the opposite of the ground,
+    // so it needs no shadow for an edge: the tile and the symbol alone
+    // (`mark_top`: lime on ink, ink on paper), and the cursor bar and run
+    // triangle inside the tile (`mark_left`: ink in the lime tile, lime in
+    // the ink one). The mark's lime only touches ink.
     pub mark_top: Hsla,
     pub mark_left: Hsla,
-    pub mark_right: Hsla,
-    // The pixel wordmark's shadow, one pixel down and right: a dark olive
-    // on ink (KodAct CLI's), the tile's lime on paper (where the CLI's sage
-    // went flat).
-    pub brand_shadow: Hsla,
     // Marks drawn on a design page (`ui/design_marks.rs`): the page is
     // usually light whatever the app's mode, so the ink is the look's
     // light-mode link in both modes, over a thin halo for dark pages.
@@ -553,14 +552,12 @@ impl ExtraColors {
                 accent: rgb(0xc6ff3d).into(),
                 accent_soft: rgb(0x2a341f).into(),
                 accent_fg: rgb(0x101214).into(),
-                // The mark: a lime tile, its cursor bar and run triangle in
-                // ink, its shadow a dark olive (KodAct CLI's `brand.rs`).
+                // The mark on ink: a lime tile, its cursor bar and run
+                // triangle in ink (KodAct CLI's `brand.rs`).
                 mark_top: rgb(0xc6ff3d).into(),
                 page_ink: rgb(0x4a7200).into(),
                 page_halo: rgb(0xffffff).into(),
                 mark_left: rgb(0x101214).into(),
-                mark_right: rgb(0x3d5f00).into(),
-                brand_shadow: rgb(0x3d5a10).into(),
                 border_strong: rgb(0x3a4047).into(),
                 sunk: rgb(0x121417).into(),
                 toggle_on: rgb(0xc6ff3d).into(),
@@ -623,12 +620,12 @@ impl ExtraColors {
                 accent: rgb(0xb5ea2c).into(),
                 accent_soft: rgb(0xe4efcd).into(),
                 accent_fg: rgb(0x101214).into(),
-                mark_top: rgb(0xb5ea2c).into(),
+                // The mark on paper: an ink tile, its cursor bar and run
+                // triangle in lime; the symbol alone in ink.
+                mark_top: rgb(0x101214).into(),
                 page_ink: rgb(0x4a7200).into(),
                 page_halo: rgb(0xffffff).into(),
-                mark_left: rgb(0x101214).into(),
-                mark_right: rgb(0x4a7200).into(),
-                brand_shadow: rgb(0xb5ea2c).into(),
+                mark_left: rgb(0xc6ff3d).into(),
                 border_strong: rgb(0xc5c8cb).into(),
                 sunk: rgb(0xeeede8).into(),
                 toggle_on: rgb(0x4a7200).into(),
@@ -880,7 +877,7 @@ pub struct Sizes {
     pub side_shade: Pixels, // 12: the sidebar's shadow across the session's left edge
     pub edge_fade: Pixels, // 40: the transcript fading out where the composer meets it
     pub home_heading: Pixels, // 36: the home screen's heading, KodAct Sans 600
-    pub mark_home: Pixels, // 48: the mark beside the home screen's greeting (3px a pixel of its grid)
+    pub mark_home: Pixels, // 34: the symbol beside the home screen's greeting, as tall as its capitals and a bit
 }
 
 impl Default for Sizes {
@@ -963,7 +960,7 @@ impl Default for Sizes {
             side_shade: px(12.),
             edge_fade: px(40.),
             home_heading: px(36.),
-            mark_home: px(48.),
+            mark_home: px(34.),
         }
     }
 }

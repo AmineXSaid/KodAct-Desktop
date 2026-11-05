@@ -259,20 +259,14 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
         .text_color(t.colors.text_muted)
         .cursor_pointer()
         .hover(move |s| s.text_color(strong))
-        .children(live_step.map(|c| {
-            // Agents at work: KodAct's cube turning, as on each agent's row.
-            if crate::state::is_agent_tool(&c.target) {
-                super::turning_logo_in(
-                    f32::from(t.size.icon_sm),
-                    format!("work-turn-{chat}-{msg}-{start}"),
-                )
-            } else {
-                super::tasks::status_icon(
-                    ToolStatus::Running,
-                    t,
-                    format!("work-spin-{chat}-{msg}-{start}").into(),
-                )
-            }
+        // A step at work, an agent's too: the running icon. KodAct's mark
+        // is the working line's alone.
+        .children(live_step.map(|_| {
+            super::tasks::status_icon(
+                ToolStatus::Running,
+                t,
+                format!("work-spin-{chat}-{msg}-{start}").into(),
+            )
         }))
         .child(
             div()

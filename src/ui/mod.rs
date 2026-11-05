@@ -229,23 +229,6 @@ pub fn icon(path: &'static str, size: Pixels, color: Hsla) -> Svg {
     svg().path(path).size(size).flex_none().text_color(color)
 }
 
-/// The KodAct mark, the lime tile (`mark.rs`), `size` px square.
-pub fn logo(size: f32) -> mark::Tile {
-    mark::tile(size)
-}
-
-/// The KodAct mark at work: its cursor bar and run triangle take turns.
-/// Reduced motion: the mark at rest.
-pub fn turning_logo(size: f32, id: impl Into<gpui::ElementId>) -> gpui::AnyElement {
-    mark::working(size, id)
-}
-
-/// The KodAct mark at work, the size of the icon it stands beside: work in
-/// progress in the conversation.
-pub fn turning_logo_in(size: f32, id: impl Into<gpui::ElementId>) -> gpui::AnyElement {
-    mark::working(size, id)
-}
-
 /// Your avatar, drawn `size` px square at this screen's density.
 pub fn avatar_image(name: &str, size: f32, window: &gpui::Window) -> gpui::Img {
     let px = (size * window.scale_factor()).round() as u32;

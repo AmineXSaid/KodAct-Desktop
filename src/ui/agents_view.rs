@@ -104,8 +104,6 @@ pub struct View<'a> {
     pub runs: &'a [AgentRun],
     /// What you asked, which KodAct split across its agents.
     pub request: Option<SharedString>,
-    /// KodAct's mark for the top of the tree.
-    pub logo: AnyElement,
     /// The chat's turn is still going.
     pub working: bool,
 }
@@ -275,7 +273,8 @@ pub fn render(
                 ),
         );
 
-    // KodAct at the root of the tree.
+    // What you asked, at the root of the tree (no mark: the working line
+    // carries KodAct's).
     let root = div()
         .flex()
         .items_center()
@@ -285,7 +284,6 @@ pub fn render(
         .border_1()
         .border_color(t.colors.border)
         .bg(t.colors.surface)
-        .child(div().flex_none().child(v.logo))
         .child(
             div()
                 .flex_1()

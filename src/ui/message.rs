@@ -1585,14 +1585,10 @@ fn agent_header(
         .text_color(t.colors.text_muted)
         .cursor_pointer()
         .hover(move |s| s.text_color(strong))
-        // At work, KodAct's cube turns; stuck, a warning; else how it ended.
+        // At work, the running icon (KodAct's mark is the working line's
+        // alone); stuck, a warning; else how it ended.
         .child(div().flex_none().child(if stalled {
             icon("icons/triangle-alert.svg", t.size.icon_sm, t.extra.warning).into_any_element()
-        } else if call.status == ToolStatus::Running {
-            super::turning_logo_in(
-                f32::from(t.size.icon_sm),
-                SharedString::from(format!("agent-turn-{}-{}-{b}", cx.chat, cx.index)),
-            )
         } else {
             status_icon(call.status, t)
         }))

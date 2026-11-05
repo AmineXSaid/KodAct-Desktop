@@ -916,16 +916,6 @@ impl Render for Workspace {
                             .and_then(|c| s.agents.get(&c))
                             .map_or(&[][..], |r| r.as_slice()),
                         agents_open: &s.agents_open,
-                        // The logo turns while an agent runs or the reply is still going.
-                        logo: if s.busy()
-                            || s.current
-                                .and_then(|c| s.agents.get(&c))
-                                .is_some_and(|r| r.iter().any(|run| run.ended.is_none()))
-                        {
-                            super::turning_logo(32., "agents-logo")
-                        } else {
-                            super::logo(32.).into_any_element()
-                        },
                         working: s.busy(),
                         copied: s.copied.clone(),
                         width: fit.width,
@@ -2047,7 +2037,7 @@ fn share_out(
     (p, d)
 }
 
-/// The greeting, in the display serif, after KodAct's mark: an editorial
+/// The greeting after KodAct's symbol, the screen's one mark: an editorial
 /// line, not a banner.
 fn greeting_line(line: &str, t: &crate::theme::Theme) -> impl IntoElement {
     div()
@@ -2062,7 +2052,7 @@ fn greeting_line(line: &str, t: &crate::theme::Theme) -> impl IntoElement {
             div()
                 .flex_none()
                 .mt(px(3.))
-                .child(super::logo(f32::from(t.size.mark_home))),
+                .child(super::mark::symbol(f32::from(t.size.mark_home))),
         )
         .child(
             div()

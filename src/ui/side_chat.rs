@@ -226,7 +226,8 @@ impl Render for SideChat {
             ));
         }
 
-        let send_bg = t.extra.accent;
+        // Send as the composer's: the mark's tile, opposite the ground.
+        let send = super::mark::Colors::of(&t);
         let input_row = div()
             .flex()
             .items_center()
@@ -255,14 +256,10 @@ impl Render for SideChat {
                     .items_center()
                     .justify_center()
                     .rounded(t.radius.button)
-                    .bg(send_bg)
+                    .bg(send.tile)
                     .cursor_pointer()
                     .hover(|st| st.opacity(0.9))
-                    .child(icon(
-                        "kodact/run.svg",
-                        t.size.icon_sm,
-                        t.extra.accent_fg,
-                    ))
+                    .child(icon("kodact/run.svg", t.size.icon_sm, send.ink))
                     .tooltip(|window, cx| {
                         gpui::component::tooltip::Tooltip::new("Send side question")
                             .build(window, cx)

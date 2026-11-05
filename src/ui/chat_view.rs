@@ -900,9 +900,10 @@ fn working_line(
         .gap(t.space.tight)
         .h(px(24.))
         .mt(px(4.))
-        // KodAct's mark at work, as on agent rows; the words say what kind
-        // of step it is, a lime shimmer sweeping through them.
-        .child(super::turning_logo_in(
+        // KodAct's mark at work, its one animated place (the symbol, no
+        // tile); the words say what kind of step it is, a lime shimmer
+        // sweeping through them.
+        .child(super::mark::working(
             f32::from(t.size.icon),
             SharedString::from(format!("working-mark-{activity:?}")),
         ))

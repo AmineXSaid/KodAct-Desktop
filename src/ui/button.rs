@@ -431,26 +431,27 @@ pub fn send_button(
                 })
                 .on_click(on_click)
         }
+        // Send is the mark's tile holding its run triangle, so it takes the
+        // opposite of the ground as the mark does: a lime tile on ink, an
+        // ink tile with a lime triangle on paper.
         SendState::Ready => {
-            let p = Variant::Accent.paint(t);
-            let hover = p.hover_bg;
+            let c = super::mark::Colors::of(t);
             base.aria_label("Send")
-                .bg(p.bg)
+                .bg(c.tile)
                 .cursor_pointer()
-                .hover(move |s| s.bg(hover))
-                .active(|s| s.opacity(0.85))
+                .hover(|s| s.opacity(0.88))
+                .active(|s| s.opacity(0.8))
                 // The mark's run triangle: KodAct acts.
-                .child(icon("kodact/run.svg", t.size.icon, p.fg))
+                .child(icon("kodact/run.svg", t.size.icon, c.ink))
                 .on_click(on_click)
         }
-        SendState::Empty => base
-            .aria_label("Send (write something first)")
-            .bg(t.extra.accent_soft)
-            .child(icon(
-                "kodact/run.svg",
-                t.size.icon,
-                t.extra.accent_fg.opacity(if t.is_dark { 0.4 } else { 0.9 }),
-            )),
+        // Nothing to send: the tile faint, the triangle in it fainter.
+        SendState::Empty => {
+            let c = super::mark::Colors::of(t);
+            base.aria_label("Send (write something first)")
+                .bg(c.tile.opacity(0.12))
+                .child(icon("kodact/run.svg", t.size.icon, c.tile.opacity(0.45)))
+        }
     }
 }
 

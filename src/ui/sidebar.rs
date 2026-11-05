@@ -1236,14 +1236,33 @@ pub fn rail(t: &crate::theme::Theme, screen: Screen) -> impl IntoElement {
         )
 }
 
-/// A chat's status, in a fixed slot at its row's end: KodAct's mark at
-/// work while it works, a breathing accent dot when it needs you, a
+/// A chat's status, in a fixed slot at its row's end: a quiet turning ring
+/// while it works (the mark is the working line's alone, and lime here is
+/// for what needs you), a breathing accent dot when it needs you, a
 /// warning when it ended on an error, the link colour's dot when a reply is
 /// unread, a faint ring at rest.
 pub fn status_mark(status: ChatStatus, id: usize, t: &crate::theme::Theme) -> gpui::AnyElement {
     let dot = || div().size(px(7.)).rounded(t.radius.pill);
     let inner: gpui::AnyElement = match status {
-        ChatStatus::Working => super::mark::working(12., ("chat-working", id)),
+        ChatStatus::Working => {
+            let ring = icon(
+                "icons/loader-circle.svg",
+                t.size.icon_xs,
+                t.colors.text_muted,
+            );
+            if super::motion::reduced_motion() {
+                ring.into_any_element()
+            } else {
+                ring.with_animation(
+                    ("chat-working", id),
+                    Animation::new(Duration::from_millis(900)).repeat(),
+                    |svg, d| {
+                        svg.with_transformation(gpui::Transformation::rotate(gpui::percentage(d)))
+                    },
+                )
+                .into_any_element()
+            }
+        }
         ChatStatus::NeedsYou => dot()
             .bg(t.extra.live)
             .with_animation(

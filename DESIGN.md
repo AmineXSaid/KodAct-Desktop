@@ -110,10 +110,10 @@ Corners from the tokens above; one radius per role. No coloured edge over 1px on
 
 ## Components
 
-- **Activity** (tool calls, runs of calls, thinking, answers): quiet lines in the muted ink, 26px high, no icons for what worked; opened, steps indent under a 2px neutral rule. While KodAct works: the mark at work, and the step's words shimmering up to lime.
+- **Activity** (tool calls, runs of calls, thinking, answers): quiet lines in the muted ink, 26px high, no icons for what worked; opened, steps indent under a 2px neutral rule. While KodAct works: the symbol at work on the working line (its one animated place), and the step's words shimmering up to lime; any other running step takes the running icon.
 - **Your message:** a filled bubble without a frame.
 - **Cards that need you** (permission, question): a lifted card; the primary action a lime pill under ink, the rest quiet.
-- **The mark:** the lime tile with its ink cursor bar and run triangle; beside it in the title bar, "Kod" in the strong ink and "Act" in lime; in About and the opener, the pixel wordmark.
+- **The mark:** the cursor bar and run triangle, opposite the ground (lime on ink, ink on paper), one per screen: the symbol at home and on the working line; the tile (at least 16px) in About, onboarding and the opener, with the pixel wordmark. The title bar carries the name as type, "Kod" quiet and "Act" in the brand line. Its lime only touches ink.
 - **Menus and popovers:** one style (radius, padding, row height, shadow) from the tokens.
 
 ## Do's and Don'ts

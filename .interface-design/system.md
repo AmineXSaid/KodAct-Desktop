@@ -8,11 +8,11 @@
 
 **Personality:** KodAct, as KodAct CLI draws it: a precise, quick working tool for long agent sessions, calm because nothing performs, sure because state is never in doubt. One brand from terminal to window.
 
-**Foundation:** ink, paper and lime (KodAct CLI's `tui/palette.rs`). Ink at night, the default: the title bar and sidebar #0f1113, the session #15181b, cards #1c2024; paper text in two voices (yours #f2f0e9, KodAct's a softer #d9d7cf). Paper by day: #e9e8e2, #f6f5f1, cards #fdfdfb, ink text. Lime #c6ff3d is KodAct acting and what needs you: as a fill (Send, the primary button, the mark's tile; #b5ea2c by day) it carries ink; as a line or a word (what is live, links, a switch that is on) it is olive #4a7200 on paper. Teal and violet carry structure (modes, skills, memory, code), peach marks code in prose; green, red and amber only mean done, failed and a warning.
+**Foundation:** ink, paper and lime (KodAct CLI's `tui/palette.rs`). Ink at night, the default: the title bar and sidebar #0f1113, the session #15181b, cards #1c2024; paper text in two voices (yours #f2f0e9, KodAct's a softer #d9d7cf). Paper by day: #e9e8e2, #f6f5f1, cards #fdfdfb, ink text. Lime #c6ff3d is KodAct acting and what needs you: as a fill (the primary button; Send and the mark's tile on ink; #b5ea2c by day) it carries ink; as a line or a word (what is live, links, a switch that is on) it is olive #4a7200 on paper. Teal and violet carry structure (modes, skills, memory, code), peach marks code in prose; green, red and amber only mean done, failed and a warning.
 
 **Depth:** nearly flat. Hairlines inside cards; the session and the user's message lift on paper grain (three 1px shadows at 6/4/1% ink); popovers and the permission card a touch more.
 
-**Shape:** two shapes, and the mark's. Everything you press is a pill (buttons, chips, icon buttons); everything that holds content is 4px (cards, rows, menus, fields, the composer, the session); Send and the mark are tiles, squares with their corners rounded a sixth, on a grid of square pixels where they are large.
+**Shape:** two shapes, and the mark's. Everything you press is a pill (buttons, chips, icon buttons); everything that holds content is 4px (cards, rows, menus, fields, the composer, the session); Send and the mark are tiles, squares with their corners rounded a sixth, each the opposite of its ground: lime on ink, ink on paper, never a shadow.
 
 **Type:** KodAct's own open faces, carried in the app (OFL, `assets/fonts/`): KodAct Sans (KodAct's cut of Host Grotesk) for every word, 400 for text, 500 for labels, 600 for headings and buttons, its squared terminals kin to the pixel letters; KodAct Mono (its cut of JetBrains Mono, without the arrow ligatures) for code, paths and keys. Named KodAct's own, so a copy installed on the computer is never drawn in their place. The wordmark is not a font: it is the CLI's pixel letters, "Kod" in the strong ink and "Act" in lime. Small labels in sentence case, never uppercase and never above a heading; diagrams are redrawn in KodAct Sans whatever they name.
 
@@ -69,7 +69,7 @@ Lucide, 2px stroke as drawn. Sizes: 12 / 14 / 16 / 20 only.
 - `button_sm`: 28px, a compact button, a selector
 - `switch_w`: 36px, a switch's track (20px tall, 14px thumb)
 - `rail`: 52px, the collapsed sidebar
-- `mark_home`: 48px, the mark beside the home greeting
+- `mark_home`: 34px, the symbol beside the home greeting
 
 ### Surfaces
 The ink stack (paper by day): the title bar and the sidebar share the deepest ground, the session steps up from it, cards step up again (`palette_check.rs`).
@@ -129,11 +129,9 @@ Contrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of w
 | `accent` | `#b5ea2c` | 13.2:1 | `#c6ff3d` | 15.9:1 | the brand as a fill: Send, the primary button, the new-chat mark (ink on it) |
 | `fill` | `#b5ea2c` | 13.2:1 | `#c6ff3d` | 15.9:1 | filled buttons: KodAct's lime tile under ink, in both modes |
 | `toggle_on` | `#4a7200` | 5.6:1 | `#c6ff3d` | 13.9:1 | a switch that is on |
-| `mark_top` | `#b5ea2c` | 1.3:1 | `#c6ff3d` | 15.1:1 | the mark's tile (`ui/mark.rs`) |
+| `mark_top` | `#101214` | 17.2:1 | `#c6ff3d` | 15.1:1 | the mark's tile and the symbol alone, opposite the ground (`ui/mark.rs`) |
 | `page_ink` | `#4a7200` | 5.7:1 | `#4a7200` | 5.7:1 | marks drawn on a design page, on their halo (`ui/design_marks.rs`) |
-| `mark_left` | `#101214` | 13.2:1 | `#101214` | 15.9:1 | the ink of the mark's cursor bar and run triangle, on its tile |
-| `mark_right` | `#4a7200` | 5.2:1 | `#3d5f00` | 2.4:1 | the mark's shadow, one pixel down and right: its edge on paper |
-| `brand_shadow` | `#b5ea2c` | 1.3:1 | `#3d5a10` | 2.3:1 | the pixel wordmark's shadow: dark olive on ink, the tile's lime on paper |
+| `mark_left` | `#c6ff3d` | 15.9:1 | `#101214` | 15.9:1 | the mark's cursor bar and run triangle inside its tile |
 | `live` | `#4a7200` | 5.6:1 | `#c6ff3d` | 13.9:1 | what is live: dots that need you, the shimmer's peak; lime on ink, olive on paper |
 | `fill_danger` | `#b8392e` | 5.6:1 | `#ff7a6b` | 7.4:1 | destructive confirms |
 | `success` | `#2a6f3e` | 6.0:1 | `#7ccf8f` | 8.7:1 | done, passed |
@@ -159,7 +157,7 @@ One family; every control takes keyboard focus (a `primary` edge shows for the k
 - Secondary and Outlined: `surface`, 1px `border_strong`, `hover` wash.
 - Ghost: clear until hovered. Danger: `fill_danger`, white.
 - Icon: 34px square, radius 4px, a 16px icon in `text_muted`; outlined squares 38px at 9999px radius.
-- Send: 38px, the mark's tile (corners a sixth of it, beside 9999px pills), `accent` under the ink run triangle; `accent_soft` with nothing to send; Stop: an ink square on a soft tile.
+- Send: 38px, the mark's tile (corners a sixth of it, beside 9999px pills), `mark_top` under the `mark_left` run triangle (lime under ink at night, ink under lime by day); faint with nothing to send; Stop: an ink square on a soft tile.
 - Switch: 36x20px pill, 14px thumb sliding over 160ms; `toggle_on` when on, `border_strong` when off.
 - Segmented: a `sunk` track, radius 4px; the chosen segment raised onto `surface` at 9999px.
 
@@ -205,9 +203,10 @@ One family; every control takes keyboard focus (a `primary` edge shows for the k
 | Decision | Rationale | Date |
 |----------|-----------|------|
 | KodAct CLI's identity | Forge became KodAct, and the desktop takes the CLI's own identity in place of Forge's forge-and-ember world: ink, paper and lime (`tui/palette.rs`), the cursor-and-run tile and the pixel wordmark (`tui/brand.rs`). Lime fills carry ink; where lime would be a line or a word on paper it is olive. | 2026-11-05 |
-| Dark first | KodAct is mostly seen in a dark terminal, and lime is at full strength on ink. Light stays whole, with the CLI's olive and a lime shadow under the wordmark (where the CLI's sage went flat). | 2026-11-05 |
+| Dark first | KodAct is mostly seen in a dark terminal, and lime is at full strength on ink. Light stays whole, with the CLI's olive, and the mark in ink with no shadow (lime would have no edge on paper). | 2026-11-05 |
 | KodAct Sans and KodAct Mono, carried | KodAct's own open faces replace Anthropic Sans, which was Anthropic's and not ours to ship: cuts of Host Grotesk for words and JetBrains Mono for code (without its arrow ligatures), named KodAct's so an installed copy never stands in. | 2026-11-05 |
-| The mark at work | One working mark everywhere (the hammer, the turning ingot and the VS Code cube are gone): the tile's cursor bar and run triangle take turns, code then act. Send is the run triangle; the working words shimmer up to lime, as in the CLI. | 2026-11-05 |
+| The mark at work | One working mark (the hammer, the turning ingot and the VS Code cube are gone): the cursor bar and run triangle take turns, code then act. Send is the run triangle; the working words shimmer up to lime, as in the CLI. | 2026-11-05 |
+| One mark per screen, opposite its ground | The tile had become a status icon (title bar, sidebar rows, agent rows, work groups, the agents header): up to seven on a screen, brighter than the reply on ink and 1.16 to 1.30:1 on paper behind a hard olive shadow. Now the symbol is at home and at work on the working line only; anything else that runs takes the running icon; the title bar carries the name as type; the mark and Send take the opposite of the ground, and the app icon is the ink tile (`design/kodact-identity.html`). | 2026-11-05 |
 | An opener under a second | The forging film (2.6s each launch, 8.3s the first) is replaced by the mark's beat and the name sliding out beside it, then a fade: 0.9s, on the theme's own ground, skippable. | 2026-11-05 |
 | One colour, moss, not terracotta | The reference rations one warm orange to the primary action; KodAct keeps the rationing and takes the reference's own moss, calmer on cream and kin to the mark. | 2026-10-18 |
 | Dusty blue, not moss | Moss read as too green beside the cream; a dusty blue from the Slate theme's family, warmed for cream, keeps the same rationing and contrast (5.4:1 on the session). | 2026-10-19 |

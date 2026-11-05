@@ -57,9 +57,14 @@ instructions, knowledge and memory.
 ## Brand Commitments
 
 - One brand with KodAct CLI: its identity is the desktop's (ink, paper and
-  lime from the CLI's `tui/palette.rs`; the lime tile with a cursor bar and
-  a run triangle; the name in the CLI's pixel letters, "Kod" in ink or
+  lime from the CLI's `tui/palette.rs`; the cursor bar and run triangle,
+  alone or in a tile; the name in the CLI's pixel letters, "Kod" in ink or
   paper and "Act" in lime). A change to one is a change to both.
+- The mark takes the opposite of its ground and needs no shadow: lime on
+  ink, ink on paper; the app icon is the ink tile with a lime symbol. Its
+  lime only touches ink. One mark per screen: the symbol at home and at work
+  on the working line; anything else that runs takes the running icon; the
+  title bar carries the name as type. (`design/kodact-identity.html`)
 - Nothing borrowed from Claude's look or type: no cream and terracotta, no
   Anthropic Sans. Calm and restraint are still the bar, judged on KodAct's
   own terms.

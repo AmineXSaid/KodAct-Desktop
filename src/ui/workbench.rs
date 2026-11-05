@@ -177,8 +177,6 @@ pub struct View<'a> {
     /// The chat's sub-agents, and the cards opened.
     pub agents: &'a [crate::state::AgentRun],
     pub agents_open: &'a std::collections::HashSet<String>,
-    /// KodAct's mark, for the top of the agents' tree.
-    pub logo: AnyElement,
     /// The chat's turn is still going.
     pub working: bool,
     pub copied: Option<SharedString>,
@@ -508,7 +506,6 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
                     Message::User { text, .. } => Some(text.clone()),
                     _ => None,
                 }),
-                logo: v.logo,
                 working: v.working,
             },
             state.clone(),
