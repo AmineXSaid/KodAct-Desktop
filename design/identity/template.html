@@ -1,0 +1,647 @@
+<title>KodAct Identity System</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+@font-face{font-family:"KodAct Sans";font-weight:400;src:url(data:font/ttf;base64,{{F_REG}}) format("truetype")}
+@font-face{font-family:"KodAct Sans";font-weight:500;src:url(data:font/ttf;base64,{{F_MED}}) format("truetype")}
+@font-face{font-family:"KodAct Sans";font-weight:600;src:url(data:font/ttf;base64,{{F_SEMI}}) format("truetype")}
+@font-face{font-family:"KodAct Mono";font-weight:400;src:url(data:font/ttf;base64,{{F_MONO}}) format("truetype")}
+
+/* KodAct's tokens (src/theme.rs), light and dark */
+:root{
+  --ink-0:#0f1113; --ink-1:#15181b; --ink-2:#1c2024; --ink-3:#121417;
+  --paper-0:#e9e8e2; --paper-1:#f6f5f1; --paper-2:#fdfdfb; --paper-3:#eeede8;
+  --lime:#c6ff3d; --lime-day:#b5ea2c; --olive:#4a7200;
+  --t-strong-d:#fbf9f3; --t-d:#f2f0e9; --t-body-d:#d9d7cf; --t-muted-d:#a9adb2; --t-subtle-d:#868b92;
+  --t-strong-l:#08090b; --t-l:#101214; --t-body-l:#2b2e33; --t-muted-l:#55595e; --t-subtle-l:#63676d;
+  --border-d:rgba(226,230,233,.12); --border-l:rgba(16,18,20,.13);
+  --teal-d:#5fd8c4; --violet-d:#b4a2ff; --peach-d:#ffb98f; --danger-d:#ff7a6b;
+  --teal-l:#0e7568; --violet-l:#5a44c0; --peach-l:#a4461c; --danger-l:#b8392e;
+
+  /* page roles: light */
+  --bg:var(--paper-1); --surface:var(--paper-2); --sunk:var(--paper-0);
+  --text:var(--t-l); --body:var(--t-body-l); --muted:var(--t-muted-l); --subtle:var(--t-subtle-l);
+  --line:var(--border-l); --brand-line:var(--olive); --good:#2a6f3e; --bad:var(--danger-l);
+  --sp-xs:4px; --sp-sm:8px; --sp-md:12px; --sp-lg:16px; --sp-xl:24px; --sp-xxl:32px;
+  --r:4px; --pill:9999px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:var(--ink-1); --surface:var(--ink-2); --sunk:var(--ink-0);
+    --text:var(--t-d); --body:var(--t-body-d); --muted:var(--t-muted-d); --subtle:var(--t-subtle-d);
+    --line:var(--border-d); --brand-line:var(--lime); --good:#7ccf8f; --bad:var(--danger-d);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:var(--ink-1); --surface:var(--ink-2); --sunk:var(--ink-0);
+  --text:var(--t-d); --body:var(--t-body-d); --muted:var(--t-muted-d); --subtle:var(--t-subtle-d);
+  --line:var(--border-d); --brand-line:var(--lime); --good:#7ccf8f; --bad:var(--danger-d);
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box;margin:0}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--body);font:400 15px/1.533 "KodAct Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+::selection{background:var(--lime);color:var(--t-l)}
+a{color:var(--brand-line);text-underline-offset:3px}
+code,.mono{font-family:"KodAct Mono",ui-monospace,monospace;font-size:.88em}
+:focus-visible{outline:2px solid var(--brand-line);outline-offset:2px}
+
+.wrap{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header.top{padding:56px 0 40px;border-bottom:1px solid var(--line)}
+header.top .lock{display:flex;align-items:center;gap:14px;margin-bottom:28px}
+h1{font:600 44px/1.08 "KodAct Sans";color:var(--text);letter-spacing:-.02em;max-width:18ch;text-wrap:balance}
+h2{font:600 28px/1.15 "KodAct Sans";color:var(--text);letter-spacing:-.01em;margin:0 0 var(--sp-md)}
+h3{font:600 17px/1.3 "KodAct Sans";color:var(--text);margin:0 0 var(--sp-sm)}
+p.lead{font-size:18px;line-height:1.5;max-width:64ch;margin-top:var(--sp-lg);color:var(--body)}
+p{max-width:68ch}
+section{padding:64px 0;border-bottom:1px solid var(--line)}
+section > .wrap > p{margin-bottom:var(--sp-xl)}
+.note{color:var(--muted);font-size:13px}
+.grid{display:grid;gap:var(--sp-lg)}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:900px){.g3,.g4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:620px){.g2,.g3,.g4{grid-template-columns:1fr} h1{font-size:34px}}
+
+/* swatches of ground */
+.on-ink{background:var(--ink-1);color:var(--t-body-d)}
+.on-ink0{background:var(--ink-0);color:var(--t-body-d)}
+.on-paper{background:var(--paper-1);color:var(--t-body-l)}
+.on-paper0{background:var(--paper-0);color:var(--t-body-l)}
+.on-lime{background:var(--lime);color:var(--t-l)}
+.plate{border-radius:var(--r);border:1px solid var(--line);min-height:200px;display:flex;flex-direction:column;justify-content:space-between;padding:var(--sp-lg);overflow:hidden}
+.plate .art{flex:1;display:flex;align-items:center;justify-content:center;padding:var(--sp-xl) 0}
+.plate .cap{font-size:13px;line-height:1.4}
+.plate .cap b{font-weight:600;display:block;font-size:14px}
+.on-ink .cap b,.on-ink0 .cap b{color:var(--t-d)} .on-paper .cap b,.on-paper0 .cap b{color:var(--t-l)}
+.on-ink .cap span,.on-ink0 .cap span{color:var(--t-muted-d)} .on-paper .cap span,.on-paper0 .cap span{color:var(--t-muted-l)}
+
+/* findings */
+.finding{display:grid;grid-template-columns:72px 1fr;gap:var(--sp-lg);padding:var(--sp-lg) 0;border-top:1px solid var(--line)}
+.finding:first-of-type{border-top:0}
+.sev{font:600 13px/1 "KodAct Mono";color:var(--text);padding-top:5px}
+.sev.p0{color:var(--bad)}
+.finding h3{margin-bottom:4px}
+.finding p{color:var(--body)}
+.finding .fix{margin-top:6px;color:var(--muted);font-size:14px}
+.finding .fix b{color:var(--text);font-weight:600}
+
+.shots{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--sp-lg);margin:var(--sp-xl) 0}
+@media (max-width:760px){.shots{grid-template-columns:1fr}}
+figure img{width:100%;height:auto;display:block;border-radius:var(--r);border:1px solid var(--line)}
+figcaption{font-size:13px;color:var(--muted);margin-top:var(--sp-sm)}
+
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:10px 12px;border-top:1px solid var(--line);vertical-align:top}
+th{font-weight:600;color:var(--text);border-top:0;font-size:13px}
+td:first-child{color:var(--text);font-weight:500;white-space:nowrap}
+td .gone{color:var(--bad)} td .keep{color:var(--good)}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+
+/* pairing matrix */
+.pair{border-radius:var(--r);border:1px solid var(--line);padding:var(--sp-lg);display:flex;flex-direction:column;gap:var(--sp-md);min-height:170px}
+.pair .art{flex:1;display:flex;align-items:center;justify-content:center;gap:18px}
+.verdict{font-size:13px;display:flex;gap:6px;align-items:baseline;line-height:1.35}
+.verdict i{font-style:normal;font-weight:600}
+.ok i{color:#2a6f3e} .on-ink .ok i,.on-ink0 .ok i{color:#7ccf8f}
+.no i{color:#b8392e} .on-ink .no i,.on-ink0 .no i{color:#ff7a6b}
+
+/* the mark */
+svg.k{display:block}
+.k-bar,.k-run{fill:currentColor}
+.spec{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:var(--sp-xl);align-items:center}
+@media (max-width:760px){.spec{grid-template-columns:1fr}}
+.sizes{display:flex;align-items:flex-end;gap:22px;flex-wrap:wrap}
+.sizes div{display:flex;flex-direction:column;align-items:center;gap:8px;font:400 12px "KodAct Mono";color:var(--muted)}
+
+/* working beat */
+@keyframes bar{0%,100%{opacity:1}50%{opacity:.28}}
+@keyframes run{0%,100%{opacity:.28}50%{opacity:1}}
+.beat .k-bar{animation:bar 1.4s cubic-bezier(.45,0,.55,1) infinite}
+.beat .k-run{animation:run 1.4s cubic-bezier(.45,0,.55,1) infinite}
+@keyframes sweep{from{background-position:120% 0}to{background-position:-20% 0}}
+.shimmer{background:linear-gradient(90deg,var(--sh-a) 0%,var(--sh-a) 40%,var(--sh-b) 50%,var(--sh-a) 60%,var(--sh-a) 100%);background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:sweep 2.2s linear infinite}
+@media (prefers-reduced-motion:reduce){.beat .k-bar,.beat .k-run,.shimmer,.spin{animation:none}.shimmer{color:var(--sh-a)}}
+
+/* ============ mockup: window chrome ============ */
+.mock{border-radius:8px;overflow:hidden;border:1px solid var(--line);box-shadow:0 18px 50px -20px rgba(0,0,0,.45);margin-top:var(--sp-xl)}
+.mockscroll{overflow-x:auto;border-radius:8px}
+.win{width:1120px;height:700px;display:grid;grid-template-rows:36px 1fr;font-size:13px}
+.win .bar{display:flex;align-items:center;gap:12px;padding:0 0 0 12px}
+.win .body{display:grid;grid-template-columns:260px 1fr;min-height:0}
+.win .side{padding:10px 8px;display:flex;flex-direction:column;gap:2px;min-height:0}
+.win .main{display:flex;flex-direction:column;min-height:0}
+.ctrls{margin-left:auto;display:flex;height:36px}
+.ctrls span{width:46px;display:flex;align-items:center;justify-content:center}
+.ctrls svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:1}
+.wm{font:600 13px/1 "KodAct Sans";letter-spacing:-.005em}
+.ico{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ico14{width:14px;height:14px}
+.row{height:30px;display:flex;align-items:center;gap:8px;padding:0 8px;border-radius:var(--r);white-space:nowrap;overflow:hidden}
+.row .t{flex:1;overflow:hidden;text-overflow:ellipsis}
+.slot{width:14px;height:14px;display:flex;align-items:center;justify-content:center;flex:none}
+.dot{width:7px;height:7px;border-radius:9999px}
+.ring{width:7px;height:7px;border-radius:9999px;border:1px solid currentColor;opacity:.35}
+@keyframes rot{to{transform:rotate(360deg)}}
+.spin{animation:rot .9s linear infinite;transform-origin:50% 50%}
+.grouphead{padding:14px 8px 4px;font-size:12px}
+.col{width:680px;margin:0 auto}
+.transcript{flex:1;overflow:hidden;padding:28px 0 0}
+.you{margin-left:auto;max-width:520px;padding:10px 16px;border-radius:var(--r);font-size:15px;line-height:23px;width:fit-content}
+.reply{font-size:15px;line-height:23px;margin-top:20px}
+.reply p+p{margin-top:12px}
+.quiet{height:26px;display:flex;align-items:center;gap:8px;font-size:13px}
+.quiet .chev{width:12px;height:12px}
+.ic{font-family:"KodAct Mono";font-size:13px;padding:1px 5px;border-radius:3px}
+.composer{margin:12px auto 18px;width:680px;border-radius:var(--r);padding:12px 12px 10px 16px}
+.composer .ph{font-size:15px;line-height:23px;min-height:46px}
+.composer .tools{display:flex;align-items:center;gap:6px;font-size:12px}
+.chip{height:26px;padding:0 10px;border-radius:9999px;display:inline-flex;align-items:center;gap:6px}
+.send{width:30px;height:30px;border-radius:var(--r);display:flex;align-items:center;justify-content:center;margin-left:auto;flex:none}
+.kbd{font-family:"KodAct Mono";font-size:11px;padding:1px 5px;border-radius:3px}
+
+/* dark window */
+.win.dark{background:var(--ink-1);color:var(--t-body-d)}
+.dark .bar,.dark .side{background:var(--ink-0)}
+.dark .bar{color:var(--t-muted-d);border-bottom:1px solid var(--border-d)}
+.dark .side{border-right:1px solid var(--border-d)}
+.dark .row{color:var(--t-body-d)} .dark .row.sel{background:var(--ink-1);color:var(--t-strong-d)}
+.dark .row .sub{color:var(--t-subtle-d)}
+.dark .grouphead{color:var(--t-subtle-d)}
+.dark .you{background:var(--ink-2);color:var(--t-strong-d)}
+.dark .reply{color:var(--t-body-d)}
+.dark .quiet{color:var(--t-muted-d)}
+.dark .ic{background:rgba(255,185,143,.1);color:var(--peach-d)}
+.dark .composer{background:var(--ink-2);box-shadow:0 1px 0 rgba(255,255,255,.04) inset,0 8px 24px -12px rgba(0,0,0,.6);border:1px solid var(--border-d)}
+.dark .composer .ph{color:var(--t-subtle-d)}
+.dark .chip{color:var(--t-muted-d);background:rgba(255,255,255,.04)}
+.dark .kbd{background:rgba(255,255,255,.06);color:var(--t-muted-d)}
+.dark{--sh-a:var(--t-muted-d);--sh-b:var(--lime)}
+
+/* light window */
+.win.light{background:var(--paper-1);color:var(--t-body-l)}
+.light .bar,.light .side{background:var(--paper-0)}
+.light .bar{color:var(--t-muted-l);border-bottom:1px solid var(--border-l)}
+.light .side{border-right:1px solid var(--border-l)}
+.light .row{color:var(--t-body-l)} .light .row.sel{background:var(--paper-1);color:var(--t-strong-l)}
+.light .row .sub{color:var(--t-subtle-l)}
+.light .grouphead{color:var(--t-subtle-l)}
+.light .composer{background:var(--paper-2);border:1px solid var(--border-l);box-shadow:0 8px 24px -14px rgba(16,18,20,.25)}
+.light .composer .ph{color:var(--t-subtle-l)}
+.light .chip{color:var(--t-muted-l);background:rgba(16,18,20,.045)}
+.light .kbd{background:rgba(16,18,20,.06);color:var(--t-muted-l)}
+.home{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;padding-bottom:40px}
+.home h4{font:600 30px/1.15 "KodAct Sans";letter-spacing:-.015em;margin:18px 0 8px}
+.home .sub{font-size:15px}
+.starters{display:flex;gap:8px;margin-top:14px;width:680px}
+.starter{flex:1;border-radius:var(--r);padding:12px 14px;font-size:13px;line-height:1.4}
+.light .starter{background:var(--paper-2);border:1px solid var(--border-l);color:var(--t-body-l)}
+.light .starter b{display:block;font-weight:600;color:var(--t-strong-l);margin-bottom:2px}
+
+/* touchpoints */
+.tp{border-radius:var(--r);border:1px solid var(--line);overflow:hidden;display:flex;flex-direction:column}
+.tp .stage{flex:1;display:flex;align-items:center;justify-content:center;padding:28px 18px;min-height:220px}
+.tp .lbl{padding:12px 16px;font-size:13px;border-top:1px solid var(--line);background:var(--surface);color:var(--muted)}
+.tp .lbl b{color:var(--text);font-weight:600;display:block;font-size:14px}
+.taskbar{width:100%;height:48px;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:6px}
+.tb-i{width:40px;height:40px;border-radius:4px;display:flex;align-items:center;justify-content:center;position:relative}
+.tb-i.on::after{background:#0067c0;content:"";position:absolute;bottom:2px;left:50%;width:16px;height:3px;border-radius:2px;transform:translateX(-50%)}
+.tb-g{width:22px;height:22px;border-radius:5px;opacity:.85}
+.term{width:100%;border-radius:6px;background:#0f1113;padding:16px 18px;font:400 12.5px/1.6 "KodAct Mono";color:#d9d7cf;border:1px solid rgba(226,230,233,.1)}
+.term .m{color:#868b92}
+.term .l{color:#c6ff3d}
+.about{width:300px;border-radius:6px;padding:28px 24px 20px;display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
+.tab{display:flex;align-items:center;gap:8px;height:34px;padding:0 12px;border-radius:8px 8px 0 0;font-size:12.5px;width:220px}
+.dont{position:relative}
+.dont .x{position:absolute;inset:0;pointer-events:none}
+footer{padding:40px 0 64px;color:var(--muted);font-size:13px}
+.legend{display:flex;gap:var(--sp-lg);flex-wrap:wrap;font-size:13px;color:var(--muted);margin-top:var(--sp-md)}
+.pin{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:9999px;background:var(--lime);color:#101214;font:600 11px/1 "KodAct Sans";vertical-align:middle}
+.anno{position:relative}
+.anno .pin{position:absolute;box-shadow:0 0 0 2px #101214}
+</style>
+
+<!-- the mark, drawn once: the CLI's geometry (ui/mark.rs vector_tile_svg) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- the glyph alone: cursor bar + run triangle, optically centred box -->
+    <symbol id="glyph" viewBox="10 14 44 36">
+      <rect class="k-bar" x="12.8" y="15.36" width="7.68" height="33.28"/>
+      <path class="k-run" d="M26.88 15.36L51.2 32L26.88 48.64Z"/>
+    </symbol>
+    <symbol id="tile-shape" viewBox="0 0 64 64">
+      <path d="M10.67 0H53.33A10.67 10.67 0 0 1 64 10.67V53.33A10.67 10.67 0 0 1 53.33 64H10.67A10.67 10.67 0 0 1 0 53.33V10.67A10.67 10.67 0 0 1 10.67 0Z"/>
+    </symbol>
+    <symbol id="pxkod" viewBox="0 0 26 10"><path d="{{KOD}}"/></symbol>
+    <symbol id="pxact" viewBox="27 0 25 10"><path d="{{ACT}}"/></symbol>
+  </defs>
+</svg>
+
+<header class="top">
+  <div class="wrap">
+    <div class="lock">
+      {{TILE_INK_40}}
+      <span style="font:600 22px/1 'KodAct Sans';color:var(--text);letter-spacing:-.01em">Kod<span style="color:var(--brand-line)">Act</span></span>
+    </div>
+    <h1>One mark, used once, on the right ground</h1>
+    <p class="lead">A critique of how the desktop app uses the KodAct mark now, and an identity system that fixes it: one symbol with a short set of lockups, a rule for which ground each one sits on, a map of where it shows in the product, and three mockups.</p>
+  </div>
+</header>
+
+<!-- ======================= CRITIQUE ======================= -->
+<section id="critique">
+  <div class="wrap">
+    <h2>What's wrong now</h2>
+    <p>Native GPUI app, so this is a design review only (the web detector doesn't apply). Screenshots are from the app at <code>a5723c4</code> on Xvfb in demo mode, light and dark. Sources: <code>ui/mark.rs</code> and every place that calls it.</p>
+
+    {{SHOTS}}
+
+    <div class="finding">
+      <div class="sev p0">P0</div>
+      <div>
+        <h3>The mark is a status icon, so it shows up everywhere</h3>
+        <p>The lime tile is drawn in the title bar, the home screen, the agents view header (32 px), every sidebar row for a chat that's working (12 px), every running sub-agent row, the live step of a work group, and the working line under the reply. In the demo session the screenshot shows two at once (title bar and working line). Each chat working in the background and each running sub-agent adds one more, animated: with two background chats and three sub-agents, that's <b>seven tiles, six of them moving</b>. A mark that's everywhere stops being a mark; it turns into wallpaper and competes with the reply.</p>
+        <p class="fix"><b>Fix:</b> one mark per screen. The brand appears at home and in the working line; everywhere else a running thing gets the ordinary running icon.</p>
+      </div>
+    </div>
+    <div class="finding">
+      <div class="sev p0">P0</div>
+      <div>
+        <h3>In dark, the mark outshouts the reply</h3>
+        <p>Lime <code>#c6ff3d</code> has a relative luminance of 0.84, while the reply's body ink <code>#d9d7cf</code> has 0.68. A filled square of the brightest colour in the palette is louder than any line of text. That breaks product principle 1, "the reply is the hero". Each extra tile in the sidebar and agent rows pulls the eye away from the words.</p>
+        <p class="fix"><b>Fix:</b> on ink, inside the product, draw the <b>glyph</b> (bar and triangle) in lime without the tile. It weighs about a third as much and still reads as KodAct.</p>
+      </div>
+    </div>
+    <div class="finding">
+      <div class="sev p0">P0</div>
+      <div>
+        <h3>On paper, the tile has no edge</h3>
+        <p>Lime tile <code>#b5ea2c</code> against the light canvas is <b>1.30:1</b>, against the sidebar <b>1.16:1</b>, and against a white Windows taskbar <b>1.18:1</b>. The tile only shows up because of a hard 1 px olive offset shadow (<code>mark_right</code>), which is a zero-blur block shadow: the craft floor rules it out as a costume, and here it's patching an edge the colour doesn't have. The light-mode pixel wordmark is worse: its shadow is lime on paper (<code>brand_shadow</code> = <code>#b5ea2c</code>).</p>
+        <p class="fix"><b>Fix:</b> the tile always takes the opposite of its ground: <b>an ink tile on paper, a lime tile on ink</b>. No shadows in the desktop app.</p>
+      </div>
+    </div>
+    <div class="finding">
+      <div class="sev">P1</div>
+      <div>
+        <h3>At 12–14 px the tile is a lime blob</h3>
+        <p>At 12 px (sidebar rows) the cursor bar is 1.4 px wide and the triangle about 4 px: you can't make out either, so what's left is a bright square. At 14 px (work group, agent rows) it's barely better. The CLI's 16-pixel grid needs at least 16 px to read.</p>
+        <p class="fix"><b>Fix:</b> never draw the tile below 16 px. Below that, draw nothing brand-related; use the status icon.</p>
+      </div>
+    </div>
+    <div class="finding">
+      <div class="sev">P1</div>
+      <div>
+        <h3>The mark means three different things</h3>
+        <p>The same lime tile means "this app" in the title bar, "working" in the sidebar, and "a sub-agent" in a work group. The send button is a lime tile with the same run triangle, so the user's own action looks like the agent's status. Lime also already means "needs you" (the breathing dot).</p>
+        <p class="fix"><b>Fix:</b> assign meanings. The <b>tile</b> is the product (icon, About, onboarding). The <b>glyph at work</b> is KodAct acting, in one place: the working line. <b>Send</b> is a run triangle in a fill, with no cursor bar. Running elsewhere uses the neutral arc.</p>
+      </div>
+    </div>
+    <div class="finding">
+      <div class="sev">P2</div>
+      <div>
+        <h3>On the pixel grid, the run triangle becomes a D</h3>
+        <p>From 40 px up (<code>PIXEL_FROM</code>), the tile is drawn on the CLI's 16-pixel grid. Six columns can't hold a diagonal, so the triangle stair-steps into a rounded "D", and the mark loses the run-forward shape it's named for. In a terminal, half blocks force that grid. A desktop app can draw the real geometry.</p>
+        <p class="fix"><b>Fix:</b> draw the tile from its vector geometry at every size in the desktop app. Keep the pixels for the wordmark, where square letters are the material.</p>
+      </div>
+    </div>
+    <div class="finding">
+      <div class="sev">P2</div>
+      <div>
+        <h3>The title bar repeats what the OS already shows</h3>
+        <p>The Windows taskbar and Alt-Tab already show the app icon. Adding a tile beside the sidebar toggle makes a second brand mark on every screen, before the user has read anything. Claude Desktop, the product users compare this with every day, puts no mark in its chrome.</p>
+        <p class="fix"><b>Fix:</b> the title bar carries the name as type, "KodAct" in 13 px semibold, muted, with "Act" in the brand line. No tile.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= SYSTEM ======================= -->
+<section id="system">
+  <div class="wrap">
+    <h2>The identity: one symbol, a few lockups</h2>
+    <p>Claude's identity works because one shape, the spark, covers everything: it's the app icon in a tile, the symbol alone in the product, the lockup on the site, and it animates in exactly one place, while the model is writing. KodAct already has a shape that good: the <b>cursor bar and the run triangle</b>, "code, then act". The system keeps it and gives each use its own form.</p>
+
+    <div class="grid g4" style="margin-top:var(--sp-xl)">
+      <div class="plate on-ink">
+        <div class="art">{{GLYPH_LIME_56}}</div>
+        <div class="cap"><b>Symbol</b><span>The glyph alone. Lime on ink, ink on paper. The form used inside the product.</span></div>
+      </div>
+      <div class="plate on-paper">
+        <div class="art">{{TILE_INK_64}}</div>
+        <div class="cap"><b>Ink tile</b><span>The app icon. Lime glyph in an ink tile, which reads on any OS background.</span></div>
+      </div>
+      <div class="plate on-ink0">
+        <div class="art">{{TILE_LIME_64}}</div>
+        <div class="cap"><b>Lime tile</b><span>The CLI's tile, unchanged. Only on ink: the CLI front page, About in dark, marketing.</span></div>
+      </div>
+      <div class="plate on-ink">
+        <div class="art"><svg width="156" height="30" viewBox="0 0 52 10" aria-label="KodAct"><use href="#pxkod" x="0" y="0" width="26" height="10" fill="#fbf9f3"/><use href="#pxact" x="27" y="0" width="25" height="10" fill="#c6ff3d"/></svg></div>
+        <div class="cap"><b>Pixel wordmark</b><span>The CLI's letters, without the drop shadow. Brand moments only, 24 px tall or more.</span></div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:48px">Lockups</h3>
+    <div class="grid g3">
+      <div class="plate on-paper">
+        <div class="art">{{LOCK_H_PAPER}}</div>
+        <div class="cap"><b>Horizontal: ink tile and type</b><span>Website header, README, installer. Gap = half the tile.</span></div>
+      </div>
+      <div class="plate on-ink">
+        <div class="art">{{LOCK_H_INK}}</div>
+        <div class="cap"><b>Horizontal: lime tile and type</b><span>The same lockup on ink. "Act" takes the brand colour: olive on paper, lime on ink.</span></div>
+      </div>
+      <div class="plate on-ink0">
+        <div class="art">{{LOCK_STACK}}</div>
+        <div class="cap"><b>Stacked: tile over pixel wordmark</b><span>About, splash, onboarding. The only place both appear together.</span></div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:48px">Which ground takes which mark</h3>
+    <p class="note" style="margin-bottom:var(--sp-md)">The rule fits on one line: <b>the tile is the opposite of its ground, and the mark's lime only ever touches ink.</b></p>
+    <div class="grid g4">
+      <div class="pair on-paper">
+        <div class="art">{{TILE_INK_40}}{{GLYPH_INK_32}}</div>
+        <div class="verdict ok"><i>Use</i> Ink tile or ink glyph on paper. 17:1.</div>
+      </div>
+      <div class="pair on-ink">
+        <div class="art">{{TILE_LIME_40}}{{GLYPH_LIME_32}}</div>
+        <div class="verdict ok"><i>Use</i> Lime tile or lime glyph on ink. 15:1.</div>
+      </div>
+      <div class="pair on-paper dont">
+        <div class="art">{{TILE_LIME_40_SHADOW}}</div>
+        <div class="verdict no"><i>Don't</i> Lime tile on paper. 1.3:1, and only the hard shadow gives it an edge.</div>
+      </div>
+      <div class="pair on-ink dont">
+        <div class="art">{{TILE_INK_40_ONINK}}</div>
+        <div class="verdict no"><i>Don't</i> Ink tile on ink inside the product; the edge disappears. (The app icon has its own keyline.)</div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:48px">Size and clear space</h3>
+    <div class="spec">
+      <div class="sizes plate on-paper" style="min-height:0;flex-direction:row;justify-content:flex-start;padding:24px">
+        <div>{{TILE_INK_16}}16 · min tile</div>
+        <div>{{TILE_INK_24}}24</div>
+        <div>{{TILE_INK_32}}32</div>
+        <div>{{TILE_INK_48}}48</div>
+        <div>{{GLYPH_INK_14}}12–14 · glyph</div>
+      </div>
+      <div>
+        <p>The tile needs <b>at least 16 px</b>; below that, use the glyph (down to 12 px) or nothing. The desktop draws the tile from its geometry at every size: on the CLI's 16-pixel grid the triangle steps into a D (see the finding above), so the pixels stay with the wordmark. Clear space around any lockup is twice the cursor bar's width. Nothing else goes inside that space: no badge, no count, no dot.</p>
+      </div>
+    </div>
+
+    <h3 style="margin-top:48px">Motion: the glyph at work</h3>
+    <div class="grid g2">
+      <div class="plate on-ink" style="min-height:150px">
+        <div class="art" style="gap:10px;justify-content:flex-start;padding-left:8px">
+          <svg class="k beat" width="16" height="14" style="color:#c6ff3d"><use href="#glyph"/></svg>
+          <span class="shimmer" style="font:500 13px 'KodAct Sans';--sh-a:#a9adb2;--sh-b:#c6ff3d">Editing src/ui/sidebar.rs</span>
+        </div>
+        <div class="cap"><b>Dark: lime glyph, no tile</b><span>The bar and the triangle take turns, 1.4 s a beat. One per chat, under the reply.</span></div>
+      </div>
+      <div class="plate on-paper" style="min-height:150px">
+        <div class="art" style="gap:10px;justify-content:flex-start;padding-left:8px">
+          <svg class="k beat" width="16" height="14" style="color:#101214"><use href="#glyph"/></svg>
+          <span class="shimmer" style="font:500 13px 'KodAct Sans';--sh-a:#55595e;--sh-b:#4a7200">Editing src/ui/sidebar.rs</span>
+        </div>
+        <div class="cap"><b>Light: ink glyph, the shimmer peaks in olive</b><span>Same beat. With reduced motion, the glyph holds still and the words don't shimmer.</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= PLACEMENT ======================= -->
+<section id="placement">
+  <div class="wrap">
+    <h2>Where it shows in the product</h2>
+    <p>Every current call to <code>ui/mark.rs</code>, and what replaces it.</p>
+    <div class="tablewrap">
+    <table>
+      <tr><th>Place</th><th>Now</th><th>Proposed</th></tr>
+      <tr><td>Title bar</td><td>14 px tile and "KodAct" (<code>workspace.rs:464</code>)</td><td>"KodAct" as type, muted, "Act" in the brand line. <span class="gone">No tile.</span></td></tr>
+      <tr><td>Home / empty chat</td><td>Lime tile at <code>mark_home</code> (<code>workspace.rs:2065</code>)</td><td><span class="keep">The one brand moment.</span> Glyph at 32 px: lime on ink, ink on paper.</td></tr>
+      <tr><td>Working line</td><td>Animated tile, 16 px (<code>chat_view.rs:905</code>)</td><td><span class="keep">The signature.</span> Animated glyph, no tile.</td></tr>
+      <tr><td>Sidebar, chat working</td><td>Animated tile, 12 px (<code>sidebar.rs:1246</code>)</td><td>Neutral arc spinner in muted ink. <span class="gone">No mark.</span></td></tr>
+      <tr><td>Work group, live agent step</td><td>Animated tile, 14 px (<code>work_group.rs:265</code>)</td><td>The running status icon (<code>tasks::status_icon</code>), as other steps use.</td></tr>
+      <tr><td>Agent tool row, running</td><td>Animated tile, 14 px (<code>message.rs:1592</code>)</td><td>The running status icon. <span class="gone">No mark.</span></td></tr>
+      <tr><td>Agents view header</td><td>32 px tile, animated while busy (<code>workspace.rs:925</code>)</td><td><span class="gone">Removed.</span> The header is the chat's title.</td></tr>
+      <tr><td>Send</td><td>Lime tile, run triangle</td><td>Run triangle in the fill: lime on ink; on paper, an ink tile with a lime triangle.</td></tr>
+      <tr><td>About, onboarding, opener</td><td>Pixel tile and pixel wordmark with an olive shadow</td><td>Stacked lockup, no shadow: lime tile on ink, ink tile on paper.</td></tr>
+      <tr><td>App icon, taskbar, installer</td><td>Lime tile (<code>kodact.ico</code>)</td><td>Ink tile, lime glyph, 1 px keyline for dark taskbars.</td></tr>
+    </table>
+    </div>
+    <p class="note" style="margin-top:var(--sp-md)">Result: in a working session, the mark appears once (the working line) instead of up to seven times.</p>
+  </div>
+</section>
+
+<!-- ======================= MOCKUPS ======================= -->
+<section id="m1">
+  <div class="wrap">
+    <h2>Mockup 1: a working session, dark</h2>
+    <p>The same chat as the screenshot above, with the system applied. The title bar shows the name as type. The working line draws the glyph alone, with no tile, and it's the one brand mark on screen. A chat working in the background shows a quiet arc in the sidebar, and the lime dot is left to mean "needs you". While KodAct works, Send is Stop, so no other run triangle competes with the glyph.</p>
+    <div class="mockscroll"><div class="mock" style="width:max-content">
+      <div class="win dark">
+        <div class="bar">
+          <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+          <span class="wm" style="color:#a9adb2">Kod<span style="color:#c6ff3d">Act</span></span>
+          <span style="margin-left:168px;display:flex;gap:14px;color:#868b92"><svg class="ico" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg><svg class="ico" viewBox="0 0 24 24" style="opacity:.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>
+          <span style="margin-left:auto;display:flex;align-items:center;gap:6px;color:#a9adb2;font-size:12.5px">
+            <svg class="spin" width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" fill="none" stroke="#a9adb2" stroke-opacity=".25" stroke-width="1.5"/><path d="M6 1.5a4.5 4.5 0 0 1 4.5 4.5" fill="none" stroke="#a9adb2" stroke-width="1.5" stroke-linecap="round"/></svg>2 running
+            <span class="chip" style="height:24px;margin-left:8px;color:#f2f0e9"><span class="dot" style="background:#c6ff3d"></span>1 needs you</span>
+          </span>
+          <span class="ctrls" style="margin-left:12px;color:#a9adb2"><span><svg viewBox="0 0 10 10"><path d="M0 5h10"/></svg></span><span><svg viewBox="0 0 10 10"><rect x=".5" y=".5" width="9" height="9"/></svg></span><span><svg viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10"/></svg></span></span>
+        </div>
+        <div class="body">
+          <div class="side">
+            <div style="display:flex;gap:2px;padding:3px;border-radius:4px;border:1px solid rgba(226,230,233,.12);margin-bottom:6px">
+              <span class="row" style="flex:1;justify-content:center;height:26px;color:#a9adb2">Chats</span>
+              <span class="row sel" style="flex:1;justify-content:center;height:26px;background:#1c2024">Code</span>
+            </div>
+            <div class="row" style="border:1px solid rgba(226,230,233,.12);margin-bottom:6px"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="t" style="color:#a9adb2">Search</span><span class="kbd">Ctrl K</span></div>
+            <div class="row"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg><span class="t">New</span></div>
+            <div class="row"><svg class="ico" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="t">Projects</span></div>
+            <div class="row"><svg class="ico" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg><span class="t">Documents</span></div>
+            <div class="row"><svg class="ico" viewBox="0 0 24 24"><path d="M4 6h10M4 12h16M4 18h7"/></svg><span class="t">Customize</span></div>
+            <div class="grouphead" style="padding-top:18px">Recents</div>
+            <div class="row sel"><span class="t">Add a greeting function and test it</span></div>
+            <div class="row"><span class="t">Port the terminal dock to WSL</span><span class="slot"><svg class="spin" width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" fill="none" stroke="#a9adb2" stroke-opacity=".25" stroke-width="1.5"/><path d="M6 1.5a4.5 4.5 0 0 1 4.5 4.5" fill="none" stroke="#a9adb2" stroke-width="1.5" stroke-linecap="round"/></svg></span></div>
+            <div class="row"><span class="t">Explain this project</span><span class="slot"><span class="dot" style="background:#c6ff3d"></span></span></div>
+            <div class="row"><span class="t">Palette check, light surfaces</span><span class="slot"><span class="ring" style="color:#a9adb2"></span></span></div>
+          </div>
+          <div class="main">
+            <div style="height:34px;display:flex;align-items:center;padding:0 16px;border-bottom:1px solid rgba(226,230,233,.12);color:#f2f0e9;font-weight:600;font-size:13.5px">Add a greeting function and test it <svg class="ico ico14" viewBox="0 0 24 24" style="margin-left:6px;color:#a9adb2"><path d="m6 9 6 6 6-6"/></svg></div>
+            <div class="transcript"><div class="col">
+              <div class="you">Add a greeting function and test it</div>
+              <div class="reply">
+                <div class="quiet" style="margin-bottom:6px">Thought for 1s <svg class="ico chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></div>
+                <p>Let me look at how the greeting is wired before changing anything.</p>
+                <div class="quiet" style="margin-top:8px"><svg class="ico chev" viewBox="0 0 24 24" style="color:#7ccf8f"><path d="M20 6 9 17l-5-5"/></svg>Read <span style="color:#d9d7cf;font-weight:500">main.rs</span></div>
+                <div class="quiet"><svg class="spin" width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" fill="none" stroke="#a9adb2" stroke-opacity=".25" stroke-width="1.5"/><path d="M6 1.5a4.5 4.5 0 0 1 4.5 4.5" fill="none" stroke="#a9adb2" stroke-width="1.5" stroke-linecap="round"/></svg>Editing <span style="color:#d9d7cf;font-weight:500">greet.rs</span></div>
+                <div class="quiet" style="margin-top:14px;height:24px;gap:8px">
+                  <svg class="k beat" width="16" height="14" style="color:#c6ff3d"><use href="#glyph"/></svg>
+                  <span class="shimmer" style="font-weight:500">Working</span>
+                  <span style="color:#868b92">4s · ~212 tokens</span>
+                </div>
+              </div>
+            </div></div>
+            <div class="composer" style="padding:8px 8px 8px 14px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <svg class="ico" viewBox="0 0 24 24" style="color:#a9adb2"><path d="M12 5v14M5 12h14"/></svg>
+                <span style="flex:1;font-size:14.5px;color:#868b92">Add to the task, or steer KodAct…</span>
+                <span class="send" style="background:#2a3036;color:#f2f0e9;margin:0" title="Stop"><svg width="10" height="10" viewBox="0 0 10 10"><rect width="10" height="10" rx="1.5" fill="currentColor"/></svg></span>
+              </div>
+            </div>
+            <div style="width:680px;margin:-10px auto 16px;display:flex;gap:14px;font-size:12.5px;color:#a9adb2"><span>Manual<svg class="ico" viewBox="0 0 24 24" style="width:12px;height:12px;vertical-align:-1px;margin-left:3px"><path d="m6 9 6 6 6-6"/></svg></span><span>forge-gpui<svg class="ico" viewBox="0 0 24 24" style="width:12px;height:12px;vertical-align:-1px;margin-left:3px"><path d="m6 9 6 6 6-6"/></svg></span><span style="margin-left:auto">glm-4.6 · local<svg class="ico" viewBox="0 0 24 24" style="width:12px;height:12px;vertical-align:-1px;margin-left:3px"><path d="m6 9 6 6 6-6"/></svg></span></div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <div class="legend"><span>Brand marks on screen: <b style="color:var(--text)">1</b> (the app now: 2, and one more per working chat or running sub-agent)</span><span>Running elsewhere: a neutral arc</span><span>Lime here means KodAct acting or needs you, nothing else</span></div>
+  </div>
+</section>
+
+<section id="m2">
+  <div class="wrap">
+    <h2>Mockup 2: home, light</h2>
+    <p>The home screen as it is, with the mark swapped. On paper the symbol is ink, with no tile and no shadow, and stands where the pixel tile was, beside "KodAct returns". It's the one brand moment on the screen. Send becomes an ink tile holding the lime run triangle, so the mark's lime touches ink even on a paper composer.</p>
+    <div class="mockscroll"><div class="mock" style="width:max-content">
+      <div class="win light">
+        <div class="bar">
+          <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+          <span class="wm" style="color:#55595e">Kod<span style="color:#4a7200">Act</span></span>
+          <span style="margin-left:168px;display:flex;gap:14px;color:#63676d;opacity:.6"><svg class="ico" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg><svg class="ico" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>
+          <span class="ctrls" style="color:#55595e"><span><svg viewBox="0 0 10 10"><path d="M0 5h10"/></svg></span><span><svg viewBox="0 0 10 10"><rect x=".5" y=".5" width="9" height="9"/></svg></span><span><svg viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10"/></svg></span></span>
+        </div>
+        <div class="body">
+          <div class="side">
+            <div style="display:flex;gap:2px;padding:3px;border-radius:4px;border:1px solid rgba(16,18,20,.13);margin-bottom:6px">
+              <span class="row sel" style="flex:1;justify-content:center;height:26px;background:#fdfdfb">Chats</span>
+              <span class="row" style="flex:1;justify-content:center;height:26px;color:#55595e">Code</span>
+            </div>
+            <div class="row" style="border:1px solid rgba(16,18,20,.13);margin-bottom:6px"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="t" style="color:#55595e">Search</span><span class="kbd">Ctrl K</span></div>
+            <div class="row"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg><span class="t">New</span></div>
+            <div class="row"><svg class="ico" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="t">Projects</span></div>
+            <div class="row"><svg class="ico" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg><span class="t">Documents</span></div>
+            <div class="row"><svg class="ico" viewBox="0 0 24 24"><path d="M4 6h10M4 12h16M4 18h7"/></svg><span class="t">Customize</span></div>
+            <div class="grouphead" style="padding-top:18px">Recents</div>
+            <div class="row"><span class="t">Port the terminal dock to WSL</span><span class="slot"><svg class="spin" width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" fill="none" stroke="#55595e" stroke-opacity=".25" stroke-width="1.5"/><path d="M6 1.5a4.5 4.5 0 0 1 4.5 4.5" fill="none" stroke="#55595e" stroke-width="1.5" stroke-linecap="round"/></svg></span></div>
+            <div class="row"><span class="t">Explain this project</span><span class="slot"><span class="dot" style="background:#4a7200"></span></span></div>
+            <div class="row"><span class="t">Palette check, light surfaces</span><span class="slot"><span class="ring" style="color:#55595e"></span></span></div>
+          </div>
+          <div class="main">
+            <div class="home">
+              <div style="display:flex;align-items:center;gap:14px">
+                <svg class="k" width="34" height="28" style="color:#101214" aria-label="KodAct"><use href="#glyph"/></svg>
+                <h4 style="color:#08090b;margin:0">KodAct returns</h4>
+              </div>
+              <div class="sub" style="color:#55595e;margin-top:10px;font-size:14px">Ask anything, or pick a folder below to work on code. KodAct asks before it changes anything.</div>
+              <div class="composer" style="margin:22px auto 0;padding:8px 8px 8px 14px">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <svg class="ico" viewBox="0 0 24 24" style="color:#55595e"><path d="M12 5v14M5 12h14"/></svg>
+                  <span style="flex:1;font-size:14.5px;color:#63676d">Ask KodAct anything</span>
+                  <span class="send" style="background:#101214;margin:0" title="Send"><svg width="18" height="18" viewBox="0 0 16 16"><path d="M5.2 3.2L13 8L5.2 12.8Z" fill="#c6ff3d"/></svg></span>
+                </div>
+              </div>
+              <div style="width:680px;margin:10px auto 0;display:flex;gap:16px;font-size:12.5px;color:#55595e"><span>Manual<svg class="ico" viewBox="0 0 24 24" style="width:12px;height:12px;vertical-align:-1px;margin-left:3px"><path d="m6 9 6 6 6-6"/></svg></span><span>Work in a folder<svg class="ico" viewBox="0 0 24 24" style="width:12px;height:12px;vertical-align:-1px;margin-left:3px"><path d="m6 9 6 6 6-6"/></svg></span><span style="margin-left:auto">Choose a model<svg class="ico" viewBox="0 0 24 24" style="width:12px;height:12px;vertical-align:-1px;margin-left:3px"><path d="m6 9 6 6 6-6"/></svg></span></div>
+              <div style="display:flex;gap:8px;margin-top:22px">
+                <span class="chip" style="border:1px solid rgba(16,18,20,.13);background:transparent;color:#2b2e33">Teach me something</span>
+                <span class="chip" style="border:1px solid rgba(16,18,20,.13);background:transparent;color:#2b2e33">Help me write</span>
+                <span class="chip" style="border:1px solid rgba(16,18,20,.13);background:transparent;color:#2b2e33">Explain some code</span>
+                <span class="chip" style="border:1px solid rgba(16,18,20,.13);background:transparent;color:#2b2e33">Make a plan</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <div class="legend"><span>Brand marks on screen: <b style="color:var(--text)">1</b>, the ink symbol (the app now: 2, both with the olive shadow)</span><span>No offset shadow anywhere</span><span>The mark's lime appears only on ink: Send</span></div>
+  </div>
+</section>
+
+<section id="m3">
+  <div class="wrap">
+    <h2>Mockup 3: outside the window</h2>
+    <p>The same symbol where the app meets the OS and the CLI. The ink tile is the icon because it has to hold up on light and dark taskbars. The lime tile stays with the CLI and anything set on ink.</p>
+    <div class="grid g3" style="margin-top:var(--sp-xl)">
+      <div class="tp">
+        <div class="stage" style="background:#f3f3f3;flex-direction:column;gap:18px">
+          <div class="taskbar" style="background:#eeeeee;box-shadow:0 -1px 0 rgba(0,0,0,.08)">
+            <div class="tb-i"><div class="tb-g" style="background:#0067c0"></div></div>
+            <div class="tb-i"><div class="tb-g" style="background:#f2b01e"></div></div>
+            <div class="tb-i on" style="background:rgba(0,0,0,.05)">{{ICON_24}}</div>
+            <div class="tb-i"><div class="tb-g" style="background:#2b7a3d"></div></div>
+          </div>
+          <div class="taskbar" style="background:#1f1f1f">
+            <div class="tb-i"><div class="tb-g" style="background:#4cc2ff"></div></div>
+            <div class="tb-i"><div class="tb-g" style="background:#f2b01e"></div></div>
+            <div class="tb-i on" style="background:rgba(255,255,255,.06)">{{ICON_24}}</div>
+            <div class="tb-i"><div class="tb-g" style="background:#5fb376"></div></div>
+          </div>
+        </div>
+        <div class="lbl"><b>Windows taskbar, light and dark</b>Ink tile, lime glyph, 1 px keyline. It reads on both; the lime tile would vanish on the light one (1.18:1).</div>
+      </div>
+      <div class="tp">
+        <div class="stage on-ink0">
+          <div class="about" style="background:#1c2024;border:1px solid rgba(226,230,233,.12);box-shadow:0 16px 40px -16px rgba(0,0,0,.7)">
+            {{TILE_LIME_56}}
+            <svg width="130" height="25" viewBox="0 0 52 10" aria-label="KodAct"><use href="#pxkod" x="0" y="0" width="26" height="10" fill="#fbf9f3"/><use href="#pxact" x="27" y="0" width="25" height="10" fill="#c6ff3d"/></svg>
+            <div style="font-size:13px;color:#a9adb2;line-height:1.5">Code, then act, on the model you choose.<br><span style="color:#868b92;font-family:'KodAct Mono';font-size:12px">Desktop 0.1.0</span></div>
+          </div>
+        </div>
+        <div class="lbl"><b>About, dark</b>The stacked lockup: lime tile on ink over the pixel wordmark, no drop shadow. The pixel letters appear only at moments like this.</div>
+      </div>
+      <div class="tp">
+        <div class="stage on-ink0" style="padding:18px">
+          <div class="term">
+            <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px">
+              {{TILE_LIME_28}}
+              <svg width="104" height="20" viewBox="0 0 52 10" aria-label="KodAct"><use href="#pxkod" x="0" y="0" width="26" height="10" fill="#fbf9f3"/><use href="#pxact" x="27" y="0" width="25" height="10" fill="#c6ff3d"/></svg>
+            </div>
+            <div class="m">~/projects/forge-gpui · glm-4.6 · local</div>
+            <div style="margin-top:8px"><span class="l">›</span> fix the failing palette check</div>
+            <div class="m" style="margin-top:6px">  Read src/palette_check.rs</div>
+            <div style="margin-top:2px"><svg class="k beat" width="11" height="9" style="color:#c6ff3d;display:inline-block;vertical-align:-1px"><use href="#glyph"/></svg> <span class="shimmer" style="--sh-a:#868b92;--sh-b:#c6ff3d">Editing theme.rs</span></div>
+          </div>
+        </div>
+        <div class="lbl"><b>KodAct CLI front page</b>Unchanged: lime tile and pixel name. The CLI's working glyph is the same one as in the desktop's working line.</div>
+      </div>
+      <div class="tp">
+        <div class="stage" style="background:#dee1e6;flex-direction:column;align-items:flex-start;justify-content:flex-end;padding:28px 18px 0">
+          <div class="tab" style="background:#fff;color:#1f1f1f">{{TILE_INK_16}}<span>KodAct · desktop agent</span><span style="margin-left:auto;color:#777">×</span></div>
+          <div style="background:#fff;width:100%;height:60px"></div>
+        </div>
+        <div class="lbl"><b>Favicon, 16 px</b>The ink tile at its minimum size. Below 16 px there is no tile.</div>
+      </div>
+      <div class="tp">
+        <div class="stage on-paper" style="padding:22px">
+          <div style="width:100%;border:1px solid rgba(16,18,20,.13);border-radius:6px;background:#fdfdfb;padding:22px;display:flex;flex-direction:column;gap:16px">
+            {{LOCK_H_PAPER_SM}}
+            <div style="font:600 20px/1.2 'KodAct Sans';color:#08090b;letter-spacing:-.01em">Install KodAct for Windows</div>
+            <div style="display:flex;gap:8px;align-items:center"><span style="height:32px;padding:0 16px;border-radius:9999px;background:#b5ea2c;color:#101214;font:600 13px/32px 'KodAct Sans'">Install</span><span style="font-size:13px;color:#55595e">Version 0.1.0 for Windows</span></div>
+          </div>
+        </div>
+        <div class="lbl"><b>Installer, light</b>Horizontal lockup with the ink tile. The lime primary button holds ink text; that's a fill, not the mark.</div>
+      </div>
+      <div class="tp">
+        <div class="stage on-ink0" style="padding:0">
+          <div style="width:100%;height:100%;min-height:220px;display:flex;flex-direction:column;justify-content:space-between;padding:22px;background:#0f1113">
+            <svg class="k" width="44" height="36" style="color:#c6ff3d"><use href="#glyph"/></svg>
+            <div>
+              <div style="font:600 24px/1.15 'KodAct Sans';color:#fbf9f3;letter-spacing:-.015em;max-width:15ch">Code, then <span style="color:#c6ff3d">act</span>, on the model you choose.</div>
+              <div style="margin-top:10px;font-size:13px;color:#a9adb2">github.com/AmineXSaid/KodAct</div>
+            </div>
+          </div>
+        </div>
+        <div class="lbl"><b>Social card and README banner</b>Lime glyph alone on ink, at large size. The sentence uses the same split as the name.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">Geometry from <code>src/ui/mark.rs</code> and colours from <code>src/theme.rs</code>; type is KodAct Sans and KodAct Mono (Host Grotesk and JetBrains Mono, OFL). Contrast ratios are WCAG 2.x relative luminance.</div>
+</footer>
