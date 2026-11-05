@@ -65,6 +65,10 @@ instructions, knowledge and memory.
   lime only touches ink. One mark per screen: the symbol at home and at work
   on the working line; anything else that runs takes the running icon; the
   title bar carries the name as type. (`design/kodact-identity.html`)
+- Two levels. Small and inside the app, that flat mark; large (the app icon
+  from 128px, About, the installer), the emblem: the bar and the triangle as
+  solids on a plinth, inked in paper and ink on the flat lime tile, keeping
+  its colours in both modes (`design/emblem/`, its brief in `BRIEF.md`).
 - Nothing borrowed from Claude's look or type: no cream and terracotta, no
   Anthropic Sans. Calm and restraint are still the bar, judged on KodAct's
   own terms.

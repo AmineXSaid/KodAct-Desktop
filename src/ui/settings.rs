@@ -2001,13 +2001,15 @@ impl Settings {
             .flex()
             .flex_col()
             .gap(px(14.))
-            // The lockup: the wordmark, its version beneath.
+            // The stacked lockup: the emblem over the pixel wordmark, its
+            // version beneath.
             .child(
                 div()
                     .flex()
                     .flex_col()
-                    .gap(t.space.sm)
-                    .child(super::mark::lockup(4., t))
+                    .gap(t.space.md)
+                    .child(super::mark::emblem(f32::from(t.size.emblem_about), t))
+                    .child(super::mark::pixel_wordmark(4., super::mark::word_colors(t)))
                     .child(
                         div()
                             .text_size(t.text.caption)

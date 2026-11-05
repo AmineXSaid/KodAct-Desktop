@@ -7,8 +7,12 @@ dark taskbars alike, and the lime tile would lose its edge on a light one
 (1.18:1 on white). A keyline a step lighter than the ink gives it an edge on
 a dark taskbar; the lime symbol carries it on any.
 
-Every size Windows asks for is drawn from the geometry on its own
-(supersampled, then reduced), so 16 and 24 px stay crisp.
+Two levels, as the brand has them: from 128px up the icon is the emblem
+(the bar and the triangle as engraved solids, `design/emblem/`), reduced
+from its 1024px render; below 128px (the taskbar, the title bar), where the
+engraving would average to a dim olive, the flat symbol, drawn from the
+geometry on its own (supersampled, then reduced), so 16 and 24 px stay
+crisp.
 
     python3 -I scripts/make_ico.py   # writes assets/kodact.ico (+ a preview PNG with --preview)
 """
@@ -20,6 +24,8 @@ from PIL import Image, ImageDraw
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / "assets/kodact.ico"
+EMBLEM = ROOT / "design/emblem/emblem-1024.png"  # node design/emblem/render.js
+EMBLEM_FROM = 128  # below this the hatching averages to a dim olive
 
 # 100/125/150/200% taskbar and title bar, Explorer views, Alt-Tab.
 SIZES = [16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 128, 256]
@@ -51,7 +57,11 @@ def vector_icon(size):
 
 
 def main():
-    images = [vector_icon(n) for n in SIZES]
+    emblem = Image.open(EMBLEM).convert("RGBA")
+    images = [
+        emblem.resize((n, n), Image.LANCZOS) if n >= EMBLEM_FROM else vector_icon(n)
+        for n in SIZES
+    ]
     big = images[-1]
     big.save(OUT, format="ICO", sizes=[(n, n) for n in SIZES], append_images=images[:-1])
     print(f"wrote {OUT.relative_to(ROOT)} ({len(SIZES)} sizes)")

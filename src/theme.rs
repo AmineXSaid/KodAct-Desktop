@@ -476,6 +476,12 @@ pub struct ExtraColors {
     // the ink one). The mark's lime only touches ink.
     pub mark_top: Hsla,
     pub mark_left: Hsla,
+    // The emblem (`ui/mark.rs`, `design/emblem/`), an inked illustration
+    // that keeps its colours in both modes: the flat lime tile, the forms
+    // in paper, and ink for every line, the shadow and the tile's keyline.
+    pub emblem_tile: Hsla,
+    pub emblem_paper: Hsla,
+    pub emblem_ink: Hsla,
     // Marks drawn on a design page (`ui/design_marks.rs`): the page is
     // usually light whatever the app's mode, so the ink is the look's
     // light-mode link in both modes, over a thin halo for dark pages.
@@ -558,6 +564,9 @@ impl ExtraColors {
                 page_ink: rgb(0x4a7200).into(),
                 page_halo: rgb(0xffffff).into(),
                 mark_left: rgb(0x101214).into(),
+                emblem_tile: rgb(0xc6ff3d).into(),
+                emblem_paper: rgb(0xfbf9f3).into(),
+                emblem_ink: rgb(0x101214).into(),
                 border_strong: rgb(0x3a4047).into(),
                 sunk: rgb(0x121417).into(),
                 toggle_on: rgb(0xc6ff3d).into(),
@@ -626,6 +635,9 @@ impl ExtraColors {
                 page_ink: rgb(0x4a7200).into(),
                 page_halo: rgb(0xffffff).into(),
                 mark_left: rgb(0xc6ff3d).into(),
+                emblem_tile: rgb(0xc6ff3d).into(),
+                emblem_paper: rgb(0xfbf9f3).into(),
+                emblem_ink: rgb(0x101214).into(),
                 border_strong: rgb(0xc5c8cb).into(),
                 sunk: rgb(0xeeede8).into(),
                 toggle_on: rgb(0x4a7200).into(),
@@ -877,6 +889,7 @@ pub struct Sizes {
     pub side_shade: Pixels, // 12: the sidebar's shadow across the session's left edge
     pub edge_fade: Pixels, // 40: the transcript fading out where the composer meets it
     pub home_heading: Pixels, // 36: the home screen's heading, KodAct Sans 600
+    pub emblem_about: Pixels, // 112: the emblem in About, over the pixel wordmark
     pub mark_home: Pixels, // 34: the symbol beside the home screen's greeting, as tall as its capitals and a bit
 }
 
@@ -960,6 +973,7 @@ impl Default for Sizes {
             side_shade: px(12.),
             edge_fade: px(40.),
             home_heading: px(36.),
+            emblem_about: px(112.),
             mark_home: px(34.),
         }
     }

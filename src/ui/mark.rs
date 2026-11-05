@@ -11,6 +11,11 @@
 //!   ground too: a lime tile on ink, an ink tile (a lime symbol) on paper.
 //!   Never below [`TILE_MIN`]; no shadow, the colours carry the edge. About,
 //!   onboarding, the opener.
+//! - [`emblem`]: the large level, the bar and the triangle as solids on a
+//!   plinth, inked in paper and ink on the flat lime tile (`design/emblem/`):
+//!   About, and the app icon from 128px up. It keeps its colours in both
+//!   modes, its keyline giving it an edge on paper. Never small: under
+//!   [`EMBLEM_MIN`] its hatching blurs, so smaller places take the tile.
 //! - [`wordmark`]: the name as type, "Kod" quiet and "Act" in the brand line:
 //!   the title bar's (the OS already shows the icon there).
 //! - [`pixel_wordmark`]: the name in the CLI's pixel letters, "Kod" in the
@@ -156,8 +161,17 @@ const SYMBOL_BOX: &str = "10 14 44 36";
 /// The symbol's height over its width.
 pub const SYMBOL_RATIO: f32 = 36. / 44.;
 
-/// The asset source's `kodact/…` paths: the wordmark's, the tile's and the
-/// symbol's layers.
+/// The smallest emblem: below it the engraving's hairlines blur together.
+pub const EMBLEM_MIN: f32 = 72.;
+
+/// The emblem's layers, drawn by `design/emblem/emblem.py`.
+const EMBLEM_TILE: &[u8] = include_bytes!("../../design/emblem/emblem-tile.svg");
+const EMBLEM_KEYLINE: &[u8] = include_bytes!("../../design/emblem/emblem-keyline.svg");
+const EMBLEM_PAPER: &[u8] = include_bytes!("../../design/emblem/emblem-paper.svg");
+const EMBLEM_LINES: &[u8] = include_bytes!("../../design/emblem/emblem-lines.svg");
+
+/// The asset source's `kodact/…` paths: the wordmark's, the tile's, the
+/// symbol's and the emblem's layers.
 pub(crate) fn svg_asset(path: &str) -> Option<Vec<u8>> {
     let tile = |part| svg_doc("0 0 64 64", &part_path(part), false);
     let symbol = |part| svg_doc(SYMBOL_BOX, &part_path(part), false);
@@ -169,6 +183,10 @@ pub(crate) fn svg_asset(path: &str) -> Option<Vec<u8>> {
         "tile-run.svg" => tile(Part::Run),
         "symbol-bar.svg" => symbol(Part::Bar),
         "symbol-run.svg" => symbol(Part::Run),
+        "emblem-tile.svg" => EMBLEM_TILE.to_vec(),
+        "emblem-keyline.svg" => EMBLEM_KEYLINE.to_vec(),
+        "emblem-paper.svg" => EMBLEM_PAPER.to_vec(),
+        "emblem-lines.svg" => EMBLEM_LINES.to_vec(),
         // The run triangle alone, centred (a touch right, as a triangle's
         // weight sits left): Send.
         "run.svg" => svg_doc("0 0 16 16", "M5.2 3.2L13 8L5.2 12.8Z", false),
@@ -307,6 +325,31 @@ pub fn working(size: f32, id: impl Into<ElementId>) -> AnyElement {
         .into_any_element()
 }
 
+/// The emblem, `size` px square (at least [`EMBLEM_MIN`]): the lime tile and
+/// its keyline, the forms in paper, the ink over them.
+pub fn emblem(size: f32, t: &Theme) -> AnyElement {
+    let x = &t.extra;
+    let size = size.max(EMBLEM_MIN);
+    let layer = |path: &'static str, color: Hsla| {
+        svg()
+            .path(path)
+            .absolute()
+            .top_0()
+            .left_0()
+            .size(px(size))
+            .text_color(color)
+    };
+    div()
+        .relative()
+        .flex_none()
+        .size(px(size))
+        .child(layer("kodact/emblem-tile.svg", x.emblem_tile))
+        .child(layer("kodact/emblem-keyline.svg", x.emblem_ink))
+        .child(layer("kodact/emblem-paper.svg", x.emblem_paper))
+        .child(layer("kodact/emblem-lines.svg", x.emblem_ink))
+        .into_any_element()
+}
+
 /// The name set as type, `size` px: "Kod" quiet, "Act" in the brand line.
 /// No tile: the title bar's, where the OS already shows the icon.
 pub fn wordmark(size: f32, t: &Theme) -> AnyElement {
@@ -362,18 +405,6 @@ pub fn lockup_tile(k: f32) -> f32 {
     (WORD_H as f32 * k * 1.2).round().max(TILE_MIN)
 }
 
-/// The tile and the pixel wordmark side by side, as the CLI's front page
-/// sets them, `k` px a pixel.
-pub fn lockup(k: f32, t: &Theme) -> AnyElement {
-    div()
-        .flex()
-        .items_center()
-        .gap(px(3. * k))
-        .child(tile(lockup_tile(k)))
-        .child(pixel_wordmark(k, word_colors(t)))
-        .into_any_element()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -401,6 +432,10 @@ mod tests {
             "symbol-bar",
             "symbol-run",
             "run",
+            "emblem-tile",
+            "emblem-keyline",
+            "emblem-paper",
+            "emblem-lines",
         ] {
             let svg = String::from_utf8(svg_asset(&format!("kodact/{p}.svg")).unwrap()).unwrap();
             assert!(
