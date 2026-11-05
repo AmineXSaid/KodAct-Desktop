@@ -772,7 +772,7 @@ fn run_list(
         runs.push(TextRun {
             len: shown.len(),
             font: f,
-            // Inline code (a file, a command) in Forge's coral on a rounded
+            // Inline code (a file, a command) in KodAct's coral on a rounded
             // chip (painted by `chips`): a name set apart at a glance.
             color: if s.link.is_some() {
                 t.colors.primary
@@ -1463,7 +1463,7 @@ fn header_button(
         .child(label)
 }
 
-/// Code in `lang`, coloured with Forge's code palette (comments italic).
+/// Code in `lang`, coloured with KodAct's code palette (comments italic).
 pub fn code_text(code: &str, lang: &str, t: &Theme) -> StyledText {
     use crate::highlight::{highlight, Kind};
     let k = &t.code;
@@ -1514,8 +1514,8 @@ mod tests {
 
     #[test]
     fn front_matter_reads_as_yaml_not_a_heading() {
-        let out = super::fence_front_matter("---\nname: Forge\ncolors: x\n---\n# Title\n");
-        assert_eq!(out, "```yaml\nname: Forge\ncolors: x\n```\n# Title\n");
+        let out = super::fence_front_matter("---\nname: KodAct\ncolors: x\n---\n# Title\n");
+        assert_eq!(out, "```yaml\nname: KodAct\ncolors: x\n```\n# Title\n");
         // A rule later on, or an unclosed block, stays as written.
         assert_eq!(super::fence_front_matter("Hi\n---\n"), "Hi\n---\n");
         assert_eq!(super::fence_front_matter("---\nno end"), "---\nno end");
@@ -1645,7 +1645,7 @@ mod tests {
             }
         );
         // Box drawing too, and a fenced drawing is left alone.
-        let boxed = "┌──────┐\n│ Forge │\n└──┬───┘\n   ▼";
+        let boxed = "┌──────┐\n│ KodAct │\n└──┬───┘\n   ▼";
         assert!(matches!(&parse(boxed)[0], Block::Code { lang, .. } if lang == "text"));
         let fenced = format!("```\n{art}\n```");
         assert_eq!(fence_ascii_art(&fenced), fenced);

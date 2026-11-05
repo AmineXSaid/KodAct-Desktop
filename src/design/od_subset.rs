@@ -9,7 +9,7 @@
 //! `# comments` stay in values, quotes are stripped without unescaping, only
 //! `|`, `|-`, `>` and `>-` start a block (and `>` does not fold), a bare
 //! `key:` is an empty map, and a few malformed shapes are an error (Open
-//! Design then drops the skill; Forge keeps the file and reports it).
+//! Design then drops the skill; KodAct keeps the file and reports it).
 
 use serde_json::{Map, Number, Value};
 

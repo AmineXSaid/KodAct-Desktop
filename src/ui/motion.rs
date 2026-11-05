@@ -1,14 +1,14 @@
 //! Motion settings shared by the animated pieces.
 
-/// Motion turned down: `FORGE_REDUCED_MOTION=1` shows still frames instead.
+/// Motion turned down: `KODACT_REDUCED_MOTION=1` shows still frames instead.
 pub fn reduced_motion() -> bool {
-    std::env::var("FORGE_REDUCED_MOTION").is_ok_and(|v| v == "1")
+    std::env::var("KODACT_REDUCED_MOTION").is_ok_and(|v| v == "1")
 }
 
-/// For looking at a transition frame by frame: `FORGE_SLOW_MOTION=8` plays
+/// For looking at a transition frame by frame: `KODACT_SLOW_MOTION=8` plays
 /// every one eight times slower.
 fn slowed() -> f32 {
-    std::env::var("FORGE_SLOW_MOTION")
+    std::env::var("KODACT_SLOW_MOTION")
         .ok()
         .and_then(|v| v.parse::<f32>().ok())
         .filter(|f| *f >= 1.)

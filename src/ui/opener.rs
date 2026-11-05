@@ -19,7 +19,7 @@
 //! Every frame is a pure function of the time since it started (`scene`),
 //! on a 1920 x 1080 stage scaled to fit the window, over all of it. It is drawn in the dark
 //! theme's colours in either theme, as a film is; the handoff fades it into
-//! whatever the window shows. `FORGE_OPENER_AT=<seconds>` holds it still at
+//! whatever the window shows. `KODACT_OPENER_AT=<seconds>` holds it still at
 //! one moment, for screenshots.
 
 use std::f32::consts::TAU;
@@ -428,7 +428,7 @@ fn scene(cut: Cut, t: f32, word: Word, hero: Place) -> Scene {
 pub struct Opener {
     cut: Cut,
     start: Instant,
-    /// `FORGE_OPENER_AT`: hold the film at this moment.
+    /// `KODACT_OPENER_AT`: hold the film at this moment.
     held: Option<f32>,
     focus: FocusHandle,
     palette: Palette,
@@ -448,7 +448,7 @@ impl Opener {
     }
 
     pub fn new(cut: Cut, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let held = std::env::var("FORGE_OPENER_AT")
+        let held = std::env::var("KODACT_OPENER_AT")
             .ok()
             .and_then(|v| v.parse::<f32>().ok());
         let focus = cx.focus_handle();
@@ -857,7 +857,7 @@ fn paint_layer(
             let mid = |y: f32, l: &gpui::ShapedLine| o.y + px(f.y(y)) + (l.ascent - l.descent) / 2.;
             let l = shape(chapter, &fonts.mono, fs, ink, window);
             paint_text(&l, o.x + px(f.x(mg + 30.)), mid(mg + 30., &l), window, cx);
-            let l = shape("FORGE", &fonts.mono, fs, ink, window);
+            let l = shape("KODACT", &fonts.mono, fs, ink, window);
             paint_text(
                 &l,
                 o.x + px(f.x(STAGE_W - mg - 30.)) - l.width,

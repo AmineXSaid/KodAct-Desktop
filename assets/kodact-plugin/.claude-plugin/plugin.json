@@ -1,0 +1,6 @@
+{
+  "name": "kodact",
+  "version": "0.1.0",
+  "description": "What KodAct desktop adds to every KodAct CLI session it starts: the Expert output style, and Diagram Design (44 diagram types, drawn in KodAct's own skin and shown natively in the app).",
+  "author": { "name": "KodAct" }
+}

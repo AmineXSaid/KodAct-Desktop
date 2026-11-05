@@ -1,12 +1,12 @@
 //! The Knowledge card on a project page's rail (`knowledge.rs`): the
 //! project's reference files, each Always (its text in every new chat) or
-//! On demand (read by Forge when it matters), with a meter of what Always
+//! On demand (read by KodAct when it matters), with a meter of what Always
 //! spends against its budget.
 //!
 //! Add files with the picker or by dropping them on the card; write a note
 //! in place; or add from GitHub: a repository's files and folders, picked
 //! from its tree, synced on demand (`github_knowledge.rs`). A click opens a file in the side panel; × takes it out (a copy
-//! Forge made is deleted, a file of the project's own stays).
+//! KodAct made is deleted, a file of the project's own stays).
 
 use gpui::component::input::{Input, InputState, TextareaState};
 use gpui::{
@@ -434,7 +434,7 @@ impl ProjectKnowledge {
                         .text_size(t.text.caption)
                         .text_color(t.colors.text_subtle)
                         .line_height(relative(1.4))
-                        .child("Forge copies the files you tick into this project, so every chat can read them; Sync brings them up to the branch's latest. Private repositories need gh signed in (gh auth login)."),
+                        .child("KodAct copies the files you tick into this project, so every chat can read them; Sync brings them up to the branch's latest. Private repositories need gh signed in (gh auth login)."),
                 )
             })
             // The tree rises in once GitHub has listed it.
@@ -566,12 +566,11 @@ impl Render for ProjectKnowledge {
             );
 
         // A repository's files show as the repository, below.
-        let github_dir = ".forge/knowledge/github/";
         let rows = k
             .items
             .iter()
             .enumerate()
-            .filter(|(_, i)| !i.rel.starts_with(github_dir))
+            .filter(|(_, i)| !crate::names::starts_in_project_dir(&i.rel, "knowledge/github/"))
             .map(|(i, item)| {
                 let name = item.rel.rsplit('/').next().unwrap_or(&item.rel).to_string();
                 let folder = item
@@ -644,7 +643,7 @@ impl Render for ProjectKnowledge {
                                         t.colors.text_subtle
                                     })
                                     .child(note.map(String::from).unwrap_or_else(|| {
-                                        if folder.is_empty() || folder == crate::knowledge::DIR {
+                                        if folder.is_empty() || crate::knowledge::is_dir(&folder) {
                                             detail.clone()
                                         } else {
                                             format!("{folder} · {detail}")
@@ -878,7 +877,7 @@ impl Render for ProjectKnowledge {
                         .text_color(t.extra.warning)
                         .line_height(relative(1.4))
                         .child(format!(
-                            "{over} Always file{} past the budget: Forge reads {} on demand instead.",
+                            "{over} Always file{} past the budget: KodAct reads {} on demand instead.",
                             if over == 1 { " is" } else { "s are" },
                             if over == 1 { "it" } else { "them" }
                         )),
@@ -895,7 +894,7 @@ impl Render for ProjectKnowledge {
                         .text_size(t.text.body_sm)
                         .text_color(t.colors.text_subtle)
                         .line_height(relative(1.4))
-                        .child("Drop specs, briefs or data here. Forge reads them when they matter; set the ones every chat needs to Always."),
+                        .child("Drop specs, briefs or data here. KodAct reads them when they matter; set the ones every chat needs to Always."),
                 )
             })
             .child(div().flex().flex_col().gap(px(2.)).children(rows).children(repo_rows))

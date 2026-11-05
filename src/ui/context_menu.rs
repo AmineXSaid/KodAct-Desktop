@@ -2,7 +2,7 @@
 //! how much of the model's window this conversation uses, what fills it
 //! (your messages, replies, tool output, thinking, files: a split of the
 //! reported total, counted from the text), how it grew turn by turn, and
-//! Compact, which has ForgeCLI summarize the conversation to free room.
+//! Compact, which has KodAct CLI summarize the conversation to free room.
 
 use gpui::{div, prelude::*, px, relative, AnyElement, Entity, FontWeight, SharedString};
 
@@ -223,7 +223,7 @@ pub fn render(
                     .pt(t.space.xs)
                     .border_t_1()
                     .border_color(t.colors.border)
-                    .child(div().flex_1().min_w_0().pt(t.space.sm).text_size(t.text.caption).text_color(t.colors.text_subtle).line_height(relative(1.4)).child("Compacting summarizes the conversation so far, so it takes far less room. Forge keeps what was decided."))
+                    .child(div().flex_1().min_w_0().pt(t.space.sm).text_size(t.text.caption).text_color(t.colors.text_subtle).line_height(relative(1.4)).child("Compacting summarizes the conversation so far, so it takes far less room. KodAct keeps what was decided."))
                     .child(
                         div()
                             .id("compact")

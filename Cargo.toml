@@ -1,8 +1,8 @@
 [package]
-name = "forge-gpui"
+name = "kodact-desktop"
 version = "0.1.0"
 edition = "2021"
-description = "Forge: a desktop chat shell for Claude Code, in GPUI (UI only, mock data)."
+description = "KodAct desktop: the desktop app for the KodAct CLI, in GPUI."
 license = "UNLICENSED"
 publish = false
 
@@ -30,7 +30,7 @@ webpki-roots = "=0.26.11"
 url = "=2.5.8"
 # The local hour, for the new-chat greeting.
 chrono = { version = "=0.4.45", default-features = false, features = ["clock"] }
-# Office files and PDFs Forge made, read for the side panel (office.rs):
+# Office files and PDFs KodAct made, read for the side panel (office.rs):
 # spreadsheets (calamine), Word and PowerPoint XML (zip, quick-xml), PDF text (lopdf).
 calamine = { version = "=0.36.1", default-features = false }
 # Attachments (stage.rs) also open archives with it: the pure-Rust codecs
@@ -46,7 +46,7 @@ hayro = "=0.8.0"
 # emulator (grid, scrollback, escape sequences). MIT and Apache-2.0.
 portable-pty = "=0.9.0"
 alacritty_terminal = "=0.26.0"
-# SHA-256 of the ForgeCLI uploaded to a remote, checked against the copy
+# SHA-256 of the KodAct CLI uploaded to a remote, checked against the copy
 # there. Already built for rustls; named here at the same pin. ISC-style.
 ring = { version = "=0.17.14", default-features = false }
 tungstenite = { version = "=0.30.0", default-features = false, features = ["handshake"] }
@@ -63,7 +63,7 @@ ruzstd = "=0.8.1"
 blake3 = { version = "=1.8.5", default-features = false, features = ["std", "pure"] }
 sevenz-rust2 = { version = "=0.24.0", default-features = false, features = ["bzip2", "deflate"] }
 image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
-# Events from each chat's ForgeCLI process to the UI (backend.rs).
+# Events from each chat's KodAct CLI process to the UI (backend.rs).
 async-channel = "=2.5.0"
 # The design library's SKILL.md and DESIGN.md front-matter is real YAML
 # (nested maps, block text, lists): src/design/frontmatter.rs. Pure Rust,
@@ -75,7 +75,7 @@ yaml-rust2 = { version = "=0.13.0", default-features = false }
 keyring = { version = "=3.6.3", default-features = false, features = ["windows-native"] }
 
 [build-dependencies]
-# The Windows .exe icon (build.rs): assets/forge.rc compiled in. MIT.
+# The Windows .exe icon (build.rs): assets/kodact.rc compiled in. MIT.
 embed-resource = "=3.0.12"
 
 [dev-dependencies]
@@ -89,6 +89,6 @@ opt-level = 0
 opt-level = 2
 
 # GPUI's Windows renderer, with its shaders compiled at runtime when the
-# build had no fxc.exe (a cross-compiled .exe). vendor/gpui-pre-windows/FORGE-CHANGES.md.
+# build had no fxc.exe (a cross-compiled .exe). vendor/gpui-pre-windows/KODACT-CHANGES.md.
 [patch.crates-io]
 gpui-pre-windows = { path = "vendor/gpui-pre-windows" }

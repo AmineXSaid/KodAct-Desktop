@@ -3,7 +3,7 @@ from PIL import Image
 im = Image.open(sys.argv[1]).convert("RGB")
 W, H = im.size
 px = im.load()
-# The filled Allow button: Forge blue, in the chat column.
+# The filled Allow button: KodAct blue, in the chat column.
 xs, ys = [], []
 for y in range(40, H - 120, 2):
     for x in range(250, 760, 2):

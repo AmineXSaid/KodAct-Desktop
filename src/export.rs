@@ -1,4 +1,4 @@
-//! A chat as a Markdown file: your messages, Forge's replies, its tool calls
+//! A chat as a Markdown file: your messages, KodAct's replies, its tool calls
 //! as short lines (a command with its output in a fenced block), and the
 //! notices. Written to Downloads by "Export as Markdown".
 
@@ -80,7 +80,7 @@ fn clip(text: &str) -> String {
 pub fn markdown(chat: &Chat, project: &str) -> String {
     let mut out = format!("# {}\n\n", chat.title);
     if !project.is_empty() {
-        out.push_str(&format!("_Exported from Forge · project {project}_\n\n"));
+        out.push_str(&format!("_Exported from KodAct · project {project}_\n\n"));
     }
     // A reply can span several messages; it gets one header.
     let mut in_reply = false;
@@ -94,7 +94,7 @@ pub fn markdown(chat: &Chat, project: &str) -> String {
             }
             Message::Assistant { blocks } => {
                 if !std::mem::replace(&mut in_reply, true) {
-                    out.push_str("## Forge\n\n");
+                    out.push_str("## KodAct\n\n");
                 }
                 for b in blocks {
                     block(&mut out, b);
@@ -271,7 +271,7 @@ mod tests {
         assert!(md.starts_with("# Fix the greeting: a test!\n"));
         assert!(md.contains("## You\n\nRun the tests"));
         // One header for a reply split over two messages.
-        assert_eq!(md.matches("## Forge").count(), 1, "{md}");
+        assert_eq!(md.matches("## KodAct").count(), 1, "{md}");
         assert!(md.contains("- **Ran** `cargo test`"));
         // Colour codes are dropped and the fence outlasts the backticks inside.
         assert!(md.contains("````text\nok ```\n````"), "{md}");

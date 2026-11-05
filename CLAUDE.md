@@ -1,8 +1,8 @@
-# forge-gpui — working rules
+# KodAct desktop — working rules
 
-The Forge desktop chat UI in Rust, on GPUI and gpui-component (through
-`gpui-kit`). Each chat's engine is a ForgeCLI process (`src/backend.rs`,
-`forge -p --input-format stream-json`); the starting chats are demo data in
+The KodAct desktop chat UI in Rust, on GPUI and gpui-component (through
+`gpui-kit`). Each chat's engine is a KodAct CLI process (`src/backend.rs`,
+`kodact -p --input-format stream-json`); the starting chats are demo data in
 `src/state.rs`, and features with no engine behind them yet show a toast.
 
 These rules apply everywhere. Rules for one part of the tree live in
@@ -39,6 +39,6 @@ views), `theme.md` (the tokens).
   screenshot and fix the high-priority items.
 - The quality bar is Impeccable (`.claude/skills/impeccable`): `PRODUCT.md` is
   the product record, `DESIGN.md` is generated with system.md. Read its
-  `reference/craft-floor.md` before a UI edit; Forge is an Operate surface
+  `reference/craft-floor.md` before a UI edit; KodAct is an Operate surface
   (`reference/operate.md`). Critiques are design reviews of screenshots,
   saved in `.impeccable/critique/` (its web detector does not apply here).

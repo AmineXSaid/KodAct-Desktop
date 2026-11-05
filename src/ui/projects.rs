@@ -1,4 +1,4 @@
-//! Projects: the folders Forge works in.
+//! Projects: the folders KodAct works in.
 //!
 //! - The Projects page lists every project as a card (name, description,
 //!   folder, branch, how many chats, when it was last opened), in tabs (All,
@@ -871,7 +871,7 @@ impl ProjectsView {
                 }))
                 .into_any_element()
         };
-        // The folder Forge started in is always here; others can leave the list.
+        // The folder KodAct started in is always here; others can leave the list.
         let (saved, removable) = (p.saved, Some(&p.path) != s.launch_dir.as_ref());
         let page = div()
             .id("project-page")
@@ -1072,7 +1072,7 @@ impl ProjectsView {
                                         .text_color(t.colors.text_muted)
                                         .child(icon("icons/message-square.svg", t.size.icon_lg, t.colors.text_muted))
                                         .child(
-                                            "Forge reads the same instructions, files and memory every time you chat in this project.",
+                                            "KodAct reads the same instructions, files and memory every time you chat in this project.",
                                         ),
                                 )
                             })

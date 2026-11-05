@@ -141,7 +141,7 @@ impl Render for AskpassDialog {
             div()
                 .text_size(t.text.caption)
                 .text_color(t.colors.text_muted)
-                .child("Kept in memory until Forge closes, never saved."),
+                .child("Kept in memory until KodAct closes, never saved."),
         )
         .child(
             div()

@@ -1,4 +1,4 @@
-//! Rules and memory: what Forge reads in this project, and when.
+//! Rules and memory: what KodAct reads in this project, and when.
 //!
 //! The list groups every instruction file by when it loads (every session,
 //! for matching files, in a folder, or as a skill when it fits), with a rough
@@ -298,7 +298,7 @@ impl RulesView {
                             .font_family(t.font_display.clone())
                             .text_size(t.text.subheading)
                             .text_color(t.colors.text_body)
-                            .child(format!("What Forge reads in {where_}, and when. Files read every session cost context every time; the rest load only when they apply.")),
+                            .child(format!("What KodAct reads in {where_}, and when. Files read every session cost context every time; the rest load only when they apply.")),
                     ),
             )
             .child(

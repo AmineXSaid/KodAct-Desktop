@@ -1,6 +1,6 @@
 //! Settings → Plugins: folders bundling commands, agents, skills, hooks and
-//! MCP servers, which ForgeCLI loads from the `pluginDirs` setting (relative
-//! paths are from the project). Forge's own plugin rides along with every
+//! MCP servers, which KodAct CLI loads from the `pluginDirs` setting (relative
+//! paths are from the project). KodAct's own plugin rides along with every
 //! chat. Add a folder, or remove one; Marketplaces (`marketplaces.rs`)
 //! installs plugins from Claude Code marketplaces.
 
@@ -30,7 +30,7 @@ pub struct PluginsEditor {
     _subs: Vec<Subscription>,
 }
 
-/// A listed folder as ForgeCLI resolves it: relative to the project.
+/// A listed folder as KodAct CLI resolves it: relative to the project.
 fn full_path(project: &std::path::Path, d: &str) -> std::path::PathBuf {
     if std::path::Path::new(d).is_absolute() {
         std::path::PathBuf::from(d)
@@ -40,7 +40,7 @@ fn full_path(project: &std::path::Path, d: &str) -> std::path::PathBuf {
 }
 
 /// A plugin folder's name and description, from its manifest
-/// (`.forge-plugin/plugin.json` or `plugin.json`), else the folder's name.
+/// (`.kodact-plugin/plugin.json` or `plugin.json`), else the folder's name.
 fn manifest(dir: &std::path::Path) -> Option<(String, String)> {
     if !dir.is_dir() {
         return None;
@@ -48,7 +48,7 @@ fn manifest(dir: &std::path::Path) -> Option<(String, String)> {
     let read = |p: std::path::PathBuf| -> Option<Value> {
         serde_json::from_str(&std::fs::read_to_string(p).ok()?).ok()
     };
-    let m = read(dir.join(".forge-plugin").join("plugin.json"))
+    let m = read(dir.join(".kodact-plugin").join("plugin.json"))
         .or_else(|| read(dir.join("plugin.json")))
         .or_else(|| read(dir.join(".claude-plugin").join("plugin.json")));
     let name = m
@@ -66,7 +66,7 @@ impl PluginsEditor {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let path = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("e.g. tools/forge-plugin  or  C:\\plugins\\review-kit")
+                .placeholder("e.g. tools/kodact-plugin  or  C:\\plugins\\review-kit")
         });
         let subs = vec![
             cx.observe(&state, |this, state, cx| {
@@ -216,7 +216,7 @@ impl Render for PluginsEditor {
         let mut out = div().flex().flex_col().gap(px(10.)).child(kit::header(
             &t,
             "Plugins",
-            "A plugin is a folder bundling commands, agents, skills, hooks and MCP servers, Claude Code's plugins included. ForgeCLI loads the folders listed here into every chat.",
+            "A plugin is a folder bundling commands, agents, skills, hooks and MCP servers, Claude Code's plugins included. KodAct CLI loads the folders listed here into every chat.",
             Some(browse),
         ));
         out = out.child(
@@ -278,7 +278,7 @@ impl Render for PluginsEditor {
                         String::new(),
                         Some((
                             t.extra.danger,
-                            "This folder doesn't exist, so ForgeCLI skips it.".to_string(),
+                            "This folder doesn't exist, so KodAct CLI skips it.".to_string(),
                         )),
                     ),
                 };
@@ -320,12 +320,12 @@ impl Render for PluginsEditor {
                 "No plugin folders yet. Add one to load its commands, agents, skills, hooks and MCP servers into every chat.",
             ));
         }
-        out = out.child(kit::group(&t, "Built into Forge")).child(
+        out = out.child(kit::group(&t, "Built into KodAct")).child(
             kit::card(&t)
                 .child(icon("icons/puzzle.svg", t.size.icon, t.colors.text_muted))
                 .child(kit::card_text(
                     &t,
-                    "forge",
+                    "kodact",
                     false,
                     Some("Diagram Design and Office documents, given to every chat".into()),
                     None,

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""A scripted model for checking question cards with the real ForgeCLI: it
+"""A scripted model for checking question cards with the real KodAct CLI: it
 asks two questions (AskUserQuestion) and logs the tool result it gets back,
 which must read "The user answered: ...", then says ok.
 
     python3 scripts/e2e/ask_model.py <port> <log>
 
 Point an endpoint at http://127.0.0.1:<port> (wire "anthropic"), as
-real_forgecli.sh does, ask anything, and answer the card."""
+real_kodact.sh does, ask anything, and answer the card."""
 import json, sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 LOG = open(sys.argv[2], "a")

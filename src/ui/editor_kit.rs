@@ -1,4 +1,4 @@
-//! The pieces every Settings editor of ForgeCLI's files is built from, so
+//! The pieces every Settings editor of KodAct CLI's files is built from, so
 //! Slash Commands, Agents, Skills, Hooks, MCP Servers and Permissions read as
 //! one family: a header with the one primary action, a list of cards, an
 //! inline delete confirm, labelled fields, and the empty, loading and error
@@ -186,7 +186,7 @@ pub fn loading(t: &Theme) -> gpui::Div {
             t.size.icon_xs,
             t.colors.text_muted,
         ))
-        .child("Reading ForgeCLI's files…")
+        .child("Reading KodAct CLI's files…")
 }
 
 /// Files that couldn't be read: named, so they can be fixed.

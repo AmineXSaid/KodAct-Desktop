@@ -1,9 +1,9 @@
-//! Settings → MCP servers: tools from other programs, which ForgeCLI starts
+//! Settings → MCP servers: tools from other programs, which KodAct CLI starts
 //! for each chat. A server is a command (stdio) or a URL (HTTP or SSE),
-//! saved where `forge mcp add` saves it: yours (`mcpServers` in your
+//! saved where `kodact mcp add` saves it: yours (`mcpServers` in your
 //! settings), the project's `.mcp.json` (shared; each person trusts it), or
 //! this PC's for the project. Add, edit, remove, trust, and a status row from
-//! `forge mcp list`, which starts each server the way a chat would.
+//! `kodact mcp list`, which starts each server the way a chat would.
 
 use gpui::component::input::{InputState, TextareaState};
 use gpui::{
@@ -219,7 +219,7 @@ impl McpEditor {
         let mut out = div().flex().flex_col().gap(px(10.)).child(kit::header(
             t,
             "MCP servers",
-            "An MCP server gives Forge more tools: a database, an issue tracker, a browser. ForgeCLI starts each one for every chat, and its tools ask permission like any other.",
+            "An MCP server gives KodAct more tools: a database, an issue tracker, a browser. KodAct CLI starts each one for every chat, and its tools ask permission like any other.",
             Some(add),
         ));
         let Some(catalog) = catalog else {
@@ -258,7 +258,7 @@ impl McpEditor {
                 div()
                     .text_size(t.text.caption)
                     .text_color(t.colors.text_muted)
-                    .child("The web browser (Settings → General) adds Forge's browser tools for each chat too; it isn't saved in these files."),
+                    .child("The web browser (Settings → General) adds KodAct's browser tools for each chat too; it isn't saved in these files."),
             );
         }
         let status = if checking {
@@ -313,7 +313,7 @@ impl McpEditor {
                     match server.scope {
                         McpScope::User => "your settings.json",
                         McpScope::Project => "the project's .mcp.json, for everyone",
-                        McpScope::Local => ".forge/settings.local.json",
+                        McpScope::Local => ".kodact/settings.local.json",
                     }
                 ),
                 kit::cancel_button(t, "cancel-delete").on_click(cx.listener(|this, _, _, cx| {
@@ -347,7 +347,7 @@ impl McpEditor {
         let (dot, line): (Hsla, String) = if !server.trusted {
             (
                 t.extra.warning,
-                "Not trusted on this PC, so ForgeCLI won't start it.".into(),
+                "Not trusted on this PC, so KodAct CLI won't start it.".into(),
             )
         } else if server.disabled {
             (
@@ -519,7 +519,7 @@ impl McpEditor {
             .child(kit::header(
                 t,
                 if editing { "Edit server" } else { "Add a server" },
-                "Keep keys out of the file: write ${NAME} and ForgeCLI fills it from the environment when it starts the server.",
+                "Keep keys out of the file: write ${NAME} and KodAct CLI fills it from the environment when it starts the server.",
                 None,
             ))
             .child(kit::field(t, "Saved in", None, scopes.into_any_element()))

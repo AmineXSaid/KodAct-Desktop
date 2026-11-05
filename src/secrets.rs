@@ -1,11 +1,13 @@
 //! Where endpoint keys live: Windows Credential Manager on Windows (per user,
-//! never in a file), elsewhere a `secrets.json` in Forge's config folder that
+//! never in a file), elsewhere a `secrets.json` in KodAct's config folder that
 //! only you can read (for development on Linux and macOS). A profile names
 //! its key as `${secret:<key>}`; the key itself is never in endpoints.json.
 
-/// The key a profile's token is filed under, as Forge for VS Code names it.
+/// The key a profile's token is filed under, as KodAct for VS Code names it.
+/// A profile keeps the key it was saved with (Forge's were
+/// `forge.endpoint.<profile>.token`), so older ones still resolve.
 pub fn key_for(profile: &str) -> String {
-    format!("forge.endpoint.{profile}.token")
+    format!("kodact.endpoint.{profile}.token")
 }
 
 /// The reference a profile stores.
@@ -15,25 +17,31 @@ pub fn reference(key: &str) -> String {
 
 #[cfg(windows)]
 mod store {
-    const SERVICE: &str = "Forge";
+    const SERVICE: &str = "KodAct";
+    /// Where Forge (before the rename) filed keys: still read.
+    const OLD_SERVICE: &str = "Forge";
 
-    fn entry(key: &str) -> Result<keyring::Entry, String> {
-        keyring::Entry::new(SERVICE, key).map_err(|e| format!("Credential Manager: {e}"))
+    fn entry_in(service: &str, key: &str) -> Result<keyring::Entry, String> {
+        keyring::Entry::new(service, key).map_err(|e| format!("Credential Manager: {e}"))
     }
 
     pub fn get(key: &str) -> Option<String> {
-        entry(key).ok()?.get_password().ok()
+        [SERVICE, OLD_SERVICE]
+            .into_iter()
+            .find_map(|s| entry_in(s, key).ok()?.get_password().ok())
     }
 
     pub fn set(key: &str, value: &str) -> Result<(), String> {
-        entry(key)?
+        entry_in(SERVICE, key)?
             .set_password(value)
             .map_err(|e| format!("Credential Manager: {e}"))
     }
 
     pub fn delete(key: &str) {
-        if let Ok(e) = entry(key) {
-            let _ = e.delete_credential();
+        for s in [SERVICE, OLD_SERVICE] {
+            if let Ok(e) = entry_in(s, key) {
+                let _ = e.delete_credential();
+            }
         }
     }
 }
@@ -94,10 +102,10 @@ mod tests {
 
     #[test]
     fn references_name_the_key_never_the_value() {
-        assert_eq!(key_for("kgpt"), "forge.endpoint.kgpt.token");
+        assert_eq!(key_for("kgpt"), "kodact.endpoint.kgpt.token");
         assert_eq!(
             reference(&key_for("kgpt")),
-            "${secret:forge.endpoint.kgpt.token}"
+            "${secret:kodact.endpoint.kgpt.token}"
         );
     }
 }

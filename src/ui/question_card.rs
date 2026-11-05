@@ -1,4 +1,4 @@
-//! A question Forge asks you (AskUserQuestion), as a card of its own rather
+//! A question KodAct asks you (AskUserQuestion), as a card of its own rather
 //! than a permission prompt: the question and its options as one list to
 //! pick from, "Other" last with a field for your own words (the message box
 //! works too), steps when there are several questions, Skip and Submit.
@@ -263,7 +263,7 @@ fn pending(info: &PermInfo, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement
                 .id(id("skip"))
                 .role(gpui::accesskit::Role::Button)
                 .aria_label(SharedString::from(
-                    "Skip: Forge goes on with its own assumptions",
+                    "Skip: KodAct goes on with its own assumptions",
                 ))
                 .px(t.space.xs)
                 .text_size(t.text.body_sm)

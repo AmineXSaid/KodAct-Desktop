@@ -1,7 +1,7 @@
-//! Settings → Profiles: named sets of ForgeCLI settings, one in use
+//! Settings → Profiles: named sets of KodAct CLI settings, one in use
 //! (`setting_profiles.rs`). Make one (it starts empty), use it, open its
 //! file to fill it, or delete it. The one in use reaches each chat's
-//! ForgeCLI as `--settings`, above your settings, the project's and this
+//! KodAct CLI as `--settings`, above your settings, the project's and this
 //! PC's: what it sets wins, the rest falls back.
 
 use gpui::component::input::InputState;
@@ -90,7 +90,7 @@ impl Render for ProfilesEditor {
             .child(kit::header(
                 &t,
                 "Profiles",
-                "A profile is a set of ForgeCLI settings you can switch to, such as stricter permissions for client work. What it sets wins over your settings files; what it doesn't set falls back to them.",
+                "A profile is a set of KodAct CLI settings you can switch to, such as stricter permissions for client work. What it sets wins over your settings files; what it doesn't set falls back to them.",
                 None,
             ))
             .child(
@@ -258,7 +258,7 @@ impl Render for ProfilesEditor {
                 .text_size(t.text.caption)
                 .text_color(t.colors.text_muted)
                 .line_height(gpui::relative(1.4))
-                .child("A profile file takes the same keys as settings.json. Switching restarts each idle chat's ForgeCLI on its next message, resuming its conversation."),
+                .child("A profile file takes the same keys as settings.json. Switching restarts each idle chat's KodAct CLI on its next message, resuming its conversation."),
         )
     }
 }

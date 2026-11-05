@@ -1,6 +1,6 @@
-"""Usage: python3 -I scripts/gen_file_icons.py <FORGE repo> <forge-gpui repo>
+"""Usage: python3 -I scripts/gen_file_icons.py <KODACT repo> <kodact-desktop repo>
 
-Port the VS Code extension's file/folder icon maps and their SVGs to forge-gpui."""
+Port the VS Code extension's file/folder icon maps and their SVGs to kodact-desktop."""
 import re, os, shutil, sys
 forge, gpui = sys.argv[1], sys.argv[2]
 icons = os.path.join(forge, 'assets/icons')

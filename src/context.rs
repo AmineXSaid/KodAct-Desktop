@@ -3,7 +3,7 @@
 //! Two numbers, both real or the meter isn't shown:
 //! - **used**: the size of the conversation as the model last saw it, from
 //!   the usage the model reported for the latest reply (input, cache writes,
-//!   cache reads and output, as Claude Code and Forge for VS Code add them up);
+//!   cache reads and output, as Claude Code and KodAct for VS Code add them up);
 //! - **window**: the context window the endpoint states for the model in
 //!   use, its `contextWindow` in endpoints.json or the size the endpoint
 //!   itself lists. Never a guess.
@@ -73,7 +73,7 @@ impl Breakdown {
             ("Replies", self.replies),
             ("Tool calls and output", self.tools),
             ("Thinking", self.thinking),
-            ("Files Forge wrote", self.files),
+            ("Files KodAct wrote", self.files),
         ]
         .into_iter()
         .map(|(l, n)| (l, (n as f64 * k).round() as u64))
@@ -224,7 +224,7 @@ pub fn meter(usage: Option<Usage>, window: Option<u64>) -> Option<Meter> {
     })
 }
 
-/// What fills the context, as ForgeCLI counts it (`get_context_usage`, the
+/// What fills the context, as KodAct CLI counts it (`get_context_usage`, the
 /// numbers its `/context` shows): each part in tokens, the window, and where
 /// automatic compaction runs. For the Session column's Context card.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -244,7 +244,7 @@ pub struct ContextUsage {
 }
 
 impl ContextUsage {
-    /// ForgeCLI's answer, or None when it isn't one.
+    /// KodAct CLI's answer, or None when it isn't one.
     pub fn from_json(v: &serde_json::Value) -> Option<Self> {
         let rows = |key: &str, name: &str| -> Vec<(String, u64)> {
             v[key]

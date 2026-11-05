@@ -2,10 +2,10 @@
 //!
 //! - **Open a folder** on this computer (the system's folder picker).
 //! - **Clone from GitHub**: paste the repository's address; it is cloned
-//!   into `Forge Projects` and opened.
+//!   into `KodAct Projects` and opened.
 //! - **Start fresh**: a name and a template (Blank, Code, Writing,
-//!   Research, Data); Forge makes the folder in `Forge Projects`, writes the
-//!   template's instructions into its FORGE.md, and opens it.
+//!   Research, Data); KodAct makes the folder in `KodAct Projects`, writes the
+//!   template's instructions into its KODACT.md, and opens it.
 
 use gpui::component::input::{Input, InputEvent, InputState};
 use gpui::{
@@ -123,7 +123,7 @@ impl Render for NewProject {
         let t = cx.theme().clone();
         let home = crate::templates::projects_home()
             .map(|h| crate::rules::display_path(&h, crate::rules::home_dir().as_deref()))
-            .unwrap_or_else(|| "Forge Projects".into());
+            .unwrap_or_else(|| "KodAct Projects".into());
         let picker = self.state.clone();
         let close = self.state.clone();
 
@@ -131,7 +131,7 @@ impl Render for NewProject {
             &t,
             "icons/folder-open.svg",
             "Open a folder",
-            "A folder on this computer: Forge works in it, with its own chats, instructions and memory.",
+            "A folder on this computer: KodAct works in it, with its own chats, instructions and memory.",
         )
         .child(div().flex_1())
         .child(
@@ -180,7 +180,7 @@ impl Render for NewProject {
             &t,
             "icons/folder-plus.svg",
             "Start fresh",
-            "A new folder for any kind of work. A template gives Forge its first instructions.",
+            "A new folder for any kind of work. A template gives KodAct its first instructions.",
         )
         .child(field(&t, &self.name))
         .child(chips)
@@ -192,7 +192,7 @@ impl Render for NewProject {
                     format!("In {home}, empty.")
                 } else {
                     format!(
-                        "In {home}, with a FORGE.md for {}.",
+                        "In {home}, with a KODACT.md for {}.",
                         chosen.label.to_lowercase()
                     )
                 }),

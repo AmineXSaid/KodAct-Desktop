@@ -1,7 +1,7 @@
 //! Marks drawn over a design page with the design bar's Insert tools, as on
 //! Claude's canvas: a box, a ring, a line, an arrow, a pencil stroke, a pen
 //! path, a text label or a sticky note. They live in the page's own CSS
-//! pixels (so they scroll and zoom with it), and go to Forge as a picture of
+//! pixels (so they scroll and zoom with it), and go to KodAct as a picture of
 //! the page with them on it (`overlay_js`: Chromium draws them, so a note's
 //! text is exactly as you see it) and a list of what each is.
 
@@ -276,7 +276,7 @@ pub fn arrow_head(from: (f64, f64), to: (f64, f64), size: f64) -> [(f64, f64); 2
     [back(1.0), back(-1.0)]
 }
 
-/// The marks as the message Forge gets with their picture: each, in order
+/// The marks as the message KodAct gets with their picture: each, in order
 /// (a note's and a label's words quoted), then what you said.
 pub fn message(page: &str, marks: &[Mark], comment: &str) -> String {
     let mut out = format!("Marks on {page} (the picture shows them on the page):\n");

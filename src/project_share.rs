@@ -1,10 +1,10 @@
-//! Sharing a project's setup: what makes Forge good in it (its shared
+//! Sharing a project's setup: what makes KodAct good in it (its shared
 //! instructions, its knowledge, and if you choose its memory), never your
-//! own `FORGE.local.md`.
+//! own `KODACT.local.md`.
 //!
 //! - **With the repo**: commit the setup files, so everyone who clones the
-//!   project gets the same Forge.
-//! - **As a file**: a `.forgeproject` (a zip: the files under `setup/`, and
+//!   project gets the same KodAct.
+//! - **As a file**: a `.kodactproject` (a zip: the files under `setup/`, and
 //!   `project.json` with the name and description) to send to anyone; they
 //!   import it into a project of theirs. Importing never overwrites a file
 //!   that is already there.
@@ -16,10 +16,13 @@ use std::path::{Path, PathBuf};
 
 use serde_json::json;
 
-pub const EXT: &str = "forgeproject";
+pub const EXT: &str = "kodactproject";
+/// The format a setup's `project.json` names, and Forge's.
+const FORMAT: &str = "kodact-project-setup";
+const OLD_FORMAT: &str = "forge-project-setup";
 
 /// The project's setup files that exist, relative to it, with forward
-/// slashes; `.forge/memory.md` only with `memory`.
+/// slashes; the memory (`.kodact/memory.md`) only with `memory`.
 pub fn setup_files(project: &Path, memory: bool) -> Vec<String> {
     let mut out = vec![];
     let shared = crate::project_ctx::shared_file(project);
@@ -28,28 +31,27 @@ pub fn setup_files(project: &Path, memory: bool) -> Vec<String> {
             out.push(rel.to_string_lossy().replace('\\', "/"));
         }
     }
-    for f in [".forge/knowledge.json", ".forge/knowledge.md"] {
-        if project.join(f).is_file() {
-            out.push(f.to_string());
+    for f in ["knowledge.json", "knowledge.md"] {
+        let f = crate::names::in_project_dir(project, f);
+        if project.join(&f).is_file() {
+            out.push(f);
         }
     }
-    if let Ok(dir) = std::fs::read_dir(project.join(crate::knowledge::DIR)) {
+    let knowledge = crate::knowledge::dir(project);
+    if let Ok(dir) = std::fs::read_dir(project.join(&knowledge)) {
         let mut files: Vec<String> = dir
             .filter_map(|e| e.ok())
             .filter(|e| e.path().is_file())
             .map(|e| {
-                format!(
-                    "{}/{}",
-                    crate::knowledge::DIR,
-                    e.file_name().to_string_lossy()
-                )
+                format!("{knowledge}/{}", e.file_name().to_string_lossy())
             })
             .collect();
         files.sort();
         out.extend(files);
     }
-    if memory && project.join(crate::project_memory::FILE).is_file() {
-        out.push(crate::project_memory::FILE.to_string());
+    let memory_file = crate::project_memory::file(project);
+    if memory && project.join(&memory_file).is_file() {
+        out.push(memory_file);
     }
     out
 }
@@ -92,11 +94,16 @@ pub fn uncommitted(project: &Path, memory: bool) -> Option<usize> {
     }
     let mut args = vec!["status", "--porcelain", "--untracked-files=all", "--"];
     args.extend(files.iter().map(String::as_str));
-    // Counted as you'd recognise them: Forge's own list and compiled block
+    // Counted as you'd recognise them: KodAct's own list and compiled block
     // are committed with them, not counted.
     git(project, &args).ok().map(|o| {
         o.lines()
-            .filter(|l| !l.trim().is_empty() && !l.contains(".forge/knowledge."))
+            .filter(|l| {
+                !l.trim().is_empty()
+                    && !crate::names::PROJECT_DIRS
+                        .iter()
+                        .any(|d| l.contains(&format!("{d}/knowledge.")))
+            })
             .count()
     })
 }
@@ -113,7 +120,7 @@ pub fn commit(project: &Path, memory: bool) -> Result<String, String> {
     let mut commit = vec![
         "commit",
         "-m",
-        "Forge project setup: instructions and knowledge",
+        "KodAct project setup: instructions and knowledge",
         "--",
     ];
     commit.extend(files.iter().map(String::as_str));
@@ -131,7 +138,7 @@ pub fn commit(project: &Path, memory: bool) -> Result<String, String> {
         })
 }
 
-/// Export the setup to `<dir>/<name>.forgeproject`; returns its path.
+/// Export the setup to `<dir>/<name>.kodactproject`; returns its path.
 pub fn export(
     project: &Path,
     name: &str,
@@ -156,7 +163,7 @@ pub fn export(
     let opts = zip::write::SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated);
     let meta = json!({
-        "format": "forge-project-setup",
+        "format": FORMAT,
         "version": 1,
         "name": name,
         "description": description,
@@ -188,11 +195,11 @@ pub struct Imported {
     pub kept: Vec<String>,
 }
 
-/// Import a `.forgeproject` into `project`, never overwriting a file.
+/// Import a `.kodactproject` into `project`, never overwriting a file.
 pub fn import(file: &Path, project: &Path) -> Result<Imported, String> {
     let f = std::fs::File::open(file).map_err(|e| e.to_string())?;
     let mut zip =
-        zip::ZipArchive::new(f).map_err(|_| "this isn't a Forge project setup".to_string())?;
+        zip::ZipArchive::new(f).map_err(|_| "this isn't a KodAct project setup".to_string())?;
     let is_setup = zip
         .by_name("project.json")
         .ok()
@@ -201,11 +208,19 @@ pub fn import(file: &Path, project: &Path) -> Result<Imported, String> {
             m.read_to_string(&mut s).ok()?;
             serde_json::from_str::<serde_json::Value>(&s).ok()
         })
-        .is_some_and(|v| v["format"] == "forge-project-setup");
+        .is_some_and(|v| v["format"] == FORMAT || v["format"] == OLD_FORMAT);
     if !is_setup {
-        return Err("this isn't a Forge project setup".into());
+        return Err("this isn't a KodAct project setup".into());
     }
     let mut out = Imported::default();
+    // A setup names its folder and instructions as the project it came from
+    // did (`.forge/`, `FORGE.md` before the rename); they land under this
+    // project's own names, where the engine reads them (`names.rs`).
+    let dir_name = crate::names::project_dir_name(project);
+    let instructions = crate::names::instructions(project)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "KODACT.md".into());
     for i in 0..zip.len() {
         let mut entry = zip.by_index(i).map_err(|e| e.to_string())?;
         // Only what is under setup/, and never outside the project.
@@ -220,10 +235,17 @@ pub fn import(file: &Path, project: &Path) -> Result<Imported, String> {
         }
         let shown = rel.to_string_lossy().replace('\\', "/");
         // Your own instructions never travel in a setup.
-        if shown.ends_with("FORGE.local.md") {
+        if crate::names::is_local_instructions_name(shown.rsplit('/').next().unwrap_or(&shown)) {
             continue;
         }
-        let to = project.join(rel);
+        let shown = match shown.split_once('/') {
+            Some((top, rest)) if crate::names::PROJECT_DIRS.contains(&top) => {
+                format!("{dir_name}/{rest}")
+            }
+            _ if crate::names::is_instructions_name(&shown) => instructions.clone(),
+            _ => shown,
+        };
+        let to = project.join(&shown);
         if to.exists() {
             out.kept.push(shown);
             continue;
@@ -263,11 +285,11 @@ mod tests {
         assert!(!files
             .iter()
             .any(|f| f.contains("memory") || f.contains("local")));
-        assert!(setup_files(&a, true).contains(&crate::project_memory::FILE.to_string()));
+        assert!(setup_files(&a, true).contains(&crate::project_memory::file(&a)));
 
         let out = project("out");
         let file = export(&a, "Billing API", "The API", true, &out).unwrap();
-        assert_eq!(file.file_name().unwrap(), "Billing API.forgeproject");
+        assert_eq!(file.file_name().unwrap(), "Billing API.kodactproject");
 
         let b = project("b");
         std::fs::write(b.join("FORGE.md"), "Their own.").unwrap();
@@ -278,11 +300,11 @@ mod tests {
             std::fs::read_to_string(b.join("FORGE.md")).unwrap(),
             "Their own."
         );
-        assert!(b.join(crate::project_memory::FILE).is_file());
+        assert!(b.join(crate::project_memory::file(&b)).is_file());
         assert!(!b.join("FORGE.local.md").exists());
         // Something else isn't imported.
-        std::fs::write(out.join("x.forgeproject"), b"not a zip").unwrap();
-        assert!(import(&out.join("x.forgeproject"), &b).is_err());
+        std::fs::write(out.join("x.kodactproject"), b"not a zip").unwrap();
+        assert!(import(&out.join("x.kodactproject"), &b).is_err());
         for d in [a, b, out] {
             let _ = std::fs::remove_dir_all(d);
         }

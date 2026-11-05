@@ -1,4 +1,4 @@
-"""Build assets/forge.ico (the Windows icon: taskbar, title bar, installer).
+"""Build assets/kodact.ico (the Windows icon: taskbar, title bar, installer).
 
 The app icon: KodAct's mark (src/ui/kodact_mark.rs) in paper on a tile of the
 accent, the turquoise as it is set on paper, so it reads on a light or a dark
@@ -8,7 +8,7 @@ the left, then a chevron pointing right, their corners rounded by the join.
 Every size Windows asks for is drawn on its own from the geometry (supersampled,
 then reduced), never scaled from another size, so 16 and 24 px stay crisp.
 
-    python3 -I scripts/make_ico.py   # writes assets/forge.ico (+ a preview PNG with --preview)
+    python3 -I scripts/make_ico.py   # writes assets/kodact.ico (+ a preview PNG with --preview)
 """
 
 import pathlib
@@ -17,7 +17,7 @@ import sys
 from PIL import Image, ImageDraw
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-OUT = ROOT / "assets/forge.ico"
+OUT = ROOT / "assets/kodact.ico"
 
 # 100/125/150/200% taskbar and title bar, Explorer views, Alt-Tab.
 SIZES = [16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 128, 256]

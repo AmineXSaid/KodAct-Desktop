@@ -1,5 +1,5 @@
 //! A port on the remote that leads to a port here, for targets with no
-//! `ssh -R`: WSL and containers. ForgeCLI's hidden `forge relay --port N`
+//! `ssh -R`: WSL and containers. KodAct CLI's hidden `kodact relay --port N`
 //! listens on the remote's 127.0.0.1:N and carries each connection over its
 //! stdin/stdout (`wsl.exe` / `docker exec -i`); this side joins each one to
 //! 127.0.0.1:<local> here: the model proxy, or the browser tools.
@@ -59,7 +59,7 @@ impl Drop for Relay {
     }
 }
 
-/// Start a relay on `target` (its ForgeCLI at `forge`) listening on
+/// Start a relay on `target` (its KodAct CLI at `kodact`) listening on
 /// `remote_port`, joined to `local_port` here. Returns at once (the UI
 /// thread may call it); [`Relay::wait_ready`] waits for it to listen.
 pub fn start(
@@ -189,13 +189,13 @@ mod tests {
 
     /// A real relay on a container: a request made inside it to the relay's
     /// port reaches a server here and its answer comes back. Needs
-    /// `FORGE_TEST_CONTAINER` (running, with the relay-capable ForgeCLI
-    /// already provisioned at `FORGE_TEST_FORGE`, a remote path).
+    /// `KODACT_TEST_CONTAINER` (running, with the relay-capable KodAct CLI
+    /// already provisioned at `KODACT_TEST_FORGE`, a remote path).
     #[test]
     #[ignore]
     fn real_relay_reaches_back() {
-        let name = std::env::var("FORGE_TEST_CONTAINER").expect("FORGE_TEST_CONTAINER");
-        let forge = std::env::var("FORGE_TEST_FORGE").expect("FORGE_TEST_FORGE");
+        let name = std::env::var("KODACT_TEST_CONTAINER").expect("KODACT_TEST_CONTAINER");
+        let forge = std::env::var("KODACT_TEST_FORGE").expect("KODACT_TEST_FORGE");
         let t = Target::Container {
             name,
             user: None,

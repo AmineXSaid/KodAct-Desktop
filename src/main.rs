@@ -1,14 +1,14 @@
-//! Forge: a desktop app for ForgeCLI, built on GPUI. Each chat is a `forge`
+//! KodAct: a desktop app for KodAct CLI, built on GPUI. Each chat is a `kodact`
 //! process (`backend.rs`); the demo chats in the sidebar are mock data
-//! (`state.rs`), and `FORGE_DEMO=1` makes every reply the scripted demo.
+//! (`state.rs`), and `KODACT_DEMO=1` makes every reply the scripted demo.
 
 // A release build on Windows is a windowed app: no console opens beside it.
 // Debug builds keep the console, for logs.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
-// Which shell commands run without asking, per mode (Forge for VS Code's
+// Which shell commands run without asking, per mode (KodAct for VS Code's
 // rules). Called when a chat's CLI asks for permission (state.rs); the
-// Edit-automatically hook (`edit_mode_asks`) is ForgeCLI's job now.
+// Edit-automatically hook (`edit_mode_asks`) is KodAct CLI's job now.
 #[cfg_attr(not(test), allow(dead_code))]
 mod approve;
 mod assets;
@@ -41,6 +41,7 @@ mod history;
 mod knowledge;
 mod mermaid;
 mod modes;
+mod names;
 mod office;
 mod office_render;
 #[cfg(test)]
@@ -70,7 +71,7 @@ mod ui;
 mod web_view;
 mod xlsx_style;
 
-// Forge's own settings file, and SSH passwords asked in the app.
+// KodAct's own settings file, and SSH passwords asked in the app.
 mod app_settings;
 mod askpass;
 mod model_proxy;
@@ -141,7 +142,7 @@ fn bind_keys(cx: &mut App) {
     cx.bind_keys([KeyBinding::new(new_terminal_alias, NewTerminal, None)]);
 }
 
-/// A crash leaves its reason in `crash.log` in Forge's config folder: a
+/// A crash leaves its reason in `crash.log` in KodAct's config folder: a
 /// windowed app on Windows has no console to print it to.
 fn log_crashes() {
     let default = std::panic::take_hook();
@@ -151,7 +152,7 @@ fn log_crashes() {
             let when = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
             let trace = std::backtrace::Backtrace::force_capture();
             let entry = format!(
-                "--- {when} (Forge {})\n{info}\n{trace}\n",
+                "--- {when} (KodAct {})\n{info}\n{trace}\n",
                 env!("CARGO_PKG_VERSION")
             );
             use std::io::Write;
@@ -167,9 +168,28 @@ fn log_crashes() {
     }));
 }
 
+/// Settings made before the app was renamed (from Forge) keep working: each
+/// `FORGE_*` variable stands for its `KODACT_*` name when that one is unset,
+/// as the engine does (KodAct CLI's `adopt_forgecli_env`). Runs first, while
+/// the process has one thread, before anything reads a setting.
+fn adopt_forge_env() {
+    let legacy: Vec<(String, std::ffi::OsString)> = std::env::vars_os()
+        .filter_map(|(k, v)| {
+            let rest = k.into_string().ok()?.strip_prefix("FORGE_")?.to_string();
+            Some((format!("KODACT_{rest}"), v))
+        })
+        .collect();
+    for (name, value) in legacy {
+        if std::env::var_os(&name).is_none() {
+            std::env::set_var(name, value);
+        }
+    }
+}
+
 fn main() {
+    adopt_forge_env();
     // `--browser-mcp <devtools> <focus-file>`: serve the browser tools to a
-    // ForgeCLI (`browser_mcp.rs`) instead of opening the window.
+    // KodAct CLI (`browser_mcp.rs`) instead of opening the window.
     let args: Vec<String> = std::env::args().collect();
     // Run by ssh as its askpass program: hand the prompt to the app's dialog
     // and print the answer (`askpass.rs`).

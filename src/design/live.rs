@@ -10,7 +10,7 @@
 
 use std::path::Path;
 
-/// Whether Forge shows this file live while it is written: an HTML page.
+/// Whether KodAct shows this file live while it is written: an HTML page.
 pub fn is_page(path: &str) -> bool {
     let lower = path.to_ascii_lowercase();
     lower.ends_with(".html") || lower.ends_with(".htm")
@@ -281,7 +281,7 @@ pub const DECK_UNPRINT_JS: &str = r#"(() => {
     for (const el of [...document.getElementsByClassName(c)]) el.classList.remove(c);
 })()"#;
 
-/// A comment on part of a page, as the message Forge gets: the page, the
+/// A comment on part of a page, as the message KodAct gets: the page, the
 /// part (its tag, the start of its text, a selector that finds it), what
 /// you said, and to change only that part.
 pub fn comment_message(page: &str, part: &crate::web_view::PagePart, comment: &str) -> String {

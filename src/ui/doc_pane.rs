@@ -1,4 +1,4 @@
-//! The side panel: a file Forge made, opened beside the chat. A document is
+//! The side panel: a file KodAct made, opened beside the chat. A document is
 //! rendered as one (`markdown::Look::Document`); a diagram is drawn natively
 //! (`diagram_view.rs`), fitted to the panel or at its actual size, and can
 //! open in the browser where it is interactive. The header names the file
@@ -420,7 +420,7 @@ pub fn render(
         let content: AnyElement = match read {
             None => quiet(format!("Reading {}…", file.name)),
             Some(Err(e)) => quiet(format!(
-                "Forge could not read {}: {e}. Open it with its app instead.",
+                "KodAct could not read {}: {e}. Open it with its app instead.",
                 file.name
             )),
             Some(Ok(p)) => match p.as_ref() {

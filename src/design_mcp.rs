@@ -1,6 +1,6 @@
-//! Forge's design tools for ForgeCLI's agents (`docs/open-design-port.md`
+//! KodAct's design tools for KodAct CLI's agents (`docs/open-design-port.md`
 //! §5.3): an MCP server (stdio, JSON-RPC) served by this same executable,
-//! `forge-gpui --design-mcp <devtools-url> <focus-file>`, as the browser
+//! `kodact-desktop --design-mcp <devtools-url> <focus-file>`, as the browser
 //! tools are (`browser_mcp.rs`). They replace Open Design's `od` CLI:
 //!
 //! - `design_search` and `design_read` find and read the design library
@@ -23,8 +23,8 @@ use crate::browser_mcp::{Answer, Browser};
 use crate::design::library::{Entry, Index, Kind};
 use crate::design::{lint, live, prompt};
 
-/// The server's name: its tools reach the model as `mcp__forge-design__…`.
-pub const SERVER: &str = "forge-design";
+/// The server's name: its tools reach the model as `mcp__kodact-design__…`.
+pub const SERVER: &str = "kodact-design";
 
 /// The most of a library file `design_read` returns at once.
 const READ_MAX: usize = 60_000;
@@ -42,7 +42,7 @@ fn tools() -> Vec<Value> {
             "inputSchema": { "type": "object", "properties": props, "required": required } })
     };
     vec![
-        tool("design_search", "Search Forge's design library: skills, templates, design systems (looks), craft rules, examples, task profiles. Returns kind, id, title and summary for each match; read one with design_read.",
+        tool("design_search", "Search KodAct's design library: skills, templates, design systems (looks), craft rules, examples, task profiles. Returns kind, id, title and summary for each match; read one with design_read.",
             json!({ "query": { "type": "string", "description": "Words to look for, e.g. \"course deck\", \"dark editorial\", \"dashboard\"." },
                 "kind": { "type": "string", "enum": kinds, "description": "Only this kind." },
                 "limit": { "type": "integer", "description": "At most this many (default 12)." } }), &["query"]),
@@ -51,7 +51,7 @@ fn tools() -> Vec<Value> {
                 "id": { "type": "string" },
                 "path": { "type": "string", "description": "A file in the entry's folder, or (without kind and id) a path in the library." },
                 "offset": { "type": "integer", "description": "Start this many bytes in, to read past a long file's first part." } }), &[]),
-        tool("design_render", "Look at a page as the user sees it in Forge's side panel: a picture of the page, or of slides n to m of a deck. Opens or reloads the page in the panel first.",
+        tool("design_render", "Look at a page as the user sees it in KodAct's side panel: a picture of the page, or of slides n to m of a deck. Opens or reloads the page in the panel first.",
             json!({ "path": { "type": "string", "description": "The page's HTML file: absolute, or from the project's folder." },
                 "slides": { "type": "string", "description": "A slide (\"3\") or a range (\"2-5\"); at most 12 at once. Leave out for the page." },
                 "full_page": { "type": "boolean", "description": "The whole page scrolled, not only what fits the panel." } }), &["path"]),
@@ -110,7 +110,7 @@ impl Tools {
     fn index(&mut self) -> Result<&Index, String> {
         if self.index.is_none() {
             let root = crate::design::root().ok_or(
-                "Forge's design library isn't installed (no design-library folder beside Forge).",
+                "KodAct's design library isn't installed (no design-library folder beside KodAct).",
             )?;
             self.index = Some(Index::load(&root));
         }
@@ -119,7 +119,7 @@ impl Tools {
 
     fn browser(&mut self) -> Result<&mut Browser, String> {
         self.browser.as_mut().ok_or_else(|| {
-            "Forge's browser isn't on, so pages can't be rendered: turn on the web browser (side panel), or read the file back instead."
+            "KodAct's browser isn't on, so pages can't be rendered: turn on the web browser (side panel), or read the file back instead."
                 .to_string()
         })
     }
@@ -362,7 +362,7 @@ impl Tools {
                     page.shown
                         .file_stem()
                         .map(|s| s.to_string_lossy().into_owned())
-                        .unwrap_or_else(|| "forge-design".into())
+                        .unwrap_or_else(|| "kodact-design".into())
                 });
                 let host = crate::design::services::host(a["to"].as_str())?;
                 let url = crate::design::services::deploy(&page.shown, &name, host)?;
@@ -461,7 +461,7 @@ impl Tools {
     /// What overflows on screen, when the panel has a tab on `path`.
     fn overflow(&mut self, path: &Path) -> Result<Option<Vec<String>>, String> {
         let Some(b) = self.browser.as_mut() else {
-            return Err("Forge's browser isn't on".into());
+            return Err("KodAct's browser isn't on".into());
         };
         let url = live::file_url(path);
         let Some(tab) = b
@@ -566,7 +566,7 @@ pub fn remote_copy(target: &str, path: &str) -> PathBuf {
 }
 
 /// A tool's `path`, absolute or from the project's folder (this server's
-/// working folder, as ForgeCLI starts it).
+/// working folder, as KodAct CLI starts it).
 fn page_path(a: &Value) -> Result<PathBuf, String> {
     let p = a["path"]
         .as_str()
@@ -820,7 +820,7 @@ fn handle(t: &mut Tools, msg: &Value) -> Option<Value> {
             "protocolVersion": msg["params"]["protocolVersion"].as_str().unwrap_or("2024-11-05"),
             "capabilities": { "tools": { "listChanged": false } },
             "serverInfo": { "name": SERVER, "version": env!("CARGO_PKG_VERSION") },
-            "instructions": "Forge's design library and checks. Search and read the library before designing; render a page to see it as the user does; lint it before calling it done.",
+            "instructions": "KodAct's design library and checks. Search and read the library before designing; render a page to see it as the user does; lint it before calling it done.",
         })),
         "ping" => reply(json!({})),
         "tools/list" => reply(json!({ "tools": tools() })),
@@ -859,7 +859,7 @@ pub fn serve(devtools: &str, focus_file: &Path) {
     }
 }
 
-/// Serve the design tools over HTTP for a ForgeCLI on `remote` (as the
+/// Serve the design tools over HTTP for a KodAct CLI on `remote` (as the
 /// browser tools are, `browser_mcp::serve_http`): pages are read from the
 /// remote, the library and the panel's browser are this computer's.
 /// Returns the port.
@@ -877,7 +877,7 @@ pub fn serve_http(
     crate::browser_mcp::serve_json_http(token, move |msg| handle(&mut t, msg))
 }
 
-/// The design tools as a remote ForgeCLI reaches them: over HTTP on the
+/// The design tools as a remote KodAct CLI reaches them: over HTTP on the
 /// remote's `127.0.0.1:<port>`, forwarded back here.
 pub fn http_mcp_config(port: u16, token: &str) -> String {
     json!({ "mcpServers": { SERVER: {
@@ -887,7 +887,7 @@ pub fn http_mcp_config(port: u16, token: &str) -> String {
     .to_string()
 }
 
-/// The `--mcp-config` JSON that gives a ForgeCLI the design tools; an
+/// The `--mcp-config` JSON that gives a KodAct CLI the design tools; an
 /// empty `devtools` gives them without a browser.
 pub fn mcp_config(exe: &Path, devtools: &str, focus: &Path) -> String {
     json!({ "mcpServers": { SERVER: {
@@ -1030,7 +1030,7 @@ mod tests {
 
     #[test]
     fn lint_without_a_browser_checks_the_source() {
-        let dir = std::env::temp_dir().join(format!("forge-design-mcp-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("kodact-design-mcp-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let page = dir.join("index.html");
         std::fs::write(
@@ -1062,13 +1062,13 @@ mod tests {
         assert!(err && msg.contains("browser isn't on"), "{msg}");
     }
 
-    /// Over a real SSH remote (`FORGE_TEST_SSH=user@host:port`, and
-    /// `FORGE_TEST_DEVTOOLS` for render): a remote page is linted with its
+    /// Over a real SSH remote (`KODACT_TEST_SSH=user@host:port`, and
+    /// `KODACT_TEST_DEVTOOLS` for render): a remote page is linted with its
     /// linked files checked there, and rendered from a copy here.
     #[test]
     #[ignore]
     fn remote_pages_over_ssh() {
-        let Ok(host) = std::env::var("FORGE_TEST_SSH") else {
+        let Ok(host) = std::env::var("KODACT_TEST_SSH") else {
             return;
         };
         let dir = format!("/tmp/forge-remote-design-{}", std::process::id());
@@ -1087,7 +1087,7 @@ mod tests {
             &extra,
         )
         .unwrap();
-        let devtools = std::env::var("FORGE_TEST_DEVTOOLS").unwrap_or_default();
+        let devtools = std::env::var("KODACT_TEST_DEVTOOLS").unwrap_or_default();
         let focus = std::env::temp_dir().join("forge-remote-design-focus.txt");
         let port = serve_http(
             &devtools,
@@ -1161,13 +1161,13 @@ mod tests {
     #[test]
     fn its_config_runs_this_app() {
         let c: Value = serde_json::from_str(&mcp_config(
-            Path::new("/app/forge-gpui"),
+            Path::new("/app/kodact-desktop"),
             "",
             Path::new("/cfg/focus.txt"),
         ))
         .unwrap();
-        let s = &c["mcpServers"]["forge-design"];
-        assert_eq!(s["command"], "/app/forge-gpui");
+        let s = &c["mcpServers"]["kodact-design"];
+        assert_eq!(s["command"], "/app/kodact-desktop");
         assert_eq!(s["args"], json!(["--design-mcp", "", "/cfg/focus.txt"]));
     }
 }

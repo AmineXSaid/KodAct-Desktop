@@ -1,7 +1,7 @@
 //! Open Design's outside services, with the user's own keys: pictures made
 //! for a design (OpenAI's images, or fal's), and a page published to the
-//! web (Vercel). Keys come from the environment ForgeCLI runs in:
-//! `OPENAI_API_KEY` (or Forge's `FORGE_OPENAI_API_KEY`), `FAL_KEY`,
+//! web (Vercel). Keys come from the environment KodAct CLI runs in:
+//! `OPENAI_API_KEY` (or KodAct's `KODACT_OPENAI_API_KEY`), `FAL_KEY`,
 //! `VERCEL_TOKEN`. Each service's address can be set too (`OPENAI_BASE_URL`,
 //! `FAL_BASE_URL`, `VERCEL_API_URL`), for a proxy or a compatible service.
 
@@ -35,7 +35,7 @@ impl ImageService {
 }
 
 pub fn image_service() -> Option<ImageService> {
-    if env(&["OPENAI_API_KEY", "FORGE_OPENAI_API_KEY"]).is_some() {
+    if env(&["OPENAI_API_KEY", "KODACT_OPENAI_API_KEY"]).is_some() {
         Some(ImageService::OpenAi)
     } else if env(&["FAL_KEY"]).is_some() {
         Some(ImageService::Fal)
@@ -44,7 +44,7 @@ pub fn image_service() -> Option<ImageService> {
     }
 }
 
-const NO_KEY: &str = "No picture service is set up: set OPENAI_API_KEY (OpenAI's images) or FAL_KEY (fal) where Forge runs, then start the chat again.";
+const NO_KEY: &str = "No picture service is set up: set OPENAI_API_KEY (OpenAI's images) or FAL_KEY (fal) where KodAct runs, then start the chat again.";
 
 fn post(url: &str, auth: &str, body: &Value) -> Result<Value, String> {
     match ureq::post(url)
@@ -90,10 +90,10 @@ pub fn image(
     let service = image_service().ok_or(NO_KEY)?;
     let bytes = match service {
         ImageService::OpenAi => {
-            let key = env(&["OPENAI_API_KEY", "FORGE_OPENAI_API_KEY"]).expect("checked");
+            let key = env(&["OPENAI_API_KEY", "KODACT_OPENAI_API_KEY"]).expect("checked");
             let base =
                 env(&["OPENAI_BASE_URL"]).unwrap_or_else(|| "https://api.openai.com/v1".into());
-            let model = env(&["FORGE_IMAGE_MODEL"]).unwrap_or_else(|| "gpt-image-1".into());
+            let model = env(&["KODACT_IMAGE_MODEL"]).unwrap_or_else(|| "gpt-image-1".into());
             let r = post(
                 &format!("{}/images/generations", base.trim_end_matches('/')),
                 &format!("Bearer {key}"),
@@ -111,7 +111,7 @@ pub fn image(
         ImageService::Fal => {
             let key = env(&["FAL_KEY"]).expect("checked");
             let base = env(&["FAL_BASE_URL"]).unwrap_or_else(|| "https://fal.run".into());
-            let model = env(&["FORGE_FAL_MODEL"]).unwrap_or_else(|| "fal-ai/flux/schnell".into());
+            let model = env(&["KODACT_FAL_MODEL"]).unwrap_or_else(|| "fal-ai/flux/schnell".into());
             let (w, h) = size
                 .split_once('x')
                 .and_then(|(w, h)| Some((w.parse::<u32>().ok()?, h.parse::<u32>().ok()?)))
@@ -175,12 +175,12 @@ fn save_bytes(dir: &Path, name: &str, ext: &str, bytes: &[u8]) -> Result<PathBuf
 }
 
 /// A short video made from `prompt` with fal (`FAL_KEY`; the model is
-/// `FORGE_FAL_VIDEO_MODEL`, else LTX Video), saved as `dir/<name>.mp4`.
+/// `KODACT_FAL_VIDEO_MODEL`, else LTX Video), saved as `dir/<name>.mp4`.
 pub fn video(prompt: &str, dir: &Path, name: &str) -> Result<PathBuf, String> {
     let key = env(&["FAL_KEY"])
-        .ok_or("Video needs fal: set FAL_KEY where Forge runs, then start the chat again.")?;
+        .ok_or("Video needs fal: set FAL_KEY where KodAct runs, then start the chat again.")?;
     let base = env(&["FAL_BASE_URL"]).unwrap_or_else(|| "https://fal.run".into());
-    let model = env(&["FORGE_FAL_VIDEO_MODEL"]).unwrap_or_else(|| "fal-ai/ltx-video".into());
+    let model = env(&["KODACT_FAL_VIDEO_MODEL"]).unwrap_or_else(|| "fal-ai/ltx-video".into());
     let r = post(
         &format!("{}/{model}", base.trim_end_matches('/')),
         &format!("Key {key}"),
@@ -193,14 +193,14 @@ pub fn video(prompt: &str, dir: &Path, name: &str) -> Result<PathBuf, String> {
 }
 
 /// Speech or narration read from `text` with ElevenLabs
-/// (`ELEVENLABS_API_KEY`; the voice is `FORGE_VOICE_ID`, else a stock one),
+/// (`ELEVENLABS_API_KEY`; the voice is `KODACT_VOICE_ID`, else a stock one),
 /// saved as `dir/<name>.mp3`.
 pub fn speech(text: &str, dir: &Path, name: &str) -> Result<PathBuf, String> {
     let key = env(&["ELEVENLABS_API_KEY"]).ok_or(
-        "Narration needs ElevenLabs: set ELEVENLABS_API_KEY where Forge runs, then start the chat again.",
+        "Narration needs ElevenLabs: set ELEVENLABS_API_KEY where KodAct runs, then start the chat again.",
     )?;
     let base = env(&["ELEVENLABS_BASE_URL"]).unwrap_or_else(|| "https://api.elevenlabs.io".into());
-    let voice = env(&["FORGE_VOICE_ID"]).unwrap_or_else(|| "21m00Tcm4TlvDq8ikWAM".into());
+    let voice = env(&["KODACT_VOICE_ID"]).unwrap_or_else(|| "21m00Tcm4TlvDq8ikWAM".into());
     let url = format!("{}/v1/text-to-speech/{voice}", base.trim_end_matches('/'));
     let r = ureq::post(&url)
         .timeout(Duration::from_secs(120))
@@ -254,11 +254,11 @@ pub fn host(asked: Option<&str>) -> Result<Host, String> {
         Some("vercel") => Ok(Host::Vercel),
         Some("cloudflare" | "cloudflare-pages" | "pages") => Ok(Host::Cloudflare),
         Some(other) => Err(format!(
-            "{other} isn't a host Forge publishes to: vercel or cloudflare."
+            "{other} isn't a host KodAct publishes to: vercel or cloudflare."
         )),
         None if env(&["VERCEL_TOKEN"]).is_some() => Ok(Host::Vercel),
         None if cloudflare => Ok(Host::Cloudflare),
-        None => Err("Publishing needs a token: VERCEL_TOKEN (vercel.com/account/tokens), or CLOUDFLARE_API_TOKEN (with Pages: Edit) and CLOUDFLARE_ACCOUNT_ID, set where Forge runs; then start the chat again.".into()),
+        None => Err("Publishing needs a token: VERCEL_TOKEN (vercel.com/account/tokens), or CLOUDFLARE_API_TOKEN (with Pages: Edit) and CLOUDFLARE_ACCOUNT_ID, set where KodAct runs; then start the chat again.".into()),
     }
 }
 
@@ -277,7 +277,7 @@ fn site_name(name: &str) -> String {
         .take(58)
         .collect();
     if n.is_empty() {
-        "forge-design".into()
+        "kodact-design".into()
     } else {
         n
     }
@@ -297,7 +297,7 @@ pub fn deploy(page: &Path, name: &str, host: Host) -> Result<String, String> {
 
 fn deploy_vercel(html: &str, name: &str) -> Result<String, String> {
     let token = env(&["VERCEL_TOKEN"]).ok_or(
-        "Publishing on Vercel needs a token: create one at vercel.com/account/tokens and set VERCEL_TOKEN where Forge runs, then start the chat again.",
+        "Publishing on Vercel needs a token: create one at vercel.com/account/tokens and set VERCEL_TOKEN where KodAct runs, then start the chat again.",
     )?;
     let base = env(&["VERCEL_API_URL"]).unwrap_or_else(|| "https://api.vercel.com".into());
     let r = post(
@@ -354,10 +354,10 @@ fn get_json(url: &str, auth: &str) -> Result<Value, String> {
 /// deployment of a manifest naming it.
 fn deploy_cloudflare(html: &str, name: &str) -> Result<String, String> {
     let token = env(&["CLOUDFLARE_API_TOKEN"]).ok_or(
-        "Publishing on Cloudflare Pages needs CLOUDFLARE_API_TOKEN (with Pages: Edit) where Forge runs.",
+        "Publishing on Cloudflare Pages needs CLOUDFLARE_API_TOKEN (with Pages: Edit) where KodAct runs.",
     )?;
     let account = env(&["CLOUDFLARE_ACCOUNT_ID"])
-        .ok_or("Publishing on Cloudflare Pages needs CLOUDFLARE_ACCOUNT_ID where Forge runs.")?;
+        .ok_or("Publishing on Cloudflare Pages needs CLOUDFLARE_ACCOUNT_ID where KodAct runs.")?;
     let base = env(&["CLOUDFLARE_API_URL"])
         .unwrap_or_else(|| "https://api.cloudflare.com/client/v4".into());
     let base = base.trim_end_matches('/');
@@ -499,7 +499,7 @@ mod tests {
     fn clear() {
         for k in [
             "OPENAI_API_KEY",
-            "FORGE_OPENAI_API_KEY",
+            "KODACT_OPENAI_API_KEY",
             "FAL_KEY",
             "VERCEL_TOKEN",
             "OPENAI_BASE_URL",

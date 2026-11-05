@@ -537,7 +537,7 @@ impl Render for RemotePicker {
                 _ => None,
             },
             RemotePage::Ssh if m.hosts.is_empty() && q.is_empty() => Some((
-                "No hosts in ~/.ssh/config. Type user@host to connect. Forge signs in with your SSH keys or agent.".into(),
+                "No hosts in ~/.ssh/config. Type user@host to connect. KodAct signs in with your SSH keys or agent.".into(),
                 false,
             )),
             RemotePage::Folder => match m.folder.as_ref().and_then(|f| f.entries.as_ref()) {
@@ -579,7 +579,7 @@ impl Render for RemotePicker {
                         div()
                             .text_size(t.text.caption)
                             .text_color(t.colors.text_muted)
-                            .child("Forge hasn't connected to this host before. Trust it only if this key fingerprint matches the server's:"),
+                            .child("KodAct hasn't connected to this host before. Trust it only if this key fingerprint matches the server's:"),
                     )
                     .child(div().font_family(t.font_mono.clone()).text_size(t.text.caption).text_color(t.colors.text).child(fp.clone()))
                     .child(

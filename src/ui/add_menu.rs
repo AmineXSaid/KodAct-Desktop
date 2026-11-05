@@ -1,7 +1,7 @@
 //! The composer's "+" menu, as Claude Desktop has one: what you can add to
-//! a message and the tools a reply may use. Only rows Forge can serve:
+//! a message and the tools a reply may use. Only rows KodAct can serve:
 //! files and photos, the web browser (a switch, so the menu stays open),
-//! and ForgeCLI's extensions: connectors (MCP servers), skills, plugins
+//! and KodAct CLI's extensions: connectors (MCP servers), skills, plugins
 //! (`pluginDirs`) and hooks. Claude Desktop's screenshot,
 //! research, style and project rows have no engine here, so they're left
 //! out rather than shown dead.

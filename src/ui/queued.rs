@@ -1,7 +1,7 @@
-//! Messages you sent while Forge works, under the working line until they
+//! Messages you sent while KodAct works, under the working line until they
 //! reach it (`AppState::queued`): each a pale bubble on your side, saying it
-//! reaches Forge at its next step, with Edit (back into the box) and Remove.
-//! Once Forge takes one, it moves into the transcript where the model read it.
+//! reaches KodAct at its next step, with Edit (back into the box) and Remove.
+//! Once KodAct takes one, it moves into the transcript where the model read it.
 
 use gpui::{div, prelude::*, relative, AnyElement, Entity, SharedString};
 
@@ -59,7 +59,7 @@ fn bubble(t: &Theme, state: &Entity<AppState>, chat: usize, q: &Queued) -> AnyEl
                         .overflow_hidden()
                         .whitespace_nowrap()
                         .text_ellipsis()
-                        .child("Queued · reaches Forge at its next step"),
+                        .child("Queued · reaches KodAct at its next step"),
                 )
                 .child(
                     Button::icon(id("edit"), "icons/pencil.svg", "Edit")

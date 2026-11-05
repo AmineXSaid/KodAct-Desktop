@@ -1,8 +1,8 @@
 //! Traces to your own Langfuse (Open Design's observability, ported as an
-//! option): each reply, when it ends, as a trace with your message, Forge's
+//! option): each reply, when it ends, as a trace with your message, KodAct's
 //! reply, the tools it used, the model, the tokens and the time, and for a
 //! design chat its setup. Sent only when `LANGFUSE_PUBLIC_KEY` and
-//! `LANGFUSE_SECRET_KEY` are set where Forge runs (`LANGFUSE_HOST` for a
+//! `LANGFUSE_SECRET_KEY` are set where KodAct runs (`LANGFUSE_HOST` for a
 //! self-hosted one), off the window's thread; nothing goes anywhere else.
 
 use std::time::Duration;
@@ -49,7 +49,7 @@ pub fn target() -> Option<(String, String)> {
 /// The ingestion batch for a turn: a trace, and a generation in it for the
 /// model's part.
 pub fn batch(t: &Turn, id: &str, now: &str) -> Value {
-    let mut metadata = json!({ "tools": t.tools, "app": "Forge" });
+    let mut metadata = json!({ "tools": t.tools, "app": "KodAct" });
     if let Some(d) = &t.design {
         metadata["design"] = d.clone();
     }
@@ -75,7 +75,7 @@ pub fn batch(t: &Turn, id: &str, now: &str) -> Value {
         { "id": format!("{id}-t"), "timestamp": now, "type": "trace-create", "body": {
             "id": id, "timestamp": now, "name": t.chat, "sessionId": t.session,
             "input": t.input, "output": t.output, "metadata": metadata,
-            "tags": if t.design.is_some() { json!(["forge", "design"]) } else { json!(["forge"]) },
+            "tags": if t.design.is_some() { json!(["kodact", "design"]) } else { json!(["kodact"]) },
         } },
         { "id": format!("{id}-g"), "timestamp": now, "type": "generation-create", "body": generation },
     ] })
@@ -89,7 +89,7 @@ pub fn send(t: &Turn) -> Result<(), String> {
     };
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let id = format!(
-        "forge-{}-{}",
+        "kodact-{}-{}",
         t.session
             .chars()
             .filter(|c| c.is_ascii_alphanumeric())

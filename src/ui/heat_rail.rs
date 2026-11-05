@@ -1,4 +1,4 @@
-//! The heat rail: Forge's signature down the left of a run's opened steps.
+//! The heat rail: KodAct's signature down the left of a run's opened steps.
 //! Each step is a node on one hairline, in the status language the app
 //! shares (the working line, the endpoint badges): ember while it works,
 //! ink once done, danger when it failed, warning when it was stopped.

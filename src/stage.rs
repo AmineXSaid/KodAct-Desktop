@@ -1,5 +1,5 @@
 //! Attachments the model can't take inline are put where its tools reach
-//! them: a copy goes in the project, under `.forge/attachments/<id>/`, and
+//! them: a copy goes in the project, under `.kodact/attachments/<id>/`, and
 //! the message names that path. Any model, whatever it can see, can then open
 //! it with Read, Grep, Bash (`tshark`, `unzip -l`, `python`…). An archive is
 //! also opened next to its copy, so its files are ordinary project files at
@@ -25,7 +25,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 /// Where copies go, inside the project.
-pub const STAGING_DIR: &str = ".forge/attachments";
+/// Where attachments are staged, relative to the project:
+/// `.kodact/attachments` (in `.forge/` while a project has only that
+/// folder, `names.rs`).
+pub fn staging_dir(project: &Path) -> String {
+    crate::names::in_project_dir(project, "attachments")
+}
 /// The largest file copied into the project; a bigger one goes by its own path.
 pub const MAX_STAGED: u64 = 256 * 1024 * 1024;
 /// Extraction limits for one archive.
@@ -81,10 +86,10 @@ pub fn safe_name(name: &str) -> String {
     }
 }
 
-/// A fresh `.forge/attachments/<id>/` in `project`.
+/// A fresh `.kodact/attachments/<id>/` in `project`.
 fn new_dir(project: &Path) -> Result<PathBuf, String> {
     static N: AtomicU64 = AtomicU64::new(0);
-    let root = project.join(STAGING_DIR);
+    let root = project.join(staging_dir(project));
     std::fs::create_dir_all(&root)
         .map_err(|e| format!("couldn't create {}: {e}", root.display()))?;
     let ignore = root.join(".gitignore");
@@ -709,12 +714,12 @@ mod tests {
         .unwrap();
         let s = stage_file(&project, &src, "in.zip").unwrap();
         assert!(
-            s.rel.starts_with(".forge/attachments/") && s.rel.ends_with("/in.zip"),
+            s.rel.starts_with(".kodact/attachments/") && s.rel.ends_with("/in.zip"),
             "{}",
             s.rel
         );
         assert_eq!(
-            std::fs::read_to_string(project.join(STAGING_DIR).join(".gitignore")).unwrap(),
+            std::fs::read_to_string(project.join(staging_dir(&project)).join(".gitignore")).unwrap(),
             "*\n"
         );
         let x = extract(&project, &s.abs, "in.zip").unwrap();
@@ -726,7 +731,7 @@ mod tests {
             "fn main() {}"
         );
         assert!(!project
-            .join(".forge/attachments")
+            .join(".kodact/attachments")
             .join("escape.txt")
             .exists());
         discard(&s.dir);

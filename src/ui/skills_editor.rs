@@ -1,9 +1,9 @@
-//! Settings → Skills: folders of instructions ForgeCLI loads when they fit
+//! Settings → Skills: folders of instructions KodAct CLI loads when they fit
 //! the task (`skills/<name>/SKILL.md`). Only a skill's name and description
 //! sit in the context until the model picks it. List them (yours, the
-//! project's, and the ones built into Forge), turn one on or off, and
+//! project's, and the ones built into KodAct), turn one on or off, and
 //! create, edit or delete. Off moves the folder to `skills/.disabled/`,
-//! where ForgeCLI never looks, since it has no setting for this.
+//! where KodAct CLI never looks, since it has no setting for this.
 
 use std::path::PathBuf;
 
@@ -165,7 +165,7 @@ impl SkillsEditor {
         let mut out = div().flex().flex_col().gap(px(10.)).child(kit::header(
             t,
             "Skills",
-            "A skill is a folder of instructions (and any files they use). Only its name and description sit in the context; Forge reads the rest when the task fits. Skills installed for Claude Code work here too.",
+            "A skill is a folder of instructions (and any files they use). Only its name and description sit in the context; KodAct reads the rest when the task fits. Skills installed for Claude Code work here too.",
             Some(add),
         ));
         let Some(catalog) = catalog else {
@@ -174,7 +174,7 @@ impl SkillsEditor {
         if catalog.skills.is_empty() {
             out = out.child(kit::empty(
                 t,
-                "No skills of your own yet. Make one for know-how Forge should pull in only when it needs it: a file format, a deploy procedure, a house style.",
+                "No skills of your own yet. Make one for know-how KodAct should pull in only when it needs it: a file format, a deploy procedure, a house style.",
             ));
         }
         for scope in [Scope::Project, Scope::User] {
@@ -194,8 +194,8 @@ impl SkillsEditor {
                 out = out.child(self.row(t, sk, cx));
             }
         }
-        // Built in: Forge's plugin (and ForgeCLI's own, named in the hint).
-        out = out.child(kit::group(t, "Built into Forge"));
+        // Built in: KodAct's plugin (and KodAct CLI's own, named in the hint).
+        out = out.child(kit::group(t, "Built into KodAct"));
         for (name, description) in crate::plugin::skills() {
             out = out.child(
                 kit::card(t)
@@ -212,7 +212,7 @@ impl SkillsEditor {
             div()
                 .text_size(t.text.caption)
                 .text_color(t.colors.text_muted)
-                .child("ForgeCLI also brings its own: /code-review, /security-review, /simplify, /verify, /init and more. A skill of yours with the same name replaces one."),
+                .child("KodAct CLI also brings its own: /code-review, /security-review, /simplify, /verify, /init and more. A skill of yours with the same name replaces one."),
         );
         let mut links = div().flex().gap(px(14.)).pt(px(4.));
         for (scope, id, label) in [
@@ -415,7 +415,7 @@ impl SkillsEditor {
     }
 
     /// Copy one of your skills to the machine the current project is on (WSL, SSH),
-    /// into its `~/.claude/skills`, where ForgeCLI there finds it.
+    /// into its `~/.claude/skills`, where KodAct CLI there finds it.
     fn copy_to_remote(&mut self, sk: &ff::Skill, cx: &mut Context<Self>) {
         let s = self.state.read(cx);
         let Some(remote) = s.current_remote() else {

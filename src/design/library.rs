@@ -180,7 +180,7 @@ pub struct Entry {
     /// Open Design lists it by link only: its `SKILL.md` describes the skill
     /// and says to install the upstream bundle.
     pub catalogue: bool,
-    /// For a catalogue entry: whether Forge ships the real upstream skill.
+    /// For a catalogue entry: whether KodAct ships the real upstream skill.
     pub upstream_shipped: bool,
     /// Not for the gallery: atoms, Open Design's router and its internal
     /// prompt package (`od.hidden`, `od.strategy`), and a template whose
@@ -210,7 +210,7 @@ pub struct Entry {
 pub struct Problem {
     pub path: PathBuf,
     pub message: String,
-    /// Upstream ships it this way and Forge copes (an invalid YAML header
+    /// Upstream ships it this way and KodAct copes (an invalid YAML header
     /// that is still read, a preview upstream names but doesn't ship):
     /// reported, but not a failure.
     pub tolerated: bool,
@@ -1467,9 +1467,9 @@ mod tests {
         assert!(pptx.catalogue && !pptx.upstream_shipped);
     }
 
-    /// CLAUDE.md rule 1: Forge is closed source, so every licence in the
-    /// library must let Forge redistribute it: no copyleft, nothing
-    /// non-commercial or proprietary, and every declared licence one Forge
+    /// CLAUDE.md rule 1: KodAct is closed source, so every licence in the
+    /// library must let KodAct redistribute it: no copyleft, nothing
+    /// non-commercial or proprietary, and every declared licence one KodAct
     /// knows to be permissive.
     #[test]
     fn every_licence_in_the_library_lets_forge_ship_it() {
@@ -1562,7 +1562,7 @@ mod tests {
 
     #[test]
     fn odd_folders_cant_panic_or_stall_loading() {
-        let tmp = std::env::temp_dir().join(format!("forge-design-odd-{}", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!("kodact-design-odd-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         let skill = tmp.join("skills/a");
         std::fs::create_dir_all(skill.join("examples")).unwrap();

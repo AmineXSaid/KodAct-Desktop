@@ -77,14 +77,14 @@ fn root_rels() -> String {
 
 fn core(title: &str) -> String {
     format!(
-        r#"{XML}<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>{}</dc:title><dc:creator>Forge</dc:creator></cp:coreProperties>"#,
+        r#"{XML}<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>{}</dc:title><dc:creator>KodAct</dc:creator></cp:coreProperties>"#,
         esc(title)
     )
 }
 
 fn app(n: usize) -> String {
     format!(
-        r#"{XML}<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Forge</Application><Slides>{n}</Slides></Properties>"#
+        r#"{XML}<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>KodAct</Application><Slides>{n}</Slides></Properties>"#
     )
 }
 
@@ -173,7 +173,7 @@ fn theme(name: &str) -> String {
     .map(|(k, v)| format!(r#"<a:{k}><a:srgbClr val="{v}"/></a:{k}>"#))
     .collect::<String>();
     format!(
-        r#"{XML}<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="{name}"><a:themeElements><a:clrScheme name="Forge">{colours}</a:clrScheme><a:fontScheme name="Forge"><a:majorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme><a:fmtScheme name="Forge"><a:fillStyleLst>{fill}{fill}{fill}</a:fillStyleLst><a:lnStyleLst>{line}{line}{line}</a:lnStyleLst><a:effectStyleLst>{effect}{effect}{effect}</a:effectStyleLst><a:bgFillStyleLst>{fill}{fill}{fill}</a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>"#
+        r#"{XML}<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="{name}"><a:themeElements><a:clrScheme name="KodAct">{colours}</a:clrScheme><a:fontScheme name="KodAct"><a:majorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme><a:fmtScheme name="KodAct"><a:fillStyleLst>{fill}{fill}{fill}</a:fillStyleLst><a:lnStyleLst>{line}{line}{line}</a:lnStyleLst><a:effectStyleLst>{effect}{effect}{effect}</a:effectStyleLst><a:bgFillStyleLst>{fill}{fill}{fill}</a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>"#
     )
 }
 
@@ -330,10 +330,10 @@ pub fn write(title: &str, slides: &[Slide]) -> Result<Vec<u8>, String> {
         notes_master_rels().as_bytes(),
         deflate,
     )?;
-    put("ppt/theme/theme1.xml", theme("Forge").as_bytes(), deflate)?;
+    put("ppt/theme/theme1.xml", theme("KodAct").as_bytes(), deflate)?;
     put(
         "ppt/theme/theme2.xml",
-        theme("Forge Notes").as_bytes(),
+        theme("KodAct Notes").as_bytes(),
         deflate,
     )?;
     for (i, s) in slides.iter().enumerate() {

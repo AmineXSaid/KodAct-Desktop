@@ -1,8 +1,8 @@
 //! Pets: Open Design's animated companions (`assets/community-pets/` in
-//! the library, and any you add under `pets/` in Forge's config folder).
+//! the library, and any you add under `pets/` in KodAct's config folder).
 //! A pet is a `pet.json` and a sprite sheet: an 8 by 9 atlas of 192 by 208
-//! cells, one row per mood (`hatch-pet`'s contract). Forge shows the one you
-//! pick beside the chat, in the mood of what Forge is doing.
+//! cells, one row per mood (`hatch-pet`'s contract). KodAct shows the one you
+//! pick beside the chat, in the mood of what KodAct is doing.
 
 use std::path::{Path, PathBuf};
 
@@ -71,7 +71,7 @@ pub struct Pet {
     pub sheet: PathBuf,
 }
 
-/// Where your own pets go: `pets/<id>/pet.json` in Forge's config folder.
+/// Where your own pets go: `pets/<id>/pet.json` in KodAct's config folder.
 pub fn own_dir() -> Option<PathBuf> {
     crate::profile::dir().map(|d| d.join("pets"))
 }

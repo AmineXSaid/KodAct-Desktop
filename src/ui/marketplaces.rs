@@ -1,8 +1,8 @@
 //! Settings → Plugins → Marketplaces: Claude Code plugin marketplaces (a
 //! repository with `.claude-plugin/marketplace.json`), as `/plugin
 //! marketplace add` and `/plugin install` work there. Add one by
-//! `owner/repo`, a git URL or a folder; install a plugin from it, and Forge
-//! copies it under ForgeCLI's config folder (`plugins/<marketplace>/<plugin>`)
+//! `owner/repo`, a git URL or a folder; install a plugin from it, and KodAct
+//! copies it under KodAct CLI's config folder (`plugins/<marketplace>/<plugin>`)
 //! and lists it in your `pluginDirs`, so every new chat loads it.
 
 use std::collections::HashMap;

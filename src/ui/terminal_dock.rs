@@ -850,7 +850,7 @@ impl TerminalDock {
                 )
                 .into_any_element();
         };
-        // Forge for VS Code's terminal: ink, its foreground, a purple cursor.
+        // KodAct for VS Code's terminal: ink, its foreground, a purple cursor.
         let k = t.terminal;
         let fg = k.foreground;
         let bg = k.background;

@@ -71,7 +71,7 @@ pub fn fluid(svg: &str, width: f32, scale: f32) -> Option<AnyElement> {
     )
 }
 
-/// The drawing to show in this theme: a Forge-skinned diagram turns dark
+/// The drawing to show in this theme: a KodAct-skinned diagram turns dark
 /// with the app.
 pub fn themed(svg: &str, dark: bool) -> std::borrow::Cow<'_, str> {
     match dark.then(|| crate::diagram::for_dark(svg)).flatten() {
@@ -97,7 +97,7 @@ fn css(c: gpui::Hsla) -> String {
     )
 }
 
-/// The colours Forge draws a Mermaid diagram in, from the theme's tokens.
+/// The colours KodAct draws a Mermaid diagram in, from the theme's tokens.
 pub fn palette(t: &crate::theme::Theme) -> crate::mermaid::Palette {
     crate::mermaid::Palette {
         // Filled shapes in the accent's pale form, edged in the accent, on

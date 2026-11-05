@@ -1,6 +1,6 @@
-//! ForgeCLI's slash commands, as the composer's `/` menu offers them.
+//! KodAct CLI's slash commands, as the composer's `/` menu offers them.
 //!
-//! The list is ForgeCLI's own catalogue (`forge-core/src/commands/mod.rs`),
+//! The list is KodAct CLI's own catalogue (`kodact-core/src/commands/mod.rs`),
 //! less the commands that only work in its terminal UI and those the desktop
 //! does itself or that would pull the chat out from under it (`/exit`,
 //! `/clear`, `/resume`, `/branch`, `/cd`, `/rewind`, `/model`, `/rename`,
@@ -62,13 +62,13 @@ const BUILTIN: &[(&str, &str, &str, bool)] = &[
     (
         "goal",
         "[condition|clear]",
-        "Set a goal Forge keeps working toward until a check finds it met",
+        "Set a goal KodAct keeps working toward until a check finds it met",
         false,
     ),
     (
         "loop",
         "[interval] [prompt]",
-        "Run a prompt on a schedule, or let Forge pace it",
+        "Run a prompt on a schedule, or let KodAct pace it",
         false,
     ),
     (
@@ -87,7 +87,7 @@ const BUILTIN: &[(&str, &str, &str, bool)] = &[
     (
         "debug",
         "[description]",
-        "Turn on debug logging, and have Forge read the log to find a problem",
+        "Turn on debug logging, and have KodAct read the log to find a problem",
         false,
     ),
     (
@@ -111,7 +111,7 @@ const BUILTIN: &[(&str, &str, &str, bool)] = &[
     (
         "advisor",
         "[model|off]",
-        "Let Forge consult a second model for advice at key moments",
+        "Let KodAct consult a second model for advice at key moments",
         false,
     ),
     (
@@ -123,7 +123,7 @@ const BUILTIN: &[(&str, &str, &str, bool)] = &[
     (
         "memory",
         "",
-        "List the memory files in use (FORGE.md, AGENTS.md)",
+        "List the memory files in use (KODACT.md, AGENTS.md)",
         false,
     ),
     (
@@ -209,7 +209,7 @@ const BUILTIN: &[(&str, &str, &str, bool)] = &[
     ("help", "", "Show help and the available commands", false),
 ];
 
-/// ForgeCLI's built-in commands the desktop offers.
+/// KodAct CLI's built-in commands the desktop offers.
 pub fn builtin() -> Vec<Command> {
     BUILTIN
         .iter()
@@ -221,7 +221,7 @@ pub fn builtin() -> Vec<Command> {
         .collect()
 }
 
-/// Your commands and the project's, as ForgeCLI finds them
+/// Your commands and the project's, as KodAct CLI finds them
 /// (`forge_files::commands`: yours, then `.agents/commands` and
 /// `.forge/commands`, subfolders as `dir:name`), described by their
 /// `description:` front matter or their first line (blocking: call off the
@@ -244,7 +244,7 @@ pub fn custom(project: &std::path::Path) -> Vec<Command> {
     out
 }
 
-/// The skills ForgeCLI ships (`forge-agents/bundled`), by name and what
+/// The skills KodAct CLI ships (`kodact-agents/bundled`), by name and what
 /// they do. A user or project skill of the same name replaces one.
 const BUNDLED_SKILLS: &[(&str, &str)] = &[
     (
@@ -261,7 +261,7 @@ const BUNDLED_SKILLS: &[(&str, &str)] = &[
     ),
     (
         "init",
-        "Write or improve FORGE.md, the project's instructions for Forge",
+        "Write or improve KODACT.md, the project's instructions for KodAct",
     ),
     (
         "review",
@@ -282,7 +282,7 @@ const BUNDLED_SKILLS: &[(&str, &str)] = &[
     ),
     (
         "update-config",
-        "Change Forge's settings files: permissions, hooks, environment variables, model and more",
+        "Change KodAct's settings files: permissions, hooks, environment variables, model and more",
     ),
     (
         "verify",
@@ -291,7 +291,7 @@ const BUNDLED_SKILLS: &[(&str, &str)] = &[
 ];
 
 /// The skills you can run with `/name`: the project's and yours (from the
-/// folders ForgeCLI reads, `forge_files::skills`), then ForgeCLI's own.
+/// folders KodAct CLI reads, `forge_files::skills`), then KodAct CLI's own.
 /// A skill marked `user-invocable: false` is the model's alone. Reads
 /// files: call it off the UI thread.
 pub fn skills(project: &std::path::Path) -> Vec<Command> {
@@ -310,9 +310,9 @@ pub fn skills(project: &std::path::Path) -> Vec<Command> {
     with_shipped(own)
 }
 
-/// The skills a remote's ForgeCLI loads: its own folders' (each SKILL.md's
+/// The skills a remote's KodAct CLI loads: its own folders' (each SKILL.md's
 /// frontmatter, read over the connection: `remote::skill_heads`), then
-/// Forge's plugin and ForgeCLI's own, as [`skills`] lists them here.
+/// KodAct's plugin and KodAct CLI's own, as [`skills`] lists them here.
 pub fn remote_skills(heads: &[(String, String)]) -> Vec<Command> {
     let own = heads
         .iter()
@@ -340,8 +340,8 @@ fn invocable(md: &str) -> bool {
         .any(|l| l.replace(' ', "") == "user-invocable:false")
 }
 
-/// Your skills, sorted, then the ones that come with Forge: its plugin's
-/// (`forge:diagram-design`) and ForgeCLI's own.
+/// Your skills, sorted, then the ones that come with KodAct: its plugin's
+/// (`kodact:diagram-design`) and KodAct CLI's own.
 fn with_shipped(mut out: Vec<Command>) -> Vec<Command> {
     out.sort_by(|a, b| a.name.cmp(&b.name));
     out.dedup_by(|a, b| a.name == b.name);
@@ -353,7 +353,7 @@ fn with_shipped(mut out: Vec<Command>) -> Vec<Command> {
     out
 }
 
-/// Forge's plugin's skills, as ForgeCLI names them (`forge:diagram-design`).
+/// KodAct's plugin's skills, as KodAct CLI names them (`kodact:diagram-design`).
 pub fn plugin_skills() -> impl Iterator<Item = Command> {
     crate::plugin::skills()
         .into_iter()
@@ -364,7 +364,7 @@ pub fn plugin_skills() -> impl Iterator<Item = Command> {
         })
 }
 
-/// ForgeCLI's own skills, which every project has.
+/// KodAct CLI's own skills, which every project has.
 pub fn bundled_skills() -> impl Iterator<Item = Command> {
     BUNDLED_SKILLS.iter().map(|(name, what)| Command {
         name: name.to_string(),
@@ -373,7 +373,7 @@ pub fn bundled_skills() -> impl Iterator<Item = Command> {
     })
 }
 
-/// Whether `text` is a command ForgeCLI answers at once (`/status`, `/usage`…).
+/// Whether `text` is a command KodAct CLI answers at once (`/status`, `/usage`…).
 pub fn is_immediate(text: &str) -> bool {
     let Some(rest) = text.trim().strip_prefix('/') else {
         return false;
@@ -407,7 +407,7 @@ mod tests {
         assert_eq!(names[..2], ["nameless", "tls-notes"]);
         assert!(!names.iter().any(|n| n == "model-only" || n == "broken"));
         assert!(
-            names.iter().any(|n| n == "forge:diagram-design"),
+            names.iter().any(|n| n == "kodact:diagram-design"),
             "{names:?}"
         );
         assert!(names.iter().any(|n| n == "init"));
@@ -445,7 +445,7 @@ mod tests {
         )
         .unwrap();
         std::fs::write(cmds.join("lint.md"), "# Lint everything\n").unwrap();
-        // Yours (ForgeCLI's config folder) may add more; these are the project's.
+        // Yours (KodAct CLI's config folder) may add more; these are the project's.
         let c: Vec<Command> = custom(&dir)
             .into_iter()
             .filter(|c| c.name == "lint" || c.name == "ship")

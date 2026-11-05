@@ -5,7 +5,7 @@
 //!
 //! The file format is its own (`Saved*`), versioned, and separate from the
 //! transcript model in `state.rs`, so either can change without breaking
-//! the other. A chat's ForgeCLI conversation is resumed by the same id
+//! the other. A chat's KodAct CLI conversation is resumed by the same id
 //! (`--resume`), so a reopened chat still has its context.
 
 use std::path::{Path, PathBuf};
@@ -18,7 +18,7 @@ use crate::state::{
     ToolKind, ToolStatus, Verdict,
 };
 
-/// The format version written. Files from a newer Forge are left alone.
+/// The format version written. Files from a newer KodAct are left alone.
 const VERSION: u32 = 1;
 /// A binary file a reply made is kept inline up to this size; larger ones
 /// are read again from where they were written.
@@ -30,7 +30,7 @@ const MODE_PREFIX: &str = "mode:";
 pub struct SavedChat {
     pub version: u32,
     pub session: String,
-    /// The ForgeCLI conversation exists on disk: the next message resumes it.
+    /// The KodAct CLI conversation exists on disk: the next message resumes it.
     #[serde(default)]
     pub resumable: bool,
     pub project: PathBuf,
@@ -76,7 +76,7 @@ pub enum SavedMessage {
         sent: u64,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attachments: Vec<SavedAttachment>,
-        /// ForgeCLI's id for the turn (for Revert).
+        /// KodAct CLI's id for the turn (for Revert).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         turn: Option<String>,
     },
@@ -168,7 +168,7 @@ pub enum SavedBlock {
         /// When it was answered, in seconds since 1970.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         at: Option<u64>,
-        /// What you told Forge to do instead, with a denial.
+        /// What you told KodAct to do instead, with a denial.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         note: Option<String>,
         /// The call's row in the same message.
@@ -633,15 +633,15 @@ pub fn updated_of(saved: &SavedChat) -> SystemTime {
     time(saved.updated)
 }
 
-/// Where chats are kept: `FORGE_HISTORY_DIR`, else `<config>/chats`.
+/// Where chats are kept: `KODACT_HISTORY_DIR`, else `<config>/chats`.
 pub fn dir() -> Option<PathBuf> {
-    if let Some(d) = std::env::var_os("FORGE_HISTORY_DIR") {
+    if let Some(d) = std::env::var_os("KODACT_HISTORY_DIR") {
         return Some(PathBuf::from(d));
     }
     crate::profile::dir().map(|d| d.join("chats"))
 }
 
-/// Whether `id` is a session id Forge made (and so a safe file name).
+/// Whether `id` is a session id KodAct made (and so a safe file name).
 pub fn valid_id(id: &str) -> bool {
     id.len() == 36
         && id.chars().enumerate().all(|(i, c)| {
@@ -892,7 +892,7 @@ mod tests {
         };
         c.messages.push(Message::Assistant {
             blocks: vec![Block::Permission {
-                title: "Forge has 2 questions".into(),
+                title: "KodAct has 2 questions".into(),
                 detail: "Stack?".into(),
                 verdict: Verdict::Allowed,
                 info: PermInfo {

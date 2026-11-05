@@ -46,6 +46,7 @@ const PROTECTED_CREDENTIAL_SUBPATHS: &[&str] = &[".ssh", ".gnupg", ".aws", ".kub
 /// files are legitimately edited and removed all the time. Matched exactly.
 const PROTECTED_HOME_SUBPATHS: &[&str] = &[
     ".config",
+    ".kodact",
     ".forge",
     ".claude",
     ".local",

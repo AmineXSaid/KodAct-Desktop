@@ -55,7 +55,7 @@ pub struct Workspace {
     doc_find: Entity<super::doc_find::DocFind>,
     /// The project's tree and a viewer, under the side panel (`files_pane.rs`).
     files: Entity<super::files_pane::FilesPane>,
-    /// The film as Forge opens, while it plays (`opener.rs`).
+    /// The film as KodAct opens, while it plays (`opener.rs`).
     opener: Option<Entity<super::opener::Opener>>,
     /// The windows drawn here, kept for the beat each takes to leave.
     presence: Presences,
@@ -447,7 +447,7 @@ impl Workspace {
                         window.dispatch_action(Box::new(ToggleSidebar), cx)
                     }));
                     if sidebar_open {
-                        // Over the sidebar, its head: the toggle and Forge's
+                        // Over the sidebar, its head: the toggle and KodAct's
                         // name (Chat | Code heads the sidebar itself).
                         d.child(
                             // The title bar insets its row by the sidebar's
@@ -640,7 +640,7 @@ impl Workspace {
         )
     }
 
-    /// A new chat: the greeting in the display serif beside Forge's mark, a
+    /// A new chat: the greeting in the display serif beside KodAct's mark, a
     /// quiet line under it, the composer and the starters, on a plain
     /// ground.
     fn welcome(&self, _window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -654,13 +654,13 @@ impl Workspace {
             .map(|p| p.name.to_string())
             .unwrap_or_default();
         let sub = if !s.in_folder() {
-            "Ask anything, or pick a folder below to work on code. Forge asks before it changes anything."
+            "Ask anything, or pick a folder below to work on code. KodAct asks before it changes anything."
                 .to_string()
         } else if project.is_empty() {
-            "Ask, plan or build. Forge works in your project and asks before it changes anything."
+            "Ask, plan or build. KodAct works in your project and asks before it changes anything."
                 .to_string()
         } else {
-            format!("Working in {project}. Forge asks before it changes anything.")
+            format!("Working in {project}. KodAct asks before it changes anything.")
         };
         div().flex_1().min_h_0().relative().flex().flex_col().child(
             // A short window scrolls it rather than cutting off the starters.
@@ -1296,7 +1296,7 @@ impl Render for Workspace {
                     if s.design_on_screen().is_some() {
                         s.design_set_select(!s.design_select, cx)
                     } else {
-                        s.show_toast("Show a page Forge designed to comment on it.", cx)
+                        s.show_toast("Show a page KodAct designed to comment on it.", cx)
                     }
                 })
             }))
@@ -2047,7 +2047,7 @@ fn share_out(
     (p, d)
 }
 
-/// The greeting, in the display serif, after Forge's mark: an editorial
+/// The greeting, in the display serif, after KodAct's mark: an editorial
 /// line, not a banner.
 fn greeting_line(line: &str, t: &crate::theme::Theme) -> impl IntoElement {
     div()

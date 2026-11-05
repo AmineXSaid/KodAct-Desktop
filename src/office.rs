@@ -1,4 +1,4 @@
-//! Office files and PDFs, read natively for the side panel. Forge's
+//! Office files and PDFs, read natively for the side panel. KodAct's
 //! office-documents skill writes them; this shows what it wrote, without
 //! Word, Excel or a PDF viewer:
 //!
@@ -130,7 +130,7 @@ pub const MAX_PAGES: usize = 40;
 fn pages(bytes: &[u8]) -> Result<(Vec<Page>, usize), String> {
     use hayro::hayro_interpret::InterpreterSettings;
     use hayro::hayro_syntax::Pdf;
-    let pdf = Pdf::new(bytes.to_vec()).map_err(|e| format!("not a PDF Forge can draw: {e:?}"))?;
+    let pdf = Pdf::new(bytes.to_vec()).map_err(|e| format!("not a PDF KodAct can draw: {e:?}"))?;
     let total = pdf.pages().len();
     let cache = hayro::RenderCache::new();
     let settings = InterpreterSettings::default();
@@ -150,7 +150,7 @@ fn pages(bytes: &[u8]) -> Result<(Vec<Page>, usize), String> {
         let (width, height) = (u32::from(pixmap.width()), u32::from(pixmap.height()));
         // An opaque page: premultiplied and straight alpha are the same.
         let rgba = image::RgbaImage::from_raw(width, height, pixmap.data_as_u8_slice().to_vec())
-            .ok_or("a page Forge could not draw")?;
+            .ok_or("a page KodAct could not draw")?;
         let mut png = Vec::new();
         rgba.write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png)
             .map_err(|e| e.to_string())?;
@@ -288,7 +288,7 @@ pub fn text(kind: Kind, bytes: &[u8]) -> Result<String, String> {
 pub fn sheets_csv(bytes: &[u8], budget: usize) -> Result<(Vec<(String, String)>, bool), String> {
     use calamine::{Data, Reader as _};
     let mut book = calamine::open_workbook_auto_from_rs(Cursor::new(bytes.to_vec()))
-        .map_err(|e| format!("not a workbook Forge can read: {e}"))?;
+        .map_err(|e| format!("not a workbook KodAct can read: {e}"))?;
     let cell = |d: &Data| -> String {
         let s = match d {
             Data::Empty => String::new(),
@@ -358,7 +358,7 @@ pub fn column_letters(mut n: usize) -> String {
 fn sheets(bytes: &[u8]) -> Result<Vec<Sheet>, String> {
     use calamine::{Data, Reader as _};
     let mut book = calamine::open_workbook_auto_from_rs(Cursor::new(bytes.to_vec()))
-        .map_err(|e| format!("not a workbook Forge can read: {e}"))?;
+        .map_err(|e| format!("not a workbook KodAct can read: {e}"))?;
     let looks = crate::xlsx_style::read(bytes);
     let mut out = vec![];
     for name in book.sheet_names().to_vec() {
@@ -426,7 +426,7 @@ fn part(zip: &mut zip::ZipArchive<Cursor<&[u8]>>, path: &str) -> Option<String> 
 
 fn open_zip(bytes: &[u8]) -> Result<zip::ZipArchive<Cursor<&[u8]>>, String> {
     zip::ZipArchive::new(Cursor::new(bytes))
-        .map_err(|e| format!("not an Office file Forge can read: {e}"))
+        .map_err(|e| format!("not an Office file KodAct can read: {e}"))
 }
 
 fn attr(e: &BytesStart, key: &[u8]) -> Option<String> {
@@ -808,7 +808,7 @@ fn slide_text(xml: &str) -> (Option<String>, Vec<String>) {
 
 fn pdf(bytes: &[u8]) -> Result<String, String> {
     let doc =
-        lopdf::Document::load_mem(bytes).map_err(|e| format!("not a PDF Forge can read: {e}"))?;
+        lopdf::Document::load_mem(bytes).map_err(|e| format!("not a PDF KodAct can read: {e}"))?;
     let pages: Vec<u32> = doc.get_pages().keys().copied().take(MAX_PARTS).collect();
     if pages.is_empty() {
         return Err("the PDF has no pages".into());

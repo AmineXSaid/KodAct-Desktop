@@ -1,7 +1,7 @@
 //! Knowledge from GitHub, as Claude's projects take it: pick a repository,
 //! tick files or folders, and their text joins the project's knowledge
 //! (`knowledge.rs`, On demand). The files are downloaded into
-//! `.forge/knowledge/github/<owner>-<repo>/`, so every chat reads them like
+//! `.kodact/knowledge/github/<owner>-<repo>/`, so every chat reads them like
 //! any other knowledge file; Sync fetches the branch's latest and drops
 //! what was deleted upstream.
 //!
@@ -9,7 +9,7 @@
 //!   repositories work), else GitHub's REST API, with `GH_TOKEN` /
 //!   `GITHUB_TOKEN` when set (public repositories need none). The same
 //!   route as the project's Repository card (`git_status.rs`).
-//! - `.forge/github-knowledge.json` keeps each repository's branch, the
+//! - `.kodact/github-knowledge.json` keeps each repository's branch, the
 //!   commit last synced, what was picked and the files that came of it.
 //!
 //! Everything here blocks: run it off the UI thread.
@@ -20,9 +20,9 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-const SOURCES: &str = ".forge/github-knowledge.json";
+const SOURCES: &str = "github-knowledge.json";
 /// Where downloaded files go, under the knowledge folder.
-const DIR: &str = ".forge/knowledge/github";
+const DIR: &str = "knowledge/github";
 /// A file larger than this stays on GitHub.
 pub const FILE_MAX: u64 = 2 * 1024 * 1024;
 /// One add or sync downloads at most this many files.
@@ -108,7 +108,7 @@ pub struct Source {
 }
 
 fn sources_path(project: &Path) -> PathBuf {
-    project.join(SOURCES)
+    crate::names::project_dir(project).join(SOURCES)
 }
 
 pub fn sources(project: &Path) -> Vec<Source> {
@@ -129,7 +129,7 @@ fn save(project: &Path, list: &[Source]) -> Result<(), String> {
 
 /// Where a repository's files are kept in the project.
 fn local_dir(project: &Path, repo: &str) -> PathBuf {
-    project.join(DIR).join(repo.replace('/', "-"))
+    crate::names::project_dir(project).join(DIR).join(repo.replace('/', "-"))
 }
 
 /// A repository path as a safe path under its folder: no `..`, no root.
@@ -210,7 +210,7 @@ impl Hub {
                 .agent
                 .get(&format!("https://api.github.com/{path}"))
                 .set("Accept", accept)
-                .set("User-Agent", "Forge-Desktop");
+                .set("User-Agent", "KodAct-Desktop");
             if let Some(t) = token {
                 req = req.set("Authorization", &format!("Bearer {t}"));
             }
@@ -543,7 +543,7 @@ mod tests {
         assert!(local_path(p, "o/r", "a\\b").is_none());
         assert_eq!(
             local_path(p, "o/r", "docs/a.md").unwrap(),
-            Path::new("/p/.forge/knowledge/github/o-r/docs/a.md")
+            Path::new("/p/.kodact/knowledge/github/o-r/docs/a.md")
         );
     }
 
@@ -554,7 +554,7 @@ mod tests {
 
     #[test]
     fn removing_a_repository_takes_its_files_out_of_the_knowledge() {
-        let dir = std::env::temp_dir().join(format!("forge-ghk-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("kodact-ghk-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let f = local_path(&dir, "o/r", "docs/a.md").unwrap();

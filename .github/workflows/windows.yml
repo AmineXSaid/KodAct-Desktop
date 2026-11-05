@@ -4,7 +4,7 @@
 # warnings as errors, a debug build, then the tests. A red check is a broken
 # commit.
 #
-# `build` (Windows) makes Forge's .exe with MSVC and the Windows SDK (GPUI
+# `build` (Windows) makes KodAct's .exe with MSVC and the Windows SDK (GPUI
 # compiles its shaders with the SDK's fxc.exe in release builds). A push to
 # main keeps it as an artifact for 30 days and puts it on the `windows-build`
 # branch (one commit, replaced each time), so it can also be fetched with
@@ -101,7 +101,7 @@ jobs:
       - name: Describe the .exe
         shell: pwsh
         run: |
-          $exe = "target/release/forge-gpui.exe"
+          $exe = "target/release/kodact-desktop.exe"
           $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
           $size = (Get-Item $exe).Length
           @(
@@ -113,10 +113,10 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Forge-windows-x64
+          name: KodAct-windows-x64
           retention-days: 30
           path: |
-            target/release/forge-gpui.exe
+            target/release/kodact-desktop.exe
             BUILD.txt
 
       - name: Publish to the windows-build branch
@@ -126,12 +126,12 @@ jobs:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir publish
-          cp target/release/forge-gpui.exe BUILD.txt publish/
+          cp target/release/kodact-desktop.exe BUILD.txt publish/
           cd publish
           git init -q -b windows-build
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add forge-gpui.exe BUILD.txt
+          git add kodact-desktop.exe BUILD.txt
           git commit -q -m "Windows build of ${GITHUB_SHA::7}"
           git push --force -q "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" windows-build
 

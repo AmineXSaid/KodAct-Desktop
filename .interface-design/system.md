@@ -1,4 +1,4 @@
-# Design System: Forge desktop (forge-gpui)
+# Design System: KodAct desktop (kodact-desktop)
 
 > Generated from `src/theme.rs` by `src/system_md.rs`. Change a token in theme.rs, then run
 > `UPDATE_SYSTEM_MD=1 cargo test system_md`; `cargo test` fails while this file is stale.
@@ -182,7 +182,7 @@ One family; every control takes keyboard focus (a `primary` edge shows for the k
 - Usage: menus, pickers, the command palette
 
 ### File Card
-- A file Forge made, in its reply: up to 440px, `surface`, 1px `border`, radius 4px, padding 8px
+- A file KodAct made, in its reply: up to 440px, `surface`, 1px `border`, radius 4px, padding 8px
 - A 36x44 page tile (radius 4px, concentric with the card) previews it, its type in mono `primary`
 - Title 600 `text_strong`; "Document · MD" caption `text_muted`; a bordered Download button
 - Open: the edge turns `primary` at 60%
@@ -204,19 +204,19 @@ One family; every control takes keyboard focus (a `primary` edge shows for the k
 
 | Decision | Rationale | Date |
 |----------|-----------|------|
-| One colour, moss, not terracotta | The reference rations one warm orange to the primary action; Forge keeps the rationing and takes the reference's own moss, calmer on cream and kin to the mark. | 2026-10-18 |
+| One colour, moss, not terracotta | The reference rations one warm orange to the primary action; KodAct keeps the rationing and takes the reference's own moss, calmer on cream and kin to the mark. | 2026-10-18 |
 | Dusty blue, not moss | Moss read as too green beside the cream; a dusty blue from the Slate theme's family, warmed for cream, keeps the same rationing and contrast (5.4:1 on the session). | 2026-10-19 |
 | Paper on paper | The session is a 4px sheet on the cream canvas with paper grain; the title bar and sidebar have no dividers, the sheet's edge is the split. | 2026-10-18 |
 | Pills to press, 4px to hold | The contrast between the two shapes is the system: it says at a glance what acts and what holds. | 2026-10-18 |
 | Ink pills for the loud neutrals | New chat and needs-you are ink pills; the accent is kept for the one decision in front of you (Allow once, Send). | 2026-10-18 |
 | Anthropic Sans only | One family everywhere, in its Text and Display cuts: the interface, replies, code, the terminal and diagrams. No other face is bundled or named. | 2026-10-26 |
 | One look | The theme picker and its eleven other looks are gone; Calmly smooth, light and dark, is the app's one look. | 2026-10-26 |
-| No generic AI icons | No sparkles, magic wands, robot heads or brains: each icon names its thing. Design is pencil-ruler (the Pen tool keeps pen-tool), skills a scroll, agents boxes (Forge's cubes, many), memory a notebook, effort a gauge; thinking shows Forge's own strike mark. | 2026-11-02 |
+| No generic AI icons | No sparkles, magic wands, robot heads or brains: each icon names its thing. Design is pencil-ruler (the Pen tool keeps pen-tool), skills a scroll, agents boxes (KodAct's cubes, many), memory a notebook, effort a gauge; thinking shows KodAct's own strike mark. | 2026-11-02 |
 | Three durations | Every transition takes one of three times: fast 120ms (anything leaving, a menu arriving, the edge draw), base 200ms (hovers, dialogs and notices arriving, the panel leaving), slow 280ms (the side panel arriving). Loops (the strike mark, a working node) keep their own beat. | 2026-11-02 |
-| The heat rail | Forge's signature: a run's opened steps hang on one rail, a node each in the shared status language (ember working, ink done, danger failed or declined, warning stopped); while the run is live the rail glows ember and the working node breathes, then it cools to a hairline (`heat_rail.rs`). | 2026-11-02 |
+| The heat rail | KodAct's signature: a run's opened steps hang on one rail, a node each in the shared status language (ember working, ink done, danger failed or declined, warning stopped); while the run is live the rail glows ember and the working node breathes, then it cools to a hairline (`heat_rail.rs`). | 2026-11-02 |
 | One control per kind of choice | One of a few short options is a segmented control (`editor_kit::choice`); one of several options that each need a line of description is a radio list; chips are for picking several, or one from a long list. Where a setting is kept reads the same everywhere: This project, just me · This project, shared · All my projects. | 2026-11-02 |
-| Forge Ember | Warm paper and warm graphite, the sidebar a step deeper than the session, and one copper heat for the action, the current state and links: the forge's own colour, as calm as Claude Code's. | 2026-10-23 |
-| KodAct Signal | The app takes KodAct's identity from its terminal: ink and cool paper for the surfaces, the terminal's turquoise as the one colour, and KodAct's mark (a step, then a chevron) in place of the ingot. It replaces Forge Ember. | 2026-11-10 |
+| KodAct Ember | Warm paper and warm graphite, the sidebar a step deeper than the session, and one copper heat for the action, the current state and links: the forge's own colour, as calm as Claude Code's. | 2026-10-23 |
+| KodAct Signal | The app takes KodAct's identity from its terminal: ink and cool paper for the surfaces, the terminal's turquoise as the one colour, and KodAct's mark (a step, then a chevron) in place of the ingot. It replaces KodAct Ember. | 2026-11-10 |
 | A neutral wash for the open row | The accent stays for the action; the open chat and the open screen lift by a grey wash. | 2026-10-23 |
 | Composer at 620px | A comfortable measure for a prompt, the same in a chat and on the welcome page. | 2026-10-11 |
 | Composer on the reading column | In a chat the composer takes the 760px column the reply is read in, so the two line up; on the welcome page it keeps its own measure. | 2026-10-23 |

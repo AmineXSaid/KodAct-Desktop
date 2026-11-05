@@ -240,7 +240,7 @@ fn row(
         })
 }
 
-/// A comment's number in its pin's colours: Forge's comments in the
+/// A comment's number in its pin's colours: KodAct's comments in the
 /// page's ink, notes for you quieter.
 pub fn pin_mark(t: &Theme, n: usize, sent: crate::state::CommentSent) -> gpui::Div {
     let note = sent == crate::state::CommentSent::Note;
@@ -463,13 +463,13 @@ pub fn render(
     // The comments: their pins, resolved ones, then each, newest last.
     let open_count = comments.iter().filter(|c| !c.resolved).count();
     let mut comments_menu = sheet(t, 300.)
-        // A whole review, not one comment: Forge scores and fixes the page.
+        // A whole review, not one comment: KodAct scores and fixes the page.
         .child(
             row(
                 t,
                 "comments-review",
                 Some("icons/stethoscope.svg"),
-                crate::i18n::tr("Ask Forge to review the page"),
+                crate::i18n::tr("Ask KodAct to review the page"),
                 None,
                 false,
             )
@@ -683,7 +683,7 @@ pub fn render(
                     None => "Reading the library…".to_string(),
                     Some(all) if all.is_empty() => "No design library here.".to_string(),
                     Some(all) => format!(
-                        "{} of {} design systems. One restyles the page: Forge reads its DESIGN.md.",
+                        "{} of {} design systems. One restyles the page: KodAct reads its DESIGN.md.",
                         shown.len(),
                         all.len()
                     ),

@@ -24,9 +24,9 @@ pub fn day_part(hour: u32) -> DayPart {
 const ANYTIME: &[&str] = &[
     "Welcome back, {}",
     "{} returns",
-    "What are we forging, {}?",
-    "Back at the anvil, {}",
-    "The forge is lit, {}",
+    "What are we building, {}?",
+    "Back at it, {}",
+    "Ready to ship, {}?",
     "Ready when you are, {}",
     "Let's build something, {}",
     "Good to see you, {}",
@@ -37,13 +37,13 @@ fn of_day(part: DayPart) -> &'static [&'static str] {
         DayPart::Morning => &[
             "Good morning, {}",
             "Morning, {}. Fresh start?",
-            "Early fire, {}",
+            "Early start, {}",
         ],
         DayPart::Afternoon => &["Good afternoon, {}", "Afternoon, {}. What's next?"],
         DayPart::Evening => &["Good evening, {}", "Evening shift, {}"],
         DayPart::Night => &[
             "Burning the midnight oil, {}?",
-            "Late at the forge, {}",
+            "Late session, {}",
             "Quiet hours, {}",
         ],
     }
@@ -62,7 +62,7 @@ fn mix(x: u64) -> u64 {
 pub fn pick(name: &str, hour: u32, seed: u64) -> String {
     let name = name.trim();
     if name.is_empty() {
-        return "Welcome to Forge".into();
+        return "Welcome to KodAct".into();
     }
     let day = of_day(day_part(hour));
     let all = day.len() + ANYTIME.len();
@@ -116,6 +116,6 @@ mod tests {
         // Night lines never show in the morning.
         assert!(!lines.iter().any(|l| l.contains("midnight")));
         assert_eq!(pick("Amine", 9, 7), pick("Amine", 9, 7));
-        assert_eq!(pick("  ", 9, 1), "Welcome to Forge");
+        assert_eq!(pick("  ", 9, 1), "Welcome to KodAct");
     }
 }

@@ -313,7 +313,7 @@ fn the_measures_agree_with_known_values() {
     assert!((l - 1.).abs() < 0.001 && c < 0.001);
 }
 
-/// The terminal's colours read on its ink (`terminal.background`), as Forge
+/// The terminal's colours read on its ink (`terminal.background`), as KodAct
 /// for VS Code sets them: every colour at least as a UI part (3:1), the
 /// darkest text ones at AA; black in dark mode is meant to sit back.
 #[test]

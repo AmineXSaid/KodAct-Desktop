@@ -1,4 +1,4 @@
-//! Saving a file Forge made into your Downloads folder, the way a browser
+//! Saving a file KodAct made into your Downloads folder, the way a browser
 //! does: under its own name, or "name (1).md" when that is taken. Never
 //! overwrites, and never writes outside the folder.
 

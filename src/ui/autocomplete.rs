@@ -1,12 +1,12 @@
 //! The composer's autocomplete: type `/` at the start of a message for
-//! commands (ForgeCLI's, the project's own, the app's, the modes), or `@`
+//! commands (KodAct CLI's, the project's own, the app's, the modes), or `@`
 //! anywhere for a file in the project. A popover above the box lists the
 //! matches, best first, with the matched letters in bold; ↑/↓ move, Enter
 //! or Tab completes, Esc closes it until the word changes.
 //!
-//! Choosing a ForgeCLI or project command writes it into the box (`/compact `),
+//! Choosing a KodAct CLI or project command writes it into the box (`/compact `),
 //! ready to send; an app action or a mode runs at once and clears the word;
-//! a file is written as `@path `, which ForgeCLI attaches when it reads the
+//! a file is written as `@path `, which KodAct CLI attaches when it reads the
 //! message.
 
 use gpui::{div, prelude::*, px, Action, AnyElement, FontWeight, SharedString};
@@ -42,7 +42,7 @@ pub fn trigger(text: &str) -> Option<Trigger> {
     }
 }
 
-/// A mention in a message: a `/name` ForgeCLI runs leading it (a skill or
+/// A mention in a message: a `/name` KodAct CLI runs leading it (a skill or
 /// a command), or `@path` naming one of the project's files or folders.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Mark {
@@ -166,7 +166,7 @@ fn app_actions() -> Vec<(&'static str, &'static str, &'static str, Box<dyn Actio
         ),
         (
             "browser",
-            "Turn the web browser on or off for Forge's agents",
+            "Turn the web browser on or off for KodAct's agents",
             "icons/globe.svg",
             Box::new(ToggleBrowser),
         ),
@@ -241,7 +241,7 @@ pub fn items(trig: &Trigger, s: &AppState) -> Vec<Item> {
                 order,
                 format!("/{name}"),
                 what.to_string(),
-                "Forge Desktop",
+                "KodAct Desktop",
                 icon,
                 Pick::Action(action),
             );
@@ -275,7 +275,7 @@ pub fn items(trig: &Trigger, s: &AppState) -> Vec<Item> {
         .collect()
 }
 
-/// `@path` as ForgeCLI reads it: quoted when it has a space.
+/// `@path` as KodAct CLI reads it: quoted when it has a space.
 pub fn mention(path: &str) -> String {
     if path.contains(char::is_whitespace) {
         format!("@\"{path}\"")
@@ -686,7 +686,7 @@ mod tests {
             trigger("/simplify @comp").map(|t| t.query),
             Some("comp".into())
         );
-        // A space in a path is quoted, as ForgeCLI reads it.
+        // A space in a path is quoted, as KodAct CLI reads it.
         assert_eq!(mention("docs/a b.md"), "@\"docs/a b.md\"");
     }
 

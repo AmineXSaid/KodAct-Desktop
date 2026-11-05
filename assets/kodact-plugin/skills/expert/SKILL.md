@@ -1,6 +1,6 @@
 ---
 name: expert
-description: Teach the user while you work, so they understand and remember, not just receive an answer. Use when the user asks to learn, understand, be taught, have something explained "from the basics" or "step by step", asks "why does this work", wants a walkthrough of code or of a change you made, or invokes /forge:expert. Stays on for the rest of the conversation until the user says stop.
+description: Teach the user while you work, so they understand and remember, not just receive an answer. Use when the user asks to learn, understand, be taught, have something explained "from the basics" or "step by step", asks "why does this work", wants a walkthrough of code or of a change you made, or invokes /kodact:expert. Stays on for the rest of the conversation until the user says stop.
 ---
 
 # Expert: teach as you work

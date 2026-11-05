@@ -2,10 +2,10 @@
 //! into a PDF, which `office.rs` draws page by page, so the side panel shows
 //! a document's layout, fonts and pictures, and a deck's slides as designed.
 //!
-//! LibreOffice is used when it is on this computer (`FORGE_SOFFICE`, PATH,
+//! LibreOffice is used when it is on this computer (`KODACT_SOFFICE`, PATH,
 //! or where its installer puts it); without it the panel shows the file's
 //! text, as before. Each file is rendered once, keyed by its bytes, into
-//! Forge's temp folder. Rendering blocks for seconds: run it off the UI
+//! KodAct's temp folder. Rendering blocks for seconds: run it off the UI
 //! thread.
 
 use std::hash::{Hash, Hasher};
@@ -24,7 +24,7 @@ pub fn soffice() -> Option<PathBuf> {
 }
 
 fn find() -> Option<PathBuf> {
-    if let Some(p) = std::env::var_os("FORGE_SOFFICE").map(PathBuf::from) {
+    if let Some(p) = std::env::var_os("KODACT_SOFFICE").map(PathBuf::from) {
         return p.is_file().then_some(p);
     }
     let names: &[&str] = if cfg!(windows) {

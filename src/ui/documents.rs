@@ -1,4 +1,4 @@
-//! Documents: every file Forge made, across your chats, newest first. Each
+//! Documents: every file KodAct made, across your chats, newest first. Each
 //! is a row (its mark, its title, its type and the chat it came from) with
 //! View, which opens it in the side panel, and Download; nothing is drawn
 //! in place until you ask for it. The chat's name opens that chat.
@@ -176,10 +176,10 @@ pub fn render(t: &Theme, state: &Entity<AppState>, s: &AppState, scale: f32) -> 
                                 .text_size(t.text.body)
                                 .text_color(t.colors.text_muted)
                                 .child(if count == 0 {
-                                    "Files Forge makes in your chats (documents, sheets, decks, diagrams) gather here.".to_string()
+                                    "Files KodAct makes in your chats (documents, sheets, decks, diagrams) gather here.".to_string()
                                 } else {
                                     format!(
-                                        "{count} {} Forge made in your chats, newest first.",
+                                        "{count} {} KodAct made in your chats, newest first.",
                                         if count == 1 { "file" } else { "files" }
                                     )
                                 }),

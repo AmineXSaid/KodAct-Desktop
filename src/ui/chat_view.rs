@@ -183,7 +183,7 @@ impl ChatView {
         let step = if busy {
             let s = self.state.read(cx);
             s.chat().and_then(|c| {
-                // Between a goal's turns ForgeCLI checks it, then goes on.
+                // Between a goal's turns KodAct CLI checks it, then goes on.
                 let between = !matches!(c.messages.last(), Some(Message::Assistant { .. }));
                 if between
                     && s.goals.get(&c.id).map(|g| g.status) == Some(crate::state::GoalStatus::Working)
@@ -380,10 +380,10 @@ fn tool_name(target: &str) -> String {
     }
 }
 
-/// Files Forge writes for people to read: plans, notes, docs.
+/// Files KodAct writes for people to read: plans, notes, docs.
 const DOC_EXTENSIONS: &[&str] = &["md", "mdx", "markdown", "txt", "rst", "adoc", "org", "docx"];
 
-/// Forge is writing a plan or a document right now: writing or editing a
+/// KodAct is writing a plan or a document right now: writing or editing a
 /// document file, presenting its plan, or replying in plan mode (the reply
 /// is the plan).
 fn writing_doc(c: &Chat, mode: crate::modes::ModeId) -> bool {
@@ -879,7 +879,7 @@ fn tokens(n: usize) -> String {
     }
 }
 
-/// Forge's working line, as Claude Code's: the ember mark (`activity.rs`),
+/// KodAct's working line, as Claude Code's: the ember mark (`activity.rs`),
 /// the step in words with a light sweeping across them, then for how long
 /// and about how much it has written.
 fn working_line(
@@ -899,7 +899,7 @@ fn working_line(
         .gap(t.space.tight)
         .h(px(24.))
         .mt(px(4.))
-        // Forge's cube turning in the theme's live colour, as on agent rows;
+        // KodAct's cube turning in the theme's live colour, as on agent rows;
         // the words say what kind of step it is.
         .child(super::turning_logo_in(
             f32::from(t.size.icon),

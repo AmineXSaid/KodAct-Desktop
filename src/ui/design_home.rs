@@ -143,7 +143,7 @@ impl DesignHome {
         });
         let schedule = self.schedule(cx);
         let said = match &schedule {
-            Ok(e) => format!("Runs {}, while Forge is open.", e.say()),
+            Ok(e) => format!("Runs {}, while KodAct is open.", e.say()),
             Err(why) => why.to_string(),
         };
         let ready = schedule.is_ok() && !self.ask.read(cx).value().trim().is_empty();
@@ -205,7 +205,7 @@ impl DesignHome {
                     .flex()
                     .flex_col()
                     .gap(t.space.xs)
-                    .child(label("What Forge does each time"))
+                    .child(label("What KodAct does each time"))
                     .child(super::editor_kit::line(t, &self.ask, false)),
             )
             .child(
@@ -442,7 +442,7 @@ impl Render for DesignHome {
                         div()
                             .text_size(t.text.body)
                             .text_color(t.colors.text_muted)
-                            .child(crate::i18n::tr("Start from a template, an example, a design system or a skill. Forge sets up the chat, and the page shows beside it as it's made.")),
+                            .child(crate::i18n::tr("Start from a template, an example, a design system or a skill. KodAct sets up the chat, and the page shows beside it as it's made.")),
                     ),
             );
 
@@ -464,7 +464,7 @@ impl Render for DesignHome {
                         .child(if crate::design::root().is_some() {
                             crate::i18n::tr("Reading the design library…")
                         } else {
-                            "Forge's design library isn't installed: put design-library beside Forge, or set FORGE_DESIGN_LIB."
+                            "KodAct's design library isn't installed: put design-library beside KodAct, or set KODACT_DESIGN_LIB."
                         }),
                 )
                 .into_any_element();
@@ -559,7 +559,7 @@ impl Render for DesignHome {
                     .detach();
                 })
         };
-        // Routines: requests Forge runs on a schedule.
+        // Routines: requests KodAct runs on a schedule.
         // It opens the list above the cards: a chevron says so, the count
         // says how many there are.
         let routines_button = theme::ghost_button(
@@ -643,7 +643,7 @@ impl Render for DesignHome {
                                 .min_w_0()
                                 .text_size(t.text.caption)
                                 .text_color(t.colors.text_muted)
-                                .child(crate::i18n::tr("Requests Forge runs on a schedule, while it's open, each as a new chat in this project.")),
+                                .child(crate::i18n::tr("Requests KodAct runs on a schedule, while it's open, each as a new chat in this project.")),
                         )
                         .when(!self.routine_form, |d| {
                             d.child(

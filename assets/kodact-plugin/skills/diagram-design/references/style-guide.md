@@ -1,16 +1,16 @@
 <!-- diagram-design-profile
-name: Forge
+name: KodAct
 slug: forge
 source-url: none
 created: 2026-10-12
 updated: 2026-10-12
-notes: Forge desktop's own skin, bundled with Forge
+notes: KodAct desktop's own skin, bundled with KodAct
 -->
 # Style Guide
 
 **The single source of truth for colors, typography, and tokens.** Every diagram draws from this — not from hex values inlined in other reference files. If you want to change the visual skin of Diagram Design, change this file.
 
-This copy ships with Forge in Forge's own skin: warm paper, graphite ink, one blue accent, Anthropic Sans, Anthropic Sans and Anthropic Sans, so a diagram reads as part of the app. It is the active `forge` profile; swap these values (or run [`onboarding.md`](onboarding.md)) and every new diagram inherits the new skin without touching any type-specific logic.
+This copy ships with KodAct in KodAct's own skin: warm paper, graphite ink, one blue accent, Anthropic Sans, Anthropic Sans and Anthropic Sans, so a diagram reads as part of the app. It is the active `kodact` profile; swap these values (or run [`onboarding.md`](onboarding.md)) and every new diagram inherits the new skin without touching any type-specific logic.
 
 To generate your own from a website URL, see [`onboarding.md`](onboarding.md).
 
@@ -24,19 +24,19 @@ Every token is referred to by **semantic role**, not by its hex value. Type refe
 
 | Role | Purpose | Default (light) | Default (dark) |
 |---|---|---|---|
-| `paper` | Page background, default node fill | `#f9f7f5` (Forge stage) | `#1c1b19` (Forge dark stage) |
-| `paper-2` | Diagram container bg, secondary fill | `#f1efeb` (Forge pane) | `#22211f` (Forge card) |
+| `paper` | Page background, default node fill | `#f9f7f5` (KodAct stage) | `#1c1b19` (KodAct dark stage) |
+| `paper-2` | Diagram container bg, secondary fill | `#f1efeb` (KodAct pane) | `#22211f` (KodAct card) |
 | `ink` | Primary text, primary stroke | `#1c1b19` | `#f6f5f4` |
 | `ink-strong` | High-contrast text on accent fills | `#ffffff` | `#111111` |
-| `muted` | Secondary text, default arrow stroke | `#615d59` (Forge graphite) | `#b5b0aa` |
+| `muted` | Secondary text, default arrow stroke | `#615d59` (KodAct graphite) | `#b5b0aa` |
 | `soft` | Sublabels, boundary labels | `#6f6a64` | `#9d978f` |
 | `rule` | Hairline borders | `rgba(28,27,25,0.12)` | `rgba(246,245,244,0.12)` |
 | `rule-solid` | Stronger borders, baselines | `#c9c4bd` | `rgba(181,176,170,0.25)` |
-| `accent` | Focal / 1–2 max per diagram | `#005fb3` (Forge blue, a step deeper) | `#4ba1f3` |
+| `accent` | Focal / 1–2 max per diagram | `#005fb3` (KodAct blue, a step deeper) | `#4ba1f3` |
 | `accent-tint` | Fill for accent-bordered boxes | `rgba(0,95,179,0.08)` | `rgba(75,161,243,0.10)` |
-| `link` | HTTP/API calls, external arrows | `#6a4fb4` (Forge violet) | `#ac93e6` |
+| `link` | HTTP/API calls, external arrows | `#6a4fb4` (KodAct violet) | `#ac93e6` |
 
-> **Brand palette source:** Forge desktop. `paper`, `paper-2`, `ink` and `muted` are Forge's own surfaces and text (`src/theme.rs`); the accent is Forge's one blue, taken a step deeper (`#005fb3` in place of `#0075de`) so it clears 4.5:1 as text on `paper` and under white labels on an 85% accent fill; `link` is Forge's violet so it never reads as a second blue. Every value is held to the contrast contract below.
+> **Brand palette source:** KodAct desktop. `paper`, `paper-2`, `ink` and `muted` are KodAct's own surfaces and text (`src/theme.rs`); the accent is KodAct's one blue, taken a step deeper (`#005fb3` in place of `#0075de`) so it clears 4.5:1 as text on `paper` and under white labels on an 85% accent fill; `link` is KodAct's violet so it never reads as a second blue. Every value is held to the contrast contract below.
 
 > **Note:** The pre-baked example HTML files in `assets/` were built under an earlier skin. Regenerating them against the current `style-guide.md` is a v5.1 task. New diagrams the skill produces will use the tokens above.
 
@@ -54,7 +54,7 @@ Every token must clear the threshold for each role it plays, against the backgro
 - **A token used in several roles must pass each one.** `accent` is a stroke in one place and a label in another, so it is held to 4.5:1, not the 3:1 its strokes alone would need. Don't assume a token is non-text because it usually is.
 - **Translucent colors are composited first.** An `rgba()` fill or stroke is blended over `paper` before its ratio is measured. A value that clears the bar at full strength can fail at 0.5 opacity.
 - **Surfaces other than `paper` cost contrast.** Inside an `accent-tint` box or on `paper-2` every ratio drops. Measure text placed there against that surface, not against `paper`.
-- **Current values (Forge skin):** light `accent` 5.98:1, `soft` 5.01:1, `link` 5.80:1, `muted` 6.11:1 on `#f9f7f5`, white on the 85% accent fill 4.77:1; dark `accent` 6.30:1, `soft` 5.95:1, `link` 6.61:1, `muted` 7.99:1 on `#1c1b19`, `#111111` on the 85% accent fill 5.38:1.
+- **Current values (KodAct skin):** light `accent` 5.98:1, `soft` 5.01:1, `link` 5.80:1, `muted` 6.11:1 on `#f9f7f5`, white on the 85% accent fill 4.77:1; dark `accent` 6.30:1, `soft` 5.95:1, `link` 6.61:1, `muted` 7.99:1 on `#1c1b19`, `#111111` on the 85% accent fill 5.38:1.
 
 ### Inversion rule (light → dark)
 
@@ -96,7 +96,7 @@ A self-contained palette for the terminal-window primitive (see [primitive-termi
 
 ## Typography
 
-One family, Anthropic Sans, and nothing else: Forge draws every diagram in
+One family, Anthropic Sans, and nothing else: KodAct draws every diagram in
 it (it rewrites any other `font-family` before drawing), so naming another
 face only makes the file disagree with what is seen.
 

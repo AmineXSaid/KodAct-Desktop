@@ -1,4 +1,4 @@
-//! Every control Forge shows that has nothing behind it yet, in one table:
+//! Every control KodAct shows that has nothing behind it yet, in one table:
 //! where it is, what it will do, what it says when pressed, and the step
 //! that wires it. Views never write their own "isn't wired yet" text: they
 //! look the stub up here (`AppState::stub`), and draw the control with the
@@ -7,17 +7,17 @@
 //! When a stub is wired, delete its row; the tests keep the table tidy.
 //!
 //! After the three-step upgrade (P1 to P3), what is left here is blocked:
-//! on something ForgeCLI doesn't do yet, or on a hosted service Forge
+//! on something KodAct CLI doesn't do yet, or on a hosted service KodAct
 //! doesn't have (each row's `waits_on` says which), or it is missing only
-//! in `FORGE_DEMO`. P3 wired the Settings sections, Diagnostics and Profiles;
-//! the model-side capability probe stays here, waiting on ForgeCLI.
+//! in `KODACT_DEMO`. P3 wired the Settings sections, Diagnostics and Profiles;
+//! the model-side capability probe stays here, waiting on KodAct CLI.
 
 /// Why a stub is still a stub.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Step {
-    /// Waits on ForgeCLI or a service (`Stub::waits_on`).
+    /// Waits on KodAct CLI or a service (`Stub::waits_on`).
     Blocked,
-    /// Only `FORGE_DEMO` lacks it: it has no ForgeCLI behind it.
+    /// Only `KODACT_DEMO` lacks it: it has no KodAct CLI behind it.
     Demo,
 }
 
@@ -33,7 +33,7 @@ pub struct Stub {
     pub does: &'static str,
     /// What pressing it says now.
     pub toast: &'static str,
-    /// What it waits on, in a few words: ForgeCLI support, or a service.
+    /// What it waits on, in a few words: KodAct CLI support, or a service.
     pub waits_on: &'static str,
     pub step: Step,
 }
@@ -53,30 +53,30 @@ pub const STUBS: &[Stub] = &[
         place: "src/ui/message.rs, #good-* / #bad-*",
         does: "Send a reply's rating, with an optional note, to the team.",
         toast: "Thanks. Your rating is kept on this PC; sending it to the team is coming soon.",
-        waits_on: "a feedback service for Forge",
+        waits_on: "a feedback service for KodAct",
         step: Step::Blocked,
     },
     Stub {
         id: CONTINUE_NO_SESSION,
         place: "src/ui/message.rs, #continue-*",
-        does: "Resume a stopped reply whose conversation ForgeCLI never wrote.",
-        toast: "ForgeCLI has no record of this conversation, so it can't pick up where it stopped. Send a message to start again.",
-        waits_on: "ForgeCLI keeping a conversation it never wrote",
+        does: "Resume a stopped reply whose conversation KodAct CLI never wrote.",
+        toast: "KodAct CLI has no record of this conversation, so it can't pick up where it stopped. Send a message to start again.",
+        waits_on: "KodAct CLI keeping a conversation it never wrote",
         step: Step::Blocked,
     },
     Stub {
         id: REVERT_DEMO,
         place: "src/ui/message.rs, #revert-*",
-        does: "Put files back as they were before a message, from ForgeCLI's checkpoints.",
-        toast: "Revert uses ForgeCLI's checkpoints, and the demo has no ForgeCLI behind it.",
-        waits_on: "ForgeCLI (the demo has none)",
+        does: "Put files back as they were before a message, from KodAct CLI's checkpoints.",
+        toast: "Revert uses KodAct CLI's checkpoints, and the demo has no KodAct CLI behind it.",
+        waits_on: "KodAct CLI (the demo has none)",
         step: Step::Demo,
     },
     Stub {
         id: REVERT_NO_CHECKPOINT,
         place: "src/ui/message.rs, #revert-*",
-        does: "Revert changes from a message sent before Forge learnt ForgeCLI's turn ids.",
-        toast: "This message has no ForgeCLI checkpoint (it was sent by an older Forge), so its changes can't be reverted from here.",
+        does: "Revert changes from a message sent before KodAct learnt KodAct CLI's turn ids.",
+        toast: "This message has no KodAct CLI checkpoint (it was sent by an older KodAct), so its changes can't be reverted from here.",
         waits_on: "a checkpoint this old message never had",
         step: Step::Blocked,
     },
@@ -84,8 +84,8 @@ pub const STUBS: &[Stub] = &[
         id: REAPPLY,
         place: "src/ui/message.rs, #reapply-*",
         does: "Apply a reverted change again.",
-        toast: "Applying a reverted change again needs ForgeCLI to roll checkpoints forward, which it can't yet. Ask Forge to make the change again.",
-        waits_on: "ForgeCLI rolling checkpoints forward",
+        toast: "Applying a reverted change again needs KodAct CLI to roll checkpoints forward, which it can't yet. Ask KodAct to make the change again.",
+        waits_on: "KodAct CLI rolling checkpoints forward",
         step: Step::Blocked,
     },
     Stub {
@@ -99,17 +99,17 @@ pub const STUBS: &[Stub] = &[
     Stub {
         id: COMPACT_DEMO,
         place: "src/ui/context_menu.rs, #compact (src/state.rs, compact)",
-        does: "Summarize the conversation to free context (ForgeCLI's /compact).",
-        toast: "Compacting runs in ForgeCLI, and the demo has no ForgeCLI behind it.",
-        waits_on: "ForgeCLI (the demo has none)",
+        does: "Summarize the conversation to free context (KodAct CLI's /compact).",
+        toast: "Compacting runs in KodAct CLI, and the demo has no KodAct CLI behind it.",
+        waits_on: "KodAct CLI (the demo has none)",
         step: Step::Demo,
     },
     Stub {
         id: CAPABILITY_PROBE,
         place: "src/ui/diagnostics.rs, #capability-probe",
         does: "Check what a model can do: stream, call tools, read images, think.",
-        toast: "Model checks are coming. They need ForgeCLI to report what a model supports. The endpoint's check already sends one real message.",
-        waits_on: "ForgeCLI reporting what a model supports",
+        toast: "Model checks are coming. They need KodAct CLI to report what a model supports. The endpoint's check already sends one real message.",
+        waits_on: "KodAct CLI reporting what a model supports",
         step: Step::Blocked,
     },
 ];

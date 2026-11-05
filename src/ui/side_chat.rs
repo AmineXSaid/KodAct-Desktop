@@ -1,4 +1,4 @@
-//! `/btw`: the side-question card. A floating card over the chat, as Forge
+//! `/btw`: the side-question card. A floating card over the chat, as KodAct
 //! for VS Code has it: questions answered from this conversation's context,
 //! without tools, while the conversation goes on. It folds to its title bar
 //! and closes with Esc; the thread keeps the last 20 exchanges.

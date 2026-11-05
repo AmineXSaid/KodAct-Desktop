@@ -76,7 +76,7 @@ pub struct Radius {
     pub pill: Pixels,    // 9999: buttons, badges, avatars
 }
 
-/// Forge's look: Calmly smooth, its surfaces and one colour light and
+/// KodAct's look: Calmly smooth, its surfaces and one colour light and
 /// dark (`tint`), and its form: corners, density, depth (`form`). One look
 /// for now; every face is Anthropic Sans (`fonts.rs`).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -202,7 +202,7 @@ pub struct Theme {
     pub radius: Radius,
     pub font_sans: SharedString, // Anthropic Sans Text: every word the app sets (`fonts.rs`)
     pub motion_ms: u64,          // 200ms ease for hovers/transitions
-    // Forge additions (see the section at the end of the tokens).
+    // KodAct additions (see the section at the end of the tokens).
     pub font_mono: SharedString, // code, paths, commands: Anthropic Sans Text too
     pub font_code_inline: SharedString, // a name in prose: the same face
     pub font_display: SharedString, // large lines (the greeting, headings): Anthropic Sans Display
@@ -421,7 +421,7 @@ impl Theme {
     }
 }
 
-// ---------- Forge additions ----------
+// ---------- KodAct additions ----------
 
 impl Theme {
     /// The sidebar's shadow where it meets the session: its colour at the
@@ -499,7 +499,7 @@ pub struct ExtraColors {
     // faint wash, a rounded chip (`ui/markdown.rs`).
     pub code_inline_fg: Hsla,
     pub code_inline_bg: Hsla,
-    // Permission modes, as Forge for VS Code tints them (forge-tokens.css).
+    // Permission modes, as KodAct for VS Code tints them (forge-tokens.css).
     pub mode_edit: Hsla,   // Edit automatically
     pub mode_plan: Hsla,   // Plan
     pub mode_bypass: Hsla, // Bypass permissions
@@ -513,7 +513,7 @@ pub struct ExtraColors {
     pub ping_slow_bg: Hsla,
     pub ping_slow_fg: Hsla,
     // The terminal dock's 16 colours: black, red, green, yellow, blue,
-    // magenta, cyan, white, then the bright eight. Forge for VS Code's
+    // magenta, cyan, white, then the bright eight. KodAct for VS Code's
     // (forge-tokens.css, Pajamas stops), on its terminal ink
     // (`terminal.background`); "white" is a grey in light so it never vanishes.
     // One divergence: light's yellows sit a stop darker (orange-600/500), as
@@ -672,8 +672,8 @@ impl ExtraColors {
     }
 }
 
-/// The shell tool's terminal block: Forge's terminal palette (the same
-/// Pajamas stops Forge for VS Code uses). Light themes get the darker stops.
+/// The shell tool's terminal block: KodAct's terminal palette (the same
+/// Pajamas stops KodAct for VS Code uses). Light themes get the darker stops.
 #[derive(Clone, Copy)]
 pub struct TerminalColors {
     pub background: Hsla,
@@ -690,7 +690,7 @@ pub struct TerminalColors {
     pub number: Hsla,
     pub comment: Hsla,
     /// Output colours, by ANSI number: black, red, green, yellow, blue,
-    /// magenta, cyan, white. A program's red or green is Forge's.
+    /// magenta, cyan, white. A program's red or green is KodAct's.
     pub ansi: [Hsla; 8],
 }
 
@@ -740,7 +740,7 @@ impl TerminalColors {
     }
 }
 
-/// Code colours, by token kind (`highlight.rs`): Forge's code palette, the
+/// Code colours, by token kind (`highlight.rs`): KodAct's code palette, the
 /// terminal's stops plus a blue for functions and a green for types.
 #[derive(Clone, Copy)]
 pub struct CodeColors {

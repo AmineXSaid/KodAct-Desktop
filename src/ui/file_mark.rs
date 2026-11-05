@@ -1,6 +1,6 @@
 //! Which app a file belongs to, at a glance: Excel, Word, PowerPoint and PDF
 //! marks in those apps' own colours and style (`assets/marks/`, drawn for
-//! Forge). Rasterised at the exact device pixels they are shown at, through
+//! KodAct). Rasterised at the exact device pixels they are shown at, through
 //! the diagram view's cache.
 
 use gpui::{div, prelude::*, px, AnyElement};

@@ -1,5 +1,5 @@
 //! Starting points for a new project (New project › Start fresh): each a
-//! description and the instructions its `FORGE.md` starts with, so the
+//! description and the instructions its `KODACT.md` starts with, so the
 //! first chat already knows what kind of work this is. Blank has none.
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -8,7 +8,7 @@ pub struct Template {
     pub label: &'static str,
     /// The project's description on its card.
     pub description: &'static str,
-    /// Its FORGE.md, `{name}` for the project's name; empty for none.
+    /// Its KODACT.md, `{name}` for the project's name; empty for none.
     pub instructions: &'static str,
     /// Start it as a git repository.
     pub git: bool,
@@ -56,9 +56,16 @@ pub fn by_key(key: &str) -> Template {
     ALL.iter().copied().find(|t| t.key == key).unwrap_or(ALL[0])
 }
 
-/// The folder new projects are made in: `Forge Projects` in your home.
+/// The folder new projects are made in: `KodAct Projects` in your home, or
+/// Forge's `Forge Projects` while only that one exists. Looked up once (the
+/// New project sheet shows it as it renders).
 pub fn projects_home() -> Option<std::path::PathBuf> {
-    crate::rules::home_dir().map(|h| h.join("Forge Projects"))
+    static HOME: std::sync::OnceLock<Option<std::path::PathBuf>> = std::sync::OnceLock::new();
+    HOME.get_or_init(|| {
+        crate::rules::home_dir()
+            .map(|h| crate::names::renamed(&h, "KodAct Projects", "Forge Projects"))
+    })
+    .clone()
 }
 
 /// A folder name from what you typed: no separators or characters a
@@ -89,7 +96,7 @@ pub fn create(dir: &std::path::Path, name: &str, t: Template) -> Result<(), Stri
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     if !t.instructions.is_empty() {
         let text = t.instructions.replace("{name}", name.trim());
-        std::fs::write(dir.join("FORGE.md"), text).map_err(|e| e.to_string())?;
+        std::fs::write(dir.join("KODACT.md"), text).map_err(|e| e.to_string())?;
     }
     if t.git {
         // Best effort: without git it is still a folder to work in.
@@ -124,7 +131,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("forge-tpl-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         create(&dir, "Launch notes", by_key("writing")).unwrap();
-        let text = std::fs::read_to_string(dir.join("FORGE.md")).unwrap();
+        let text = std::fs::read_to_string(dir.join("KODACT.md")).unwrap();
         assert!(text.starts_with("# Launch notes\n\nA writing project."));
         assert!(
             create(&dir, "Again", by_key("blank")).is_err(),
@@ -132,7 +139,7 @@ mod tests {
         );
         let blank = dir.join("blank");
         create(&blank, "x", by_key("blank")).unwrap();
-        assert!(!blank.join("FORGE.md").exists());
+        assert!(!blank.join("KODACT.md").exists());
         assert_eq!(by_key("nope").key, "blank");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -146,8 +153,8 @@ mod tests {
         assert_eq!(folder_name("..."), None);
         let home = std::path::Path::new("/h");
         assert_eq!(
-            clone_target(home, "https://github.com/a/forge-gpui.git"),
-            Some(home.join("forge-gpui"))
+            clone_target(home, "https://github.com/a/kodact-desktop.git"),
+            Some(home.join("kodact-desktop"))
         );
         assert_eq!(
             clone_target(home, "git@github.com:a/tool"),

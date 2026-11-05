@@ -2153,44 +2153,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa9a19cbb55df58761df49b23516a86d432839add4af60fc256da840f66ed35b"
 
 [[package]]
-name = "forge-gpui"
-version = "0.1.0"
-dependencies = [
- "alacritty_terminal",
- "async-channel",
- "blake3",
- "calamine",
- "chrono",
- "embed-resource",
- "flate2",
- "globset",
- "gpui-kit",
- "hayro",
- "ignore",
- "image",
- "keyring",
- "lopdf",
- "portable-pty",
- "pulldown-cmark",
- "quick-xml",
- "ring",
- "rustls",
- "ruzstd",
- "serde",
- "serde_json",
- "sevenz-rust2",
- "syntect",
- "tar",
- "tungstenite",
- "two-face",
- "ureq",
- "url",
- "webpki-roots 0.26.11",
- "yaml-rust2",
- "zip",
-]
-
-[[package]]
 name = "form_urlencoded"
 version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4001,6 +3963,44 @@ name = "khronos_api"
 version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
+
+[[package]]
+name = "kodact-desktop"
+version = "0.1.0"
+dependencies = [
+ "alacritty_terminal",
+ "async-channel",
+ "blake3",
+ "calamine",
+ "chrono",
+ "embed-resource",
+ "flate2",
+ "globset",
+ "gpui-kit",
+ "hayro",
+ "ignore",
+ "image",
+ "keyring",
+ "lopdf",
+ "portable-pty",
+ "pulldown-cmark",
+ "quick-xml",
+ "ring",
+ "rustls",
+ "ruzstd",
+ "serde",
+ "serde_json",
+ "sevenz-rust2",
+ "syntect",
+ "tar",
+ "tungstenite",
+ "two-face",
+ "ureq",
+ "url",
+ "webpki-roots 0.26.11",
+ "yaml-rust2",
+ "zip",
+]
 
 [[package]]
 name = "kqueue"

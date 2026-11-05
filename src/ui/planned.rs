@@ -1,4 +1,4 @@
-//! A Settings section whose feature waits on ForgeCLI: what it will do, and
+//! A Settings section whose feature waits on KodAct CLI: what it will do, and
 //! what it waits on, with no controls, since there's nothing yet for a
 //! control to change. The rest of the "Planned" group (Sandbox,
 //! Environments, Memory and rules, Plugins) turned out to have engine
@@ -21,14 +21,14 @@ pub struct Planned {
 
 pub const NETWORK: Planned = Planned {
     title: "Network",
-    blurb: "How Forge reaches the internet: through a proxy, with your company's certificates, and which sites it may fetch from.",
+    blurb: "How KodAct reaches the internet: through a proxy, with your company's certificates, and which sites it may fetch from.",
     will: &[
         "Send model and web requests through an HTTP or SOCKS proxy, with a bypass list.",
         "Trust extra certificate authorities, for networks that inspect TLS.",
         "Keep a list of sites WebFetch may open without asking, and sites it never may.",
         "Show which endpoint and MCP servers each chat reaches, and how long they take.",
     ],
-    waits_on: "ForgeCLI settings for a proxy and extra certificates: today it reads neither, so a Forge setting would change nothing.",
+    waits_on: "KodAct CLI settings for a proxy and extra certificates: today it reads neither, so a KodAct setting would change nothing.",
     today: "Allow or deny sites now in Permissions, with rules like WebFetch(domain:example.com). Check an endpoint's DNS, TCP, TLS and key in Models → Diagnose.",
 };
 

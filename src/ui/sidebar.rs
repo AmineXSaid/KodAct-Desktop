@@ -839,7 +839,7 @@ impl Render for Sidebar {
             // Part of the window, not a card on it: the window's own
             // colour, flush to its edges; the chat is the raised sheet.
             .overflow_hidden()
-            // Forge's name is in the window's top row; the sidebar opens
+            // KodAct's name is in the window's top row; the sidebar opens
             // with Chat | Code, across its width, then search.
             .child(
                 div()

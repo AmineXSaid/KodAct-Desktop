@@ -1,7 +1,7 @@
-//! Forge's browser tools for ForgeCLI's agents: an MCP server (stdio,
+//! KodAct's browser tools for KodAct CLI's agents: an MCP server (stdio,
 //! JSON-RPC) that drives the browser in the side panel (`web_view.rs`)
-//! over the DevTools protocol. ForgeCLI starts it as this same executable,
-//! `forge-gpui --browser-mcp <devtools-url> <focus-file>` (`browser.rs`),
+//! over the DevTools protocol. KodAct CLI starts it as this same executable,
+//! `kodact-desktop --browser-mcp <devtools-url> <focus-file>` (`browser.rs`),
 //! so it needs nothing installed and acts on exactly the page you see.
 //!
 //! The tools cover the whole browser: open pages and tabs; read a page's
@@ -21,8 +21,8 @@ use serde_json::{json, Value};
 
 use crate::web_view::{connect, pages, Conn, TabInfo};
 
-/// The server's name: its tools reach the model as `mcp__forge-browser__…`.
-pub const SERVER: &str = "forge-browser";
+/// The server's name: its tools reach the model as `mcp__kodact-browser__…`.
+pub const SERVER: &str = "kodact-browser";
 
 /// Every tool: its name, what it does, and its input's schema.
 fn tools() -> Vec<Value> {
@@ -53,7 +53,7 @@ fn tools() -> Vec<Value> {
             "inputSchema": { "type": "object", "properties": props, "required": required } })
     };
     vec![
-        tool("navigate", "Open a URL in the current tab (or a new one), and wait for it to load. The page shows live in Forge's side panel.",
+        tool("navigate", "Open a URL in the current tab (or a new one), and wait for it to load. The page shows live in KodAct's side panel.",
             plus(json!({ "url": { "type": "string" }, "new_tab": { "type": "boolean", "description": "Open it in a new tab." } }), &dialog), &["url"]),
         tool("state", "The current page: its URL, title, tabs, scroll position, and every visible interactive element, numbered. Use the numbers with click, type, select and hover. Numbers change when the page changes: call state again after it does.",
             json!({}), &[]),
@@ -346,7 +346,7 @@ impl Browser {
                             std::thread::sleep(Duration::from_millis(300))
                         }
                         None => return Err(
-                            "Forge's browser isn't running: open the Browser tab in the side panel"
+                            "KodAct's browser isn't running: open the Browser tab in the side panel"
                                 .into(),
                         ),
                     }
@@ -853,7 +853,7 @@ impl Browser {
                 let log = self.console.get(&id).cloned().unwrap_or_default();
                 let from = log.len().saturating_sub(limit);
                 Ok(text(if log.is_empty() {
-                    "No console messages since Forge's tools first used this tab.".to_string()
+                    "No console messages since KodAct's tools first used this tab.".to_string()
                 } else {
                     log[from..].join("\n")
                 }))
@@ -948,7 +948,7 @@ fn handle(b: &mut Browser, msg: &Value) -> Option<Value> {
             "protocolVersion": msg["params"]["protocolVersion"].as_str().unwrap_or("2024-11-05"),
             "capabilities": { "tools": { "listChanged": false } },
             "serverInfo": { "name": SERVER, "version": env!("CARGO_PKG_VERSION") },
-            "instructions": "The browser in Forge's side panel, where the user watches it live. Call state to see a page's numbered elements, then click, type, select or hover by number; eval runs any JavaScript in the page.",
+            "instructions": "The browser in KodAct's side panel, where the user watches it live. Call state to see a page's numbered elements, then click, type, select or hover by number; eval runs any JavaScript in the page.",
         })),
         "ping" => reply(json!({})),
         "tools/list" => reply(json!({ "tools": tools() })),
@@ -983,7 +983,7 @@ pub fn serve(devtools_http: &str, focus_file: &Path) {
 }
 
 /// Serve the same MCP over HTTP on `127.0.0.1:<port>` (`POST /mcp/<token>`,
-/// one JSON-RPC message per request, its answer as JSON): for a ForgeCLI on
+/// one JSON-RPC message per request, its answer as JSON): for a KodAct CLI on
 /// a remote, which reaches it through an `ssh -R` forward (`remote.rs`).
 /// Requests without the token are refused. Returns the port.
 pub fn serve_http(devtools_http: &str, focus_file: &Path, token: &str) -> std::io::Result<u16> {
@@ -1097,7 +1097,7 @@ mod tests {
             r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26"}}"#,
         );
         assert!(init.starts_with("HTTP/1.1 200"), "{init}");
-        assert!(init.contains(r#""name":"forge-browser""#));
+        assert!(init.contains(r#""name":"kodact-browser""#));
         let list = post(
             "/mcp/tok",
             r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#,
@@ -1185,12 +1185,12 @@ mod tests {
     }
 
     /// Every tool against a real Chromium and a page with a form: needs
-    /// Playwright's Chromium (or FORGE_CHROME).
+    /// Playwright's Chromium (or KODACT_CHROME).
     #[test]
     #[ignore]
     fn drives_a_real_page() {
         let exe = crate::web_view::find_chromium().expect("no Chromium");
-        let dir = std::env::temp_dir().join(format!("forge-mcp-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("kodact-mcp-{}", std::process::id()));
         let (view, _rx) =
             crate::web_view::start(&exe, &dir.join("profile"), &dir.join("focus")).unwrap();
         let mut b = Browser::new(&view.cdp_url, &dir.join("focus"));
@@ -1219,7 +1219,7 @@ mod tests {
         call(
             &mut b,
             "type",
-            json!({"index": idx("input"), "text": "Forge"}),
+            json!({"index": idx("input"), "text": "KodAct"}),
         )
         .unwrap();
         call(
@@ -1231,13 +1231,13 @@ mod tests {
         call(&mut b, "click", json!({"index": idx("button")})).unwrap();
         assert_eq!(
             call(&mut b, "text", json!({"selector": "#out"})).unwrap(),
-            "Hello Forge b"
+            "Hello KodAct b"
         );
         assert_eq!(
             call(&mut b, "eval", json!({"expression": "1 + 2"})).unwrap(),
             "3"
         );
-        assert!(call(&mut b, "wait", json!({"text": "Hello Forge"}))
+        assert!(call(&mut b, "wait", json!({"text": "Hello KodAct"}))
             .unwrap()
             .starts_with("Found"));
         assert!(call(&mut b, "console", json!({}))
@@ -1287,7 +1287,7 @@ mod tests {
     #[ignore]
     fn reports_dialogs_tabs_and_downloads() {
         let exe = crate::web_view::find_chromium().expect("no Chromium");
-        let dir = std::env::temp_dir().join(format!("forge-mcp-side-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("kodact-mcp-side-{}", std::process::id()));
         let (view, _rx) =
             crate::web_view::start(&exe, &dir.join("profile"), &dir.join("focus")).unwrap();
         let mut b = Browser::new(&view.cdp_url, &dir.join("focus"));

@@ -1,4 +1,4 @@
-//! Settings → Hooks: commands ForgeCLI runs at points in a chat (before a
+//! Settings → Hooks: commands KodAct CLI runs at points in a chat (before a
 //! tool runs, after it, when you send a message, when a reply ends…), kept
 //! under `hooks` in a settings file: yours, the project's (shared), or this
 //! PC's for the project. Each gets the event as JSON on stdin; exit 2

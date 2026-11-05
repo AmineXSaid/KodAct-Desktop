@@ -1,4 +1,4 @@
-//! Forge's design library: Open Design's skills, templates, design systems
+//! KodAct's design library: Open Design's skills, templates, design systems
 //! and craft rules (`design-library/`, mirrored by
 //! `scripts/sync_open_design.py`), indexed here so a design chat's system
 //! prompt can be built from exactly what the run needs. The plan is
@@ -31,12 +31,12 @@ use library::{Index, Kind};
 /// taken from where.
 const MARKER: &str = "UPSTREAM.json";
 
-/// Where the design library is: `FORGE_DESIGN_LIB`, else `design-library`
+/// Where the design library is: `KODACT_DESIGN_LIB`, else `design-library`
 /// beside the executable (where the installer puts it), else, in a
 /// development build, the repository's own copy.
 pub fn root() -> Option<PathBuf> {
     let is_lib = |p: &Path| p.join(MARKER).is_file();
-    if let Some(p) = std::env::var_os("FORGE_DESIGN_LIB").map(PathBuf::from) {
+    if let Some(p) = std::env::var_os("KODACT_DESIGN_LIB").map(PathBuf::from) {
         return is_lib(&p).then_some(p);
     }
     let beside = std::env::current_exe()
@@ -47,7 +47,7 @@ pub fn root() -> Option<PathBuf> {
     [beside, dev].into_iter().flatten().find(|p| is_lib(p))
 }
 
-/// `forge-gpui --design-check`: load the whole library and print what is in
+/// `kodact-desktop --design-check`: load the whole library and print what is in
 /// it and what could not be read. Exits 1 when anything failed (upstream's
 /// own tolerated quirks are listed, but don't fail it).
 ///
@@ -57,7 +57,7 @@ pub fn check(args: &[String]) -> i32 {
     #[cfg(windows)]
     attach_console();
     let Some(root) = root() else {
-        eprintln!("No design library: set FORGE_DESIGN_LIB, or put design-library beside the app.");
+        eprintln!("No design library: set KODACT_DESIGN_LIB, or put design-library beside the app.");
         return 1;
     };
     let ix = Index::load(&root);

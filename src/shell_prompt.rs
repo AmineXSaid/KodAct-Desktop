@@ -56,7 +56,7 @@ fn kind(program: &str) -> Option<Kind> {
 
 /// bash: the person's `~/.bashrc`, then a prompt in colour where theirs has
 /// none, and `ls` and `grep` in colour where they aren't aliased.
-const BASH_RC: &str = r#"# Forge's terminal: your startup file first, then colour where it set none.
+const BASH_RC: &str = r#"# KodAct's terminal: your startup file first, then colour where it set none.
 [ -f ~/.bashrc ] && . ~/.bashrc
 # A colour code (`\e[`) means the prompt is coloured already; a title alone
 # (`\e]0;…`, as Ubuntu's stock prompt sets) does not.
@@ -71,13 +71,13 @@ alias grep >/dev/null 2>&1 || { echo | grep --color=auto x >/dev/null 2>&1; [ $?
 "#;
 
 /// zsh reads `.zshenv` then `.zshrc` from `ZDOTDIR`: these pass on to the
-/// person's own (from `FORGE_USER_ZDOTDIR`, else home), then colour.
-const ZSH_ENV: &str = r#"# Forge's terminal: your own .zshenv.
-__forge_z="${FORGE_USER_ZDOTDIR:-$HOME}"
+/// person's own (from `KODACT_USER_ZDOTDIR`, else home), then colour.
+const ZSH_ENV: &str = r#"# KodAct's terminal: your own .zshenv.
+__forge_z="${KODACT_USER_ZDOTDIR:-$HOME}"
 [ -f "$__forge_z/.zshenv" ] && ZDOTDIR="$__forge_z" . "$__forge_z/.zshenv"
 "#;
-const ZSH_RC: &str = r#"# Forge's terminal: your own .zshrc, then colour where it set none.
-__forge_z="${FORGE_USER_ZDOTDIR:-$HOME}"
+const ZSH_RC: &str = r#"# KodAct's terminal: your own .zshrc, then colour where it set none.
+__forge_z="${KODACT_USER_ZDOTDIR:-$HOME}"
 ZDOTDIR="$__forge_z"
 [ -f "$__forge_z/.zshrc" ] && . "$__forge_z/.zshrc"
 unset __forge_z
@@ -92,7 +92,7 @@ alias ls >/dev/null 2>&1 || { ls --color=auto -d . >/dev/null 2>&1 && alias ls='
 
 /// sh: `$ENV` is read by an interactive POSIX shell; its PS1 has no escapes
 /// of its own, so the escape character is put in by printf.
-const SH_ENV: &str = r#"# Forge's terminal: a prompt in colour.
+const SH_ENV: &str = r#"# KodAct's terminal: a prompt in colour.
 __forge_e=$(printf '\033')
 __forge_s='$'; [ "$(id -u 2>/dev/null)" = 0 ] && __forge_s='#'
 PS1="${__forge_e}[1;32m$(id -un 2>/dev/null)@$(hostname 2>/dev/null || uname -n)${__forge_e}[0m:${__forge_e}[1;34m"'$PWD'"${__forge_e}[0m${__forge_s} "
@@ -191,7 +191,7 @@ fn dress_in(
                 return plain;
             }
             if let Some(own) = var("ZDOTDIR") {
-                out.env.push(("FORGE_USER_ZDOTDIR".into(), own));
+                out.env.push(("KODACT_USER_ZDOTDIR".into(), own));
             }
             out.env
                 .push(("ZDOTDIR".into(), zdot.to_string_lossy().into_owned()));
@@ -258,7 +258,7 @@ mod tests {
         let zsh = dress_in("zsh", &[], &d, |k| (k == "ZDOTDIR").then(|| "/z".into()));
         assert!(zsh
             .env
-            .contains(&("FORGE_USER_ZDOTDIR".into(), "/z".into())));
+            .contains(&("KODACT_USER_ZDOTDIR".into(), "/z".into())));
         assert!(zsh.env.iter().any(|(k, _)| k == "ZDOTDIR"));
 
         let sh = dress_in("sh", &[], &d, none);
@@ -310,7 +310,7 @@ mod tests {
         // Ubuntu's stock prompt: a window title, no colour.
         std::fs::write(
             home.join(".bashrc"),
-            "FORGE_TEST_MINE=yes\nPS1='\\[\\e]0;\\u@\\h: \\w\\a\\]\\u@\\h:\\w\\$ '\n",
+            "KODACT_TEST_MINE=yes\nPS1='\\[\\e]0;\\u@\\h: \\w\\a\\]\\u@\\h:\\w\\$ '\n",
         )
         .unwrap();
         if Command::new("bash").arg("--version").output().is_ok() {
@@ -318,7 +318,7 @@ mod tests {
             let out = Command::new("bash")
                 .args(&b.args)
                 .arg("-ic")
-                .arg("echo \"$FORGE_TEST_MINE\"; printf %s \"$PS1\"")
+                .arg("echo \"$KODACT_TEST_MINE\"; printf %s \"$PS1\"")
                 .env("HOME", &home)
                 .env_remove("PS1")
                 .output()

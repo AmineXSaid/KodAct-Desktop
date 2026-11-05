@@ -1,10 +1,10 @@
-//! Which faces Forge draws with: Anthropic Sans, and nothing else.
+//! Which faces KodAct draws with: Anthropic Sans, and nothing else.
 //!
 //! Its Text cut sets every word (interface, replies, code, the terminal,
 //! diagrams); its Display cut sets the large lines. The app bundles no
 //! font. Anthropic Sans is read from the `fonts` folder beside the app,
 //! where the installer puts it (`installer/private-fonts`, a personal
-//! build's, never committed), from Forge's `fonts` folder next to its
+//! build's, never committed), from KodAct's `fonts` folder next to its
 //! settings, and from the system.
 
 use std::path::{Path, PathBuf};
@@ -20,7 +20,7 @@ pub const DISPLAY: &str = "Anthropic Sans Display";
 const MAX_FILE: u64 = 16 * 1024 * 1024;
 const MAX_FILES: usize = 64;
 
-/// Forge's own fonts folder: `fonts` beside its settings.
+/// KodAct's own fonts folder: `fonts` beside its settings.
 pub fn user_dir() -> Option<PathBuf> {
     crate::profile::dir().map(|d| d.join("fonts"))
 }
@@ -60,7 +60,7 @@ pub fn app_dir() -> Option<PathBuf> {
 }
 
 /// Where Anthropic Sans is read from, in order: beside the app (the
-/// installer's copy), Forge's own folder, and in a development build the
+/// installer's copy), KodAct's own folder, and in a development build the
 /// checkout's `installer/private-fonts`.
 pub fn dirs() -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = [app_dir(), user_dir()].into_iter().flatten().collect();

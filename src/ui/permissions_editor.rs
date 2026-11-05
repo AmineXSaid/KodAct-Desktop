@@ -1,4 +1,4 @@
-//! Settings → Permissions: the rules ForgeCLI checks before a tool runs,
+//! Settings → Permissions: the rules KodAct CLI checks before a tool runs,
 //! under `permissions` in a settings file. `allow` runs without asking,
 //! `ask` always asks, `deny` never runs; a rule is a tool name, or a tool
 //! with what it applies to: `Bash(git status)`, `Read(./.env)`,
@@ -41,7 +41,7 @@ impl PermissionsEditor {
             InputState::new(window, cx).placeholder("e.g. Bash(npm test:*)  or  Read(./secrets/**)")
         });
         let subs = vec![
-            // A new read of ForgeCLI's files: read the rules again with it.
+            // A new read of KodAct CLI's files: read the rules again with it.
             cx.observe(&state, |this, state, cx| {
                 let s = state.read(cx);
                 if s.settings_tab == crate::state::SettingsTab::Permissions && !s.engine.loading {
@@ -302,7 +302,7 @@ impl Render for PermissionsEditor {
                                     div()
                                         .text_size(t.text.caption)
                                         .text_color(t.colors.text_muted)
-                                        .child(format!("Chats here start in the {mode} mode (defaultMode); Forge's mode menu changes it per chat.")),
+                                        .child(format!("Chats here start in the {mode} mode (defaultMode); KodAct's mode menu changes it per chat.")),
                                 );
                             }
                             for (kind, rule) in list {
@@ -314,7 +314,7 @@ impl Render for PermissionsEditor {
                 if !any {
                     out = out.child(kit::empty(
                         &t,
-                        "No rules yet, so Forge asks before each tool that changes something, as the chat's mode says. Allow what you trust here, such as Bash(npm test), to stop being asked.",
+                        "No rules yet, so KodAct asks before each tool that changes something, as the chat's mode says. Allow what you trust here, such as Bash(npm test), to stop being asked.",
                     ));
                 }
             }

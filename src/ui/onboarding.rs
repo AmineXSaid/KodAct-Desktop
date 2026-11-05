@@ -1,4 +1,4 @@
-//! First run, in two steps: Forge asks what to call you, then you pick your
+//! First run, in two steps: KodAct asks what to call you, then you pick your
 //! avatar. The steps slide past each other (forward to the avatar, back to
 //! the name). The name and avatar are kept (`profile.rs`) and shown in the
 //! sidebar. Reopened from the command palette: "Change your name" starts at

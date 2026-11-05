@@ -1,4 +1,4 @@
-//! Remote development, as VS Code does it: a chat's ForgeCLI runs inside a
+//! Remote development, as VS Code does it: a chat's KodAct CLI runs inside a
 //! WSL distro, on an SSH host or in a (dev) container, and this app stays the
 //! UI. Only how the process starts changes; it speaks the same stream-json
 //! over its stdin and stdout (`backend.rs`).
@@ -14,10 +14,10 @@
 //! `container://vscode@api/workspaces/api`. Chats belong to projects, so a
 //! chat runs where its project lives, and both are saved as they always were.
 //!
-//! [`BOOT`], a POSIX `sh` script, starts ForgeCLI on the remote: it reads the
+//! [`BOOT`], a POSIX `sh` script, starts KodAct CLI on the remote: it reads the
 //! launch's environment from the first lines of stdin (keys never go on a
 //! command line, where `ps` would show them), expands `~/` in the arguments,
-//! changes to the project folder and `exec`s ForgeCLI on the same stdin.
+//! changes to the project folder and `exec`s KodAct CLI on the same stdin.
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -116,7 +116,7 @@ pub fn docker_command(wsl: Option<&str>) -> Command {
     c
 }
 
-/// The folder name in a dev container Forge started (`forge-dc-<slug>-<hash>`).
+/// The folder name in a dev container KodAct started (`forge-dc-<slug>-<hash>`).
 fn dev_container_slug(name: &str) -> Option<&str> {
     let rest = name.strip_prefix("forge-dc-")?;
     let (slug, hash) = rest.rsplit_once('-')?;
@@ -288,15 +288,15 @@ pub fn command(target: &Target, script: &str, args: &[String], extra: &Extra) ->
 /// `~` and `~/…` to the remote home, as a shell function the scripts share.
 const TILDE: &str = r#"x() { case $1 in "~") printf '%s' "$HOME";; "~/"*) printf '%s/%s' "$HOME" "${1#"~/"}";; *) printf '%s' "$1";; esac; }"#;
 
-/// A file the boot script writes before ForgeCLI starts: `HOST_FILE` names
+/// A file the boot script writes before KodAct CLI starts: `HOST_FILE` names
 /// it, `HOST_TEXT` holds it. A design chat's prompt goes this way: too big
 /// for a command line, and too big for the environment (Linux caps one
 /// string at 128 KB, and a big one stops every program starting), so the
 /// script keeps the text in a shell variable it never exports.
-pub const HOST_FILE: &str = "FORGE_HOST_FILE";
-pub const HOST_TEXT: &str = "FORGE_HOST_TEXT";
+pub const HOST_FILE: &str = "KODACT_HOST_FILE";
+pub const HOST_TEXT: &str = "KODACT_HOST_TEXT";
 
-/// Starts ForgeCLI on the remote: `$1` the folder, `$2` ForgeCLI, the rest
+/// Starts KodAct CLI on the remote: `$1` the folder, `$2` KodAct CLI, the rest
 /// its arguments; the environment comes first on stdin, one `KEY=value` a
 /// line (backslash escapes, see [`env_line`]), ended by an empty line.
 pub fn boot_script() -> String {
@@ -317,7 +317,7 @@ if [ -n "${{{HOST_FILE}:-}}" ]; then
   unset {HOST_FILE}
 fi
 unset t
-cd "$d" 2>/dev/null || {{ echo "forge: there is no folder $d on $(uname -n)" >&2; exit 97; }}
+cd "$d" 2>/dev/null || {{ echo "kodact: there is no folder $d on $(uname -n)" >&2; exit 97; }}
 exec "$f" "$@""#
     )
 }
@@ -332,7 +332,7 @@ pub fn env_line(key: &str, value: &str) -> String {
     format!("{key}={v}\n")
 }
 
-/// How to start ForgeCLI in `remote`'s folder: the command, and the bytes to
+/// How to start KodAct CLI in `remote`'s folder: the command, and the bytes to
 /// write to its stdin before anything else (the environment).
 pub fn launch(
     remote: &Remote,
@@ -375,7 +375,7 @@ fn bring_back(target: &Target, stderr: &str) -> bool {
     };
     if stderr.contains("is not running") {
         let started = docker(wsl.as_deref(), &["start", name]).is_ok();
-        // Made before Forge kept its folder: keep it now, from its label.
+        // Made before KodAct kept its folder: keep it now, from its label.
         if started && is_devcontainer(target) && remembered_source(name).is_none() {
             if let Ok(src) = labelled_source(name, wsl.as_deref()) {
                 remember_source(name, &src);
@@ -513,7 +513,7 @@ impl Error {
                     } else if crate::askpass::env().is_some() {
                         format!("{host} refused the sign-in: the password or passphrase was wrong, or no key it accepts was offered. Connect again to retry.")
                     } else {
-                        format!("{host} refused the sign-in. Forge signs in with your SSH keys or agent: check `ssh {host}` works in a terminal.")
+                        format!("{host} refused the sign-in. KodAct signs in with your SSH keys or agent: check `ssh {host}` works in a terminal.")
                     }
                 } else if has("Could not resolve hostname") {
                     format!("{host} couldn't be found (name not resolved).")
@@ -539,7 +539,7 @@ impl Error {
                 {
                     "Docker isn't running. Start Docker Desktop (or the docker service).".into()
                 } else if has("No such container") && name.starts_with("forge-dc-") {
-                    format!("The dev container {name} was deleted. Open the folder again (Reopen in container) and Forge builds it anew.")
+                    format!("The dev container {name} was deleted. Open the folder again (Reopen in container) and KodAct builds it anew.")
                 } else if has("No such container") {
                     format!("There's no container named {name}.")
                 } else if has("is not running") {
@@ -609,7 +609,7 @@ fn ssh_host_port(host: &str) -> (String, Option<String>) {
 
 // ---------------------------------------------------------------- what's there
 
-/// What a target is, from `uname`: only Linux runs ForgeCLI remotely.
+/// What a target is, from `uname`: only Linux runs KodAct CLI remotely.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Info {
     pub arch: String,
@@ -632,7 +632,7 @@ fn waking(target: &Target, e: &Error) -> bool {
             Target::Wsl(_) => {
                 !(m.contains("There's no WSL distro")
                     || m.contains("isn't installed")
-                    || m.contains("Forge runs remotely"))
+                    || m.contains("KodAct runs remotely"))
             }
             Target::Container { .. } => m.contains("Docker isn't running") || m.contains("failed"),
             Target::Ssh(_) => false,
@@ -682,7 +682,7 @@ fn probe_within(target: &Target, extra: &Extra, limit: Duration) -> Result<Info,
     let (os, arch) = (words.next().unwrap_or(""), words.next().unwrap_or(""));
     if os != "Linux" {
         return Err(Error::Other(format!(
-            "{} runs {os}; Forge runs remotely on Linux only.",
+            "{} runs {os}; KodAct runs remotely on Linux only.",
             target.label()
         )));
     }
@@ -867,10 +867,11 @@ mkdir -p "$(dirname "$d")" && rm -rf "$t" && mkdir -p "$t" && tar -xf - -C "$t" 
     )
 }
 
-/// The skills ForgeCLI on the remote loads, from its folders there (Claude
-/// Code's `~/.claude/skills`, yours in `$FORGE_HOME` or `~/.config/forge`,
-/// then the project's `.claude/skills` from its repository root down,
-/// `.agents` and `.forge`): each skill's folder name and its SKILL.md frontmatter.
+/// The skills KodAct CLI on the remote loads, from its folders there (Claude
+/// Code's `~/.claude/skills`, yours in `$KODACT_HOME` or `~/.config/kodact`
+/// (ForgeCLI's `forge` while only that exists), then the project's
+/// `.claude/skills` from its repository root down, `.agents`, ForgeCLI's
+/// `.forge` and `.kodact`): each skill's folder name and its SKILL.md frontmatter.
 pub fn skill_heads(
     target: &Target,
     path: &str,
@@ -879,7 +880,11 @@ pub fn skill_heads(
     let script = format!(
         r#"{TILDE}
 d=$(x "$1")
-u=${{FORGE_HOME:-${{XDG_CONFIG_HOME:-$HOME/.config}}/forge}}
+u=${{KODACT_HOME:-${{FORGE_HOME:-}}}}
+if [ -z "$u" ]; then
+  b=${{XDG_CONFIG_HOME:-$HOME/.config}}
+  if [ ! -e "$b/kodact" ] && [ -e "$b/forge" ]; then u=$b/forge; else u=$b/kodact; fi
+fi
 c=${{CLAUDE_CONFIG_DIR:-$HOME/.claude}}
 chain=""; p=$d; found=""
 while [ -n "$p" ]; do
@@ -892,7 +897,7 @@ done
 [ -n "$found" ] || chain="$d/.claude/skills"
 IFS='
 '
-for r in "$c/skills" "$u/skills" $chain "$d/.agents/skills" "$d/.forge/skills"; do
+for r in "$c/skills" "$u/skills" $chain "$d/.agents/skills" "$d/.forge/skills" "$d/.kodact/skills"; do
   for f in "$r"/*/SKILL.md; do
     [ -f "$f" ] || continue
     printf '\036%s\n' "$(basename "$(dirname "$f")")"
@@ -1094,7 +1099,7 @@ pub fn containers() -> Result<Vec<Container>, Error> {
 
 // ---------------------------------------------------------------- dev containers
 
-/// What Forge uses from a `devcontainer.json`.
+/// What KodAct uses from a `devcontainer.json`.
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct DevContainer {
     pub name: Option<String>,
@@ -1275,7 +1280,7 @@ fn wait_for_docker(wsl: Option<&str>, progress: &dyn Fn(&str)) -> Result<(), Err
 /// Reopen a local folder in its dev container: build or pull the image,
 /// start (or reuse) a container with the folder mounted, run
 /// `postCreateCommand` once, and return the remote project.
-/// A container Forge started from a folder's devcontainer.json.
+/// A container KodAct started from a folder's devcontainer.json.
 pub fn is_devcontainer(target: &Target) -> bool {
     matches!(target, Target::Container { name, .. } if name.starts_with("forge-dc-"))
 }
@@ -1336,7 +1341,7 @@ impl DevSource {
     }
 }
 
-/// Where Forge keeps each dev container's folder (`devcontainers.json`,
+/// Where KodAct keeps each dev container's folder (`devcontainers.json`,
 /// name → its `forge.devcontainer` label), so a container deleted since can
 /// be built again: its own label went with it.
 fn sources_file() -> Option<PathBuf> {
@@ -1370,7 +1375,7 @@ fn remembered_source(name: &str) -> Option<DevSource> {
 
 /// The folder a dev container was started from (its `forge.devcontainer`
 /// label), on the Docker of `wsl` or this computer; for one deleted since,
-/// the folder Forge remembered when it made it.
+/// the folder KodAct remembered when it made it.
 pub fn devcontainer_source(name: &str, wsl: Option<&str>) -> Result<DevSource, Error> {
     match labelled_source(name, wsl) {
         Ok(src) => Ok(src),
@@ -1580,19 +1585,19 @@ pub fn devcontainer_up(
     Ok(remote)
 }
 
-// ---------------------------------------------------------------- ForgeCLI on the remote
+// ---------------------------------------------------------------- KodAct CLI on the remote
 
-/// Where a target's ForgeCLI and Forge's plugin were put.
+/// Where a target's KodAct CLI and KodAct's plugin were put.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Provisioned {
     pub forge: String,
     pub plugin: String,
 }
 
-/// The Linux ForgeCLI this app carries for an architecture (`uname -m`):
-/// `FORGE_REMOTE_CLI`, else `bin/linux-<arch>/forge` beside the app.
+/// The Linux KodAct CLI this app carries for an architecture (`uname -m`):
+/// `KODACT_REMOTE_CLI`, else `bin/linux-<arch>/kodact` beside the app.
 pub fn local_forge(arch: &str) -> Option<PathBuf> {
-    if let Some(p) = std::env::var_os("FORGE_REMOTE_CLI").map(PathBuf::from) {
+    if let Some(p) = std::env::var_os("KODACT_REMOTE_CLI").map(PathBuf::from) {
         return p.is_file().then_some(p);
     }
     let arch = match arch {
@@ -1602,8 +1607,8 @@ pub fn local_forge(arch: &str) -> Option<PathBuf> {
     };
     let dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
     [
-        dir.join("bin").join(format!("linux-{arch}")).join("forge"),
-        dir.join(format!("linux-{arch}")).join("forge"),
+        dir.join("bin").join(format!("linux-{arch}")).join("kodact"),
+        dir.join(format!("linux-{arch}")).join("kodact"),
     ]
     .into_iter()
     .find(|p| p.is_file())
@@ -1619,7 +1624,7 @@ fn content_id(bytes: &[u8]) -> String {
     format!("{h:016x}")
 }
 
-/// Make sure the target has this app's ForgeCLI and plugin, uploading what's
+/// Make sure the target has this app's KodAct CLI and plugin, uploading what's
 /// missing (once per version), and say where they are.
 pub fn provision(
     target: &Target,
@@ -1630,16 +1635,16 @@ pub fn provision(
     let info = probe_waking(target, extra, progress)?;
     let local = local_forge(&info.arch).ok_or_else(|| {
         Error::Other(format!(
-            "This Forge has no ForgeCLI for Linux {} to put on {}.",
+            "This KodAct has no KodAct CLI for Linux {} to put on {}.",
             info.arch,
             target.label()
         ))
     })?;
     let bin = std::fs::read(&local).map_err(|e| Error::Other(e.to_string()))?;
     let base = crate::app_settings::get().server_install_dir;
-    let forge = format!("{base}/bin/forge-{}", content_id(&bin));
+    let forge = format!("{base}/bin/kodact-{}", content_id(&bin));
     let plugin_files = crate::plugin::files();
-    let plugin = format!("{base}/plugin-{}/forge", crate::plugin::hash());
+    let plugin = format!("{base}/plugin-{}/kodact", crate::plugin::hash());
     let check = format!(
         r#"{TILDE}
 [ -x "$(x "$1")" ] && echo forge
@@ -1656,7 +1661,7 @@ true"#
     )?)
     .into_owned();
     if !have.lines().any(|l| l == "forge") {
-        progress(&format!("Installing ForgeCLI on {}…", target.label()));
+        progress(&format!("Installing KodAct CLI on {}…", target.label()));
         let put = format!(
             r#"{TILDE}
 f=$(x "$1"); mkdir -p "$(dirname "$f")" && cat > "$f.part" && chmod 755 "$f.part" && mv -f "$f.part" "$f""#
@@ -1669,7 +1674,7 @@ f=$(x "$1"); mkdir -p "$(dirname "$f")" && cat > "$f.part" && chmod 755 "$f.part
             Duration::from_secs(600),
             extra,
         )?;
-        progress(&format!("Checking ForgeCLI on {}…", target.label()));
+        progress(&format!("Checking KodAct CLI on {}…", target.label()));
         verify_upload(target, &forge, &bin, extra)?;
     }
     if !have.lines().any(|l| l == "plugin") {
@@ -1722,7 +1727,7 @@ else echo "size $(wc -c < "$f" | tr -d ' ')"; fi"#
         extra,
     );
     Err(Error::Other(format!(
-        "ForgeCLI arrived damaged on {}. It was removed; connect again to upload it once more.",
+        "KodAct CLI arrived damaged on {}. It was removed; connect again to upload it once more.",
         target.label()
     )))
 }
@@ -1816,7 +1821,7 @@ pub fn with_port(url: &str, port: u16) -> String {
     format!("{scheme}://{host}:{port}{path}")
 }
 
-/// The browser's tool server as a remote ForgeCLI reaches it: over HTTP on
+/// The browser's tool server as a remote KodAct CLI reaches it: over HTTP on
 /// the remote's `127.0.0.1:<port>` (an `ssh -R` forward; for WSL its
 /// mirrored networking, for a container its host network).
 pub fn browser_mcp_config(port: u16, token: &str) -> String {
@@ -2019,7 +2024,7 @@ mod tests {
             r#"{"image":"alpine:3.20"}"#,
         )
         .unwrap();
-        std::env::set_var("FORGE_CONFIG_DIR", root.join("config"));
+        std::env::set_var("KODACT_CONFIG_DIR", root.join("config"));
         let remote = devcontainer_up(&DevSource::Local(dir.clone()), true, &|_| {}).unwrap();
         let Target::Container { name, .. } = &remote.target else {
             panic!()
@@ -2195,13 +2200,13 @@ mod tests {
         let home = std::env::temp_dir().join(format!("forge-boot-{}", std::process::id()));
         std::fs::create_dir_all(home.join("proj")).unwrap();
         let mut prelude = String::new();
-        prelude.push_str(&env_line("FORGE_API_KEY", "sk-secret"));
-        prelude.push_str(&env_line("FORGE_CUSTOM_HEADERS", "A: 1\nB: 2\\x"));
+        prelude.push_str(&env_line("KODACT_API_KEY", "sk-secret"));
+        prelude.push_str(&env_line("KODACT_CUSTOM_HEADERS", "A: 1\nB: 2\\x"));
         prelude.push('\n');
         let script = boot_script();
         let mut child = Command::new("sh")
             .args(["-c", &script, "sh", "~/proj", "/bin/sh", "-c"])
-            .arg(r#"printf '%s|%s|%s|' "$PWD" "$FORGE_API_KEY" "$FORGE_CUSTOM_HEADERS"; cat; printf '|%s' "$1""#)
+            .arg(r#"printf '%s|%s|%s|' "$PWD" "$KODACT_API_KEY" "$KODACT_CUSTOM_HEADERS"; cat; printf '|%s' "$1""#)
             .args(["arg0", "~/x"])
             .env("HOME", &home)
             .stdin(Stdio::piped())
@@ -2223,7 +2228,7 @@ mod tests {
     }
 
     /// A long file in the environment (a design chat's prompt) is written
-    /// where it's named, and gone from what ForgeCLI inherits.
+    /// where it's named, and gone from what KodAct CLI inherits.
     #[cfg(unix)]
     #[test]
     fn boot_writes_the_host_file() {
@@ -2235,7 +2240,7 @@ mod tests {
         prelude.push('\n');
         let mut child = Command::new("sh")
             .args(["-c", &boot_script(), "sh", "~", "/bin/sh", "-c"])
-            .arg(r#"printf '%s|%s' "${FORGE_HOST_TEXT:-gone}" "${FORGE_HOST_FILE:-gone}""#)
+            .arg(r#"printf '%s|%s' "${KODACT_HOST_TEXT:-gone}" "${KODACT_HOST_FILE:-gone}""#)
             .env("HOME", &home)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -2399,7 +2404,7 @@ mod tests {
         std::fs::remove_dir_all(dir).ok();
     }
 
-    /// Drive a remote ForgeCLI through [`launch`] as the app does: the
+    /// Drive a remote KodAct CLI through [`launch`] as the app does: the
     /// scripted model's MODETEST (Read, Write, Edit, mkdir, ls, rm, curl),
     /// allowing every ask. Returns what asked, and the folder's files after.
     fn modetest(target: &Target, mode: &str, model: &str, extra: &Extra) -> (Vec<String>, String) {
@@ -2439,9 +2444,9 @@ mod tests {
         .map(|s| s.to_string())
         .collect();
         let env = vec![
-            ("FORGE_BASE_URL".to_string(), model.to_string()),
+            ("KODACT_BASE_URL".to_string(), model.to_string()),
             (
-                "FORGE_API_KEY".to_string(),
+                "KODACT_API_KEY".to_string(),
                 "sk-test-not-in-argv".to_string(),
             ),
         ];
@@ -2485,7 +2490,7 @@ mod tests {
             }
         }
         drop(stdin);
-        // stdin closed: the remote ForgeCLI ends, and so does the connection.
+        // stdin closed: the remote KodAct CLI ends, and so does the connection.
         let start = Instant::now();
         while child.try_wait().unwrap().is_none() {
             assert!(
@@ -2504,7 +2509,7 @@ mod tests {
     }
 
     /// The app's browser tools, served over HTTP here and forwarded with
-    /// `ssh -R`, are offered to the remote ForgeCLI's agent.
+    /// `ssh -R`, are offered to the remote KodAct CLI's agent.
     fn browser_reaches_the_remote(t: &Target, extra: &Extra, model: &str) {
         use std::io::BufRead;
         let port =
@@ -2531,8 +2536,8 @@ mod tests {
         .map(|s| s.to_string())
         .collect();
         let env = vec![
-            ("FORGE_BASE_URL".to_string(), model.to_string()),
-            ("FORGE_API_KEY".to_string(), "t".to_string()),
+            ("KODACT_BASE_URL".to_string(), model.to_string()),
+            ("KODACT_API_KEY".to_string(), "t".to_string()),
         ];
         let remote = Remote {
             target: t.clone(),
@@ -2574,7 +2579,7 @@ mod tests {
             .filter_map(|v| v.as_str().map(str::to_string))
             .collect();
         assert!(
-            names.iter().any(|n| n == "mcp__forge-browser__navigate"),
+            names.iter().any(|n| n == "mcp__kodact-browser__navigate"),
             "{names:?}"
         );
         eprintln!(
@@ -2582,21 +2587,21 @@ mod tests {
             t.label(),
             names
                 .iter()
-                .filter(|n| n.starts_with("mcp__forge-browser__"))
+                .filter(|n| n.starts_with("mcp__kodact-browser__"))
                 .count()
         );
     }
 
-    /// Against real targets: `FORGE_TEST_SSH` (a Host whose key isn't known
-    /// yet), `FORGE_TEST_CONTAINER` (a running container), with
-    /// `FORGE_REMOTE_CLI` (a Linux ForgeCLI) and `FORGE_TEST_MODEL` (the
+    /// Against real targets: `KODACT_TEST_SSH` (a Host whose key isn't known
+    /// yet), `KODACT_TEST_CONTAINER` (a running container), with
+    /// `KODACT_REMOTE_CLI` (a Linux KodAct CLI) and `KODACT_TEST_MODEL` (the
     /// scripted model, reachable at the same URL from the targets).
     #[test]
     #[ignore]
     fn real_remotes() {
-        let model = std::env::var("FORGE_TEST_MODEL").expect("FORGE_TEST_MODEL");
+        let model = std::env::var("KODACT_TEST_MODEL").expect("KODACT_TEST_MODEL");
         let mut targets = vec![];
-        if let Ok(h) = std::env::var("FORGE_TEST_SSH") {
+        if let Ok(h) = std::env::var("KODACT_TEST_SSH") {
             let t = Target::Ssh(h.clone());
             // A first connection: the host key is unknown, and its fingerprint shown.
             match probe(&t, &Extra::default()) {
@@ -2615,7 +2620,7 @@ mod tests {
             }
             targets.push((t, extra));
         }
-        if let Ok(c) = std::env::var("FORGE_TEST_CONTAINER") {
+        if let Ok(c) = std::env::var("KODACT_TEST_CONTAINER") {
             targets.push((
                 Target::Container {
                     name: c,
@@ -2629,7 +2634,7 @@ mod tests {
         for (t, extra) in targets {
             let info = probe(&t, &extra).unwrap();
             assert_eq!(info.arch, "x86_64");
-            // ForgeCLI goes up once; the second time it's already there.
+            // KodAct CLI goes up once; the second time it's already there.
             let said = std::sync::Mutex::new(vec![]);
             provision(&t, &extra, &|m| said.lock().unwrap().push(m.to_string())).unwrap();
             let again = std::sync::Mutex::new(vec![]);
@@ -2677,13 +2682,13 @@ mod tests {
 
     /// "Reopen in Container" for real, from a folder's devcontainer.json:
     /// once from an image, once from a Dockerfile with postCreateCommand.
-    /// Needs `FORGE_TEST_IMAGE` (a local image with sh) and the variables
+    /// Needs `KODACT_TEST_IMAGE` (a local image with sh) and the variables
     /// [`real_remotes`] uses.
     #[test]
     #[ignore]
     fn real_devcontainer() {
-        let image = std::env::var("FORGE_TEST_IMAGE").expect("FORGE_TEST_IMAGE");
-        let model = std::env::var("FORGE_TEST_MODEL").expect("FORGE_TEST_MODEL");
+        let image = std::env::var("KODACT_TEST_IMAGE").expect("KODACT_TEST_IMAGE");
+        let model = std::env::var("KODACT_TEST_MODEL").expect("KODACT_TEST_MODEL");
         for (case, json, dockerfile) in [
             (
                 "image",
@@ -2755,11 +2760,11 @@ mod tests {
 
     /// Rebuild and the way back: a dev container knows its folder, and a
     /// fresh start replaces it (its changes gone, postCreateCommand run
-    /// again, the folder still mounted). Needs `FORGE_TEST_IMAGE`.
+    /// again, the folder still mounted). Needs `KODACT_TEST_IMAGE`.
     #[test]
     #[ignore]
     fn real_devcontainer_rebuild() {
-        let image = std::env::var("FORGE_TEST_IMAGE").expect("FORGE_TEST_IMAGE");
+        let image = std::env::var("KODACT_TEST_IMAGE").expect("KODACT_TEST_IMAGE");
         let dir = std::env::temp_dir().join(format!("forge-dc-rebuild-{}", std::process::id()));
         std::fs::create_dir_all(dir.join(".devcontainer")).unwrap();
         std::fs::write(
@@ -2889,11 +2894,11 @@ mod tests {
     }
 
     /// A real upload is checked, and a damaged one is caught and removed:
-    /// `FORGE_TEST_SSH` names the host, `FORGE_REMOTE_CLI` the ForgeCLI.
+    /// `KODACT_TEST_SSH` names the host, `KODACT_REMOTE_CLI` the KodAct CLI.
     #[test]
     #[ignore]
     fn real_upload_is_verified() {
-        let host = std::env::var("FORGE_TEST_SSH").expect("FORGE_TEST_SSH");
+        let host = std::env::var("KODACT_TEST_SSH").expect("KODACT_TEST_SSH");
         let t = Target::Ssh(host);
         let extra = Extra {
             accept_new_host_key: true,
@@ -2920,7 +2925,7 @@ mod tests {
                 .lock()
                 .unwrap()
                 .iter()
-                .any(|m| m.starts_with("Checking ForgeCLI")),
+                .any(|m| m.starts_with("Checking KodAct CLI")),
             "{:?}",
             steps.lock().unwrap()
         );

@@ -768,7 +768,7 @@ impl Chrome {
                     )?;
                 }
                 let lib = crate::design::root().ok_or_else(|| {
-                    Failure::Page("Figma export needs Forge's design library (its clipper).".into())
+                    Failure::Page("Figma export needs KodAct's design library (its clipper).".into())
                 })?;
                 let clipper =
                     std::fs::read_to_string(lib.join("clipper/capture.js")).map_err(|e| {
@@ -1114,7 +1114,7 @@ mod tests {
         eprintln!("captured: {:?}", c.brand);
         shutdown();
         assert!(warm < Duration::from_secs(8), "{warm:?}");
-        if std::env::var_os("FORGE_KEEP_EXPORTS").is_none() {
+        if std::env::var_os("KODACT_KEEP_EXPORTS").is_none() {
             let _ = std::fs::remove_dir_all(&dir);
         }
     }

@@ -1,8 +1,8 @@
-//! Forge's own plugin (`assets/forge-plugin`), given to every ForgeCLI
+//! KodAct's own plugin (`assets/kodact-plugin`), given to every KodAct CLI
 //! session with `--plugin-dir`: the Diagram Design skill (MIT,
-//! cathrynlavery/diagram-design, in Forge's skin), the design skill (decks,
+//! cathrynlavery/diagram-design, in KodAct's skin), the design skill (decks,
 //! pages and prototypes for the side panel) and the office-documents skill. It is built into the app and unpacked once per version into the
-//! config folder, `plugin/<hash>/forge/`, so a release needs no files beside it.
+//! config folder, `plugin/<hash>/kodact/`, so a release needs no files beside it.
 
 use std::path::PathBuf;
 use std::sync::OnceLock;
@@ -12,14 +12,14 @@ mod embedded {
 }
 
 /// The unpacked plugin folder, unpacking it on first use; None if the
-/// config folder can't be written (Forge then runs without it).
+/// config folder can't be written (KodAct then runs without it).
 pub fn dir() -> Option<PathBuf> {
     static DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
     DIR.get_or_init(|| {
         let root = crate::profile::dir()?.join("plugin");
-        // ForgeCLI names a plugin's skills after its folder: `forge:diagram-design`.
+        // KodAct CLI names a plugin's skills after its folder: `kodact:diagram-design`.
         let version = root.join(embedded::HASH);
-        let dir = version.join("forge");
+        let dir = version.join("kodact");
         let done = version.join(".unpacked");
         if !done.exists() {
             for (rel, bytes) in embedded::FILES {
@@ -50,7 +50,7 @@ pub fn hash() -> &'static str {
     embedded::HASH
 }
 
-/// The skills the plugin brings, as ForgeCLI names them (`forge:<name>`),
+/// The skills the plugin brings, as KodAct CLI names them (`kodact:<name>`),
 /// with their descriptions.
 pub fn skills() -> Vec<(String, String)> {
     let mut out: Vec<(String, String)> = embedded::FILES
@@ -59,7 +59,7 @@ pub fn skills() -> Vec<(String, String)> {
             let name = path.strip_prefix("skills/")?.strip_suffix("/SKILL.md")?;
             let doc = crate::forge_files::Doc::parse(&String::from_utf8_lossy(bytes));
             Some((
-                format!("forge:{name}"),
+                format!("kodact:{name}"),
                 doc.get("description").unwrap_or_default(),
             ))
         })
@@ -76,10 +76,10 @@ mod tests {
     fn the_plugin_lists_its_skills() {
         let names: Vec<String> = super::skills().into_iter().map(|(n, _)| n).collect();
         assert!(
-            names.contains(&"forge:diagram-design".to_string()),
+            names.contains(&"kodact:diagram-design".to_string()),
             "{names:?}"
         );
-        assert!(names.contains(&"forge:design".to_string()), "{names:?}");
+        assert!(names.contains(&"kodact:design".to_string()), "{names:?}");
         assert!(super::skills().iter().all(|(_, d)| !d.is_empty()));
     }
 
@@ -88,8 +88,8 @@ mod tests {
         let skills = super::skills();
         let (_, description) = skills
             .iter()
-            .find(|(n, _)| n == "forge:expert")
-            .expect("forge:expert is bundled");
+            .find(|(n, _)| n == "kodact:expert")
+            .expect("kodact:expert is bundled");
         assert!(description.contains("Teach the user"), "{description}");
         let names: Vec<&str> = embedded::FILES.iter().map(|(p, _)| *p).collect();
         for f in ["methods", "shapes", "levels"] {

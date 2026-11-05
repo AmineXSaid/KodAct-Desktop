@@ -1,7 +1,7 @@
 //! A model endpoint's error in words: what failed and what to do, for the
 //! error card. The server's own reply stays under it, for the details.
 
-/// A headline and what to do, when the error is one Forge recognises.
+/// A headline and what to do, when the error is one KodAct recognises.
 pub fn explain(raw: &str) -> Option<(&'static str, &'static str)> {
     let s = raw.to_lowercase();
     let has = |needles: &[&str]| needles.iter().any(|n| s.contains(n));

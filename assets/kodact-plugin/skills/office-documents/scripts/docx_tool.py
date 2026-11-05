@@ -18,7 +18,7 @@ off, so the formatting around it is kept.
 Edits keep the document's styles and the formatting of the runs they touch,
 and always write OUT (never the input in place unless OUT is the input).
 Every file written is schema-valid and carries real properties (title,
-author Forge, dates), not python-docx's template defaults.
+author KodAct, dates), not python-docx's template defaults.
 """
 
 import argparse
@@ -38,7 +38,7 @@ from docx.shared import Mm, Pt
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # mdlite, beside this file
 from mdlite import blocks, inline, plain
 
-AUTHOR = "Forge"
+AUTHOR = "KodAct"
 # Page sizes and margins, in millimetres.
 PAGES = {"a4": (210, 297, 25), "letter": (215.9, 279.4, 25.4)}
 

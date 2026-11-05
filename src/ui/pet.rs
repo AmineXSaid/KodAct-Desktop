@@ -1,5 +1,5 @@
 //! The pet beside the chat (`design::pets`): the one you picked, in the
-//! mood of what Forge is doing. Running while it works, reviewing while it
+//! mood of what KodAct is doing. Running while it works, reviewing while it
 //! reviews a design, waiting when it asks you something, a jump when a
 //! reply ends, failed after an error, idle otherwise; a wave when it first
 //! appears. Its frames are cut from the sheet off the window's thread.

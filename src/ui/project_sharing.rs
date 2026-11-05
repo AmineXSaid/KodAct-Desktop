@@ -1,9 +1,9 @@
 //! The Share card on a project page's rail (`crate::project_share`): give
-//! others the same Forge in this project, its shared instructions and its
+//! others the same KodAct in this project, its shared instructions and its
 //! knowledge (and its memory, if you choose), never your own instructions.
 //!
 //! - With the repo: how many setup files aren't committed yet, and Commit.
-//! - As a file: Export a `.forgeproject` to Downloads; Import one here.
+//! - As a file: Export a `.kodactproject` to Downloads; Import one here.
 
 use gpui::{
     div, prelude::*, px, relative, AnyElement, Context, Entity, FontWeight, IntoElement,
@@ -104,7 +104,7 @@ impl Render for ProjectSharing {
             );
         if files == 0 {
             return card
-                .child(note("Nothing to share yet: write the project's instructions or add knowledge, and anyone you share it with gets the same Forge here.".into()))
+                .child(note("Nothing to share yet: write the project's instructions or add knowledge, and anyone you share it with gets the same KodAct here.".into()))
                 .child(
                     theme::ghost_button(&t, "Import a setup…")
                         .id("share-import")

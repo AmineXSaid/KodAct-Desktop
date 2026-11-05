@@ -2,14 +2,14 @@
 //! (specs, briefs, data, notes), as Claude's project knowledge is, but kept
 //! as files in the project and in your control.
 //!
-//! - Files you add from elsewhere are copied into `.forge/knowledge/`;
+//! - Files you add from elsewhere are copied into `.kodact/knowledge/`;
 //!   files already in the project are referenced where they are.
 //! - Each is **Always** (its text goes into every new chat) or **On demand**
-//!   (listed; Forge reads it with its own tools when it matters). Always
+//!   (listed; KodAct reads it with its own tools when it matters). Always
 //!   files fit a budget (a share of the model's window); past it, the rest
 //!   are listed On demand, and the rail says so.
-//! - `.forge/knowledge.json` keeps the list and the choices;
-//!   `.forge/knowledge.md` is the block compiled from them, sent ahead of a
+//! - `.kodact/knowledge.json` keeps the list and the choices;
+//!   `.kodact/knowledge.md` is the block compiled from them, sent ahead of a
 //!   new chat's first message (`state.rs` `send_to_forge`), so its size is
 //!   never limited by a command line.
 //!
@@ -19,9 +19,29 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-pub const DIR: &str = ".forge/knowledge";
-const MANIFEST: &str = ".forge/knowledge.json";
-const COMPILED: &str = ".forge/knowledge.md";
+/// The folder copies go in, relative to the project: `.kodact/knowledge`
+/// (`.forge/knowledge` in a project made before the rename, `names.rs`).
+pub fn dir(project: &Path) -> String {
+    crate::names::in_project_dir(project, "knowledge")
+}
+
+/// Whether `rel` (relative to a project) is the knowledge folder, under
+/// either name. No disk access.
+pub fn is_dir(rel: &str) -> bool {
+    crate::names::PROJECT_DIRS
+        .iter()
+        .any(|d| rel == format!("{d}/knowledge"))
+}
+
+/// The list and the choices.
+fn manifest_file(project: &Path) -> PathBuf {
+    project.join(crate::names::in_project_dir(project, "knowledge.json"))
+}
+
+/// The block compiled from them.
+fn compiled_file(project: &Path) -> PathBuf {
+    project.join(crate::names::in_project_dir(project, "knowledge.md"))
+}
 /// The largest text file read for its words.
 const TEXT_MAX: u64 = 4 * 1024 * 1024;
 /// The largest Office file or PDF read for its words.
@@ -67,14 +87,14 @@ pub struct Knowledge {
 }
 
 fn manifest(project: &Path) -> Manifest {
-    std::fs::read_to_string(project.join(MANIFEST))
+    std::fs::read_to_string(manifest_file(project))
         .ok()
         .and_then(|t| serde_json::from_str(&t).ok())
         .unwrap_or_default()
 }
 
 fn save_manifest(project: &Path, m: &Manifest) -> Result<(), String> {
-    let path = project.join(MANIFEST);
+    let path = manifest_file(project);
     if let Some(d) = path.parent() {
         std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
     }
@@ -112,10 +132,10 @@ pub fn text_of(path: &Path) -> Option<String> {
 }
 
 /// The project's knowledge: the listed files, then any file dropped into
-/// `.forge/knowledge/` by hand (On demand).
+/// `.kodact/knowledge/` by hand (On demand).
 fn entries(project: &Path) -> Vec<Entry> {
     let mut files = manifest(project).files;
-    if let Ok(dir) = std::fs::read_dir(project.join(DIR)) {
+    if let Ok(dir) = std::fs::read_dir(project.join(dir(project))) {
         let mut found: Vec<String> = dir
             .filter_map(|e| e.ok())
             .filter(|e| e.path().is_file())
@@ -166,7 +186,7 @@ pub fn compile(project: &Path, budget: u64) -> Knowledge {
             missing: meta.is_none(),
         });
     }
-    let path = project.join(COMPILED);
+    let path = compiled_file(project);
     if items.iter().any(|i| !i.missing) {
         let mut out = String::from(
             "<project_knowledge>\nThis project's reference files, chosen by the user for every chat in it. Use them as the source of truth on what they cover, and say which file an answer comes from.\n\n",
@@ -195,7 +215,7 @@ pub fn compile(project: &Path, budget: u64) -> Knowledge {
 
 /// The block a new chat's first message carries, as last compiled.
 pub fn block(project: &Path) -> Option<String> {
-    let path = project.join(COMPILED);
+    let path = compiled_file(project);
     // A compiled block is bounded by its budget; this only guards a file
     // edited by hand.
     if std::fs::metadata(&path).ok()?.len() > 8 * 1024 * 1024 {
@@ -223,16 +243,16 @@ fn free_name(dir: &Path, name: &str) -> PathBuf {
 }
 
 /// Add files: one in the project is referenced where it is; one from
-/// elsewhere is copied into `.forge/knowledge/`. New files start On demand.
+/// elsewhere is copied into `.kodact/knowledge/`. New files start On demand.
 /// Returns how many were added.
 pub fn add(project: &Path, paths: &[PathBuf]) -> Result<usize, String> {
     let mut m = manifest(project);
     let mut added = 0;
     for p in paths.iter().filter(|p| p.is_file()) {
         let rel = match rel_of(project, p) {
-            Some(rel) if !rel.starts_with(".forge/knowledge.") => rel,
+            Some(rel) if !crate::names::starts_in_project_dir(&rel, "knowledge.") => rel,
             _ => {
-                let dir = project.join(DIR);
+                let dir = project.join(dir(project));
                 std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
                 let name = p
                     .file_name()
@@ -255,9 +275,9 @@ pub fn add(project: &Path, paths: &[PathBuf]) -> Result<usize, String> {
     Ok(added)
 }
 
-/// Add a note you wrote, as a Markdown file in `.forge/knowledge/`, Always.
+/// Add a note you wrote, as a Markdown file in `.kodact/knowledge/`, Always.
 pub fn add_text(project: &Path, title: &str, text: &str) -> Result<String, String> {
-    let dir = project.join(DIR);
+    let dir = project.join(dir(project));
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let stem = crate::rules::slug(title).unwrap_or_else(|| "note".into());
     let to = free_name(&dir, &format!("{stem}.md"));
@@ -290,14 +310,14 @@ pub fn set_always(project: &Path, rel: &str, always: bool) -> Result<(), String>
     save_manifest(project, &m)
 }
 
-/// Take a file out of the knowledge: a copy Forge made is deleted; a file
+/// Take a file out of the knowledge: a copy KodAct made is deleted; a file
 /// of the project's own stays where it is.
 pub fn remove(project: &Path, rel: &str) -> Result<(), String> {
     let mut m = Manifest {
         files: entries(project),
     };
     m.files.retain(|f| f.path != rel);
-    if rel.starts_with(&format!("{DIR}/")) {
+    if crate::names::starts_in_project_dir(rel, "knowledge/") {
         let _ = std::fs::remove_file(project.join(rel));
     }
     save_manifest(project, &m)
@@ -322,7 +342,7 @@ mod tests {
         std::fs::write(p.join("README.md"), "Run with pnpm dev.").unwrap();
         // From elsewhere: copied in. From the project: referenced.
         assert_eq!(add(&p, &[outside.clone(), p.join("README.md")]).unwrap(), 2);
-        let copy = format!("{DIR}/{}", outside.file_name().unwrap().to_string_lossy());
+        let copy = format!("{}/{}", dir(&p), outside.file_name().unwrap().to_string_lossy());
         assert!(p.join(&copy).is_file());
         // Both start On demand: listed, no text sent.
         let k = compile(&p, 1000);
@@ -342,7 +362,7 @@ mod tests {
         assert_eq!(k.included_tokens, 0);
         // A note is written as Markdown, Always.
         let note = add_text(&p, "Tone of voice", "Plain words.").unwrap();
-        assert_eq!(note, format!("{DIR}/tone-of-voice.md"));
+        assert_eq!(note, format!("{}/tone-of-voice.md", dir(&p)));
         assert!(compile(&p, 1000)
             .items
             .iter()
@@ -362,9 +382,9 @@ mod tests {
     #[test]
     fn a_file_dropped_in_by_hand_is_knowledge_too() {
         let p = project("b");
-        std::fs::create_dir_all(p.join(DIR)).unwrap();
-        std::fs::write(p.join(DIR).join("brief.txt"), "Launch in May.").unwrap();
-        std::fs::write(p.join(DIR).join("logo.bin"), [0u8, 1, 2, 0]).unwrap();
+        std::fs::create_dir_all(p.join(dir(&p))).unwrap();
+        std::fs::write(p.join(dir(&p)).join("brief.txt"), "Launch in May.").unwrap();
+        std::fs::write(p.join(dir(&p)).join("logo.bin"), [0u8, 1, 2, 0]).unwrap();
         let k = compile(&p, 1000);
         assert_eq!(k.items.len(), 2);
         let bin = k

@@ -52,7 +52,7 @@ fn render() -> String {
     let (l, d) = (Theme::light(), Theme::dark());
     let mut s = String::new();
     let w = &mut s;
-    let _ = writeln!(w, "# Design System: Forge desktop (forge-gpui)\n");
+    let _ = writeln!(w, "# Design System: KodAct desktop (kodact-desktop)\n");
     let _ = writeln!(w, "> Generated from `src/theme.rs` by `src/system_md.rs`. Change a token in theme.rs, then run");
     let _ = writeln!(
         w,
@@ -518,7 +518,7 @@ fn render() -> String {
     let _ = writeln!(w, "### Composer\n- Width: up to {}px, centred\n- One unit: a white box (radius {}px, 1px `border`, `border_strong` while focused, tinted by the mode when one is set) resting in a `sunk` tray\n- Text: {}px; the outlined + bottom left and Send bottom right, {}px from the box's edges\n- The tray: the project, the context ring, the model and the mode as quiet {}px selectors: a 14px icon, the label, a chevron that flips while open; washed on hover, raised onto `surface` with a hairline while open\n", px(z.composer_width), px(z.composer_radius), px(tx.body), px(sp.snug), px(z.button_sm));
     let _ = writeln!(w, "### Card Default\n- Border: 1px `border`\n- Padding: {}px\n- Radius: {}px\n- Background: `surface`\n- Usage: tool calls, file cards, code blocks\n", px(sp.xl), px(r.card));
     let _ = writeln!(w, "### Popover\n- Border: 1px `border`, radius {}px, padding {}px\n- Background: `surface`, with the two-layer popover shadow\n- Usage: menus, pickers, the command palette\n", px(r.card), px(sp.xs));
-    let _ = writeln!(w, "### File Card\n- A file Forge made, in its reply: up to 440px, `surface`, 1px `border`, radius {}px, padding {}px\n- A 36x44 page tile (radius {}px, concentric with the card) previews it, its type in mono `primary`\n- Title 600 `text_strong`; \"Document · MD\" caption `text_muted`; a bordered Download button\n- Open: the edge turns `primary` at 60%\n", px(r.card), px(sp.sm), px(r.small));
+    let _ = writeln!(w, "### File Card\n- A file KodAct made, in its reply: up to 440px, `surface`, 1px `border`, radius {}px, padding {}px\n- A 36x44 page tile (radius {}px, concentric with the card) previews it, its type in mono `primary`\n- Title 600 `text_strong`; \"Document · MD\" caption `text_muted`; a bordered Download button\n- Open: the edge turns `primary` at 60%\n", px(r.card), px(sp.sm), px(r.small));
     let _ = writeln!(w, "### Document Pane\n- Beside the conversation, half the session, at least {}px; `surface` with a hairline on its left\n- Header 48px: file icon, title, type; Copy, Download, Close as {}px quiet buttons\n- Text {}px at {} leading, lines up to {}px; the title in the display serif at {}px\n- Enters with a 220ms ease-out, fading in from 16px to the right; Escape closes it\n", px(z.doc_pane), px(z.control), px(z.doc_text), z.line_height_doc, px(z.doc_measure), px(z.doc_title));
     let _ = writeln!(w, "### Sidebar Row\n- Height: {}px, radius {}px\n- Current: the `active` wash, 500 weight, no border\n- New chat: a round `accent` mark with a white +\n- Collapsed: a {}px rail of icon buttons for the same actions\n- Group labels: {}px caption\n", px(z.row), px(r.button), px(z.rail), px(tx.caption));
 
@@ -528,19 +528,19 @@ fn render() -> String {
         "| Decision | Rationale | Date |\n|----------|-----------|------|"
     );
     for (what, why, when) in [
-        ("One colour, moss, not terracotta", "The reference rations one warm orange to the primary action; Forge keeps the rationing and takes the reference's own moss, calmer on cream and kin to the mark.", "2026-10-18"),
+        ("One colour, moss, not terracotta", "The reference rations one warm orange to the primary action; KodAct keeps the rationing and takes the reference's own moss, calmer on cream and kin to the mark.", "2026-10-18"),
         ("Dusty blue, not moss", "Moss read as too green beside the cream; a dusty blue from the Slate theme's family, warmed for cream, keeps the same rationing and contrast (5.4:1 on the session).", "2026-10-19"),
         ("Paper on paper", "The session is a 4px sheet on the cream canvas with paper grain; the title bar and sidebar have no dividers, the sheet's edge is the split.", "2026-10-18"),
         ("Pills to press, 4px to hold", "The contrast between the two shapes is the system: it says at a glance what acts and what holds.", "2026-10-18"),
         ("Ink pills for the loud neutrals", "New chat and needs-you are ink pills; the accent is kept for the one decision in front of you (Allow once, Send).", "2026-10-18"),
         ("Anthropic Sans only", "One family everywhere, in its Text and Display cuts: the interface, replies, code, the terminal and diagrams. No other face is bundled or named.", "2026-10-26"),
         ("One look", "The theme picker and its eleven other looks are gone; Calmly smooth, light and dark, is the app's one look.", "2026-10-26"),
-        ("No generic AI icons", "No sparkles, magic wands, robot heads or brains: each icon names its thing. Design is pencil-ruler (the Pen tool keeps pen-tool), skills a scroll, agents boxes (Forge's cubes, many), memory a notebook, effort a gauge; thinking shows Forge's own strike mark.", "2026-11-02"),
+        ("No generic AI icons", "No sparkles, magic wands, robot heads or brains: each icon names its thing. Design is pencil-ruler (the Pen tool keeps pen-tool), skills a scroll, agents boxes (KodAct's cubes, many), memory a notebook, effort a gauge; thinking shows KodAct's own strike mark.", "2026-11-02"),
         ("Three durations", "Every transition takes one of three times: fast 120ms (anything leaving, a menu arriving, the edge draw), base 200ms (hovers, dialogs and notices arriving, the panel leaving), slow 280ms (the side panel arriving). Loops (the strike mark, a working node) keep their own beat.", "2026-11-02"),
-        ("The heat rail", "Forge's signature: a run's opened steps hang on one rail, a node each in the shared status language (ember working, ink done, danger failed or declined, warning stopped); while the run is live the rail glows ember and the working node breathes, then it cools to a hairline (`heat_rail.rs`).", "2026-11-02"),
+        ("The heat rail", "KodAct's signature: a run's opened steps hang on one rail, a node each in the shared status language (ember working, ink done, danger failed or declined, warning stopped); while the run is live the rail glows ember and the working node breathes, then it cools to a hairline (`heat_rail.rs`).", "2026-11-02"),
         ("One control per kind of choice", "One of a few short options is a segmented control (`editor_kit::choice`); one of several options that each need a line of description is a radio list; chips are for picking several, or one from a long list. Where a setting is kept reads the same everywhere: This project, just me · This project, shared · All my projects.", "2026-11-02"),
-        ("Forge Ember", "Warm paper and warm graphite, the sidebar a step deeper than the session, and one copper heat for the action, the current state and links: the forge's own colour, as calm as Claude Code's.", "2026-10-23"),
-        ("KodAct Signal", "The app takes KodAct's identity from its terminal: ink and cool paper for the surfaces, the terminal's turquoise as the one colour, and KodAct's mark (a step, then a chevron) in place of the ingot. It replaces Forge Ember.", "2026-11-10"),
+        ("KodAct Ember", "Warm paper and warm graphite, the sidebar a step deeper than the session, and one copper heat for the action, the current state and links: the forge's own colour, as calm as Claude Code's.", "2026-10-23"),
+        ("KodAct Signal", "The app takes KodAct's identity from its terminal: ink and cool paper for the surfaces, the terminal's turquoise as the one colour, and KodAct's mark (a step, then a chevron) in place of the ingot. It replaces KodAct Ember.", "2026-11-10"),
         ("A neutral wash for the open row", "The accent stays for the action; the open chat and the open screen lift by a grey wash.", "2026-10-23"),
         ("Composer at 620px", "A comfortable measure for a prompt, the same in a chat and on the welcome page.", "2026-10-11"),
         ("Composer on the reading column", "In a chat the composer takes the 760px column the reply is read in, so the two line up; on the welcome page it keeps its own measure.", "2026-10-23"),
@@ -563,10 +563,10 @@ fn render_design() -> String {
     let w = &mut s;
     let q = |c: Hsla| format!("\"{}\"", css(c));
     let _ = writeln!(w, "---");
-    let _ = writeln!(w, "name: Forge");
+    let _ = writeln!(w, "name: KodAct");
     let _ = writeln!(
         w,
-        "description: The desktop app for ForgeCLI: a calm workspace for long agent sessions"
+        "description: The desktop app for KodAct CLI: a calm workspace for long agent sessions"
     );
     let _ = writeln!(w, "colors:");
     for (name, light, dark) in [
@@ -626,7 +626,7 @@ fn render_design() -> String {
     let _ = writeln!(w, "  user-message:\n    backgroundColor: \"{{colors.surface}}\"\n    rounded: \"{{rounded.card}}\"\n    padding: \"{}px {}px\"", px(sp.sm + gpui::px(2.)), px(sp.lg));
     let _ = writeln!(w, "  quiet-line:\n    textColor: \"{{colors.ink-muted}}\"\n    typography: \"{{typography.ui}}\"\n    height: \"{}px\"", px(z.quiet_line));
     let _ = writeln!(w, "---\n");
-    let _ = writeln!(w, "# Design: Forge\n");
+    let _ = writeln!(w, "# Design: KodAct\n");
     let _ = writeln!(w, "> Generated from `src/theme.rs` by `src/system_md.rs`, with `.interface-design/system.md`. Change a token in theme.rs, then run `UPDATE_SYSTEM_MD=1 cargo test system_md`. The product record is `PRODUCT.md`; the theme above is the default one, light and dark, and every other theme keeps the same roles.\n");
     let _ = writeln!(w, "## Overview\n\nAn Operate surface: an app for long agent sessions, judged against Claude Desktop's calm. The reply is the hero; everything around it (the agent's activity, the chrome, the menus) is quieter than the words. Restraint, precision and one accent, not decoration.\n");
     let _ = writeln!(w, "## Colors\n\n- **Neutrals** carry everything: a canvas, a slightly different sidebar layer, a surface for the few things that hold content (your messages, an opened change, a card that needs you), and five inks from strong to subtle.\n- **The accent** is only for the primary action, the current selection and state (a waiting dot, a switch that is on). Never for decoration or an inactive control.\n- **Status colours** (success, danger, warning) only mean status: a failed call, a stopped one, a change's size.\n- Text holds 4.5:1 against its ground in every theme (`src/palette_check.rs`).\n");

@@ -1,11 +1,11 @@
-//! Endpoint profiles: where Forge's models come from, as Forge for VS Code
+//! Endpoint profiles: where KodAct's models come from, as KodAct for VS Code
 //! has them. A profile is one endpoint together with the one model it runs,
 //! so the model window lists pairs: you read the model, the profile name and
 //! its host underneath. No model is built in, and none is the default: the
 //! selected profile is, else the first one, else there is nothing to pick
 //! and the composer says to set up an endpoint.
 //!
-//! Read from `endpoints.json` in Forge's config folder:
+//! Read from `endpoints.json` in KodAct's config folder:
 //!
 //! ```json
 //! { "selected": "local",
@@ -32,7 +32,7 @@ pub enum Wire {
     Anthropic,
     Openai,
     /// Google's Gemini API (`models/<model>:generateContent`): Google AI
-    /// Studio, or a gateway that speaks it. ForgeCLI's native Gemini wire.
+    /// Studio, or a gateway that speaks it. KodAct CLI's native Gemini wire.
     Gemini,
 }
 
@@ -51,7 +51,7 @@ impl Wire {
 /// format both `x-api-key` and a bearer token (gateways take one or the
 /// other), OpenAI's a bearer token, Gemini's `x-goog-api-key` for Google AI
 /// Studio, a bearer token for Vertex AI, both for anything else (as
-/// ForgeCLI sends them).
+/// KodAct CLI sends them).
 pub fn auth_headers(wire: Wire, base_url: &str, key: &str) -> Vec<(&'static str, String)> {
     let bearer = ("authorization", format!("Bearer {key}"));
     match wire {
@@ -395,8 +395,8 @@ pub fn find_models<'a>(models: &'a [String], query: &str) -> Vec<&'a String> {
 /// OpenAI's reasoning models: the o-series, GPT-5 and Codex. They take
 /// `max_completion_tokens`, not `max_tokens`. A gateway (OmniRoute,
 /// OpenRouter, LiteLLM) puts a provider before the id (`cx/gpt-5-codex`,
-/// `openai/o3`), so only the last segment is read. ForgeCLI decides the
-/// same way (`forge-api`, `openai::is_reasoning_model`).
+/// `openai/o3`), so only the last segment is read. KodAct CLI decides the
+/// same way (`kodact-api`, `openai::is_reasoning_model`).
 pub fn is_reasoning_model(model: &str) -> bool {
     let id = model
         .rsplit('/')
@@ -441,7 +441,7 @@ pub const PRESETS: [Preset; 10] = [
         key: true,
         catalog: false,
     },
-    // Google AI Studio's Gemini API, on ForgeCLI's native Gemini wire (thought
+    // Google AI Studio's Gemini API, on KodAct CLI's native Gemini wire (thought
     // signatures, thinking levels); its model list goes in the model menu.
     Preset {
         id: "gemini",
@@ -807,7 +807,7 @@ impl Profile {
             Wire::Anthropic => {
                 anthropic_url(base, self.chat_path.as_deref().unwrap_or("/v1/messages"))
             }
-            // The check and titles ask for a whole answer; chats stream through ForgeCLI.
+            // The check and titles ask for a whole answer; chats stream through KodAct CLI.
             Wire::Gemini => format!(
                 "{base}/models/{}:generateContent",
                 self.model.trim().trim_start_matches("models/")
