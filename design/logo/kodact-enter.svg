@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="6 6 52 52">
+  <!-- KodAct's mark: the Enter key, its tall stepped cap with the return
+       arrow cut through it: you hand the agent the task, and it acts.
+       One colour; the arrow is the ground showing through. -->
+  <path fill="currentColor" fill-rule="evenodd" d="M15 10H50Q54 10 54 14V50Q54 54 50 54H30Q26 54 26 50V32H15Q11 32 11 28V14Q11 10 15 10Z
+    M44 17H49V43H38.6L42 46.4L38.6 49.8L30.4 41.6L38.6 33.4L42 36.8L38.6 38H44Z"/>
+</svg>

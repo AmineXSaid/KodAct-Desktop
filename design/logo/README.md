@@ -1,33 +1,30 @@
-# KodAct's logo: K_
+# KodAct's logo: the Enter key
 
-The bar and the run triangle read as a media player's pause and play, so
-they are out. The new mark is **K_**: the K of KodAct, typed at a prompt,
-with the cursor waiting after it. It carries the name and the product's
-work (a command line, an agent about to act) in one shape. It belongs to
-no other brand and reads at 16px.
+Proposal: **the Enter key**, its tall stepped cap with the return arrow cut
+through it. It is KodAct's moment: you have written the task, you press
+Enter, and the agent acts. It is no letter, star, spark, face or media
+control, so it sits apart from the field (Claude's spark, Gemini's star,
+OpenAI's knot, Kimi's K, Mistral's pixels, Cursor's cube, the play and
+pause of a media player).
 
-- `kodact-k.svg`: the mark, one colour (`currentColor`), in a 60-unit box.
-  The `cursor` rectangle is its own shape, so it alone can blink.
-- `k-cursor.png`: the mark as the KODACT / icon / product lockup (Desktop on
-  ink, the CLI on paper), at 48, 32, 24 and 16px, in the title bar and in
-  the working line. A2 (typed) is the choice; A1 (joined) merges the
-  underscore into the leg, where it reads as a foot.
-- `directions.png`: the four directions explored (K and cursor, Leap,
-  Shift, Lean), and why K won: Leap reads as a battery small, Shift as a
-  "no entry" slash, Lean as any tech brand's.
+- `kodact-enter.svg`: the mark, one colour (`currentColor`); the arrow is
+  the ground showing through.
+- `enter.png`: as the KODACT / icon / product lockup (Desktop on ink, the
+  CLI on paper), at 48, 32, 24 and 16px, and in the title bar.
+- `directions-2.png`: the second round: Enter, a switch turned on (clean,
+  but any app's toggle), and the editor's caret on a line (reads as an A).
 
-## How it is used
+## Dropped
 
-- The app icon: lime K_ in the ink tile (holds on light and dark taskbars);
-  lime tile with an ink K_ on ink grounds.
-- The lockup, as the reference app families set theirs: KODACT in spaced
-  capitals above, the icon, the product name below (KodAct Desktop,
-  KodAct CLI). One mark for both products.
-- In the app: the mark at home; at work on the working line, the cursor
-  blinks (a 1.1s beat, steady under reduced motion). Running elsewhere stays
-  the muted spinner.
+- **The bar and the run triangle** (and the Monolith, Cut and Soft pair
+  versions of it): a media player's pause and play.
+- **K_** (`kodact-k.svg`, `k-cursor.png`, `directions.png`): a letter K sits
+  too close to Kimi's mark. Leap, Shift and Lean from that round: a battery,
+  a "no entry" slash, any tech brand.
 
-## Next
+## Before it ships
 
-Not yet in the app: `src/ui/mark.rs`, `assets/kodact.ico` and the emblem
-in About still draw the bar and triangle. Replacing them is the next change.
+- A trademark and logo search on the Enter key mark (this proposal was
+  checked only against the AI brands named above).
+- Then into the app: `src/ui/mark.rs`, `assets/kodact.ico`, About and the
+  title bar still draw the bar and triangle.
