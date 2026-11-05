@@ -233,9 +233,17 @@ in the lockup), or "Kod Act".
 
 ### Logo & Marks
 
-**In development.** The previous mark (a cursor bar beside a run triangle)
-is retired: it reads as a media player's pause and play. A new mark is being
-chosen in `design/logo/`; this section is completed when one is approved.
+**In development: an illustrated emblem.** The primary mark is one
+hand-made illustrated object from the Operator's world (no living being) on
+the flat lime tile, in lime, paper and ink, with the drawn character of
+Claude's spark rather than assembled geometry. A flat one-colour silhouette
+cut from the same drawing serves below 128px. The brief, three candidate
+subjects and image-model prompts are in `design/emblem/BRIEF.md`; this
+section is completed when the art is approved.
+
+The previous mark (a cursor bar beside a run triangle) is retired: it reads
+as a media player's pause and play. The geometric marks explored in
+`design/logo/` were generic and are not used.
 
 Invariants already decided:
 - One simple, ownable mark, one colour, legible at 16px.
