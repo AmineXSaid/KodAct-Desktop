@@ -363,7 +363,11 @@ pub fn render(
             .unwrap_or(now)
             .saturating_duration_since(run.started);
         let (status_icon, status_color): (AnyElement, Hsla) = match status {
-            ToolStatus::Running => (spinner(t, t.extra.live, format!("agent-{i}")), t.extra.live),
+            // Running in the muted ink, as everywhere (`tasks::status_icon`).
+            ToolStatus::Running => (
+                spinner(t, t.colors.text_muted, format!("agent-{i}")),
+                t.colors.text_muted,
+            ),
             ToolStatus::Failed => (
                 icon("icons/circle-x.svg", t.size.icon_sm, t.extra.danger).into_any_element(),
                 t.extra.danger,

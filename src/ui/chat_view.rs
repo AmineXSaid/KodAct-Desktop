@@ -817,9 +817,21 @@ pub(super) fn elapsed(seconds: u64) -> String {
 /// light runs left to right, each letter catching it as it passes: white
 /// at night, a pale shine on paper.
 pub(super) fn shimmer(label: &str, sweep: f32, t: &crate::theme::Theme) -> StyledText {
+    // KodAct CLI's working shimmer: grey up to the brand at its peak. The
+    // working line's alone; elsewhere `quiet_shimmer`.
+    shimmer_to(label, sweep, t.extra.live, t)
+}
+
+/// The shimmer peaking in the strong ink, not the brand: a chat working
+/// away from the working line (its sidebar title), so lime stays the
+/// working line's and what needs you.
+pub(super) fn quiet_shimmer(label: &str, sweep: f32, t: &crate::theme::Theme) -> StyledText {
+    shimmer_to(label, sweep, t.colors.text_strong, t)
+}
+
+fn shimmer_to(label: &str, sweep: f32, peak: gpui::Hsla, t: &crate::theme::Theme) -> StyledText {
     let n = label.chars().count().max(1) as f32;
-    // KodAct CLI's working shimmer: grey up to the brand at its peak.
-    let (base, peak) = (t.colors.text_muted, t.extra.live);
+    let base = t.colors.text_muted;
     let strength = if t.is_dark { 1. } else { 0.85 };
     let mut runs = vec![];
     for (i, ch) in label.chars().enumerate() {

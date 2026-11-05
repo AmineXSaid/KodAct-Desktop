@@ -20,7 +20,9 @@ button tests in both modes.
 Lime is a fill under ink (`accent`, `fill`: the primary button; the
 mark's tile and Send on ink) or a line and a word (`live`, `primary`, `toggle_on`: what is
 live, links, a switch that is on), olive on paper. An indicator takes
-`live`, never `accent`. The mark (`mark_top`, `mark_left`) takes the
+`live`, never `accent`; a running spinner and a working chat's sidebar
+shimmer take the muted and strong inks, so lime in motion is the working
+line's alone. The mark (`mark_top`, `mark_left`) takes the
 opposite of its ground, lime on ink and ink on paper, with no shadow, and
 its lime only touches ink. The mark and the wordmark come only from
 `ui/mark.rs`; the faces only from `fonts.rs` (KodAct Sans and KodAct

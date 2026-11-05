@@ -63,8 +63,11 @@ pub fn tasks(messages: &[Message]) -> Vec<Task> {
 }
 
 pub(super) fn status_icon(status: ToolStatus, t: &Theme, key: SharedString) -> AnyElement {
+    // Running in the muted ink: lime is the working line's (KodAct acting)
+    // and what needs you, so a spinner never repeats it.
+    let running = t.colors.text_muted;
     match status {
-        ToolStatus::Running => icon("icons/loader-circle.svg", t.size.icon_sm, t.extra.live)
+        ToolStatus::Running => icon("icons/loader-circle.svg", t.size.icon_sm, running)
             .with_animation(
                 key,
                 Animation::new(Duration::from_millis(900)).repeat(),

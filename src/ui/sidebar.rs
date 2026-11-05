@@ -518,8 +518,9 @@ impl Render for Sidebar {
                                         d.font_weight(FontWeight::SEMIBOLD)
                                             .text_color(t.colors.text_strong)
                                     })
-                                    // Working, as Claude marks it: a band of
-                                    // light runs along the title.
+                                    // Working: a band of light runs along the
+                                    // title, up to the strong ink (lime is
+                                    // the working line's).
                                     .map(|d| {
                                         if status == ChatStatus::Working {
                                             let (title, theme) = (c.title.to_string(), t.clone());
@@ -528,7 +529,7 @@ impl Render for Sidebar {
                                                 Animation::new(Duration::from_millis(2200))
                                                     .repeat(),
                                                 move |d, k| {
-                                                    d.child(super::chat_view::shimmer(
+                                                    d.child(super::chat_view::quiet_shimmer(
                                                         &title,
                                                         -0.3 + k * 1.6,
                                                         &theme,
