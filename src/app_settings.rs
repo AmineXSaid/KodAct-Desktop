@@ -195,7 +195,8 @@ impl Default for WindowState {
         Self {
             terminal_open: false,
             terminal_share: 0.35,
-            dark: false,
+            // Dark first: KodAct is mostly seen in a dark terminal.
+            dark: true,
             theme: crate::theme::Look::default().id().into(),
         }
     }

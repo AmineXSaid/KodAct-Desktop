@@ -44,7 +44,7 @@ pub fn render(
         .font_weight(FontWeight::MEDIUM)
         .cursor_pointer()
         .hover(move |d| d.bg(fill_hover))
-        .child(div().size(px(7.)).rounded_full().bg(t.extra.accent))
+        .child(div().size(px(7.)).rounded_full().bg(t.extra.live))
         .child(format!("{n} {} you", if n == 1 { "needs" } else { "need" }))
         .tooltip(|window, cx| {
             gpui::component::tooltip::Tooltip::new("Chats waiting on your answer").build(window, cx)

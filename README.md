@@ -317,7 +317,7 @@ Changes apply the next time they're used; no restart.
 
 ## Layout
 
-- `src/theme.rs`: every colour, size, radius and font, in the app's one look (Calmly smooth, light and dark). Nothing else hardcodes them.
+- `src/theme.rs`: every colour, size, radius and font, in KodAct's one look (ink, paper and lime, as KodAct CLI draws them; dark first, and light). Nothing else hardcodes them.
 - `src/state.rs`: the app state, the transcript model, demo chats and the scripted reply.
 - `src/backend.rs`: each chat's `kodact` process: launch, the stream-json events, permission answers.
 - `src/forge_files.rs`: KodAct CLI's own files (commands, agents, skills, hooks,
@@ -333,7 +333,8 @@ Changes apply the next time they're used; no restart.
 - `src/browser_mcp.rs`: the browser tools for KodAct CLI's agents, served by this same program
   (`--browser-mcp`): navigate, state (numbered elements), click, type, press, select, hover,
   scroll, text, html, eval, wait, screenshot, console and tabs, on the page the panel shows.
-- `src/assets.rs`: bundled icons (Lucide, ISC). No font is bundled: every face is Anthropic Sans, read from the `fonts` folder beside the app (`fonts.rs`).
+- `src/assets.rs`: bundled icons (Lucide, ISC), and KodAct's mark and wordmark drawn as SVG (`ui/mark.rs`).
+- `src/fonts.rs`: KodAct's faces, carried in the app: KodAct Sans for words and KodAct Mono for code, KodAct's cuts of Host Grotesk and JetBrains Mono (`assets/fonts/`, SIL OFL 1.1).
 - `src/ui/`: one file per part:
   - the window: `workspace` (title bar, welcome), `sidebar`, `chat_view`,
     `message`, `markdown`, `composer`, `command_palette`, `onboarding`,
@@ -347,12 +348,12 @@ Changes apply the next time they're used; no restart.
     `skills_editor`, `hooks_editor`, `mcp_editor`, `permissions_editor`,
     `sandbox_editor`, `env_editor`, `memory_view`, `plugins_editor`,
     `planned` (Network), `guide`, and `editor_kit`, the pieces they share;
-  - the brand: `ingot` (KodAct's mark, the ingot cube, still and turning, and
-    the wordmark KODACT, the cube in the O's place, as the VS Code extension
-    sets it; its faces are SVGs drawn from its geometry and tinted from the
-    theme). The wordmark heads the sidebar always, the project under it.
-- `scripts/make_ico.py`: `assets/kodact.ico`, the ingot on an accent tile, each
-  size Windows asks for drawn on its own.
+  - the brand: `mark` (KodAct CLI's mark and wordmark: the lime tile with its
+    cursor bar and run triangle, at rest and at work, and the name in the
+    CLI's pixel letters, "Kod" and "Act"; drawn as SVG layers tinted from the
+    theme) and `opener` (the mark's beat as the window opens, under a second).
+- `scripts/make_ico.py`: `assets/kodact.ico`, KodAct's tile, each size Windows
+  asks for drawn on its own (on the CLI's pixel grid where it fits).
 - `scripts/screenshots.sh`: light and dark screenshots of every screen (see below).
 - `.github/workflows/windows.yml`: fmt, clippy (`-D warnings`) and tests on
   Linux for every push and pull request; the Windows build and tests.

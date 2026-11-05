@@ -1,7 +1,10 @@
-//! Design tokens for GPUI in the "calmly smooth" system (after the Anchor
-//! style reference): sun-bleached cream surfaces stacked like paper on paper,
-//! one ink, one copper accent rationed to the decisive action, Anthropic Sans
-//! throughout, 4px cards against pill buttons, and shadows thin as grain.
+//! Design tokens for GPUI: KodAct's identity, shared with KodAct CLI
+//! (its `tui/palette.rs`). Ink, paper and lime: ink grounds stepping up
+//! from the sidebar to the session to cards (paper ones by day), paper text
+//! in two voices, and lime for KodAct acting and what needs you (olive on
+//! paper, where lime would not read). Teal and violet carry structure, peach
+//! marks code, and green, red and amber only ever mean done, failed and a
+//! warning. KodAct Sans for words, KodAct Mono for code (`fonts.rs`).
 //! Pure UI: colors, type, spacing, radius, elevation, motion + a few styled primitives.
 //! Written against GPUI's current API; field/method names may need small tweaks per GPUI version.
 
@@ -75,33 +78,33 @@ pub struct Radius {
     pub pill: Pixels,    // 9999: buttons, badges, avatars
 }
 
-/// KodAct's look: Calmly smooth, its surfaces and one colour light and
-/// dark (`tint`), and its form: corners, density, depth (`form`). One look
-/// for now; every face is Anthropic Sans (`fonts.rs`).
+/// KodAct's look, light and dark: its surfaces and its one colour
+/// (`tint`), and its form: corners, density, depth (`form`).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Look {
-    /// Warm paper and graphite, one copper for the action.
+    /// Ink, paper and lime, as KodAct CLI draws them.
     #[default]
-    Calm,
+    KodAct,
 }
 
 impl Look {
     #[cfg(test)]
-    pub const ALL: [Look; 1] = [Look::Calm];
+    pub const ALL: [Look; 1] = [Look::KodAct];
 
     /// How it is saved (`window.json`).
     pub fn id(self) -> &'static str {
-        "calm"
+        "kodact"
     }
 
-    /// A saved theme: whatever was saved, it is Calmly smooth now.
+    /// A saved theme: whatever was saved (Forge's "calm" included), it is
+    /// KodAct's look now.
     pub fn from_id(_id: &str) -> Option<Look> {
-        Some(Look::Calm)
+        Some(Look::KodAct)
     }
 
     #[cfg(test)]
     pub fn name(self) -> &'static str {
-        "Calmly smooth"
+        "KodAct"
     }
 
     /// Everything but colour: corners, density, depth.
@@ -121,39 +124,37 @@ impl Look {
 
     /// Its surfaces and colour in one mode.
     fn tint(self, dark: bool) -> Tint {
-        let t = |canvas,
-                 stage,
-                 card,
-                 sunk,
-                 accent,
-                 accent_fg,
-                 accent_soft,
-                 link,
-                 link_hover,
-                 mark_top| Tint {
-            canvas,
-            stage,
-            card,
-            sunk,
-            accent,
-            accent_fg,
-            accent_soft,
-            link,
-            link_hover,
-            mark_top,
-        };
-        // KodAct Ember: warm paper and warm graphite, one copper heat for
-        // the action, the current row and state (`.impeccable`, 2026-10-23).
+        // KodAct CLI's roles (`tui/palette.rs`): the ink of its tiles for
+        // grounds, lime #c6ff3d for the brand (its tile #b5ea2c by day, and
+        // olive #4a7200 for the brand drawn as a line or a word on paper).
         if dark {
-            t(
-                0x1b1a19, 0x242322, 0x2e2d2b, 0x1f1e1d, 0xe2895b, 0x1b1a19, 0x3e2b22, 0xeb9d74,
-                0xf3b694, 0xe2895b,
-            )
+            Tint {
+                canvas: 0x0f1113,
+                stage: 0x15181b,
+                card: 0x1c2024,
+                sunk: 0x121417,
+                accent: 0xc6ff3d,
+                accent_fg: 0x101214,
+                accent_soft: 0x2a341f,
+                link: 0xc6ff3d,
+                link_hover: 0xdcff85,
+                live: 0xc6ff3d,
+                mark_top: 0xc6ff3d,
+            }
         } else {
-            t(
-                0xebe8e1, 0xf7f5f1, 0xffffff, 0xf1eee8, 0xb4532a, 0xffffff, 0xf5e2d7, 0xa44a24,
-                0x86391a, 0x93401c,
-            )
+            Tint {
+                canvas: 0xe9e8e2,
+                stage: 0xf6f5f1,
+                card: 0xfdfdfb,
+                sunk: 0xeeede8,
+                accent: 0xb5ea2c,
+                accent_fg: 0x101214,
+                accent_soft: 0xe4efcd,
+                link: 0x4a7200,
+                link_hover: 0x3d5f00,
+                live: 0x4a7200,
+                mark_top: 0xb5ea2c,
+            }
         }
     }
 }
@@ -173,8 +174,9 @@ struct Form {
 }
 
 /// One mode of a theme, as hex: the canvas (title bar and sidebar), the
-/// session, cards, a recessed well; the accent fill, its label, its pale
-/// form; links and their hover; the mark's top.
+/// session, cards, a recessed well; the brand as a fill (the mark's tile,
+/// Send, the primary button), the ink on it, its pale wash; links and their
+/// hover; the brand as a line or a word (what is live); the mark's tile.
 #[derive(Clone, Copy)]
 struct Tint {
     canvas: u32,
@@ -186,6 +188,7 @@ struct Tint {
     accent_soft: u32,
     link: u32,
     link_hover: u32,
+    live: u32,
     mark_top: u32,
 }
 
@@ -198,12 +201,12 @@ pub struct Theme {
     pub text: TypeScale,
     pub space: Space,
     pub radius: Radius,
-    pub font_sans: SharedString, // Anthropic Sans Text: every word the app sets (`fonts.rs`)
+    pub font_sans: SharedString, // KodAct Sans: every word but code (`fonts.rs`)
     pub motion_ms: u64,          // 200ms ease for hovers/transitions
     // KodAct additions (see the section at the end of the tokens).
-    pub font_mono: SharedString, // code, paths, commands: Anthropic Sans Text too
-    pub font_code_inline: SharedString, // a name in prose: the same face
-    pub font_display: SharedString, // large lines (the greeting, headings): Anthropic Sans Display
+    pub font_mono: SharedString, // code, paths, commands, keys: KodAct Mono
+    pub font_code_inline: SharedString, // a name in prose: the code face
+    pub font_display: SharedString, // large lines (headings): the interface face, set heavier
     pub display_weight: FontWeight, // 600: headings are set in the heavier of the two cuts
     pub font_reading: SharedString, // a reply's prose: the interface face
     pub extra: ExtraColors,
@@ -217,16 +220,12 @@ impl Global for Theme {}
 fn ink(alpha: f32) -> Hsla {
     hsla(0., 0., 0., alpha)
 }
-/// The reference's ink (#2b2a27) at `alpha`: hairlines and washes on paper.
-fn warm_ink(alpha: f32) -> Hsla {
-    hsla(45. / 360., 0.05, 0.16, alpha)
-}
 
 impl Theme {
     fn base(is_dark: bool, colors: Colors) -> Self {
         Self {
             is_dark,
-            look: Look::Calm,
+            look: Look::KodAct,
             colors,
             text: TypeScale {
                 caption: px(12.),
@@ -262,8 +261,8 @@ impl Theme {
             },
             font_sans: crate::fonts::TEXT.into(),
             motion_ms: 200,
-            font_mono: crate::fonts::TEXT.into(),
-            font_code_inline: crate::fonts::TEXT.into(),
+            font_mono: crate::fonts::MONO.into(),
+            font_code_inline: crate::fonts::MONO.into(),
             font_display: crate::fonts::DISPLAY.into(),
             display_weight: FontWeight::SEMIBOLD,
             font_reading: crate::fonts::TEXT.into(),
@@ -295,15 +294,17 @@ impl Theme {
         self.extra.accent_fg = c(k.accent_fg);
         self.extra.accent_soft = c(k.accent_soft);
         self.extra.toggle_on = c(k.link);
-        // Live activity and agents take the accent and the theme's spread,
-        // unless the theme names their own.
-        // Live activity takes the accent; agents carry no colour of their own.
-        (self.extra.live, self.extra.agent) = (c(k.accent), None);
+        // What is live is the brand drawn as a line (lime on ink, olive on
+        // paper); agents carry no colour of their own.
+        (self.extra.live, self.extra.agent) = (c(k.live), None);
         self.extra.mark_top = c(k.mark_top);
         self.extra.page_ink = c(look.tint(false).link);
         self.colors.primary = c(k.link);
         self.colors.primary_hover = c(k.link_hover);
-        self.colors.primary_tint = c(k.link).opacity(if self.is_dark { 0.16 } else { 0.12 });
+        self.colors.primary_tint = c(k.link).opacity(if self.is_dark { 0.16 } else { 0.14 });
+        // The primary button is the brand's fill, under ink, as KodAct CLI's tile.
+        (self.extra.fill, self.extra.fill_fg) = (c(k.accent), c(k.accent_fg));
+        self.extra.fill_hover = c(if self.is_dark { k.link_hover } else { 0xa9df1f });
 
         let f = look.form();
         self.display_weight = f.display_weight;
@@ -314,7 +315,7 @@ impl Theme {
         let z = &mut self.size;
         z.composer_radius = px(composer);
         (z.row, z.titlebar) = (px(f.row), px(f.titlebar));
-        // Anthropic Sans runs large (a tall x-height): a step smaller, so a
+        // KodAct Sans runs large (a tall x-height): a step smaller, so a
         // reply reads at the size the look meant.
         let (size, line) = ((f.chat.0 - BRAND_STEP).max(13.), f.chat.1 - BRAND_STEP);
         z.chat_text = px(size);
@@ -327,56 +328,60 @@ impl Theme {
         Self::base(
             false,
             Colors {
-                // KodAct Ember by day: warm paper, the session a sheet on it.
-                canvas: rgb(0xf7f5f1).into(),
-                surface: rgb(0xffffff).into(),
-                sidebar: rgb(0xebe8e1).into(),
-                // One ink, #1e1e1e, carries the type; Stone for what is secondary.
-                text: rgb(0x1e1e1e).into(),
-                text_strong: rgb(0x1e1e1e).into(),
-                text_body: rgb(0x2b2825).into(),
-                text_muted: rgb(0x5a554f).into(),
-                text_subtle: rgb(0x7d776f).into(),
-                border: hsla(0., 0., 0.118, 0.13),
-                hover: hsla(0., 0., 0.118, 0.05),
-                // Links and selected text: ember copper, the one colour.
-                primary: rgb(0xa44a24).into(),
-                primary_hover: rgb(0x86391a).into(),
-                primary_fg: rgb(0xffffff).into(),
-                primary_tint: hsla(18. / 360., 0.64, 0.39, 0.12),
-                marigold: rgb(0xffb110).into(),
-                coral: rgb(0xc84b55).into(),
-                sky: rgb(0x62aef0).into(),
-                midnight: rgb(0x02093a).into(),
-                peach: rgb(0xd0e6e7).into(),
+                // Paper by day: the window a step below the session, cards
+                // nearly white on it (overwritten by the look's tint).
+                canvas: rgb(0xf6f5f1).into(),
+                surface: rgb(0xfdfdfb).into(),
+                sidebar: rgb(0xe9e8e2).into(),
+                // KodAct CLI's inks on paper: yours #101214, KodAct's words
+                // a step softer (#2b2e33), muted and subtle greys.
+                text: rgb(0x101214).into(),
+                text_strong: rgb(0x08090b).into(),
+                text_body: rgb(0x2b2e33).into(),
+                text_muted: rgb(0x55595e).into(),
+                text_subtle: rgb(0x63676d).into(),
+                border: hsla(210. / 360., 0.1, 0.07, 0.13),
+                hover: hsla(210. / 360., 0.1, 0.07, 0.05),
+                // Links and selected text: olive, the brand on paper.
+                primary: rgb(0x4a7200).into(),
+                primary_hover: rgb(0x3d5f00).into(),
+                primary_fg: rgb(0xfdfdfb).into(),
+                primary_tint: hsla(83. / 360., 1., 0.22, 0.14),
+                marigold: rgb(0x8f6200).into(),
+                coral: rgb(0xb8392e).into(),
+                sky: rgb(0x2f63a8).into(),
+                midnight: rgb(0x101214).into(),
+                peach: rgb(0xa4461c).into(),
             },
         )
     }
 
-    /// The same room at night: warm graphite, the ember lifted to read on it.
+    /// Ink at night: graphite grounds, paper text, lime at full strength.
     pub fn dark() -> Self {
         Self::base(
             true,
             Colors {
-                canvas: rgb(0x242322).into(),
-                surface: rgb(0x2e2d2b).into(),
-                sidebar: rgb(0x1b1a19).into(),
-                text: rgb(0xf0e9e5).into(),
-                text_strong: rgb(0xf5f2f0).into(),
-                text_body: rgb(0xd9d1cb).into(),
-                text_muted: rgb(0xa8a29b).into(),
-                text_subtle: rgb(0x857f77).into(),
-                border: hsla(22. / 360., 0.37, 0.92, 0.12),
-                hover: hsla(22. / 360., 0.37, 0.92, 0.06),
-                primary: rgb(0xeb9d74).into(),
-                primary_hover: rgb(0xf3b694).into(),
-                primary_fg: rgb(0x1b1a19).into(),
-                primary_tint: hsla(20. / 360., 0.74, 0.69, 0.16),
-                marigold: rgb(0xffb110).into(),
-                coral: rgb(0xd8646d).into(),
-                sky: rgb(0x62aef0).into(),
-                midnight: rgb(0x02093a).into(),
-                peach: rgb(0x2f4749).into(),
+                canvas: rgb(0x15181b).into(),
+                surface: rgb(0x1c2024).into(),
+                sidebar: rgb(0x0f1113).into(),
+                // Yours brightest (#f2f0e9), KodAct's words a soft paper
+                // (#d9d7cf) so long replies read without glare.
+                text: rgb(0xf2f0e9).into(),
+                text_strong: rgb(0xfbf9f3).into(),
+                text_body: rgb(0xd9d7cf).into(),
+                text_muted: rgb(0xa9adb2).into(),
+                text_subtle: rgb(0x868b92).into(),
+                border: hsla(210. / 360., 0.12, 0.9, 0.12),
+                hover: hsla(210. / 360., 0.12, 0.9, 0.055),
+                primary: rgb(0xc6ff3d).into(),
+                primary_hover: rgb(0xdcff85).into(),
+                primary_fg: rgb(0x101214).into(),
+                primary_tint: hsla(78. / 360., 1., 0.62, 0.16),
+                marigold: rgb(0xf0c25e).into(),
+                coral: rgb(0xff7a6b).into(),
+                sky: rgb(0x8fbef0).into(),
+                midnight: rgb(0x101214).into(),
+                peach: rgb(0xffb98f).into(),
             },
         )
     }
@@ -451,44 +456,38 @@ pub struct ExtraColors {
     pub chrome: Hsla, // the title bar
     pub pane: Hsla,   // the sidebar
     pub stage: Hsla,  // the session: the chat, the welcome, Rules, Projects
-    // Filled buttons. Light uses `primary` as is; in dark, white text on
-    // `primary` reads at only 3.3:1, so the fill is the same blue, deeper,
-    // and links keep `primary` (`palette_check.rs` holds both to 4.5:1).
+    // Filled buttons: KodAct's lime tile under ink, in both modes (set
+    // from the look's tint, `apply`).
     pub fill: Hsla,
     pub fill_hover: Hsla,
     pub fill_danger: Hsla, // a destructive confirm ("Allow bypass")
-    pub fill_fg: Hsla,     // text and icons on `fill` (ink in light, paper in dark)
-    // The accent: patina teal (forged copper as it weathers), one colour in
-    // both modes (`#216d70`), kept for the few places
-    // it earns: the send button, the mark's core.
+    pub fill_fg: Hsla,     // text and icons on `fill`: ink
+    // The brand as a fill, lime under ink (the tile's lime by day): Send,
+    // the new-chat mark. An indicator takes `live` instead.
     pub accent: Hsla,
     pub accent_soft: Hsla, // the send button with nothing to send; a soft wash
     pub accent_fg: Hsla,
-    // KodAct's mark, the ingot (`ui/ingot.rs`): its top in the accent, its
-    // left side ink (paper in dark), its right a grey a clear step from
-    // both, so the three faces part by lightness and not by hue alone.
+    // KodAct's mark (`ui/mark.rs`): the tile (`mark_top`), the ink of its
+    // cursor bar and run triangle (`mark_left`), and its shadow, one pixel
+    // down and right (`mark_right`), which gives it an edge on paper.
     pub mark_top: Hsla,
     pub mark_left: Hsla,
     pub mark_right: Hsla,
+    // The pixel wordmark's shadow, one pixel down and right: a dark olive
+    // on ink (KodAct CLI's), the tile's lime on paper (where the CLI's sage
+    // went flat).
+    pub brand_shadow: Hsla,
     // Marks drawn on a design page (`ui/design_marks.rs`): the page is
     // usually light whatever the app's mode, so the ink is the look's
     // light-mode link in both modes, over a thin halo for dark pages.
     pub page_ink: Hsla,
     pub page_halo: Hsla,
-    // The ingot fresh from the forge (onboarding, a strike), as hot metal
-    // cools: white hot, then the orange glow, then a dull ember red, then
-    // dark iron, before each face settles to its own colour. Never a resting colour; the same
-    // in both modes, as heat looks the same in any light.
-    pub mark_heat_white: Hsla,
-    pub mark_heat: Hsla,
-    pub mark_heat_ember: Hsla,
-    pub mark_heat_iron: Hsla,
     pub border_strong: Hsla, // outlined buttons, switch tracks at rest, fields
     pub sunk: Hsla,          // a recessed track: segmented controls, the composer's tray
     pub toggle_on: Hsla,     // a switch that is on
-    // What is running right now (a tool's spinner, the working line's
-    // mark, an agent at work): the accent, except where a theme gives
-    // live activity its own colour (Premium: the link's blue).
+    // The brand as a line or a word: what is live (a spinner, a dot that
+    // needs you, the shimmer's peak), lime on ink, olive on paper, where a
+    // lime fill would not read.
     pub live: Hsla,
     // Sub-agents' own mark (their kind in the Agents panel): the theme's
     // spread of colours, except where a theme gives agents one (Premium:
@@ -526,152 +525,146 @@ pub struct ExtraColors {
 
 impl ExtraColors {
     fn for_mode(is_dark: bool) -> Self {
+        // KodAct CLI's roles: SUCCESS, WARNING, DANGER for state only; TEAL
+        // and VIOLET for structure (modes, skills, memory); CODE (peach) for
+        // a name in prose. The brand fields are set by the look (`apply`).
         if is_dark {
             Self {
-                inset: hsla(0., 0., 1., 0.035),
-                success: rgb(0x8fbf9b).into(),
-                success_tint: rgb(0x26302a).into(),
-                danger: rgb(0xe98a72).into(),
-                danger_tint: hsla(7. / 360., 0.7, 0.55, 0.1),
-                warning: rgb(0xffc85a).into(),
-                warning_tint: hsla(40. / 360., 1., 0.53, 0.18),
-                diff_add: hsla(135. / 360., 0.27, 0.65, 0.12),
-                diff_del: hsla(12. / 360., 0.73, 0.68, 0.12),
-                scrim: ink(0.55),
-                selected: rgb(0x242322).into(),
-                // The cream stack at night: the canvas under the title bar
-                // and the sidebar, the session a step up, cards above it.
-                chrome: rgb(0x1b1a19).into(),
-                pane: rgb(0x1b1a19).into(),
-                stage: rgb(0x242322).into(),
-                // The filled action is cream on umber, as ink on cream in light.
-                fill: rgb(0xf0e9e5).into(),
-                fill_hover: rgb(0xf5f2f0).into(),
-                // Brick, lifted for the night, under the dark label.
-                fill_danger: rgb(0xe98a72).into(),
-                fill_fg: rgb(0x171513).into(),
-                accent: rgb(0xe2895b).into(),
-                accent_soft: rgb(0x3e2b22).into(),
-                accent_fg: rgb(0x1b1a19).into(),
-                mark_top: rgb(0xe2895b).into(),
-                page_ink: rgb(0xa44a24).into(),
+                inset: hsla(210. / 360., 0.12, 0.9, 0.035),
+                success: rgb(0x7ccf8f).into(),
+                success_tint: rgb(0x1b2a20).into(),
+                danger: rgb(0xff7a6b).into(),
+                danger_tint: hsla(6. / 360., 1., 0.71, 0.1),
+                warning: rgb(0xf0c25e).into(),
+                warning_tint: hsla(41. / 360., 0.83, 0.65, 0.15),
+                diff_add: hsla(135. / 360., 0.45, 0.65, 0.13),
+                diff_del: hsla(6. / 360., 1., 0.71, 0.12),
+                scrim: ink(0.6),
+                selected: rgb(0x15181b).into(),
+                // Ink at night: the sidebar and title bar deepest, the
+                // session a step up, cards above it.
+                chrome: rgb(0x0f1113).into(),
+                pane: rgb(0x0f1113).into(),
+                stage: rgb(0x15181b).into(),
+                fill: rgb(0xc6ff3d).into(),
+                fill_hover: rgb(0xdcff85).into(),
+                fill_danger: rgb(0xff7a6b).into(),
+                fill_fg: rgb(0x101214).into(),
+                accent: rgb(0xc6ff3d).into(),
+                accent_soft: rgb(0x2a341f).into(),
+                accent_fg: rgb(0x101214).into(),
+                // The mark: a lime tile, its cursor bar and run triangle in
+                // ink, its shadow a dark olive (KodAct CLI's `brand.rs`).
+                mark_top: rgb(0xc6ff3d).into(),
+                page_ink: rgb(0x4a7200).into(),
                 page_halo: rgb(0xffffff).into(),
-                mark_left: rgb(0xf0e9e5).into(),
-                mark_right: rgb(0x7d776f).into(),
-                mark_heat_white: rgb(0xfff2cc).into(),
-                mark_heat: rgb(0xf5892c).into(),
-                mark_heat_ember: rgb(0xa3311c).into(),
-                mark_heat_iron: rgb(0x3b3633).into(),
-                border_strong: rgb(0x4a4540).into(),
-                sunk: rgb(0x1f1e1d).into(),
-                toggle_on: rgb(0xeb9d74).into(),
-                live: rgb(0xeb9d74).into(),
+                mark_left: rgb(0x101214).into(),
+                mark_right: rgb(0x3d5f00).into(),
+                brand_shadow: rgb(0x3d5a10).into(),
+                border_strong: rgb(0x3a4047).into(),
+                sunk: rgb(0x121417).into(),
+                toggle_on: rgb(0xc6ff3d).into(),
+                live: rgb(0xc6ff3d).into(),
                 agent: None,
-                memory: rgb(0xe5c77a).into(),
-                memory_tint: rgb(0x3a3220).into(),
-                code_inline_fg: rgb(0xef968b).into(),
-                code_inline_bg: Hsla::from(rgb(0xf0e6dc)).opacity(0.09),
-                mode_edit: rgb(0x2da160).into(),
-                mode_plan: rgb(0x428fdc).into(),
-                mode_bypass: rgb(0xec5941).into(),
-                skill: rgb(0xc3a3ec).into(),
-                ping_fast_bg: hsla(148. / 360., 0.78, 0.29, 0.22),
-                ping_fast_fg: rgb(0x91d4a8).into(),
-                ping_fair_bg: hsla(30. / 360., 0.04, 0.92, 0.1),
-                ping_fair_fg: rgb(0xdcdbd9).into(),
-                ping_slow_bg: hsla(34. / 360., 1., 0.34, 0.22),
-                ping_slow_fg: rgb(0xe9be74).into(),
+                memory: rgb(0x5fd8c4).into(),
+                memory_tint: rgb(0x15302c).into(),
+                code_inline_fg: rgb(0xffb98f).into(),
+                code_inline_bg: hsla(210. / 360., 0.12, 0.9, 0.07),
+                mode_edit: rgb(0x5fd8c4).into(),
+                mode_plan: rgb(0xb4a2ff).into(),
+                mode_bypass: rgb(0xff7a6b).into(),
+                skill: rgb(0xb4a2ff).into(),
+                ping_fast_bg: hsla(135. / 360., 0.45, 0.65, 0.16),
+                ping_fast_fg: rgb(0x9adfaa).into(),
+                ping_fair_bg: hsla(210. / 360., 0.12, 0.9, 0.08),
+                ping_fair_fg: rgb(0xd9d7cf).into(),
+                ping_slow_bg: hsla(41. / 360., 0.83, 0.65, 0.16),
+                ping_slow_fg: rgb(0xf3cf7f).into(),
+                // The terminal dock: KodAct CLI's roles as the 16 colours.
                 ansi: [
-                    rgb(0x646163).into(),
-                    rgb(0xec5941).into(),
-                    rgb(0x2da160).into(),
-                    rgb(0xd99530).into(),
-                    rgb(0x428fdc).into(),
-                    rgb(0x9475db).into(),
-                    rgb(0x63a6e9).into(),
-                    rgb(0xc1bfbe).into(),
-                    rgb(0x747273).into(),
-                    rgb(0xf6806d).into(),
-                    rgb(0x52b87a).into(),
-                    rgb(0xe9be74).into(),
-                    rgb(0x63a6e9).into(),
-                    rgb(0xac93e6).into(),
-                    rgb(0x9dc7f1).into(),
-                    rgb(0xecebea).into(),
+                    rgb(0x4a5058).into(),
+                    rgb(0xff7a6b).into(),
+                    rgb(0x7ccf8f).into(),
+                    rgb(0xf0c25e).into(),
+                    rgb(0x8fbef0).into(),
+                    rgb(0xb4a2ff).into(),
+                    rgb(0x5fd8c4).into(),
+                    rgb(0xd9d7cf).into(),
+                    rgb(0x868b92).into(),
+                    rgb(0xff9d92).into(),
+                    rgb(0xa8e3b6).into(),
+                    rgb(0xf7d58a).into(),
+                    rgb(0xb7d6f6).into(),
+                    rgb(0xcfc4ff).into(),
+                    rgb(0x93e7d9).into(),
+                    rgb(0xfbf9f3).into(),
                 ],
             }
         } else {
             Self {
-                inset: warm_ink(0.03),
-                success: rgb(0x3f6b4b).into(),
-                success_tint: rgb(0xe3ebe3).into(),
-                danger: rgb(0xa3402c).into(),
-                danger_tint: hsla(9. / 360., 0.6, 0.55, 0.1),
-                warning: rgb(0x8a5600).into(),
-                warning_tint: hsla(40. / 360., 1., 0.53, 0.2),
-                diff_add: hsla(137. / 360., 0.26, 0.33, 0.10),
-                diff_del: hsla(10. / 360., 0.57, 0.41, 0.09),
-                scrim: hsla(25. / 360., 0.2, 0.08, 0.38), // the dialog stands clear of the chat
-                selected: rgb(0xf7f5f1).into(),
-                // Cream Canvas under the title bar and the sidebar, Warm
-                // White for the session, white for the cards on it.
-                chrome: rgb(0xebe8e1).into(),
-                pane: rgb(0xebe8e1).into(),
-                stage: rgb(0xf7f5f1).into(),
-                // The filled action is the ink pill: quiet, never the accent.
-                fill: rgb(0x1e1e1e).into(),
-                fill_hover: rgb(0x34322f).into(),
-                fill_danger: rgb(0xa3402c).into(),
-                fill_fg: rgb(0xf0e9e5).into(),
-                // Dusty blue, where the reference has terracotta: the one colour.
-                accent: rgb(0xb4532a).into(),
-                accent_soft: rgb(0xf5e2d7).into(),
-                accent_fg: rgb(0xffffff).into(),
-                mark_top: rgb(0x93401c).into(),
-                page_ink: rgb(0xa44a24).into(),
+                inset: hsla(210. / 360., 0.1, 0.07, 0.035),
+                success: rgb(0x2a6f3e).into(),
+                success_tint: rgb(0xe2efe5).into(),
+                danger: rgb(0xb8392e).into(),
+                danger_tint: hsla(5. / 360., 0.6, 0.45, 0.1),
+                warning: rgb(0x8f6200).into(),
+                warning_tint: hsla(41. / 360., 1., 0.5, 0.17),
+                diff_add: hsla(137. / 360., 0.44, 0.33, 0.10),
+                diff_del: hsla(5. / 360., 0.6, 0.45, 0.09),
+                scrim: hsla(210. / 360., 0.12, 0.07, 0.4),
+                selected: rgb(0xf6f5f1).into(),
+                chrome: rgb(0xe9e8e2).into(),
+                pane: rgb(0xe9e8e2).into(),
+                stage: rgb(0xf6f5f1).into(),
+                fill: rgb(0xb5ea2c).into(),
+                fill_hover: rgb(0xa9df1f).into(),
+                fill_danger: rgb(0xb8392e).into(),
+                fill_fg: rgb(0x101214).into(),
+                accent: rgb(0xb5ea2c).into(),
+                accent_soft: rgb(0xe4efcd).into(),
+                accent_fg: rgb(0x101214).into(),
+                mark_top: rgb(0xb5ea2c).into(),
+                page_ink: rgb(0x4a7200).into(),
                 page_halo: rgb(0xffffff).into(),
-                mark_left: rgb(0x1e1e1e).into(),
-                mark_right: rgb(0x8b857e).into(),
-                mark_heat_white: rgb(0xfff2cc).into(),
-                mark_heat: rgb(0xf5892c).into(),
-                mark_heat_ember: rgb(0xa3311c).into(),
-                mark_heat_iron: rgb(0x3b3633).into(),
-                border_strong: rgb(0xc9c9c7).into(),
-                sunk: rgb(0xf1eee8).into(),
-                toggle_on: rgb(0xa44a24).into(),
-                live: rgb(0xa44a24).into(),
+                mark_left: rgb(0x101214).into(),
+                mark_right: rgb(0x4a7200).into(),
+                brand_shadow: rgb(0xb5ea2c).into(),
+                border_strong: rgb(0xc5c8cb).into(),
+                sunk: rgb(0xeeede8).into(),
+                toggle_on: rgb(0x4a7200).into(),
+                live: rgb(0x4a7200).into(),
                 agent: None,
-                memory: rgb(0x75591a).into(),
-                memory_tint: rgb(0xf6ecd2).into(),
-                code_inline_fg: rgb(0xa13430).into(),
-                code_inline_bg: Hsla::from(rgb(0x2b2622)).opacity(0.065),
-                mode_edit: rgb(0x108548).into(),
-                mode_plan: rgb(0x1f75cb).into(),
-                mode_bypass: rgb(0xa32c12).into(),
-                skill: rgb(0x7a3fb0).into(),
-                ping_fast_bg: rgb(0xc3e6cd).into(),
-                ping_fast_fg: rgb(0x306440).into(),
-                ping_fair_bg: rgb(0xdcdbd9).into(),
-                ping_fair_fg: rgb(0x4d4b4e).into(),
-                ping_slow_bg: rgb(0xf5d9a8).into(),
-                ping_slow_fg: rgb(0x894b16).into(),
+                memory: rgb(0x0e7568).into(),
+                memory_tint: rgb(0xdcefeb).into(),
+                code_inline_fg: rgb(0xa4461c).into(),
+                code_inline_bg: hsla(210. / 360., 0.1, 0.07, 0.06),
+                mode_edit: rgb(0x0e7568).into(),
+                mode_plan: rgb(0x5a44c0).into(),
+                mode_bypass: rgb(0xb8392e).into(),
+                skill: rgb(0x5a44c0).into(),
+                ping_fast_bg: rgb(0xd3ebd9).into(),
+                ping_fast_fg: rgb(0x265f37).into(),
+                ping_fair_bg: rgb(0xe3e3e0).into(),
+                ping_fair_fg: rgb(0x3d4146).into(),
+                ping_slow_bg: rgb(0xf6e4b8).into(),
+                ping_slow_fg: rgb(0x7a5300).into(),
                 ansi: [
-                    rgb(0x28272d).into(),
-                    rgb(0xc02f12).into(),
-                    rgb(0x2f7549).into(),
-                    rgb(0x995715).into(),
-                    rgb(0x2f68b4).into(),
-                    rgb(0x6a4fb4).into(),
-                    rgb(0x1f75cb).into(),
-                    rgb(0x747273).into(),
-                    rgb(0x646163).into(),
-                    rgb(0xdd2b0e).into(),
-                    rgb(0x108548).into(),
-                    rgb(0xab6100).into(),
-                    rgb(0x1f75cb).into(),
-                    rgb(0x7b58cf).into(),
-                    rgb(0x1f75cb).into(),
-                    rgb(0x18171d).into(),
+                    rgb(0x101214).into(),
+                    rgb(0xb8392e).into(),
+                    rgb(0x2f7a45).into(),
+                    rgb(0x8f6200).into(),
+                    rgb(0x2f63a8).into(),
+                    rgb(0x5a44c0).into(),
+                    rgb(0x0e7568).into(),
+                    rgb(0x55595e).into(),
+                    rgb(0x63676d).into(),
+                    rgb(0xa8322a).into(),
+                    rgb(0x2a6e3e).into(),
+                    rgb(0x805700).into(),
+                    rgb(0x2a5896).into(),
+                    rgb(0x513cad).into(),
+                    rgb(0x0c685d).into(),
+                    rgb(0x2b2e33).into(),
                 ],
             }
         }
@@ -702,43 +695,45 @@ pub struct TerminalColors {
 
 impl TerminalColors {
     fn for_mode(is_dark: bool) -> Self {
+        // KodAct CLI's code roles; the prompt and the running cursor in the
+        // brand, as the CLI's prompt mark.
         if is_dark {
             Self {
-                background: rgb(0x18171d).into(),
-                foreground: rgb(0xdcdbd9).into(),
-                muted: rgb(0x8a8888).into(),
-                divider: hsla(30. / 360., 0.04, 0.92, 0.1),
-                prompt: rgb(0xac93e6).into(),
-                command: rgb(0x52b87a).into(),
-                keyword: rgb(0xac93e6).into(),
-                flag: rgb(0x63a6e9).into(),
-                string: rgb(0xe9be74).into(),
-                variable: rgb(0xcbbbf2).into(),
-                operator: rgb(0xf6806d).into(),
-                number: rgb(0xd99530).into(),
-                comment: rgb(0x747273).into(),
+                background: rgb(0x101214).into(),
+                foreground: rgb(0xd9d7cf).into(),
+                muted: rgb(0x868b92).into(),
+                divider: hsla(210. / 360., 0.12, 0.9, 0.1),
+                prompt: rgb(0xc6ff3d).into(),
+                command: rgb(0x5fd8c4).into(),
+                keyword: rgb(0xb4a2ff).into(),
+                flag: rgb(0x8fbef0).into(),
+                string: rgb(0xc9ec7a).into(),
+                variable: rgb(0xcfc4ff).into(),
+                operator: rgb(0xa9adb2).into(),
+                number: rgb(0xf0c25e).into(),
+                comment: rgb(0x868b92).into(),
                 ansi: [
-                    0x646163, 0xec5941, 0x2da160, 0xd99530, 0x428fdc, 0x9475db, 0x63a6e9, 0xc1bfbe,
+                    0x4a5058, 0xff7a6b, 0x7ccf8f, 0xf0c25e, 0x8fbef0, 0xb4a2ff, 0x5fd8c4, 0xd9d7cf,
                 ]
                 .map(|c| rgb(c).into()),
             }
         } else {
             Self {
-                background: rgb(0xecebea).into(),
-                foreground: rgb(0x28272d).into(),
-                muted: rgb(0x747273).into(),
-                divider: hsla(250. / 360., 0.07, 0.16, 0.12),
-                prompt: rgb(0x7759c2).into(),
-                command: rgb(0x2f7549).into(),
-                keyword: rgb(0x6a4fb4).into(),
-                flag: rgb(0x2f68b4).into(),
-                string: rgb(0x995715).into(),
-                variable: rgb(0x7b58cf).into(),
-                operator: rgb(0xc02f12).into(),
-                number: rgb(0xab6100).into(),
-                comment: rgb(0x747273).into(),
+                background: rgb(0xeeede8).into(),
+                foreground: rgb(0x2b2e33).into(),
+                muted: rgb(0x5d6167).into(),
+                divider: hsla(210. / 360., 0.1, 0.07, 0.12),
+                prompt: rgb(0x4a7200).into(),
+                command: rgb(0x0e7568).into(),
+                keyword: rgb(0x5a44c0).into(),
+                flag: rgb(0x2f63a8).into(),
+                string: rgb(0x4f7000).into(),
+                variable: rgb(0x513cad).into(),
+                operator: rgb(0x55595e).into(),
+                number: rgb(0x805700).into(),
+                comment: rgb(0x5d6167).into(),
                 ansi: [
-                    0x28272d, 0xc02f12, 0x2f7549, 0xab6100, 0x2f68b4, 0x6a4fb4, 0x1f75cb, 0x747273,
+                    0x101214, 0xb8392e, 0x2f7a45, 0x805700, 0x2f63a8, 0x5a44c0, 0x0e7568, 0x55595e,
                 ]
                 .map(|c| rgb(c).into()),
             }
@@ -765,40 +760,42 @@ pub struct CodeColors {
 
 impl CodeColors {
     fn for_mode(is_dark: bool) -> Self {
+        // KodAct CLI's code colours (`CODE_*`): violet keywords, lime-green
+        // strings, amber numbers, teal types; blue for functions.
         let c = |x: u32| -> Hsla { rgb(x).into() };
         if is_dark {
             Self {
-                keyword: c(0xac93e6),
-                string: c(0xe9be74),
-                number: c(0xd99530),
-                comment: c(0x8a8888),
-                function: c(0x63a6e9),
-                type_: c(0x52b87a),
-                variable: c(0xcbbbf2),
-                operator: c(0xf6806d),
-                meta: c(0x8a8888),
-                added: c(0x52b87a),
-                removed: c(0xf6806d),
+                keyword: c(0xb4a2ff),
+                string: c(0xc9ec7a),
+                number: c(0xf0c25e),
+                comment: c(0x868b92),
+                function: c(0x8fbef0),
+                type_: c(0x5fd8c4),
+                variable: c(0xcdd1d5),
+                operator: c(0xa9adb2),
+                meta: c(0x868b92),
+                added: c(0x7ccf8f),
+                removed: c(0xff7a6b),
             }
         } else {
             Self {
-                keyword: c(0x6a4fb4),
-                string: c(0x995715),
-                number: c(0xab6100),
-                comment: c(0x747273),
-                function: c(0x2f68b4),
-                type_: c(0x2f7549),
-                variable: c(0x7b58cf),
-                operator: c(0xc02f12),
-                meta: c(0x747273),
-                added: c(0x2f7549),
-                removed: c(0xc02f12),
+                keyword: c(0x5a44c0),
+                string: c(0x4f7000),
+                number: c(0x805700),
+                comment: c(0x5d6167),
+                function: c(0x2f63a8),
+                type_: c(0x0e7568),
+                variable: c(0x33373b),
+                operator: c(0x55595e),
+                meta: c(0x5d6167),
+                added: c(0x2f7a45),
+                removed: c(0xb8392e),
             }
         }
     }
 }
 
-/// How much smaller a reply is set when Anthropic Sans draws it.
+/// How much smaller a reply is set when KodAct Sans draws it.
 const BRAND_STEP: f32 = 1.;
 
 /// The app's fixed dimensions.
@@ -830,7 +827,7 @@ pub struct Sizes {
     pub hairline: Pixels,           // 1
     pub line_height_chat: f32,      // 23px lines at 15px: whole pixels, crisp
     pub chat_text: Pixels,          // 15: replies and your messages
-    pub greeting: Pixels,           // 32: the new-chat greeting, Anthropic Sans Display 600
+    pub greeting: Pixels,           // 32: the new-chat greeting, KodAct Sans 600
     pub statusbar: Pixels,          // 26: the status bar at the foot of the window
     pub figure: Pixels,             // 28: one figure that leads a view (agents finished)
     pub panel_in_ms: u64,           // 280: the side panel sliding in
@@ -882,8 +879,8 @@ pub struct Sizes {
     pub rail: Pixels,      // 52: the collapsed sidebar
     pub side_shade: Pixels, // 12: the sidebar's shadow across the session's left edge
     pub edge_fade: Pixels, // 40: the transcript fading out where the composer meets it
-    pub home_heading: Pixels, // 36: the home screen's heading, Anthropic Sans Display 600
-    pub mark_home: Pixels, // 44: the mark beside the home screen's greeting
+    pub home_heading: Pixels, // 36: the home screen's heading, KodAct Sans 600
+    pub mark_home: Pixels, // 48: the mark beside the home screen's greeting (3px a pixel of its grid)
 }
 
 impl Default for Sizes {
@@ -966,13 +963,15 @@ impl Default for Sizes {
             side_shade: px(12.),
             edge_fade: px(40.),
             home_heading: px(36.),
-            mark_home: px(44.),
+            mark_home: px(48.),
         }
     }
 }
 
 pub fn init(cx: &mut App) {
-    cx.set_global(Theme::light());
+    // Dark first, as KodAct is mostly seen in a dark terminal; the saved
+    // mode (`window.json`) is applied as the window opens.
+    cx.set_global(Theme::dark());
 }
 
 pub trait ActiveTheme {
@@ -1154,13 +1153,13 @@ mod look_tests {
     fn any_saved_theme_reads_as_the_one_look() {
         // Themes saved before there was one look come back as it.
         for id in ["calm", "terracotta", "premium", "ink", "neon"] {
-            assert_eq!(Look::from_id(id), Some(Look::Calm));
+            assert_eq!(Look::from_id(id), Some(Look::KodAct));
         }
-        assert_eq!(Look::default(), Look::Calm);
+        assert_eq!(Look::default(), Look::KodAct);
         // Calm laid over the base changes nothing: one source of its values.
         for dark in [false, true] {
             let (a, b) = (
-                Theme::of(Look::Calm, dark),
+                Theme::of(Look::KodAct, dark),
                 if dark { Theme::dark() } else { Theme::light() },
             );
             for (x, y) in [

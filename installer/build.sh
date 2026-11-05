@@ -32,14 +32,8 @@ x86_64-w64-mingw32-strip -o "$out/stage/app/KodAct.exe" "$here/target/$target/re
 x86_64-w64-mingw32-strip -o "$out/stage/cli/kodact.exe" "$cli/target/$target/release/kodact.exe"
 cp "$cli/target/x86_64-unknown-linux-musl/release/kodact" "$out/stage/linux/kodact"
 
-# Fonts for a personal build (installer/private-fonts, never committed):
-# installed beside the app, where KodAct reads them at start.
-fonts=()
-if compgen -G "$here/installer/private-fonts/*.[oOtT][tT][fF]" >/dev/null; then
-  rm -rf "$out/stage/fonts" && mkdir -p "$out/stage/fonts"
-  cp "$here"/installer/private-fonts/*.[oOtT][tT][fF] "$out/stage/fonts/"
-  fonts=(-DFONTS_DIR="$out/stage/fonts")
-fi
+# KodAct's fonts are inside the app (assets/fonts, OFL); their licences
+# are installed beside it.
 
 # The design library: its committed files and the media its lock pins
 # (fetched once, cached by hash), checked, and nothing else from the folder.
@@ -48,7 +42,6 @@ python3 -I "$here/scripts/sync_open_design.py" check
 python3 -I "$here/scripts/sync_open_design.py" stage "$out/stage/design-library"
 
 makensis -V2 -WX \
-  "${fonts[@]}" \
   -DDESIGN_DIR="$out/stage/design-library" \
   -DAPP_EXE="$out/stage/app/KodAct.exe" \
   -DCLI_EXE="$out/stage/cli/kodact.exe" \

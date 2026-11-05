@@ -84,14 +84,14 @@ Read the rendered `font-family` stack of:
 - `<body>` → `node-name` family  
 - `<code>`, `<pre>`, or any mono-styled element → `sublabel` family
 
-If the site has only one family, keep the schematic defaults for the missing roles (Anthropic Sans for title, Anthropic Sans for mono). Don't force-pick a mono font that isn't on the site.
+If the site has only one family, keep the schematic defaults for the missing roles (KodAct Sans for title, KodAct Sans for mono). Don't force-pick a mono font that isn't on the site.
 
 ### Exact-font gate for brand-matched output
 
-A brand's own typeface is not carried over: diagrams are set in Anthropic Sans.
+A brand's own typeface is not carried over: diagrams are set in KodAct Sans.
 
 1. Record the computed family and weight used by the sampled heading, body, and technical-label elements.
-2. Fonts are not part of a profile: every diagram is set in Anthropic Sans, whatever the brand uses.
+2. Fonts are not part of a profile: every diagram is set in KodAct Sans, whatever the brand uses.
 4. A custom-hosted or paid font is not compatible with the default single-file allowlist. Label that role `fallback` unless the user separately approves and packages the font; never silently add a remote font URL or claim an exact match.
 5. Verify the rendered output with `getComputedStyle`; a declared family that failed to load does not pass.
 

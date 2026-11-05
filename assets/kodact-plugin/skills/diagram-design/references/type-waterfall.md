@@ -33,7 +33,7 @@
 <rect x="112" y="192" width="96" height="228" fill="{paper}"/>
 <rect x="112" y="192" width="96" height="228" fill="{ink @ 0.08}" stroke="{ink}" stroke-width="1"
       data-role="total" data-value="240" data-name="FY25 base"/>
-<text x="160" y="184" fill="{muted}" font-size="8" font-family="Anthropic Sans Text" text-anchor="middle">240</text>
+<text x="160" y="184" fill="{muted}" font-size="8" font-family="KodAct Sans" text-anchor="middle">240</text>
 
 <!-- Carry: the running total (240) crosses the gap at its own level -->
 <line x1="208" y1="192" x2="256" y2="192" stroke="{ink @ 0.55}" stroke-width="1" data-carry="240"/>
@@ -42,7 +42,7 @@
 <rect x="256" y="131" width="96" height="61" fill="{paper}"/>
 <rect x="256" y="131" width="96" height="61" fill="{muted @ 0.15}" stroke="{muted}" stroke-width="1"
       data-role="delta" data-value="+64" data-name="Headcount"/>
-<text x="304" y="123" fill="{muted}" font-size="8" font-family="Anthropic Sans Text" text-anchor="middle">+64</text>
+<text x="304" y="123" fill="{muted}" font-size="8" font-family="KodAct Sans" text-anchor="middle">+64</text>
 ```
 
 Endpoint positions round to the nearest integer pixel and never snap to the 4px grid — data coordinates are exempt, exactly as in the dumbbell. Bar x-positions and widths are layout, so they stay on the grid.

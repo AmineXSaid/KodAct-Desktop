@@ -18,11 +18,11 @@ pub fn is_diagram(name: &str, content: &str) -> bool {
     }
 }
 
-/// `svg` with every font it names set in Anthropic Sans Text: each
+/// `svg` with every font it names set in KodAct Sans: each
 /// `font-family` attribute and CSS declaration, whatever face the drawing
 /// asked for. KodAct draws in no other face.
 pub fn brand_fonts(svg: &str) -> String {
-    const FACE: &str = "'Anthropic Sans Text'";
+    const FACE: &str = "'KodAct Sans'";
     let mut out = String::with_capacity(svg.len());
     let mut rest = svg;
     while let Some(at) = rest.find("font-family") {
@@ -235,7 +235,7 @@ mod tests {
         ] {
             assert!(!out.contains(gone), "{gone} in {out}");
         }
-        assert_eq!(out.matches("Anthropic Sans Text").count(), 5, "{out}");
+        assert_eq!(out.matches("KodAct Sans").count(), 5, "{out}");
         assert!(
             out.contains("fill: red") && out.contains("font-size: 9px") && out.contains(r#"x="1""#)
         );
@@ -315,7 +315,7 @@ mod tests {
             "template-dark.html",
         ] {
             let t = std::fs::read_to_string(format!("{root}/assets/{template}")).unwrap();
-            assert!(t.contains("'Anthropic Sans Text'"), "{template}");
+            assert!(t.contains("'KodAct Sans'"), "{template}");
             for old in [
                 "Geist",
                 "Instrument",

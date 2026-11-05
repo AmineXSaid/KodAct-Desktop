@@ -86,14 +86,14 @@ These six rules are **non-negotiable**. Run the pre-output checklist (SKILL.md �
 <rect x="X" y="Y" width="W" height="H" rx="6" fill="FILL" stroke="STROKE" stroke-width="1"/>
 <!-- 3. Rectangular type tag (rx=2, NOT a pill) -->
 <rect x="X+8" y="Y+6" width="28" height="12" rx="2" fill="transparent" stroke="STROKE@0.40" stroke-width="0.8"/>
-<text x="X+22" y="Y+15" fill="STROKE@0.8" font-size="7" font-family="Anthropic Sans Text"
+<text x="X+22" y="Y+15" fill="STROKE@0.8" font-size="7" font-family="KodAct Sans"
       text-anchor="middle" letter-spacing="0.08em">API</text>
 <!-- 4. Node name (node-name role, sans: human-readable) -->
 <text x="CX" y="CY+2" fill="{ink}" font-size="12" font-weight="600"
-      font-family="Anthropic Sans Text" text-anchor="middle">Node Name</text>
+      font-family="KodAct Sans" text-anchor="middle">Node Name</text>
 <!-- 5. Technical sublabel (sublabel role, mono) -->
 <text x="CX" y="CY+18" fill="{muted}" font-size="9"
-      font-family="Anthropic Sans Text" text-anchor="middle">tech:port</text>
+      font-family="KodAct Sans" text-anchor="middle">tech:port</text>
 ```
 
 ## Arrow labels — always mask, always with margin
@@ -104,7 +104,7 @@ Every arrow label needs an opaque rect behind it. Without one it bleeds through 
 <!-- Mask sits 14px above the arrow (8px text height + 6px gap). Stroke is at ARROW_Y. -->
 <rect x="MID_X-18" y="ARROW_Y-20" width="36" height="12" rx="2" fill="{paper}"/>
 <text x="MID_X" y="ARROW_Y-11" fill="{soft}" font-size="8"
-      font-family="Anthropic Sans Text" text-anchor="middle" letter-spacing="0.06em">WRITE</text>
+      font-family="KodAct Sans" text-anchor="middle" letter-spacing="0.06em">WRITE</text>
 ```
 
 Rules:
@@ -114,7 +114,7 @@ Rules:
 - Never `writing-mode` vertical.
 - For vertical segments, place the label to the side (not on the line) with the same 6–10px horizontal gap.
 
-**Font substitution.** Don't estimate per-character widths — use the `style-guide.md` budget (0.60em sans / 0.62em mono per char). A production run sized mono labels at ~0.47em/char and clipped twice; the calibrated budget fits Anthropic Sans. Verify with `python3 <repo-root>/scripts/verify-geometry.py` — it checks masks against later-painted nodes, not text fit; holding the budget is yours.
+**Font substitution.** Don't estimate per-character widths — use the `style-guide.md` budget (0.60em sans / 0.62em mono per char). A production run sized mono labels at ~0.47em/char and clipped twice; the calibrated budget fits KodAct Sans. Verify with `python3 <repo-root>/scripts/verify-geometry.py` — it checks masks against later-painted nodes, not text fit; holding the budget is yours.
 
 ## Legend — horizontal strip at the bottom
 
@@ -123,7 +123,7 @@ Rules:
 ```svg
 <line x1="30" y1="LEGEND_Y-8" x2="VIEWBOX_W-30" y2="LEGEND_Y-8"
       stroke="{ink @ 0.10}" stroke-width="0.8"/>
-<text x="30" y="LEGEND_Y+8" fill="{muted}" font-size="8" font-family="Anthropic Sans Text"
+<text x="30" y="LEGEND_Y+8" fill="{muted}" font-size="8" font-family="KodAct Sans"
       letter-spacing="0.14em">LEGEND</text>
 <!-- Items — horizontal row, ~160px apart -->
 ```

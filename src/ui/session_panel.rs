@@ -79,7 +79,7 @@ fn part_colour(name: &str, t: &Theme) -> Hsla {
         "Messages" => t.colors.sky,
         "System prompt" => t.colors.marigold,
         "Built-in tools" => t.extra.success,
-        "MCP tools" => t.extra.accent,
+        "MCP tools" => t.extra.live,
         "Skills" => t.extra.skill,
         "Memory files" => t.extra.memory,
         _ => t.colors.text_muted,

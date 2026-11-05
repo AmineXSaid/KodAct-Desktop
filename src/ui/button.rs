@@ -413,9 +413,10 @@ pub fn send_button(
         .flex()
         .items_center()
         .justify_center()
-        .rounded(t.radius.control);
+        // The mark's tile: a square with its corners rounded a sixth.
+        .rounded(size * (1. / 6.));
     match state {
-        // Stop: a soft disc with the ink square, never louder than the
+        // Stop: a soft tile with the ink square, never louder than the
         // work it would stop.
         SendState::Busy => {
             let ink = t.colors.text;
@@ -438,14 +439,15 @@ pub fn send_button(
                 .cursor_pointer()
                 .hover(move |s| s.bg(hover))
                 .active(|s| s.opacity(0.85))
-                .child(icon("icons/arrow-up.svg", t.size.icon, p.fg))
+                // The mark's run triangle: KodAct acts.
+                .child(icon("kodact/run.svg", t.size.icon, p.fg))
                 .on_click(on_click)
         }
         SendState::Empty => base
             .aria_label("Send (write something first)")
             .bg(t.extra.accent_soft)
             .child(icon(
-                "icons/arrow-up.svg",
+                "kodact/run.svg",
                 t.size.icon,
                 t.extra.accent_fg.opacity(if t.is_dark { 0.4 } else { 0.9 }),
             )),
@@ -740,14 +742,14 @@ mod tests {
         }
     }
 
-    /// Calmly smooth has two shapes: what you press is a pill, what holds
+    /// KodAct's look has two shapes: what you press is a pill, what holds
     /// content is 4px. Every theme keeps the order: what you press is at
     /// least as round as a row, and the composer at least as round as a card.
     #[test]
     fn pills_to_press_four_pixels_to_hold() {
         for dark in [false, true] {
-            let r = Theme::of(crate::theme::Look::Calm, dark).radius;
-            let z = Theme::of(crate::theme::Look::Calm, dark).size;
+            let r = Theme::of(crate::theme::Look::KodAct, dark).radius;
+            let z = Theme::of(crate::theme::Look::KodAct, dark).size;
             for v in [r.compact, r.control, r.segment, r.pill] {
                 assert!(f32::from(v) >= 999., "{}px", f32::from(v));
             }

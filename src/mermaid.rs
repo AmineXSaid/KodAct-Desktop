@@ -61,7 +61,7 @@ impl Palette {
     }
 }
 
-const FONT: &str = "Anthropic Sans Text";
+const FONT: &str = crate::fonts::TEXT;
 const SIZE: f32 = 13.;
 /// Past this many nodes or messages, the source is shown instead.
 const LIMIT: usize = 250;

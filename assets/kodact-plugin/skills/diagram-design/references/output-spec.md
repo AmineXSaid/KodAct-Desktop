@@ -112,11 +112,11 @@ Node names shrink relative to the canvas as it grows — resist that. Scale the 
 
 | Role | standard | presentation | print |
 |---|---|---|---|
-| Title (Anthropic Sans) | 28 | 40 | 32 |
-| Node name (Anthropic Sans 600) | 12 | 16 | 12 |
-| Sublabel (Anthropic Sans) | 9 | 12 | 9 |
-| Arrow label (Anthropic Sans) | 8 | 12 | 8 |
-| Eyebrow / tag (Anthropic Sans) | 8 | 8 | 8 |
+| Title (KodAct Sans) | 28 | 40 | 32 |
+| Node name (KodAct Sans 600) | 12 | 16 | 12 |
+| Sublabel (KodAct Sans) | 9 | 12 | 9 |
+| Arrow label (KodAct Sans) | 8 | 12 | 8 |
+| Eyebrow / tag (KodAct Sans) | 8 | 8 | 8 |
 | Node box min height | 48 | 64 | 48 |
 | Min gap between nodes | 24 | 40 | 24 |
 
@@ -126,12 +126,12 @@ Every `font-size` is one of the role values above for the preset in use, or one 
 
 | Exception | Font | Sizes |
 |---|---|---|
-| Dense annotation: legend keys, axis ticks, chart data labels, source lines, in-box tags | Anthropic Sans or Anthropic Sans regular | 7 to 11, half steps allowed |
-| Chart series or row name: bar category, line or bump series, gantt row, matrix header | Anthropic Sans 600 | 10 to 11 |
-| Group or entity heading | Anthropic Sans 600 | 14 |
+| Dense annotation: legend keys, axis ticks, chart data labels, source lines, in-box tags | KodAct Sans or KodAct Sans regular | 7 to 11, half steps allowed |
+| Chart series or row name: bar category, line or bump series, gantt row, matrix header | KodAct Sans 600 | 10 to 11 |
+| Group or entity heading | KodAct Sans 600 | 14 |
 | Decorative watermark numerals at or under 0.08 opacity | any | any |
 
-An exception is bound to the font beside it, weight included: Anthropic Sans at 600 or heavier is the node-name voice, lighter Anthropic Sans is annotation. So a Anthropic Sans 600 node name cannot borrow the dense-annotation range down to 7, and a Anthropic Sans tick cannot borrow the 14 reserved for headings. A chart row carries a name in the same Anthropic Sans 600 voice at a rank the ramp has no row for, which is why it has an exception of its own rather than a licence to shrink: `type-bar.md`, `type-gantt.md` and `type-line.md` all set that name at 10 or 11.
+An exception is bound to the font beside it, weight included: KodAct Sans at 600 or heavier is the node-name voice, lighter KodAct Sans is annotation. So a KodAct Sans 600 node name cannot borrow the dense-annotation range down to 7, and a KodAct Sans tick cannot borrow the 14 reserved for headings. A chart row carries a name in the same KodAct Sans 600 voice at a rank the ramp has no row for, which is why it has an exception of its own rather than a licence to shrink: `type-bar.md`, `type-gantt.md` and `type-line.md` all set that name at 10 or 11.
 
 Anything else is a bug in the diagram, not a new size. The one standing carve-out is the closed inventory below.
 
@@ -143,22 +143,22 @@ Each is registered against the font carrying it, because that is what the sweep 
 
 | File | Sizes | What they are |
 |---|---|---|
-| `assets/example-data-flow.html` | Anthropic Sans 5, Anthropic Sans 6 | chip text and role label, both set in CSS |
-| `assets/example-data-flow-dark.html` | Anthropic Sans 5, Anthropic Sans 6 | chip text and role label, both set in CSS |
-| `assets/example-data-flow-full.html` | Anthropic Sans 5, Anthropic Sans 6 | chip text and role label, both set in CSS |
-| `assets/example-nested.html` | Anthropic Sans 14, Anthropic Sans 14 | two italic serif asides |
-| `assets/example-nested-dark.html` | Anthropic Sans 14, Anthropic Sans 14 | two italic serif asides |
-| `assets/example-nested-full.html` | Anthropic Sans 14, Anthropic Sans 14 | two italic serif asides |
-| `assets/example-paved-road-animated.html` | Anthropic Sans 600 13 | boundary node name |
-| `assets/example-process.html` | Anthropic Sans 6 | role chip |
-| `assets/example-process-dark.html` | Anthropic Sans 6 | role chip |
-| `assets/example-process-full.html` | Anthropic Sans 6 | role chip |
-| `assets/example-quadrant-consultant.html` | Anthropic Sans 600 13 | inline dot glyph in a `tspan` |
-| `assets/example-queue-animated.html` | Anthropic Sans 600 13, Anthropic Sans 600 22, Anthropic Sans 600 24 | state caption and two fill counters |
-| `assets/example-treemap.html` | Anthropic Sans 600 7, Anthropic Sans 600 7, Anthropic Sans 600 13, Anthropic Sans 600 13 | two cell index glyphs and two cell names |
-| `assets/example-treemap-dark.html` | Anthropic Sans 600 7, Anthropic Sans 600 7, Anthropic Sans 600 13, Anthropic Sans 600 13 | two cell index glyphs and two cell names |
-| `assets/example-treemap-full.html` | Anthropic Sans 600 7, Anthropic Sans 600 7, Anthropic Sans 600 13, Anthropic Sans 600 13 | two cell index glyphs and two cell names |
-| `references/type-treemap.md` | Anthropic Sans 600 13 | the cell-name line of the documented pattern |
+| `assets/example-data-flow.html` | KodAct Sans 5, KodAct Sans 6 | chip text and role label, both set in CSS |
+| `assets/example-data-flow-dark.html` | KodAct Sans 5, KodAct Sans 6 | chip text and role label, both set in CSS |
+| `assets/example-data-flow-full.html` | KodAct Sans 5, KodAct Sans 6 | chip text and role label, both set in CSS |
+| `assets/example-nested.html` | KodAct Sans 14, KodAct Sans 14 | two italic serif asides |
+| `assets/example-nested-dark.html` | KodAct Sans 14, KodAct Sans 14 | two italic serif asides |
+| `assets/example-nested-full.html` | KodAct Sans 14, KodAct Sans 14 | two italic serif asides |
+| `assets/example-paved-road-animated.html` | KodAct Sans 600 13 | boundary node name |
+| `assets/example-process.html` | KodAct Sans 6 | role chip |
+| `assets/example-process-dark.html` | KodAct Sans 6 | role chip |
+| `assets/example-process-full.html` | KodAct Sans 6 | role chip |
+| `assets/example-quadrant-consultant.html` | KodAct Sans 600 13 | inline dot glyph in a `tspan` |
+| `assets/example-queue-animated.html` | KodAct Sans 600 13, KodAct Sans 600 22, KodAct Sans 600 24 | state caption and two fill counters |
+| `assets/example-treemap.html` | KodAct Sans 600 7, KodAct Sans 600 7, KodAct Sans 600 13, KodAct Sans 600 13 | two cell index glyphs and two cell names |
+| `assets/example-treemap-dark.html` | KodAct Sans 600 7, KodAct Sans 600 7, KodAct Sans 600 13, KodAct Sans 600 13 | two cell index glyphs and two cell names |
+| `assets/example-treemap-full.html` | KodAct Sans 600 7, KodAct Sans 600 7, KodAct Sans 600 13, KodAct Sans 600 13 | two cell index glyphs and two cell names |
+| `references/type-treemap.md` | KodAct Sans 600 13 | the cell-name line of the documented pattern |
 
 New diagrams get no rows here. Bringing one of these onto the ramp is a visual change to a shipped example and belongs in its own PR.
 
@@ -229,16 +229,16 @@ Two rules that hold at every audience level:
 
 ### Non-Latin labels
 
-Anthropic Sans has no CJK coverage. When labels contain Japanese, Chinese, or Korean text, extend the family on those `<text>` elements — don't swap the whole skin:
+KodAct Sans has no CJK coverage. When labels contain Japanese, Chinese, or Korean text, extend the family on those `<text>` elements — don't swap the whole skin:
 
 ```svg
-<text font-family="Anthropic Sans Text">認証サービス</text>
-<text font-family="Anthropic Sans Text">인증 서비스</text>
-<text font-family="Anthropic Sans Text">认证服务</text>
-<text font-family="Anthropic Sans Text">認證服務</text>
+<text font-family="KodAct Sans">認証サービス</text>
+<text font-family="KodAct Sans">인증 서비스</text>
+<text font-family="KodAct Sans">认证服务</text>
+<text font-family="KodAct Sans">認證服務</text>
 ```
 
-These stacks lead with the default skin's sans. Under a custom skin, lead with the `node-name` family instead and keep the CJK fallbacks after it. The Hiragino/Yu Gothic stack carries no Hangul glyphs, so Korean labels need the Korean stack — don't reuse the Japanese one. Anthropic Sans ships in the skin's font link, so it leads that stack and the local families follow it; the register, floor, and title rules Korean needs beyond the font live in [`style-guide.md`](style-guide.md#korean-labels). Japanese fonts also cover only a subset of the Chinese character set and render Simplified forms with Japanese glyph variants, so Chinese labels need a Chinese stack; Simplified and Traditional are separate stacks for the same reason. Anthropic Sans now ships in the link too, so it leads the Traditional stack and the local families follow; the register, floor, and title rules Traditional Chinese needs beyond the font live in [`style-guide.md`](style-guide.md#traditional-chinese-labels). For mono sublabels use `'Anthropic Sans Text', 'Anthropic Sans Mono CJK JP', monospace` (Japanese), `'Anthropic Sans Text', 'Anthropic Sans Mono CJK KR', monospace` (Korean), or `'Anthropic Sans Text', 'Anthropic Sans Mono CJK SC', monospace` / `'Anthropic Sans Text', 'Anthropic Sans Mono CJK TC', monospace` (Chinese). Budget **1em per full-width CJK glyph**, not a small percentage over the average Latin glyph; `verify-treemap.py` uses that conservative contract for Unicode wide/full-width characters and treats combining marks as non-advancing. Prefer 12px names over 8px sublabels for CJK; Hangul and Han go muddy below 12px, so treat 12px as the floor rather than 10px. Actual width still varies by fallback font, so run the relevant geometry verifier after translating labels.
+These stacks lead with the default skin's sans. Under a custom skin, lead with the `node-name` family instead and keep the CJK fallbacks after it. The Hiragino/Yu Gothic stack carries no Hangul glyphs, so Korean labels need the Korean stack — don't reuse the Japanese one. KodAct Sans ships in the skin's font link, so it leads that stack and the local families follow it; the register, floor, and title rules Korean needs beyond the font live in [`style-guide.md`](style-guide.md#korean-labels). Japanese fonts also cover only a subset of the Chinese character set and render Simplified forms with Japanese glyph variants, so Chinese labels need a Chinese stack; Simplified and Traditional are separate stacks for the same reason. KodAct Sans now ships in the link too, so it leads the Traditional stack and the local families follow; the register, floor, and title rules Traditional Chinese needs beyond the font live in [`style-guide.md`](style-guide.md#traditional-chinese-labels). For mono sublabels use `'KodAct Sans', 'KodAct Sans Mono CJK JP', monospace` (Japanese), `'KodAct Sans', 'KodAct Sans Mono CJK KR', monospace` (Korean), or `'KodAct Sans', 'KodAct Sans Mono CJK SC', monospace` / `'KodAct Sans', 'KodAct Sans Mono CJK TC', monospace` (Chinese). Budget **1em per full-width CJK glyph**, not a small percentage over the average Latin glyph; `verify-treemap.py` uses that conservative contract for Unicode wide/full-width characters and treats combining marks as non-advancing. Prefer 12px names over 8px sublabels for CJK; Hangul and Han go muddy below 12px, so treat 12px as the floor rather than 10px. Actual width still varies by fallback font, so run the relevant geometry verifier after translating labels.
 
 ---
 

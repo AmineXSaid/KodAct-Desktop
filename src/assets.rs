@@ -1,7 +1,7 @@
 //! Everything the app ships inside its binary: the icons (Lucide, ISC
 //! licence, `assets/icons/LICENSE`), the file icons (Material Icon Theme,
-//! MIT, `assets/file-icons/LICENSE`). No font: Anthropic Sans is read
-//! from disk (`fonts.rs`).
+//! MIT, `assets/file-icons/LICENSE`). KodAct's fonts are carried too
+//! (`fonts.rs`, OFL, `assets/fonts/`).
 
 use std::borrow::Cow;
 
@@ -162,16 +162,16 @@ pub struct Assets;
 impl AssetSource for Assets {
     fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
         // GPUI's SVG renderer loads these two paths into the font list
-        // diagrams draw text with: both are Anthropic Sans Text.
-        if matches!(
-            path,
-            "fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf" | "fonts/lilex/Lilex-Regular.ttf"
-        ) {
-            return Ok(crate::fonts::text_regular().map(Cow::Owned));
+        // diagrams draw text with: KodAct's interface face and its code face.
+        if path == "fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf" {
+            return Ok(Some(Cow::Borrowed(crate::fonts::text_regular())));
         }
-        if path.starts_with("ingot/") {
-            // The mark's faces, drawn from its geometry (`ui/ingot.rs`).
-            return Ok(crate::ui::ingot::face_svg(path).map(Cow::Owned));
+        if path == "fonts/lilex/Lilex-Regular.ttf" {
+            return Ok(Some(Cow::Borrowed(crate::fonts::mono_regular())));
+        }
+        if path.starts_with("kodact/") {
+            // KodAct's mark and wordmark, drawn from the CLI's pixels (`ui/mark.rs`).
+            return Ok(crate::ui::mark::svg_asset(path).map(Cow::Owned));
         }
         if path.starts_with("avatars/") {
             // Sized to the pixels they're drawn at (`avatars.rs`).

@@ -1,4 +1,4 @@
-//! The left sidebar, a sheet on the window's cream like the session beside
+//! The left sidebar, on the window's deepest ground beside the session
 //! it: the project (opening the switcher), New chat, search, the chats
 //! grouped by date (Pinned first), and you with settings at the bottom.
 //! Collapses with Ctrl/⌘B.
@@ -1236,21 +1236,16 @@ pub fn rail(t: &crate::theme::Theme, screen: Screen) -> impl IntoElement {
         )
 }
 
-/// A chat's status, in a fixed slot at its row's end: the strike mark
-/// turning while it works, a breathing accent dot when it needs you, a
+/// A chat's status, in a fixed slot at its row's end: KodAct's mark at
+/// work while it works, a breathing accent dot when it needs you, a
 /// warning when it ended on an error, the link colour's dot when a reply is
 /// unread, a faint ring at rest.
 pub fn status_mark(status: ChatStatus, id: usize, t: &crate::theme::Theme) -> gpui::AnyElement {
     let dot = || div().size(px(7.)).rounded(t.radius.pill);
     let inner: gpui::AnyElement = match status {
-        ChatStatus::Working => super::activity::strike(
-            t.extra.accent,
-            t.extra.mark_heat_white,
-            12.,
-            ("chat-working", id),
-        ),
+        ChatStatus::Working => super::mark::working(12., ("chat-working", id)),
         ChatStatus::NeedsYou => dot()
-            .bg(t.extra.accent)
+            .bg(t.extra.live)
             .with_animation(
                 ("chat-needs", id),
                 Animation::new(Duration::from_millis(1600))

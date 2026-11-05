@@ -80,10 +80,10 @@ Not for: a third value that is really a category (use the focal accent or facet 
         fill="{accent @ 0.15}" stroke="{accent}" stroke-width="1.2"/>
 
 <!-- Its label, bound to the bubble it names -->
-<text data-name="Payments" data-role="label" x="538" y="108" fill="{ink}" font-size="8" font-family="Anthropic Sans Text" text-anchor="middle" letter-spacing="0.06em">PAYMENTS</text>
+<text data-name="Payments" data-role="label" x="538" y="108" fill="{ink}" font-size="8" font-family="KodAct Sans" text-anchor="middle" letter-spacing="0.06em">PAYMENTS</text>
 
 <!-- An axis tick, bound to the number it prints -->
-<text data-tick="x" data-value="300" x="608" y="440" fill="{muted}" font-size="8" font-family="Anthropic Sans Text" text-anchor="middle">300</text>
+<text data-tick="x" data-value="300" x="608" y="440" fill="{muted}" font-size="8" font-family="KodAct Sans" text-anchor="middle">300</text>
 ```
 
 What each binding buys, and what it costs to omit:
@@ -153,10 +153,10 @@ Not for: two variables (that is the parent scatter); comparing distributions acr
 <circle data-value="431" data-name="req-4c1f" cx="942" cy="230" r="4" fill="{accent @ 0.55}" stroke="{accent}" stroke-width="1.2"/>
 
 <!-- Its label, bound to the dot it names -->
-<text data-name="req-4c1f" data-role="label" x="942" y="120" fill="{ink}" font-size="8" font-family="Anthropic Sans Text" text-anchor="middle" letter-spacing="0.06em">REQ-4C1F</text>
+<text data-name="req-4c1f" data-role="label" x="942" y="120" fill="{ink}" font-size="8" font-family="KodAct Sans" text-anchor="middle" letter-spacing="0.06em">REQ-4C1F</text>
 
 <!-- An axis tick, bound to the number it prints -->
-<text data-tick="x" data-value="200" x="480" y="440" fill="{muted}" font-size="8" font-family="Anthropic Sans Text" text-anchor="middle">200</text>
+<text data-tick="x" data-value="200" x="480" y="440" fill="{muted}" font-size="8" font-family="KodAct Sans" text-anchor="middle">200</text>
 ```
 
 What each binding buys, and what it costs to omit:

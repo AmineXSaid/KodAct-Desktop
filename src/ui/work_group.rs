@@ -265,7 +265,6 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
                 super::turning_logo_in(
                     f32::from(t.size.icon_sm),
                     format!("work-turn-{chat}-{msg}-{start}"),
-                    t.extra.live,
                 )
             } else {
                 super::tasks::status_icon(

@@ -19,13 +19,13 @@
 <rect x="X_start" y="ROW_Y+8" width="DURATION_PX" height="24" rx="4"
       fill="{muted @ 0.15}" stroke="{muted}" stroke-width="1"/>
 <text x="X_start+8" y="ROW_Y+25" fill="{ink}" font-size="10" font-weight="600"
-      font-family="Anthropic Sans Text">Task name</text>
+      font-family="KodAct Sans">Task name</text>
 
 <!-- Focal task -->
 <rect x="X_start" y="ROW_Y+8" width="DURATION_PX" height="24" rx="4"
       fill="{accent @ 0.12}" stroke="{accent}" stroke-width="1"/>
 <text x="X_start+8" y="ROW_Y+25" fill="{accent}" font-size="10" font-weight="600"
-      font-family="Anthropic Sans Text">Key task</text>
+      font-family="KodAct Sans">Key task</text>
 ```
 
 Duration in pixels: `(end_week - start_week) × pitch`. Pitch = timeline_width / total_weeks.

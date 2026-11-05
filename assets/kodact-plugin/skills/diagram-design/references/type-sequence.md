@@ -47,7 +47,7 @@ Use a rectangular **frame** that spans only the lifelines participating in the b
 <rect x="X" y="Y" width="40" height="16" rx="2"
       fill="{paper}" stroke="{ink @ 0.22}" stroke-width="1"/>
 <text x="X+20" y="Y+12" fill="{muted}" font-size="8"
-      font-family="Anthropic Sans Text" text-anchor="middle"
+      font-family="KodAct Sans" text-anchor="middle"
       letter-spacing="0.12em">ALT</text>
 ```
 
@@ -66,7 +66,7 @@ Dark mode: the roles invert with the skin, so only the frame fill changes, to `i
 ```svg
 <!-- Guard: left-aligned inside the frame, mono -->
 <text x="X+12" y="GUARD_Y" fill="{muted}" font-size="8"
-      font-family="Anthropic Sans Text" letter-spacing="0.04em">[token valid]</text>
+      font-family="KodAct Sans" letter-spacing="0.04em">[token valid]</text>
 
 <!-- alt region divider -->
 <line x1="X+8" y1="DIV_Y" x2="X+W-8" y2="DIV_Y"

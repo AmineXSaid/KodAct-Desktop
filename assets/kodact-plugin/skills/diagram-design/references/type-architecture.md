@@ -60,7 +60,7 @@ Group 2+ nodes that serve the same tier or trust boundary with a zone rect — d
       fill="{ink @ 0.02}" stroke="{ink @ 0.10}" stroke-width="0.8"/>
 <rect x="{label_x}" y="{y+4}" width="{label_w}" height="12" rx="2" fill="{paper}"/>
 <text x="{label_cx}" y="{y+13}" fill="{soft}" font-size="7"
-      font-family="Anthropic Sans Text" text-anchor="middle" letter-spacing="0.14em">LAYER</text>
+      font-family="KodAct Sans" text-anchor="middle" letter-spacing="0.14em">LAYER</text>
 ```
 
 Rules:

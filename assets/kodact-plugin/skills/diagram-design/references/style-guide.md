@@ -10,7 +10,7 @@ notes: KodAct desktop's own skin, bundled with KodAct
 
 **The single source of truth for colors, typography, and tokens.** Every diagram draws from this — not from hex values inlined in other reference files. If you want to change the visual skin of Diagram Design, change this file.
 
-This copy ships with KodAct in KodAct's own skin: warm paper, graphite ink, one blue accent, Anthropic Sans, Anthropic Sans and Anthropic Sans, so a diagram reads as part of the app. It is the active `kodact` profile; swap these values (or run [`onboarding.md`](onboarding.md)) and every new diagram inherits the new skin without touching any type-specific logic.
+This copy ships with KodAct in KodAct's own skin: warm paper, graphite ink, one blue accent, KodAct Sans, with KodAct Mono for code, so a diagram reads as part of the app. It is the active `kodact` profile; swap these values (or run [`onboarding.md`](onboarding.md)) and every new diagram inherits the new skin without touching any type-specific logic.
 
 To generate your own from a website URL, see [`onboarding.md`](onboarding.md).
 
@@ -96,25 +96,25 @@ A self-contained palette for the terminal-window primitive (see [primitive-termi
 
 ## Typography
 
-One family, Anthropic Sans, and nothing else: KodAct draws every diagram in
+One family, KodAct Sans, and nothing else: KodAct draws every diagram in
 it (it rewrites any other `font-family` before drawing), so naming another
 face only makes the file disagree with what is seen.
 
 | Role | Face | Size | Weight | Use |
 |---|---|---|---|---|
-| `title` | Anthropic Sans Display | 1.75rem | 400 | Page H1 |
-| `node-name` | Anthropic Sans Text | 12px | 600 | Human-readable labels |
-| `sublabel` | Anthropic Sans Text | 9px | 400 | Port, protocol, URL, field type |
-| `eyebrow` | Anthropic Sans Text | 7–8px | 500, tracked 0.18em, uppercase | Type tags, axis labels |
-| `arrow-label` | Anthropic Sans Text | 8px | 400, tracked 0.06em | Arrow annotations |
-| `callout` | Anthropic Sans Text *italic* | 14px | 400 | Editorial asides only |
+| `title` | KodAct Sans | 1.75rem | 400 | Page H1 |
+| `node-name` | KodAct Sans | 12px | 600 | Human-readable labels |
+| `sublabel` | KodAct Sans | 9px | 400 | Port, protocol, URL, field type |
+| `eyebrow` | KodAct Sans | 7–8px | 500, tracked 0.18em, uppercase | Type tags, axis labels |
+| `arrow-label` | KodAct Sans | 8px | 400, tracked 0.06em | Arrow annotations |
+| `callout` | KodAct Sans *italic* | 14px | 400 | Editorial asides only |
 
 ### Font stack
 
 ```css
---font-sans: 'Anthropic Sans Text';
---font-mono: 'Anthropic Sans Text';
---font-serif: 'Anthropic Sans Display';
+--font-sans: 'KodAct Sans';
+--font-mono: 'KodAct Sans';
+--font-serif: 'KodAct Sans';
 ```
 
 Write exactly these, with no fallback list and no font `<link>` or
@@ -124,7 +124,7 @@ than a different face.
 
 ### Labels in other scripts
 
-Anthropic Sans has no Hangul or Han. Keep the same `font-family`; the
+KodAct Sans has no Hangul or Han. Keep the same `font-family`; the
 viewer's system draws those glyphs. Measure per character: every wide or
 full-width character costs 1em, every other character its Latin advance
 (0.60em), nonspacing marks nothing; sum, multiply by the font size, add
@@ -175,7 +175,7 @@ Four options:
 - **Contrast**: every text token (`ink`, `muted`, `soft`, `link`, and `accent`) must clear 4.5:1 on `paper`, in both skins. See the [contrast contract](#contrast-contract); `scripts/verify-contrast.py` checks it.
 - **One accent**: pick one color for `accent`. Two accents erases the focal signal.
 - **No rainbow palette**: if your brand ships 8 colors, pick 3 (paper, ink, accent). The rest become `muted` variants.
-- **Serif + sans + mono**: three families, not more. If brand typography is all sans, keep Anthropic Sans for `title` and `callout` anyway — the contrast is load-bearing.
+- **Serif + sans + mono**: three families, not more. If brand typography is all sans, keep KodAct Sans for `title` and `callout` anyway — the contrast is load-bearing.
 - **Paper is warm-neutral, not pure white**: pure white turns the design sterile. Pick a cream, bone, or light grey with a hint of warmth.
 - **Dot pattern is optional, not default**: the 22×22 dot pattern is an opt-in "dotted paper" variant (good for long-form editorial hero diagrams). The default background is a clean `paper` fill, no pattern. When the pattern is enabled, it should sit at ~10% opacity of `ink` on `paper` — visible but quiet.
 - **Container is clean by default**: the diagram sits directly on the page paper, no secondary container background or border. A framed variant (`paper-2` bg + `rule` border + 8px radius + padding) is available as an opt-in for card-heavy layouts, but don't reach for it by default — the extra chrome fights the figure.

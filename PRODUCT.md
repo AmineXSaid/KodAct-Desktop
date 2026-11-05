@@ -45,7 +45,9 @@ instructions, knowledge and memory.
   radius and font comes from `src/theme.rs` tokens (`.interface-design/system.md`
   and `DESIGN.md` are generated from it). Web tooling (CSS detectors, browser
   live mode) does not apply.
-- Eleven themes, each in light and dark; fonts are bundled (OFL).
+- One look, KodAct's, in dark (the default) and light; its fonts are carried
+  in the app (KodAct Sans and KodAct Mono, cut from Host Grotesk and JetBrains
+  Mono, OFL).
 - Dependencies must be Apache-2.0, MIT, BSD, ISC or similar; nothing copied
   from GPL code.
 - Terminology: chat, reply, project, folder, endpoint, model, mode (Manual,
@@ -54,11 +56,14 @@ instructions, knowledge and memory.
 
 ## Brand Commitments
 
-- Quality reference: Claude Desktop's calm and restraint, with KodAct's own
-  identity (its mark, palette and themes), not a copy of Claude.
-- Nothing in the current visual identity is binding: the ingot mark, the
-  wordmark, the theme set and the home screen's dots may all change when it
-  serves the product.
+- One brand with KodAct CLI: its identity is the desktop's (ink, paper and
+  lime from the CLI's `tui/palette.rs`; the lime tile with a cursor bar and
+  a run triangle; the name in the CLI's pixel letters, "Kod" in ink or
+  paper and "Act" in lime). A change to one is a change to both.
+- Nothing borrowed from Claude's look or type: no cream and terracotta, no
+  Anthropic Sans. Calm and restraint are still the bar, judged on KodAct's
+  own terms.
+- Dark first; light stays whole.
 - Voice: plain words, the product's own terms; controls name their action,
   errors name the problem and the way out.
 

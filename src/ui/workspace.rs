@@ -461,7 +461,7 @@ impl Workspace {
                                 .gap(t.space.sm)
                                 .pr(t.space.sm)
                                 .child(toggle)
-                                .child(super::ingot::wordmark(15., &t)),
+                                .child(super::mark::wordmark(14., &t)),
                         )
                     } else {
                         d.child(toggle)
@@ -853,7 +853,7 @@ impl Render for Workspace {
         );
         let dock = self.dock(dock_w, dock_leaving, cx);
 
-        // The session is a sheet on the cream: 4px corners, paper grain,
+        // The session is a sheet on the window's ground: 4px corners, grain,
         // a gutter to its right and below.
         let main = div()
             .flex_1()

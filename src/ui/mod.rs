@@ -40,12 +40,11 @@ pub mod file_icon_map;
 pub mod file_mark;
 pub mod files_pane;
 pub mod find_bar;
-mod forge_cube;
 pub mod goal_bar;
 pub mod guide;
 pub mod hooks_editor;
-pub mod ingot;
 mod lens;
+pub mod mark;
 pub mod markdown;
 pub mod marketplaces;
 pub mod mcp_editor;
@@ -230,27 +229,21 @@ pub fn icon(path: &'static str, size: Pixels, color: Hsla) -> Svg {
     svg().path(path).size(size).flex_none().text_color(color)
 }
 
-/// The KodAct logo, the ingot (`ingot.rs`), `size` px square.
-pub fn logo(size: f32) -> ingot::Ingot {
-    ingot::mark(size)
+/// The KodAct mark, the lime tile (`mark.rs`), `size` px square.
+pub fn logo(size: f32) -> mark::Tile {
+    mark::tile(size)
 }
 
-/// The KodAct logo turning while KodAct works, a quarter turn at a time.
-/// Reduced motion: the logo at rest.
+/// The KodAct mark at work: its cursor bar and run triangle take turns.
+/// Reduced motion: the mark at rest.
 pub fn turning_logo(size: f32, id: impl Into<gpui::ElementId>) -> gpui::AnyElement {
-    ingot::turning(size, id)
+    mark::working(size, id)
 }
 
-/// The KodAct logo turning, painted in `color` (lit from above): the mark of
-/// work in progress in the conversation, in the theme's live colour.
-pub fn turning_logo_in(
-    size: f32,
-    id: impl Into<gpui::ElementId>,
-    color: gpui::Hsla,
-) -> gpui::AnyElement {
-    // KodAct for VS Code's working cube: stock struck true, a quarter turn a
-    // beat, drawn a little larger than an icon so its voxels read.
-    forge_cube::working(size * 1.25, id, color)
+/// The KodAct mark at work, the size of the icon it stands beside: work in
+/// progress in the conversation.
+pub fn turning_logo_in(size: f32, id: impl Into<gpui::ElementId>) -> gpui::AnyElement {
+    mark::working(size, id)
 }
 
 /// Your avatar, drawn `size` px square at this screen's density.

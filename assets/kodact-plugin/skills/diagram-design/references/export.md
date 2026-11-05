@@ -56,7 +56,7 @@ That script is the source of truth for the transform below (CSS carry-forward, d
    - **Drop** page chrome: `*`, `html`, `body`, `main`, `h1`/`h2`/`h3`, `p`, `.frame`, `.eyebrow`, `.summary`, `.card(s)`, `.footer`, `.header`, and the bare `svg { min-width: … }` layout rule. Only the bare `svg` selector is layout; `svg .zone` and `svg text` are diagram rules (see above). Those must not follow a fragment.
    - Carry `color` and `font-family` from the dropped `body` rule onto `#<slug>-root`. SVG content inherits both: `stroke="currentColor"` reads `color`, and text without its own font rule reads `font-family`.
    - **XML-escape** the carried CSS text (`&` → `&amp;`, `<` → `&lt;`) before inserting it into the SVG. Rule bodies can contain XML-sensitive characters (e.g. `content: "R&D"`); a bare `&` makes the standalone file fail to parse.
-5. Load no font: the SVG names Anthropic Sans and makes no network request. Merge the carried rules into one `<defs>` `<style>` (don't add a second `<defs>`); a new `<defs>` goes after the leading `<title>` and `<desc>` so the first-child accessible-title contract holds.
+5. Load no font: the SVG names KodAct Sans and makes no network request. Merge the carried rules into one `<defs>` `<style>` (don't add a second `<defs>`); a new `<defs>` goes after the leading `<title>` and `<desc>` so the first-child accessible-title contract holds.
      ```svg
      <defs>
        <style>

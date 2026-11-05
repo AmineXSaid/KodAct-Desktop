@@ -64,11 +64,11 @@ fn render() -> String {
     );
 
     let _ = writeln!(w, "## Direction\n");
-    let _ = writeln!(w, "**Personality:** calmly smooth: a warm editorial workspace, confident and unhurried, closer to a printed quarterly than a dashboard (after the Anchor style reference).\n");
-    let _ = writeln!(w, "**Foundation:** KodAct Ember. Warm paper by day: the window and sidebar #ebe8e1, the session a sheet of #f7f5f1 on it, cards white on that. Warm graphite at night: #1b1a19, #242322, cards #2e2d2b. One ink carries the type. One colour, ember copper (#b4532a; #e2895b at night): the decisive action, links, a switch that is on, the mark's top, a waiting dot. Inline code in coral on a faint wash. Everything else is neutral; colour otherwise only for meaning (modes, status).\n");
+    let _ = writeln!(w, "**Personality:** KodAct, as KodAct CLI draws it: a precise, quick working tool for long agent sessions, calm because nothing performs, sure because state is never in doubt. One brand from terminal to window.\n");
+    let _ = writeln!(w, "**Foundation:** ink, paper and lime (KodAct CLI's `tui/palette.rs`). Ink at night, the default: the title bar and sidebar #0f1113, the session #15181b, cards #1c2024; paper text in two voices (yours #f2f0e9, KodAct's a softer #d9d7cf). Paper by day: #e9e8e2, #f6f5f1, cards #fdfdfb, ink text. Lime #c6ff3d is KodAct acting and what needs you: as a fill (Send, the primary button, the mark's tile; #b5ea2c by day) it carries ink; as a line or a word (what is live, links, a switch that is on) it is olive #4a7200 on paper. Teal and violet carry structure (modes, skills, memory, code), peach marks code in prose; green, red and amber only mean done, failed and a warning.\n");
     let _ = writeln!(w, "**Depth:** nearly flat. Hairlines inside cards; the session and the user's message lift on paper grain (three 1px shadows at 6/4/1% ink); popovers and the permission card a touch more.\n");
-    let _ = writeln!(w, "**Shape:** two shapes. Everything you press is a pill (buttons, chips, icon buttons, the new-chat and needs-you pills); everything that holds content is 4px (cards, rows, menus, fields, the composer, the session).\n");
-    let _ = writeln!(w, "**Type:** Anthropic Sans only, the Text cut for every word (code included) and the Display cut for the greeting and headings: 400 for text, 500 for labels, 600 for headings and buttons. Small labels in sentence case, never uppercase and never above a heading. The app bundles no font; diagrams are redrawn in it whatever they name.\n");
+    let _ = writeln!(w, "**Shape:** two shapes, and the mark's. Everything you press is a pill (buttons, chips, icon buttons); everything that holds content is 4px (cards, rows, menus, fields, the composer, the session); Send and the mark are tiles, squares with their corners rounded a sixth, on a grid of square pixels where they are large.\n");
+    let _ = writeln!(w, "**Type:** KodAct's own open faces, carried in the app (OFL, `assets/fonts/`): KodAct Sans (KodAct's cut of Host Grotesk) for every word, 400 for text, 500 for labels, 600 for headings and buttons, its squared terminals kin to the pixel letters; KodAct Mono (its cut of JetBrains Mono, without the arrow ligatures) for code, paths and keys. Named KodAct's own, so a copy installed on the computer is never drawn in their place. The wordmark is not a font: it is the CLI's pixel letters, \"Kod\" in the strong ink and \"Act\" in lime. Small labels in sentence case, never uppercase and never above a heading; diagrams are redrawn in KodAct Sans whatever they name.\n");
 
     let _ = writeln!(w, "## Tokens\n");
     let sp = &l.space;
@@ -227,7 +227,7 @@ fn render() -> String {
     }
     let _ = writeln!(w);
 
-    let _ = writeln!(w, "### Surfaces\nThe cream stack: the title bar and the sidebar share the canvas, the session steps up from it, cards step up again (`palette_check.rs`).\n");
+    let _ = writeln!(w, "### Surfaces\nThe ink stack (paper by day): the title bar and the sidebar share the deepest ground, the session steps up from it, cards step up again (`palette_check.rs`).\n");
     let _ = writeln!(
         w,
         "| Token | Light | L | Dark | L | Role |\n|---|---|---|---|---|---|"
@@ -265,8 +265,8 @@ fn render() -> String {
     }
     let _ = writeln!(w);
 
-    let _ = writeln!(w, "### Theme\nOne look, Calmly smooth, in light and dark (`window.json` keeps the mode). Every face is Anthropic Sans: Text for every word (interface, replies, code, the terminal, diagrams), Display for the large lines (`fonts.rs`). It passes `palette_check.rs` in both modes.\n");
-    let (a, b) = (Theme::of(Look::Calm, false), Theme::of(Look::Calm, true));
+    let _ = writeln!(w, "### Theme\nOne look, KodAct's, in dark (the default) and light (`window.json` keeps the mode). KodAct Sans for words, KodAct Mono for code (`fonts.rs`). It passes `palette_check.rs` in both modes.\n");
+    let (a, b) = (Theme::of(Look::KodAct, false), Theme::of(Look::KodAct, true));
     let (r, z) = (&a.radius, &a.size);
     let _ = writeln!(
         w,
@@ -321,7 +321,7 @@ fn render() -> String {
     );
     // Each row: the token, then the pair whose contrast is shown.
     type Pick = fn(&Theme) -> Hsla;
-    let rows: [(&str, Pick, Pick, Pick, &str); 27] = [
+    let rows: [(&str, Pick, Pick, Pick, &str); 25] = [
         (
             "text_strong",
             |t| t.colors.text_strong,
@@ -383,14 +383,14 @@ fn render() -> String {
             |t| t.extra.accent,
             |t| t.extra.accent_fg,
             |t| t.extra.accent,
-            "send, the new-chat mark, accent dots (white icon on it)",
+            "the brand as a fill: Send, the primary button, the new-chat mark (ink on it)",
         ),
         (
             "fill",
             |t| t.extra.fill,
             |t| t.extra.fill_fg,
             |t| t.extra.fill,
-            "filled buttons: ink on paper, paper on charcoal",
+            "filled buttons: KodAct's lime tile under ink, in both modes",
         ),
         (
             "toggle_on",
@@ -404,7 +404,7 @@ fn render() -> String {
             |t| t.extra.mark_top,
             |t| t.extra.mark_top,
             |t| t.extra.stage,
-            "the ingot mark's top face (`ui/ingot.rs`)",
+            "the mark's tile (`ui/mark.rs`)",
         ),
         (
             "page_ink",
@@ -417,43 +417,29 @@ fn render() -> String {
             "mark_left",
             |t| t.extra.mark_left,
             |t| t.extra.mark_left,
-            |t| t.extra.stage,
-            "the ingot's left face",
+            |t| t.extra.mark_top,
+            "the ink of the mark's cursor bar and run triangle, on its tile",
         ),
         (
             "mark_right",
             |t| t.extra.mark_right,
             |t| t.extra.mark_right,
             |t| t.extra.stage,
-            "the ingot's right face",
+            "the mark's shadow, one pixel down and right: its edge on paper",
         ),
         (
-            "mark_heat_white",
-            |t| t.extra.mark_heat_white,
-            |t| t.extra.mark_heat_white,
+            "brand_shadow",
+            |t| t.extra.brand_shadow,
+            |t| t.extra.brand_shadow,
             |t| t.extra.stage,
-            "the ingot white hot from the forge (onboarding); never at rest",
+            "the pixel wordmark's shadow: dark olive on ink, the tile's lime on paper",
         ),
         (
-            "mark_heat",
-            |t| t.extra.mark_heat,
-            |t| t.extra.mark_heat,
-            |t| t.extra.stage,
-            "the ingot's orange glow as it cools, and a strike's flare",
-        ),
-        (
-            "mark_heat_ember",
-            |t| t.extra.mark_heat_ember,
-            |t| t.extra.mark_heat_ember,
-            |t| t.extra.stage,
-            "the ingot's ember red as it cools",
-        ),
-        (
-            "mark_heat_iron",
-            |t| t.extra.mark_heat_iron,
-            |t| t.extra.mark_heat_iron,
-            |t| t.extra.stage,
-            "the ingot's dark iron, last before its own colours",
+            "live",
+            |t| t.extra.live,
+            |t| t.extra.live,
+            |t| t.colors.surface,
+            "what is live: dots that need you, the shimmer's peak; lime on ink, olive on paper",
         ),
         (
             "fill_danger",
@@ -528,13 +514,13 @@ fn render() -> String {
     let _ = writeln!(w, "### Contrast floors\n- Meaningful text: 4.5:1 on every surface and hover wash.\n- Icons, mode edges, the send arrow: 3:1.\n- Placeholders and disabled text (`text_subtle`): 2.5:1, never body copy.\n- Hairlines: 1.15:1 on every surface.\n- Surface steps: at least 0.02 OKLab L apart, each within 0.004 of the mean step.\n");
 
     let _ = writeln!(w, "## Patterns\n");
-    let _ = writeln!(w, "### Buttons (`ui/button.rs`)\nOne family; every control takes keyboard focus (a `primary` edge shows for the keyboard only), names itself to assistive technology, and swallows clicks while disabled or loading.\n- Primary: {}px tall, padding 0 14px, radius {}px, `fill` with `fill_fg`, 500 weight. One per surface.\n- Secondary and Outlined: `surface`, 1px `border_strong`, `hover` wash.\n- Ghost: clear until hovered. Danger: `fill_danger`, white.\n- Icon: {}px square, radius {}px, a {}px icon in `text_muted`; outlined squares {}px at {}px radius.\n- Send: {}px, radius {}px, `accent` with a white arrow; `accent_soft` with nothing to send; Stop is an ink ring round a square.\n- Switch: {}x{}px pill, {}px thumb sliding over {}ms; `toggle_on` when on, `border_strong` when off.\n- Segmented: a `sunk` track, radius {}px; the chosen segment raised onto `surface` at {}px.\n", px(z.button_h), px(r.button), px(z.hit), px(r.button), px(z.icon), px(z.hit_lg), px(r.control), px(z.hit_lg), px(r.control), px(z.switch_w), px(z.switch_h), px(z.switch_thumb), z.pop_in_ms, px(r.button), px(r.segment));
+    let _ = writeln!(w, "### Buttons (`ui/button.rs`)\nOne family; every control takes keyboard focus (a `primary` edge shows for the keyboard only), names itself to assistive technology, and swallows clicks while disabled or loading.\n- Primary: {}px tall, padding 0 14px, radius {}px, `fill` with `fill_fg`, 500 weight. One per surface.\n- Secondary and Outlined: `surface`, 1px `border_strong`, `hover` wash.\n- Ghost: clear until hovered. Danger: `fill_danger`, white.\n- Icon: {}px square, radius {}px, a {}px icon in `text_muted`; outlined squares {}px at {}px radius.\n- Send: {}px, the mark's tile (corners a sixth of it, beside {}px pills), `accent` under the ink run triangle; `accent_soft` with nothing to send; Stop: an ink square on a soft tile.\n- Switch: {}x{}px pill, {}px thumb sliding over {}ms; `toggle_on` when on, `border_strong` when off.\n- Segmented: a `sunk` track, radius {}px; the chosen segment raised onto `surface` at {}px.\n", px(z.button_h), px(r.button), px(z.hit), px(r.button), px(z.icon), px(z.hit_lg), px(r.control), px(z.hit_lg), px(r.control), px(z.switch_w), px(z.switch_h), px(z.switch_thumb), z.pop_in_ms, px(r.button), px(r.segment));
     let _ = writeln!(w, "### Composer\n- Width: up to {}px, centred\n- One unit: a white box (radius {}px, 1px `border`, `border_strong` while focused, tinted by the mode when one is set) resting in a `sunk` tray\n- Text: {}px; the outlined + bottom left and Send bottom right, {}px from the box's edges\n- The tray: the project, the context ring, the model and the mode as quiet {}px selectors: a 14px icon, the label, a chevron that flips while open; washed on hover, raised onto `surface` with a hairline while open\n", px(z.composer_width), px(z.composer_radius), px(tx.body), px(sp.snug), px(z.button_sm));
     let _ = writeln!(w, "### Card Default\n- Border: 1px `border`\n- Padding: {}px\n- Radius: {}px\n- Background: `surface`\n- Usage: tool calls, file cards, code blocks\n", px(sp.xl), px(r.card));
     let _ = writeln!(w, "### Popover\n- Border: 1px `border`, radius {}px, padding {}px\n- Background: `surface`, with the two-layer popover shadow\n- Usage: menus, pickers, the command palette\n", px(r.card), px(sp.xs));
     let _ = writeln!(w, "### File Card\n- A file KodAct made, in its reply: up to 440px, `surface`, 1px `border`, radius {}px, padding {}px\n- A 36x44 page tile (radius {}px, concentric with the card) previews it, its type in mono `primary`\n- Title 600 `text_strong`; \"Document · MD\" caption `text_muted`; a bordered Download button\n- Open: the edge turns `primary` at 60%\n", px(r.card), px(sp.sm), px(r.small));
     let _ = writeln!(w, "### Document Pane\n- Beside the conversation, half the session, at least {}px; `surface` with a hairline on its left\n- Header 48px: file icon, title, type; Copy, Download, Close as {}px quiet buttons\n- Text {}px at {} leading, lines up to {}px; the title in the display serif at {}px\n- Enters with a 220ms ease-out, fading in from 16px to the right; Escape closes it\n", px(z.doc_pane), px(z.control), px(z.doc_text), z.line_height_doc, px(z.doc_measure), px(z.doc_title));
-    let _ = writeln!(w, "### Sidebar Row\n- Height: {}px, radius {}px\n- Current: the `active` wash, 500 weight, no border\n- New chat: a round `accent` mark with a white +\n- Collapsed: a {}px rail of icon buttons for the same actions\n- Group labels: {}px caption\n", px(z.row), px(r.button), px(z.rail), px(tx.caption));
+    let _ = writeln!(w, "### Sidebar Row\n- Height: {}px, radius {}px\n- Current: the `active` wash, 500 weight, no border\n- New chat: a round `accent` mark with an ink +\n- Collapsed: a {}px rail of icon buttons for the same actions\n- Group labels: {}px caption\n", px(z.row), px(r.button), px(z.rail), px(tx.caption));
 
     let _ = writeln!(w, "## Decisions\n");
     let _ = writeln!(
@@ -542,14 +528,19 @@ fn render() -> String {
         "| Decision | Rationale | Date |\n|----------|-----------|------|"
     );
     for (what, why, when) in [
+        ("KodAct CLI's identity", "Forge became KodAct, and the desktop takes the CLI's own identity in place of Forge's forge-and-ember world: ink, paper and lime (`tui/palette.rs`), the cursor-and-run tile and the pixel wordmark (`tui/brand.rs`). Lime fills carry ink; where lime would be a line or a word on paper it is olive.", "2026-11-05"),
+        ("Dark first", "KodAct is mostly seen in a dark terminal, and lime is at full strength on ink. Light stays whole, with the CLI's olive and a lime shadow under the wordmark (where the CLI's sage went flat).", "2026-11-05"),
+        ("KodAct Sans and KodAct Mono, carried", "KodAct's own open faces replace Anthropic Sans, which was Anthropic's and not ours to ship: cuts of Host Grotesk for words and JetBrains Mono for code (without its arrow ligatures), named KodAct's so an installed copy never stands in.", "2026-11-05"),
+        ("The mark at work", "One working mark everywhere (the hammer, the turning ingot and the VS Code cube are gone): the tile's cursor bar and run triangle take turns, code then act. Send is the run triangle; the working words shimmer up to lime, as in the CLI.", "2026-11-05"),
+        ("An opener under a second", "The forging film (2.6s each launch, 8.3s the first) is replaced by the mark's beat and the name sliding out beside it, then a fade: 0.9s, on the theme's own ground, skippable.", "2026-11-05"),
         ("One colour, moss, not terracotta", "The reference rations one warm orange to the primary action; KodAct keeps the rationing and takes the reference's own moss, calmer on cream and kin to the mark.", "2026-10-18"),
         ("Dusty blue, not moss", "Moss read as too green beside the cream; a dusty blue from the Slate theme's family, warmed for cream, keeps the same rationing and contrast (5.4:1 on the session).", "2026-10-19"),
         ("Paper on paper", "The session is a 4px sheet on the cream canvas with paper grain; the title bar and sidebar have no dividers, the sheet's edge is the split.", "2026-10-18"),
         ("Pills to press, 4px to hold", "The contrast between the two shapes is the system: it says at a glance what acts and what holds.", "2026-10-18"),
         ("Ink pills for the loud neutrals", "New chat and needs-you are ink pills; the accent is kept for the one decision in front of you (Allow once, Send).", "2026-10-18"),
-        ("Anthropic Sans only", "One family everywhere, in its Text and Display cuts: the interface, replies, code, the terminal and diagrams. No other face is bundled or named.", "2026-10-26"),
+        ("Anthropic Sans only (since replaced)", "One family everywhere, in its Text and Display cuts: the interface, replies, code, the terminal and diagrams.", "2026-10-26"),
         ("One look", "The theme picker and its eleven other looks are gone; Calmly smooth, light and dark, is the app's one look.", "2026-10-26"),
-        ("KodAct Ember", "Warm paper and warm graphite, the sidebar a step deeper than the session, and one copper heat for the action, the current state and links: KodAct's own colour, as calm as Claude Code's.", "2026-10-23"),
+        ("Forge Ember (since replaced)", "Warm paper and warm graphite, the sidebar a step deeper than the session, and one copper heat for the action, the current state and links.", "2026-10-23"),
         ("A neutral wash for the open row", "The accent stays for the action; the open chat and the open screen lift by a grey wash.", "2026-10-23"),
         ("Composer at 620px", "A comfortable measure for a prompt, the same in a chat and on the welcome page.", "2026-10-11"),
         ("Composer on the reading column", "In a chat the composer takes the 760px column the reply is read in, so the two line up; on the welcome page it keeps its own measure.", "2026-10-23"),
@@ -575,7 +566,7 @@ fn render_design() -> String {
     let _ = writeln!(w, "name: KodAct");
     let _ = writeln!(
         w,
-        "description: The desktop app for KodAct CLI: a calm workspace for long agent sessions"
+        "description: The desktop app for KodAct CLI: long agent sessions in KodAct's ink, paper and lime"
     );
     let _ = writeln!(w, "colors:");
     for (name, light, dark) in [
@@ -622,8 +613,9 @@ fn render_design() -> String {
     let r = &l.radius;
     let _ = writeln!(
         w,
-        "rounded:\n  button: \"{}px\"\n  card: \"{}px\"\n  field: \"{}px\"\n  composer: \"{}px\"",
+        "rounded:\n  button: \"{}px\"\n  pill: \"{}px\"\n  card: \"{}px\"\n  field: \"{}px\"\n  composer: \"{}px\"",
         px(r.button),
+        px(r.pill),
         px(r.card),
         px(r.field),
         px(z.composer_radius)
@@ -631,20 +623,20 @@ fn render_design() -> String {
     let sp = &l.space;
     let _ = writeln!(w, "spacing:\n  xs: \"{}px\"\n  sm: \"{}px\"\n  md: \"{}px\"\n  lg: \"{}px\"\n  xl: \"{}px\"\n  xxl: \"{}px\"", px(sp.xs), px(sp.sm), px(sp.md), px(sp.lg), px(sp.xl), px(sp.xxl));
     let _ = writeln!(w, "components:");
-    let _ = writeln!(w, "  button-primary:\n    backgroundColor: \"{{colors.accent}}\"\n    rounded: \"{{rounded.button}}\"");
+    let _ = writeln!(w, "  button-primary:\n    backgroundColor: \"{{colors.accent}}\"\n    textColor: \"{{colors.ink}}\"\n    rounded: \"{{rounded.pill}}\"");
     let _ = writeln!(w, "  user-message:\n    backgroundColor: \"{{colors.surface}}\"\n    rounded: \"{{rounded.card}}\"\n    padding: \"{}px {}px\"", px(sp.sm + gpui::px(2.)), px(sp.lg));
     let _ = writeln!(w, "  quiet-line:\n    textColor: \"{{colors.ink-muted}}\"\n    typography: \"{{typography.ui}}\"\n    height: \"{}px\"", px(z.quiet_line));
     let _ = writeln!(w, "---\n");
     let _ = writeln!(w, "# Design: KodAct\n");
     let _ = writeln!(w, "> Generated from `src/theme.rs` by `src/system_md.rs`, with `.interface-design/system.md`. Change a token in theme.rs, then run `UPDATE_SYSTEM_MD=1 cargo test system_md`. The product record is `PRODUCT.md`; the theme above is the default one, light and dark, and every other theme keeps the same roles.\n");
-    let _ = writeln!(w, "## Overview\n\nAn Operate surface: an app for long agent sessions, judged against Claude Desktop's calm. The reply is the hero; everything around it (the agent's activity, the chrome, the menus) is quieter than the words. Restraint, precision and one accent, not decoration.\n");
-    let _ = writeln!(w, "## Colors\n\n- **Neutrals** carry everything: a canvas, a slightly different sidebar layer, a surface for the few things that hold content (your messages, an opened change, a card that needs you), and five inks from strong to subtle.\n- **The accent** is only for the primary action, the current selection and state (a waiting dot, a switch that is on). Never for decoration or an inactive control.\n- **Status colours** (success, danger, warning) only mean status: a failed call, a stopped one, a change's size.\n- Text holds 4.5:1 against its ground in every theme (`src/palette_check.rs`).\n");
-    let _ = writeln!(w, "## Typography\n\nOne sans for interface and prose ({}), in regular and semibold; replies at {}px on {:.0}px lines. Code in {}; a name in prose (a file, a command) in {} on a faint neutral wash, never coloured. Small text is sentence case: no uppercase labels and no label above a heading.\n", l.font_sans, px(z.chat_text), f32::from(z.chat_text) * z.line_height_chat, l.font_mono, l.font_code_inline);
+    let _ = writeln!(w, "## Overview\n\nAn Operate surface: an app for long agent sessions, in KodAct CLI's identity: ink, paper and lime, the cursor-and-run tile, the pixel wordmark. The reply is the hero; everything around it (the agent's activity, the chrome, the menus) is quieter than the words. Precise, quick, one brand colour; nothing borrowed from Claude's look.\n");
+    let _ = writeln!(w, "## Colors\n\n- **Neutrals** carry everything: ink grounds stepping up from the sidebar to the session to cards (paper ones by day), and five inks from strong to subtle; your words a step brighter than KodAct's.\n- **Lime** is KodAct acting and what needs you: the primary action and Send (a lime fill under ink), what is live (the mark at work, a waiting dot, the shimmer's peak), links and a switch that is on. On paper, lime that would be a line or a word is olive.\n- **Teal and violet** carry structure (modes, skills, memory, code tokens); **peach** marks a name in prose.\n- **Status colours** (success, danger, warning) only mean status: a failed call, a stopped one, a change's size.\n- Text holds 4.5:1 against its ground in both modes (`src/palette_check.rs`).\n");
+    let _ = writeln!(w, "## Typography\n\nOne sans for interface and prose ({}), in regular and semibold; replies at {}px on {:.0}px lines. Code in {}; a name in prose (a file, a command) in {}, in peach on a faint wash. Small text is sentence case: no uppercase labels and no label above a heading.\n", l.font_sans, px(z.chat_text), f32::from(z.chat_text) * z.line_height_chat, l.font_mono, l.font_code_inline);
     let _ = writeln!(w, "## Layout\n\nThe transcript and the composer share one {}px column and one edge. Paragraphs {}px apart; tight groups, generous separation. The sidebar is {}px.\n", px(z.column), px(sp.md), px(z.sidebar));
     let _ = writeln!(w, "## Elevation & Depth\n\nNearly flat. Lift (`elevation_grain`) only for what holds content you act on: the composer, a card that needs you; popovers a touch more. No glows, no hard offset shadows.\n");
     let _ = writeln!(w, "## Shapes\n\nCorners from the tokens above; one radius per role. No coloured edge over 1px on cards or rows: a selected row is a soft fill.\n");
-    let _ = writeln!(w, "## Components\n\n- **Activity** (tool calls, runs of calls, thinking, answers): quiet lines in the muted ink, {}px high, no icons for what worked; opened, steps indent under a 2px neutral rule.\n- **Your message:** a filled bubble without a frame.\n- **Cards that need you** (permission, question): a lifted card; the primary action in the accent, the rest quiet.\n- **Menus and popovers:** one style (radius, padding, row height, shadow) from the tokens.\n", px(z.quiet_line));
-    let _ = writeln!(w, "## Do's and Don'ts\n\n- Do let the reply be the loudest thing on screen.\n- Do say what happened in words (\"Couldn't write Cargo.toml\"), not only with an icon.\n- Don't put a kicker or eyebrow above a heading.\n- Don't use mono as a technical costume: mono is for code, paths in changes, and data.\n- Don't use colour for what isn't primary, selected or a state.\n- Don't add motion that isn't a state change; transitions stay within 150 to 250ms.");
+    let _ = writeln!(w, "## Components\n\n- **Activity** (tool calls, runs of calls, thinking, answers): quiet lines in the muted ink, {}px high, no icons for what worked; opened, steps indent under a 2px neutral rule. While KodAct works: the mark at work, and the step's words shimmering up to lime.\n- **Your message:** a filled bubble without a frame.\n- **Cards that need you** (permission, question): a lifted card; the primary action a lime pill under ink, the rest quiet.\n- **The mark:** the lime tile with its ink cursor bar and run triangle; beside it in the title bar, \"Kod\" in the strong ink and \"Act\" in lime; in About and the opener, the pixel wordmark.\n- **Menus and popovers:** one style (radius, padding, row height, shadow) from the tokens.\n", px(z.quiet_line));
+    let _ = writeln!(w, "## Do's and Don'ts\n\n- Do let the reply be the loudest thing on screen.\n- Do say what happened in words (\"Couldn't write Cargo.toml\"), not only with an icon.\n- Don't put a kicker or eyebrow above a heading.\n- Don't use mono as a technical costume: mono is for code, paths in changes, and data.\n- Don't use lime for what isn't KodAct acting, what needs you, a link or a choice that is on.\n- Don't dress the window as a terminal: the CLI lends its colours, its mark and its pixel letters, not its function keys or its prompt.\n- Don't add motion that isn't a state change; transitions stay within 150 to 250ms.");
     s
 }
 

@@ -38,8 +38,8 @@ Without it, a verifier has to infer the intended share from the text inside the 
 <rect x="X" y="Y" width="W" height="H" rx="2" fill="{paper}"/>
 <!-- Cell body -->
 <rect x="X" y="Y" width="W" height="H" rx="2" data-share="18.29" fill="{ink @ 0.16}" stroke="{ink @ 0.30}" stroke-width="1"/>
-<text x="X+16" y="Y+28" fill="{ink}" font-size="13" font-weight="600" font-family="Anthropic Sans Text">NAME</text>
-<text x="X+16" y="Y+46" fill="{muted}" font-size="9" font-family="Anthropic Sans Text">VALUE · SHARE</text>
+<text x="X+16" y="Y+28" fill="{ink}" font-size="13" font-weight="600" font-family="KodAct Sans">NAME</text>
+<text x="X+16" y="Y+46" fill="{muted}" font-size="9" font-family="KodAct Sans">VALUE · SHARE</text>
 ```
 
 Focal cell: replace the fill with `accent @ 0.16` and the stroke with `accent` at 1.5px.
@@ -98,10 +98,10 @@ Every segment is one `<rect>` (over its paper mask, as in the parent) carrying t
 
 ```svg
 <rect x="580" y="106" width="216" height="314" rx="2" data-column="mobile" data-segment="macOS" data-amount="1980" fill="{accent @ 0.16}" stroke="{accent}" stroke-width="1.5"/>
-<text data-column="mobile" data-segment="macOS" data-role="label" x="596" y="152" fill="{muted}" font-size="9" font-family="Anthropic Sans Text">1,980 min · 83% of mobile</text>
-<text data-column="mobile" data-role="caption" x="688" y="438" fill="{muted}" font-size="9" font-family="Anthropic Sans Text" text-anchor="middle">mobile · 24%</text>
+<text data-column="mobile" data-segment="macOS" data-role="label" x="596" y="152" fill="{muted}" font-size="9" font-family="KodAct Sans">1,980 min · 83% of mobile</text>
+<text data-column="mobile" data-role="caption" x="688" y="438" fill="{muted}" font-size="9" font-family="KodAct Sans" text-anchor="middle">mobile · 24%</text>
 <!-- Key: the node-name family at regular weight; swap in the active skin's sans stack -->
-<text data-segment="macOS" data-role="key" x="344" y="497" fill="{muted}" font-size="8.5" font-family="Anthropic Sans Text">macOS</text>
+<text data-segment="macOS" data-role="key" x="344" y="497" fill="{muted}" font-size="8.5" font-family="KodAct Sans">macOS</text>
 ```
 
 `data-amount` is the basis of every geometric check, and `data-segment` on a `<rect>` is this contract's scope key: the parent binds `data-share` on a `<rect>` and reads only files named for it, slopegraph binds `data-series` on a `<line>`, bump `data-ranks` and ridgeline `data-bins` on a `<path>`, bubble `data-size` and beeswarm `data-value` on a `<circle>`. No two gates read one attribute, so no two gates claim one file. A label prints the segment's amount and its within-column share and nothing else numeric; a caption prints its column's name and share of the whole; a key names its series. `scripts/verify-marimekko.py` covers the shared plot, the constant gutter, the width, height and area shares, the tiling, the series order, the accent count, every binding and the marker fit; `scripts/test-verify-marimekko.py` proves each check in both polarities and pins the scope treaty with the parent and the sibling gates.

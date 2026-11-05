@@ -254,12 +254,12 @@ impl Render for SideChat {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .rounded(t.radius.control)
+                    .rounded(t.radius.button)
                     .bg(send_bg)
                     .cursor_pointer()
                     .hover(|st| st.opacity(0.9))
                     .child(icon(
-                        "icons/arrow-up.svg",
+                        "kodact/run.svg",
                         t.size.icon_sm,
                         t.extra.accent_fg,
                     ))

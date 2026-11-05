@@ -4,22 +4,20 @@
 //! sidebar. Reopened from the command palette: "Change your name" starts at
 //! the name, "Change your avatar" at the avatars.
 //!
-//! The name step forges itself in: the ingot's faces land white hot and
-//! lock with a burst of heat, then the whole cube cools as metal does,
-//! through orange and ember red to its own colours; a halo and an orbiting
-//! spark settle under the cube, the question arrives word by word, and
-//! Enter strikes the cube (a hot quarter turn) before the avatars slide in.
-//! Reduced motion: all of it at rest.
+//! The name step opens on KodAct's mark: the tile rises in and plays its
+//! beat once (the cursor bar, then the run triangle: code, then act), the
+//! question arrives word by word, and Enter makes the triangle act once
+//! more before the avatars slide in. Reduced motion: all of it at rest.
 
 use gpui::component::input::{Input, InputEvent, InputState};
 use std::time::Duration;
 
 use gpui::{
-    canvas, div, prelude::*, px, relative, Animation, AnimationExt, AnyElement, App, Context,
+    div, prelude::*, px, relative, Animation, AnimationExt, AnyElement, App, Context,
     Entity, FocusHandle, IntoElement, Render, SharedString, Subscription, Task, Window,
 };
 
-use super::{icon, ingot, motion};
+use super::{icon, mark, motion};
 use crate::avatars;
 use crate::state::AppState;
 use crate::theme::{ActiveTheme, Theme};
@@ -37,21 +35,21 @@ const TRAVEL: f32 = 56.;
 /// The avatar picker: each choice, and the one you're looking at.
 const CHOICE: f32 = 56.;
 const PREVIEW: f32 = 104.;
-/// The name step's hero: its box, and the cube in it.
-const HERO: f32 = 132.;
-const CUBE: f32 = 88.;
-/// The forging, in milliseconds from the step opening: the faces land
-/// over `LAND_MS`, lock at `LOCK_MS` (the glow, the ring), the cube cools
-/// from white hot to its own colours by `COOL_MS`, the question starts at `HEADING_MS` and the field rises
-/// at `FIELD_MS`; all of it is over by `INTRO_MS`.
-const LAND_MS: f32 = 1000.;
-const LOCK_MS: f32 = 1150.;
-const COOL_MS: f32 = 3300.;
-const HEADING_MS: f32 = 1300.;
-const FIELD_MS: f32 = 1750.;
-const INTRO_MS: f32 = 3400.;
-/// Enter's strike: the hot quarter turn before the avatars come in.
-const STRIKE: Duration = Duration::from_millis(700);
+/// The name step's hero: its box, and the mark in it (whole pixels of the
+/// mark's 16-pixel grid).
+const HERO: f32 = 112.;
+const CUBE: f32 = 80.;
+/// The opening, in milliseconds from the step opening: the mark rises in
+/// by `LAND_MS` and plays its beat until `BEAT_END_MS`; the question starts
+/// at `HEADING_MS` and the field rises at `FIELD_MS`; all of it is over by
+/// `INTRO_MS`.
+const LAND_MS: f32 = 260.;
+const BEAT_END_MS: f32 = 1400.;
+const HEADING_MS: f32 = 320.;
+const FIELD_MS: f32 = 640.;
+const INTRO_MS: f32 = 1400.;
+/// Enter: the run triangle acts once more before the avatars come in.
+const STRIKE: Duration = Duration::from_millis(520);
 
 pub struct Onboarding {
     state: Entity<AppState>,
@@ -119,8 +117,8 @@ impl Onboarding {
         }
     }
 
-    /// Play the forging.
-    fn forge(&mut self) {
+    /// Play the opening: the mark rises in and plays its beat.
+    fn play_intro(&mut self) {
         self.intro += 1;
         self.strike = 0;
         self.striking = None;
@@ -139,10 +137,10 @@ impl Onboarding {
             i.focus(window, cx);
         });
         self.forged = false;
-        self.forge();
+        self.play_intro();
     }
 
-    /// Show it at the name as the opener hands over: the cube it forged
+    /// Show it at the name as the opener hands over: the mark it played
     /// rests in the hero; the question and the field arrive as usual.
     pub fn open_forged(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.open(window, cx);
@@ -368,7 +366,7 @@ impl Onboarding {
             .flex()
             .flex_col()
             .items_center()
-            .child(self.hero(&t, cx))
+            .child(self.hero(cx))
             .child(arriving(
                 &t,
                 if returning {
@@ -382,57 +380,36 @@ impl Onboarding {
             .into_any_element()
     }
 
-    /// The ingot over its halo and orbit: forging in as the step opens, a
-    /// hot quarter turn when struck, at rest under reduced motion.
-    fn hero(&self, t: &Theme, cx: &App) -> AnyElement {
-        let glow = Glow {
-            halo: t.extra.accent,
-            ring: t.colors.text_subtle,
-            spark: t.colors.primary,
-            heat: t.extra.mark_heat,
-        };
+    /// The mark: rising in and playing its beat as the step opens, its
+    /// run triangle acting when you press Enter, at rest otherwise.
+    fn hero(&self, cx: &App) -> AnyElement {
         let frame = div().relative().size(px(HERO)).flex_none();
-        if still(cx) {
-            return frame
-                .child(halo(glow, 1.))
-                .child(placed(ingot::mark(CUBE)))
-                .into_any_element();
-        }
-        if self.forged && self.strike == 0 {
-            return frame
-                .child(halo(glow, 1.))
-                .child(orbit(glow, 1.))
-                .child(placed(ingot::mark(CUBE)))
-                .into_any_element();
+        if still(cx) || (self.forged && self.strike == 0) {
+            return frame.child(placed(mark::tile(CUBE), 0., 1.)).into_any_element();
         }
         if self.strike > 0 {
+            // From the cursor bar to the run triangle and back: one act.
             return frame
-                .child(halo(glow, 1.))
-                .child(orbit(glow, 1.))
                 .child(div().absolute().inset_0().with_animation(
                     ("onboarding-strike", self.strike),
                     Animation::new(STRIKE),
-                    move |d, k| {
-                        d.child(flash(glow, (k * 1.4).min(1.)))
-                            .child(placed(ingot::struck(CUBE, k)))
-                    },
+                    move |d, k| d.child(placed(mark::tile_at_beat(CUBE, k), 0., 1.)),
                 ))
                 .into_any_element();
         }
         frame
             .with_animation(
-                SharedString::from(format!("onboarding-forge-{}", self.intro)),
+                SharedString::from(format!("onboarding-mark-{}", self.intro)),
                 Animation::new(Duration::from_millis(INTRO_MS as u64)),
                 move |d, k| {
                     let ms = k * INTRO_MS;
-                    // After the lock: the halo and orbit settle in.
-                    let after = smooth((ms - LOCK_MS) / 700.);
-                    let heat = 1. - smooth((ms - LOCK_MS) / (COOL_MS - LOCK_MS));
-                    d.child(halo(glow, after))
-                        .child(orbit(glow, after))
-                        .child(radiance(glow, heat))
-                        .child(flash(glow, (ms - LOCK_MS + 60.) / 800.))
-                        .child(placed(ingot::forging(CUBE, ms / LAND_MS, heat)))
+                    let land = smooth(ms / LAND_MS);
+                    let beat = (ms / BEAT_END_MS).clamp(0., 1.);
+                    d.child(placed(
+                        mark::tile_at_beat(CUBE, beat),
+                        10. * (1. - land),
+                        land,
+                    ))
                 },
             )
             .into_any_element()
@@ -543,147 +520,14 @@ fn smooth(x: f32) -> f32 {
     x * x * (3. - 2. * x)
 }
 
-/// The hero's colours, copied into its animation frames.
-#[derive(Clone, Copy)]
-struct Glow {
-    halo: gpui::Hsla,
-    ring: gpui::Hsla,
-    spark: gpui::Hsla,
-    heat: gpui::Hsla,
-}
-
-/// The cube in the hero's box, a little above centre over its halo.
-fn placed(cube: ingot::Ingot) -> impl IntoElement {
+/// The mark in the hero's box, centred, `rise` px low and at `alpha`.
+fn placed(tile: mark::Tile, rise: f32, alpha: f32) -> impl IntoElement {
     div()
         .absolute()
         .left(px((HERO - CUBE) / 2.))
-        .top(px((HERO - CUBE) / 2. - 6.))
-        .child(cube)
-}
-
-/// The soft glow the cube floats over, breathing; `a` fades it in.
-fn halo(g: Glow, a: f32) -> impl IntoElement {
-    let (w, h) = (112., 22.);
-    div()
-        .absolute()
-        .left(px((HERO - w) / 2.))
-        .top(px(HERO * 0.66 - h / 2.))
-        .w(px(w))
-        .h(px(h))
-        .with_animation(
-            "onboarding-halo",
-            Animation::new(Duration::from_millis(4200)).repeat(),
-            move |d, k| {
-                let b = a * (0.75 + 0.25 * (k * std::f32::consts::TAU).cos());
-                d.rounded_full()
-                    .bg(g.halo.opacity(0.06 * b))
-                    .shadow(vec![gpui::BoxShadow {
-                        color: g.halo.opacity(0.22 * b),
-                        offset: gpui::point(px(0.), px(0.)),
-                        blur_radius: px(18.),
-                        spread_radius: px(0.),
-                        inset: false,
-                    }])
-            },
-        )
-}
-
-/// A dotted ring round the cube's base with a spark running along it.
-fn orbit(g: Glow, a: f32) -> impl IntoElement {
-    const PAD: f32 = 18.;
-    div()
-        .absolute()
-        .left(px(-PAD))
-        .top(px(-PAD))
-        .size(px(HERO + PAD * 2.))
-        .with_animation(
-            "onboarding-orbit",
-            Animation::new(Duration::from_millis(7000)).repeat(),
-            move |d, k| {
-                d.child(
-                    canvas(
-                        |_, _, _| {},
-                        move |b, _, window, _| {
-                            let (cx, cy) = (HERO / 2. + PAD, HERO * 0.66 + PAD);
-                            let (rx, ry) = (78., 23.);
-                            let at = |th: f32| {
-                                b.origin
-                                    + gpui::point(px(cx + rx * th.cos()), px(cy + ry * th.sin()))
-                            };
-                            let mut ring =
-                                gpui::PathBuilder::stroke(px(1.)).dash_array(&[px(2.), px(5.)]);
-                            ring.move_to(at(0.));
-                            for i in 1..=96 {
-                                ring.line_to(at(i as f32 / 96. * std::f32::consts::TAU));
-                            }
-                            if let Ok(path) = ring.build() {
-                                window.paint_path(path, g.ring.opacity(a));
-                            }
-                            let p = at(k * std::f32::consts::TAU);
-                            let r = px(2.2);
-                            window.paint_quad(
-                                gpui::fill(
-                                    gpui::Bounds::new(
-                                        p - gpui::point(r, r),
-                                        gpui::size(r * 2., r * 2.),
-                                    ),
-                                    g.spark.opacity(a),
-                                )
-                                .corner_radii(r),
-                            );
-                        },
-                    )
-                    .size_full(),
-                )
-            },
-        )
-}
-
-/// The warmth the cube gives off while it's hot, `heat` 0..1: a soft glow
-/// behind it, orange, fading as it cools.
-fn radiance(g: Glow, heat: f32) -> AnyElement {
-    if heat <= 0.02 {
-        return div().into_any_element();
-    }
-    let size = CUBE * 0.8;
-    div()
-        .absolute()
-        .left(px((HERO - size) / 2.))
-        .top(px((HERO - size) / 2. - 6.))
-        .size(px(size))
-        .rounded_full()
-        .shadow(vec![gpui::BoxShadow {
-            color: g.heat.opacity(0.55 * heat),
-            offset: gpui::point(px(0.), px(0.)),
-            blur_radius: px(36.),
-            spread_radius: px(4.),
-            inset: false,
-        }])
-        .into_any_element()
-}
-
-/// The glow as the cube locks or is struck, `f` 0..1 through it: a burst of
-/// heat that spreads out and fades.
-fn flash(g: Glow, f: f32) -> AnyElement {
-    if f <= 0. || f >= 1. {
-        return div().into_any_element();
-    }
-    let size = 24. + 130. * f;
-    div()
-        .absolute()
-        .left(px((HERO - size) / 2.))
-        .top(px((HERO - size) / 2. - 6.))
-        .size(px(size))
-        .rounded_full()
-        .bg(g.heat.opacity(0.28 * (1. - f)))
-        .shadow(vec![gpui::BoxShadow {
-            color: g.heat.opacity(0.35 * (1. - f)),
-            offset: gpui::point(px(0.), px(0.)),
-            blur_radius: px(size * 0.4),
-            spread_radius: px(0.),
-            inset: false,
-        }])
-        .into_any_element()
+        .top(px((HERO - CUBE) / 2. + rise))
+        .opacity(alpha)
+        .child(tile)
 }
 
 /// The question, arriving word by word as the cube cools (`intro` 0: at once).

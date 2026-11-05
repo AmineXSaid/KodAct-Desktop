@@ -1059,7 +1059,7 @@ fn thinking(
                 .hover(move |s| s.text_color(strong))
                 .when(streaming, |d| {
                     d.child(
-                        icon("icons/sparkles.svg", t.size.icon_xs, t.extra.accent).with_animation(
+                        icon("icons/sparkles.svg", t.size.icon_xs, t.extra.live).with_animation(
                             SharedString::from(format!("think-pulse-{key}")),
                             Animation::new(Duration::from_millis(1600)).repeat(),
                             |svg, d| svg.opacity(0.45 + 0.55 * (d * std::f32::consts::PI).sin()),
@@ -1420,7 +1420,7 @@ pub(super) fn tool_header(
         // you, failed, was stopped or skipped.
         .children(match call.status {
             _ if waiting => {
-                Some(icon("icons/hand.svg", t.size.icon_xs, t.extra.accent).into_any_element())
+                Some(icon("icons/hand.svg", t.size.icon_xs, t.extra.live).into_any_element())
             }
             ToolStatus::Done => None,
             ToolStatus::Failed => {
@@ -1592,7 +1592,6 @@ fn agent_header(
             super::turning_logo_in(
                 f32::from(t.size.icon_sm),
                 SharedString::from(format!("agent-turn-{}-{}-{b}", cx.chat, cx.index)),
-                t.extra.live,
             )
         } else {
             status_icon(call.status, t)
@@ -1779,7 +1778,7 @@ pub(super) fn flash(row: gpui::Div, b: usize, cx: &ItemContext, t: &Theme) -> An
     if cx.flash != Some(b) {
         return row.into_any_element();
     }
-    let ring = t.extra.accent;
+    let ring = t.extra.live;
     // The ring sits just outside the row, so nothing moves when it shows.
     row.rounded(t.radius.button)
         .mx(-t.space.sm)

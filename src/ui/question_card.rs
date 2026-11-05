@@ -127,7 +127,7 @@ fn pending(info: &PermInfo, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement
                 mark,
                 t.size.icon_sm,
                 if picked {
-                    t.extra.accent
+                    t.extra.live
                 } else {
                     t.colors.text_subtle
                 },
@@ -191,7 +191,7 @@ fn pending(info: &PermInfo, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement
             "icons/pencil.svg",
             t.size.icon_sm,
             if other_on {
-                t.extra.accent
+                t.extra.live
             } else {
                 t.colors.text_subtle
             },

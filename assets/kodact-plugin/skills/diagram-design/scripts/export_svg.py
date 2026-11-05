@@ -467,7 +467,7 @@ def leading_accessibility_end(svg: str, pos: int) -> int:
 def merge_style_into_defs(svg: str, style_css: str, system_fonts: bool = False) -> str:
     """Ensure one <defs> and place a <style> with the diagram CSS first.
 
-    No font is loaded: the SVG names Anthropic Sans and makes no network
+    No font is loaded: the SVG names KodAct Sans and makes no network
     request. `system_fonts` is kept for old callers and changes nothing.
     """
     del system_fonts

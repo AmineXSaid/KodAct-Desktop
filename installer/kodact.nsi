@@ -70,11 +70,11 @@ Section "KodAct desktop app" SecApp
   SetOutPath "$INSTDIR"
   File "/oname=KodAct.exe" "${APP_EXE}"
   File "/oname=kodact.ico" "..\assets\kodact.ico"
-!ifdef FONTS_DIR
-  ; A personal build's fonts (installer/private-fonts), read at start.
-  SetOutPath "$INSTDIR\fonts"
-  File "${FONTS_DIR}/*.*"
-!endif
+  ; The licences of the fonts carried in the app (SIL OFL 1.1).
+  SetOutPath "$INSTDIR\licences"
+  File "..\assets\fonts\OFL-HostGrotesk.txt"
+  File "..\assets\fonts\OFL-JetBrainsMono.txt"
+  SetOutPath "$INSTDIR"
 
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   WriteRegStr HKCU "Software\KodAct" "InstallDir" "$INSTDIR"
@@ -283,6 +283,7 @@ Section "Uninstall"
   Delete "$INSTDIR\KodAct.exe"
   Delete "$INSTDIR\kodact.ico"
   RMDir /r "$INSTDIR\fonts"
+  RMDir /r "$INSTDIR\licences"
   IfFileExists "$INSTDIR\design-library\UPSTREAM.json" 0 +2
     RMDir /r "$INSTDIR\design-library"
   Delete "$INSTDIR\Uninstall.exe"

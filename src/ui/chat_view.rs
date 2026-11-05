@@ -459,7 +459,7 @@ impl ChatView {
                                             .right(px(1.))
                                             .size(px(7.))
                                             .rounded(t.radius.pill)
-                                            .bg(t.extra.accent),
+                                            .bg(t.extra.live),
                                     )
                                 })
                                 .tooltip(move |w, cx| {
@@ -818,8 +818,9 @@ pub(super) fn elapsed(seconds: u64) -> String {
 /// at night, a pale shine on paper.
 pub(super) fn shimmer(label: &str, sweep: f32, t: &crate::theme::Theme) -> StyledText {
     let n = label.chars().count().max(1) as f32;
-    let base = t.colors.text_muted;
-    let strength = if t.is_dark { 1. } else { 0.6 };
+    // KodAct CLI's working shimmer: grey up to the brand at its peak.
+    let (base, peak) = (t.colors.text_muted, t.extra.live);
+    let strength = if t.is_dark { 1. } else { 0.85 };
     let mut runs = vec![];
     for (i, ch) in label.chars().enumerate() {
         let x = (i as f32 + 0.5) / n;
@@ -829,7 +830,7 @@ pub(super) fn shimmer(label: &str, sweep: f32, t: &crate::theme::Theme) -> Style
         runs.push(TextRun {
             len: ch.len_utf8(),
             font: f,
-            color: mix(base, gpui::white(), lift),
+            color: mix(base, peak, lift),
             background_color: None,
             underline: None,
             strikethrough: None,
@@ -899,12 +900,11 @@ fn working_line(
         .gap(t.space.tight)
         .h(px(24.))
         .mt(px(4.))
-        // KodAct's cube turning in the theme's live colour, as on agent rows;
-        // the words say what kind of step it is.
+        // KodAct's mark at work, as on agent rows; the words say what kind
+        // of step it is, a lime shimmer sweeping through them.
         .child(super::turning_logo_in(
             f32::from(t.size.icon),
             SharedString::from(format!("working-mark-{activity:?}")),
-            t.extra.live,
         ))
         .child(div().font_weight(FontWeight::MEDIUM).with_animation(
             SharedString::from(format!("working-{label}")),

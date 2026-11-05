@@ -435,7 +435,7 @@ def verify(path: Path, offline: bool = False) -> list[str]:
             errors.append(finding)
         elif is_approved_google_fonts_stylesheet(value.strip()):
             errors.append(
-                "file loads a web font; diagrams use Anthropic Sans only, with no font <link>"
+                "file loads a web font; diagrams use KodAct Sans only, with no font <link>"
             )
     check_svgs(parser, errors)
     check_scripts(parser, errors)

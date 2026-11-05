@@ -101,7 +101,7 @@ fn grounds(t: &Theme) -> Vec<(String, Hsla)> {
 }
 
 #[test]
-fn surfaces_stack_like_paper_on_the_cream() {
+fn surfaces_stack_step_by_step() {
     for (mode, t) in both() {
         // The title bar and the sidebar share the canvas; the session is
         // a sheet a step up from it, and cards a step up again.
@@ -114,11 +114,11 @@ fn surfaces_stack_like_paper_on_the_cream() {
                 "{mode}: step {i} is {s:.4}, too close to tell apart"
             );
         }
-        // Warm, never coloured: cream, not tan.
+        // Neutral, never coloured: ink or paper, not a tint.
         for (i, (_, chroma)) in ladder.iter().enumerate() {
             assert!(
                 *chroma <= 0.03,
-                "{mode}: surface {i} has chroma {chroma:.4}; cream, not colour"
+                "{mode}: surface {i} has chroma {chroma:.4}; a neutral, not a colour"
             );
         }
         // The selected row lifts off the sidebar as the session does.
@@ -135,8 +135,9 @@ fn surfaces_stack_like_paper_on_the_cream() {
     }
 }
 
-/// One colour per theme: the accent, the links, the switches and the
-/// mark's top are one hue (Ink has none); the system's own theme is ember copper.
+/// One colour per theme: the brand's fill, its line (what is live), the
+/// links, the switches and the mark's tile are one hue: KodAct's lime
+/// (olive on paper).
 #[test]
 fn each_theme_has_one_colour() {
     let hue = |c: Hsla| {
@@ -172,6 +173,8 @@ fn each_theme_has_one_colour() {
                 ("link", t.colors.primary),
                 ("switch", x.toggle_on),
                 ("mark top", x.mark_top),
+                ("live", x.live),
+                ("filled button", x.fill),
             ] {
                 let d = (hue(c) - hue(x.accent) + 540.) % 360. - 180.;
                 assert!(
@@ -180,21 +183,24 @@ fn each_theme_has_one_colour() {
                 );
             }
         }
-        // The accent holds a UI part's 3:1 on the session and on a card,
-        // and its label reads on it.
+        // The brand as a line or a mark (what is live, a switch that is
+        // on) holds a UI part's 3:1 on the session and on a card; as a fill
+        // (Send, the primary button) it carries an ink label that reads.
         for g in [x.stage, t.colors.surface] {
-            assert!(
-                contrast(x.accent, g) >= AA_UI,
-                "{mode}: accent on a surface"
-            );
+            for (name, c) in [("live", x.live), ("switch", x.toggle_on)] {
+                assert!(contrast(c, g) >= AA_UI, "{mode}: {name} on a surface");
+            }
         }
         assert!(
             contrast(x.accent_fg, x.accent) >= AA_TEXT,
             "{mode}: the accent's label"
         );
     }
-    let calm = Theme::light();
-    assert_eq!(rgba(calm.extra.accent), rgba(gpui::rgb(0xb4532a).into()));
+    // KodAct CLI's own values: lime on ink, its tile's lime and olive on paper.
+    let (dark, light) = (Theme::dark(), Theme::light());
+    assert_eq!(rgba(dark.extra.accent), rgba(gpui::rgb(0xc6ff3d).into()));
+    assert_eq!(rgba(light.extra.accent), rgba(gpui::rgb(0xb5ea2c).into()));
+    assert_eq!(rgba(light.extra.live), rgba(gpui::rgb(0x4a7200).into()));
 }
 
 #[test]
@@ -339,31 +345,21 @@ fn terminal_colours_read_on_the_dock() {
 }
 
 #[test]
-fn the_mark_reads_on_every_surface_and_its_faces_read_apart() {
+fn the_mark_reads_on_every_surface() {
     for (mode, t) in both() {
         let x = &t.extra;
-        // The ingot's silhouette: its top and its nearer-to-ground side
-        // hold a UI part's 3:1 on each surface it sits on.
+        // KodAct's tile: its cursor bar and run triangle (ink, `mark_left`)
+        // read on the lime tile (`mark_top`) as text does.
+        let glyph = contrast(x.mark_left, x.mark_top);
+        assert!(glyph >= AA_TEXT, "{mode}: the mark's glyph is {glyph:.2}:1");
+        // The tile, or the olive shadow under it (`mark_right`), holds a UI
+        // part's 3:1 on every surface it sits on, so the mark has an edge.
         for (ground, g) in grounds(&t) {
-            let top = contrast(x.mark_top, g);
+            let edge = contrast(x.mark_top, g).max(contrast(x.mark_right, g));
             assert!(
-                top >= AA_UI,
-                "{mode}: the mark's top is {top:.2}:1 on {ground}"
+                edge >= AA_UI,
+                "{mode}: the mark's edge is {edge:.2}:1 on {ground}"
             );
-            let side = contrast(x.mark_left, g).max(contrast(x.mark_right, g));
-            assert!(
-                side >= AA_UI,
-                "{mode}: the mark's sides are {side:.2}:1 on {ground}"
-            );
-        }
-        // Its two sides, and the top against each, read as separate faces.
-        for (name, a, b) in [
-            ("left and right", x.mark_left, x.mark_right),
-            ("top and left", x.mark_top, x.mark_left),
-            ("top and right", x.mark_top, x.mark_right),
-        ] {
-            let c = contrast(a, b);
-            assert!(c >= 1.5, "{mode}: the mark's {name} faces are {c:.2}:1");
         }
     }
 }
