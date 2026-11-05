@@ -1,8 +1,8 @@
-//! Routines (Open Design's `routines.ts` and automations): a request Forge
+//! Routines (Open Design's `routines.ts` and automations): a request KodAct
 //! runs on a schedule, as a new chat in its project, with its design setup:
 //! "every Monday at 9, refresh the metrics deck from data.csv". They run
-//! while Forge is open; one missed while it was closed runs once when it
-//! opens. Kept in `routines.json` in Forge's config folder.
+//! while KodAct is open; one missed while it was closed runs once when it
+//! opens. Kept in `routines.json` in KodAct's config folder.
 
 use std::path::PathBuf;
 
@@ -254,7 +254,7 @@ mod tests {
         assert!(r.due(at("2026-10-26 09:00")));
         r.last_run = Some(at("2026-10-26 09:00").timestamp());
         assert!(!r.due(at("2026-10-26 18:00")));
-        // Missed while Forge was closed: runs once when it opens.
+        // Missed while KodAct was closed: runs once when it opens.
         assert!(r.due(at("2026-11-04 10:00")));
         r.enabled = false;
         assert!(!r.due(at("2026-11-04 10:00")));

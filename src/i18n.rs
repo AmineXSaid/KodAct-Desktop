@@ -90,11 +90,11 @@ const TABLE: &[(&str, [&str; 3])] = &[
     // The design gallery.
     ("Design", ["Design", "Diseño", "Design"]),
     (
-        "Start from a template, an example, a design system or a skill. Forge sets up the chat, and the page shows beside it as it's made.",
+        "Start from a template, an example, a design system or a skill. KodAct sets up the chat, and the page shows beside it as it's made.",
         [
-            "Partez d'un modèle, d'un exemple, d'un design system ou d'un savoir-faire. Forge prépare la conversation, et la page s'affiche à côté pendant qu'elle se construit.",
-            "Empieza con una plantilla, un ejemplo, un sistema de diseño o una habilidad. Forge prepara el chat y la página aparece al lado mientras se crea.",
-            "Starte mit einer Vorlage, einem Beispiel, einem Designsystem oder einem Skill. Forge richtet den Chat ein, und die Seite erscheint daneben, während sie entsteht.",
+            "Partez d'un modèle, d'un exemple, d'un design system ou d'un savoir-faire. KodAct prépare la conversation, et la page s'affiche à côté pendant qu'elle se construit.",
+            "Empieza con una plantilla, un ejemplo, un sistema de diseño o una habilidad. KodAct prepara el chat y la página aparece al lado mientras se crea.",
+            "Starte mit einer Vorlage, einem Beispiel, einem Designsystem oder einem Skill. KodAct richtet den Chat ein, und die Seite erscheint daneben, während sie entsteht.",
         ],
     ),
     ("Library", ["Bibliothèque", "Biblioteca", "Bibliothek"]),
@@ -121,12 +121,12 @@ const TABLE: &[(&str, [&str; 3])] = &[
     ("Save as one HTML file", ["Enregistrer en un seul fichier HTML", "Guardar como un solo archivo HTML", "Als eine HTML-Datei speichern"]),
     ("Save for Figma (editable layers)", ["Enregistrer pour Figma (calques modifiables)", "Guardar para Figma (capas editables)", "Für Figma speichern (bearbeitbare Ebenen)"]),
     ("Open in your browser", ["Ouvrir dans votre navigateur", "Abrir en tu navegador", "Im Browser öffnen"]),
-    ("Ask Forge to review the page", ["Demander à Forge de relire la page", "Pedir a Forge que revise la página", "Forge die Seite prüfen lassen"]),
+    ("Ask KodAct to review the page", ["Demander à KodAct de relire la page", "Pedir a KodAct que revise la página", "KodAct die Seite prüfen lassen"]),
     ("Slides", ["Diapositives", "Diapositivas", "Folien"]),
     ("Saved", ["Enregistré", "Guardado", "Gespeichert"]),
     ("beside the page in", ["à côté de la page en", "junto a la página en", "neben der Seite in"]),
-    // Forge's questions.
-    ("Forge asks", ["Forge demande", "Forge pregunta", "Forge fragt"]),
+    // KodAct's questions.
+    ("KodAct asks", ["KodAct demande", "KodAct pregunta", "KodAct fragt"]),
     ("Pick any", ["Choix multiples", "Elige varias", "Mehrere möglich"]),
     ("Send answers", ["Envoyer les réponses", "Enviar respuestas", "Antworten senden"]),
     ("Or type your own answer in the box below.", ["Ou écrivez votre propre réponse dans le champ ci-dessous.", "O escribe tu propia respuesta en el cuadro de abajo.", "Oder schreib deine eigene Antwort unten ins Feld."]),
@@ -140,11 +140,11 @@ const TABLE: &[(&str, [&str; 3])] = &[
     ("Delete", ["Supprimer", "Eliminar", "Löschen"]),
     ("New routine…", ["Nouvelle routine…", "Nueva rutina…", "Neue Routine…"]),
     (
-        "Requests Forge runs on a schedule, while it's open, as a new chat in their project. Make one in the composer: /routine weekly on monday at 9:00: refresh the metrics deck",
+        "Requests KodAct runs on a schedule, while it's open, as a new chat in their project. Make one in the composer: /routine weekly on monday at 9:00: refresh the metrics deck",
         [
-            "Des demandes que Forge exécute selon un horaire, tant qu'il est ouvert, dans une nouvelle conversation de leur projet. Créez-en une dans le champ de saisie : /routine weekly on monday at 9:00: actualise le deck des indicateurs",
-            "Peticiones que Forge ejecuta según un horario, mientras está abierto, como un chat nuevo en su proyecto. Crea una en el cuadro de mensaje: /routine weekly on monday at 9:00: actualiza la presentación de métricas",
-            "Anfragen, die Forge nach Zeitplan ausführt, solange es offen ist, als neuer Chat in ihrem Projekt. Lege eine im Eingabefeld an: /routine weekly on monday at 9:00: aktualisiere das Kennzahlen-Deck",
+            "Des demandes que KodAct exécute selon un horaire, tant qu'il est ouvert, dans une nouvelle conversation de leur projet. Créez-en une dans le champ de saisie : /routine weekly on monday at 9:00: actualise le deck des indicateurs",
+            "Peticiones que KodAct ejecuta según un horario, mientras está abierto, como un chat nuevo en su proyecto. Crea una en el cuadro de mensaje: /routine weekly on monday at 9:00: actualiza la presentación de métricas",
+            "Anfragen, die KodAct nach Zeitplan ausführt, solange es offen ist, als neuer Chat in ihrem Projekt. Lege eine im Eingabefeld an: /routine weekly on monday at 9:00: aktualisiere das Kennzahlen-Deck",
         ],
     ),
     // The language itself.

@@ -1,4 +1,4 @@
-//! The Modes menu, as Forge for VS Code has it: a footer button (the mode's
+//! The Modes menu, as KodAct for VS Code has it: a footer button (the mode's
 //! icon and name) that opens a menu above it, right-aligned. A "Modes"
 //! header with the Shift+Tab hint, then one row per mode: icon, name over
 //! its description, and a check on the current one. Picking Bypass the
@@ -148,7 +148,7 @@ pub fn menu(
                         .flex_col()
                         .child(div().text_color(t.colors.text_strong).font_weight(if picked { FontWeight::MEDIUM } else { FontWeight::NORMAL }).child(mode.label()))
                         .child(div().text_size(t.text.caption).text_color(t.colors.text_subtle).child(match mode {
-                            ModeId::Bypass if !allowed => "Asks you first. Forge will not ask for approval before running potentially dangerous commands",
+                            ModeId::Bypass if !allowed => "Asks you first. KodAct will not ask for approval before running potentially dangerous commands",
                             m => m.description(),
                         })),
                 )
@@ -176,7 +176,7 @@ pub fn menu(
                     .gap(px(8.))
                     .child(icon("icons/triangle-alert.svg", t.size.icon_sm, danger))
                     .child(div().flex_1().min_w_0().text_size(t.text.caption).text_color(t.colors.text).child(
-                        "Bypass permissions lets Forge run any command and edit any file without asking, including commands that delete files or reach the network. Use it only in a sandbox or a throwaway copy.",
+                        "Bypass permissions lets KodAct run any command and edit any file without asking, including commands that delete files or reach the network. Use it only in a sandbox or a throwaway copy.",
                     )),
             )
             .child(

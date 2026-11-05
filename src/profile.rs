@@ -1,24 +1,31 @@
-//! The person's profile, kept between launches: the name Forge calls
+//! The person's profile, kept between launches: the name KodAct calls
 //! them, and their avatar. A plain text file in the platform's config folder
-//! (`FORGE_CONFIG_DIR` overrides it, for tests and portable installs).
+//! (`KODACT_CONFIG_DIR` overrides it, for tests and portable installs).
 
 use std::path::PathBuf;
 
 const MAX_NAME: usize = 40;
 
+/// The app's config folder: `KodAct` in the platform's (`kodact` on Linux),
+/// or Forge's `Forge` (`forge`) while only that one exists, so chats, keys
+/// and endpoints made before the rename stay. The engine names its folder
+/// the same way, so the two keep sharing it.
 pub(crate) fn dir() -> Option<PathBuf> {
-    if let Some(d) = std::env::var_os("FORGE_CONFIG_DIR") {
+    if let Some(d) = std::env::var_os("KODACT_CONFIG_DIR") {
         return Some(PathBuf::from(d));
     }
+    let named = |base: PathBuf, new: &str, old: &str| crate::names::renamed(&base, new, old);
     if cfg!(windows) {
-        std::env::var_os("APPDATA").map(|a| PathBuf::from(a).join("Forge"))
+        std::env::var_os("APPDATA").map(|a| named(PathBuf::from(a), "KodAct", "Forge"))
     } else if cfg!(target_os = "macos") {
-        std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Library/Application Support/Forge"))
+        std::env::var_os("HOME").map(|h| {
+            named(PathBuf::from(h).join("Library/Application Support"), "KodAct", "Forge")
+        })
     } else {
         std::env::var_os("XDG_CONFIG_HOME")
             .map(PathBuf::from)
             .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
-            .map(|c| c.join("forge"))
+            .map(|c| named(c, "kodact", "forge"))
     }
 }
 

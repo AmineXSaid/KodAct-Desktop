@@ -1,4 +1,4 @@
-//! Forge's own settings: `settings.json` in its config folder (beside
+//! KodAct's own settings: `settings.json` in its config folder (beside
 //! `name.txt`), for what has no screen of its own yet: remote connections and
 //! the terminal dock. Keys are dotted, as an editor's settings are; a missing
 //! or broken file means the defaults, and odd values are held in range.
@@ -7,13 +7,13 @@
 //! {
 //!   "remote.ssh.configFile": "~/.ssh/config",
 //!   "remote.ssh.extraArgs": ["-o", "ProxyJump=bastion"],
-//!   "remote.serverInstallDir": "~/.forge",
+//!   "remote.serverInstallDir": "~/.kodact",
 //!   "remote.reconnect.maxAttempts": 8,
 //!   "terminal.defaultShell": "pwsh.exe",
 //!   "terminal.scrollback": 10000,
 //!   "terminal.fontSize": 13,
 //!   "terminal.cursorStyle": "block",
-//!   "forge.autoApproveSafeCommands": true
+//!   "kodact.autoApproveSafeCommands": true
 //! }
 //! ```
 //!
@@ -44,7 +44,7 @@ pub struct Settings {
     /// More arguments for every `ssh`, before the host.
     #[serde(rename = "remote.ssh.extraArgs")]
     pub ssh_extra_args: Vec<String>,
-    /// Where ForgeCLI and its plugin go on a remote.
+    /// Where KodAct CLI and its plugin go on a remote.
     #[serde(rename = "remote.serverInstallDir")]
     pub server_install_dir: String,
     /// Reconnect tries after a remote stops answering, before giving up.
@@ -62,7 +62,11 @@ pub struct Settings {
     pub cursor_style: CursorStyle,
     /// Harmless shell commands run without a prompt: reads in every mode,
     /// edits to project files in Edit automatically. Deletions always ask.
-    #[serde(rename = "forge.autoApproveSafeCommands")]
+    /// Forge (before the rename) called it `forge.autoApproveSafeCommands`.
+    #[serde(
+        rename = "kodact.autoApproveSafeCommands",
+        alias = "forge.autoApproveSafeCommands"
+    )]
     pub auto_approve_safe_commands: bool,
 }
 
@@ -71,7 +75,7 @@ impl Default for Settings {
         Self {
             ssh_config_file: None,
             ssh_extra_args: vec![],
-            server_install_dir: "~/.forge".into(),
+            server_install_dir: "~/.kodact".into(),
             reconnect_max_attempts: 8,
             default_shell: None,
             scrollback: 10_000,
@@ -102,7 +106,7 @@ impl Settings {
         s.server_install_dir = if plain {
             dir.to_string()
         } else {
-            "~/.forge".into()
+            "~/.kodact".into()
         };
         s.default_shell = s.default_shell.filter(|x| !x.trim().is_empty());
         s.ssh_config_file = s.ssh_config_file.filter(|x| !x.trim().is_empty());
@@ -245,9 +249,17 @@ mod tests {
         );
         // Shell syntax in the install dir is refused.
         let s = Settings::parse(r#"{"remote.serverInstallDir": "~/x; rm -rf ~"}"#);
-        assert_eq!(s.server_install_dir, "~/.forge");
+        assert_eq!(s.server_install_dir, "~/.kodact");
         let s = Settings::parse(r#"{"remote.serverInstallDir": "relative/dir"}"#);
-        assert_eq!(s.server_install_dir, "~/.forge");
+        assert_eq!(s.server_install_dir, "~/.kodact");
+    }
+
+    #[test]
+    fn forges_setting_name_still_reads() {
+        let s = Settings::parse(r#"{"forge.autoApproveSafeCommands": false}"#);
+        assert!(!s.auto_approve_safe_commands);
+        let s = Settings::parse(r#"{"kodact.autoApproveSafeCommands": false}"#);
+        assert!(!s.auto_approve_safe_commands);
     }
 
     #[test]
@@ -259,15 +271,15 @@ mod tests {
 
     /// The settings reach real ssh: `remote.ssh.configFile` names a config
     /// with a host only it knows, and `remote.ssh.extraArgs` adds an option.
-    /// `FORGE_TEST_SSH_CONFIG` is that file, `FORGE_TEST_SSH_ALIAS` the host.
+    /// `KODACT_TEST_SSH_CONFIG` is that file, `KODACT_TEST_SSH_ALIAS` the host.
     #[test]
     #[ignore]
     fn real_ssh_settings_apply() {
-        let config = std::env::var("FORGE_TEST_SSH_CONFIG").expect("FORGE_TEST_SSH_CONFIG");
-        let alias = std::env::var("FORGE_TEST_SSH_ALIAS").expect("FORGE_TEST_SSH_ALIAS");
+        let config = std::env::var("KODACT_TEST_SSH_CONFIG").expect("KODACT_TEST_SSH_CONFIG");
+        let alias = std::env::var("KODACT_TEST_SSH_ALIAS").expect("KODACT_TEST_SSH_ALIAS");
         let dir = std::env::temp_dir().join(format!("forge-settings-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        std::env::set_var("FORGE_CONFIG_DIR", &dir);
+        std::env::set_var("KODACT_CONFIG_DIR", &dir);
         std::fs::write(
             dir.join("settings.json"),
             serde_json::json!({

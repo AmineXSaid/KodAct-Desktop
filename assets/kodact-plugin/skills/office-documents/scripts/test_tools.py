@@ -117,14 +117,14 @@ class Excel(Tmp):
         self.assertEqual({ws[r].font.name for r in ("A1", "A2", "B3")}, {"Calibri"}, "every font is named, so no app substitutes one")
         self.assertEqual((ws["B2"].number_format, ws["C2"].number_format), ("#,##0.00", "#,##0"))
         self.assertEqual(ws.freeze_panes, "A2", "the header row stays in view")
-        self.assertEqual((wb.properties.creator, wb.properties.lastModifiedBy, wb.properties.title), ("Forge", "Forge", "Scores"))
+        self.assertEqual((wb.properties.creator, wb.properties.lastModifiedBy, wb.properties.title), ("KodAct", "KodAct", "Scores"))
 
     def test_edits_stamp_the_properties(self):
         src = self.make_input()
         out = self.path("stamped.xlsx")
         xlsx_tool.set_cells(src, out, ["Budget!C3=700"])
         props = openpyxl.load_workbook(out).properties
-        self.assertEqual(props.lastModifiedBy, "Forge")
+        self.assertEqual(props.lastModifiedBy, "KodAct")
         self.assertEqual(props.creator, "openpyxl", "an edit doesn't claim to have made the file")
 
     @unittest.skipUnless(HAS_OFFICE, "LibreOffice is not installed")
@@ -136,7 +136,7 @@ class Excel(Tmp):
         xlsx_tool.create(made, xlsx_tool._csv(data), "Data")
         done = self.path("done.xlsx")
         xlsx_tool.recalc(made, done)
-        self.assertEqual(openpyxl.load_workbook(done).properties.creator, "Forge")
+        self.assertEqual(openpyxl.load_workbook(done).properties.creator, "KodAct")
         self.assertEqual(openpyxl.load_workbook(done)["Data"]["A1"].font.name, "Calibri", "LibreOffice keeps the named font")
 
 
@@ -183,7 +183,7 @@ class Word(Tmp):
         run = next(r for p in d.paragraphs for r in p.runs if "architecture diagrams" in r.text)
         self.assertTrue(run.bold, "the replaced run keeps its bold")
         self.assertEqual(d.tables[0].rows[1].cells[1].text, "Shipped", "text inside tables is replaced too")
-        self.assertIn("Forge now draws diagrams", docx_tool.read(src), "the input is untouched")
+        self.assertIn("KodAct now draws diagrams", docx_tool.read(src), "the input is untouched")
         out2 = self.path("notes-3.docx")
         docx_tool.append(out, out2, "## Next\n\n1. Browser use\n")
         self.assertIn("## Next", docx_tool.read(out2))
@@ -196,7 +196,7 @@ class Word(Tmp):
         self.assertRegex(settings, r'<w:zoom [^>]*w:percent="100"', "the schema requires w:percent on w:zoom")
         d = docx.Document(out)
         cp = d.core_properties
-        self.assertEqual((cp.title, cp.author, cp.last_modified_by), ("Q3 memo", "Forge", "Forge"))
+        self.assertEqual((cp.title, cp.author, cp.last_modified_by), ("Q3 memo", "KodAct", "KodAct"))
         self.assertGreaterEqual(cp.created.year, 2026, "not python-docx's 2013 template date")
         self.assertEqual((round(d.sections[0].page_width.mm), round(d.sections[0].page_height.mm)), (210, 297))
         ids = [p._p.pPr.numPr.numId.val for p in d.paragraphs if p.style.name == "List Number"]
@@ -234,7 +234,7 @@ class Word(Tmp):
         self.assertEqual(missing, ["not in the memo"])
         d = docx.Document(out)
         self.assertEqual([c.text for c in d.comments], ["Say why."])
-        self.assertEqual(next(iter(d.comments)).author, "Forge")
+        self.assertEqual(next(iter(d.comments)).author, "KodAct")
         with zipfile.ZipFile(out) as z:
             body = z.read("word/document.xml").decode()
         self.assertIn("commentRangeStart", body)
@@ -249,7 +249,7 @@ class Word(Tmp):
         self.assertEqual(docx_tool.track(src, out, [("700", "690"), ("Travel rises", "Travel climbs")]), [])
         with zipfile.ZipFile(out) as z:
             body = z.read("word/document.xml").decode()
-        self.assertIn('w:author="Forge"', body)
+        self.assertIn('w:author="KodAct"', body)
         self.assertIn("<w:delText", body)
         self.assertEqual(body.count("<w:ins "), 2)
         read = docx_tool.read(out)
@@ -264,7 +264,7 @@ class Word(Tmp):
 
 
 class Slides(Tmp):
-    OUTLINE = "# Forge 1.0\nA desktop app for Claude Code\n\n# What's new\n- Diagrams\n  - drawn natively\n- Documents\n\n# Next\n- Browser use\n"
+    OUTLINE = "# KodAct 1.0\nA desktop app for Claude Code\n\n# What's new\n- Diagrams\n  - drawn natively\n- Documents\n\n# Next\n- Browser use\n"
 
     def test_create_read_replace(self):
         out = self.path("deck.pptx")
@@ -273,7 +273,7 @@ class Slides(Tmp):
         prs = Presentation(out)
         self.assertEqual(len(prs.slides), 3)
         text = pptx_tool.read(out)
-        self.assertIn("## Slide 1: Forge 1.0", text)
+        self.assertIn("## Slide 1: KodAct 1.0", text)
         self.assertIn("- A desktop app for Claude Code", text)
         self.assertIn("  - drawn natively", text)
         self.assertEqual((prs.slide_width, prs.slide_height), (12192000, 6858000), "16:9, as PowerPoint makes decks")
@@ -282,7 +282,7 @@ class Slides(Tmp):
                 self.assertLessEqual(shape.left + shape.width, prs.slide_width, "nothing runs off the wide slide")
                 self.assertGreater(shape.width, prs.slide_width * 0.6, "placeholders span the wide slide")
         cp = prs.core_properties
-        self.assertEqual((cp.title, cp.author, cp.last_modified_by), ("Forge 1.0", "Forge", "Forge"))
+        self.assertEqual((cp.title, cp.author, cp.last_modified_by), ("KodAct 1.0", "KodAct", "KodAct"))
         out2 = self.path("deck-2.pptx")
         self.assertEqual(pptx_tool.replace(out, out2, [("Browser use", "Browser use, built in")]), 1)
         self.assertIn("Browser use, built in", pptx_tool.read(out2))
@@ -304,11 +304,11 @@ class Slides(Tmp):
         twice = self.path("twice.pptx")
         pptx_tool.duplicate(noted, twice, 2)
         prs = Presentation(twice)
-        self.assertEqual([s.shapes.title.text for s in prs.slides], ["Forge 1.0", "What's new", "What's new", "Next"])
+        self.assertEqual([s.shapes.title.text for s in prs.slides], ["KodAct 1.0", "What's new", "What's new", "Next"])
         self.assertEqual(prs.slides[2].notes_slide.notes_text_frame.text, "Show the panel.")
         moved = self.path("moved.pptx")
         self.assertEqual(pptx_tool.reorder(twice, moved, [1, 4, 2]), 3)
-        self.assertEqual([s.shapes.title.text for s in Presentation(moved).slides], ["Forge 1.0", "Next", "What's new"])
+        self.assertEqual([s.shapes.title.text for s in Presentation(moved).slides], ["KodAct 1.0", "Next", "What's new"])
         for f in (one, noted, twice, moved):
             self.assertEqual(check_tool.validate(f), [], f)
         with self.assertRaises(SystemExit):
@@ -328,7 +328,7 @@ class Pdf(Tmp):
         pdf_tool.create(b, "# Appendix\n\nMore.\n")
         self.assertIn("Report", pdf_tool.read(a))
         meta = PdfReader(a).metadata
-        self.assertEqual((meta.title, meta.author), ("Report", "Forge"))
+        self.assertEqual((meta.title, meta.author), ("Report", "KodAct"))
         self.assertEqual(PdfReader(b).metadata.title, "Appendix", "the title defaults to the first heading")
         self.assertIn("gateway adds the key", pdf_tool.read(a))
         merged = self.path("merged.pdf")
@@ -358,7 +358,7 @@ class Pdf(Tmp):
         self.assertIn("The budget changed.", pdf_tool.read(out))
         self.assertEqual(len(PdfReader(out).pages), 1)
         meta = PdfReader(out).metadata
-        self.assertEqual((meta.title, meta.author), ("Memo", "Forge"), "the Word file's properties carry into the PDF")
+        self.assertEqual((meta.title, meta.author), ("Memo", "KodAct"), "the Word file's properties carry into the PDF")
 
 
 if __name__ == "__main__":

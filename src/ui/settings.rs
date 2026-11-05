@@ -1,7 +1,7 @@
 //! Settings: a window over the app (dimmed backdrop, Esc or a click outside
 //! closes it) with General, Models and About.
 //!
-//! Models is where endpoints are set up, the way Forge for VS Code's guided
+//! Models is where endpoints are set up, the way KodAct for VS Code's guided
 //! "Add endpoint" flow does it, as one form instead of a row of prompts:
 //! start from a preset (local runtimes found on this PC are marked), then
 //! name, URL, protocol and key, then the model list loaded *with* that key
@@ -84,7 +84,7 @@ type Section = (
 
 const SECTIONS: &[Section] = &[
     (
-        "Forge",
+        "KodAct",
         &[
             (
                 SettingsTab::General,
@@ -558,7 +558,7 @@ impl Settings {
                     catalog: self.catalog,
                     ..o.capabilities.clone()
                 },
-                // Gemini takes effort as its thinking level (ForgeCLI maps it).
+                // Gemini takes effort as its thinking level (KodAct CLI maps it).
                 None => crate::endpoints::Capabilities {
                     catalog: self.catalog,
                     effort: self.wire == Wire::Gemini,
@@ -896,7 +896,7 @@ impl Settings {
                     Self::row(
                         t,
                         "Your name",
-                        Some("What Forge calls you on the new-chat screen."),
+                        Some("What KodAct calls you on the new-chat screen."),
                         name_row.into_any_element(),
                         true,
                     ),
@@ -925,14 +925,14 @@ impl Settings {
                     Self::row(
                         t,
                         "Bypass permissions",
-                        Some("Lets Forge run any tool without asking. Only for throwaway folders or a sandbox."),
+                        Some("Lets KodAct run any tool without asking. Only for throwaway folders or a sandbox."),
                         bypass_row.into_any_element(),
                         false,
                     ),
                     Self::row(
                         t,
                         "Web browser",
-                        Some("Lets Forge's agents drive the browser in the side panel: open pages and tabs, click, type, read, run scripts, take screenshots. You watch it live. Each step asks first."),
+                        Some("Lets KodAct's agents drive the browser in the side panel: open pages and tabs, click, type, read, run scripts, take screenshots. You watch it live. Each step asks first."),
                         browser_row.into_any_element(),
                         false,
                     ),
@@ -946,7 +946,7 @@ impl Settings {
             .child(super::editor_kit::header(
                 t,
                 "General",
-                "Who you are, how Forge looks, and how new chats start.",
+                "Who you are, how KodAct looks, and how new chats start.",
                 None,
             ));
         for (i, (heading, rows)) in groups.into_iter().enumerate() {
@@ -1191,7 +1191,7 @@ impl Settings {
             .child(super::editor_kit::header(
                 t,
                 "Models",
-                "Each endpoint is a URL and the model it runs. Forge checks each one with a tiny request; the one in use answers your chats.",
+                "Each endpoint is a URL and the model it runs. KodAct checks each one with a tiny request; the one in use answers your chats.",
                 Some(
                     super::button::Button::primary("add-endpoint", "Add endpoint")
                         .with_icon("icons/plus.svg")
@@ -1305,7 +1305,7 @@ impl Settings {
                 this.form = false;
                 cx.notify();
             })))
-            .child(super::editor_kit::header(t, title, "Start from a preset or fill it in. Forge lists the models with your key, checks the one you pick with a short request, then saves it and uses it.", None))
+            .child(super::editor_kit::header(t, title, "Start from a preset or fill it in. KodAct lists the models with your key, checks the one you pick with a short request, then saves it and uses it.", None))
             .child(div().flex().flex_col().gap(px(6.)).child(div().text_size(t.text.caption).font_weight(FontWeight::MEDIUM).text_color(t.colors.text_muted).child("Start from")).child(presets).children(found_note.map(|n| div().text_size(t.text.caption).text_color(t.extra.success).child(n))))
             .child(div().flex().gap(px(10.)).child(div().w(px(170.)).child(Self::field(t, "Name", &self.ep_name))).child(div().flex_1().min_w_0().child(Self::field(t, "Base URL", &self.ep_url))))
             .child(div().flex().flex_col().gap(px(6.)).child(div().text_size(t.text.caption).font_weight(FontWeight::MEDIUM).text_color(t.colors.text_muted).child("Protocol")).child(wire_row))
@@ -1340,7 +1340,7 @@ impl Settings {
                     .flex_col()
                     .gap(px(4.))
                     .child(Self::field(t, "API key", &self.ep_key))
-                    .child(div().text_size(t.text.caption).text_color(t.colors.text_muted).child(if cfg!(windows) { "Kept in Windows Credential Manager, never in a file. Local servers need none." } else { "Kept in a private file in Forge's config folder, never in endpoints.json. Local servers need none." })),
+                    .child(div().text_size(t.text.caption).text_color(t.colors.text_muted).child(if cfg!(windows) { "Kept in Windows Credential Manager, never in a file. Local servers need none." } else { "Kept in a private file in KodAct's config folder, never in endpoints.json. Local servers need none." })),
             )
             .child(model_section)
             .children(status.map(|(c, i, s)| Self::status_line(t, c, i, s)))
@@ -2018,7 +2018,7 @@ impl Settings {
             .child(row(
                 "Engine",
                 cli.map(|p| p.display().to_string()).unwrap_or_else(|| {
-                    "ForgeCLI not found: put forge.exe beside ForgeDesktop.exe".into()
+                    "KodAct CLI not found: put kodact.exe in the bin folder beside KodAct.exe".into()
                 }),
             ))
             .child(row(

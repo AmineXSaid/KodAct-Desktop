@@ -1,6 +1,6 @@
 //! Commenting on a file in the side panel, as in Claude Docs and Claude's
 //! artifacts: select words (or cells, or a page), say what should change,
-//! and either keep it as a comment or ask Forge to change it at once.
+//! and either keep it as a comment or ask KodAct to change it at once.
 //!
 //! - What you picked is held while you type, so clicking into the box does
 //!   not lose it.
@@ -37,7 +37,7 @@ impl DocComments {
             cx.observe(&state, |_, _, cx| cx.notify()),
             cx.subscribe_in(&input, window, |this, _, ev: &InputEvent, window, cx| {
                 if let InputEvent::PressEnter { secondary, .. } = ev {
-                    // Enter keeps a comment; Ctrl/⌘ Enter asks Forge at once.
+                    // Enter keeps a comment; Ctrl/⌘ Enter asks KodAct at once.
                     this.submit(*secondary, window, cx);
                 }
             }),
@@ -252,7 +252,7 @@ impl Render for DocComments {
                                     })),
                             )
                             .child(
-                                theme::primary_button(&t, "Ask Forge to change this")
+                                theme::primary_button(&t, "Ask KodAct to change this")
                                     .id("comment-ask")
                                     .when(busy, |d| d.opacity(0.5))
                                     .on_click(cx.listener(|this, _, window, cx| {
@@ -265,7 +265,7 @@ impl Render for DocComments {
                             .text_size(t.text.caption)
                             .text_color(t.colors.text_subtle)
                             .child(format!(
-                                "Enter keeps it as a comment · {} asks Forge now",
+                                "Enter keeps it as a comment · {} asks KodAct now",
                                 super::shortcut("Enter")
                             )),
                     )

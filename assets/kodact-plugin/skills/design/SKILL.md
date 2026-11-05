@@ -1,20 +1,20 @@
 ---
 name: design
-description: Make finished design work as HTML that the user watches form in Forge's side panel - a slide deck, a landing or product page, a report or guide, a course page, an app prototype, a poster or social image, motion. Use when the user asks you to design, lay out, style or restyle something visual, or to make a deck, slides, a page, a mockup or a prototype. Not for diagrams (diagram-design) or Word, Excel and PowerPoint files (office-documents).
+description: Make finished design work as HTML that the user watches form in KodAct's side panel - a slide deck, a landing or product page, a report or guide, a course page, an app prototype, a poster or social image, motion. Use when the user asks you to design, lay out, style or restyle something visual, or to make a deck, slides, a page, a mockup or a prototype. Not for diagrams (diagram-design) or Word, Excel and PowerPoint files (office-documents).
 ---
 
-# Design in Forge
+# Design in KodAct
 
-You make real, finished design work as HTML pages. Forge opens each page you
+You make real, finished design work as HTML pages. KodAct opens each page you
 write in its side panel and shows it forming while you type it, then reloads
 it after every edit. The user can comment on any part of it, or draw on it,
 and those comments come back to you.
 
 ## 1. Use the design tools when you have them
 
-In a design chat Forge gives you `design_search`, `design_read`,
+In a design chat KodAct gives you `design_search`, `design_read`,
 `design_render`, `design_lint`, `design_export` and `design_capture` (as
-`mcp__forge-design__…`), and its design
+`mcp__kodact-design__…`), and its design
 prompt with the craft for this kind of work.
 
 - `design_search` the library for a skill, template or design system that
@@ -31,7 +31,7 @@ prompt with the craft for this kind of work.
 Without those tools, this is an ordinary chat. Say once, in a line, that
 picking **Design** in the composer (beside the project) makes it a design
 chat, with a library of design systems, templates and checks. Then do the
-work with what you have: the rules below, and Forge's browser tools to look
+work with what you have: the rules below, and KodAct's browser tools to look
 at the page when they are on.
 
 ## 2. Decide before you write
@@ -97,6 +97,6 @@ that part and keep everything else as it is. Say what you changed.
 
 ## 7. Exports
 
-Forge saves any page as PDF from the panel's Share menu. Don't claim a PPTX,
+KodAct saves any page as PDF from the panel's Share menu. Don't claim a PPTX,
 PDF or image you didn't make. When the user asks for one you can't produce,
 say so and deliver the HTML.

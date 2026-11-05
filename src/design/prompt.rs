@@ -2,11 +2,11 @@
 //! (`docs/open-design-port.md` §5.1). In order, stable parts first so
 //! prompt caching holds across a chat's turns:
 //!
-//! 1. Forge's design charter: how a design is made here (one file, written
+//! 1. KodAct's design charter: how a design is made here (one file, written
 //!    top to bottom so the panel can show it forming; look at it with
 //!    `design_render`, check it with `design_lint`, revise);
 //! 2. the task profile for the surface, Open Design's own file kept as it
-//!    is, after a short note on how its host's words map to Forge;
+//!    is, after a short note on how its host's words map to KodAct;
 //! 3. the chosen design system's `DESIGN.md`;
 //! 4. the craft rules the surface and the skill ask for;
 //! 5. the skill;
@@ -88,7 +88,7 @@ impl Surface {
     /// What it makes, under its name in the composer's menu.
     pub fn description(self) -> &'static str {
         match self {
-            Surface::Any => "Forge picks the kind of work from each request",
+            Surface::Any => "KodAct picks the kind of work from each request",
             Surface::Deck => "Slides to present: a talk, a pitch, a course",
             Surface::Prototype => "Screens to click through: an app, a site, a flow",
             Surface::Document => "A page to read: a report, a guide, a course page",
@@ -173,11 +173,11 @@ const SKILL_MAX: usize = 24_000;
 #[cfg(test)]
 const TOTAL_MAX: usize = CHARTER_MAX + PROFILE_MAX + SYSTEM_MAX + 3 * CRAFT_MAX + SKILL_MAX;
 
-/// Forge's design charter: how a design is made in Forge.
-const CHARTER: &str = "# Designing in Forge
+/// KodAct's design charter: how a design is made in KodAct.
+const CHARTER: &str = "# Designing in KodAct
 
 This is a design chat. You make real, finished design work (decks, pages, documents, prototypes, posters, motion) as HTML files \
-the user can open, click through and export. Forge's side panel shows the page while you write it and reloads it after every edit.
+the user can open, click through and export. KodAct's side panel shows the page while you write it and reloads it after every edit.
 
 ## How to work
 
@@ -188,7 +188,7 @@ renders what you have typed so far, so the user watches the page form. Change an
 - Decide the design before you write: audience, purpose, the one idea each section or slide carries, the type scale, the palette \
 and the grid. State the assumptions you make in a line, and ask only what you cannot reasonably assume.
 - When you must ask (a new design with no brief: audience, feel, length; or a choice between directions), ask with \
-AskUserQuestion: up to four short questions, each with two to four concrete options and what each means. Forge shows them as a \
+AskUserQuestion: up to four short questions, each with two to four concrete options and what each means. KodAct shows them as a \
 form the user clicks through, and you get the answers back.
 - Real content only: no lorem ipsum, no \"Your title here\", no invented numbers presented as facts. Where a fact is missing, say so \
 in the reply rather than on the page.
@@ -218,24 +218,24 @@ or after three rounds. Then tell the user in a line or two what you made, where 
 
 ## The user's comments
 
-The user can comment on a part of the page in Forge's panel, or draw on it. A comment arrives as a message naming the part (its \
+The user can comment on a part of the page in KodAct's panel, or draw on it. A comment arrives as a message naming the part (its \
 tag, its text, a selector) and sometimes a picture with their marks. Change that part, keep the rest of the page as it is, and say \
 what you changed.
 
 ## Exports
 
-Forge saves pages as PDF itself. Don't claim a PPTX, PDF or image you didn't make: when the user asks for one you can't produce, \
+KodAct saves pages as PDF itself. Don't claim a PPTX, PDF or image you didn't make: when the user asks for one you can't produce, \
 say so and deliver the HTML.";
 
-/// What Open Design's own words mean in Forge, for the profile that
+/// What Open Design's own words mean in KodAct, for the profile that
 /// follows (it is kept exactly as upstream wrote it).
 fn host_note(lib: &Path) -> String {
     let frames = lib.join(PROFILES).join("prototype");
     format!(
-        "The task profile below is Open Design's, kept as written. In Forge: \"Open Design\", \"OD\" and \"the host\" mean Forge; \
+        "The task profile below is Open Design's, kept as written. In KodAct: \"Open Design\", \"OD\" and \"the host\" mean KodAct; \
 there is no planning turn and no production-ready marker, so do the work in this turn; ignore what it says about machine \
 contracts, task state and host-side renders. Where it names `.od-frames/<file>`, copy that file from `{}` into a `.od-frames/` \
-folder beside your page and use it from there. Forge's own exports replace \"product-side exports\".",
+folder beside your page and use it from there. KodAct's own exports replace \"product-side exports\".",
         frames.display()
     )
 }
@@ -422,7 +422,7 @@ mod tests {
                     ..Setup::default()
                 },
             );
-            assert!(p.starts_with("# Designing in Forge"), "{surface:?}");
+            assert!(p.starts_with("# Designing in KodAct"), "{surface:?}");
             assert!(p.len() <= TOTAL_MAX, "{surface:?}: {}", p.len());
             assert!(p.contains("design_render") && p.contains("design_lint"));
             if surface.profile().is_some() {
@@ -452,7 +452,7 @@ mod tests {
         let p = compose(&ix, &setup);
         let at = |s: &str| p.find(s).unwrap_or_else(|| panic!("no {s}"));
         let order = [
-            at("# Designing in Forge"),
+            at("# Designing in KodAct"),
             at("# Task profile: a deck"),
             at("# Design system: Apple"),
             at("# Craft: anti-ai-slop"),

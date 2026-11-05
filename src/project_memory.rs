@@ -1,6 +1,7 @@
-//! A project's memory: what Forge learns while working there (decisions,
+//! A project's memory: what KodAct learns while working there (decisions,
 //! preferences, names, conventions), kept as plain Markdown you can read
-//! and change, in `.forge/memory.md`:
+//! and change, in `.kodact/memory.md` (`.forge/memory.md` in a project made
+//! before the rename, `names.rs`):
 //!
 //! ```text
 //! # Memory
@@ -10,18 +11,23 @@
 //! ```
 //!
 //! A new chat gets it, with the rules for adding to it, ahead of its first
-//! message (`state.rs` `send_to_forge`); Forge records with its own file
+//! message (`state.rs` `send_to_forge`); KodAct records with its own file
 //! tools. After a turn, what changed is shown under the reply with Undo.
 
 use std::path::{Path, PathBuf};
 
-pub const FILE: &str = ".forge/memory.md";
+/// The memory file, relative to the project: `.kodact/memory.md`, or in
+/// ForgeCLI's `.forge/` while the project has only that folder.
+pub fn file(project: &Path) -> String {
+    crate::names::in_project_dir(project, "memory.md")
+}
+
 /// A memory larger than this isn't sent (it would crowd the chat out); the
 /// card says so.
 pub const MAX: usize = 64 * 1024;
 
 pub fn path(project: &Path) -> PathBuf {
-    project.join(FILE)
+    project.join(file(project))
 }
 
 /// The memory as it is now; empty when there is none (blocking).
@@ -98,7 +104,7 @@ pub fn forget(text: &str, fact: &str) -> String {
     out
 }
 
-/// The memory with `fact` added under `topic` (made if missing), as Forge
+/// The memory with `fact` added under `topic` (made if missing), as KodAct
 /// writes it.
 pub fn add(text: &str, topic: &str, fact: &str) -> String {
     let mut lines: Vec<String> = if text.trim().is_empty() {
@@ -129,19 +135,20 @@ pub fn add(text: &str, topic: &str, fact: &str) -> String {
     lines.join("\n")
 }
 
-/// What a new chat gets: the memory, and how to keep it.
-pub fn prompt(text: &str) -> String {
+/// What a new chat gets: the memory, and how to keep it in `file`
+/// (relative to the project).
+pub fn prompt(text: &str, file: &str) -> String {
     let memory = if text.trim().is_empty() {
         "(Nothing yet.)".to_string()
     } else if text.len() > MAX {
-        "(It is too large to include: read .forge/memory.md when it matters.)".to_string()
+        format!("(It is too large to include: read {file} when it matters.)")
     } else {
         text.trim().to_string()
     };
     format!(
-        "<project_memory file=\"{FILE}\">\n{memory}\n</project_memory>\n\
+        "<project_memory file=\"{file}\">\n{memory}\n</project_memory>\n\
 This is what you have learned working in this project. Rely on it. When the user tells you something durable about the \
-project or how they work (a decision, a preference, a name, a convention, a correction), record it in {FILE}: one short fact \
+project or how they work (a decision, a preference, a name, a convention, a correction), record it in {file}: one short fact \
 per line as `- fact`, under a `## Topic` heading (Decisions, Preferences, People, Conventions, or a better one), creating \
 the file with `# Memory` at the top if needed. Change or remove a fact that turns out wrong. Never record secrets, keys or \
 passwords, or things that only matter for this one conversation. Say in one short line when you remembered something.\n"
@@ -199,8 +206,8 @@ mod tests {
 
     #[test]
     fn a_new_chat_gets_the_memory_and_how_to_keep_it() {
-        let p = prompt(MEM);
-        assert!(p.contains("- No ORMs.") && p.contains(FILE) && p.contains("Never record secrets"));
-        assert!(prompt("").contains("(Nothing yet.)"));
+        let p = prompt(MEM, ".kodact/memory.md");
+        assert!(p.contains("- No ORMs.") && p.contains(".kodact/memory.md") && p.contains("Never record secrets"));
+        assert!(prompt("", ".kodact/memory.md").contains("(Nothing yet.)"));
     }
 }

@@ -1,4 +1,4 @@
-//! Forge's controls: one family of buttons (primary, secondary, ghost,
+//! KodAct's controls: one family of buttons (primary, secondary, ghost,
 //! outlined, danger; icon-only or labelled; send and stop), the switch, the
 //! segmented control and the selector trigger.
 //!

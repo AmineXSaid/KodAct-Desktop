@@ -54,7 +54,7 @@ pub const CHAT_STARTERS: [Starter; 4] = [
         hint: "Step by step, checking as we go",
         // The teaching skill: it finds your level, teaches by example and checks
         // you can do it yourself, and stays on for the conversation.
-        prompt: "/forge:expert I want to learn how this works: ",
+        prompt: "/kodact:expert I want to learn how this works: ",
     },
     Starter {
         icon: "icons/pencil.svg",

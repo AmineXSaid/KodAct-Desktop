@@ -1,8 +1,8 @@
 //! SSH passwords and key passphrases, asked in the app.
 //!
 //! ssh asks through `SSH_ASKPASS`, a program it runs with the prompt as its
-//! one argument and reads the answer from. That program is Forge itself:
-//! with `FORGE_ASKPASS` in its environment (`port:token`), `main` runs
+//! one argument and reads the answer from. That program is KodAct itself:
+//! with `KODACT_ASKPASS` in its environment (`port:token`), `main` runs
 //! [`client`] instead of the window. The client hands the prompt to the app
 //! over a localhost socket; the app shows it as a dialog
 //! (`ui/askpass.rs`), and the answer goes back the same way, then out on the
@@ -22,8 +22,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
-/// The environment variable that turns Forge into the askpass client.
-pub const ENV: &str = "FORGE_ASKPASS";
+/// The environment variable that turns KodAct into the askpass client.
+pub const ENV: &str = "KODACT_ASKPASS";
 
 /// A prompt for the app to show.
 pub struct Request {
@@ -149,8 +149,8 @@ fn serve(
 /// None until the server runs (ssh then stays in batch mode, keys only).
 pub fn env() -> Option<Vec<(String, String)>> {
     let s = SERVER.get()?;
-    // `FORGE_ASKPASS_PROGRAM`: the app's binary when this runs elsewhere (tests).
-    let exe = std::env::var_os("FORGE_ASKPASS_PROGRAM")
+    // `KODACT_ASKPASS_PROGRAM`: the app's binary when this runs elsewhere (tests).
+    let exe = std::env::var_os("KODACT_ASKPASS_PROGRAM")
         .map(std::path::PathBuf::from)
         .or_else(|| std::env::current_exe().ok())?;
     let mut out = vec![
@@ -169,7 +169,7 @@ pub fn env() -> Option<Vec<(String, String)>> {
     Some(out)
 }
 
-/// The askpass client: run by ssh as `forge <prompt>` with `FORGE_ASKPASS`
+/// The askpass client: run by ssh as `kodact <prompt>` with `KODACT_ASKPASS`
 /// set. Prints the answer for ssh; exits 1 when cancelled or unreachable.
 pub fn client(addr: &str, prompt: &str) -> i32 {
     let Some((port, token)) = addr.split_once(':') else {
@@ -274,11 +274,11 @@ mod tests {
     }
 
     /// Real ssh asking through the app's binary: a passphrase-locked key
-    /// (`FORGE_TEST_SSH_PASSPHRASE_HOST`, passphrase `FORGE_TEST_PASSPHRASE`)
-    /// and a password host (`FORGE_TEST_SSH_PASSWORD_HOST`, password
-    /// `FORGE_TEST_PASSWORD`). Right answers connect and are remembered;
+    /// (`KODACT_TEST_SSH_PASSPHRASE_HOST`, passphrase `KODACT_TEST_PASSPHRASE`)
+    /// and a password host (`KODACT_TEST_SSH_PASSWORD_HOST`, password
+    /// `KODACT_TEST_PASSWORD`). Right answers connect and are remembered;
     /// a wrong one is refused with a clear message, and asked again after.
-    /// `FORGE_ASKPASS_PROGRAM` must be the built app.
+    /// `KODACT_ASKPASS_PROGRAM` must be the built app.
     #[test]
     #[ignore]
     fn real_ssh_prompts() {
@@ -295,9 +295,9 @@ mod tests {
                 let answer = if w.load(Ordering::SeqCst) {
                     "not-it".to_string()
                 } else if p.contains("passphrase") {
-                    std::env::var("FORGE_TEST_PASSPHRASE").unwrap()
+                    std::env::var("KODACT_TEST_PASSPHRASE").unwrap()
                 } else {
-                    std::env::var("FORGE_TEST_PASSWORD").unwrap()
+                    std::env::var("KODACT_TEST_PASSWORD").unwrap()
                 };
                 let _ = r.reply.send(Some(answer));
             }
@@ -307,8 +307,8 @@ mod tests {
             reverse: vec![],
         };
         for var in [
-            "FORGE_TEST_SSH_PASSPHRASE_HOST",
-            "FORGE_TEST_SSH_PASSWORD_HOST",
+            "KODACT_TEST_SSH_PASSPHRASE_HOST",
+            "KODACT_TEST_SSH_PASSWORD_HOST",
         ] {
             let host = std::env::var(var).expect(var);
             let t = Target::Ssh(host.clone());

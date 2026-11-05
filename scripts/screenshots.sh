@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Screenshots of Forge's main screens, light and dark, so "run it and look
+# Screenshots of KodAct's main screens, light and dark, so "run it and look
 # at it" is one command. Linux only (Xvfb, xdotool, ImageMagick's import).
 #
 #   cargo build && scripts/screenshots.sh [out-dir]
 #
 # It runs the debug build on a virtual display (:99, 1280x860) in demo mode
-# (FORGE_DEMO=1: scripted replies, no model needed), with a throwaway config
-# folder (FORGE_CONFIG_DIR, FORGE_HOME) and this repo as the project, then
+# (KODACT_DEMO=1: scripted replies, no model needed), with a throwaway config
+# folder (KODACT_CONFIG_DIR, KODACT_HOME) and this repo as the project, then
 # drives it with xdotool and saves PNGs to out-dir (default: screenshots/):
 #
 #   welcome, chat, map, split, projects, and every Settings section,
@@ -22,7 +22,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 OUT="${1:-screenshots}"
 mkdir -p "$OUT"
-BIN="target/debug/forge-gpui"
+BIN="target/debug/kodact-desktop"
 [ -x "$BIN" ] || { echo "Build first: cargo build" >&2; exit 1; }
 for tool in Xvfb xdotool import; do
   command -v "$tool" >/dev/null || { echo "Missing $tool" >&2; exit 1; }
@@ -47,12 +47,12 @@ fi
 
 # A name, so the app skips onboarding; lavapipe when there's no GPU.
 mkdir -p "$TMP/config" "$TMP/home"
-echo "Forge" > "$TMP/config/name.txt"
+echo "KodAct" > "$TMP/config/name.txt"
 if [ -z "${VK_ICD_FILENAMES:-}" ] && [ -f /usr/share/vulkan/icd.d/lvp_icd.json ] && [ ! -e /dev/dri ]; then
   export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json
 fi
 
-FORGE_DEMO=1 FORGE_CONFIG_DIR="$TMP/config" FORGE_HOME="$TMP/home" FORGE_PROJECT_DIR="$PWD" \
+KODACT_DEMO=1 KODACT_CONFIG_DIR="$TMP/config" KODACT_HOME="$TMP/home" KODACT_PROJECT_DIR="$PWD" \
   "$BIN" >"$TMP/app.log" 2>&1 &
 APP_PID=$!
 sleep 6

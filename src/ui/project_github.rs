@@ -4,7 +4,7 @@
 //! - Where it stands: the branch (switch or make one), ahead and behind
 //!   its upstream with Pull, what has changed.
 //! - On GitHub: the latest workflow run, open pull requests with their
-//!   checks, open issues. Each opens on GitHub, and **Ask Forge** starts a
+//!   checks, open issues. Each opens on GitHub, and **Ask KodAct** starts a
 //!   chat in the project about it: review this PR, work on this issue, fix
 //!   this failing run.
 
@@ -100,7 +100,7 @@ fn section(t: &Theme, label: String) -> gpui::Div {
 }
 
 /// One pull request or issue: its mark, number and title, a second line,
-/// and on hover Open and Ask Forge.
+/// and on hover Open and Ask KodAct.
 #[allow(clippy::too_many_arguments)]
 fn item(
     t: &Theme,
@@ -169,7 +169,7 @@ fn item(
                     super::button::Button::icon(
                         SharedString::from(format!("gh-ask-{key}")),
                         "icons/sparkles.svg",
-                        "Ask Forge about this",
+                        "Ask KodAct about this",
                     )
                     .compact()
                     .on_click(move |_, _, cx| {
@@ -251,7 +251,7 @@ impl Render for ProjectGithub {
                         .child("Not a git repository yet, so there is no history to go back to."),
                 )
                 .child(
-                    theme::ghost_button(&t, "Ask Forge to set up git")
+                    theme::ghost_button(&t, "Ask KodAct to set up git")
                         .id("gh-init")
                         .on_click(move |_, _, cx| {
                             ask.update(cx, |s, cx| {
@@ -515,7 +515,7 @@ impl Render for ProjectGithub {
                             )
                             .when(c == Checks::Failing, |d| {
                                 d.child(
-                                    theme::text_button(&t, "Ask Forge to fix")
+                                    theme::text_button(&t, "Ask KodAct to fix")
                                         .id("gh-run-fix")
                                         .text_size(t.text.caption)
                                         .on_click(move |_, _, cx| {

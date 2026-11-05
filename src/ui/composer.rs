@@ -24,15 +24,15 @@ fn placeholder(in_folder: bool, asking: Option<bool>, busy: bool, in_chat: bool)
     if asking == Some(true) {
         "Type your own answer…"
     } else if asking.is_some() {
-        "Or tell Forge what to do instead…"
+        "Or tell KodAct what to do instead…"
     } else if busy {
-        "Add to the task, or steer Forge…"
+        "Add to the task, or steer KodAct…"
     } else if in_chat {
-        "Reply to Forge, or type / for commands"
+        "Reply to KodAct, or type / for commands"
     } else if in_folder {
         "What should we build today?"
     } else {
-        "Ask Forge anything"
+        "Ask KodAct anything"
     }
 }
 
@@ -290,7 +290,7 @@ impl Composer {
             self.input.update(cx, |i, cx| i.set_value("", window, cx));
             return;
         }
-        // While a reply runs, a message is queued for Forge's next step
+        // While a reply runs, a message is queued for KodAct's next step
         // (`/btw` keeps its side card).
         if self.state.read(cx).busy() && crate::state::parse_btw(&text).is_none() {
             // Words, pictures or pasted texts: each is a message for the next step.

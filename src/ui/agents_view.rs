@@ -1,4 +1,4 @@
-//! The side panel's Agents tab: Forge's sub-agents at work, live. Forge
+//! The side panel's Agents tab: KodAct's sub-agents at work, live. KodAct
 //! sits at the top with what you asked; each agent it started hangs off a
 //! spine below it, as a card: its kind, its task, its state and how long it
 //! has run, a strip with a cell per step it took, and what it is doing now.
@@ -102,9 +102,9 @@ fn spinner(t: &Theme, color: Hsla, key: String) -> AnyElement {
 
 pub struct View<'a> {
     pub runs: &'a [AgentRun],
-    /// What you asked, which Forge split across its agents.
+    /// What you asked, which KodAct split across its agents.
     pub request: Option<SharedString>,
-    /// Forge's mark for the top of the tree.
+    /// KodAct's mark for the top of the tree.
     pub logo: AnyElement,
     /// The chat's turn is still going.
     pub working: bool,
@@ -139,7 +139,7 @@ pub fn render(
                     .text_size(t.text.body_sm)
                     .line_height(relative(1.5))
                     .text_color(t.colors.text_muted)
-                    .child("Ask Forge to split the work across sub-agents (\"use sub-agents to review each module\"). Each agent shows here as it works: what it was asked, every step it takes, and what it found."),
+                    .child("Ask KodAct to split the work across sub-agents (\"use sub-agents to review each module\"). Each agent shows here as it works: what it was asked, every step it takes, and what it found."),
             )
             .into_any_element();
     }
@@ -275,7 +275,7 @@ pub fn render(
                 ),
         );
 
-    // Forge at the root of the tree.
+    // KodAct at the root of the tree.
     let root = div()
         .flex()
         .items_center()
@@ -302,7 +302,7 @@ pub fn render(
                             div()
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(t.colors.text_strong)
-                                .child("Forge"),
+                                .child("KodAct"),
                         )
                         .child(
                             div()
@@ -341,7 +341,7 @@ pub fn render(
                 stop_button(t, "agents-stop-all", "Stop all")
                     .tooltip(|w, cx| {
                         gpui::component::tooltip::Tooltip::new(
-                            "Stop every agent; Forge carries on with what they found (Ctrl+Shift+Esc)",
+                            "Stop every agent; KodAct carries on with what they found (Ctrl+Shift+Esc)",
                         )
                         .build(w, cx)
                     })
@@ -630,7 +630,7 @@ pub fn render(
         .child(summary)
         .child(
             div().flex().flex_col().child(root).child(
-                // The spine down from Forge, with an agent off each node.
+                // The spine down from KodAct, with an agent off each node.
                 div()
                     .relative()
                     .pt(t.space.md)

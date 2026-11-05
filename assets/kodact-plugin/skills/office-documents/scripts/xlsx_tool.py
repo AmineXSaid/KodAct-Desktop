@@ -14,7 +14,7 @@ touch. openpyxl stores formulas without computing them: run `recalc`
 `recalc` fails, naming the cells, when any formula computes to an error
 (#DIV/0!, #REF!, #NAME?, #VALUE!, #N/A, #NUM!, #NULL!): fix them first.
 Fonts are always named (a nameless one becomes whatever font the opening
-app picks), and every file carries real properties: author Forge, dates.
+app picks), and every file carries real properties: author KodAct, dates.
 """
 
 import argparse
@@ -34,7 +34,7 @@ import openpyxl
 from openpyxl.styles import Border, Font, Side
 from openpyxl.utils import get_column_letter
 
-AUTHOR = "Forge"
+AUTHOR = "KodAct"
 FONT = "Calibri"
 
 

@@ -1,7 +1,7 @@
 //! The Memory card on a project page's rail (`crate::project_memory`): what
-//! Forge has learned working in the project, by topic, each fact a hover
+//! KodAct has learned working in the project, by topic, each fact a hover
 //! away from being forgotten; the whole file editable in place; a switch to
-//! stop keeping it. Plain Markdown in `.forge/memory.md`, nothing hidden.
+//! stop keeping it. Plain Markdown in `.kodact/memory.md`, nothing hidden.
 
 use gpui::component::input::TextareaState;
 use gpui::{
@@ -125,9 +125,9 @@ impl Render for ProjectMemory {
                 .text_color(t.colors.text_subtle)
                 .line_height(relative(1.4))
                 .child(if on {
-                    "Nothing yet. Forge writes down what it learns here (decisions, preferences, names) and you see each one as it happens, with Undo."
+                    "Nothing yet. KodAct writes down what it learns here (decisions, preferences, names) and you see each one as it happens, with Undo."
                 } else {
-                    "Off: chats here start without a memory, and Forge doesn't keep one."
+                    "Off: chats here start without a memory, and KodAct doesn't keep one."
                 })
                 .into_any_element()
         } else {

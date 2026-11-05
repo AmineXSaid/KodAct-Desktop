@@ -1,6 +1,6 @@
-//! Settings profiles: named sets of ForgeCLI settings kept side by side
-//! (`profiles/<name>.json` in Forge's config folder), one of them active.
-//! Each chat's ForgeCLI gets the active one as `--settings <file>`, which it
+//! Settings profiles: named sets of KodAct CLI settings kept side by side
+//! (`profiles/<name>.json` in KodAct's config folder), one of them active.
+//! Each chat's KodAct CLI gets the active one as `--settings <file>`, which it
 //! layers above your settings, the project's and this PC's: what the profile
 //! sets wins, and what it doesn't set falls back to them. A new profile
 //! starts empty (`{}`). The choice is kept in `settings-profile.txt`.
@@ -15,7 +15,7 @@ pub struct SettingsProfile {
     pub path: PathBuf,
     /// The top-level keys it sets (`permissions`, `model`…).
     pub keys: Vec<String>,
-    /// The file isn't a JSON object, so ForgeCLI would report it.
+    /// The file isn't a JSON object, so KodAct CLI would report it.
     pub problem: Option<String>,
 }
 

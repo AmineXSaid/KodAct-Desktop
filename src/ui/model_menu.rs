@@ -1,4 +1,4 @@
-//! The model window, as Forge for VS Code has it: a menu above the
+//! The model window, as KodAct for VS Code has it: a menu above the
 //! composer, as wide as it. Above eight rows it has a search box. Then
 //! "Select a model" with a refresh button that turns while models are being
 //! checked, and one row per endpoint: the model's name with its chips (Max,

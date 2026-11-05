@@ -1,4 +1,4 @@
-# Design System: Forge desktop (forge-gpui)
+# Design System: KodAct desktop (kodact-desktop)
 
 > Generated from `src/theme.rs` by `src/system_md.rs`. Change a token in theme.rs, then run
 > `UPDATE_SYSTEM_MD=1 cargo test system_md`; `cargo test` fails while this file is stale.
@@ -8,7 +8,7 @@
 
 **Personality:** calmly smooth: a warm editorial workspace, confident and unhurried, closer to a printed quarterly than a dashboard (after the Anchor style reference).
 
-**Foundation:** Forge Ember. Warm paper by day: the window and sidebar #ebe8e1, the session a sheet of #f7f5f1 on it, cards white on that. Warm graphite at night: #1b1a19, #242322, cards #2e2d2b. One ink carries the type. One colour, ember copper (#b4532a; #e2895b at night): the decisive action, links, a switch that is on, the mark's top, a waiting dot. Inline code in coral on a faint wash. Everything else is neutral; colour otherwise only for meaning (modes, status).
+**Foundation:** KodAct Ember. Warm paper by day: the window and sidebar #ebe8e1, the session a sheet of #f7f5f1 on it, cards white on that. Warm graphite at night: #1b1a19, #242322, cards #2e2d2b. One ink carries the type. One colour, ember copper (#b4532a; #e2895b at night): the decisive action, links, a switch that is on, the mark's top, a waiting dot. Inline code in coral on a faint wash. Everything else is neutral; colour otherwise only for meaning (modes, status).
 
 **Depth:** nearly flat. Hairlines inside cards; the session and the user's message lift on paper grain (three 1px shadows at 6/4/1% ink); popovers and the permission card a touch more.
 
@@ -184,7 +184,7 @@ One family; every control takes keyboard focus (a `primary` edge shows for the k
 - Usage: menus, pickers, the command palette
 
 ### File Card
-- A file Forge made, in its reply: up to 440px, `surface`, 1px `border`, radius 4px, padding 8px
+- A file KodAct made, in its reply: up to 440px, `surface`, 1px `border`, radius 4px, padding 8px
 - A 36x44 page tile (radius 4px, concentric with the card) previews it, its type in mono `primary`
 - Title 600 `text_strong`; "Document · MD" caption `text_muted`; a bordered Download button
 - Open: the edge turns `primary` at 60%
@@ -206,14 +206,14 @@ One family; every control takes keyboard focus (a `primary` edge shows for the k
 
 | Decision | Rationale | Date |
 |----------|-----------|------|
-| One colour, moss, not terracotta | The reference rations one warm orange to the primary action; Forge keeps the rationing and takes the reference's own moss, calmer on cream and kin to the mark. | 2026-10-18 |
+| One colour, moss, not terracotta | The reference rations one warm orange to the primary action; KodAct keeps the rationing and takes the reference's own moss, calmer on cream and kin to the mark. | 2026-10-18 |
 | Dusty blue, not moss | Moss read as too green beside the cream; a dusty blue from the Slate theme's family, warmed for cream, keeps the same rationing and contrast (5.4:1 on the session). | 2026-10-19 |
 | Paper on paper | The session is a 4px sheet on the cream canvas with paper grain; the title bar and sidebar have no dividers, the sheet's edge is the split. | 2026-10-18 |
 | Pills to press, 4px to hold | The contrast between the two shapes is the system: it says at a glance what acts and what holds. | 2026-10-18 |
 | Ink pills for the loud neutrals | New chat and needs-you are ink pills; the accent is kept for the one decision in front of you (Allow once, Send). | 2026-10-18 |
 | Anthropic Sans only | One family everywhere, in its Text and Display cuts: the interface, replies, code, the terminal and diagrams. No other face is bundled or named. | 2026-10-26 |
 | One look | The theme picker and its eleven other looks are gone; Calmly smooth, light and dark, is the app's one look. | 2026-10-26 |
-| Forge Ember | Warm paper and warm graphite, the sidebar a step deeper than the session, and one copper heat for the action, the current state and links: the forge's own colour, as calm as Claude Code's. | 2026-10-23 |
+| KodAct Ember | Warm paper and warm graphite, the sidebar a step deeper than the session, and one copper heat for the action, the current state and links: KodAct's own colour, as calm as Claude Code's. | 2026-10-23 |
 | A neutral wash for the open row | The accent stays for the action; the open chat and the open screen lift by a grey wash. | 2026-10-23 |
 | Composer at 620px | A comfortable measure for a prompt, the same in a chat and on the welcome page. | 2026-10-11 |
 | Composer on the reading column | In a chat the composer takes the 760px column the reply is read in, so the two line up; on the welcome page it keeps its own measure. | 2026-10-23 |

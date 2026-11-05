@@ -45,9 +45,9 @@ pub fn trigger(
         t.colors.text_muted
     };
     let tip: SharedString = if on {
-        "A design chat: Forge gets the design prompt and tools. Click to change what it makes and how it looks.".into()
+        "A design chat: KodAct gets the design prompt and tools. Click to change what it makes and how it looks.".into()
     } else {
-        "Make this a design chat: Forge designs pages you watch in the side panel.".into()
+        "Make this a design chat: KodAct designs pages you watch in the side panel.".into()
     };
     let state = state.clone();
     Some(
@@ -190,7 +190,7 @@ pub fn menu(
                 DesignTab::Look => (
                     Kind::DesignSystem,
                     setup.as_ref().and_then(|d| d.system.clone()),
-                    "No design system: Forge chooses the look",
+                    "No design system: KodAct chooses the look",
                 ),
                 DesignTab::Start => (
                     Kind::Template,

@@ -5,13 +5,13 @@
 //!   (`project_ctx.rs`: yours, the project's, your local ones), each part in
 //!   its own colour, against the window of the model picked now; you see the
 //!   cost before you type.
-//! - **Instructions**: the project's own, Shared (its `FORGE.md`, kept with
-//!   the folder) or Only me (`FORGE.local.md`), read and edited in place.
+//! - **Instructions**: the project's own, Shared (its `KODACT.md`, kept with
+//!   the folder) or Only me (`KODACT.local.md`), read and edited in place.
 //!   Rules (CLAUDE.md and `.claude/rules`) stay on their own screen, a click
 //!   away.
 //! - **Knowledge** (`project_knowledge.rs`): reference files, Always or On
 //!   demand.
-//! - **Memory** (`project_memory.rs`): what Forge has learned there.
+//! - **Memory** (`project_memory.rs`): what KodAct has learned there.
 //! - **GitHub** (`project_github.rs`): the repository, live.
 //! - **Defaults** (`project_defaults.rs`): the project's model and mode.
 //! - **Share** (`project_sharing.rs`): its setup, with the repo or a file.
@@ -50,7 +50,7 @@ impl ProjectRail {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let editor = cx.new(|cx| {
             TextareaState::new(window, cx).placeholder(
-                "How Forge should work here: what the project is, its conventions, what to avoid…",
+                "How KodAct should work here: what the project is, its conventions, what to avoid…",
             )
         });
         let knowledge =
@@ -155,7 +155,7 @@ fn budget(t: &Theme, brief: &Brief, project: &std::path::Path, window: Option<u6
             "You" => "Yours, in every project",
             "Local" => "Only you, this computer",
             "Knowledge" => "Knowledge set to Always",
-            "Memory" => "What Forge remembers here",
+            "Memory" => "What KodAct remembers here",
             _ => "The project's",
         };
         div()
@@ -193,7 +193,7 @@ fn budget(t: &Theme, brief: &Brief, project: &std::path::Path, window: Option<u6
             )
     });
     let summary = match (total, window) {
-        (0, _) => "Nothing yet: chats here start from Forge's own instructions.".to_string(),
+        (0, _) => "Nothing yet: chats here start from KodAct's own instructions.".to_string(),
         (n, Some(w)) => format!(
             "{} of {} tokens before you type ({:.1}%)",
             crate::context::short(n),
@@ -244,7 +244,7 @@ impl Render for ProjectRail {
                         div()
                             .text_size(t.text.body_sm)
                             .text_color(t.colors.text_body)
-                            .child("This project's files are on the host: its FORGE.md is read there by Forge as each chat starts. Edit it from a chat, or in the host's editor."),
+                            .child("This project's files are on the host: its KODACT.md is read there by KodAct as each chat starts. Edit it from a chat, or in the host's editor."),
                     ),
                 )
                 .into_any_element();
@@ -297,7 +297,7 @@ impl Render for ProjectRail {
             .child(tab("Shared", !mine, false, cx))
             .child(tab("Only me", mine, true, cx));
         let hint = if mine {
-            "Only you, on this computer: FORGE.local.md stays out of the project's files you share."
+            "Only you, on this computer: KODACT.local.md stays out of the project's files you share."
         } else {
             "Kept with the project's files, so anyone with the folder or the repo gets them."
         };
@@ -359,7 +359,7 @@ impl Render for ProjectRail {
                         .child(if mine {
                             "Nothing of yours yet. Say how you like to work here: your review style, what to ask before doing."
                         } else {
-                            "No instructions yet. Tell Forge what this project is, its conventions, and what to avoid."
+                            "No instructions yet. Tell KodAct what this project is, its conventions, and what to avoid."
                         }),
                 )
                 .child(

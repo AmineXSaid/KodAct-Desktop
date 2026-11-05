@@ -1,6 +1,6 @@
 //! Model calls from a remote agent go out from this computer.
 //!
-//! A remote ForgeCLI is not given the endpoint's key or address. It gets
+//! A remote KodAct CLI is not given the endpoint's key or address. It gets
 //! `http://127.0.0.1:<port>/p/<token>` and a placeholder key; the port leads
 //! back here (`ssh -R`), to this small HTTP/1.1 proxy, which looks the token
 //! up, puts the real credentials and headers on the request, sends it to the
@@ -17,7 +17,7 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
-/// Where a token's requests go: the real base URL (ForgeCLI's, before it
+/// Where a token's requests go: the real base URL (KodAct CLI's, before it
 /// adds `/v1/messages` or `/chat/completions`) and the headers that carry
 /// the key and any custom ones.
 #[derive(Clone, Debug, PartialEq)]
@@ -29,7 +29,7 @@ pub struct Route {
 static PORT: OnceLock<u16> = OnceLock::new();
 static ROUTES: Mutex<Option<HashMap<String, Route>>> = Mutex::new(None);
 
-/// The key a remote ForgeCLI is given in place of the real one.
+/// The key a remote KodAct CLI is given in place of the real one.
 pub const PLACEHOLDER_KEY: &str = "forge-proxied";
 
 fn token() -> String {
@@ -120,7 +120,7 @@ fn reply(out: &mut TcpStream, code: u16, text: &str) -> std::io::Result<()> {
     );
     write!(
         out,
-        "HTTP/1.1 {code} Forge\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+        "HTTP/1.1 {code} KodAct\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
         body.len()
     )
 }
@@ -192,7 +192,7 @@ fn serve(stream: TcpStream) -> std::io::Result<()> {
             return reply(
                 &mut out,
                 502,
-                &format!("Forge couldn't reach the model endpoint from this computer: {e}"),
+                &format!("KodAct couldn't reach the model endpoint from this computer: {e}"),
             )
         }
     };

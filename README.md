@@ -1,8 +1,8 @@
-# forge-gpui
+# KodAct desktop
 
-The Forge desktop app, written in Rust with [GPUI](https://www.gpui.rs/) and
+The KodAct desktop app, written in Rust with [GPUI](https://www.gpui.rs/) and
 gpui-component (through `gpui-kit`, Apache-2.0). Each chat runs
-[ForgeCLI](https://github.com/AmineXSaid/ForgeCLI) (`forge`) as its engine,
+[KodAct CLI](https://github.com/AmineXSaid/KodAct) (`kodact`) as its engine,
 on the endpoint picked in the model menu. The chats the sidebar starts with
 are demo data.
 
@@ -13,32 +13,48 @@ cargo run
 cargo test
 ```
 
-Forge needs two things to answer:
+KodAct needs two things to answer:
 
-- **ForgeCLI**: `forge.exe` (`forge` elsewhere) beside the app, on PATH, or
-  named by `FORGE_CLI`. Build it from ForgeCLI's `ULTRA02` branch with
-  `cargo build --release -p forge-cli`.
+- **KodAct CLI**: `kodact.exe` (`kodact` elsewhere) beside the app, on PATH, or
+  named by `KODACT_CLI`. Build it from KodAct's `main` with
+  `cargo build --release -p kodact-cli`.
 - **An endpoint**: a profile in `endpoints.json` (the model menu opens it).
-  Its URL, model and key reach `forge` as `FORGE_*` variables
+  Its URL, model and key reach `kodact` as `KODACT_*` variables
   (`src/backend.rs`); the key is read from the environment variable the
   profile names.
 
-`FORGE_DEMO=1` plays the scripted demo reply instead, with no CLI or model.
+`KODACT_DEMO=1` plays the scripted demo reply instead, with no CLI or model.
 
-Word, PowerPoint and Excel files Forge writes open beside the chat as they
-print when [LibreOffice](https://www.libreoffice.org/) is installed (Forge
-finds it on PATH or where its installer puts it; `FORGE_SOFFICE` names it).
+### Coming from Forge
+
+KodAct desktop was Forge, as KodAct CLI was ForgeCLI. Nothing set up before
+the rename is lost; the app follows the same rules as the CLI:
+
+- Every `FORGE_*` variable still works, as its `KODACT_*` name when that one
+  is unset.
+- A project's `.forge/` and `FORGE.md` (and `FORGE.local.md`) are used until
+  its `.kodact/` and `KODACT.md` exist; the app never makes a `.kodact/`
+  beside an old `.forge/` (the CLI would then stop reading the old one).
+- The config folder (`%APPDATA%\Forge`, `~/.config/forge`) is used until a
+  `KodAct` one exists, so chats, endpoints and keys stay. Keys saved in
+  Windows Credential Manager under `Forge` are still read.
+- `forge.autoApproveSafeCommands` still reads; `.forgeproject` setups still
+  import, their files landing under the project's own names.
+
+Word, PowerPoint and Excel files KodAct writes open beside the chat as they
+print when [LibreOffice](https://www.libreoffice.org/) is installed (KodAct
+finds it on PATH or where its installer puts it; `KODACT_SOFFICE` names it).
 Without it the panel shows their text. Workbooks show their own number
 formats, bold, fills and widths, with a formula bar.
 
-On first launch Forge asks what to call you and keeps the name in its config
-folder (`%APPDATA%\Forge` on Windows; `FORGE_CONFIG_DIR` overrides it).
+On first launch KodAct asks what to call you and keeps the name in its config
+folder (`%APPDATA%\KodAct` on Windows; `KODACT_CONFIG_DIR` overrides it).
 
-Forge opens on plain chats, as a chat app does: no folder, so a question or
+KodAct opens on plain chats, as a chat app does: no folder, so a question or
 a lesson never runs in a folder of yours (they run in `workspace` inside the
 config folder). Pick a folder from the chip under the message box, or from
 Projects, to work on code there. Started on a folder (`cargo run -- .`,
-`forge-gpui C:\code\app`, or `FORGE_PROJECT_DIR`), it opens on that project.
+`kodact-desktop C:\code\app`, or `KODACT_PROJECT_DIR`), it opens on that project.
 
 ## Keys
 
@@ -102,7 +118,7 @@ type. Results stay grouped, best group first. Start with `>` for commands
 only, `#` for chats, `@` for files. A document (Markdown, a diagram, an
 Office file, a PDF) opens in the side panel; any other file in the app your
 system opens it with; a chat found by what was said opens with the find bar
-on the words. With nothing found, Enter asks Forge in a new chat. Arrows,
+on the words. With nothing found, Enter asks KodAct in a new chat. Arrows,
 Page Up/Down and Ctrl+Home/End move through the list.
 
 ### Modes
@@ -116,21 +132,21 @@ Page Up/Down and Ctrl+Home/End move through the list.
 - **Plan** explores and proposes; it edits nothing until you approve.
 - **Bypass permissions** asks for nothing, once allowed in Settings.
 
-`forge.autoApproveSafeCommands: false` in the settings file makes every
+`kodact.autoApproveSafeCommands: false` in the settings file makes every
 command ask, in every mode.
 
 ### Replies
 
-- **Questions.** When Forge asks you something (AskUserQuestion), it shows a
+- **Questions.** When KodAct asks you something (AskUserQuestion), it shows a
   card with the question, its options and a tab per question. Pick an
-  option, or type your own answer in the message box; **Skip** lets Forge go
-  on with its own assumptions. Your answers reach Forge in the call itself,
+  option, or type your own answer in the message box; **Skip** lets KodAct go
+  on with its own assumptions. Your answers reach KodAct in the call itself,
   and the card then folds to one line with what you chose. Questions are
   asked every time, in every mode, so they have no "Always allow".
 - **Work in a row.** Two or more tool calls in a row, with the thinking
   between them, fold into one line ("Edited 6 files, ran 2 commands"), with
   the change's size and how many failed or were stopped. It opens to the
-  steps, and each step opens to its change or output. Text Forge writes to
+  steps, and each step opens to its change or output. Text KodAct writes to
   you, and anything waiting on you, stands on its own.
 - **Failed and stopped calls.** A failed call says so ("Couldn't write
   Cargo.toml") with its reason, and its change is marked Not applied. A
@@ -146,9 +162,9 @@ command ask, in every mode.
 
 ## Projects
 
-A project is a folder Forge works in, with its own chats, instructions,
+A project is a folder KodAct works in, with its own chats, instructions,
 knowledge and memory. **New project** opens a folder, clones one from
-GitHub, or starts a fresh one in `~/Forge Projects` from a template (Blank,
+GitHub, or starts a fresh one in `~/KodAct Projects` from a template (Blank,
 Code, Writing, Research, Data). The Projects page lists them in All,
 Starred and Archived, searched and sorted; a project's name and description
 are edited in place on its page. Plain chats (no folder) have their own
@@ -159,25 +175,25 @@ A project's page has a rail on the right:
 - **What every chat gets**: the instructions, knowledge and memory that
   load before you type, each with its token cost, against the model's
   window.
-- **Instructions**: Shared (`FORGE.md`, kept with the folder) or Only me
-  (`FORGE.local.md`), edited in place.
-- **Knowledge**: reference files (copied into `.forge/knowledge/`, or the
+- **Instructions**: Shared (`KODACT.md`, kept with the folder) or Only me
+  (`KODACT.local.md`), edited in place.
+- **Knowledge**: reference files (copied into `.kodact/knowledge/`, or the
   project's own files where they are), each Always (its text goes into
-  every new chat, within a share of the window) or On demand (Forge reads
+  every new chat, within a share of the window) or On demand (KodAct reads
   it when it matters). Drop files on the card, add them, or write a note;
   a click opens one in the side panel.
-- **Memory**: what Forge learns there, in `.forge/memory.md`, by topic.
+- **Memory**: what KodAct learns there, in `.kodact/memory.md`, by topic.
   Each reply that changes it says so ("Remembered … · Undo"); facts can be
   forgotten one by one, the file edited, the memory turned off.
 - **GitHub**: the repository live: branch (switch or make one), ahead and
   behind with Pull, changes; open pull requests with their checks, issues
-  and the latest workflow run, through `gh` or GitHub's API. **Ask Forge**
+  and the latest workflow run, through `gh` or GitHub's API. **Ask KodAct**
   starts a chat that reviews a PR, works on an issue or fixes a failing run.
 - **Defaults**: the model opening the project picks, and the mode its new
   chats start in.
 - **Share**: commit the setup (shared instructions, knowledge, optionally
   memory; never your own instructions) with the repository, or export it
-  as a `.forgeproject` file that anyone can import.
+  as a `.kodactproject` file that anyone can import.
 
 A chat's menu moves it to another project.
 
@@ -198,22 +214,22 @@ folder? **Open another folder…** (the folder chip under the message box,
 the project switcher, this menu or the palette) shows the host's folders
 from the one above, yours marked, and keeps the connection; the folder you
 leave goes if it has no chats. **Close remote connection** goes back to
-where Forge started: its folder, else a plain chat.
-A chat in a remote project runs its ForgeCLI on that machine, so its tools,
+where KodAct started: its folder, else a plain chat.
+A chat in a remote project runs its KodAct CLI on that machine, so its tools,
 shell, git and files are the remote's; this app stays the UI
 (`src/remote.rs`).
 
-- The first connection installs ForgeCLI there (`~/.forge/bin`, or
+- The first connection installs KodAct CLI there (`~/.kodact/bin`, or
   `remote.serverInstallDir`), from the static Linux build the installer puts
-  in `bin\linux-x86_64\forge` (or `FORGE_REMOTE_CLI`), and checks the copy
+  in `bin\linux-x86_64\kodact` (or `KODACT_REMOTE_CLI`), and checks the copy
   by SHA-256.
 - SSH uses the system's OpenSSH client with your keys or agent. A password
   or a key's passphrase is asked in a dialog in the app (ssh's askpass, over
   a localhost socket with a random token), kept in memory for this run and
   never saved; a wrong one says so, and Try again asks again. A host seen
   for the first time shows its key fingerprint and waits for "Trust".
-- Model calls leave from this computer: a remote ForgeCLI gets a local
-  proxy's address (a port there leading back here: `ssh -R`, or ForgeCLI's
+- Model calls leave from this computer: a remote KodAct CLI gets a local
+  proxy's address (a port there leading back here: `ssh -R`, or KodAct CLI's
   relay for WSL and containers) and a placeholder key. The real key,
   address and headers never reach the remote (`src/model_proxy.rs`). The
   side panel's browser comes back the same way.
@@ -222,29 +238,28 @@ shell, git and files are the remote's; this app stays the UI
 
 Tested here: SSH (an OpenSSH server in a container), a running container,
 and dev containers from an image and from a Dockerfile, each with the real
-ForgeCLI and the scripted model (`cargo test real_ -- --include-ignored`,
+KodAct CLI and the scripted model (`cargo test real_ -- --include-ignored`,
 see `src/remote.rs`). WSL runs the same way through `wsl.exe` but has only
 been checked by its unit tests (no Windows machine here).
 
 ## Skills and plugins
 
-Skills and plugins made for Claude Code work in Forge unchanged. ForgeCLI
+Skills and plugins made for Claude Code work in KodAct unchanged. KodAct CLI
 reads Claude Code's folders (`~/.claude/skills`, a project's `.claude/skills`,
 and `.claude-plugin/plugin.json` in a plugin) and acts on a skill's
 frontmatter as Claude Code does: `$ARGUMENTS`, `${CLAUDE_SKILL_DIR}`,
 `` !`command` `` lines, `allowed-tools`, `model`, `context: fork`, `hooks`.
-This needs a ForgeCLI with that support (its branch `ccr-02a743e1-1gmu4f`,
-built on `forge-gpui-steering`).
+KodAct CLI's `main` has that support.
 
 - **Install a skill** (Ctrl/⌘ Shift I, or Settings > Skills > Install skill):
   from a GitHub repository (`owner/repo`, or a link to one folder in it), a git
-  URL, a folder, or a `.zip` / `.skill` file. Forge shows what each skill
+  URL, a folder, or a `.zip` / `.skill` file. KodAct shows what each skill
   would run and allow before installing it into `~/.claude/skills` or the
   project's `.claude/skills`, where Claude Code finds it too. Nothing runs
   while it installs. An installed skill has Update, which fetches it again.
 - **Plugins** (Settings > Plugins > Marketplaces): add a Claude Code
   marketplace (a repository with `.claude-plugin/marketplace.json`) and
-  install its plugins. Each goes under ForgeCLI's config folder
+  install its plugins. Each goes under KodAct CLI's config folder
   (`plugins/<marketplace>/<plugin>`) and into your `pluginDirs`.
 - **WSL and SSH**: in a remote project, skills install on that machine, and
   your own skills have "Copy to this project's machine".
@@ -283,20 +298,20 @@ shell on a pseudo-terminal (ConPTY on Windows), drawn by a terminal emulator
 
 ## Settings
 
-Forge's own settings file, `settings.json` in its config folder ("Open Forge
+KodAct's own settings file, `settings.json` in its config folder ("Open KodAct
 settings" in the command palette writes one with every key):
 
 | Key | Default | Does |
 | --- | --- | --- |
 | `remote.ssh.configFile` | `~/.ssh/config` | ssh config used to list and reach hosts (`ssh -F`) |
 | `remote.ssh.extraArgs` | `[]` | more arguments for every `ssh` |
-| `remote.serverInstallDir` | `~/.forge` | where ForgeCLI goes on a remote |
+| `remote.serverInstallDir` | `~/.kodact` | where KodAct CLI goes on a remote |
 | `remote.reconnect.maxAttempts` | `8` | reconnect tries before a remote shows as failed |
 | `terminal.defaultShell` | first found | the shell a new terminal runs |
 | `terminal.scrollback` | `10000` | lines kept above the screen |
 | `terminal.fontSize` | `13` | the terminal's text size |
 | `terminal.cursorStyle` | `block` | `block`, `bar` or `underline` |
-| `forge.autoApproveSafeCommands` | `true` | commands that only read (any mode) or only edit project files (Edit automatically) run without asking |
+| `kodact.autoApproveSafeCommands` | `true` | commands that only read (any mode) or only edit project files (Edit automatically) run without asking |
 
 Changes apply the next time they're used; no restart.
 
@@ -304,18 +319,18 @@ Changes apply the next time they're used; no restart.
 
 - `src/theme.rs`: every colour, size, radius and font, in the app's one look (Calmly smooth, light and dark). Nothing else hardcodes them.
 - `src/state.rs`: the app state, the transcript model, demo chats and the scripted reply.
-- `src/backend.rs`: each chat's `forge` process: launch, the stream-json events, permission answers.
-- `src/forge_files.rs`: ForgeCLI's own files (commands, agents, skills, hooks,
-  MCP servers, permissions, env, sandbox, plugin folders, FORGE.md), read and
-  written exactly as ForgeCLI loads them; the Settings editors sit on it.
-- `src/setting_profiles.rs`: settings profiles, passed to ForgeCLI as `--settings`.
+- `src/backend.rs`: each chat's `kodact` process: launch, the stream-json events, permission answers.
+- `src/forge_files.rs`: KodAct CLI's own files (commands, agents, skills, hooks,
+  MCP servers, permissions, env, sandbox, plugin folders, KODACT.md), read and
+  written exactly as KodAct CLI loads them; the Settings editors sit on it.
+- `src/setting_profiles.rs`: settings profiles, passed to KodAct CLI as `--settings`.
 - `src/diagnose.rs`: an endpoint's DNS, TCP, TLS, HTTP and key checks.
 - `src/endpoints.rs`, `src/health.rs`, `src/secrets.rs`: endpoint profiles, their checks, and keys.
 - `src/profile.rs`: your name and avatar on disk. `src/stubs.rs`: what isn't wired yet, and why.
 - `src/web_view.rs`: the side panel's browser: a headless Chromium (Playwright's, else Chrome or Edge)
   shown live over the DevTools protocol, started through a guard (`--browser-guard`) so it closes
   with the app however the app ends.
-- `src/browser_mcp.rs`: the browser tools for ForgeCLI's agents, served by this same program
+- `src/browser_mcp.rs`: the browser tools for KodAct CLI's agents, served by this same program
   (`--browser-mcp`): navigate, state (numbered elements), click, type, press, select, hover,
   scroll, text, html, eval, wait, screenshot, console and tabs, on the page the panel shows.
 - `src/assets.rs`: bundled icons (Lucide, ISC). No font is bundled: every face is Anthropic Sans, read from the `fonts` folder beside the app (`fonts.rs`).
@@ -332,11 +347,11 @@ Changes apply the next time they're used; no restart.
     `skills_editor`, `hooks_editor`, `mcp_editor`, `permissions_editor`,
     `sandbox_editor`, `env_editor`, `memory_view`, `plugins_editor`,
     `planned` (Network), `guide`, and `editor_kit`, the pieces they share;
-  - the brand: `ingot` (Forge's mark, the ingot cube, still and turning, and
-    the wordmark FORGE, the cube in the O's place, as the VS Code extension
+  - the brand: `ingot` (KodAct's mark, the ingot cube, still and turning, and
+    the wordmark KODACT, the cube in the O's place, as the VS Code extension
     sets it; its faces are SVGs drawn from its geometry and tinted from the
     theme). The wordmark heads the sidebar always, the project under it.
-- `scripts/make_ico.py`: `assets/forge.ico`, the ingot on an accent tile, each
+- `scripts/make_ico.py`: `assets/kodact.ico`, the ingot on an accent tile, each
   size Windows asks for drawn on its own.
 - `scripts/screenshots.sh`: light and dark screenshots of every screen (see below).
 - `.github/workflows/windows.yml`: fmt, clippy (`-D warnings`) and tests on

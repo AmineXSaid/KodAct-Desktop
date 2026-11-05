@@ -230,25 +230,25 @@ pub fn icon(path: &'static str, size: Pixels, color: Hsla) -> Svg {
     svg().path(path).size(size).flex_none().text_color(color)
 }
 
-/// The Forge logo, the ingot (`ingot.rs`), `size` px square.
+/// The KodAct logo, the ingot (`ingot.rs`), `size` px square.
 pub fn logo(size: f32) -> ingot::Ingot {
     ingot::mark(size)
 }
 
-/// The Forge logo turning while Forge works, a quarter turn at a time.
+/// The KodAct logo turning while KodAct works, a quarter turn at a time.
 /// Reduced motion: the logo at rest.
 pub fn turning_logo(size: f32, id: impl Into<gpui::ElementId>) -> gpui::AnyElement {
     ingot::turning(size, id)
 }
 
-/// The Forge logo turning, painted in `color` (lit from above): the mark of
+/// The KodAct logo turning, painted in `color` (lit from above): the mark of
 /// work in progress in the conversation, in the theme's live colour.
 pub fn turning_logo_in(
     size: f32,
     id: impl Into<gpui::ElementId>,
     color: gpui::Hsla,
 ) -> gpui::AnyElement {
-    // Forge for VS Code's working cube: stock struck true, a quarter turn a
+    // KodAct for VS Code's working cube: stock struck true, a quarter turn a
     // beat, drawn a little larger than an icon so its voxels read.
     forge_cube::working(size * 1.25, id, color)
 }

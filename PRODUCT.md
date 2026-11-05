@@ -17,8 +17,8 @@ chats at once, and watch the agent work rather than only read its answer.
 
 ## Product Purpose
 
-Forge is the desktop app for ForgeCLI (`forge`), an agent harness that runs on
-any model endpoint. Each chat is a ForgeCLI process; the app shows the
+KodAct is the desktop app for KodAct CLI (`kodact`), an agent harness that runs on
+any model endpoint. Each chat is a KodAct CLI process; the app shows the
 conversation, what the agent does (reads, edits, commands, questions,
 permissions), and what it makes (documents, diagrams, sheets), and lets you
 steer it while it works. Success: a session you can leave running, come back
@@ -26,7 +26,7 @@ to, understand at a glance, and trust with your files.
 
 ## Positioning
 
-The agent is ForgeCLI on your own endpoint and your own machine (or the remote
+The agent is KodAct CLI on your own endpoint and your own machine (or the remote
 one): models are swappable, keys stay on this computer, a remote agent runs
 there while the UI and the model calls stay here. Projects carry their own
 instructions, knowledge and memory.
@@ -54,7 +54,7 @@ instructions, knowledge and memory.
 
 ## Brand Commitments
 
-- Quality reference: Claude Desktop's calm and restraint, with Forge's own
+- Quality reference: Claude Desktop's calm and restraint, with KodAct's own
   identity (its mark, palette and themes), not a copy of Claude.
 - Nothing in the current visual identity is binding: the ingot mark, the
   wordmark, the theme set and the home screen's dots may all change when it
@@ -64,8 +64,8 @@ instructions, knowledge and memory.
 
 ## Evidence on Hand
 
-- Demo mode (`FORGE_DEMO=1`) plays scripted replies for screenshots;
-  `scripts/screenshots.sh` and `scripts/e2e/` drive the real app and ForgeCLI.
+- Demo mode (`KODACT_DEMO=1`) plays scripted replies for screenshots;
+  `scripts/screenshots.sh` and `scripts/e2e/` drive the real app and KodAct CLI.
 - No customer quotes, metrics or testimonials exist; none may be invented.
 
 ## Product Principles
@@ -82,4 +82,4 @@ instructions, knowledge and memory.
 
 Text at least 4.5:1 against its ground in every theme (`src/palette_check.rs`);
 keyboard reachable actions with visible focus; reduced motion honoured
-(`FORGE_REDUCED_MOTION=1` or the system setting).
+(`KODACT_REDUCED_MOTION=1` or the system setting).

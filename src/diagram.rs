@@ -1,10 +1,10 @@
-//! Diagrams Forge draws itself. The bundled Diagram Design skill
-//! (`assets/forge-plugin/skills/diagram-design`) writes each diagram as a
-//! self-contained HTML page around one inline `<svg>`; Forge takes that SVG
+//! Diagrams KodAct draws itself. The bundled Diagram Design skill
+//! (`assets/kodact-plugin/skills/diagram-design`) writes each diagram as a
+//! self-contained HTML page around one inline `<svg>`; KodAct takes that SVG
 //! out and renders it natively (resvg, through GPUI's image pipeline), sized
 //! to the exact device pixels it is shown at, so nothing is scaled twice.
 
-/// Whether a file is a diagram Forge can draw: an `.svg`, or an `.html`
+/// Whether a file is a diagram KodAct can draw: an `.svg`, or an `.html`
 /// page that holds one.
 pub fn is_diagram(name: &str, content: &str) -> bool {
     let ext = name
@@ -20,7 +20,7 @@ pub fn is_diagram(name: &str, content: &str) -> bool {
 
 /// `svg` with every font it names set in Anthropic Sans Text: each
 /// `font-family` attribute and CSS declaration, whatever face the drawing
-/// asked for. Forge draws in no other face.
+/// asked for. KodAct draws in no other face.
 pub fn brand_fonts(svg: &str) -> String {
     const FACE: &str = "'Anthropic Sans Text'";
     let mut out = String::with_capacity(svg.len());
@@ -145,7 +145,7 @@ pub fn sized(svg: &str, width: u32) -> Option<String> {
     Some(format!("{new_tag}{}", &svg[tag.len()..]))
 }
 
-/// The Forge skin's light colours and their dark counterparts (the bundled
+/// The KodAct skin's light colours and their dark counterparts (the bundled
 /// skill's `references/style-guide.md`), for drawing a light diagram in the
 /// dark theme.
 const TO_DARK: &[(&str, &str)] = &[
@@ -162,8 +162,8 @@ const TO_DARK: &[(&str, &str)] = &[
     ("rgba(28,27,25,", "rgba(246,245,244,"), // rule
 ];
 
-/// A light, Forge-skinned drawing in the skin's dark colours; `None` when
-/// the drawing is not in the Forge skin (it is then shown as it is).
+/// A light, KodAct-skinned drawing in the skin's dark colours; `None` when
+/// the drawing is not in the KodAct skin (it is then shown as it is).
 pub fn for_dark(svg: &str) -> Option<String> {
     if !svg.to_ascii_lowercase().contains("fill=\"#f9f7f5\"") {
         return None;
@@ -245,7 +245,7 @@ mod tests {
     use super::*;
 
     const PAGE: &str = r##"<!DOCTYPE html><html><body><p class="eyebrow">Architecture · Diagram Design</p><h1>How a chat reaches a model</h1>
-<div class="diagram-container"><svg viewBox="0 0 960 600" xmlns="http://www.w3.org/2000/svg" role="img"><title id="t">Chat path</title><desc id="d">From Forge to an endpoint &amp; back.</desc>
+<div class="diagram-container"><svg viewBox="0 0 960 600" xmlns="http://www.w3.org/2000/svg" role="img"><title id="t">Chat path</title><desc id="d">From KodAct to an endpoint &amp; back.</desc>
 <g><svg x="4" y="4" width="16" height="16" viewBox="0 0 24 24"><path d="M0 0"/></svg></g><rect width="100%" height="100%" fill="#f9f7f5"/></svg></div></body></html>"##;
 
     #[test]
@@ -304,10 +304,10 @@ mod tests {
     fn the_bundled_skill_wears_the_forge_skin() {
         let root = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/assets/forge-plugin/skills/diagram-design"
+            "/assets/kodact-plugin/skills/diagram-design"
         );
         let guide = std::fs::read_to_string(format!("{root}/references/style-guide.md")).unwrap();
-        assert!(guide.starts_with("<!-- diagram-design-profile\nname: Forge\nslug: forge"));
+        assert!(guide.starts_with("<!-- diagram-design-profile\nname: KodAct\nslug: forge"));
         for template in [
             "template.html",
             "template-full.html",
@@ -358,7 +358,7 @@ mod tests {
         assert_eq!(title(PAGE).as_deref(), Some("How a chat reaches a model"));
         assert_eq!(
             description(PAGE).as_deref(),
-            Some("From Forge to an endpoint & back.")
+            Some("From KodAct to an endpoint & back.")
         );
         let bare = r#"<svg viewBox="0 0 10 10"><title>Only a title</title></svg>"#;
         assert_eq!(title(bare).as_deref(), Some("Only a title"));

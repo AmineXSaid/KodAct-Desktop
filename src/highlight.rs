@@ -1,9 +1,9 @@
-//! Syntax highlighting for code blocks, as Forge for VS Code colours them.
+//! Syntax highlighting for code blocks, as KodAct for VS Code colours them.
 //!
 //! The grammars are Sublime's (syntect) plus bat's extras (two-face), so a
 //! block in Rust, TypeScript, Python, Go, TOML, YAML, shell, SQL, a diff and
 //! many more gets coloured. Each grammar scope is mapped onto the handful of
-//! token kinds Forge's palette has (keyword, string, number, comment,
+//! token kinds KodAct's palette has (keyword, string, number, comment,
 //! function, type, variable, operator, meta, added, removed); the theme
 //! decides their colours.
 //!

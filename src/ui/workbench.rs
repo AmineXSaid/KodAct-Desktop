@@ -14,7 +14,7 @@ use super::markdown::{self, CopyContext, Look};
 use crate::state::{AppState, Block, FileRef, Message, PanelTab, ToolStatus};
 use crate::theme::Theme;
 
-/// Every plan Forge proposed in the chat, oldest first: each revision after
+/// Every plan KodAct proposed in the chat, oldest first: each revision after
 /// your feedback is a version of its own.
 pub fn plans(messages: &[Message]) -> Vec<String> {
     tools(messages)
@@ -89,7 +89,7 @@ pub fn files(messages: &[Message]) -> Vec<FileRef> {
     out
 }
 
-/// Forge is driving the browser: a browser tool runs in the chat now.
+/// KodAct is driving the browser: a browser tool runs in the chat now.
 pub fn agent_browsing(messages: &[Message]) -> bool {
     tools(messages).any(|t| {
         t.status == ToolStatus::Running && t.target.starts_with(crate::browser::TOOL_PREFIX)
@@ -177,7 +177,7 @@ pub struct View<'a> {
     /// The chat's sub-agents, and the cards opened.
     pub agents: &'a [crate::state::AgentRun],
     pub agents_open: &'a std::collections::HashSet<String>,
-    /// Forge's mark, for the top of the agents' tree.
+    /// KodAct's mark, for the top of the agents' tree.
     pub logo: AnyElement,
     /// The chat's turn is still going.
     pub working: bool,
@@ -433,7 +433,7 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
             t,
             "icons/route.svg",
             "No plan yet",
-            "Switch the mode to Plan (Shift+Tab in the composer) and ask for something: the plan Forge proposes, and its task list as it works, show here.",
+            "Switch the mode to Plan (Shift+Tab in the composer) and ask for something: the plan KodAct proposes, and its task list as it works, show here.",
             None,
         ),
         PanelTab::Plan => pad(div())
@@ -480,7 +480,7 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
                                 .text_size(t.text.caption)
                                 .text_color(t.extra.warning)
                                 .child(format!(
-                                    "An earlier version. Forge's latest plan is version {}.",
+                                    "An earlier version. KodAct's latest plan is version {}.",
                                     all_plans.len()
                                 )),
                         )
@@ -519,7 +519,7 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
             t,
             "icons/folder-open.svg",
             "No files yet",
-            "Documents, spreadsheets, PDFs, decks and diagrams Forge makes in this chat are listed here. Click one to read it in this panel.",
+            "Documents, spreadsheets, PDFs, decks and diagrams KodAct makes in this chat are listed here. Click one to read it in this panel.",
             None,
         ),
         PanelTab::Files => pad(div()).gap(t.space.xs).children(files.into_iter().enumerate().map(|(i, f)| {
@@ -665,7 +665,7 @@ mod tests {
     #[test]
     fn forge_is_browsing_while_a_browser_tool_runs() {
         let mut m = reply(&[(
-            "mcp__forge-browser__navigate",
+            "mcp__kodact-browser__navigate",
             json!({"url": "https://a.example"}),
         )]);
         assert!(agent_browsing(&m));

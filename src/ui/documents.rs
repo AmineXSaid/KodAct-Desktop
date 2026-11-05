@@ -1,4 +1,4 @@
-//! Documents: every file Forge made, across your chats, newest first, as
+//! Documents: every file KodAct made, across your chats, newest first, as
 //! Claude Code lists its artifacts. A card opens the file beside the page;
 //! the line under it names the chat it came from, and opens that chat.
 
@@ -111,10 +111,10 @@ pub fn render(t: &Theme, state: &Entity<AppState>, s: &AppState, scale: f32) -> 
                                 .text_size(t.text.body)
                                 .text_color(t.colors.text_muted)
                                 .child(if count == 0 {
-                                    "Files Forge makes in your chats (documents, sheets, decks, diagrams) gather here.".to_string()
+                                    "Files KodAct makes in your chats (documents, sheets, decks, diagrams) gather here.".to_string()
                                 } else {
                                     format!(
-                                        "{count} {} Forge made in your chats, newest first.",
+                                        "{count} {} KodAct made in your chats, newest first.",
                                         if count == 1 { "file" } else { "files" }
                                     )
                                 }),

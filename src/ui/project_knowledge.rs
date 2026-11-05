@@ -1,11 +1,11 @@
 //! The Knowledge card on a project page's rail (`knowledge.rs`): the
 //! project's reference files, each Always (its text in every new chat) or
-//! On demand (read by Forge when it matters), with a meter of what Always
+//! On demand (read by KodAct when it matters), with a meter of what Always
 //! spends against its budget.
 //!
 //! Add files with the picker or by dropping them on the card; write a note
 //! in place. A click opens a file in the side panel; × takes it out (a copy
-//! Forge made is deleted, a file of the project's own stays).
+//! KodAct made is deleted, a file of the project's own stays).
 
 use gpui::component::input::{Input, InputState, TextareaState};
 use gpui::{
@@ -219,7 +219,7 @@ impl Render for ProjectKnowledge {
                                     t.colors.text_subtle
                                 })
                                 .child(note.map(String::from).unwrap_or_else(|| {
-                                    if folder.is_empty() || folder == crate::knowledge::DIR {
+                                    if folder.is_empty() || crate::knowledge::is_dir(&folder) {
                                         detail.clone()
                                     } else {
                                         format!("{folder} · {detail}")
@@ -352,7 +352,7 @@ impl Render for ProjectKnowledge {
                         .text_color(t.extra.warning)
                         .line_height(relative(1.4))
                         .child(format!(
-                            "{over} Always file{} past the budget: Forge reads {} on demand instead.",
+                            "{over} Always file{} past the budget: KodAct reads {} on demand instead.",
                             if over == 1 { " is" } else { "s are" },
                             if over == 1 { "it" } else { "them" }
                         )),
@@ -369,7 +369,7 @@ impl Render for ProjectKnowledge {
                         .text_size(t.text.body_sm)
                         .text_color(t.colors.text_subtle)
                         .line_height(relative(1.4))
-                        .child("Drop specs, briefs or data here. Forge reads them when they matter; set the ones every chat needs to Always."),
+                        .child("Drop specs, briefs or data here. KodAct reads them when they matter; set the ones every chat needs to Always."),
                 )
             })
             .child(div().flex().flex_col().gap(px(2.)).children(rows))

@@ -1,8 +1,8 @@
 //! Settings → Skills → Install: skills from a GitHub repository (or a link to
 //! a folder in one), a git URL, a folder or a `.zip` / `.skill` file, into
 //! Claude Code's folders (yours, `~/.claude/skills`, or the project's
-//! `.claude/skills`), so they work in Forge and in Claude Code alike. In a
-//! chat on WSL or SSH they install on that machine, where its ForgeCLI runs.
+//! `.claude/skills`), so they work in KodAct and in Claude Code alike. In a
+//! chat on WSL or SSH they install on that machine, where its KodAct CLI runs.
 //!
 //! First it looks: what the source holds and, for each skill, what it would
 //! run and allow without asking. Nothing runs while installing.
@@ -289,7 +289,7 @@ impl SkillInstall {
         cx.notify();
     }
 
-    /// A plugin: copied under Forge's plugins folder and added to `pluginDirs`.
+    /// A plugin: copied under KodAct's plugins folder and added to `pluginDirs`.
     fn install_plugin(&mut self, cx: &mut Context<Self>) {
         let Some(p) = self.looked.as_ref().and_then(|l| l.found.plugin.clone()) else {
             return;

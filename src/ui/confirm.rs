@@ -1,5 +1,5 @@
 //! The confirm window: "Delete this chat?", or "Revert these files?" with
-//! the files ForgeCLI's dry run named. A small window over a scrim; Enter
+//! the files KodAct CLI's dry run named. A small window over a scrim; Enter
 //! confirms, Esc or a click outside cancels. It takes the keyboard when it
 //! opens.
 
@@ -84,9 +84,9 @@ impl Render for ConfirmWindow {
                 };
                 let running = s.status(chat) == crate::state::ChatStatus::Working;
                 let body = if running {
-                    "Its reply is still running and will be stopped. The chat and its side questions leave Forge; this can't be undone."
+                    "Its reply is still running and will be stopped. The chat and its side questions leave KodAct; this can't be undone."
                 } else {
-                    "The chat and its side questions leave Forge. Files Forge changed in your project stay as they are. This can't be undone."
+                    "The chat and its side questions leave KodAct. Files KodAct changed in your project stay as they are. This can't be undone."
                 };
                 (
                     "Delete this chat?",
@@ -119,7 +119,7 @@ impl Render for ConfirmWindow {
                 (
                 "Revert these files?",
                 format!("{} {} back to how {} before this message", files.len(), if one { "file goes" } else { "files go" }, if one { "it was" } else { "they were" }).into(),
-                "Later changes to them, from this turn on, are undone too. Files Forge created are removed. The conversation stays as it is.",
+                "Later changes to them, from this turn on, are undone too. Files KodAct created are removed. The conversation stays as it is.",
                 shown,
                 "Revert",
                 )

@@ -1,9 +1,9 @@
-//! Forge's modes, as Forge for VS Code has them: Manual, Edit
+//! KodAct's modes, as KodAct for VS Code has them: Manual, Edit
 //! automatically, Plan, and Bypass permissions.
 //!
 //! All four are Claude Code permission modes. Bypass is offered only once
 //! the person has allowed it, behind a warning. Teaching is not a mode: it
-//! is the bundled `expert` skill (`/forge:expert`), which works in any mode.
+//! is the bundled `expert` skill (`/kodact:expert`), which works in any mode.
 
 /// A permission mode, as the CLI names it (`--permission-mode`).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -73,11 +73,11 @@ impl ModeId {
 
     pub fn description(self) -> &'static str {
         match self {
-            ModeId::Manual => "Forge will ask for approval before making each edit",
-            ModeId::AcceptEdits => "Forge will edit your selected text or the whole file",
-            ModeId::Plan => "Forge will explore the code and present a plan before editing",
+            ModeId::Manual => "KodAct will ask for approval before making each edit",
+            ModeId::AcceptEdits => "KodAct will edit your selected text or the whole file",
+            ModeId::Plan => "KodAct will explore the code and present a plan before editing",
             ModeId::Bypass => {
-                "Forge will not ask for approval before running potentially dangerous commands"
+                "KodAct will not ask for approval before running potentially dangerous commands"
             }
         }
     }
@@ -138,7 +138,7 @@ pub fn flag_settings(profile: Option<&std::path::Path>) -> Option<String> {
     profile.map(|p| p.to_string_lossy().into_owned())
 }
 
-/// The flags a chat's `forge` process starts with for `mode`. While Bypass
+/// The flags a chat's `kodact` process starts with for `mode`. While Bypass
 /// is allowed the switch is always passed, so the mode can change mid-session.
 pub fn cli_args(mode: ModeId, bypass_allowed: bool) -> Vec<String> {
     let mut args = vec![

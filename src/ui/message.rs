@@ -1,4 +1,4 @@
-//! One transcript item, as Forge draws it:
+//! One transcript item, as KodAct draws it:
 //! - your message: a white card on the right;
 //! - a reply: flush with the column, with no header (your message above it
 //!   already starts the turn); it holds text (markdown), thinking (a
@@ -1585,7 +1585,7 @@ fn agent_header(
         .text_color(t.colors.text_muted)
         .cursor_pointer()
         .hover(move |s| s.text_color(strong))
-        // At work, Forge's cube turns; stuck, a warning; else how it ended.
+        // At work, KodAct's cube turns; stuck, a warning; else how it ended.
         .child(div().flex_none().child(if stalled {
             icon("icons/triangle-alert.svg", t.size.icon_sm, t.extra.warning).into_any_element()
         } else if call.status == ToolStatus::Running {
@@ -1805,13 +1805,13 @@ fn tool(call: &ToolCall, b: usize, blocks: &[Block], cx: &ItemContext, t: &Theme
 }
 
 /// A finished file change's review: Keep and Revert… while undecided; then
-/// "Kept", or "Reverted" with Re-apply (which ForgeCLI can't do yet).
+/// "Kept", or "Reverted" with Re-apply (which KodAct CLI can't do yet).
 fn review_controls(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> Option<AnyElement> {
     if !matches!(call.kind, ToolKind::Edit | ToolKind::Write) || call.status != ToolStatus::Done {
         return None;
     }
     let review = file_review(call, b, cx, t);
-    // A web page Forge wrote here: a look at it in the side panel's browser.
+    // A web page KodAct wrote here: a look at it in the side panel's browser.
     let page = matches!(
         markdown::lang_of(&call.target)
             .to_ascii_lowercase()
@@ -1955,7 +1955,7 @@ fn file_review(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> Option
     Some(el)
 }
 
-/// Forge's tool I/O row: a small label, then the text in a quiet well.
+/// KodAct's tool I/O row: a small label, then the text in a quiet well.
 fn io_row(label: &'static str, text: SharedString, lang: &str, t: &Theme) -> impl IntoElement {
     div()
         .flex()
@@ -2193,7 +2193,7 @@ fn answered(
                         })
                         .child(answer_meta(verdict, info, blocks, cx)),
                 )
-                // What you told Forge to do instead, in your words.
+                // What you told KodAct to do instead, in your words.
                 .children(info.note.as_ref().map(|n| {
                     div()
                         .mt(t.space.xs)
@@ -2642,7 +2642,7 @@ fn permission(
     let always_tip = match (&info.offer, info.scope) {
         (Some(rule), Some(scope)) => format!("Adds the rule {rule}, {scope}."),
         (Some(rule), None) => format!("Adds the rule {rule}."),
-        _ => "Forge won't ask again for this.".to_string(),
+        _ => "KodAct won't ask again for this.".to_string(),
     };
     // Said in words when nothing above shows it.
     let words = (subject.is_none() && !detail.is_empty())
@@ -2692,7 +2692,7 @@ fn permission(
                 .flex_wrap()
                 .gap(t.space.sm)
                 // A plan: start on it (edits automatically, or each one
-                // asked), or keep planning; as Forge for VS Code has it.
+                // asked), or keep planning; as KodAct for VS Code has it.
                 .when(is_plan, |d| {
                     d.child(
                         Button::primary(id("plan-auto"), "Yes, edit automatically")

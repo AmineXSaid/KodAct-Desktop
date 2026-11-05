@@ -1,6 +1,6 @@
-//! Embeds Forge's plugin (`assets/forge-plugin`: the Diagram Design,
+//! Embeds KodAct's plugin (`assets/kodact-plugin`: the Diagram Design,
 //! design and office-documents skills, the Expert output style) so the app can unpack
-//! it next to its config and hand it to every ForgeCLI it starts
+//! it next to its config and hand it to every KodAct CLI it starts
 //! (`src/plugin.rs`). The list and a content hash are generated here.
 
 use std::fmt::Write as _;
@@ -23,17 +23,17 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
 }
 
 fn main() {
-    // On Windows, the Forge cube becomes the .exe's icon (resource 1, which
-    // the window and the taskbar load too): `assets/forge.rc`. A build
+    // On Windows, the KodAct cube becomes the .exe's icon (resource 1, which
+    // the window and the taskbar load too): `assets/kodact.rc`. A build
     // without a resource compiler fails here, rather than ship a blank icon.
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
-        println!("cargo:rerun-if-changed=assets/forge.rc");
-        println!("cargo:rerun-if-changed=assets/forge.ico");
-        embed_resource::compile("assets/forge.rc", embed_resource::NONE)
+        println!("cargo:rerun-if-changed=assets/kodact.rc");
+        println!("cargo:rerun-if-changed=assets/kodact.ico");
+        embed_resource::compile("assets/kodact.rc", embed_resource::NONE)
             .manifest_required()
-            .expect("the app icon (assets/forge.rc) could not be compiled");
+            .expect("the app icon (assets/kodact.rc) could not be compiled");
     }
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/forge-plugin");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/kodact-plugin");
     println!("cargo:rerun-if-changed={}", root.display());
     let mut files = vec![];
     walk(&root, &mut files);

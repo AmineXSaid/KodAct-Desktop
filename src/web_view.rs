@@ -1,7 +1,7 @@
-//! The browser in the side panel: one headless Chromium that Forge starts,
+//! The browser in the side panel: one headless Chromium that KodAct starts,
 //! shown live in the panel and driven by the agent at the same time.
 //!
-//! Forge starts Chromium itself (Playwright's build when it is installed,
+//! KodAct starts Chromium itself (Playwright's build when it is installed,
 //! else Chrome or Edge) with a DevTools port, and the agent's browser tools are
 //! connected to that port (`browser_mcp.rs`), so there is no window of its own
 //! (`browser.rs`). The panel watches the page through the DevTools protocol:
@@ -82,7 +82,7 @@ pub enum Cmd {
     Show(String),
     NewTab(String),
     Close(String),
-    /// A page Forge is designing (`design::live`), in a tab of its own,
+    /// A page KodAct is designing (`design::live`), in a tab of its own,
     /// brought to the front: `key` is the file's address. With `draft`, the
     /// page so far is written into the tab as it streams; without, the file
     /// itself is loaded, or reloaded when the tab shows it already (which
@@ -355,8 +355,8 @@ impl Drop for WebView {
     }
 }
 
-/// `forge-gpui --browser-guard <chromium> <args…>`: run the browser, and
-/// close it as soon as stdin closes, which happens when Forge exits, quits
+/// `kodact-desktop --browser-guard <chromium> <args…>`: run the browser, and
+/// close it as soon as stdin closes, which happens when KodAct exits, quits
 /// or crashes. So the browser never outlives the app.
 pub fn guard(args: &[String]) {
     let Some((exe, rest)) = args.split_first() else {
@@ -392,10 +392,10 @@ pub fn guard(args: &[String]) {
     }
 }
 
-/// The Chromium Forge runs: `FORGE_CHROME`, then Playwright's Chromium,
+/// The Chromium KodAct runs: `KODACT_CHROME`, then Playwright's Chromium,
 /// then Chrome, then Edge (always there on Windows 10 and 11).
 pub fn find_chromium() -> Option<PathBuf> {
-    if let Some(p) = std::env::var_os("FORGE_CHROME").map(PathBuf::from) {
+    if let Some(p) = std::env::var_os("KODACT_CHROME").map(PathBuf::from) {
         if p.is_file() {
             return Some(p);
         }
@@ -536,7 +536,7 @@ pub fn start(
     }
     chrome.push("about:blank".into());
     // Through the guard (this program, `--browser-guard`), which closes the
-    // browser when Forge goes, however it goes; tests run it directly.
+    // browser when KodAct goes, however it goes; tests run it directly.
     let mut cmd = match std::env::current_exe() {
         Ok(me) if !cfg!(test) => {
             let mut c = Command::new(me);
@@ -952,7 +952,7 @@ fn devtools(
         );
     }
     let log = crate::browser::downloads_log(focus);
-    // Pages Forge is designing, by address: the tab each one has.
+    // Pages KodAct is designing, by address: the tab each one has.
     let mut designs: std::collections::HashMap<String, String> = Default::default();
     // A page's draft, before its file exists, is shown from a file of its own.
     let draft_file = crate::design::live::draft_file;
@@ -1782,7 +1782,7 @@ mod tests {
     }
 
     /// Start the browser, open a page, and see it reported and drawn: needs
-    /// a Chromium (`FORGE_CHROME` or Playwright's). Clicking and typing into
+    /// a Chromium (`KODACT_CHROME` or Playwright's). Clicking and typing into
     /// a page are checked in the app itself (see the README's screenshots).
     #[test]
     #[ignore]
@@ -1790,7 +1790,7 @@ mod tests {
         let exe = find_chromium().expect("no Chromium");
         let dir = std::env::temp_dir().join(format!("forge-web-{}", std::process::id()));
         let (view, rx) = start(&exe, &dir.join("profile"), &dir.join("focus")).unwrap();
-        view.send(Cmd::Navigate("data:text/html,<h1>Forge</h1>".into()));
+        view.send(Cmd::Navigate("data:text/html,<h1>KodAct</h1>".into()));
         let (mut frames, mut on_page, mut loaded) = (0, false, false);
         let until = Instant::now() + Duration::from_secs(20);
         while Instant::now() < until && !(loaded && frames > 1) {

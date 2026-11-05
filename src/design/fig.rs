@@ -849,7 +849,7 @@ pub fn to_html(
         return Err("the file's pages are empty".into());
     }
     Ok(format!(
-        "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>{}</title>\n<style>\nbody{{margin:0;font-family:system-ui,sans-serif}}\n.fig-page{{padding:32px;overflow:auto}}\n.fig-page h2{{font:600 13px system-ui,sans-serif;color:#666;margin:0 0 16px}}\n.fig-canvas{{position:relative}}\n.fig-canvas div{{box-sizing:border-box}}\n</style></head>\n<body>\n<!-- Imported from Figma by Forge: each page, its frames placed as in the file. -->\n{body}\n</body></html>\n",
+        "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>{}</title>\n<style>\nbody{{margin:0;font-family:system-ui,sans-serif}}\n.fig-page{{padding:32px;overflow:auto}}\n.fig-page h2{{font:600 13px system-ui,sans-serif;color:#666;margin:0 0 16px}}\n.fig-canvas{{position:relative}}\n.fig-canvas div{{box-sizing:border-box}}\n</style></head>\n<body>\n<!-- Imported from Figma by KodAct: each page, its frames placed as in the file. -->\n{body}\n</body></html>\n",
         esc(title)
     ))
 }
@@ -1329,8 +1329,8 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("Launch.fig");
         std::fs::write(&path, bytes).unwrap();
-        // A copy to try by hand: FORGE_FIG_SAMPLE=<path> cargo test design::fig
-        if let Some(keep) = std::env::var_os("FORGE_FIG_SAMPLE") {
+        // A copy to try by hand: KODACT_FIG_SAMPLE=<path> cargo test design::fig
+        if let Some(keep) = std::env::var_os("KODACT_FIG_SAMPLE") {
             std::fs::copy(&path, keep).unwrap();
         }
         let to = dir.join("launch.html");

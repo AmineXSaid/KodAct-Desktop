@@ -400,7 +400,7 @@ impl Found {
 fn read(path: &Path) -> String {
     match std::fs::metadata(path) {
         Ok(m) if m.len() > MAX_FILE_BYTES => format!(
-            "(This file is {} KB; Forge shows files up to {} KB.)",
+            "(This file is {} KB; KodAct shows files up to {} KB.)",
             m.len() / 1024,
             MAX_FILE_BYTES / 1024
         ),

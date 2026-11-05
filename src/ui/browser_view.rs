@@ -2,9 +2,9 @@
 //! (`web_view.rs`). Its tabs across the top, then back, forward, reload, the
 //! address (type a URL or words to search) and "open in your browser"; a
 //! thin bar while a page loads; then the page itself, which you click,
-//! scroll and type into as in any browser. When Forge drives it (the
+//! scroll and type into as in any browser. When KodAct drives it (the
 //! browser tools, `browser_mcp.rs`), a badge says so and you watch it work.
-//! When Forge writes a page, the panel follows it and shows it forming
+//! When KodAct writes a page, the panel follows it and shows it forming
 //! (`design::live`); a badge says which, with Stop following, or Show once
 //! you have taken the browser yourself.
 
@@ -289,7 +289,7 @@ impl BrowserView {
     }
 
     fn send(&self, cmd: Cmd, cx: &mut Context<Self>) {
-        // Taking the browser somewhere yourself stops it following Forge's design.
+        // Taking the browser somewhere yourself stops it following KodAct's design.
         let yours = matches!(
             cmd,
             Cmd::Show(_) | Cmd::NewTab(_) | Cmd::Navigate(_) | Cmd::Back | Cmd::Forward | Cmd::Close(_)
@@ -448,7 +448,7 @@ impl Render for BrowserView {
         let agent = s
             .chat()
             .is_some_and(|c| super::workbench::agent_browsing(&c.messages));
-        // The page Forge is writing (true), or wrote while you weren't
+        // The page KodAct is writing (true), or wrote while you weren't
         // following (false), and whether the panel follows it.
         let design = s
             .designing()
@@ -996,7 +996,7 @@ impl Render for BrowserView {
                                 .text_size(t.text.body_sm)
                                 .line_height(relative(1.5))
                                 .text_color(t.colors.text_muted)
-                                .child("Type an address or a search above. When Forge browses for you, you watch it here, and can take over at any time."),
+                                .child("Type an address or a search above. When KodAct browses for you, you watch it here, and can take over at any time."),
                         ),
                 )
             })
@@ -1095,7 +1095,7 @@ impl Render for BrowserView {
                     )
                     .child(Input::new(&self.mark_input).appearance(false).text_size(t.text.body_sm))
             }).map(|card| super::motion::drop_menu(card, "design-mark-words", false, &t)))
-            // Marks made: comment on them for Forge, or clear them.
+            // Marks made: comment on them for KodAct, or clear them.
             .when(marks_count > 0 && s.design_pick.is_none() && !selecting, |d| {
                 d.child(
                     div()
@@ -1186,7 +1186,7 @@ impl Render for BrowserView {
             }))
             // The page's dialog (alert, confirm, prompt), answered here.
             .children(dialog)
-            // Forge writing a page: which, and whether the panel follows it.
+            // KodAct writing a page: which, and whether the panel follows it.
             .children(design.clone().map(|(name, writing)| {
                 let following = following && writing;
                 let state = self.state.clone();
@@ -1227,7 +1227,7 @@ impl Render for BrowserView {
                             .whitespace_nowrap()
                             .text_ellipsis()
                             .child(if writing {
-                                format!("Forge is designing {name}")
+                                format!("KodAct is designing {name}")
                             } else {
                                 format!("{name} is ready")
                             }),
@@ -1246,7 +1246,7 @@ impl Render for BrowserView {
                             }),
                     )
             }))
-            // Forge at the wheel: a badge over the page.
+            // KodAct at the wheel: a badge over the page.
             .when(agent && design.is_none(), |d| {
                 d.child(
                     crate::theme::popover(&t)
@@ -1269,7 +1269,7 @@ impl Render for BrowserView {
                                 |svg, d| svg.with_transformation(Transformation::rotate(percentage(d))),
                             ),
                         )
-                        .child("Forge is using the browser"),
+                        .child("KodAct is using the browser"),
                 )
             });
 
@@ -1467,9 +1467,9 @@ impl Render for BrowserView {
                     }))
                     .child(icon("icons/bot.svg", t.size.icon_xs, t.colors.text_subtle))
                     .child(div().flex_1().min_w_0().child(if browser_on {
-                        "Forge can use this browser. Each step asks first."
+                        "KodAct can use this browser. Each step asks first."
                     } else {
-                        "Only you use this browser. Turn it on for Forge in Settings."
+                        "Only you use this browser. Turn it on for KodAct in Settings."
                     }))
                     .when(!browser_on, |d| {
                         d.child(

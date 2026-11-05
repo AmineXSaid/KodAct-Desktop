@@ -1,10 +1,10 @@
 //! App state: chats, the transcript model, models and modes. `send` hands
-//! your message to the chat's ForgeCLI process (`backend.rs`) and its events
-//! fill the reply; with `FORGE_DEMO=1` it plays a scripted reply instead, so
+//! your message to the chat's KodAct CLI process (`backend.rs`) and its events
+//! fill the reply; with `KODACT_DEMO=1` it plays a scripted reply instead, so
 //! every part of the UI can be seen working without a model. The chats the
 //! sidebar starts with are demo data.
 //!
-//! The transcript follows Forge's (the VS Code extension): a user turn, then
+//! The transcript follows KodAct's (the VS Code extension): a user turn, then
 //! assistant turns made of blocks. A tool call is one row with its input and
 //! output; its status colours the turn's timeline dot.
 
@@ -21,7 +21,7 @@ pub enum ToolStatus {
     Running,
     Done,
     Failed,
-    /// You said no when Forge asked, so it never ran.
+    /// You said no when KodAct asked, so it never ran.
     Declined,
     /// Stopped while it ran (Stop, or the app closed): it may or may not
     /// have taken effect, so nothing says it failed or worked.
@@ -47,7 +47,7 @@ pub enum ToolKind {
 }
 
 impl ToolKind {
-    /// The verb Forge shows: present tense while running, past when done.
+    /// The verb KodAct shows: present tense while running, past when done.
     pub fn verb(self, status: ToolStatus) -> &'static str {
         if status == ToolStatus::Declined {
             return "Skipped";
@@ -126,7 +126,7 @@ pub struct ToolImage {
 }
 
 impl ToolImage {
-    /// The picture in a file, if it is one Forge can show and not too big
+    /// The picture in a file, if it is one KodAct can show and not too big
     /// to keep in a chat.
     pub fn from_file(path: &str) -> Option<Self> {
         use gpui::ImageFormat;
@@ -307,7 +307,7 @@ pub enum Block {
         /// What the call was, who answered, when, and where its row is.
         info: PermInfo,
     },
-    /// A file Forge made for you: a card in the reply, opened beside the chat.
+    /// A file KodAct made for you: a card in the reply, opened beside the chat.
     File(FileRef),
 }
 
@@ -325,7 +325,7 @@ pub enum Decider {
     Mode(SharedString),
 }
 
-/// A chat's `/goal`, as ForgeCLI last reported it: shown above the box
+/// A chat's `/goal`, as KodAct CLI last reported it: shown above the box
 /// while it lasts (`ui/goal_bar.rs`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Goal {
@@ -337,7 +337,7 @@ pub struct Goal {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GoalStatus {
-    /// Forge keeps working toward it.
+    /// KodAct keeps working toward it.
     Working,
     /// Stopped by a guard or an interrupt; a message picks it up again.
     Paused,
@@ -388,14 +388,14 @@ pub struct PermInfo {
     /// While it waits: the rule "Always allow" would add, and where.
     pub offer: Option<SharedString>,
     pub scope: Option<&'static str>,
-    /// What you told Forge to do instead, with a denial.
+    /// What you told KodAct to do instead, with a denial.
     pub note: Option<SharedString>,
     /// AskUserQuestion's questions, with what you chose: the card is a
     /// question card, not a permission prompt.
     pub questions: Vec<Question>,
     /// The question the card shows.
     pub step: usize,
-    /// ForgeCLI asks about this tool every time: no "Always allow".
+    /// KodAct CLI asks about this tool every time: no "Always allow".
     pub every_time: bool,
 }
 
@@ -424,7 +424,7 @@ pub struct QOption {
 }
 
 impl Question {
-    /// The answer as Forge hears it: your words, else the labels picked.
+    /// The answer as KodAct hears it: your words, else the labels picked.
     pub fn answer(&self) -> Option<String> {
         if let Some(own) = self.own.as_deref().map(str::trim).filter(|o| !o.is_empty()) {
             return Some(own.to_string());
@@ -530,11 +530,17 @@ pub fn always_label(rule: Option<&str>) -> String {
         ("WebSearch", _) => "web searches".into(),
         ("WebFetch", "") => "web pages".into(),
         ("Bash", "") => "commands".into(),
-        // An MCP tool, said as its server and its name: Forge's browser's
-        // `mcp__forge-browser__click` is "browser click".
+        // An MCP tool, said as its server and its name: KodAct's browser's
+        // `mcp__kodact-browser__click` is "browser click".
         (t, "") if t.starts_with("mcp__") => {
             let mut parts = t.trim_start_matches("mcp__").splitn(2, "__");
-            let server = parts.next().unwrap_or("").trim_start_matches("forge-");
+            // KodAct's own servers read without the prefix (Forge's too, in
+            // chats from before the rename).
+            let server = parts.next().unwrap_or("");
+            let server = server
+                .strip_prefix("kodact-")
+                .or_else(|| server.strip_prefix("forge-"))
+                .unwrap_or(server);
             let name = parts.next().unwrap_or("").replace('_', " ");
             format!("{server} {name}").trim().to_string()
         }
@@ -636,7 +642,7 @@ pub fn rule_name(suggestions: &serde_json::Value) -> Option<String> {
         })
 }
 
-/// A sub-agent Forge started (a `Task` / `Agent` tool call), as the
+/// A sub-agent KodAct started (a `Task` / `Agent` tool call), as the
 /// Agents panel shows it.
 #[derive(Clone, Debug)]
 pub struct AgentRun {
@@ -657,7 +663,7 @@ pub struct AgentRun {
     pub steps: Vec<AgentStep>,
     /// Its latest words; once it ends, its answer.
     pub said: String,
-    /// You asked Forge to stop it, and Forge hasn't said it has yet.
+    /// You asked KodAct to stop it, and KodAct hasn't said it has yet.
     pub stopping: bool,
     /// You stopped it; the rest of the turn went on without it.
     pub stopped: bool,
@@ -686,13 +692,13 @@ impl AgentStep {
     }
 }
 
-/// How ForgeCLI's result for a sub-agent you stopped begins (its
-/// `forge_tools::AGENT_STOPPED`).
+/// How KodAct CLI's result for a sub-agent you stopped begins (its
+/// `kodact_tools::AGENT_STOPPED`).
 pub const AGENT_STOPPED: &str = "Stopped by user";
 
-/// What a ForgeCLI too old for `stop_task` is told when asked to stop one agent.
+/// What a KodAct CLI too old for `stop_task` is told when asked to stop one agent.
 pub const CANT_STOP_AGENT: &str =
-    "This Forge can't stop one agent; update it, or press Esc to stop the whole reply.";
+    "This KodAct can't stop one agent; update it, or press Esc to stop the whole reply.";
 
 /// The tools that start a sub-agent.
 pub fn is_agent_tool(name: &str) -> bool {
@@ -725,13 +731,13 @@ pub struct WebPage {
     pub last_download: Option<std::path::PathBuf>,
 }
 
-/// A page Forge is designing, shown live in the browser.
+/// A page KodAct is designing, shown live in the browser.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LiveDesign {
     pub chat: usize,
     /// The page on disk.
     pub path: std::path::PathBuf,
-    /// Forge is writing it now: its draft streaming, or an edit not done.
+    /// KodAct is writing it now: its draft streaming, or an edit not done.
     pub writing: bool,
     /// Written while you weren't following: the panel still shows an
     /// older draft, or another page, until you ask for it.
@@ -794,7 +800,7 @@ pub struct SystemCard {
 /// The artboards the Insert menu offers: a name and a width.
 pub const ARTBOARDS: [(&str, u32); 4] = [("Desktop", 1440), ("Laptop", 1280), ("Tablet", 834), ("Phone", 390)];
 
-/// A theme colour as CSS, for what Forge draws on a page.
+/// A theme colour as CSS, for what KodAct draws on a page.
 fn css(c: gpui::Hsla) -> String {
     format!(
         "hsla({:.0}, {:.0}%, {:.0}%, {:.2})",
@@ -808,11 +814,11 @@ fn css(c: gpui::Hsla) -> String {
 /// Where a design comment went.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CommentSent {
-    /// Kept as a note for yourself (no @Forge).
+    /// Kept as a note for yourself (no @KodAct).
     Note,
-    /// Waiting for Forge's reply to end, then sent.
+    /// Waiting for KodAct's reply to end, then sent.
     Waiting,
-    /// Sent to Forge.
+    /// Sent to KodAct.
     Sent,
 }
 
@@ -829,7 +835,7 @@ pub enum PanelTab {
     Browser,
 }
 
-/// A file Forge made: shown as a card in the reply (`ui/file_card.rs`),
+/// A file KodAct made: shown as a card in the reply (`ui/file_card.rs`),
 /// opened in the side panel (`ui/doc_pane.rs`), saved by Download.
 #[derive(Clone, Debug, PartialEq)]
 pub struct FileRef {
@@ -901,7 +907,7 @@ impl FileRef {
         matches!(self.kind().as_ref(), "MD" | "MARKDOWN")
     }
 
-    /// A diagram Forge draws itself (`diagram.rs`): an SVG, or a Diagram
+    /// A diagram KodAct draws itself (`diagram.rs`): an SVG, or a Diagram
     /// Design page holding one.
     pub fn is_diagram(&self) -> bool {
         crate::diagram::is_diagram(&self.name, &self.content)
@@ -923,7 +929,7 @@ impl Message {
 
 #[derive(Clone, Debug)]
 pub enum Message {
-    /// Your message: its text, the files you attached, and the id ForgeCLI
+    /// Your message: its text, the files you attached, and the id KodAct CLI
     /// gave its turn (for Revert), once known.
     User {
         text: SharedString,
@@ -959,10 +965,10 @@ pub struct Chat {
     pub version: u64,
     /// A reply finished here while you were looking at another chat.
     pub unread: bool,
-    /// Its ForgeCLI conversation's id (`--session-id`, then `--resume`) and
+    /// Its KodAct CLI conversation's id (`--session-id`, then `--resume`) and
     /// its file name in the history (`history.rs`).
     pub session: String,
-    /// ForgeCLI has written this conversation: the next process resumes it.
+    /// KodAct CLI has written this conversation: the next process resumes it.
     pub resumable: bool,
     /// When it last changed, for the sidebar's dates and the history's order.
     pub updated: SystemTime,
@@ -1053,7 +1059,7 @@ pub struct RemoteFolder {
 }
 
 /// A replaced version of a conversation: from your message at `at` on, as
-/// it was, and the ForgeCLI conversation it had (restoring it resumes that).
+/// it was, and the KodAct CLI conversation it had (restoring it resumes that).
 #[derive(Clone, Debug)]
 pub struct Version {
     pub at: usize,
@@ -1150,7 +1156,7 @@ impl Chat {
         }
     }
 
-    /// Start a new ForgeCLI conversation for this chat (its old one can't
+    /// Start a new KodAct CLI conversation for this chat (its old one can't
     /// follow: the transcript was cut back).
     pub fn new_conversation(&mut self) {
         self.session = crate::history::new_id();
@@ -1192,7 +1198,7 @@ pub enum Screen {
     Projects,
     /// One project: its chats, and a composer to start another.
     Project(usize),
-    /// Every file Forge made, across chats (`ui/documents.rs`).
+    /// Every file KodAct made, across chats (`ui/documents.rs`).
     Documents,
     /// The design library to start from: templates, examples, design
     /// systems and skills (`ui/design_home.rs`).
@@ -1266,7 +1272,7 @@ pub enum SettingsTab {
 }
 
 impl SettingsTab {
-    /// The editors backed by ForgeCLI's files (`forge_files.rs`): open, they
+    /// The editors backed by KodAct CLI's files (`forge_files.rs`): open, they
     /// read those files and keep them current.
     pub fn reads_engine_files(self) -> bool {
         matches!(
@@ -1345,7 +1351,7 @@ pub struct Diagnosis {
     run: u64,
 }
 
-/// What the Settings editors show: ForgeCLI's files for this project.
+/// What the Settings editors show: KodAct CLI's files for this project.
 #[derive(Default)]
 pub struct Engine {
     /// The last read; None until the first one ends.
@@ -1358,16 +1364,16 @@ pub struct Engine {
     project: Option<std::path::PathBuf>,
     /// Polls the files while an editor is open.
     watch: Option<Task<()>>,
-    /// Each MCP server's state as `forge mcp list` last said it.
+    /// Each MCP server's state as `kodact mcp list` last said it.
     pub mcp_status: std::collections::BTreeMap<String, String>,
     pub mcp_checking: bool,
-    /// What went wrong with the last check (no ForgeCLI, it failed…).
+    /// What went wrong with the last check (no KodAct CLI, it failed…).
     pub mcp_error: Option<String>,
     /// The settings profiles (`setting_profiles.rs`), read with the catalog.
     pub profiles: Vec<crate::setting_profiles::SettingsProfile>,
 }
 
-/// A folder Forge works in. Its chats, rules and memory belong to it.
+/// A folder KodAct works in. Its chats, rules and memory belong to it.
 #[derive(Clone, Debug)]
 pub struct Project {
     pub id: usize,
@@ -1378,16 +1384,16 @@ pub struct Project {
     pub pinned: bool,
     /// When it was last opened, in minutes before now.
     pub opened_minutes_ago: u32,
-    /// What it is for, in your words (Forge doesn't read it).
+    /// What it is for, in your words (KodAct doesn't read it).
     pub description: SharedString,
     /// Archived: off the lists, its chats and files kept.
     pub archived: bool,
     /// When it was made and last opened (seconds since 1970).
     pub created: u64,
     pub opened_at: u64,
-    /// Forge keeps a memory for it (`.forge/memory.md`).
+    /// KodAct keeps a memory for it (`.forge/memory.md`).
     pub memory_on: bool,
-    /// On your Projects page. The folder Forge was started on is a
+    /// On your Projects page. The folder KodAct was started on is a
     /// project for that run without joining the list, unless you saved it.
     pub listed: bool,
     /// The model (a profile's name) opening the project picks, and the
@@ -1397,7 +1403,7 @@ pub struct Project {
     /// You made it a project (Open folder…, Save as project). A remote
     /// folder you connected to is worked in without becoming one.
     pub saved: bool,
-    /// Plain chats' place: no folder of yours, Forge's own (`scratch_dir`).
+    /// Plain chats' place: no folder of yours, KodAct's own (`scratch_dir`).
     /// Never listed as a project, never shown in the sidebar's head.
     pub scratch: bool,
 }
@@ -1474,7 +1480,7 @@ pub struct MemoryChange {
     pub removed: Vec<String>,
 }
 
-/// One project in `projects.json`: everything Forge keeps about it besides
+/// One project in `projects.json`: everything KodAct keeps about it besides
 /// the folder's own files.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 struct ProjectRecord {
@@ -1514,7 +1520,7 @@ fn now_secs() -> u64 {
 
 // ---------------------------------------------------------------- the engine's bookkeeping
 
-/// A chat's ForgeCLI process, the task applying its events, and the
+/// A chat's KodAct CLI process, the task applying its events, and the
 /// profile it was started on.
 struct Live {
     session: crate::backend::Session,
@@ -1530,7 +1536,7 @@ struct Live {
     _relays: Vec<std::sync::Arc<crate::relay::Relay>>,
 }
 
-/// A permission question Forge is waiting on, and where its card is.
+/// A permission question KodAct is waiting on, and where its card is.
 struct Ask {
     request_id: String,
     tool_use_id: String,
@@ -1543,7 +1549,7 @@ struct Ask {
 
 // ---------------------------------------------------------------- side questions
 
-/// The side-question card's copy, as Forge for VS Code has it.
+/// The side-question card's copy, as KodAct for VS Code has it.
 pub const SIDE_TITLE: &str = "Side question";
 pub const SIDE_EMPTY: &str =
     "Ask a quick side question below without interrupting the conversation.";
@@ -1565,7 +1571,7 @@ pub enum SideItem {
     },
 }
 
-/// A chat's side questions: answered by ForgeCLI from the conversation,
+/// A chat's side questions: answered by KodAct CLI from the conversation,
 /// without tools, while the conversation goes on untouched.
 #[derive(Clone, Debug, Default)]
 pub struct Side {
@@ -1598,7 +1604,7 @@ pub fn parse_btw(text: &str) -> Option<String> {
 // ---------------------------------------------------------------- find, ratings
 
 /// What the Stop notice says; its row offers Continue.
-pub const INTERRUPTED: &str = "Interrupted. Tell Forge what to do instead.";
+pub const INTERRUPTED: &str = "Interrupted. Tell KodAct what to do instead.";
 
 /// A reply's rating (the thumbs under a turn). Kept in memory for now:
 /// sending it is a stub (`stubs::FEEDBACK_UPLOAD`).
@@ -1700,20 +1706,20 @@ fn minutes_since(t: SystemTime) -> u32 {
         .unwrap_or(0)
 }
 
-/// Said while ForgeCLI summarizes the conversation, and when it has.
+/// Said while KodAct CLI summarizes the conversation, and when it has.
 pub const COMPACTING: &str = "Compacting the conversation…";
-pub const COMPACTED: &str = "Compacted: earlier messages were summarized to free context. Forge still knows what was decided.";
+pub const COMPACTED: &str = "Compacted: earlier messages were summarized to free context. KodAct still knows what was decided.";
 
-/// Said under a reply that was still running when Forge closed.
+/// Said under a reply that was still running when KodAct closed.
 pub const CLOSED_MID_REPLY: &str =
-    "Forge was closed before this reply finished. Send a message to pick it up.";
+    "KodAct was closed before this reply finished. Send a message to pick it up.";
 
-/// A `rewind_files` request for ForgeCLI's turn `turn`.
+/// A `rewind_files` request for KodAct CLI's turn `turn`.
 fn json_rewind(turn: &str, dry_run: bool) -> serde_json::Value {
     serde_json::json!({ "subtype": "rewind_files", "user_message_id": turn, "dry_run": dry_run })
 }
 
-/// Whether ForgeCLI's absolute path `full` is the tool row's `target`
+/// Whether KodAct CLI's absolute path `full` is the tool row's `target`
 /// (absolute, or relative to the project).
 fn same_file(full: &str, target: &str) -> bool {
     let norm = |s: &str| s.replace('\\', "/");
@@ -1721,15 +1727,15 @@ fn same_file(full: &str, target: &str) -> bool {
     f == t || f.ends_with(&format!("/{}", t.trim_start_matches("./")))
 }
 
-/// What Continue sends: Forge picks up where Stop cut it off.
+/// What Continue sends: KodAct picks up where Stop cut it off.
 const CONTINUE_PROMPT: &str = "Continue from where you stopped.";
 
 /// The largest file the Files pane's viewer shows, in bytes.
 const FILES_VIEW_MAX: usize = 1 << 20;
 
-/// `FORGE_DEMO=1`: replies are the scripted demo instead of ForgeCLI.
+/// `KODACT_DEMO=1`: replies are the scripted demo instead of KodAct CLI.
 pub(crate) fn demo_mode() -> bool {
-    std::env::var("FORGE_DEMO").is_ok_and(|v| v == "1")
+    std::env::var("KODACT_DEMO").is_ok_and(|v| v == "1")
 }
 
 /// What the confirm window asks.
@@ -1754,7 +1760,7 @@ pub struct CompletionCommand {
     pub group: &'static str,
 }
 
-/// A control request sent to a chat's ForgeCLI, and what its answer is for.
+/// A control request sent to a chat's KodAct CLI, and what its answer is for.
 #[derive(Clone, Debug)]
 pub enum Request {
     /// "Which files would reverting to before this message change?"
@@ -1775,7 +1781,7 @@ pub enum Request {
 
 /// The queued messages a replayed message of yours carries, taken out of
 /// `list`: the one with its id (delivered mid-turn), else those its words
-/// hold (they ran as a turn of their own, alone or joined, under ForgeCLI's id).
+/// hold (they ran as a turn of their own, alone or joined, under KodAct CLI's id).
 pub fn take_landed(list: &mut Vec<Queued>, uuid: &str, text: &str) -> Vec<Queued> {
     if let Some(i) = list.iter().position(|q| q.uuid == uuid) {
         return vec![list.remove(i)];
@@ -1787,7 +1793,7 @@ pub fn take_landed(list: &mut Vec<Queued>, uuid: &str, text: &str) -> Vec<Queued
     hit
 }
 
-/// A message you sent while a reply ran, waiting for Forge's next step.
+/// A message you sent while a reply ran, waiting for KodAct's next step.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Queued {
     pub uuid: String,
@@ -1799,7 +1805,7 @@ pub struct Queued {
 // ---------------------------------------------------------------- the state
 
 pub struct AppState {
-    /// What Forge calls the person; None until the first-run screen sets it.
+    /// What KodAct calls the person; None until the first-run screen sets it.
     pub user_name: Option<SharedString>,
     /// Their avatar (`avatars.rs`): chosen on the first-run screen, else one
     /// given at random and kept.
@@ -1820,7 +1826,7 @@ pub struct AppState {
     pub session_open: bool,
     /// Its cards folded shut, by name ("Environment", "Context", "Changes").
     pub session_folded: Vec<&'static str>,
-    /// What fills each chat's context, as ForgeCLI last counted it.
+    /// What fills each chat's context, as KodAct CLI last counted it.
     pub context_usage: std::collections::HashMap<usize, crate::context::ContextUsage>,
     /// The sidebar lists plain chats or chats in a folder.
     pub sidebar_kind: SidebarKind,
@@ -1831,9 +1837,9 @@ pub struct AppState {
     pub project: SharedString,
     /// The current project's folder; plain chats' place when it is none.
     pub project_dir: std::path::PathBuf,
-    /// The folder Forge was started on, if any (`launch_dir`).
+    /// The folder KodAct was started on, if any (`launch_dir`).
     pub launch_dir: Option<std::path::PathBuf>,
-    /// Remote targets ForgeCLI was put on this run (`remote.rs`).
+    /// Remote targets KodAct CLI was put on this run (`remote.rs`).
     remote_ready: std::collections::HashMap<crate::remote::Target, crate::remote::Provisioned>,
     /// A connection being made: the target and what it is doing now.
     pub remote_busy: Option<(crate::remote::Target, SharedString)>,
@@ -1903,7 +1909,7 @@ pub struct AppState {
     pub default_mode: ModeId,
     /// Bypass permissions has been allowed, behind its warning.
     pub bypass_allowed: bool,
-    /// The web browser tools (`browser_mcp.rs`) are given to new ForgeCLI sessions.
+    /// The web browser tools (`browser_mcp.rs`) are given to new KodAct CLI sessions.
     pub browser: bool,
     /// The Modes menu is open; its Bypass warning is showing.
     pub modes_open: bool,
@@ -1924,10 +1930,10 @@ pub struct AppState {
     pub web: Option<std::sync::Arc<crate::web_view::WebView>>,
     /// What it shows: the page, its tabs, whether it is loading.
     pub web_page: WebPage,
-    /// The page Forge is designing: the browser shows it as it is written
+    /// The page KodAct is designing: the browser shows it as it is written
     /// (`design::live`).
     pub design_live: Option<LiveDesign>,
-    /// Whether the panel follows Forge's design. Off once you take the
+    /// Whether the panel follows KodAct's design. Off once you take the
     /// browser yourself, or stop it; on again at the next reply.
     pub design_follow: bool,
     /// The browser's zoom (1 is the page's own size), as a browser zooms.
@@ -1973,7 +1979,7 @@ pub struct AppState {
     design_index_asked: bool,
     /// The pet beside the chat (`design::pets`), by id; None for none.
     pub pet: Option<String>,
-    /// Requests Forge runs on a schedule (`design::routines`).
+    /// Requests KodAct runs on a schedule (`design::routines`).
     pub routines: Vec<crate::design::routines::Routine>,
     /// The design gallery's list on show.
     pub gallery_tab: GalleryTab,
@@ -2000,7 +2006,7 @@ pub struct AppState {
     /// The page's outline beside it, and the headings it lists.
     pub design_outline: bool,
     pub design_headings: Vec<crate::web_view::Heading>,
-    /// Each design page's versions (its text, before Forge's first change
+    /// Each design page's versions (its text, before KodAct's first change
     /// and after each), and which one is on disk: undo and redo.
     pub design_versions:
         std::collections::HashMap<std::path::PathBuf, (Vec<std::sync::Arc<str>>, usize)>,
@@ -2041,7 +2047,7 @@ pub struct AppState {
     /// on a passage, a page or cells, until it is sent and answered.
     pub doc_comments: Vec<crate::doc_versions::Comment>,
     /// Files you attached and opened in the panel, as they came (by chat):
-    /// each is its file's first version, before Forge edits the copy.
+    /// each is its file's first version, before KodAct edits the copy.
     doc_originals: Vec<(usize, FileRef)>,
     /// The project page's brief (`project_ctx.rs`): what every chat there
     /// gets, read when the page opens. None while it is read, or for a
@@ -2085,7 +2091,7 @@ pub struct AppState {
     /// The replies being played, by chat. Each keeps going while you look at
     /// another chat; dropping one stops it.
     replies: std::collections::HashMap<usize, Task<()>>,
-    /// Each chat's ForgeCLI process (`backend.rs`), kept between turns, and
+    /// Each chat's KodAct CLI process (`backend.rs`), kept between turns, and
     /// the task that applies its events.
     sessions: std::collections::HashMap<usize, Live>,
     /// Turn results still to come from interrupted turns, by chat: until
@@ -2098,11 +2104,11 @@ pub struct AppState {
     command_started: std::collections::HashMap<(usize, String), SystemTime>,
     /// The permission question each chat is waiting on.
     asks: std::collections::HashMap<usize, Ask>,
-    /// What Forge is doing about your latest message in each chat, in a few
+    /// What KodAct is doing about your latest message in each chat, in a few
     /// words the model wrote (`title::headline`), for the working line.
     pub headlines: std::collections::HashMap<usize, String>,
     /// Messages sent while each chat's reply runs, oldest first, until they
-    /// reach Forge (`Event::UserAccepted`).
+    /// reach KodAct (`Event::UserAccepted`).
     pub queued: std::collections::HashMap<usize, Vec<Queued>>,
     /// Each chat's `/goal` while it lasts.
     pub goals: std::collections::HashMap<usize, Goal>,
@@ -2174,7 +2180,7 @@ pub struct AppState {
     resuming: std::collections::HashSet<usize>,
     /// Keeps the sidebar's "5m" / "2h" true as time passes.
     clock: Option<Task<()>>,
-    /// Counts ForgeCLI processes started, to tell their events apart.
+    /// Counts KodAct CLI processes started, to tell their events apart.
     generations: u64,
     /// Files waiting in the composer to go with the next message.
     pub attachments: Vec<crate::attach::Attachment>,
@@ -2187,10 +2193,10 @@ pub struct AppState {
     /// The attachment open in the editor (`attachment_editor.rs`): a pasted
     /// text to edit, or a picture to draw on. By its id.
     pub editing_attachment: Option<u64>,
-    /// Answers ForgeCLI gives at once, in the order asked, by chat: `true`
+    /// Answers KodAct CLI gives at once, in the order asked, by chat: `true`
     /// for a command typed in the composer (`/status`), `false` for `/btw`.
     immediate_queue: std::collections::HashMap<usize, std::collections::VecDeque<bool>>,
-    /// Control requests waiting on ForgeCLI's answer, by request id.
+    /// Control requests waiting on KodAct CLI's answer, by request id.
     requests: std::collections::HashMap<String, Request>,
     /// For `@` completion: the project's files, read once per project.
     file_index: Option<(std::path::PathBuf, std::sync::Arc<Vec<String>>)>,
@@ -2233,7 +2239,7 @@ pub struct AppState {
     pub approvals_open: bool,
     /// Chats whose running turn is a compaction.
     compacting: std::collections::HashSet<usize>,
-    /// ForgeCLI's own files, for the Settings editors.
+    /// KodAct CLI's own files, for the Settings editors.
     pub engine: Engine,
     /// Settings → Models → Diagnose: the endpoint checked and its steps.
     pub diagnosis: Option<Diagnosis>,
@@ -2242,7 +2248,7 @@ pub struct AppState {
     /// The project map is open, and its last read (None while reading).
     pub map_open: bool,
     pub map: Option<ProjectMap>,
-    /// The settings profile each chat's ForgeCLI gets (`--settings`).
+    /// The settings profile each chat's KodAct CLI gets (`--settings`).
     pub settings_profile: Option<String>,
     next_id: usize,
 }
@@ -2256,7 +2262,7 @@ impl AppState {
         let saved_avatar = crate::profile::load_avatar();
         let launch = launch_dir();
         let scratch = scratch_dir();
-        // Made at start, so ForgeCLI has a folder to run in; a failure shows
+        // Made at start, so KodAct CLI has a folder to run in; a failure shows
         // when a chat starts.
         let _ = std::fs::create_dir_all(&scratch);
         let projects = initial_projects(launch.as_deref(), &scratch);
@@ -3153,7 +3159,7 @@ impl AppState {
 
     /// A reply is playing in the chat you're looking at.
     /// Clear the chat's goal (`/goal clear`). While a reply runs it is
-    /// stopped first: ForgeCLI pauses the goal, and Clear then ends it.
+    /// stopped first: KodAct CLI pauses the goal, and Clear then ends it.
     pub fn clear_goal(&mut self, cx: &mut Context<Self>) {
         let Some(chat) = self.current else { return };
         match self.goals.get(&chat).map(|g| g.status) {
@@ -3167,7 +3173,7 @@ impl AppState {
         }
     }
 
-    /// Between a goal's turns: the chat stays busy while ForgeCLI checks
+    /// Between a goal's turns: the chat stays busy while KodAct CLI checks
     /// the goal and starts the next turn (`system/goal` ends the wait).
     fn goal_keeps_working(&mut self, chat: usize) {
         if !self.replies.contains_key(&chat) {
@@ -3473,7 +3479,7 @@ impl AppState {
         self.share_step(id, move |p| crate::project_share::commit(p, memory), cx);
     }
 
-    /// Export project `id`'s setup as a `.forgeproject` in Downloads.
+    /// Export project `id`'s setup as a `.kodactproject` in Downloads.
     pub fn share_export(&mut self, id: usize, memory: bool, cx: &mut Context<Self>) {
         let Some(dir) = crate::downloads::dir() else {
             return self.show_toast("Could not find your Downloads folder.", cx);
@@ -3496,7 +3502,7 @@ impl AppState {
         );
     }
 
-    /// Import a `.forgeproject` into project `id`.
+    /// Import a `.kodactproject` into project `id`.
     pub fn share_import(&mut self, id: usize, file: std::path::PathBuf, cx: &mut Context<Self>) {
         self.share_step(
             id,
@@ -3525,7 +3531,7 @@ impl AppState {
         cx.notify();
     }
 
-    /// New project › Start fresh: a folder in `Forge Projects` made from a
+    /// New project › Start fresh: a folder in `KodAct Projects` made from a
     /// template, opened as a project.
     pub fn create_project(&mut self, name: String, template: &'static str, cx: &mut Context<Self>) {
         let (Some(home), Some(folder)) = (
@@ -3559,7 +3565,7 @@ impl AppState {
         .detach();
     }
 
-    /// New project › Clone from GitHub: `git clone` into `Forge Projects`,
+    /// New project › Clone from GitHub: `git clone` into `KodAct Projects`,
     /// then open it as a project.
     pub fn clone_project(&mut self, url: String, cx: &mut Context<Self>) {
         let url = url.trim().to_string();
@@ -3649,7 +3655,7 @@ impl AppState {
         cx.notify();
     }
 
-    /// Start a chat in project `id` asking Forge about something (an issue,
+    /// Start a chat in project `id` asking KodAct about something (an issue,
     /// a pull request, a failing run).
     pub fn ask_forge(&mut self, id: usize, text: String, cx: &mut Context<Self>) {
         self.select_project(id, cx);
@@ -3744,7 +3750,7 @@ impl AppState {
                 crate::knowledge::add(p, &paths).map(|n| match n {
                     0 => "Those files are in the knowledge already.".into(),
                     1 => {
-                        "Added to the knowledge, On demand: Forge reads it when it matters.".into()
+                        "Added to the knowledge, On demand: KodAct reads it when it matters.".into()
                     }
                     n => format!("Added {n} files to the knowledge, On demand."),
                 })
@@ -3790,8 +3796,8 @@ impl AppState {
         );
     }
 
-    /// Save project `id`'s instructions: shared (its FORGE.md) or yours
-    /// only (FORGE.local.md). Empty removes the file.
+    /// Save project `id`'s instructions: shared (its KODACT.md) or yours
+    /// only (KODACT.local.md). Empty removes the file.
     pub fn save_instructions(
         &mut self,
         id: usize,
@@ -3872,7 +3878,7 @@ impl AppState {
     }
 
     /// Remove from projects: the folder leaves your list (its chats stay,
-    /// under All projects). The folder Forge started in always stays.
+    /// under All projects). The folder KodAct started in always stays.
     pub fn forget_project(&mut self, id: usize, cx: &mut Context<Self>) {
         if self
             .project(id)
@@ -3898,7 +3904,7 @@ impl AppState {
     }
 
     /// Write your projects to disk: the ones on your list, and the folder
-    /// Forge started on (its details, without listing it). Plain chats'
+    /// KodAct started on (its details, without listing it). Plain chats'
     /// place and folders you only connected to aren't kept.
     fn save_projects(&self, cx: &mut Context<Self>) {
         let records: Vec<ProjectRecord> = self
@@ -4081,7 +4087,7 @@ impl AppState {
         }
     }
 
-    /// A chat's mode as ForgeCLI now runs it (it changed it itself, or a
+    /// A chat's mode as KodAct CLI now runs it (it changed it itself, or a
     /// plan's answer did): the mode chip follows, and the mode is kept for
     /// the chat's next session.
     fn mode_reported(&mut self, chat: usize, mode: ModeId) {
@@ -4095,7 +4101,7 @@ impl AppState {
         }
     }
 
-    /// The mode a chat's ForgeCLI runs in: the showing chat's, or what
+    /// The mode a chat's KodAct CLI runs in: the showing chat's, or what
     /// another chat kept.
     fn chat_mode(&self, chat: usize) -> ModeId {
         if self.current == Some(chat) {
@@ -4105,7 +4111,7 @@ impl AppState {
         }
     }
 
-    /// Whether Forge answers a permission request itself (`approve`): a
+    /// Whether KodAct answers a permission request itself (`approve`): a
     /// command that only reads, in any mode but Bypass, or that only edits
     /// project files, in Edit automatically. Deletions always ask.
     fn auto_approves(&self, chat: usize, tool: &str, input: &serde_json::Value) -> bool {
@@ -4211,7 +4217,7 @@ impl AppState {
         if crate::profile::save_name(&name).is_err() {
             // Still usable for this run; the next launch asks again.
             self.show_toast(
-                "Your name could not be saved; Forge will ask again next time.",
+                "Your name could not be saved; KodAct will ask again next time.",
                 cx,
             );
         }
@@ -4250,7 +4256,7 @@ impl AppState {
     }
 
     /// Run the reply to one of your messages again: the conversation goes
-    /// back to that message, and Forge answers it afresh.
+    /// back to that message, and KodAct answers it afresh.
     pub fn retry(&mut self, chat: usize, msg: usize, cx: &mut Context<Self>) {
         let Some(text) = self.take_from(chat, msg, cx) else {
             return;
@@ -4293,7 +4299,7 @@ impl AppState {
     /// its text. Stops a reply in progress first.
     fn take_from(&mut self, chat: usize, msg: usize, cx: &mut Context<Self>) -> Option<String> {
         self.replies.remove(&chat);
-        // Forge's conversation can't be cut back: the next message starts a new one.
+        // KodAct's conversation can't be cut back: the next message starts a new one.
         self.sessions.remove(&chat);
         while self.side.get(&chat).is_some_and(|s| !s.pending.is_empty()) {
             self.answer_side(
@@ -4354,7 +4360,7 @@ impl AppState {
         self.settings_tab(tab, cx);
     }
 
-    /// Show a Settings section; an editor of ForgeCLI's files reads them
+    /// Show a Settings section; an editor of KodAct CLI's files reads them
     /// and starts watching them.
     pub fn settings_tab(&mut self, tab: SettingsTab, cx: &mut Context<Self>) {
         self.settings_tab = tab;
@@ -4368,7 +4374,7 @@ impl AppState {
         cx.notify();
     }
 
-    /// Read ForgeCLI's files again (off the UI thread).
+    /// Read KodAct CLI's files again (off the UI thread).
     pub fn reload_engine(&mut self, cx: &mut Context<Self>) {
         let project = self.project_dir.clone();
         if self.engine.project.as_ref() != Some(&project) {
@@ -4410,7 +4416,7 @@ impl AppState {
         cx.notify();
     }
 
-    /// While Settings shows an editor of ForgeCLI's files, look at them every
+    /// While Settings shows an editor of KodAct CLI's files, look at them every
     /// two seconds and read them again when one changed (an edit in another
     /// program, a `git pull`).
     fn watch_engine(&mut self, cx: &mut Context<Self>) {
@@ -4564,11 +4570,11 @@ impl AppState {
         cx.notify();
     }
 
-    /// Ask ForgeCLI which MCP servers start (`forge mcp list`, in the project).
+    /// Ask KodAct CLI which MCP servers start (`kodact mcp list`, in the project).
     pub fn check_mcp(&mut self, cx: &mut Context<Self>) {
         let Some(cli) = crate::backend::find_cli() else {
             self.engine.mcp_error = Some(
-                "ForgeCLI isn't installed beside Forge, so the servers can't be checked.".into(),
+                "KodAct CLI isn't installed beside KodAct, so the servers can't be checked.".into(),
             );
             return cx.notify();
         };
@@ -4602,12 +4608,12 @@ impl AppState {
                             s.engine.mcp_error = Some(
                                 err.lines()
                                     .last()
-                                    .unwrap_or("forge mcp list failed")
+                                    .unwrap_or("kodact mcp list failed")
                                     .to_string(),
                             );
                         }
                     }
-                    Err(e) => s.engine.mcp_error = Some(format!("Couldn't run ForgeCLI: {e}")),
+                    Err(e) => s.engine.mcp_error = Some(format!("Couldn't run KodAct CLI: {e}")),
                 }
                 cx.notify();
             });
@@ -4616,7 +4622,7 @@ impl AppState {
         cx.notify();
     }
 
-    /// Run a change to ForgeCLI's files off the UI thread, then read them
+    /// Run a change to KodAct CLI's files off the UI thread, then read them
     /// again and say how it went.
     pub fn engine_write(
         &mut self,
@@ -4708,8 +4714,8 @@ impl AppState {
     }
 
     /// Open a Word, Excel, PowerPoint or PDF file you attached in the side
-    /// panel, as one Forge wrote: the same preview, comments and versions.
-    /// It points at the project's copy (what Forge edits); the file you
+    /// panel, as one KodAct wrote: the same preview, comments and versions.
+    /// It points at the project's copy (what KodAct edits); the file you
     /// picked is read for its first version. Anything else opens in its app.
     pub fn open_attachment(&mut self, a: crate::attach::Attachment, cx: &mut Context<Self>) {
         use crate::attach::Kind;
@@ -4760,7 +4766,7 @@ impl AppState {
             let first = original
                 .clone()
                 .and_then(|b| file_card(name.clone(), ext.clone(), at.display().to_string(), b));
-            // The copy now: the same file, or Forge's edit of it.
+            // The copy now: the same file, or KodAct's edit of it.
             let now = std::fs::read(&at)
                 .ok()
                 .and_then(|b| file_card(name, ext, at.display().to_string(), b));
@@ -4863,7 +4869,7 @@ impl AppState {
         cx.notify();
     }
 
-    /// Send the panel's file's open comments to Forge as one message: each
+    /// Send the panel's file's open comments to KodAct as one message: each
     /// one's place, quote and request. A later version of the file answers
     /// them.
     pub fn send_doc_comments(&mut self, cx: &mut Context<Self>) {
@@ -4894,7 +4900,7 @@ impl AppState {
         self.send(text, cx);
     }
 
-    /// One comment, sent at once: "Ask Forge to change this".
+    /// One comment, sent at once: "Ask KodAct to change this".
     pub fn ask_doc_change(
         &mut self,
         anchor: crate::doc_versions::Anchor,
@@ -5172,7 +5178,7 @@ impl AppState {
 
     /// Open a file in the app the system has for it: a diagram's page in the
     /// browser (where it is interactive), a workbook in Excel. Written to
-    /// Forge's temp folder off the UI thread, then handed to the system.
+    /// KodAct's temp folder off the UI thread, then handed to the system.
     pub fn open_externally(&mut self, file: &FileRef, cx: &mut Context<Self>) {
         let dir = std::env::temp_dir().join("forge-files");
         let (name, bytes) = (crate::downloads::clean_name(&file.name), file.data());
@@ -5229,7 +5235,7 @@ impl AppState {
         Some(project.join(p))
     }
 
-    /// Forge starts on a page: the design this chat shows live. A design
+    /// KodAct starts on a page: the design this chat shows live. A design
     /// from an earlier reply starts following again.
     fn design_begin(&mut self, chat: usize, path: std::path::PathBuf) {
         let turn = self.turn_started.get(&chat).copied();
@@ -5241,7 +5247,7 @@ impl AppState {
             Some(l) => l.since,
             None => {
                 self.design_follow = true;
-                // The page as it was, for undo, before Forge changes it.
+                // The page as it was, for undo, before KodAct changes it.
                 self.design_keep_version(&path);
                 std::time::Instant::now()
             }
@@ -5359,7 +5365,7 @@ impl AppState {
         (key, title)
     }
 
-    /// Follow Forge's design again (the badge's Show), or stop: you take
+    /// Follow KodAct's design again (the badge's Show), or stop: you take
     /// the browser yourself, or press Stop following.
     pub fn design_set_follow(&mut self, on: bool, cx: &mut Context<Self>) {
         self.design_follow = on;
@@ -5373,7 +5379,7 @@ impl AppState {
     }
 
     /// The design the badge tells of: the chat on screen's, while it
-    /// replies and Forge writes it.
+    /// replies and KodAct writes it.
     pub fn designing(&self) -> Option<&LiveDesign> {
         self.design_live
             .as_ref()
@@ -5443,9 +5449,9 @@ impl AppState {
         cx.notify();
     }
 
-    /// Ask Forge to review the page on screen: Open Design's five-part
+    /// Ask KodAct to review the page on screen: Open Design's five-part
     /// design review (craft, the brief, brand, accessibility, copy), with
-    /// the fixes made, not only listed. Sent now, or queued while Forge
+    /// the fixes made, not only listed. Sent now, or queued while KodAct
     /// replies.
     pub fn design_critique(&mut self, cx: &mut Context<Self>) {
         let Some(page) = self.design_on_screen() else {
@@ -5650,7 +5656,7 @@ fix everything under 8, render it again to check, then tell me the scores before
             return;
         };
         if self.designing().is_some_and(|l| l.path == page) {
-            return self.show_toast("Forge is changing this page; undo once it's done.", cx);
+            return self.show_toast("KodAct is changing this page; undo once it's done.", cx);
         }
         if !self.design_can_step(step) {
             return self.show_toast(
@@ -5696,7 +5702,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         self.design_show(&to, cx);
     }
 
-    /// Ask Forge to rename the page on screen, so it knows the new name:
+    /// Ask KodAct to rename the page on screen, so it knows the new name:
     /// the composer starts the request.
     pub fn design_rename(&mut self, cx: &mut Context<Self>) {
         if let Some(name) = self
@@ -5853,7 +5859,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         }
     }
 
-    /// Open the comment box on the page's marks: what you say goes to Forge
+    /// Open the comment box on the page's marks: what you say goes to KodAct
     /// with a picture of them.
     pub fn design_comment_on_marks(&mut self, cx: &mut Context<Self>) {
         let marks: Vec<_> = self.design_marks_here();
@@ -5879,7 +5885,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         cx.notify();
     }
 
-    /// A comment on the page's marks: a note keeps them; for Forge, a
+    /// A comment on the page's marks: a note keeps them; for KodAct, a
     /// picture of the page with them on it is taken (`Update::Picture`),
     /// then they go with it, and come off the page.
     fn design_comment_marks(
@@ -6037,7 +6043,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         .detach();
     }
 
-    /// Ask Forge to restyle the page on screen with a design system: the
+    /// Ask KodAct to restyle the page on screen with a design system: the
     /// composer starts the request, naming the system's `DESIGN.md`.
     pub fn design_apply_system(&mut self, card: &SystemCard, cx: &mut Context<Self>) {
         let Some(name) = self
@@ -6060,12 +6066,12 @@ fix everything under 8, render it again to check, then tell me the scores before
     }
 
     /// Make the open chat a design chat set up with `setup`, or an
-    /// ordinary chat again (None). Its next message starts ForgeCLI again
+    /// ordinary chat again (None). Its next message starts KodAct CLI again
     /// (resuming the conversation) with the design prompt and tools.
     pub fn set_design(&mut self, setup: Option<crate::design::prompt::Setup>, cx: &mut Context<Self>) {
         if setup.is_some() && crate::design::root().is_none() {
             return self.show_toast(
-                "Forge's design library isn't installed: put design-library beside Forge, or set FORGE_DESIGN_LIB.",
+                "KodAct's design library isn't installed: put design-library beside KodAct, or set KODACT_DESIGN_LIB.",
                 cx,
             );
         }
@@ -6089,13 +6095,13 @@ fix everything under 8, render it again to check, then tell me the scores before
         let was = std::mem::replace(&mut chat.design, setup.clone());
         let toast = match (&setup, was) {
             (Some(s), None) => format!(
-                "Design chat: {}. Forge gets the design prompt and tools from your next message.",
+                "Design chat: {}. KodAct gets the design prompt and tools from your next message.",
                 s.surface.label()
             ),
             (Some(s), Some(_)) => format!("Design chat: {}.", s.surface.label()),
             (None, _) => "An ordinary chat again: no design prompt or tools from the next message.".into(),
         };
-        // Its ForgeCLI starts again on the next message, unless a reply is
+        // Its KodAct CLI starts again on the next message, unless a reply is
         // running (that one keeps what it started with).
         if self
             .chats
@@ -6280,7 +6286,7 @@ fix everything under 8, render it again to check, then tell me the scores before
     }
 
     /// A design system from a website: a design chat whose request (in the
-    /// composer, for you to finish with the address) has Forge capture the
+    /// composer, for you to finish with the address) has KodAct capture the
     /// site's brand with `design_capture`, then design in it.
     pub fn design_from_website(&mut self, cx: &mut Context<Self>) {
         self.new_chat(cx);
@@ -6342,7 +6348,7 @@ fix everything under 8, render it again to check, then tell me the scores before
     }
 
     /// The page's version, for its slide pictures: it changes with each of
-    /// Forge's edits.
+    /// KodAct's edits.
     pub fn design_version_of(&self, page: &std::path::Path) -> usize {
         self.design_versions.get(page).map_or(0, |(list, at)| list.len() * 1000 + at)
     }
@@ -6372,7 +6378,7 @@ fix everything under 8, render it again to check, then tell me the scores before
     pub fn next_pet(&mut self, cx: &mut Context<Self>) {
         let all = crate::design::pets::all();
         if all.is_empty() {
-            return self.show_toast("No pets: they come with Forge's design library.", cx);
+            return self.show_toast("No pets: they come with KodAct's design library.", cx);
         }
         let at = self
             .pet
@@ -6429,7 +6435,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         };
         self.routines.push(r);
         let _ = crate::design::routines::save(&self.routines);
-        self.show_toast(format!("Routine made: it runs {}, while Forge is open. Manage it in Design › Routines.", when.say()), cx);
+        self.show_toast(format!("Routine made: it runs {}, while KodAct is open. Manage it in Design › Routines.", when.say()), cx);
         cx.notify();
     }
 
@@ -6478,7 +6484,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                 let now = chrono::Local::now();
                 let due = s.routines.iter().find(|r| r.due(now)).map(|r| r.id.clone());
                 // Not into a chat that is replying, or a screen you're on
-                // mid-answer: a routine waits until Forge is free.
+                // mid-answer: a routine waits until KodAct is free.
                 if let (Some(id), false) = (due, s.busy()) {
                     s.run_routine(&id, cx);
                 }
@@ -6583,8 +6589,8 @@ fix everything under 8, render it again to check, then tell me the scores before
     }
 
     /// Comment on the part picked: a note for yourself, or (`to_forge`) a
-    /// request Forge acts on; while Forge replies it waits for the reply to
-    /// end (`queue`), or reaches Forge at its next step.
+    /// request KodAct acts on; while KodAct replies it waits for the reply to
+    /// end (`queue`), or reaches KodAct at its next step.
     pub fn design_comment(&mut self, text: String, to_forge: bool, queue: bool, cx: &mut Context<Self>) {
         let text = text.trim().to_string();
         let (Some(page), Some(chat)) = (self.design_on_screen(), self.current) else {
@@ -6862,7 +6868,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         }
         let Some(exe) = crate::web_view::find_chromium() else {
             self.web_page.error = Some(
-                "Forge needs Chromium, Chrome or Edge for the browser. Install one, or run: npx playwright install chromium"
+                "KodAct needs Chromium, Chrome or Edge for the browser. Install one, or run: npx playwright install chromium"
                     .into(),
             );
             cx.notify();
@@ -7128,7 +7134,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                 .background_spawn(async move {
                     match remote {
                         // A remote project's files and skills come over the
-                        // connection: ForgeCLI there reads its own folders,
+                        // connection: KodAct CLI there reads its own folders,
                         // not this computer's.
                         Some((extra, r)) => (
                             crate::remote::project_files(&r.target, &r.path, 20_000, &extra)
@@ -7233,7 +7239,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         .detach();
     }
 
-    /// The commands `/` offers: the project's own, then ForgeCLI's.
+    /// The commands `/` offers: the project's own, then KodAct CLI's.
     pub fn completion_commands(&self) -> Vec<CompletionCommand> {
         let custom = self
             .custom_commands
@@ -7267,16 +7273,16 @@ fix everything under 8, render it again to check, then tell me the scores before
                         name: c.name,
                         args: c.args,
                         description: c.description,
-                        group: "ForgeCLI",
+                        group: "KodAct CLI",
                     }),
             )
-            // Forge's own: a side question (`parse_btw`), answered in a
+            // KodAct's own: a side question (`parse_btw`), answered in a
             // card over the chat, which leaves the conversation as it is.
             .chain([CompletionCommand {
                 name: "btw".into(),
                 args: "<question>".into(),
                 description: "Ask a side question; the answer floats over the chat".into(),
-                group: "Forge",
+                group: "KodAct",
             }])
             .collect()
     }
@@ -7290,7 +7296,7 @@ fix everything under 8, render it again to check, then tell me the scores before
             .unwrap_or_default()
     }
 
-    /// "Run again" on a command: Forge is asked to run it again, as a
+    /// "Run again" on a command: KodAct is asked to run it again, as a
     /// message of yours, so the mode's permissions apply as for any command.
     pub fn rerun(&mut self, command: &str, cx: &mut Context<Self>) {
         if self.busy() {
@@ -7444,7 +7450,7 @@ fix everything under 8, render it again to check, then tell me the scores before
     // ------------------------------------------------------------ JSON export and share
 
     /// The chat as JSON: its whole transcript, tool calls included (the
-    /// history's format, so Forge can read it back).
+    /// history's format, so KodAct can read it back).
     fn chat_json(&self, id: usize) -> Option<(String, String)> {
         let c = self.chats.iter().find(|c| c.id == id)?;
         let dir = self
@@ -7494,7 +7500,7 @@ fix everything under 8, render it again to check, then tell me the scores before
 
     /// Bring back version `v`: the conversation from its message on becomes
     /// what it was then (the one showing now is kept as a version in turn),
-    /// and the next message resumes that version's ForgeCLI conversation.
+    /// and the next message resumes that version's KodAct CLI conversation.
     pub fn restore_version(&mut self, chat: usize, v: usize, cx: &mut Context<Self>) {
         self.versions_open = None;
         if self.replies.contains_key(&chat) {
@@ -7536,7 +7542,7 @@ fix everything under 8, render it again to check, then tell me the scores before
 
     // ------------------------------------------------------------ context
 
-    /// Summarize the conversation to free context: ForgeCLI's `/compact`,
+    /// Summarize the conversation to free context: KodAct CLI's `/compact`,
     /// shown as a notice rather than a message of yours.
     pub fn compact(&mut self, cx: &mut Context<Self>) {
         self.context_open = false;
@@ -7555,7 +7561,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         };
         if !self.sessions.contains_key(&id) {
             if let Err(e) = self.start_session(id, profile, cx) {
-                return self.show_toast(format!("Couldn't start Forge to compact: {e}"), cx);
+                return self.show_toast(format!("Couldn't start KodAct to compact: {e}"), cx);
             }
         }
         match self.sessions.get(&id).map(|l| l.session.send("/compact")) {
@@ -7768,9 +7774,9 @@ fix everything under 8, render it again to check, then tell me the scores before
     }
 
     /// Turn the web browser on or off. Chats that aren't replying restart
-    /// their ForgeCLI on their next message (resuming the conversation), so
+    /// their KodAct CLI on their next message (resuming the conversation), so
     /// the change reaches them; a running reply keeps what it started with.
-    /// Idle chats' ForgeCLI processes end, so each starts again (resuming its
+    /// Idle chats' KodAct CLI processes end, so each starts again (resuming its
     /// conversation) with the new arguments on its next message.
     fn restart_idle_engines(&mut self) {
         let working: Vec<usize> = self
@@ -7805,7 +7811,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         let on = !self.browser;
         if on && crate::web_view::find_chromium().is_none() {
             return self.show_toast(
-                "Forge's browser needs Chromium, Chrome or Edge. Install one (or run: npx playwright install chromium), then turn it on again.",
+                "KodAct's browser needs Chromium, Chrome or Edge. Install one (or run: npx playwright install chromium), then turn it on again.",
                 cx,
             );
         }
@@ -7816,7 +7822,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         self.restart_idle_engines();
         self.show_toast(
             if on {
-                "Web browser on: Forge's agents drive the browser in the side panel (open, click, type, read, run scripts, screenshots) while you watch. Each step asks first."
+                "Web browser on: KodAct's agents drive the browser in the side panel (open, click, type, read, run scripts, screenshots) while you watch. Each step asks first."
             } else {
                 "Web browser off."
             },
@@ -7873,7 +7879,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         cx.notify();
     }
 
-    /// Revert the changes made since your message before `msg`: ForgeCLI's
+    /// Revert the changes made since your message before `msg`: KodAct CLI's
     /// checkpoints say which files that touches (a dry run), and the confirm
     /// window lists them before anything is put back.
     pub fn ask_revert(&mut self, chat: usize, msg: usize, cx: &mut Context<Self>) {
@@ -7890,7 +7896,7 @@ fix everything under 8, render it again to check, then tell me the scores before
             turn: Some(turn), ..
         }) = c.messages.get(q)
         else {
-            // A message from before Forge learnt turn ids (or one never accepted).
+            // A message from before KodAct learnt turn ids (or one never accepted).
             return self.stub(crate::stubs::REVERT_NO_CHECKPOINT, cx);
         };
         let turn = turn.to_string();
@@ -7906,7 +7912,7 @@ fix everything under 8, render it again to check, then tell me the scores before
             Request::RevertPlan { chat, msg: q },
             cx,
         ) {
-            self.show_toast(format!("Couldn't ask Forge what to revert: {e}"), cx);
+            self.show_toast(format!("Couldn't ask KodAct what to revert: {e}"), cx);
         }
     }
 
@@ -7935,7 +7941,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         cx.notify();
     }
 
-    /// Send a control request to a chat's ForgeCLI (starting it, resumed,
+    /// Send a control request to a chat's KodAct CLI (starting it, resumed,
     /// if it isn't running), remembering what the answer is for.
     fn control(
         &mut self,
@@ -7954,7 +7960,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         let id = self
             .sessions
             .get(&chat)
-            .ok_or("Forge isn't running")?
+            .ok_or("KodAct isn't running")?
             .session
             .request(request)?;
         self.requests.insert(id, what);
@@ -7971,7 +7977,7 @@ fix everything under 8, render it again to check, then tell me the scores before
             return self.on_stop_reply(chat, &ids, result, cx);
         }
         if let Request::ContextUsage { chat } = req {
-            // An older ForgeCLI doesn't know the request: the card keeps
+            // An older KodAct CLI doesn't know the request: the card keeps
             // the composer's measure.
             if let Some(u) = result
                 .ok()
@@ -7987,7 +7993,7 @@ fix everything under 8, render it again to check, then tell me the scores before
             match result {
                 Ok(v) if v["cancelled"] == true => self.unqueue(chat, &uuid, edit, cx),
                 Ok(_) => self.show_toast(
-                    "Already with Forge: it reached the model before it could be taken back.",
+                    "Already with KodAct: it reached the model before it could be taken back.",
                     cx,
                 ),
                 Err(e) => self.show_toast(format!("Couldn't take it back: {e}"), cx),
@@ -7998,7 +8004,7 @@ fix everything under 8, render it again to check, then tell me the scores before
             if v["canRewind"] == false {
                 return Err(v["error"]
                     .as_str()
-                    .unwrap_or("Forge has no checkpoint for this message")
+                    .unwrap_or("KodAct has no checkpoint for this message")
                     .to_string());
             }
             Ok(v["filesChanged"]
@@ -8101,15 +8107,15 @@ fix everything under 8, render it again to check, then tell me the scores before
         self.regenerate(id, end, cx);
     }
 
-    /// Pick a stopped reply back up. The chat's ForgeCLI process still holds
-    /// the conversation after Stop, so Forge is asked to go on; when the
+    /// Pick a stopped reply back up. The chat's KodAct CLI process still holds
+    /// the conversation after Stop, so KodAct is asked to go on; when the
     /// process is gone the conversation can't be resumed (a stub until P2).
     pub fn continue_reply(&mut self, cx: &mut Context<Self>) {
         let Some(id) = self.current else { return };
         if self.busy() {
             return;
         }
-        // The live process still holds the conversation, and one ForgeCLI
+        // The live process still holds the conversation, and one KodAct CLI
         // wrote can be resumed (`--resume`).
         let resumable = self.chats.iter().any(|c| c.id == id && c.resumable);
         if demo_mode() || self.sessions.contains_key(&id) || resumable {
@@ -8159,7 +8165,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         self.open_chat_menu(open.then_some(id), cx);
     }
 
-    /// Ask chat `chat`'s ForgeCLI what fills its context; the answer lands
+    /// Ask chat `chat`'s KodAct CLI what fills its context; the answer lands
     /// in `context_usage`. Nothing to ask without a running session.
     pub fn ask_context_usage(&mut self, chat: usize) {
         if let Some(Ok(id)) = self.sessions.get(&chat).map(|l| l.session.context_usage()) {
@@ -8361,7 +8367,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                 .await;
             let title = match named {
                 Ok(t) => t,
-                Err(e) => return eprintln!("forge: chat {id} keeps its name: {e}"),
+                Err(e) => return eprintln!("kodact: chat {id} keeps its name: {e}"),
             };
             let _ = this.update(cx, |s, cx| {
                 let still = s
@@ -8381,7 +8387,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         .detach();
     }
 
-    /// Ask the model, apart from the chat, what Forge is doing about
+    /// Ask the model, apart from the chat, what KodAct is doing about
     /// `message`; kept while that reply still runs.
     fn ask_headline(
         &mut self,
@@ -8400,7 +8406,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                     cx.notify();
                 }
                 Ok(_) => {}
-                Err(e) => eprintln!("forge: no headline for chat {id}: {e}"),
+                Err(e) => eprintln!("kodact: no headline for chat {id}: {e}"),
             });
         })
         .detach();
@@ -8429,7 +8435,7 @@ fix everything under 8, render it again to check, then tell me the scores before
     }
 
     /// A copy of a chat, its messages included, opened next to it. The copy
-    /// starts its own ForgeCLI conversation on its first message.
+    /// starts its own KodAct CLI conversation on its first message.
     pub fn duplicate_chat(&mut self, id: usize, cx: &mut Context<Self>) {
         self.chat_menu = None;
         let Some(c) = self.chats.iter().find(|c| c.id == id) else {
@@ -8642,7 +8648,7 @@ fix everything under 8, render it again to check, then tell me the scores before
             .iter()
             .find(|c| c.id == id)
             .map(|c| c.title.clone());
-        // Its file goes too (ForgeCLI's own log of the conversation stays, as it does for the CLI).
+        // Its file goes too (KodAct CLI's own log of the conversation stays, as it does for the CLI).
         self.dirty.remove(&id);
         if let (Some(dir), Some(session)) = (
             self.history.clone(),
@@ -8867,7 +8873,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         }
     }
 
-    /// Deny the question `chat` waits on, telling Forge what to do instead
+    /// Deny the question `chat` waits on, telling KodAct what to do instead
     /// (you typed it in the composer while the card waited).
     pub fn deny_with_note(&mut self, chat: usize, note: String, cx: &mut Context<Self>) {
         if let Some((msg, block)) = self.pending_question(chat) {
@@ -9058,7 +9064,7 @@ fix everything under 8, render it again to check, then tell me the scores before
             .is_some_and(|(c, (m, b))| !self.questions_at(c, m, b).is_empty())
     }
 
-    // ------------------------------------------------------------ messages sent while Forge works
+    // ------------------------------------------------------------ messages sent while KodAct works
 
     /// Send `text` while the reply runs: shown as queued, and given to the
     /// model at its next step (between tool calls), or run next when the
@@ -9080,7 +9086,7 @@ fix everything under 8, render it again to check, then tell me the scores before
             let sent = self
                 .sessions
                 .get(&chat)
-                .ok_or_else(|| "Forge isn't running".to_string())
+                .ok_or_else(|| "KodAct isn't running".to_string())
                 .and_then(|l| {
                     let documents = l.profile.wire != crate::endpoints::Wire::Openai;
                     let content = crate::attach::content_blocks(&text, &attachments, documents);
@@ -9101,7 +9107,7 @@ fix everything under 8, render it again to check, then tell me the scores before
     }
 
     /// Take a queued message back (`edit`: into the box, to change it).
-    /// Only once ForgeCLI confirms it hadn't reached the model yet.
+    /// Only once KodAct CLI confirms it hadn't reached the model yet.
     pub fn remove_queued(&mut self, chat: usize, uuid: String, edit: bool, cx: &mut Context<Self>) {
         if demo_mode() || !self.sessions.contains_key(&chat) {
             return self.unqueue(chat, &uuid, edit, cx);
@@ -9151,7 +9157,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         cx.notify();
     }
 
-    /// Stopped, or Forge ended: what was still queued goes back in the box,
+    /// Stopped, or KodAct ended: what was still queued goes back in the box,
     /// in order, so nothing you wrote is lost.
     fn restore_queued(&mut self, chat: usize, cx: &mut Context<Self>) {
         let Some(list) = self.queued.remove(&chat).filter(|l| !l.is_empty()) else {
@@ -9208,7 +9214,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         true
     }
 
-    /// The demo's next step: its queued messages land, as ForgeCLI's would.
+    /// The demo's next step: its queued messages land, as KodAct CLI's would.
     fn land_queued_demo(&mut self, chat: usize, cx: &mut Context<Self>) -> bool {
         let Some(list) = self.queued.get(&chat).filter(|l| !l.is_empty()) else {
             return false;
@@ -9269,7 +9275,7 @@ fix everything under 8, render it again to check, then tell me the scores before
             }
             c.version += 1;
         }
-        // A real question: Forge waits on this answer.
+        // A real question: KodAct waits on this answer.
         if self
             .asks
             .get(&chat)
@@ -9382,7 +9388,7 @@ fix everything under 8, render it again to check, then tell me the scores before
     }
 
     /// Stop every running sub-agent of the chat on screen (Stop all,
-    /// Ctrl+Shift+Escape); Forge carries on with what they found.
+    /// Ctrl+Shift+Escape); KodAct carries on with what they found.
     pub fn stop_agents(&mut self, cx: &mut Context<Self>) {
         self.stop_agent_runs(None, cx);
     }
@@ -9479,7 +9485,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         }
     }
 
-    /// ForgeCLI's answer to a stop: the agents' own results follow (and mark
+    /// KodAct CLI's answer to a stop: the agents' own results follow (and mark
     /// them stopped); a refusal clears "stopping" and says why.
     fn on_stop_reply(
         &mut self,
@@ -9512,7 +9518,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         }
         self.turn_started.remove(&id);
         if let Some(live) = self.sessions.get(&id) {
-            // What Forge says until the stopped turn's result belongs to that turn.
+            // What KodAct says until the stopped turn's result belongs to that turn.
             if live.session.interrupt().is_ok() {
                 *self.stale_turns.entry(id).or_default() += 1;
             } else {
@@ -9526,7 +9532,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         // What you queued goes back in the box, as Claude does on Esc.
         self.restore_queued(id, cx);
         // Design comments waiting for the reply stay on the page as notes:
-        // Forge didn't get them.
+        // KodAct didn't get them.
         if self.design_held.remove(&id).is_some() {
             for c in self.design_comments.iter_mut().filter(|c| c.chat == id) {
                 if c.sent == CommentSent::Waiting {
@@ -9559,7 +9565,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         cx.notify();
     }
 
-    /// Add your message, and have Forge answer it (`send_to_forge`).
+    /// Add your message, and have KodAct answer it (`send_to_forge`).
     pub fn send(&mut self, text: String, cx: &mut Context<Self>) {
         let text = text.trim().to_string();
         // `/routine <when>: <request>` makes a routine, here.
@@ -9582,7 +9588,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                 cx,
             );
         }
-        // ForgeCLI reads a command (`/simplify`) only from a message that is
+        // KodAct CLI reads a command (`/simplify`) only from a message that is
         // its text alone, so the attachments wait for the next message.
         let command = text.starts_with('/');
         let attachments = if command {
@@ -9635,7 +9641,7 @@ fix everything under 8, render it again to check, then tell me the scores before
             }
         };
         self.screen = Screen::Chat;
-        // The working line says what Forge is doing about this message once
+        // The working line says what KodAct is doing about this message once
         // the model has said it in a few words; until then, the step.
         self.headlines.remove(&id);
         if let Some(profile) = self
@@ -9663,7 +9669,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         cx.notify();
     }
 
-    /// `FORGE_DEMO=1`: replies are the scripted demo, no ForgeCLI needed.
+    /// `KODACT_DEMO=1`: replies are the scripted demo, no KodAct CLI needed.
     fn play_script(&mut self, id: usize, text: String, cx: &mut Context<Self>) {
         self.snapshot_memory(id);
         // A demo chat is named for what its reply does, as a model would
@@ -9705,7 +9711,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                             .await;
                     }
                     // What you sent meanwhile lands at the next step, as with
-                    // ForgeCLI, and the demo says it heard you.
+                    // KodAct CLI, and the demo says it heard you.
                     if matches!(step, Step::ToolStart(..) | Step::End { .. }) {
                         let _ = this.update(cx, |s, cx| {
                             if s.land_queued_demo(id, cx) {
@@ -9749,7 +9755,7 @@ fix everything under 8, render it again to check, then tell me the scores before
 
     // ------------------------------------------------------------ the engine
 
-    /// Send your message to the chat's ForgeCLI process, starting it first
+    /// Send your message to the chat's KodAct CLI process, starting it first
     /// when the chat has none (or the endpoint changed under it).
     fn send_to_forge(
         &mut self,
@@ -9759,7 +9765,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         cx: &mut Context<Self>,
     ) {
         let Some(profile) = self.active_profile().cloned() else {
-            return self.notice(id, "Set up an endpoint first: Forge needs a model to answer. Open the model menu to add one.", true);
+            return self.notice(id, "Set up an endpoint first: KodAct needs a model to answer. Open the model menu to add one.", true);
         };
         if let Some(live) = self.sessions.get(&id) {
             if live.profile != profile {
@@ -9770,7 +9776,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                 if same_endpoint && live.session.set_model(&profile.model).is_ok() {
                     self.sessions.get_mut(&id).expect("checked above").profile = profile.clone();
                 } else {
-                    // Another endpoint: Forge restarts on it and resumes this
+                    // Another endpoint: KodAct restarts on it and resumes this
                     // conversation, so the new model reads every message above.
                     self.sessions.remove(&id);
                 }
@@ -9778,13 +9784,13 @@ fix everything under 8, render it again to check, then tell me the scores before
         }
         // A design chat's setup is part of the process's system prompt
         // (changed, perhaps, while a reply ran): a change restarts the
-        // chat's ForgeCLI, resuming the conversation.
+        // chat's KodAct CLI, resuming the conversation.
         let resumable = self.chats.iter().any(|c| c.id == id && c.resumable);
         let design = self.chats.iter().find(|c| c.id == id).and_then(|c| c.design.clone());
         if resumable && self.sessions.get(&id).is_some_and(|l| l.design != design) {
             self.sessions.remove(&id);
         }
-        // A remote project's first message connects (and installs ForgeCLI
+        // A remote project's first message connects (and installs KodAct CLI
         // there if needed) in the background, then sends.
         if !self.sessions.contains_key(&id) {
             if let Some(remote) = self.chat_remote(id) {
@@ -9816,6 +9822,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                 if memory_on {
                     block.push_str(&crate::project_memory::prompt(
                         &crate::project_memory::read(dir),
+                        &crate::project_memory::file(dir),
                     ));
                 }
                 (!block.trim().is_empty()).then_some(block)
@@ -9845,12 +9852,12 @@ fix everything under 8, render it again to check, then tell me the scores before
                     ))
                 }
             })
-            .unwrap_or(Err("Forge isn't running.".into()));
+            .unwrap_or(Err("KodAct isn't running.".into()));
         if let Err(e) = sent {
             self.sessions.remove(&id);
             return self.notice(id, e, true);
         }
-        // A command ForgeCLI answers at once (`/status`) starts no turn: its
+        // A command KodAct CLI answers at once (`/status`) starts no turn: its
         // answer comes back as an immediate result.
         if attachments.is_empty() && crate::commands::is_immediate(&text) {
             self.immediate_queue.entry(id).or_default().push_back(true);
@@ -9880,7 +9887,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         };
         let mut launch =
             crate::backend::launch(&profile, self.mode, self.bypass_allowed, conversation)?;
-        // The web browser: Forge's own browser tools (this executable, as
+        // The web browser: KodAct's own browser tools (this executable, as
         // an MCP server) on the browser in the side panel. A remote agent
         // reaches them over HTTP, forwarded back to this machine.
         let mut extra = crate::remote::Extra::default();
@@ -9905,7 +9912,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         }
         // A design chat: its prompt, built from the library, and the design
         // tools on the panel's browser (started for it even when the
-        // browser setting is off). A remote ForgeCLI gets the prompt through
+        // browser setting is off). A remote KodAct CLI gets the prompt through
         // its boot script (`remote::HOST_FILE`) and the tools over HTTP,
         // forwarded back here; its pages are read from the remote.
         let design = self
@@ -9971,7 +9978,7 @@ fix everything under 8, render it again to check, then tell me the scores before
             .as_deref()
             .and_then(crate::setting_profiles::path_of);
         if let Some(mut flag) = crate::modes::flag_settings(profile_path.as_deref()) {
-            // A remote ForgeCLI can't read this machine's file: send its settings.
+            // A remote KodAct CLI can't read this machine's file: send its settings.
             if remote.is_some() && !flag.trim_start().starts_with('{') {
                 flag = std::fs::read_to_string(&flag).unwrap_or_else(|_| "{}".into());
             }
@@ -9989,7 +9996,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                 .get(&remote.target)
                 .cloned()
                 .ok_or_else(|| format!("Not connected to {} yet.", remote.target.label()))?;
-            // Forge's plugin, as put on the remote.
+            // KodAct's plugin, as put on the remote.
             if let Some(i) = launch.args.iter().position(|a| a == "--plugin-dir") {
                 if let Some(dir) = launch.args.get_mut(i + 1) {
                     *dir = ready.plugin.clone();
@@ -10021,7 +10028,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                 self.model_routes.insert(id, token);
             }
             // SSH carries them as -R forwards; WSL and containers through
-            // ForgeCLI's relay beside the session.
+            // KodAct CLI's relay beside the session.
             if let crate::remote::Target::Ssh(host) = &remote.target {
                 extra.accept_new_host_key = self.trusted_hosts.contains(host);
                 for (there, here) in &backs {
@@ -10048,7 +10055,7 @@ fix everything under 8, render it again to check, then tell me the scores before
             }
             crate::backend::Session::spawn_remote(remote, &ready.forge, &launch, &extra)?
         } else {
-            let exe = crate::backend::find_cli().ok_or("ForgeCLI wasn't found. Reinstall Forge (it puts forge.exe in the bin folder beside the app), or set FORGE_CLI to its path.")?;
+            let exe = crate::backend::find_cli().ok_or("KodAct CLI wasn't found. Reinstall KodAct (it puts kodact.exe in the bin folder beside the app), or set KODACT_CLI to its path.")?;
             let project = self.chats.iter().find(|c| c.id == id).map(|c| c.project);
             let dir = project
                 .and_then(|p| self.project(p))
@@ -10130,7 +10137,7 @@ fix everything under 8, render it again to check, then tell me the scores before
             if let Some(c) = self.chat_mut(chat) {
                 c.new_conversation();
             }
-            self.notice(chat, "Forge couldn't reopen this conversation's earlier context, so it goes on as a new conversation.", false);
+            self.notice(chat, "KodAct couldn't reopen this conversation's earlier context, so it goes on as a new conversation.", false);
             if let Some((text, attachments)) = pending {
                 self.replies.remove(&chat);
                 self.send_to_forge(chat, text, attachments, cx);
@@ -10187,7 +10194,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                     (GoalStatus::Working, Some(why)) if checked => {
                         self.notice(
                             chat,
-                            format!("Goal not met yet: {why} Forge keeps going."),
+                            format!("Goal not met yet: {why} KodAct keeps going."),
                             false,
                         );
                         self.goal_keeps_working(chat);
@@ -10300,7 +10307,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                     if let Some(p) = page {
                         self.design_done(chat, &p, cx);
                     }
-                    // A document Forge wrote gets its card in the reply; one
+                    // A document KodAct wrote gets its card in the reply; one
                     // it edited, the card brought up to date.
                     if let Some((p, edit)) = written {
                         if let Some(remote) = self.chat_remote(chat) {
@@ -10334,7 +10341,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                 }
                 let (title, detail) = crate::backend::ask_text(&tool_name, &input);
                 let row = self.tool_rows.get(&(chat, tool_use_id.clone())).copied();
-                // A tool ForgeCLI always asks about offers no rule.
+                // A tool KodAct CLI always asks about offers no rule.
                 let offers = !crate::backend::always_asks(&tool_name);
                 let info = PermInfo {
                     kind: Some(crate::backend::tool_call(&tool_name, &input).kind),
@@ -10407,7 +10414,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                         }),
                     );
                     if is_error {
-                        self.notice(chat, "ForgeCLI reported an error for this command.", true);
+                        self.notice(chat, "KodAct CLI reported an error for this command.", true);
                     }
                     self.touch(chat, cx);
                 } else {
@@ -10466,11 +10473,11 @@ fix everything under 8, render it again to check, then tell me the scores before
                 if let Some(c) = self.chat_mut(chat) {
                     c.messages.push(Message::TurnEnd { seconds, usage });
                     c.version += 1;
-                    // ForgeCLI has written the conversation: it can be resumed.
+                    // KodAct CLI has written the conversation: it can be resumed.
                     c.resumable = true;
                 }
                 self.finish_turn(chat, cx);
-                // A goal at work: ForgeCLI checks it now and goes on until it
+                // A goal at work: KodAct CLI checks it now and goes on until it
                 // holds, so the chat keeps working until the goal says.
                 if self.goals.get(&chat).map(|g| g.status) == Some(GoalStatus::Working) {
                     self.goal_keeps_working(chat);
@@ -10483,7 +10490,7 @@ fix everything under 8, render it again to check, then tell me the scores before
             Event::Exited { code, detail } => {
                 self.sessions.remove(&chat);
                 while self.side.get(&chat).is_some_and(|s| !s.pending.is_empty()) {
-                    self.answer_side(chat, "Forge stopped before it answered.".into(), true);
+                    self.answer_side(chat, "KodAct stopped before it answered.".into(), true);
                 }
                 self.asks.remove(&chat);
                 self.stale_turns.remove(&chat);
@@ -10496,8 +10503,8 @@ fix everything under 8, render it again to check, then tell me the scores before
                             "The connection to {} ended. Your next message reconnects and picks the conversation up.",
                             r.target.label()
                         ),
-                        (_, Some(c)) => format!("Forge stopped (exit code {c})."),
-                        (_, None) => "Forge stopped.".to_string(),
+                        (_, Some(c)) => format!("KodAct stopped (exit code {c})."),
+                        (_, None) => "KodAct stopped.".to_string(),
                     };
                     let text = if detail.is_empty() {
                         why
@@ -10512,7 +10519,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         cx.notify();
     }
 
-    /// Open a web page Forge wrote in the side panel's browser.
+    /// Open a web page KodAct wrote in the side panel's browser.
     pub fn preview_page(&mut self, chat: usize, path: &str, cx: &mut Context<Self>) {
         let project = self
             .chats
@@ -10538,7 +10545,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         }
     }
 
-    /// A document Forge wrote, read back for its card: Markdown, a diagram,
+    /// A document KodAct wrote, read back for its card: Markdown, a diagram,
     /// an Office file or a PDF. None for anything else (code has its diff).
     fn written_file(&self, chat: usize, path: &str) -> Option<FileRef> {
         let name = path.rsplit(['/', '\\']).next()?.to_string();
@@ -10594,7 +10601,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         out
     }
 
-    /// A document Forge wrote on a remote, read back over the connection
+    /// A document KodAct wrote on a remote, read back over the connection
     /// (off this thread); its card joins the reply when it arrives.
     fn remote_written_file(
         &mut self,
@@ -10681,7 +10688,7 @@ impl AppState {
         });
     }
 
-    /// Open Forge's settings.json in your editor, writing one with every key
+    /// Open KodAct's settings.json in your editor, writing one with every key
     /// at its default first if there is none. Edits apply at their next use.
     pub fn open_app_settings(&mut self, cx: &mut Context<Self>) {
         self.palette_open = false;
@@ -10698,7 +10705,7 @@ impl AppState {
                         cx,
                     );
                 }
-                None => s.show_toast("Couldn't write settings.json in Forge's config folder.", cx),
+                None => s.show_toast("Couldn't write settings.json in KodAct's config folder.", cx),
             });
         })
         .detach();
@@ -10741,7 +10748,7 @@ impl AppState {
             .and_then(|p| crate::remote::Remote::parse(&p.path))
     }
 
-    /// ForgeCLI is on this target and answered: chats there start at once.
+    /// KodAct CLI is on this target and answered: chats there start at once.
     pub fn remote_connected(&self, target: &crate::remote::Target) -> bool {
         self.remote_ready.contains_key(target)
     }
@@ -10768,7 +10775,7 @@ impl AppState {
         self.connect(target, Some((id, text, attachments)), cx);
     }
 
-    /// Put this app's ForgeCLI on a target (off this thread; what it's doing
+    /// Put this app's KodAct CLI on a target (off this thread; what it's doing
     /// shows on the remote indicator), then send the message that waited.
     pub fn connect(
         &mut self,
@@ -10946,7 +10953,7 @@ impl AppState {
     }
 
     /// Work in a remote folder: it becomes the current project, and
-    /// ForgeCLI is put there in the background.
+    /// KodAct CLI is put there in the background.
     /// Opened the wrong folder on a host: its folders, from the one above
     /// this, to pick another. The connection stays up.
     pub fn change_remote_folder(&mut self, cx: &mut Context<Self>) {
@@ -11042,7 +11049,7 @@ impl AppState {
         }
     }
 
-    /// The current remote is a dev container Forge started from a folder.
+    /// The current remote is a dev container KodAct started from a folder.
     pub fn in_devcontainer(&self) -> bool {
         self.current_remote()
             .is_some_and(|r| crate::remote::is_devcontainer(&r.target))
@@ -11197,7 +11204,7 @@ impl AppState {
         }
     }
 
-    /// Back to this machine, where Forge started: the folder it was
+    /// Back to this machine, where KodAct started: the folder it was
     /// started in, else a plain chat (no folder), as at launch.
     pub fn close_remote(&mut self, cx: &mut Context<Self>) {
         self.remote_menu = None;
@@ -11259,7 +11266,7 @@ impl AppState {
                                 s.remote_busy = None;
                                 s.remote_failed = None;
                                 s.show_toast(format!("Reconnected to {}.", target.label()), cx);
-                                // Ready again (ForgeCLI is still there: no upload).
+                                // Ready again (KodAct CLI is still there: no upload).
                                 s.connect(target.clone(), None, cx);
                             }
                             Duration::from_secs(15)
@@ -11465,7 +11472,7 @@ impl AppState {
         }
     }
 
-    /// A file Forge made or changed, as a card in the reply. A file the
+    /// A file KodAct made or changed, as a card in the reply. A file the
     /// reply already shows has that card brought up to date, so it ends on
     /// the final version. An edit adds a card only for a diagram (Diagram
     /// Design copies its template, then edits it); editing a README doesn't.
@@ -11631,7 +11638,7 @@ impl AppState {
         .detach();
     }
 
-    /// Forge keeps a memory for project `id`, or doesn't.
+    /// KodAct keeps a memory for project `id`, or doesn't.
     pub fn set_project_memory(&mut self, id: usize, on: bool, cx: &mut Context<Self>) {
         self.edit_project(id, cx, |p| p.memory_on = on);
         self.load_project_brief(id, cx);
@@ -11705,7 +11712,7 @@ impl AppState {
                 .pending
                 .push_back(question.clone().into());
             if demo_mode() {
-                self.answer_side(id, format!("(Demo) A side answer to \"{question}\": ForgeCLI answers these from the conversation, without tools."), false);
+                self.answer_side(id, format!("(Demo) A side answer to \"{question}\": KodAct CLI answers these from the conversation, without tools."), false);
             } else if let Err(e) = self.send_side(id, &question, cx) {
                 self.answer_side(id, e, true);
             }
@@ -11726,7 +11733,7 @@ impl AppState {
                 .ok_or("Set up an endpoint first: side questions need a model.")?;
             self.start_session(id, profile, cx)?;
         }
-        let live = self.sessions.get(&id).ok_or("Forge isn't running.")?;
+        let live = self.sessions.get(&id).ok_or("KodAct isn't running.")?;
         live.session.send(&format!("/btw {question}"))?;
         self.immediate_queue.entry(id).or_default().push_back(false);
         Ok(())
@@ -11742,7 +11749,7 @@ impl AppState {
         };
         side.push(if is_error || text.is_empty() {
             let message = if text.is_empty() {
-                "Forge didn't return an answer for this side question.".to_string()
+                "KodAct didn't return an answer for this side question.".to_string()
             } else {
                 text
             };
@@ -12036,7 +12043,7 @@ impl AppState {
                 self.check_memory(chat, cx);
             }
             (Step::Remember(fact), _) => {
-                // As Forge would: the fact written into the project's memory.
+                // As KodAct would: the fact written into the project's memory.
                 if let Some(dir) = self.chat_project_dir(chat) {
                     let now = crate::project_memory::read(&dir);
                     let _ = crate::project_memory::write(
@@ -12073,7 +12080,7 @@ enum Step {
         bool,
     ),
     Denied,
-    /// A tool call as ForgeCLI sends it (name and input), done with its output.
+    /// A tool call as KodAct CLI sends it (name and input), done with its output.
     Use(&'static str, serde_json::Value, String),
     /// A file the reply made: its card.
     File(FileRef),
@@ -12154,7 +12161,7 @@ fn demo_refactor() -> Vec<Step> {
     let files: [(&str, usize, usize); 9] = [
         ("config/sync.toml", 5, 0),
         ("scripts/sync_open_design.py", 12, 0),
-        ("installer/forge.nsi", 3, 0),
+        ("installer/kodact.nsi", 3, 0),
         ("installer/build.sh", 4, 1),
         ("installer/README.md", 4, 2),
         ("src/sync.rs", 16, 1),
@@ -12184,13 +12191,13 @@ fn demo_refactor() -> Vec<Step> {
 }
 
 /// The demo's drawn answer: a flowchart and a sequence, in Mermaid.
-const DEMO_DIAGRAM: &str = "Here is how a message travels through Forge.\n\n```mermaid\nflowchart TD\n  A[You type a message] --> B{Endpoint set up?}\n  B -->|no| C[Settings › Models]\n  C --> D\n  B -->|yes| D[ForgeCLI process]\n  D -.->|stream-json| E([Reply in the chat])\n  D --> F[(Session log)]\n```\n\nAnd the turn itself, step by step:\n\n```mermaid\nsequenceDiagram\n  autonumber\n  participant U as You\n  participant D as Forge\n  participant C as ForgeCLI\n  U->>D: Send\n  D->>C: user turn\n  loop each tool call\n    C-->>D: tool_use / tool_result\n  end\n  C-->>D: result\n  D-->>U: Reply\n```";
+const DEMO_DIAGRAM: &str = "Here is how a message travels through KodAct.\n\n```mermaid\nflowchart TD\n  A[You type a message] --> B{Endpoint set up?}\n  B -->|no| C[Settings › Models]\n  C --> D\n  B -->|yes| D[KodAct CLI process]\n  D -.->|stream-json| E([Reply in the chat])\n  D --> F[(Session log)]\n```\n\nAnd the turn itself, step by step:\n\n```mermaid\nsequenceDiagram\n  autonumber\n  participant U as You\n  participant D as KodAct\n  participant C as KodAct CLI\n  U->>D: Send\n  D->>C: user turn\n  loop each tool call\n    C-->>D: tool_use / tool_result\n  end\n  C-->>D: result\n  D-->>U: Reply\n```";
 
 /// The demo's charts: a pie and an xychart, drawn natively.
 const DEMO_CHARTS: &str = "Where the time went:\n\n```mermaid\npie title Time per task\n  \"Reading\" : 42\n  \"Writing\" : 30\n  \"Tests\" : 12\n```\n\nAnd per month:\n\n```mermaid\nxychart-beta\n  title \"Replies\"\n  x-axis [jan, feb, mar, apr]\n  y-axis \"Replies\" 0 --> 100\n  bar [20, 45, 60, 80]\n  line [25, 40, 70, 90]\n```\n";
 
 /// The demo's ASCII answer, for checking that box drawing keeps its columns.
-const DEMO_ASCII: &str = "Here it is in ASCII.\n\n```text\n┌──────────────┐     ┌──────────────┐\n│  Forge app   │ ──▶ │   ForgeCLI   │\n└──────┬───────┘     └──────┬───────┘\n       │ stream-json        │ HTTPS\n       ▼                    ▼\n┌──────────────┐     ┌──────────────┐\n│  Chat view   │ ◀── │    Model     │\n└──────────────┘     └──────────────┘\n```\n\nAnd the same without a fence:\n\n+--------+      +---------+\n| Client | ---> | Server  |\n+--------+      +---------+\n     |               |\n     v               v\n  [ UI ]         [ DB ]\n";
+const DEMO_ASCII: &str = "Here it is in ASCII.\n\n```text\n┌──────────────┐     ┌──────────────┐\n│  KodAct app   │ ──▶ │   KodAct CLI   │\n└──────┬───────┘     └──────┬───────┘\n       │ stream-json        │ HTTPS\n       ▼                    ▼\n┌──────────────┐     ┌──────────────┐\n│  Chat view   │ ◀── │    Model     │\n└──────────────┘     └──────────────┘\n```\n\nAnd the same without a fence:\n\n+--------+      +---------+\n| Client | ---> | Server  |\n+--------+      +---------+\n     |               |\n     v               v\n  [ UI ]         [ DB ]\n";
 
 /// The demo's page: a six-slide course introduction, written a few lines
 /// at a time, so the live view shows it forming, then made on disk.
@@ -12236,7 +12243,7 @@ fn demo_approvals() -> Vec<Step> {
         Step::Asked("Bash", bash("rm -rf target", "Clean the build"), "", Verdict::Denied, Decider::You, true),
         Step::Asked("Bash", bash("git log --oneline -20", "Recent history"), "", Verdict::Allowed, Decider::You, false),
         Step::Asked("Bash", bash("find . -name '*.toml' -not -path './target/*'", "Find the manifests"), "", Verdict::Allowed, Decider::You, false),
-        Step::Asked("Bash", bash("file target/release/forge", "Check the binary"), "", Verdict::Allowed, Decider::You, false),
+        Step::Asked("Bash", bash("file target/release/kodact", "Check the binary"), "", Verdict::Allowed, Decider::You, false),
         Step::Asked(
             "Edit",
             json!({ "file_path": "src/main.rs", "old_string": "println!(\"Hello, world\");", "new_string": "println!(\"{}\", greeting());" }),
@@ -12296,7 +12303,7 @@ fn demo_screenshots() -> Vec<Step> {
 }
 
 /// Questions first (a card with two), then a burst of work: a write that
-/// fails as ForgeCLI's does on a file not read yet, then edits and commands
+/// fails as KodAct CLI's does on a file not read yet, then edits and commands
 /// with thinking between them, as a real build-out goes.
 fn demo_questions() -> Vec<Step> {
     use serde_json::json;
@@ -12453,7 +12460,7 @@ fn demo_agents() -> Vec<Step> {
         Step::Say,
     );
     s.extend([
-        start("a1", "Explore", "Map the chat pipeline", "Find how a message travels from the composer to ForgeCLI and back. List the files and the functions on the path."),
+        start("a1", "Explore", "Map the chat pipeline", "Find how a message travels from the composer to KodAct CLI and back. List the files and the functions on the path."),
         start("a2", "code-reviewer", "Review the side panel", "Review src/ui/workbench.rs and src/ui/doc_pane.rs for bugs and dead code. Report findings with file:line."),
         start("a3", "test-runner", "Check the tests", "Run the test suite, and list any test that is slow or flaky."),
         tool("a1", "a1t1", "Grep", json!({ "pattern": "fn send", "path": "src" })),
@@ -12613,22 +12620,22 @@ fn demo_plan() -> Vec<Step> {
             String::new(),
         ),
         Step::Use(
-            "mcp__forge-browser__navigate",
+            "mcp__kodact-browser__navigate",
             json!({"url": "https://vendor.example/pricing"}),
             "Navigated to: https://vendor.example/pricing".into(),
         ),
         Step::Use(
-            "mcp__forge-browser__state",
+            "mcp__kodact-browser__state",
             json!({}),
             r#"{"url": "https://vendor.example/pricing#teams", "title": "Pricing"}"#.into(),
         ),
         Step::Use(
-            "mcp__forge-browser__click",
+            "mcp__kodact-browser__click",
             json!({"index": 7}),
             "Clicked element 7".into(),
         ),
         Step::Use(
-            "mcp__forge-browser__text",
+            "mcp__kodact-browser__text",
             json!({"query": "the Teams plan's price per seat"}),
             "Teams: 14 per seat per month".into(),
         ),
@@ -12829,11 +12836,11 @@ fn script(prompt: &str) -> Vec<Step> {
         "fn main() {\n    println!(\"Hello, world\");\n}\n".into(),
         vec![],
     ));
-    // The change is known when the call starts, as ForgeCLI sends it: the
+    // The change is known when the call starts, as KodAct CLI sends it: the
     // card shows it before you allow it.
     let change = diff(&[
         (DiffKind::Add, "pub fn greeting() -> &'static str {"),
-        (DiffKind::Add, "    \"Hello, Forge\""),
+        (DiffKind::Add, "    \"Hello, KodAct\""),
         (DiffKind::Add, "}"),
         (DiffKind::Add, ""),
         (DiffKind::Same, "fn main() {"),
@@ -12844,7 +12851,7 @@ fn script(prompt: &str) -> Vec<Step> {
     s.push(Step::ToolStart(ToolKind::Edit, "src/main.rs".into(), None));
     s.push(Step::ToolDiff(change.clone()));
     s.push(Step::Ask(
-        "Allow Forge to edit main.rs?".into(),
+        "Allow KodAct to edit main.rs?".into(),
         "src/main.rs".into(),
     ));
     s.push(Step::ToolDone("The file was updated.".into(), change));
@@ -12855,7 +12862,7 @@ fn script(prompt: &str) -> Vec<Step> {
     ));
     s.push(Step::ToolDone("   \x1b[1;32mCompiling\x1b[0m hello v0.1.0 (/home/amine/dev/kryptonite)\n    \x1b[1;32mFinished\x1b[0m `test` profile [unoptimized + debuginfo] target(s) in 1.84s\n     \x1b[1;32mRunning\x1b[0m unittests src/main.rs (target/debug/deps/hello-3f2a9c1e)\n\nrunning 3 tests\ntest tests::greets_by_name ... \x1b[32mok\x1b[0m\ntest tests::greeting_is_static ... \x1b[32mok\x1b[0m\ntest tests::main_prints_the_greeting ... \x1b[32mok\x1b[0m\n\ntest result: \x1b[32mok\x1b[0m. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n   \x1b[1;32mDoc-tests\x1b[0m hello\n\nrunning 0 tests\n\ntest result: \x1b[32mok\x1b[0m. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s".into(), vec![]));
     s.extend(words(
-        "Done. The greeting now lives in `greeting()` and `main` prints it.\n\n**What changed**\n- `src/main.rs`: a new `greeting()` function, used by `main`.\n- A unit test, `greets_by_name`, checks the text.\n\n```rust\npub fn greeting() -> &'static str {\n    \"Hello, Forge\"\n}\n```\n\nAll tests pass.",
+        "Done. The greeting now lives in `greeting()` and `main` prints it.\n\n**What changed**\n- `src/main.rs`: a new `greeting()` function, used by `main`.\n- A unit test, `greets_by_name`, checks the text.\n\n```rust\npub fn greeting() -> &'static str {\n    \"Hello, KodAct\"\n}\n```\n\nAll tests pass.",
         Step::Say,
     ));
     s.push(Step::End { seconds: 14.2 });
@@ -12865,11 +12872,11 @@ fn script(prompt: &str) -> Vec<Step> {
 /// A reply in the shape of a written plan: numbered points with bold
 /// lead-ins, bullets three deep, and names in inline code, one long enough
 /// to wrap.
-const DEMO_SUMMARY: &str = "I've written the plan to `/root/.claude/plans/scalable-forging-stearns.md`. Nothing is changed yet.\n\n**Where Forge loses**\n\n1. **No chat title.** The open chat's title goes in the title bar, and clicking it opens the chat's actions (Rename, Pin, Move, Export, Delete).\n   - The search pill leaves the title bar: `Search` becomes the sidebar's first row.\n2. **The message box looks like a form.** It becomes one line: `+`, the text, then send.\n   - Mode, model and the context ring move under the box as quiet text.\n     - The ring keeps its numbers in the tooltip.\n3. **You can't read the session at a glance.** A Session column shows the place, the branch in `git_status::Repo`, context use and changes.\n\nThe tokens live in `src/theme.rs`; run `UPDATE_SYSTEM_MD=1 cargo test system_md` after changing one.";
+const DEMO_SUMMARY: &str = "I've written the plan to `/root/.claude/plans/scalable-forging-stearns.md`. Nothing is changed yet.\n\n**Where KodAct loses**\n\n1. **No chat title.** The open chat's title goes in the title bar, and clicking it opens the chat's actions (Rename, Pin, Move, Export, Delete).\n   - The search pill leaves the title bar: `Search` becomes the sidebar's first row.\n2. **The message box looks like a form.** It becomes one line: `+`, the text, then send.\n   - Mode, model and the context ring move under the box as quiet text.\n     - The ring keeps its numbers in the tooltip.\n3. **You can't read the session at a glance.** A Session column shows the place, the branch in `git_status::Repo`, context use and changes.\n\nThe tokens live in `src/theme.rs`; run `UPDATE_SYSTEM_MD=1 cargo test system_md` after changing one.";
 
 // ---------------------------------------------------------------- mock chats
 
-/// The projects: the folder Forge was started on (if it was), then the
+/// The projects: the folder KodAct was started on (if it was), then the
 /// ones you opened before (`projects.txt` in the config folder), then plain
 /// chats' place, which is no project of yours.
 /// The folder above a remote path (`~/work/api` → `~/work`); the top stays.
@@ -12893,7 +12900,7 @@ fn initial_projects_from(
     records: &[ProjectRecord],
 ) -> Vec<Project> {
     let mut out: Vec<Project> = vec![];
-    // The folder Forge started on: a project this run, with its details
+    // The folder KodAct started on: a project this run, with its details
     // if it has some, on your list only if you saved it.
     if let Some(here) = launch {
         let mut p = Project::at(1, here.to_path_buf(), true);
@@ -12922,7 +12929,7 @@ fn initial_projects_from(
     out
 }
 
-/// Where a chat with no folder works: Forge's own folder, so a question or
+/// Where a chat with no folder works: KodAct's own folder, so a question or
 /// a lesson never runs in (or reads) a folder of yours. Files it writes
 /// there still come back as cards in the reply.
 pub fn scratch_dir() -> std::path::PathBuf {
@@ -12931,11 +12938,11 @@ pub fn scratch_dir() -> std::path::PathBuf {
         .join("workspace")
 }
 
-/// The folder Forge was started on: `FORGE_PROJECT_DIR`, or a folder given
-/// as its argument (`forge .`). Opened from the Start menu or a shortcut, it
+/// The folder KodAct was started on: `KODACT_PROJECT_DIR`, or a folder given
+/// as its argument (`kodact .`). Opened from the Start menu or a shortcut, it
 /// was started on none, and opens on plain chats, as a chat app does.
 fn launch_dir() -> Option<std::path::PathBuf> {
-    std::env::var_os("FORGE_PROJECT_DIR")
+    std::env::var_os("KODACT_PROJECT_DIR")
         .map(std::path::PathBuf::from)
         .or_else(|| std::env::args_os().nth(1).map(std::path::PathBuf::from))
         .filter(|p| p.is_dir())
@@ -12992,34 +12999,34 @@ fn parse_projects(json: Option<&str>, old: Option<&str>) -> Vec<ProjectRecord> {
         .collect()
 }
 
-/// A remote ForgeCLI's model settings with the secrets taken out: the route
+/// A remote KodAct CLI's model settings with the secrets taken out: the route
 /// the proxy keeps here (the real base URL, the key as the wire sends it,
 /// custom headers), and the environment the remote gets instead (the key a
 /// placeholder, no custom headers; the base URL is replaced by the caller).
 fn proxied_env(env: &[(String, String)]) -> (crate::model_proxy::Route, Vec<(String, String)>) {
     let get = |k: &str| env.iter().find(|(n, _)| n == k).map(|(_, v)| v.clone());
     let mut headers = vec![];
-    let base = if let Some(b) = get("FORGE_BASE_URL") {
-        if let Some(t) = get("FORGE_API_KEY") {
+    let base = if let Some(b) = get("KODACT_BASE_URL") {
+        if let Some(t) = get("KODACT_API_KEY") {
             headers.push(("x-api-key".to_string(), t.clone()));
             headers.push(("authorization".to_string(), format!("Bearer {t}")));
         }
         b
-    } else if let Some(b) = get("FORGE_GEMINI_BASE_URL") {
+    } else if let Some(b) = get("KODACT_GEMINI_BASE_URL") {
         // As the real host takes it (the remote, on 127.0.0.1, sends both).
-        if let Some(t) = get("FORGE_GEMINI_API_KEY") {
+        if let Some(t) = get("KODACT_GEMINI_API_KEY") {
             for (h, v) in crate::endpoints::auth_headers(crate::endpoints::Wire::Gemini, &b, &t) {
                 headers.push((h.to_string(), v));
             }
         }
         b
     } else {
-        if let Some(t) = get("FORGE_OPENAI_API_KEY") {
+        if let Some(t) = get("KODACT_OPENAI_API_KEY") {
             headers.push(("authorization".to_string(), format!("Bearer {t}")));
         }
-        get("FORGE_OPENAI_BASE_URL").unwrap_or_default()
+        get("KODACT_OPENAI_BASE_URL").unwrap_or_default()
     };
-    if let Some(lines) = get("FORGE_CUSTOM_HEADERS") {
+    if let Some(lines) = get("KODACT_CUSTOM_HEADERS") {
         for l in lines.lines() {
             if let Some((k, v)) = l.split_once(':') {
                 headers.push((k.trim().to_string(), v.trim().to_string()));
@@ -13028,12 +13035,12 @@ fn proxied_env(env: &[(String, String)]) -> (crate::model_proxy::Route, Vec<(Str
     }
     let remote = env
         .iter()
-        .filter(|(k, _)| k != "FORGE_CUSTOM_HEADERS")
+        .filter(|(k, _)| k != "KODACT_CUSTOM_HEADERS")
         .map(|(k, v)| match k.as_str() {
-            "FORGE_API_KEY"
-            | "FORGE_AUTH_TOKEN"
-            | "FORGE_OPENAI_API_KEY"
-            | "FORGE_GEMINI_API_KEY" => {
+            "KODACT_API_KEY"
+            | "KODACT_AUTH_TOKEN"
+            | "KODACT_OPENAI_API_KEY"
+            | "KODACT_GEMINI_API_KEY" => {
                 (k.clone(), crate::model_proxy::PLACEHOLDER_KEY.to_string())
             }
             _ => (k.clone(), v.clone()),
@@ -13075,7 +13082,7 @@ fn minutes_ago(minutes: u32) -> SystemTime {
 #[cfg(test)]
 fn mock_chats() -> Vec<Chat> {
     let rich = vec![
-        Message::user("Fix the greeting in src/main.rs so it says Hello, Forge, and add a test for it.".into(), minutes_ago(9)),
+        Message::user("Fix the greeting in src/main.rs so it says Hello, KodAct, and add a test for it.".into(), minutes_ago(9)),
         Message::Assistant {
             blocks: vec![
                 Block::Thinking {
@@ -13092,7 +13099,7 @@ fn mock_chats() -> Vec<Chat> {
                     output: "".into(),
                     diff: diff(&[
                         (DiffKind::Add, "pub fn greeting() -> &'static str {"),
-                        (DiffKind::Add, "    \"Hello, Forge\""),
+                        (DiffKind::Add, "    \"Hello, KodAct\""),
                         (DiffKind::Add, "}"),
                         (DiffKind::Add, ""),
                         (DiffKind::Same, "fn main() {"),
@@ -13117,7 +13124,7 @@ fn mock_chats() -> Vec<Chat> {
         },
         Message::Assistant {
             blocks: vec![Block::Text(
-                "Done. The greeting now lives in `greeting()` and `main` prints it.\n\n## What changed\n\n- `src/main.rs`: new **`greeting()`** function, used by `main`.\n- A unit test, *greets_by_name*, checks the text.\n\n```rust\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn greets_by_name() {\n        assert_eq!(super::greeting(), \"Hello, Forge\");\n    }\n}\n```\n\n> Run `cargo test` any time to check it again.\n\n1. Build with `cargo build`.\n2. Run it with `cargo run`.".into(),
+                "Done. The greeting now lives in `greeting()` and `main` prints it.\n\n## What changed\n\n- `src/main.rs`: new **`greeting()`** function, used by `main`.\n- A unit test, *greets_by_name*, checks the text.\n\n```rust\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn greets_by_name() {\n        assert_eq!(super::greeting(), \"Hello, KodAct\");\n    }\n}\n```\n\n> Run `cargo test` any time to check it again.\n\n1. Build with `cargo build`.\n2. Run it with `cargo run`.".into(),
             )],
         },
         Message::TurnEnd { seconds: 18.4, usage: None },
@@ -13171,10 +13178,10 @@ fn mock_chats() -> Vec<Chat> {
                     {"content": "Round-trip test", "status": "in_progress"},
                     {"content": "Windows run with a read-only file", "status": "pending"}
                 ]}))),
-                done(crate::backend::tool_call("mcp__forge-browser__navigate", &serde_json::json!({"url": "https://serde.rs/field-attrs.html"}))),
-                done(crate::backend::tool_call("mcp__forge-browser__state", &serde_json::json!({}))),
-                done(crate::backend::tool_call("mcp__forge-browser__click", &serde_json::json!({"index": 12}))),
-                done(crate::backend::tool_call("mcp__forge-browser__text", &serde_json::json!({"query": "how #[serde(alias)] works"}))),
+                done(crate::backend::tool_call("mcp__kodact-browser__navigate", &serde_json::json!({"url": "https://serde.rs/field-attrs.html"}))),
+                done(crate::backend::tool_call("mcp__kodact-browser__state", &serde_json::json!({}))),
+                done(crate::backend::tool_call("mcp__kodact-browser__click", &serde_json::json!({"index": 12}))),
+                done(crate::backend::tool_call("mcp__kodact-browser__text", &serde_json::json!({"query": "how #[serde(alias)] works"}))),
                 Block::Tool(ToolCall { kind: ToolKind::Read, target: "src/settings.rs".into(), note: None, status: ToolStatus::Done, output: "pub struct Settings { pub theme: String, pub model: String, pub permissions: Vec<String> }".into(), diff: vec![], open: false, full: false, review: Review::Open, images: vec![] }),
                 Block::Tool(ToolCall {
                     kind: ToolKind::Write,
@@ -13195,7 +13202,7 @@ fn mock_chats() -> Vec<Chat> {
     // A reply that drew a diagram with the bundled Diagram Design skill.
     const CHAT_PATH: &str = include_str!("../assets/docs/forge-chat-path.html");
     let drawn = vec![
-        Message::user("Draw how a chat in Forge reaches the model, and where the API key gets added.".into(), minutes_ago(13)),
+        Message::user("Draw how a chat in KodAct reaches the model, and where the API key gets added.".into(), minutes_ago(13)),
         Message::Assistant {
             blocks: vec![
                 Block::Tool(ToolCall {
@@ -13453,7 +13460,7 @@ mod tests {
             vec![q("b", "Use lib.rs.")]
         );
         assert_eq!(list, vec![q("a", "Keep it short.")]);
-        // Run as a turn of its own, joined, under ForgeCLI's id: by its words.
+        // Run as a turn of its own, joined, under KodAct CLI's id: by its words.
         let mut list = vec![q("a", "one"), q("b", "two"), q("c", "later")];
         let got = take_landed(&mut list, "cli-uuid", "one\n\ntwo");
         assert_eq!(got.len(), 2);
@@ -13521,7 +13528,7 @@ mod tests {
         };
         assert!(matches!(&blocks[..], [Block::File(f)] if f == &v2));
         // Editing a README brings no card; writing one still does.
-        let readme = card("README.md", "# Forge");
+        let readme = card("README.md", "# KodAct");
         assert_eq!(chat.update_card(readme.clone(), true), None);
         assert_eq!(chat.update_card(readme.clone(), false), Some(readme));
     }
@@ -13583,7 +13590,7 @@ mod tests {
         assert_eq!(l(Some("WebFetch(domain:docs.rs)")), "Always allow docs.rs");
         assert_eq!(l(Some("WebSearch")), "Always allow web searches");
         assert_eq!(
-            l(Some("mcp__forge-browser__click")),
+            l(Some("mcp__kodact-browser__click")),
             "Always allow browser click"
         );
         assert_eq!(
@@ -13591,7 +13598,7 @@ mod tests {
             "Always allow github create issue"
         );
         assert_eq!(
-            l(Some("mcp__forge-browser__click")),
+            l(Some("mcp__kodact-browser__click")),
             "Always allow browser click"
         );
         assert_eq!(
@@ -13611,11 +13618,11 @@ mod tests {
     #[test]
     fn remote_sessions_get_no_secrets() {
         let env: Vec<(String, String)> = [
-            ("FORGE_BASE_URL", "https://api.example.com"),
-            ("FORGE_API_KEY", "sk-real"),
-            ("FORGE_AUTH_TOKEN", "sk-real"),
-            ("FORGE_CUSTOM_HEADERS", "x-team: blue\nx-org: 7"),
-            ("FORGE_CONTEXT_WINDOW", "200000"),
+            ("KODACT_BASE_URL", "https://api.example.com"),
+            ("KODACT_API_KEY", "sk-real"),
+            ("KODACT_AUTH_TOKEN", "sk-real"),
+            ("KODACT_CUSTOM_HEADERS", "x-team: blue\nx-org: 7"),
+            ("KODACT_CONTEXT_WINDOW", "200000"),
         ]
         .iter()
         .map(|(k, v)| (k.to_string(), v.to_string()))
@@ -13634,14 +13641,14 @@ mod tests {
             !flat.contains("sk-real") && !flat.contains("x-team"),
             "{flat}"
         );
-        assert!(remote.contains(&("FORGE_CONTEXT_WINDOW".into(), "200000".into())));
+        assert!(remote.contains(&("KODACT_CONTEXT_WINDOW".into(), "200000".into())));
         // OpenAI-compatible: the bearer only.
         let env = vec![
             (
-                "FORGE_OPENAI_BASE_URL".to_string(),
+                "KODACT_OPENAI_BASE_URL".to_string(),
                 "http://h/v1".to_string(),
             ),
-            ("FORGE_OPENAI_API_KEY".to_string(), "k".to_string()),
+            ("KODACT_OPENAI_API_KEY".to_string(), "k".to_string()),
         ];
         let (route, remote) = super::proxied_env(&env);
         assert_eq!(route.base, "http://h/v1");
@@ -13653,10 +13660,10 @@ mod tests {
         // Gemini: the key as Google AI Studio takes it; the remote gets a placeholder.
         let env = vec![
             (
-                "FORGE_GEMINI_BASE_URL".to_string(),
+                "KODACT_GEMINI_BASE_URL".to_string(),
                 "https://generativelanguage.googleapis.com/v1beta".to_string(),
             ),
-            ("FORGE_GEMINI_API_KEY".to_string(), "AIza-real".to_string()),
+            ("KODACT_GEMINI_API_KEY".to_string(), "AIza-real".to_string()),
         ];
         let (route, remote) = super::proxied_env(&env);
         assert_eq!(
@@ -13719,7 +13726,7 @@ mod tests {
         let chats = mock_chats();
         let rich = &chats.iter().find(|c| c.id == 1).unwrap().messages;
         // Your message, a tool's target and a reply's prose.
-        assert_eq!(find_hits(rich, "HELLO, FORGE"), vec![0, 1, 2]);
+        assert_eq!(find_hits(rich, "HELLO, KODACT"), vec![0, 1, 2]);
         assert_eq!(find_hits(rich, "diffLines"), vec![5]);
         assert!(find_hits(rich, "   ").is_empty());
         assert!(find_hits(rich, "no such words anywhere").is_empty());

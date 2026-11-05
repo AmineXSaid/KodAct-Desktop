@@ -1,19 +1,19 @@
-; The Forge installer for Windows: the desktop app and ForgeCLI.
+; The KodAct installer for Windows: the desktop app and KodAct CLI.
 ;
-;   makensis -DAPP_EXE=<ForgeDesktop.exe> -DCLI_EXE=<forge.exe> -DVERSION=0.1.0 \
-;            -DOUT=<Forge-Setup.exe> installer/forge.nsi
+;   makensis -DAPP_EXE=<KodAct.exe> -DCLI_EXE=<kodact.exe> -DVERSION=0.1.0 \
+;            -DOUT=<KodAct-Setup.exe> installer/kodact.nsi
 ;
 ; Built by installer/build.sh. A per-user install: no administrator rights,
 ; no UAC prompt. Lays out:
-;   %LOCALAPPDATA%\Programs\Forge\Forge.exe        the desktop app
-;   %LOCALAPPDATA%\Programs\Forge\bin\forge.exe    ForgeCLI (the app finds it in bin\)
-;   %LOCALAPPDATA%\Programs\Forge\bin\linux-x86_64\forge   ForgeCLI for Linux, put on
+;   %LOCALAPPDATA%\Programs\KodAct\KodAct.exe        the desktop app
+;   %LOCALAPPDATA%\Programs\KodAct\bin\kodact.exe    KodAct CLI (the app finds it in bin\)
+;   %LOCALAPPDATA%\Programs\KodAct\bin\linux-x86_64\kodact  KodAct CLI for Linux, put on
 ;                                     WSL distros, SSH hosts and containers
-;   %LOCALAPPDATA%\Programs\Forge\design-library\  the design library
+;   %LOCALAPPDATA%\Programs\KodAct\design-library\  the design library
 ; plus the user's Start menu and desktop shortcuts, an optional PATH entry for
-; `forge` (the user's), and an uninstaller in Apps & features (the user's).
+; `kodact` (the user's), and an uninstaller in Apps & features (the user's).
 
-; A 64-bit installer: Forge runs on 64-bit Windows only.
+; A 64-bit installer: KodAct runs on 64-bit Windows only.
 Target amd64-unicode
 SetCompressor /SOLID lzma
 
@@ -26,33 +26,33 @@ SetCompressor /SOLID lzma
   !define VERSION "0.1.0"
 !endif
 !ifndef OUT
-  !define OUT "Forge-Setup-${VERSION}.exe"
+  !define OUT "KodAct-Setup-${VERSION}.exe"
 !endif
 
-!define NAME "Forge"
-!define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\Forge"
+!define NAME "KodAct"
+!define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\KodAct"
 !define ENV_KEY "Environment"
 
 Name "${NAME}"
 OutFile "${OUT}"
-InstallDir "$LOCALAPPDATA\Programs\Forge"
-InstallDirRegKey HKCU "Software\Forge" "InstallDir"
+InstallDir "$LOCALAPPDATA\Programs\KodAct"
+InstallDirRegKey HKCU "Software\KodAct" "InstallDir"
 RequestExecutionLevel user
-BrandingText "Forge ${VERSION}"
+BrandingText "KodAct ${VERSION}"
 
 VIProductVersion "${VERSION}.0"
-VIAddVersionKey "ProductName" "Forge"
-VIAddVersionKey "FileDescription" "Forge installer"
+VIAddVersionKey "ProductName" "KodAct"
+VIAddVersionKey "FileDescription" "KodAct installer"
 VIAddVersionKey "FileVersion" "${VERSION}"
 VIAddVersionKey "ProductVersion" "${VERSION}"
-VIAddVersionKey "LegalCopyright" "Forge"
+VIAddVersionKey "LegalCopyright" "KodAct"
 
-!define MUI_ICON "..\assets\forge.ico"
-!define MUI_UNICON "..\assets\forge.ico"
+!define MUI_ICON "..\assets\kodact.ico"
+!define MUI_UNICON "..\assets\kodact.ico"
 !define MUI_ABORTWARNING
 !define MUI_COMPONENTSPAGE_SMALLDESC
-!define MUI_FINISHPAGE_RUN "$INSTDIR\Forge.exe"
-!define MUI_FINISHPAGE_RUN_TEXT "Start Forge"
+!define MUI_FINISHPAGE_RUN "$INSTDIR\KodAct.exe"
+!define MUI_FINISHPAGE_RUN_TEXT "Start KodAct"
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_COMPONENTS
@@ -65,11 +65,11 @@ VIAddVersionKey "LegalCopyright" "Forge"
 
 ; ------------------------------------------------------------------ install
 
-Section "Forge desktop app" SecApp
+Section "KodAct desktop app" SecApp
   SectionIn RO
   SetOutPath "$INSTDIR"
-  File "/oname=Forge.exe" "${APP_EXE}"
-  File "/oname=forge.ico" "..\assets\forge.ico"
+  File "/oname=KodAct.exe" "${APP_EXE}"
+  File "/oname=kodact.ico" "..\assets\kodact.ico"
 !ifdef FONTS_DIR
   ; A personal build's fonts (installer/private-fonts), read at start.
   SetOutPath "$INSTDIR\fonts"
@@ -77,11 +77,11 @@ Section "Forge desktop app" SecApp
 !endif
 
   WriteUninstaller "$INSTDIR\Uninstall.exe"
-  WriteRegStr HKCU "Software\Forge" "InstallDir" "$INSTDIR"
-  WriteRegStr HKCU "${UNINST_KEY}" "DisplayName" "Forge"
+  WriteRegStr HKCU "Software\KodAct" "InstallDir" "$INSTDIR"
+  WriteRegStr HKCU "${UNINST_KEY}" "DisplayName" "KodAct"
   WriteRegStr HKCU "${UNINST_KEY}" "DisplayVersion" "${VERSION}"
-  WriteRegStr HKCU "${UNINST_KEY}" "Publisher" "Forge"
-  WriteRegStr HKCU "${UNINST_KEY}" "DisplayIcon" "$INSTDIR\Forge.exe,0"
+  WriteRegStr HKCU "${UNINST_KEY}" "Publisher" "KodAct"
+  WriteRegStr HKCU "${UNINST_KEY}" "DisplayIcon" "$INSTDIR\KodAct.exe,0"
   WriteRegStr HKCU "${UNINST_KEY}" "InstallLocation" "$INSTDIR"
   WriteRegStr HKCU "${UNINST_KEY}" "UninstallString" '"$INSTDIR\Uninstall.exe"'
   WriteRegStr HKCU "${UNINST_KEY}" "QuietUninstallString" '"$INSTDIR\Uninstall.exe" /S'
@@ -89,51 +89,51 @@ Section "Forge desktop app" SecApp
   WriteRegDWORD HKCU "${UNINST_KEY}" "NoRepair" 1
 
   SetShellVarContext current
-  CreateShortcut "$SMPROGRAMS\Forge.lnk" "$INSTDIR\Forge.exe" "" "$INSTDIR\Forge.exe" 0
+  CreateShortcut "$SMPROGRAMS\KodAct.lnk" "$INSTDIR\KodAct.exe" "" "$INSTDIR\KodAct.exe" 0
 SectionEnd
 
 Section "Design library" SecDesign
   SectionIn RO
   ; Open Design's skills, templates, design systems and craft rules, which
-  ; Forge's design chats read (design-library/, staged by build.sh with its
+  ; KodAct's design chats read (design-library/, staged by build.sh with its
   ; media fetched). Replaced whole, so an update leaves no stale files; only
-  ; a library Forge put there (it has UPSTREAM.json) is ever removed.
+  ; a library KodAct put there (it has UPSTREAM.json) is ever removed.
   IfFileExists "$INSTDIR\design-library\UPSTREAM.json" 0 +2
     RMDir /r "$INSTDIR\design-library"
   SetOutPath "$INSTDIR\design-library"
   File /r "${DESIGN_DIR}\*.*"
 SectionEnd
 
-Section "ForgeCLI (forge)" SecCli
+Section "KodAct CLI (kodact)" SecCli
   SectionIn RO
   SetOutPath "$INSTDIR\bin"
-  File "/oname=forge.exe" "${CLI_EXE}"
+  File "/oname=kodact.exe" "${CLI_EXE}"
   ; Remote development: the app copies this to a remote the first time.
   SetOutPath "$INSTDIR\bin\linux-x86_64"
-  File "/oname=forge" "${LINUX_CLI}"
+  File "/oname=kodact" "${LINUX_CLI}"
 SectionEnd
 
-Section "Add forge to PATH" SecPath
+Section "Add kodact to PATH" SecPath
   Push "$INSTDIR\bin"
   Call AddToPath
 SectionEnd
 
 Section "Desktop shortcut" SecDesktop
   SetShellVarContext current
-  CreateShortcut "$DESKTOP\Forge.lnk" "$INSTDIR\Forge.exe" "" "$INSTDIR\Forge.exe" 0
+  CreateShortcut "$DESKTOP\KodAct.lnk" "$INSTDIR\KodAct.exe" "" "$INSTDIR\KodAct.exe" 0
 SectionEnd
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecApp} "The Forge desktop chat app."
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecApp} "The KodAct desktop chat app."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecDesign} "Skills, templates and design systems for design chats."
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecCli} "ForgeCLI, the engine behind every chat. The app needs it."
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecPath} "Run forge from any terminal (your user's PATH)."
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} "A Forge icon on the desktop."
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecCli} "KodAct CLI, the engine behind every chat. The app needs it."
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecPath} "Run kodact from any terminal (your user's PATH)."
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} "A KodAct icon on the desktop."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
 Function .onInit
   ${IfNot} ${RunningX64}
-    MessageBox MB_ICONSTOP "Forge needs 64-bit Windows."
+    MessageBox MB_ICONSTOP "KodAct needs 64-bit Windows."
     Abort
   ${EndIf}
   SetRegView 64
@@ -178,7 +178,7 @@ Function AddToPath
     ${EndIf}
   ${EndIf}
   WriteRegExpandStr HKCU "${ENV_KEY}" "Path" $1
-  WriteRegStr HKCU "Software\Forge" "AddedToPath" "$0"
+  WriteRegStr HKCU "Software\KodAct" "AddedToPath" "$0"
   SendMessage ${HWND_BROADCAST} ${WM_SETTINGCHANGE} 0 "STR:Environment" /TIMEOUT=2000
   done:
   Pop $2
@@ -266,22 +266,22 @@ FunctionEnd
 ; ------------------------------------------------------------------ uninstall
 
 Section "Uninstall"
-  ReadRegStr $0 HKCU "Software\Forge" "AddedToPath"
+  ReadRegStr $0 HKCU "Software\KodAct" "AddedToPath"
   ${If} $0 != ""
     Push $0
     Call un.RemoveFromPath
   ${EndIf}
 
   SetShellVarContext current
-  Delete "$SMPROGRAMS\Forge.lnk"
-  Delete "$DESKTOP\Forge.lnk"
+  Delete "$SMPROGRAMS\KodAct.lnk"
+  Delete "$DESKTOP\KodAct.lnk"
 
-  Delete "$INSTDIR\bin\linux-x86_64\forge"
+  Delete "$INSTDIR\bin\linux-x86_64\kodact"
   RMDir "$INSTDIR\bin\linux-x86_64"
-  Delete "$INSTDIR\bin\forge.exe"
+  Delete "$INSTDIR\bin\kodact.exe"
   RMDir "$INSTDIR\bin"
-  Delete "$INSTDIR\Forge.exe"
-  Delete "$INSTDIR\forge.ico"
+  Delete "$INSTDIR\KodAct.exe"
+  Delete "$INSTDIR\kodact.ico"
   RMDir /r "$INSTDIR\fonts"
   IfFileExists "$INSTDIR\design-library\UPSTREAM.json" 0 +2
     RMDir /r "$INSTDIR\design-library"
@@ -289,5 +289,5 @@ Section "Uninstall"
   RMDir "$INSTDIR"
 
   DeleteRegKey HKCU "${UNINST_KEY}"
-  DeleteRegKey HKCU "Software\Forge"
+  DeleteRegKey HKCU "Software\KodAct"
 SectionEnd

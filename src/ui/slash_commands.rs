@@ -1,7 +1,7 @@
-//! Settings → Slash Commands: the prompts `/name` expands to, as ForgeCLI
-//! reads them from `commands/` (yours, in ForgeCLI's config folder, and the
-//! project's `.forge/commands`). List, create, edit and delete; the next
-//! chat's ForgeCLI picks a change up, and `/` in the composer lists it.
+//! Settings → Slash Commands: the prompts `/name` expands to, as KodAct CLI
+//! reads them from `commands/` (yours, in KodAct CLI's config folder, and the
+//! project's `.kodact/commands`). List, create, edit and delete; the next
+//! chat's KodAct CLI picks a change up, and `/` in the composer lists it.
 
 use std::path::PathBuf;
 
@@ -170,7 +170,7 @@ impl SlashCommands {
         let mut out = div().flex().flex_col().gap(px(10.)).child(kit::header(
             t,
             "Slash commands",
-            "A command is a saved prompt: type /name in a chat and Forge sends it, with what you type after it as $ARGUMENTS.",
+            "A command is a saved prompt: type /name in a chat and KodAct sends it, with what you type after it as $ARGUMENTS.",
             Some(add),
         ));
         let Some(catalog) = catalog else {
@@ -263,7 +263,7 @@ impl SlashCommands {
         let note = c.shadowed.then(|| {
             (
                 t.extra.warning,
-                "Another /".to_string() + &c.name + " later in ForgeCLI's order replaces this one.",
+                "Another /".to_string() + &c.name + " later in KodAct CLI's order replaces this one.",
             )
         });
         let (edit, del) = (c.clone(), c.path.clone());
@@ -314,7 +314,7 @@ impl SlashCommands {
         let editing = matches!(self.form, Some(Some(_)));
         let mut scopes = div().flex().gap(px(6.));
         for (scope, label) in [
-            (Scope::Project, "This project (.forge/commands)"),
+            (Scope::Project, "This project (.kodact/commands)"),
             (Scope::User, "Yours, every project"),
         ] {
             scopes = scopes.child(

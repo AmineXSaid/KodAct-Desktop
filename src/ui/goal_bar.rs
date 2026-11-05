@@ -1,6 +1,6 @@
-//! The chat's `/goal`, above the box while it lasts: what Forge works
+//! The chat's `/goal`, above the box while it lasts: what KodAct works
 //! toward, where it stands (working, paused, achieved, can't be met), and
-//! what the last check said. ForgeCLI checks the goal after each turn and
+//! what the last check said. KodAct CLI checks the goal after each turn and
 //! starts another until it holds; this strip is how you follow that loop.
 
 use gpui::{div, prelude::*, AnyElement, Entity};

@@ -1,4 +1,4 @@
-//! Settings → Environments: variables ForgeCLI sets for the commands Forge
+//! Settings → Environments: variables KodAct CLI sets for the commands KodAct
 //! runs (the `env` key of a settings file): a tool's path, a test
 //! database URL, a flag your scripts read. One `KEY=value` a line, per file.
 
@@ -119,7 +119,7 @@ impl Render for EnvEditor {
         let mut out = div().flex().flex_col().gap(px(14.)).child(kit::header(
             &t,
             "Environment variables",
-            "Variables ForgeCLI sets for the commands Forge runs. Keep secrets in a file only this PC reads, or better, in your system's environment.",
+            "Variables KodAct CLI sets for the commands KodAct runs. Keep secrets in a file only this PC reads, or better, in your system's environment.",
             None,
         ));
         if self.values.is_none() {

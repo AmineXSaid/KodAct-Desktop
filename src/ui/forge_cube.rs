@@ -1,4 +1,4 @@
-//! The working indicator from Forge for VS Code (`ForgeCube.vue`, `cube.ts`):
+//! The working indicator from KodAct for VS Code (`ForgeCube.vue`, `cube.ts`):
 //! raw graphite stock struck into a finished cube.
 //!
 //! One loop is four beats, each a quarter turn. Beat one holds the rough
@@ -372,7 +372,7 @@ fn still(size: f32, frame: Frame, ink: Inks) -> gpui::Canvas<()> {
     .size(px(size))
 }
 
-/// The cube being forged while Forge works, `size` px square, its finished
+/// The cube being forged while KodAct works, `size` px square, its finished
 /// faces in `color`. Reduced motion: the finished cube at rest.
 pub fn working(size: f32, id: impl Into<ElementId>, color: Hsla) -> AnyElement {
     let ink = inks(color);

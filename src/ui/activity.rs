@@ -1,9 +1,9 @@
-//! What Forge is doing right now, as the working line under a reply shows
+//! What KodAct is doing right now, as the working line under a reply shows
 //! it: the strike mark, then the step in words ("Reading src/main.rs",
 //! "Running cargo test"), how long, and how much it has written.
 //!
-//! The mark is Forge's own: four ember dots standing as a diamond, the ◆ of
-//! Forge's mark. On each beat a blow lands, as a hammer on hot metal: the
+//! The mark is KodAct's own: four ember dots standing as a diamond, the ◆ of
+//! KodAct's mark. On each beat a blow lands, as a hammer on hot metal: the
 //! diamond squashes flat, the struck dots flash white-hot, then it springs
 //! back and they cool to ember. The next blow comes from the side, as a
 //! smith turns the work between strikes. One mark for every kind of work;

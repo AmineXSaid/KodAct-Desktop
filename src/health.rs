@@ -1,5 +1,5 @@
 //! Whether each endpoint's model answers, and how fast: the model window's
-//! ping, as Forge for VS Code measures it.
+//! ping, as KodAct for VS Code measures it.
 //!
 //! A check is a real request, not a ping: a one-token completion ("hi",
 //! `max_tokens: 4`) to the model the profile runs. Its round trip is the
@@ -320,8 +320,8 @@ pub(crate) fn token(auth: &Auth) -> Result<Option<String>, String> {
 }
 
 /// An environment variable as it is now. On Windows a variable set with
-/// `setx` (or System Properties) after Forge started is read from the
-/// registry, so it works without restarting Forge.
+/// `setx` (or System Properties) after KodAct started is read from the
+/// registry, so it works without restarting KodAct.
 pub(crate) fn env_var(name: &str) -> Option<String> {
     if let Ok(v) = std::env::var(name) {
         return Some(v);
@@ -855,7 +855,7 @@ mod tests {
         })
         .is_err());
         assert!(token(&Auth::Bearer {
-            token: "${env:FORGE_TEST_SURELY_UNSET}".into()
+            token: "${env:KODACT_TEST_SURELY_UNSET}".into()
         })
         .unwrap_err()
         .contains("not set"));

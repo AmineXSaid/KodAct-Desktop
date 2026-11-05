@@ -1,6 +1,6 @@
 //! Installing skills and plugins the way Claude Code users do: from a GitHub
 //! repository (`owner/repo`, or a link to a folder in it), any git URL, a
-//! folder, or a `.zip` / `.skill` file. ForgeCLI loads Claude Code's folders
+//! folder, or a `.zip` / `.skill` file. KodAct CLI loads Claude Code's folders
 //! (`~/.claude/skills`, a project's `.claude/skills`), so a skill installed
 //! here works in both, unchanged.
 //!
@@ -9,8 +9,8 @@
 //! scripts) and what it allows without asking (`allowed-tools`).
 //!
 //! Plugins come from Claude Code marketplaces (a repository with
-//! `.claude-plugin/marketplace.json`): each is copied under Forge's config
-//! folder and added to the user's `pluginDirs`, which ForgeCLI loads.
+//! `.claude-plugin/marketplace.json`): each is copied under KodAct's config
+//! folder and added to the user's `pluginDirs`, which KodAct CLI loads.
 //!
 //! Everything here blocks (downloads, copies): call it off the UI thread.
 
@@ -24,7 +24,14 @@ const MAX_DOWNLOAD: u64 = 200 * 1024 * 1024;
 /// How deep a repository is searched for skills.
 const SCAN_DEPTH: usize = 5;
 /// What an installed skill or plugin records about where it came from.
-pub const RECORD: &str = ".forge-install.json";
+pub const RECORD: &str = ".kodact-install.json";
+/// The record as Forge (before the rename) wrote it: still read.
+pub const OLD_RECORD: &str = ".forge-install.json";
+
+/// Whether `name` is an install record, either name.
+pub fn is_record(name: &str) -> bool {
+    name == RECORD || name == OLD_RECORD
+}
 
 /// Where to get skills or plugins from.
 #[derive(Clone, Debug, PartialEq)]
@@ -167,7 +174,7 @@ fn http() -> ureq::Agent {
 fn download(url: &str, file: &Path) -> Result<(), String> {
     let resp = http()
         .get(url)
-        .set("User-Agent", "Forge")
+        .set("User-Agent", "KodAct")
         .call()
         .map_err(|e| match e {
             ureq::Error::Status(404, _) => {
@@ -317,7 +324,7 @@ fn name_problem(name: &str) -> Option<String> {
     });
     if bad {
         return Some(format!(
-            "its name {name:?} has characters Claude Code and Forge refuse"
+            "its name {name:?} has characters Claude Code and KodAct refuse"
         ));
     }
     if name == "synced" || name.starts_with("anthropic-skills") {
@@ -481,7 +488,7 @@ fn split_rules(raw: &str) -> Vec<String> {
 pub fn read_plugin(dir: &Path) -> Option<FoundPlugin> {
     let file = [
         ".claude-plugin/plugin.json",
-        ".forge-plugin/plugin.json",
+        ".kodact-plugin/plugin.json",
         "plugin.json",
     ]
     .iter()
@@ -625,9 +632,12 @@ fn write_record(dir: &Path, origin: &Origin) -> Result<(), String> {
     .map_err(|e| e.to_string())
 }
 
-/// Where an installed skill or plugin came from, if Forge installed it.
+/// Where an installed skill or plugin came from, if KodAct installed it.
 pub fn origin(dir: &Path) -> Option<Origin> {
-    let v: Value = serde_json::from_str(&std::fs::read_to_string(dir.join(RECORD)).ok()?).ok()?;
+    let text = std::fs::read_to_string(dir.join(RECORD))
+        .or_else(|_| std::fs::read_to_string(dir.join(OLD_RECORD)))
+        .ok()?;
+    let v: Value = serde_json::from_str(&text).ok()?;
     Some(Origin {
         source: v["source"].as_str()?.to_string(),
         path_in_source: v["path"].as_str().map(str::to_string),
@@ -715,7 +725,7 @@ pub fn install_skill_remote(
     };
     let dest = format!("{root}/{folder}");
     let mut files = dir_files(&skill.dir)?;
-    files.retain(|(r, _)| r != RECORD);
+    files.retain(|(r, _)| !is_record(r));
     let origin = Origin {
         source: source.label(),
         path_in_source: skill
@@ -736,10 +746,10 @@ pub fn install_skill_remote(
     Ok(dest)
 }
 
-/// Install again, from where it came, the skill Forge installed at `dir`.
+/// Install again, from where it came, the skill KodAct installed at `dir`.
 pub fn update_skill(dir: &Path) -> Result<(), String> {
     let o = origin(dir)
-        .ok_or("Forge didn't install this skill, so it doesn't know where it came from.")?;
+        .ok_or("KodAct didn't install this skill, so it doesn't know where it came from.")?;
     let source = parse_source(&o.source, Path::new("/"))?;
     let work = work_dir();
     let result = (|| {
@@ -910,8 +920,8 @@ pub fn read_marketplace(root: &Path) -> Result<Marketplace, String> {
     })
 }
 
-/// The folder Forge installs plugins into: `plugins/<marketplace>/<plugin>`
-/// under ForgeCLI's config folder.
+/// The folder KodAct installs plugins into: `plugins/<marketplace>/<plugin>`
+/// under KodAct CLI's config folder.
 pub fn plugins_root() -> Option<PathBuf> {
     crate::forge_files::cli_home().map(|h| h.join("plugins"))
 }
@@ -964,7 +974,7 @@ pub fn install_plugin(
     Ok(to)
 }
 
-/// Add `dir` to your `pluginDirs` (ForgeCLI's user settings), once.
+/// Add `dir` to your `pluginDirs` (KodAct CLI's user settings), once.
 pub fn add_plugin_dir(project: &Path, dir: &Path) -> Result<(), String> {
     use crate::forge_files::{set_setting, setting, Layer};
     let mut dirs: Vec<Value> = setting(project, Layer::User, "pluginDirs")?
@@ -1019,7 +1029,7 @@ pub fn install_local_plugin(
     add_plugin_dir(project, &to)
 }
 
-/// The marketplaces you added: `marketplaces.json` in Forge's config folder,
+/// The marketplaces you added: `marketplaces.json` in KodAct's config folder,
 /// `[{ "name": …, "source": … }]`.
 pub fn known_marketplaces() -> Vec<(String, String)> {
     let Some(file) = marketplaces_file() else {
@@ -1047,7 +1057,7 @@ fn marketplaces_file() -> Option<PathBuf> {
 
 /// Remember (or, with `None`, forget) a marketplace by name.
 pub fn remember_marketplace(name: &str, source: Option<&str>) -> Result<(), String> {
-    let file = marketplaces_file().ok_or("Forge's config folder is unknown")?;
+    let file = marketplaces_file().ok_or("KodAct's config folder is unknown")?;
     let mut list = known_marketplaces();
     list.retain(|(n, _)| n != name);
     if let Some(s) = source {

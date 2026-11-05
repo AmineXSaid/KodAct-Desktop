@@ -1,4 +1,4 @@
-//! A file Forge made, as a card in its reply: a small page that previews the
+//! A file KodAct made, as a card in its reply: a small page that previews the
 //! document, its title and type, and Download. A diagram's card shows the
 //! diagram itself, drawn natively. Clicking the card opens the file beside
 //! the chat (`doc_pane.rs`); clicking it again closes it.

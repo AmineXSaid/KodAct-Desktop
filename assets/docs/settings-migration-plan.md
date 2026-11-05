@@ -1,6 +1,6 @@
 # Settings migration plan
 
-Forge's settings move from one flat `settings.json` to a versioned schema with
+KodAct's settings move from one flat `settings.json` to a versioned schema with
 scopes (user, project, local). Nothing you set today is lost: the migration
 reads the old file once, writes the new one beside it, and keeps a backup.
 
@@ -34,10 +34,10 @@ pub fn migrate(v1: &V1) -> Result<V2, MigrateError> {
 - [ ] Round-trip test: v1 → v2 → read back
 - [ ] Test on Windows with a read-only settings file
 
-> If the old file fails validation, Forge keeps using it and says so once,
+> If the old file fails validation, KodAct keeps using it and says so once,
 > rather than guessing.
 
 ## Risks
 
 - **A half-written file.** Writing beside the old one and renaming avoids it.
-- **Older Forge versions.** They keep reading v1 until the backup is removed.
+- **Older KodAct versions.** They keep reading v1 until the backup is removed.

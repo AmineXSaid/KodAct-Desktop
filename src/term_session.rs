@@ -36,7 +36,7 @@ pub struct Shell {
 /// The shells a new terminal can run, the default first: this computer's,
 /// or the remote's (its login shell, bash, sh).
 /// The shells a new terminal can run here. `trust_new_key`: an SSH host's
-/// key was accepted in Forge, so a first connection takes it.
+/// key was accepted in KodAct, so a first connection takes it.
 pub fn shells(
     remote: Option<&Remote>,
     local_dir: &std::path::Path,
@@ -560,20 +560,20 @@ mod tests {
         assert_eq!(dc.label, "bash");
     }
 
-    /// A real remote terminal: `FORGE_TEST_SSH` names an SSH host (and
-    /// `FORGE_TEST_CONTAINER` a running container, optionally). The shell
+    /// A real remote terminal: `KODACT_TEST_SSH` names an SSH host (and
+    /// `KODACT_TEST_CONTAINER` a running container, optionally). The shell
     /// starts in the folder, runs commands, sees resizes, and ends.
     #[test]
     #[ignore]
     fn real_remote_terminals() {
         let mut remotes = vec![];
-        if let Ok(h) = std::env::var("FORGE_TEST_SSH") {
+        if let Ok(h) = std::env::var("KODACT_TEST_SSH") {
             remotes.push(Remote {
                 target: Target::Ssh(h),
                 path: "/tmp".into(),
             });
         }
-        if let Ok(c) = std::env::var("FORGE_TEST_CONTAINER") {
+        if let Ok(c) = std::env::var("KODACT_TEST_CONTAINER") {
             remotes.push(Remote {
                 target: Target::Container {
                     name: c,
@@ -585,7 +585,7 @@ mod tests {
         }
         assert!(
             !remotes.is_empty(),
-            "set FORGE_TEST_SSH or FORGE_TEST_CONTAINER"
+            "set KODACT_TEST_SSH or KODACT_TEST_CONTAINER"
         );
         for r in remotes {
             let shell = remote_shell(&r, "", true);

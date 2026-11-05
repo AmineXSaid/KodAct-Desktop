@@ -9,7 +9,7 @@
     python pdf_tool.py convert FILE.docx|.xlsx|.pptx OUT.pdf
 
 `convert` exports an Office file through LibreOffice (headless).
-Every PDF written has a Title and an Author (Forge, unless the source says).
+Every PDF written has a Title and an Author (KodAct, unless the source says).
 """
 
 import argparse
@@ -29,7 +29,7 @@ from reportlab.platypus import ListFlowable, ListItem, Paragraph, Preformatted, 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # mdlite, beside this file
 from mdlite import blocks, inline, plain
 
-AUTHOR = "Forge"
+AUTHOR = "KodAct"
 
 
 def read(path):

@@ -1,7 +1,7 @@
-//! Settings → Agents: sub-agents ForgeCLI can hand a task to (its Task
+//! Settings → Agents: sub-agents KodAct CLI can hand a task to (its Task
 //! tool), each a Markdown file in `agents/`: a name and a description (when
 //! to use it: the model reads it), the tools it may use, an optional model,
-//! and its instructions. Create, edit and delete; the next chat's ForgeCLI
+//! and its instructions. Create, edit and delete; the next chat's KodAct CLI
 //! lists it with its built-in agents (general-purpose, Explore, Plan).
 
 use std::path::PathBuf;
@@ -177,7 +177,7 @@ impl AgentsEditor {
         let mut out = div().flex().flex_col().gap(px(10.)).child(kit::header(
             t,
             "Agents",
-            "Forge can hand a task to a sub-agent, which works in its own context and reports back. ForgeCLI has three built in: general-purpose, Explore and Plan.",
+            "KodAct can hand a task to a sub-agent, which works in its own context and reports back. KodAct CLI has three built in: general-purpose, Explore and Plan.",
             Some(add),
         ));
         let Some(catalog) = catalog else {
@@ -321,7 +321,7 @@ impl AgentsEditor {
         let editing = matches!(self.form, Some(Some(_)));
         let mut scopes = div().flex().gap(px(6.));
         for (scope, label) in [
-            (Scope::Project, "This project (.forge/agents)"),
+            (Scope::Project, "This project (.kodact/agents)"),
             (Scope::User, "Yours, every project"),
         ] {
             scopes = scopes.child(
@@ -371,7 +371,7 @@ impl AgentsEditor {
             .child(kit::header(
                 t,
                 if editing { "Edit agent" } else { "New agent" },
-                "The description tells Forge when to hand this agent a task; the instructions are its system prompt.",
+                "The description tells KodAct when to hand this agent a task; the instructions are its system prompt.",
                 None,
             ))
             .child(kit::field(t, "Saved in", None, scopes.into_any_element()))

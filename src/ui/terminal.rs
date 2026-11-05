@@ -1,10 +1,10 @@
-//! A shell command, drawn as Forge draws it: a terminal block.
+//! A shell command, drawn as KodAct draws it: a terminal block.
 //!
 //! - The input line: a `$` prompt and the command, syntax coloured (the
 //!   command word, keywords, flags, strings, variables, operators, numbers,
 //!   comments), with a copy button that shows on hover.
 //! - The output, under a hairline: its ANSI colours kept and mapped onto
-//!   Forge's terminal palette. Long output shows its last lines under a
+//!   KodAct's terminal palette. Long output shows its last lines under a
 //!   fade, with "Show N earlier lines"; a running command shows a blinking
 //!   block cursor; an empty result says so.
 //! - A footer: the exit code as a badge, the line count, and the toggle.
@@ -387,7 +387,7 @@ pub fn block(call: &ToolCall, at: &Where, t: &Theme) -> AnyElement {
             .map(|l| div().child(output_text(l, t)));
         out = out.children(shown);
         if hidden > 0 {
-            // The cut-off top fades out, as in Forge.
+            // The cut-off top fades out, as in KodAct.
             out = out.child(div().absolute().top_0().left_0().right_0().h(px(22.)).bg(
                 linear_gradient(
                     0.,
@@ -515,7 +515,7 @@ pub fn block(call: &ToolCall, at: &Where, t: &Theme) -> AnyElement {
                     )
                     .tooltip(|window, cx| {
                         gpui::component::tooltip::Tooltip::new(
-                            "Ask Forge to run this command again (your mode's permissions apply)",
+                            "Ask KodAct to run this command again (your mode's permissions apply)",
                         )
                         .build(window, cx)
                     })

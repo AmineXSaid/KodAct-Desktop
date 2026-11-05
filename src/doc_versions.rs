@@ -118,7 +118,7 @@ pub struct Comment {
     pub version: usize,
     pub anchor: Anchor,
     pub note: String,
-    /// Sent to Forge: the versions the file had then. A later version
+    /// Sent to KodAct: the versions the file had then. A later version
     /// answers it.
     pub sent: Option<usize>,
 }
@@ -317,7 +317,7 @@ pub fn find_cells(sheets: &[crate::office::Sheet], query: &str, limit: usize) ->
     (out, total)
 }
 
-/// The message that asks Forge to act on `comments` in `file`: each one's
+/// The message that asks KodAct to act on `comments` in `file`: each one's
 /// place, quote and request, and how to edit (only those parts, the rest
 /// kept exactly, written back as a new version, then read back).
 /// `word_comments`: also add each as a real comment in the Word file.

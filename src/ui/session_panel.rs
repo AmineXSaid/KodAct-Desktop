@@ -4,7 +4,7 @@
 //! - **Environment**: where the agent runs (this computer, or the remote
 //!   host), the folder it works in, and its branch.
 //! - **Context**: how full the window is, a bar in a colour per part, and
-//!   each part in tokens and per cent (ForgeCLI's own count,
+//!   each part in tokens and per cent (KodAct CLI's own count,
 //!   `get_context_usage`); the tools, memory files and skills behind them.
 //! - **Changes**: what the chat changed, file by file, with Create PR.
 
@@ -575,7 +575,7 @@ pub fn render(t: &Theme, state: &Entity<AppState>, s: &AppState, chat: usize) ->
                 None => div()
                     .text_size(t.text.body_sm)
                     .text_color(t.colors.text_muted)
-                    .child("Forge counts what fills the context once the chat has a reply.")
+                    .child("KodAct counts what fills the context once the chat has a reply.")
                     .into_any_element(),
             },
         ))

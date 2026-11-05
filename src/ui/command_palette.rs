@@ -4,7 +4,7 @@
 //! it, under tabs for each scope with how many each finds. A first `>` keeps
 //! to commands, `#` to chats, `@` to files, `%` to what was said, and Tab
 //! moves between them. Arrow keys (and Page Up/Down, Home/End) move, Enter
-//! runs, Esc closes; with nothing found, Enter asks Forge.
+//! runs, Esc closes; with nothing found, Enter asks KodAct.
 
 use gpui::component::input::{self, Input, InputEvent, InputState};
 use gpui::component::Sizable as _;
@@ -307,7 +307,7 @@ impl CommandPalette {
                 if s.browser {
                     "Turn the web browser off"
                 } else {
-                    "Turn the web browser on for Forge's agents"
+                    "Turn the web browser on for KodAct's agents"
                 },
                 "icons/globe.svg",
                 None,
@@ -362,7 +362,7 @@ impl CommandPalette {
                 Box::new(OpenProjects),
             ),
             act(
-                "Documents: every file Forge made",
+                "Documents: every file KodAct made",
                 "icons/file-text.svg",
                 None,
                 Box::new(OpenDocuments),
@@ -574,7 +574,7 @@ impl CommandPalette {
                 Box::new(KillTerminal),
             ),
             act(
-                "Open Forge settings (settings.json)",
+                "Open KodAct settings (settings.json)",
                 "icons/file-pen.svg",
                 None,
                 Box::new(OpenAppSettings),
@@ -1002,7 +1002,7 @@ impl CommandPalette {
                     ),
                 );
             }
-            // Messages sent while Forge works, not yet with it.
+            // Messages sent while KodAct works, not yet with it.
             if s.current
                 .and_then(|c| s.queued.get(&c))
                 .is_some_and(|q| !q.is_empty())
@@ -1186,7 +1186,7 @@ impl CommandPalette {
             scored.push((
                 0,
                 Command {
-                    label: format!("Ask Forge: {q}").into(),
+                    label: format!("Ask KodAct: {q}").into(),
                     group: "Nothing matches",
                     icon: "icons/message-square.svg",
                     hint: Some("Enter".into()),
@@ -1360,7 +1360,7 @@ fn runs(positions: &[usize]) -> usize {
     positions.windows(2).filter(|w| w[1] != w[0] + 1).count() + usize::from(!positions.is_empty())
 }
 
-/// Chats where `q` was said (your words or Forge's), newest chat first, with
+/// Chats where `q` was said (your words or KodAct's), newest chat first, with
 /// the words around it.
 fn said_matches(s: &AppState, q: &str) -> Vec<(i32, Command, Vec<usize>)> {
     let needle = q.to_lowercase();

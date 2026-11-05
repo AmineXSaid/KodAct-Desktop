@@ -1,5 +1,5 @@
-//! Mermaid diagrams a reply writes, drawn by Forge itself: the source is
-//! parsed here, laid out, and written as an SVG in Forge's colours, which the
+//! Mermaid diagrams a reply writes, drawn by KodAct itself: the source is
+//! parsed here, laid out, and written as an SVG in KodAct's colours, which the
 //! chat then draws natively like any other diagram (`ui/diagram_view.rs`).
 //!
 //! Supported: flowcharts (`graph` / `flowchart`, every direction, the common
@@ -66,7 +66,7 @@ const SIZE: f32 = 13.;
 /// Past this many nodes or messages, the source is shown instead.
 const LIMIT: usize = 250;
 
-/// The SVG for a Mermaid source, or `None` when it isn't one Forge draws.
+/// The SVG for a Mermaid source, or `None` when it isn't one KodAct draws.
 pub fn render(source: &str, p: &Palette) -> Option<String> {
     let lines: Vec<&str> = source
         .lines()
@@ -1916,10 +1916,10 @@ mod tests {
         let p = Palette::test();
         for src in [
             "graph TD\nA --> B --> C\nC --> A\nA --> C",
-            "flowchart LR\n  user((User)) -->|types| ui[Forge desktop]\n  ui --> cli[ForgeCLI] --> api{{Model API}}\n  cli -.-> disk[(Sessions)]",
+            "flowchart LR\n  user((User)) -->|types| ui[KodAct desktop]\n  ui --> cli[KodAct CLI] --> api{{Model API}}\n  cli -.-> disk[(Sessions)]",
             "graph BT\nA-->B",
             "stateDiagram-v2\n[*] --> Idle\nIdle --> Working : send\nWorking --> Idle : done\nWorking --> [*]",
-            "sequenceDiagram\nautonumber\nparticipant U as You\nactor F as Forge\nU->>F: Ask a question\nloop each tool\nF->>F: Run it\nend\nalt ok\nF-->>U: Answer\nelse failed\nF--xU: Error\nend\nNote over U,F: done",
+            "sequenceDiagram\nautonumber\nparticipant U as You\nactor F as KodAct\nU->>F: Ask a question\nloop each tool\nF->>F: Run it\nend\nalt ok\nF-->>U: Answer\nelse failed\nF--xU: Error\nend\nNote over U,F: done",
         ] {
             let svg = render(src, &p).unwrap_or_else(|| panic!("{src}"));
             assert!(svg.starts_with("<svg") && svg.ends_with("</svg>"), "{svg}");
@@ -1988,10 +1988,10 @@ fn dump_samples() {
         return;
     };
     let samples = [
-        ("flow-td", "flowchart TD\n  A[You type a message] --> B{Endpoint set up?}\n  B -->|no| C[Open Settings › Models]\n  B -->|yes| D[ForgeCLI process]\n  C --> D\n  D --> E[(Session log)]\n  D -.->|stream-json| F([Reply in the chat])\n  F --> G((Done))\n  D --> F"),
-        ("flow-lr", "graph LR\n  subgraph Desktop\n    ui[Forge UI] --> st[AppState]\n  end\n  st --> cli[ForgeCLI]\n  cli ==> api{{Model API}}\n  cli --> tools[Tools]\n  tools --> cli"),
+        ("flow-td", "flowchart TD\n  A[You type a message] --> B{Endpoint set up?}\n  B -->|no| C[Open Settings › Models]\n  B -->|yes| D[KodAct CLI process]\n  C --> D\n  D --> E[(Session log)]\n  D -.->|stream-json| F([Reply in the chat])\n  F --> G((Done))\n  D --> F"),
+        ("flow-lr", "graph LR\n  subgraph Desktop\n    ui[KodAct UI] --> st[AppState]\n  end\n  st --> cli[KodAct CLI]\n  cli ==> api{{Model API}}\n  cli --> tools[Tools]\n  tools --> cli"),
         ("state", "stateDiagram-v2\n  [*] --> Idle\n  Idle --> Working : send\n  Working --> NeedsYou : permission\n  NeedsYou --> Working : allow\n  Working --> Idle : done\n  Working --> Error : failed\n  Error --> [*]"),
-        ("sequence", "sequenceDiagram\n  autonumber\n  participant U as You\n  participant D as Forge Desktop\n  participant C as ForgeCLI\n  U->>D: Send a message\n  D->>C: stream-json user turn\n  loop every tool call\n    C->>C: Run the tool\n    C-->>D: tool_use / tool_result\n  end\n  alt needs permission\n    C->>D: can_use_tool\n    D->>U: Ask\n    U-->>D: Allow\n  else allowed\n    Note over C: runs at once\n  end\n  C-->>D: result\n  D-->>U: Reply"),
+        ("sequence", "sequenceDiagram\n  autonumber\n  participant U as You\n  participant D as KodAct Desktop\n  participant C as KodAct CLI\n  U->>D: Send a message\n  D->>C: stream-json user turn\n  loop every tool call\n    C->>C: Run the tool\n    C-->>D: tool_use / tool_result\n  end\n  alt needs permission\n    C->>D: can_use_tool\n    D->>U: Ask\n    U-->>D: Allow\n  else allowed\n    Note over C: runs at once\n  end\n  C-->>D: result\n  D-->>U: Reply"),
     ];
     let p = Palette::test();
     for (name, src) in samples {

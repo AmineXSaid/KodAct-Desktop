@@ -1,6 +1,6 @@
-//! Settings → Memory and rules: the instruction files ForgeCLI puts in front
-//! of the model in every chat (`FORGE.md` yours and the project's, or
-//! `AGENTS.md`, and `FORGE.local.md` for this computer), in the order it
+//! Settings → Memory and rules: the instruction files KodAct CLI puts in front
+//! of the model in every chat (`KODACT.md` yours and the project's, or
+//! `AGENTS.md`, and `KODACT.local.md` for this computer), in the order it
 //! reads them. Open one in your editor, or make the project's first file.
 //! Rules that load only for some paths live in Rules and memory
 //! (Ctrl/⌘ Shift R).
@@ -23,8 +23,8 @@ pub struct MemoryView {
 }
 
 /// What a new memory file starts with.
-const STARTER: &str = "# Project notes for Forge\n\n\
-Forge reads this file at the start of every chat in this project.\n\n\
+const STARTER: &str = "# Project notes for KodAct\n\n\
+KodAct reads this file at the start of every chat in this project.\n\n\
 - How to build and test: \n\
 - Conventions to follow: \n\
 - Things to avoid: \n";
@@ -77,7 +77,7 @@ impl Render for MemoryView {
         let mut out = div().flex().flex_col().gap(px(10.)).child(kit::header(
             &t,
             "Memory and rules",
-            "What Forge reads at the start of every chat: your notes, then the project's, top folder first. Keep them short: every line costs context in every chat.",
+            "What KodAct reads at the start of every chat: your notes, then the project's, top folder first. Keep them short: every line costs context in every chat.",
             None,
         ));
         let Some(files) = self.files.clone() else {

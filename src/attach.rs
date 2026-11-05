@@ -1,5 +1,5 @@
 //! Files and images you attach to a message: what each is, how it is
-//! prepared, and how it reaches ForgeCLI. Any file can be attached and
+//! prepared, and how it reaches KodAct CLI. Any file can be attached and
 //! nothing is dropped silently:
 //!
 //! - an image goes as an image block, scaled down first when it is big (the
@@ -36,7 +36,7 @@ const IMAGE_BUDGET: usize = 1_000_000;
 const IMAGE_DECODE_MAX: u64 = 64 * 1024 * 1024;
 /// The largest text file sent inline; a bigger one goes by path.
 pub const TEXT_MAX: u64 = 256 * 1024;
-/// The largest PDF sent as a document block (ForgeCLI's own Read limit).
+/// The largest PDF sent as a document block (KodAct CLI's own Read limit).
 pub const PDF_MAX: u64 = 32 * 1024 * 1024;
 /// How much of a document's text goes in the message.
 pub const DOC_TEXT_MAX: usize = 200_000;
@@ -137,7 +137,7 @@ pub struct Attachment {
     pub cut: bool,
     /// The copy in the project, relative to it.
     pub saved_at: Option<String>,
-    /// The `.forge/attachments/<id>` folder, removed if the chip is.
+    /// The `.kodact/attachments/<id>` folder, removed if the chip is.
     pub staged_dir: Option<PathBuf>,
     /// What an archive held.
     pub extracted: Option<Arc<stage::Extracted>>,
@@ -348,7 +348,7 @@ fn document_text(kind: Kind, name: &str, bytes: &[u8]) -> Result<(String, bool),
             (s, cut)
         }
         _ => {
-            let k = crate::office::Kind::of(name).ok_or("not a document Forge reads")?;
+            let k = crate::office::Kind::of(name).ok_or("not a document KodAct reads")?;
             let t = crate::office::text(k, bytes)?;
             if t.len() > DOC_TEXT_MAX {
                 let mut end = DOC_TEXT_MAX;
@@ -824,7 +824,7 @@ mod tests {
         assert_eq!(cap.kind, Kind::File);
         let at = cap.saved_at.clone().unwrap();
         assert!(
-            at.starts_with(".forge/attachments/") && at.ends_with("/eth_spy.pcapng"),
+            at.starts_with(".kodact/attachments/") && at.ends_with("/eth_spy.pcapng"),
             "{at}"
         );
         assert!(project.join(&at).is_file());

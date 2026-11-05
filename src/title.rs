@@ -4,7 +4,7 @@
 //! chat meanwhile. With no model to ask, a chat is "Untitled N", numbered
 //! after the Untitled chats already in your history.
 //!
-//! Each message you send also gets its headline: what Forge is doing about
+//! Each message you send also gets its headline: what KodAct is doing about
 //! it, in a few words ("Checking which branch the folder is on"), for the
 //! working line ([`headline`]).
 //!
@@ -108,7 +108,7 @@ pub fn ask(profile: &Profile, first: &str) -> Result<String, String> {
     request(profile, &prompt(first))
 }
 
-/// Ask the model what Forge is doing about `message`, for the working line.
+/// Ask the model what KodAct is doing about `message`, for the working line.
 pub fn headline(profile: &Profile, message: &str) -> Result<String, String> {
     request(profile, &headline_prompt(message))
 }

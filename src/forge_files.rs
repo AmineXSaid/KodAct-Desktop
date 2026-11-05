@@ -1,31 +1,33 @@
-//! ForgeCLI's own configuration files, read and written the way ForgeCLI
+//! KodAct CLI's own configuration files, read and written the way KodAct CLI
 //! reads them, so what the Settings editors save is what the next chat's
-//! engine loads. Each kind mirrors one loader in ForgeCLI:
+//! engine loads. Each kind mirrors one loader in KodAct CLI:
 //!
 //! - **Slash commands**: `commands/**/*.md` (a file in a subfolder is
 //!   `dir:name`), frontmatter `description`, `argument-hint`, then the prompt
-//!   (`forge-agents/src/commands.rs`).
+//!   (`kodact-agents/src/commands.rs`).
 //! - **Agents**: `agents/*.md`, frontmatter `name`, `description` (both
 //!   required), `tools` (none = every tool), `model`, then the system prompt
-//!   (`forge-agents/src/definitions.rs`).
+//!   (`kodact-agents/src/definitions.rs`).
 //! - **Skills**: `skills/<name>/SKILL.md`, frontmatter `name`, `description`
-//!   (required) (`forge-agents/src/skills.rs`). ForgeCLI has no setting that
+//!   (required) (`kodact-agents/src/skills.rs`). KodAct CLI has no setting that
 //!   turns a skill off, so a disabled skill moves to `skills/.disabled/`,
 //!   which its loader never opens.
 //! - **Hooks**: the `hooks` key of a settings file:
 //!   `{"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command",
-//!   "command": "…", "timeout": 60}]}]}` (`forge-hooks`).
+//!   "command": "…", "timeout": 60}]}]}` (`kodact-hooks`).
 //! - **MCP servers**: `mcpServers` in user or local settings, or the
-//!   project's `.mcp.json`, which ForgeCLI runs only once the user trusts it
-//!   (`enabledMcpjsonServers` in local settings) (`forge-mcp/src/config.rs`).
+//!   project's `.mcp.json`, which KodAct CLI runs only once the user trusts it
+//!   (`enabledMcpjsonServers` in local settings) (`kodact-mcp/src/config.rs`).
 //! - **Permissions**: `permissions.allow`, `.ask`, `.deny` and `.defaultMode`
-//!   in a settings file (`forge-permissions`).
+//!   in a settings file (`kodact-permissions`).
 //!
-//! The folders (`forge-config`): the user's are under ForgeCLI's config
-//! folder ([`cli_home`]); a project's are `.forge/<kind>` (ForgeCLI also reads
-//! `.agents/<kind>`, listed here too). Settings files: the user's
-//! `settings.json`, the project's `.forge/settings.json` (shared) and
-//! `.forge/settings.local.json` (this computer only).
+//! The folders (`kodact-config`): the user's are under KodAct CLI's config
+//! folder ([`cli_home`]); a project's are `.kodact/<kind>` (KodAct CLI also
+//! reads `.agents/<kind>`, and ForgeCLI's `.forge/<kind>`, listed here too).
+//! Settings files: the user's `settings.json`, the project's
+//! `.kodact/settings.json` (shared) and `.kodact/settings.local.json` (this
+//! computer only), in `.forge/` while a project has only that folder
+//! (`names.rs`).
 //!
 //! A settings file that isn't a JSON object is never overwritten: saving
 //! reports it instead. Everything here is plain file I/O; callers run it off
@@ -38,10 +40,11 @@ use serde_json::{json, Map, Value};
 
 // ---------------------------------------------------------------- where
 
-/// ForgeCLI's configuration folder, as `forge_config::config_dir` finds it:
-/// `FORGE_HOME`, else `$XDG_CONFIG_HOME/forge`, else the platform's config
-/// folder (`%APPDATA%\forge`, `~/Library/Application Support/forge`,
-/// `~/.config/forge`).
+/// KodAct CLI's configuration folder, as `kodact_config::config_dir` finds it:
+/// `KODACT_HOME`, else `$XDG_CONFIG_HOME/kodact`, else the platform's config
+/// folder (`%APPDATA%\kodact`, `~/Library/Application Support/kodact`,
+/// `~/.config/kodact`); each `kodact` is ForgeCLI's `forge` while only that
+/// one exists.
 pub fn cli_home() -> Option<PathBuf> {
     let abs = |k: &str| {
         std::env::var_os(k)
@@ -49,11 +52,12 @@ pub fn cli_home() -> Option<PathBuf> {
             .map(PathBuf::from)
             .filter(|p| p.is_absolute())
     };
-    if let Some(h) = abs("FORGE_HOME") {
+    if let Some(h) = abs("KODACT_HOME") {
         return Some(h);
     }
+    let named = |d: PathBuf| crate::names::renamed(&d, "kodact", "forge");
     if let Some(x) = abs("XDG_CONFIG_HOME") {
-        return Some(x.join("forge"));
+        return Some(named(x));
     }
     let home = || std::env::var_os("HOME").map(PathBuf::from);
     let platform = if cfg!(windows) {
@@ -63,15 +67,15 @@ pub fn cli_home() -> Option<PathBuf> {
     } else {
         home().map(|h| h.join(".config"))
     };
-    platform.map(|d| d.join("forge"))
+    platform.map(named)
 }
 
 /// Where a Markdown resource lives.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum Scope {
-    /// ForgeCLI's config folder: every project.
+    /// KodAct CLI's config folder: every project.
     User,
-    /// The project's `.forge/` (or `.agents/`).
+    /// The project's `.kodact/` (or `.agents/`, or ForgeCLI's `.forge/`).
     Project,
 }
 
@@ -88,13 +92,13 @@ impl Scope {
 pub fn kind_dir(kind: &str, scope: Scope, project: &Path) -> Option<PathBuf> {
     match scope {
         Scope::User => cli_home().map(|h| h.join(kind)),
-        Scope::Project => Some(project.join(".forge").join(kind)),
+        Scope::Project => Some(crate::names::project_dir(project).join(kind)),
     }
 }
 
-/// Claude Code's configuration folder, which ForgeCLI also reads so skills,
+/// Claude Code's configuration folder, which KodAct CLI also reads so skills,
 /// commands and agents installed for Claude Code load unchanged
-/// (`forge_config::compat_home`): `$CLAUDE_CONFIG_DIR`, else `~/.claude`.
+/// (`kodact_config::compat_home`): `$CLAUDE_CONFIG_DIR`, else `~/.claude`.
 pub fn compat_home() -> Option<PathBuf> {
     std::env::var_os("CLAUDE_CONFIG_DIR")
         .filter(|v| !v.is_empty())
@@ -104,7 +108,7 @@ pub fn compat_home() -> Option<PathBuf> {
 }
 
 /// The folders from the project's repository root down to `project`, root
-/// first (`forge_config::project_chain`); outside a repository, only `project`.
+/// first (`kodact_config::project_chain`); outside a repository, only `project`.
 pub fn project_chain(project: &Path) -> Vec<PathBuf> {
     let mut chain = vec![];
     for dir in project.ancestors() {
@@ -117,10 +121,10 @@ pub fn project_chain(project: &Path) -> Vec<PathBuf> {
     vec![project.to_path_buf()]
 }
 
-/// Every folder ForgeCLI reads `kind` from, lowest precedence first
-/// (`forge_config::resource_dirs`): Claude Code's `~/.claude/<kind>`, Forge's
+/// Every folder KodAct CLI reads `kind` from, lowest precedence first
+/// (`kodact_config::resource_dirs`): Claude Code's `~/.claude/<kind>`, KodAct's
 /// own, then the project's `.claude/<kind>` from the repository root down,
-/// `.agents/<kind>` and `.forge/<kind>`.
+/// `.agents/<kind>`, ForgeCLI's `.forge/<kind>` and `.kodact/<kind>`.
 fn read_dirs(kind: &str, project: &Path) -> Vec<(Scope, PathBuf)> {
     let mut out = vec![];
     if let Some(h) = compat_home() {
@@ -134,6 +138,7 @@ fn read_dirs(kind: &str, project: &Path) -> Vec<(Scope, PathBuf)> {
     }
     out.push((Scope::Project, project.join(".agents").join(kind)));
     out.push((Scope::Project, project.join(".forge").join(kind)));
+    out.push((Scope::Project, project.join(".kodact").join(kind)));
     let mut seen = std::collections::HashSet::new();
     out.retain(|(_, d)| seen.insert(d.clone()));
     out
@@ -145,7 +150,7 @@ pub fn is_claude_code(path: &Path) -> bool {
         || compat_home().is_some_and(|h| path.starts_with(h))
 }
 
-/// A settings file ForgeCLI layers (later wins): user, project, local.
+/// A settings file KodAct CLI layers (later wins): user, project, local.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum Layer {
     User,
@@ -167,16 +172,16 @@ impl Layer {
     pub fn hint(self) -> &'static str {
         match self {
             Layer::User => "Every project, on this computer",
-            Layer::Project => "This project, shared with everyone (.forge/settings.json)",
-            Layer::Local => "This project, this computer only (.forge/settings.local.json)",
+            Layer::Project => "This project, shared with everyone (.kodact/settings.json)",
+            Layer::Local => "This project, this computer only (.kodact/settings.local.json)",
         }
     }
 
     pub fn path(self, project: &Path) -> Option<PathBuf> {
         match self {
             Layer::User => cli_home().map(|h| h.join("settings.json")),
-            Layer::Project => Some(project.join(".forge").join("settings.json")),
-            Layer::Local => Some(project.join(".forge").join("settings.local.json")),
+            Layer::Project => Some(crate::names::project_dir(project).join("settings.json")),
+            Layer::Local => Some(crate::names::project_dir(project).join("settings.local.json")),
         }
     }
 }
@@ -235,7 +240,7 @@ pub fn edit_json(path: &Path, f: impl FnOnce(&mut Map<String, Value>)) -> Result
 // ---------------------------------------------------------------- Markdown + frontmatter
 
 /// A Markdown file with `---` frontmatter, kept in the order written so an
-/// edit changes only the keys it sets. Values are one line; ForgeCLI's
+/// edit changes only the keys it sets. Values are one line; KodAct CLI's
 /// parser also reads lists and folded blocks, which are kept as written.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Doc {
@@ -390,7 +395,7 @@ fn unquote(v: &str) -> String {
     }
 }
 
-/// Quote a value when ForgeCLI's YAML subset would read it as something
+/// Quote a value when KodAct CLI's YAML subset would read it as something
 /// else (a list, a block, a comment). Its parser only strips the outer
 /// quotes, so inner ones need no escaping.
 fn quote(v: &str) -> String {
@@ -406,7 +411,7 @@ fn quote(v: &str) -> String {
     }
 }
 
-/// A name ForgeCLI can file: letters, digits, `-` and `_` (and `:` for a
+/// A name KodAct CLI can file: letters, digits, `-` and `_` (and `:` for a
 /// command in a subfolder).
 pub fn check_name(name: &str, allow_colon: bool) -> Result<(), String> {
     if name.is_empty() {
@@ -538,7 +543,7 @@ pub fn save_command(
     if body.trim().is_empty() {
         return Err("Write the prompt the command sends.".into());
     }
-    let path = command_path(scope, project, name).ok_or("ForgeCLI's config folder is unknown")?;
+    let path = command_path(scope, project, name).ok_or("KodAct CLI's config folder is unknown")?;
     if old != Some(path.as_path()) && path.exists() {
         return Err(format!("/{name} already exists there."));
     }
@@ -568,11 +573,11 @@ pub struct Agent {
     pub model: String,
     pub prompt: String,
     pub path: PathBuf,
-    /// Why ForgeCLI would skip this file, if it would.
+    /// Why KodAct CLI would skip this file, if it would.
     pub problem: Option<String>,
 }
 
-/// The tools ForgeCLI gives an agent to choose from (`forge-tools`).
+/// The tools KodAct CLI gives an agent to choose from (`kodact-tools`).
 pub const TOOLS: &[&str] = &[
     "Read",
     "Write",
@@ -616,11 +621,11 @@ pub fn agents(project: &Path, problems: &mut Vec<String>) -> Vec<Agent> {
             let name = doc.get("name").unwrap_or_default();
             let description = doc.get("description").unwrap_or_default();
             let problem = if !text.starts_with("---") {
-                Some("no --- frontmatter, so ForgeCLI skips it".to_string())
+                Some("no --- frontmatter, so KodAct CLI skips it".to_string())
             } else if name.is_empty() {
-                Some("no name, so ForgeCLI skips it".to_string())
+                Some("no name, so KodAct CLI skips it".to_string())
             } else if description.is_empty() {
-                Some("no description, so ForgeCLI skips it".to_string())
+                Some("no description, so KodAct CLI skips it".to_string())
             } else {
                 None
             };
@@ -661,7 +666,7 @@ pub fn save_agent(
 ) -> Result<PathBuf, String> {
     check_name(name, false)?;
     if description.trim().is_empty() {
-        return Err("Say when to use it: ForgeCLI shows the description to the model.".into());
+        return Err("Say when to use it: KodAct CLI shows the description to the model.".into());
     }
     if prompt.trim().is_empty() {
         return Err("Write the agent's instructions.".into());
@@ -670,7 +675,7 @@ pub fn save_agent(
         return Err("Pick at least one tool, or allow every tool.".into());
     }
     let path = kind_dir("agents", scope, project)
-        .ok_or("ForgeCLI's config folder is unknown")?
+        .ok_or("KodAct CLI's config folder is unknown")?
         .join(format!("{name}.md"));
     if old != Some(path.as_path()) && path.exists() {
         return Err(format!(
@@ -709,7 +714,7 @@ pub struct Skill {
     pub problem: Option<String>,
 }
 
-/// Where disabled skills wait: a folder ForgeCLI's loader never opens (its
+/// Where disabled skills wait: a folder KodAct CLI's loader never opens (its
 /// own folder has no SKILL.md).
 pub const DISABLED_DIR: &str = ".disabled";
 
@@ -732,7 +737,7 @@ fn count_files(dir: &Path) -> usize {
 fn read_skill(scope: Scope, dir: &Path, enabled: bool) -> Option<Skill> {
     let text = std::fs::read_to_string(dir.join("SKILL.md")).ok()?;
     let doc = Doc::parse(&text);
-    // No description: ForgeCLI (as Claude Code) uses the body's first line.
+    // No description: KodAct CLI (as Claude Code) uses the body's first line.
     let description = doc
         .get("description")
         .filter(|d| !d.is_empty())
@@ -756,15 +761,19 @@ fn read_skill(scope: Scope, dir: &Path, enabled: bool) -> Option<Skill> {
             }),
         problem: description
             .is_empty()
-            .then(|| "empty, so ForgeCLI skips it".to_string()),
+            .then(|| "empty, so KodAct CLI skips it".to_string()),
         description,
         body: doc.body,
         dir: dir.to_path_buf(),
         enabled,
-        // Forge's install record (`skill_install::RECORD`) isn't one of its files.
-        extra_files: count_files(dir)
-            .saturating_sub(1)
-            .saturating_sub(usize::from(dir.join(".forge-install.json").is_file())),
+        // The app's install record (`skill_install::RECORD`, or Forge's
+        // older name) isn't one of its files.
+        extra_files: count_files(dir).saturating_sub(1).saturating_sub(
+            [crate::skill_install::RECORD, crate::skill_install::OLD_RECORD]
+                .iter()
+                .filter(|r| dir.join(r).is_file())
+                .count(),
+        ),
     })
 }
 
@@ -820,7 +829,7 @@ pub fn save_skill(
         Some(o) => o.to_path_buf(),
         None => {
             let d = kind_dir("skills", scope, project)
-                .ok_or("ForgeCLI's config folder is unknown")?
+                .ok_or("KodAct CLI's config folder is unknown")?
                 .join(name);
             if d.exists() {
                 return Err(format!("A skill folder named {name} already exists there."));
@@ -865,7 +874,7 @@ pub fn set_skill_enabled(dir: &Path, on: bool) -> Result<PathBuf, String> {
 
 // ---------------------------------------------------------------- hooks
 
-/// ForgeCLI's hook events (`forge-hooks`), with what each is for.
+/// KodAct CLI's hook events (`kodact-hooks`), with what each is for.
 pub const HOOK_EVENTS: &[(&str, &str, bool)] = &[
     ("PreToolUse", "Before a tool runs. Exit 2 blocks it.", true),
     ("PostToolUse", "After a tool succeeds.", true),
@@ -877,7 +886,7 @@ pub const HOOK_EVENTS: &[(&str, &str, bool)] = &[
     ),
     (
         "Stop",
-        "When Forge finishes a reply. Exit 2 makes it go on.",
+        "When KodAct finishes a reply. Exit 2 makes it go on.",
         false,
     ),
     ("SubagentStop", "When a sub-agent finishes.", false),
@@ -888,7 +897,7 @@ pub const HOOK_EVENTS: &[(&str, &str, bool)] = &[
     ),
     ("SessionEnd", "When a chat's engine stops.", false),
     ("PreCompact", "Before the conversation is compacted.", false),
-    ("Notification", "When Forge sends a notification.", false),
+    ("Notification", "When KodAct sends a notification.", false),
 ];
 
 /// Whether an event's hooks take a matcher (a tool name pattern).
@@ -903,7 +912,7 @@ pub struct Hook {
     /// Tool name or regex (`Bash`, `Edit|Write`); empty matches every tool.
     pub matcher: String,
     pub command: String,
-    /// Seconds; `None` is ForgeCLI's 60.
+    /// Seconds; `None` is KodAct CLI's 60.
     pub timeout: Option<f64>,
 }
 
@@ -1030,7 +1039,7 @@ pub fn save_hook(
     }
     let path = layer
         .path(project)
-        .ok_or("ForgeCLI's config folder is unknown")?;
+        .ok_or("KodAct CLI's config folder is unknown")?;
     let root = read_json(&path)?;
     let mut rows = hooks_of(layer, &root, &mut vec![]);
     match (index, new) {
@@ -1053,14 +1062,14 @@ pub fn save_hook(
 
 // ---------------------------------------------------------------- MCP servers
 
-/// Where a server is declared, as `forge mcp add --scope` names them.
+/// Where a server is declared, as `kodact mcp add --scope` names them.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum McpScope {
     /// `mcpServers` in the user's settings.json.
     User,
     /// The project's `.mcp.json`, shared; trusted per person.
     Project,
-    /// `mcpServers` in `.forge/settings.local.json`.
+    /// `mcpServers` in `.kodact/settings.local.json`.
     Local,
 }
 
@@ -1096,7 +1105,7 @@ pub struct Server {
     pub scope: McpScope,
     pub name: String,
     pub transport: Transport,
-    /// For `.mcp.json` servers: whether this person trusts it (ForgeCLI
+    /// For `.mcp.json` servers: whether this person trusts it (KodAct CLI
     /// runs it only then). Others are always `true`.
     pub trusted: bool,
     /// Turned off with `disabledMcpjsonServers`.
@@ -1131,7 +1140,7 @@ fn string_map(v: Option<&Value>) -> BTreeMap<String, String> {
         .unwrap_or_default()
 }
 
-/// One entry, as `forge_mcp::config::parse_server` reads it.
+/// One entry, as `kodact_mcp::config::parse_server` reads it.
 pub fn parse_server(v: &Value) -> Result<Transport, String> {
     let kind = v.get("type").and_then(Value::as_str);
     let url = v.get("url").and_then(Value::as_str);
@@ -1171,7 +1180,7 @@ pub fn parse_server(v: &Value) -> Result<Transport, String> {
     }
 }
 
-/// The JSON ForgeCLI writes for a server (`ServerConfig::to_json`).
+/// The JSON KodAct CLI writes for a server (`ServerConfig::to_json`).
 pub fn server_json(t: &Transport) -> Value {
     match t {
         Transport::Stdio { command, args, env } => {
@@ -1316,7 +1325,7 @@ pub fn pairs_text(map: &BTreeMap<String, String>, sep: &str) -> String {
 
 /// Add or replace a server (`old` names the one being edited, so a rename
 /// or a move between scopes removes it there). A `.mcp.json` server is
-/// trusted for the person adding it, as `forge mcp add --scope project` does.
+/// trusted for the person adding it, as `kodact mcp add --scope project` does.
 pub fn save_server(
     project: &Path,
     old: Option<(McpScope, &str)>,
@@ -1338,7 +1347,7 @@ pub fn save_server(
     }
     let path = scope
         .path(project)
-        .ok_or("ForgeCLI's config folder is unknown")?;
+        .ok_or("KodAct CLI's config folder is unknown")?;
     let same = old.is_some_and(|(s, n)| s == scope && n == name);
     if !same {
         let existing = read_json(&path)?;
@@ -1371,7 +1380,7 @@ pub fn save_server(
 pub fn remove_server(project: &Path, scope: McpScope, name: &str) -> Result<(), String> {
     let path = scope
         .path(project)
-        .ok_or("ForgeCLI's config folder is unknown")?;
+        .ok_or("KodAct CLI's config folder is unknown")?;
     edit_json(&path, |root| {
         if let Some(m) = root.get_mut("mcpServers").and_then(Value::as_object_mut) {
             m.remove(name);
@@ -1380,7 +1389,7 @@ pub fn remove_server(project: &Path, scope: McpScope, name: &str) -> Result<(), 
 }
 
 /// Trust (or stop trusting) a `.mcp.json` server for this person, in local
-/// settings, as `forge mcp approve` does.
+/// settings, as `kodact mcp approve` does.
 pub fn trust_server(project: &Path, name: &str, on: bool) -> Result<(), String> {
     let path = Layer::Local.path(project).ok_or("no project")?;
     edit_json(&path, |root| {
@@ -1398,7 +1407,7 @@ pub fn trust_server(project: &Path, name: &str, on: bool) -> Result<(), String> 
     })
 }
 
-/// Each server's state from `forge mcp list` lines (`name: summary - status`).
+/// Each server's state from `kodact mcp list` lines (`name: summary - status`).
 pub fn parse_mcp_list(out: &str) -> BTreeMap<String, String> {
     let strip = |s: &str| {
         // ANSI colour codes, should a build print them.
@@ -1439,7 +1448,7 @@ pub struct Permissions {
 pub fn permissions(project: &Path, layer: Layer) -> Result<Permissions, String> {
     let path = layer
         .path(project)
-        .ok_or("ForgeCLI's config folder is unknown")?;
+        .ok_or("KodAct CLI's config folder is unknown")?;
     let root = read_json(&path)?;
     let p = root.get("permissions");
     let list = |k: &str| {
@@ -1464,7 +1473,7 @@ pub fn permissions(project: &Path, layer: Layer) -> Result<Permissions, String> 
     })
 }
 
-/// A rule as ForgeCLI writes them: `Tool` or `Tool(specifier)`.
+/// A rule as KodAct CLI writes them: `Tool` or `Tool(specifier)`.
 pub fn check_rule(rule: &str) -> Result<(), String> {
     let r = rule.trim();
     let (tool, spec) = match r.split_once('(') {
@@ -1500,7 +1509,7 @@ pub fn set_rule(
     }
     let path = layer
         .path(project)
-        .ok_or("ForgeCLI's config folder is unknown")?;
+        .ok_or("KodAct CLI's config folder is unknown")?;
     edit_json(&path, |root| {
         if !root.get("permissions").is_some_and(Value::is_object) {
             root.insert("permissions".into(), json!({}));
@@ -1537,7 +1546,7 @@ pub fn set_rule(
 pub fn setting(project: &Path, layer: Layer, key: &str) -> Result<Option<Value>, String> {
     let path = layer
         .path(project)
-        .ok_or("ForgeCLI's config folder is unknown")?;
+        .ok_or("KodAct CLI's config folder is unknown")?;
     Ok(read_json(&path)?.get(key).cloned())
 }
 
@@ -1550,7 +1559,7 @@ pub fn set_setting(
 ) -> Result<(), String> {
     let path = layer
         .path(project)
-        .ok_or("ForgeCLI's config folder is unknown")?;
+        .ok_or("KodAct CLI's config folder is unknown")?;
     edit_json(&path, |root| match value {
         Some(v) => {
             root.insert(key.to_string(), v);
@@ -1561,7 +1570,7 @@ pub fn set_setting(
     })
 }
 
-/// The sandbox modes ForgeCLI takes (`sandbox.mode`).
+/// The sandbox modes KodAct CLI takes (`sandbox.mode`).
 pub const SANDBOX_MODES: [(&str, &str); 3] = [
     ("off", "Off: commands run as you"),
     ("read-only", "Read-only: commands can read, not write"),
@@ -1571,7 +1580,7 @@ pub const SANDBOX_MODES: [(&str, &str); 3] = [
     ),
 ];
 
-/// `env`: variables for the commands Forge runs, as `KEY=value` lines.
+/// `env`: variables for the commands KodAct runs, as `KEY=value` lines.
 pub fn env_text(v: Option<&Value>) -> String {
     v.and_then(Value::as_object)
         .map(|m| {
@@ -1607,7 +1616,7 @@ pub fn env_value(text: &str) -> Result<Option<Value>, String> {
 
 // ---------------------------------------------------------------- memory files
 
-/// A memory file ForgeCLI loads into every session (`forge-config/src/memory.rs`).
+/// A memory file KodAct CLI loads into every session (`kodact-config/src/memory.rs`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Memory {
     pub path: PathBuf,
@@ -1617,11 +1626,12 @@ pub struct Memory {
     pub bytes: u64,
 }
 
-/// The files ForgeCLI reads, in its order: yours, then each folder from the
-/// top down to the project (`FORGE.md`, `.forge/FORGE.md`, else
-/// `AGENTS.md`, then `FORGE.local.md`), stopping below the home folder. The
-/// project's own `FORGE.md` and `FORGE.local.md` and yours are listed even
-/// when missing, so they can be made.
+/// The files KodAct CLI reads, in its order: yours, then each folder from the
+/// top down to the project (`KODACT.md`, `.kodact/KODACT.md`, else
+/// ForgeCLI's `FORGE.md`, `.forge/FORGE.md`, else `AGENTS.md`, then
+/// `KODACT.local.md`, or `FORGE.local.md` while only that one exists),
+/// stopping below the home folder. The project's own instructions and
+/// local file and yours are listed even when missing, so they can be made.
 pub fn memory_files(project: &Path) -> Vec<Memory> {
     let file = |path: PathBuf, kind: &'static str| {
         let meta = std::fs::metadata(&path).ok().filter(|m| m.is_file());
@@ -1634,7 +1644,7 @@ pub fn memory_files(project: &Path) -> Vec<Memory> {
     };
     let mut out = vec![];
     if let Some(h) = cli_home() {
-        out.push(file(h.join("FORGE.md"), "You"));
+        out.push(file(crate::names::instructions(&h), "You"));
     }
     let home =
         std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from);
@@ -1646,11 +1656,20 @@ pub fn memory_files(project: &Path) -> Vec<Memory> {
     for dir in chain {
         let is_project = dir == project;
         let mut found = false;
-        for name in ["FORGE.md", ".forge/FORGE.md"] {
-            let m = file(dir.join(name), "Project");
-            if m.exists {
-                found = true;
-                out.push(m);
+        // KodAct's names; ForgeCLI's only where KodAct's are missing.
+        for names in [
+            ["KODACT.md", ".kodact/KODACT.md"],
+            ["FORGE.md", ".forge/FORGE.md"],
+        ] {
+            if found {
+                break;
+            }
+            for name in names {
+                let m = file(dir.join(name), "Project");
+                if m.exists {
+                    found = true;
+                    out.push(m);
+                }
             }
         }
         if !found {
@@ -1658,10 +1677,10 @@ pub fn memory_files(project: &Path) -> Vec<Memory> {
             if agents.exists {
                 out.push(agents);
             } else if is_project {
-                out.push(file(dir.join("FORGE.md"), "Project"));
+                out.push(file(crate::names::instructions(dir), "Project"));
             }
         }
-        let local = file(dir.join("FORGE.local.md"), "Local");
+        let local = file(crate::names::local_instructions(dir), "Local");
         if local.exists || is_project {
             out.push(local);
         }
@@ -1810,13 +1829,13 @@ mod tests {
             "Review $ARGUMENTS",
         )
         .unwrap();
-        assert_eq!(path, p.join(".forge/commands/git/review.md"));
+        assert_eq!(path, p.join(".kodact/commands/git/review.md"));
         let list = commands(&p, &mut vec![]);
         let c = list.iter().find(|c| c.name == "git:review").unwrap();
         assert_eq!(c.description, "Review the diff");
         assert_eq!(c.hint, "[file]");
         assert_eq!(c.body.trim(), "Review $ARGUMENTS");
-        // An argument hint in brackets stays text (ForgeCLI keeps the raw line).
+        // An argument hint in brackets stays text (KodAct CLI keeps the raw line).
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(text.contains("argument-hint: \"[file]\""), "{text}");
         // Rename: the old file goes.
@@ -1852,7 +1871,7 @@ mod tests {
         assert!(a.problem.is_none());
         assert!(save_agent(Scope::Project, &p, None, "x", "", None, "", "p").is_err());
         assert!(save_agent(Scope::Project, &p, None, "x", "d", Some(&[]), "", "p").is_err());
-        std::fs::write(p.join(".forge/agents/broken.md"), "no frontmatter").unwrap();
+        std::fs::write(p.join(".kodact/agents/broken.md"), "no frontmatter").unwrap();
         let all = agents(&p, &mut vec![]);
         assert!(all
             .iter()
@@ -1875,9 +1894,9 @@ mod tests {
         let s = &proj_skills(&p)[0];
         assert!(s.enabled && s.extra_files == 1);
         let off = set_skill_enabled(&dir, false).unwrap();
-        assert_eq!(off, p.join(".forge/skills/.disabled/pdf"));
-        // ForgeCLI's loader: only direct subfolders holding SKILL.md.
-        assert!(!p.join(".forge/skills/.disabled/SKILL.md").exists());
+        assert_eq!(off, p.join(".kodact/skills/.disabled/pdf"));
+        // KodAct CLI's loader: only direct subfolders holding SKILL.md.
+        assert!(!p.join(".kodact/skills/.disabled/SKILL.md").exists());
         assert!(!proj_skills(&p)[0].enabled);
         let on = set_skill_enabled(&off, true).unwrap();
         assert_eq!(on, dir);
@@ -2019,12 +2038,43 @@ mod tests {
         let p = tmp("mem");
         std::fs::write(p.join("AGENTS.md"), "x").unwrap();
         let m = memory_files(&p);
-        // AGENTS.md stands in for a missing FORGE.md; FORGE.local.md can be made.
+        // AGENTS.md stands in for a missing KODACT.md; KODACT.local.md can be made.
         assert!(m.iter().any(|f| f.path == p.join("AGENTS.md") && f.exists));
         assert!(m
             .iter()
-            .any(|f| f.path == p.join("FORGE.local.md") && !f.exists));
+            .any(|f| f.path == p.join("KODACT.local.md") && !f.exists));
+        assert!(!m.iter().any(|f| f.path == p.join("KODACT.md")));
+    }
+
+    #[test]
+    fn memory_keeps_forgeclis_files_until_kodacts_exist() {
+        let p = tmp("mem-old");
+        std::fs::write(p.join("FORGE.md"), "old").unwrap();
+        std::fs::write(p.join("FORGE.local.md"), "mine").unwrap();
+        let m = memory_files(&p);
+        assert!(m.iter().any(|f| f.path == p.join("FORGE.md") && f.exists));
+        assert!(m.iter().any(|f| f.path == p.join("FORGE.local.md") && f.exists));
+        // A KODACT.md wins, as the engine reads it: FORGE.md is no longer listed.
+        std::fs::write(p.join("KODACT.md"), "new").unwrap();
+        let m = memory_files(&p);
+        assert!(m.iter().any(|f| f.path == p.join("KODACT.md") && f.exists));
         assert!(!m.iter().any(|f| f.path == p.join("FORGE.md")));
+    }
+
+    #[test]
+    fn an_old_projects_folder_is_where_settings_and_resources_go() {
+        let p = tmp("old-dir");
+        std::fs::create_dir_all(p.join(".forge")).unwrap();
+        assert_eq!(Layer::Project.path(&p), Some(p.join(".forge/settings.json")));
+        assert_eq!(
+            kind_dir("commands", Scope::Project, &p),
+            Some(p.join(".forge/commands"))
+        );
+        // Resources are read from both folders, KodAct's last (it wins).
+        let dirs = read_dirs("commands", &p);
+        let forge = dirs.iter().position(|(_, d)| *d == p.join(".forge/commands"));
+        let kodact = dirs.iter().position(|(_, d)| *d == p.join(".kodact/commands"));
+        assert!(forge.is_some() && kodact.is_some() && forge < kodact, "{dirs:?}");
     }
 
     #[test]

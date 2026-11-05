@@ -1,4 +1,4 @@
-//! Edit automatically, extended to shell commands Forge finds harmless.
+//! Edit automatically, extended to shell commands KodAct finds harmless.
 //!
 //! Asked for on 2026-09-25 ("I don't want it to ask me for each bash command"),
 //! with a model that runs `grep`, `git log` and `cd … && …` chains all day. In
@@ -267,7 +267,7 @@ fn non_blank(command: Option<&str>) -> Option<&str> {
     command.filter(|c| !c.trim().is_empty())
 }
 
-/// Whether Forge answers this permission request itself, with allow.
+/// Whether KodAct answers this permission request itself, with allow.
 ///
 /// Every mode (Manual, Plan, Edit automatically): a command the risk
 /// check finds read-only runs unasked. Edit automatically also runs commands
@@ -347,7 +347,7 @@ pub struct EditModeHookInput {
 /// Measured against the real CLI (e2e scenario 26, 2026-09-25): in Edit
 /// automatically, Claude Code runs `rm <project file>` without asking -- it
 /// auto-accepts file commands inside the project, deletions included -- so no
-/// permission request ever reached Forge, whatever Forge's own settings said.
+/// permission request ever reached KodAct, whatever KodAct's own settings said.
 /// The CLI's PreToolUse hook runs before that decision, and `ask` makes it
 /// prompt instead. So, in Edit automatically only, a Bash command that deletes
 /// or moves a file, or that [`always_asks`] names, asks. Reads and edits are
@@ -417,7 +417,7 @@ mod tests {
             assert!(approves(c), "{c} should run");
         }
         for tool in [
-            "mcp__forge-browser__click",
+            "mcp__kodact-browser__click",
             "WebFetch",
             "Task",
             "Write",

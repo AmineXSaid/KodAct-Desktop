@@ -19,7 +19,7 @@ its bullets, indented two spaces per level.
 
 New decks are 16:9 (13.33 x 7.5 in), with the template's placeholders laid
 out for that width, body text that shrinks to fit its box, and real
-properties (title, author Forge, dates) instead of python-pptx's defaults.
+properties (title, author KodAct, dates) instead of python-pptx's defaults.
 """
 
 import argparse
@@ -32,7 +32,7 @@ from pptx import Presentation
 from pptx.enum.text import MSO_AUTO_SIZE
 from pptx.util import Emu
 
-AUTHOR = "Forge"
+AUTHOR = "KodAct"
 # 16:9, as PowerPoint makes new decks.
 WIDE = (Emu(12192000), Emu(6858000))
 

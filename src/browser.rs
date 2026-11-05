@@ -1,18 +1,18 @@
-//! The web browser for ForgeCLI's agents. With it on, each chat's ForgeCLI
-//! gets Forge's own browser tools (`browser_mcp.rs`, served by this same
+//! The web browser for KodAct CLI's agents. With it on, each chat's KodAct CLI
+//! gets KodAct's own browser tools (`browser_mcp.rs`, served by this same
 //! executable): they drive the browser in the side panel (`web_view.rs`),
 //! so you watch every step live and can take over. The tools reach the model
-//! as `mcp__forge-browser__navigate`, `…__click`, `…__eval`…, and ask
+//! as `mcp__kodact-browser__navigate`, `…__click`, `…__eval`…, and ask
 //! permission like any other tool.
 //!
 //! Nothing is installed for it: the tools are this program, and the browser
 //! is Playwright's Chromium, Chrome or Edge. The switch is a plain file in
-//! Forge's config folder (`browser.txt`).
+//! KodAct's config folder (`browser.txt`).
 
 use std::path::{Path, PathBuf};
 
-/// The prefix of the browser's tool names, as ForgeCLI calls them.
-pub const TOOL_PREFIX: &str = "mcp__forge-browser__";
+/// The prefix of the browser's tool names, as KodAct CLI calls them.
+pub const TOOL_PREFIX: &str = "mcp__kodact-browser__";
 
 /// Standard base64 (padding optional, whitespace skipped): a screenshot in
 /// a tool result.
@@ -67,7 +67,7 @@ pub fn focus_file() -> PathBuf {
         .join("browser-focus.txt")
 }
 
-/// The `--mcp-config` JSON that gives a ForgeCLI the browser tools: this
+/// The `--mcp-config` JSON that gives a KodAct CLI the browser tools: this
 /// executable as an MCP server, on the browser at `devtools` (its
 /// `http://127.0.0.1:<port>`).
 pub fn mcp_config(exe: &Path, devtools: &str, focus: &Path) -> String {
@@ -85,8 +85,8 @@ mod tests {
     #[test]
     fn base64_decodes() {
         assert_eq!(
-            decode_base64("SGVsbG8sIEZvcmdlIQ==").unwrap(),
-            b"Hello, Forge!"
+            decode_base64("SGVsbG8sIEtvZEFjdCE=").unwrap(),
+            b"Hello, KodAct!"
         );
         assert_eq!(decode_base64("SGk").unwrap(), b"Hi");
         assert!(decode_base64("**").is_none());
@@ -95,13 +95,13 @@ mod tests {
     #[test]
     fn the_config_runs_forge_itself_as_the_server() {
         let c: serde_json::Value = serde_json::from_str(&mcp_config(
-            Path::new("/app/forge-gpui"),
+            Path::new("/app/kodact-desktop"),
             "http://127.0.0.1:9222",
             Path::new("/cfg/focus.txt"),
         ))
         .unwrap();
-        let s = &c["mcpServers"]["forge-browser"];
-        assert_eq!(s["command"], "/app/forge-gpui");
+        let s = &c["mcpServers"]["kodact-browser"];
+        assert_eq!(s["command"], "/app/kodact-desktop");
         assert_eq!(
             s["args"],
             serde_json::json!(["--browser-mcp", "http://127.0.0.1:9222", "/cfg/focus.txt"])

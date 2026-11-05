@@ -1,8 +1,8 @@
 //! The comment box of the design bar's comment tool, as Claude's design
 //! canvas has it: over the part of the page you picked, it names that part,
-//! takes what should change, and sends it to Forge (@Forge), or keeps it as
-//! a note for you. While Forge replies, Queue for Forge holds it until the
-//! reply ends ("your comment goes after that"); unticked, Forge reads it at
+//! takes what should change, and sends it to KodAct (@KodAct), or keeps it as
+//! a note for you. While KodAct replies, Queue for KodAct holds it until the
+//! reply ends ("your comment goes after that"); unticked, KodAct reads it at
 //! its next step.
 
 use gpui::component::input::{Input, InputEvent, InputState};
@@ -18,9 +18,9 @@ use crate::theme::{self, ActiveTheme};
 pub struct DesignCommentBox {
     state: Entity<AppState>,
     input: Entity<InputState>,
-    /// @Forge: the comment asks Forge to act; without it, it is a note.
+    /// @KodAct: the comment asks KodAct to act; without it, it is a note.
     to_forge: bool,
-    /// Queue for Forge: while it replies, the comment waits for the end.
+    /// Queue for KodAct: while it replies, the comment waits for the end.
     queue: bool,
     /// The part the box is open on, so a new pick starts a fresh comment.
     on: Option<String>,
@@ -95,7 +95,7 @@ impl Render for DesignCommentBox {
         let (to_forge, queue) = (self.to_forge, self.queue);
         let hover = t.colors.hover;
 
-        // @Forge: on, the comment is a request; off, a note for you.
+        // @KodAct: on, the comment is a request; off, a note for you.
         let mention = div()
             .id("design-comment-forge")
             .flex()
@@ -125,10 +125,10 @@ impl Render for DesignCommentBox {
                     t.colors.text_muted
                 },
             ))
-            .child("Forge")
+            .child("KodAct")
             .tooltip(|window, cx| {
                 gpui::component::tooltip::Tooltip::new(
-                    "With @Forge, Forge revises the part; without, the comment is a note for you",
+                    "With @KodAct, KodAct revises the part; without, the comment is a note for you",
                 )
                 .build(window, cx)
             })
@@ -137,7 +137,7 @@ impl Render for DesignCommentBox {
                 cx.notify();
             }));
 
-        // Queue for Forge: shown while Forge replies.
+        // Queue for KodAct: shown while KodAct replies.
         let queue_box = (busy && to_forge).then(|| {
             div()
                 .id("design-comment-queue")
@@ -160,7 +160,7 @@ impl Render for DesignCommentBox {
                         t.colors.text_muted
                     },
                 ))
-                .child("Queue for Forge")
+                .child("Queue for KodAct")
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.queue = !this.queue;
                     cx.notify();
@@ -169,14 +169,14 @@ impl Render for DesignCommentBox {
 
         let say = if busy && to_forge {
             if queue {
-                "Forge is working. Your comment goes after that."
+                "KodAct is working. Your comment goes after that."
             } else {
-                "Forge is working. It reads your comment at its next step."
+                "KodAct is working. It reads your comment at its next step."
             }
         } else if to_forge {
-            "Comment on any part, and Forge can revise it."
+            "Comment on any part, and KodAct can revise it."
         } else {
-            "A note for you: Forge doesn't see it."
+            "A note for you: KodAct doesn't see it."
         };
 
         let send = super::button::send_button(

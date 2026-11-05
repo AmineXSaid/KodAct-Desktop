@@ -315,7 +315,7 @@ fn via_api(repo: &str) -> Result<Hub, String> {
         let mut req = agent
             .get(&format!("https://api.github.com/repos/{repo}/{path}"))
             .set("Accept", "application/vnd.github+json")
-            .set("User-Agent", "Forge-Desktop");
+            .set("User-Agent", "KodAct-Desktop");
         if let Some(t) = &token {
             req = req.set("Authorization", &format!("Bearer {t}"));
         }
@@ -397,7 +397,7 @@ pub fn read(project: &Path) -> Option<Repo> {
     Some(repo)
 }
 
-/// `FORGE_DEMO=1`: GitHub as a busy repository would show it, for the
+/// `KODACT_DEMO=1`: GitHub as a busy repository would show it, for the
 /// screenshots and the tour, with no network.
 fn demo_hub(slug: &str) -> Hub {
     let url = |kind: &str, n: u64| format!("https://github.com/{slug}/{kind}/{n}");
@@ -503,24 +503,24 @@ mod tests {
 
     #[test]
     fn the_remote_and_its_github_repo_are_read() {
-        let config = "[core]\n\tbare = false\n[remote \"upstream\"]\n\turl = https://github.com/acme/tool.git\n[remote \"origin\"]\n\turl = git@github.com:amine/forge-gpui.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n";
+        let config = "[core]\n\tbare = false\n[remote \"upstream\"]\n\turl = https://github.com/acme/tool.git\n[remote \"origin\"]\n\turl = git@github.com:amine/kodact-desktop.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n";
         assert_eq!(
             parse_remote(config).as_deref(),
-            Some("git@github.com:amine/forge-gpui.git")
+            Some("git@github.com:amine/kodact-desktop.git")
         );
         assert_eq!(
             parse_remote("[remote \"up\"]\n url = https://x/y\n").as_deref(),
             Some("https://x/y")
         );
         for url in [
-            "git@github.com:amine/forge-gpui.git",
-            "https://github.com/amine/forge-gpui",
-            "https://github.com/amine/forge-gpui.git/",
-            "ssh://git@github.com/amine/forge-gpui.git",
+            "git@github.com:amine/kodact-desktop.git",
+            "https://github.com/amine/kodact-desktop",
+            "https://github.com/amine/kodact-desktop.git/",
+            "ssh://git@github.com/amine/kodact-desktop.git",
         ] {
             assert_eq!(
                 github_repo(url),
-                Some(("amine".into(), "forge-gpui".into())),
+                Some(("amine".into(), "kodact-desktop".into())),
                 "{url}"
             );
         }

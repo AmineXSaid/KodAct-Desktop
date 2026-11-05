@@ -1,7 +1,7 @@
-//! Settings → Sandbox: ForgeCLI's OS sandbox for the shell commands Forge
+//! Settings → Sandbox: KodAct CLI's OS sandbox for the shell commands KodAct
 //! runs (`sandbox.mode`: off, read-only or workspace-write;
 //! `sandbox.network`). A sandboxed command runs without asking, since it
-//! can't reach beyond the sandbox. ForgeCLI confines commands with
+//! can't reach beyond the sandbox. KodAct CLI confines commands with
 //! bubblewrap on Linux and sandbox-exec on macOS; where it has no sandbox
 //! (Windows today), a mode set here makes it ask before each command
 //! instead, and this screen says so.
@@ -94,16 +94,16 @@ impl Render for SandboxEditor {
             self.read(cx);
         }
         let platform = if cfg!(windows) {
-            "ForgeCLI has no sandbox on Windows yet. With a mode set, it asks before each command instead, so nothing runs unconfined without you."
+            "KodAct CLI has no sandbox on Windows yet. With a mode set, it asks before each command instead, so nothing runs unconfined without you."
         } else if cfg!(target_os = "macos") {
-            "On this Mac, ForgeCLI confines commands with sandbox-exec."
+            "On this Mac, KodAct CLI confines commands with sandbox-exec."
         } else {
-            "On Linux, ForgeCLI confines commands with bubblewrap (bwrap). Without it, ForgeCLI asks before each command instead."
+            "On Linux, KodAct CLI confines commands with bubblewrap (bwrap). Without it, KodAct CLI asks before each command instead."
         };
         let mut out = div().flex().flex_col().gap(px(14.)).child(kit::header(
             &t,
             "Sandbox",
-            "Run the shell commands Forge starts in a sandbox. A sandboxed command runs without asking, because it can't reach past the sandbox.",
+            "Run the shell commands KodAct starts in a sandbox. A sandboxed command runs without asking, because it can't reach past the sandbox.",
             None,
         ));
         out = out.child(
@@ -219,7 +219,7 @@ impl Render for SandboxEditor {
                 .text_color(t.colors.text_muted)
                 .child(match winner {
                     Some((l, m)) => format!("New chats here use {m}, from {}.", l.hint()),
-                    None => "No file sets a mode, so commands aren't sandboxed: Forge asks before each one that changes something.".to_string(),
+                    None => "No file sets a mode, so commands aren't sandboxed: KodAct asks before each one that changes something.".to_string(),
                 }),
         )
     }

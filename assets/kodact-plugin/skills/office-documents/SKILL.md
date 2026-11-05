@@ -1,12 +1,12 @@
 ---
 name: office-documents
 description: Read, create and edit Word (.docx), Excel (.xlsx), PowerPoint (.pptx) and PDF files, keeping the formatting of what you don't change, and checking every edit by reading the file back. Use whenever a task involves one of these files: summarising, updating figures, filling a form, writing a memo or deck, merging or splitting PDFs, or exporting to PDF.
-license: Proprietary (Forge)
+license: Proprietary (KodAct)
 ---
 
 # Office documents
 
-Forge shows any .docx, .xlsx, .pptx or .pdf you write as a card in your
+KodAct shows any .docx, .xlsx, .pptx or .pdf you write as a card in your
 reply, and opens it beside the chat for the person to read. Make those files
 right the first time.
 
@@ -26,8 +26,8 @@ and look → report.**
 2. **Where to write.** For a new request, write a new file
    (`budget-edited.xlsx`) and keep the input intact, unless the person asked
    for the original to change. When the person's message comes from comments
-   on a file in Forge's panel ("Change `x.docx` as these comments ask"),
-   write back to **the same path**: Forge keeps every version and shows the
+   on a file in KodAct's panel ("Change `x.docx` as these comments ask"),
+   write back to **the same path**: KodAct keeps every version and shows the
    person what changed, so a new name would break that.
 3. **Change only what was asked.** Edit the quoted words, the named cells,
    the one shape; never rebuild a file to change one value. The tools keep
@@ -67,7 +67,7 @@ text, tables, headers and footers, and works when the text spans runs.
 **Comments and tracked changes.** When the person asks for comments "in the
 file", or for changes they can review in Word, use `comment` and `track`:
 they write real Word comments anchored to the quoted words, and real
-insertions and deletions (author Forge, dated) that Word lets them accept or
+insertions and deletions (author KodAct, dated) that Word lets them accept or
 reject one by one. `read` lists a file's comments and tracked changes at the
 end. Quote the exact words as they are in the file; a quote that is not
 found is an error, not a silent skip.

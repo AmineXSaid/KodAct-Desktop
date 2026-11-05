@@ -1,6 +1,6 @@
-"""Build assets/forge.ico (the Windows icon: taskbar, title bar, installer).
+"""Build assets/kodact.ico (the Windows icon: taskbar, title bar, installer).
 
-Forge's app icon: the ingot (src/ui/ingot.rs) reversed onto a tile of the
+KodAct's app icon: the ingot (src/ui/ingot.rs) reversed onto a tile of the
 accent, so it reads on a light or a dark taskbar alike. The cube is the same
 isometric drawing as the in-app mark: its top in paper, like metal at heat,
 its left face the accent's shadow and its right the accent lit, the faces a
@@ -9,7 +9,7 @@ hair apart so the tile shows between them.
 Every size Windows asks for is drawn on its own from the geometry (supersampled,
 then reduced), never scaled from another size, so 16 and 24 px stay crisp.
 
-    python3 -I scripts/make_ico.py   # writes assets/forge.ico (+ a preview PNG with --preview)
+    python3 -I scripts/make_ico.py   # writes assets/kodact.ico (+ a preview PNG with --preview)
 """
 
 import math
@@ -19,7 +19,7 @@ import sys
 from PIL import Image, ImageDraw
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-OUT = ROOT / "assets/forge.ico"
+OUT = ROOT / "assets/kodact.ico"
 
 # 100/125/150/200% taskbar and title bar, Explorer views, Alt-Tab.
 SIZES = [16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 128, 256]

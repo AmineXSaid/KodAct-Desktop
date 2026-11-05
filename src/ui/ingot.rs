@@ -1,4 +1,4 @@
-//! Forge's mark, the ingot: a cube of three flat faces seen from above, its
+//! KodAct's mark, the ingot: a cube of three flat faces seen from above, its
 //! top in the accent like metal still hot from the forge. Each face is a
 //! one-colour SVG made from the geometry here (`ingot/NN-F.svg`, served by
 //! `assets.rs`) and tinted from the theme (`mark_top`, `mark_left`,
@@ -6,9 +6,9 @@
 //! follows light and dark.
 //!
 //! - [`mark`]: the cube at rest, at a corner (the isometric view).
-//! - [`turning`]: the cube while Forge works, a quarter turn at a time,
+//! - [`turning`]: the cube while KodAct works, a quarter turn at a time,
 //!   easing in and out with a short rest between. Reduced motion: at rest.
-//! - [`wordmark`]: FORGE in capitals, in the interface face, its O the
+//! - [`wordmark`]: KODACT in capitals, in the interface face, its O the
 //!   cube (as the VS Code extension sets it).
 
 use std::f32::consts::{FRAC_1_SQRT_2, FRAC_PI_2, FRAC_PI_4, SQRT_2, TAU};
@@ -352,7 +352,7 @@ pub fn struck(size: f32, k: f32) -> Ingot {
     }
 }
 
-/// The mark turning while Forge works. Reduced motion: [`mark`].
+/// The mark turning while KodAct works. Reduced motion: [`mark`].
 pub fn turning(size: f32, id: impl Into<ElementId>) -> AnyElement {
     if motion::reduced_motion() {
         return mark(size).into_any_element();
@@ -385,8 +385,8 @@ fn yaw_at(ms: f32, beat: f32) -> f32 {
     REST + (quarter as f32 + eased) * FRAC_PI_2
 }
 
-/// "forge" in the display serif at `height` px, its o the cube sitting on
-/// the baseline at the letters' x-height.
+/// KODACT at `height` px, its O the cube sitting on the baseline at the
+/// capitals' height: "K", the cube, "DACT".
 pub fn wordmark(height: f32, t: &Theme) -> AnyElement {
     // `height` is the type size. Capitals stand about 0.72 of it; the cube,
     // in the O's place, is as tall as an O is (a hair over the capitals).
@@ -403,7 +403,7 @@ pub fn wordmark(height: f32, t: &Theme) -> AnyElement {
     div()
         .flex()
         .items_center()
-        .child(letters("F"))
+        .child(letters("K"))
         .child(
             // Centred on the capitals, which sit a little above the line's
             // middle (the line keeps room below for descenders).
@@ -413,7 +413,7 @@ pub fn wordmark(height: f32, t: &Theme) -> AnyElement {
                 .mx(px(height * 0.02))
                 .child(mark(cube)),
         )
-        .child(letters("RGE"))
+        .child(letters("DACT"))
         .into_any_element()
 }
 
@@ -422,7 +422,7 @@ pub fn wordmark(height: f32, t: &Theme) -> AnyElement {
 pub(crate) const WORD_CAP: f32 = 0.72;
 const WORD_LIFT: f32 = 0.05;
 
-/// The box of the cube that stands for the O in FORGE set at `type_size`:
+/// The box of the cube that stands for the O in KODACT set at `type_size`:
 /// the cube a little taller than the capitals, as a round O overshoots
 /// them. The opener's wordmark uses it too.
 pub(crate) fn o_box(type_size: f32) -> f32 {

@@ -2,7 +2,7 @@
 //! calls in a row (and the thinking between them) fold into a summary,
 //! "Edited 6 files, ran 2 commands", with the change's size and any
 //! failures; while it runs, the step in progress. It opens to the steps, a
-//! quiet line each, and each step opens to its change or output. Text Forge
+//! quiet line each, and each step opens to its change or output. Text KodAct
 //! writes to you ends a run, and anything waiting on you stands alone.
 
 use std::ops::Range;
@@ -260,7 +260,7 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
         .cursor_pointer()
         .hover(move |s| s.text_color(strong))
         .children(live_step.map(|c| {
-            // Agents at work: Forge's cube turning, as on each agent's row.
+            // Agents at work: KodAct's cube turning, as on each agent's row.
             if crate::state::is_agent_tool(&c.target) {
                 super::turning_logo_in(
                     f32::from(t.size.icon_sm),
@@ -447,7 +447,7 @@ mod tests {
             tool(ToolKind::Read, "b.rs"),
             Block::Tool(running),
             Block::Permission {
-                title: "Allow Forge to edit c.rs?".into(),
+                title: "Allow KodAct to edit c.rs?".into(),
                 detail: "".into(),
                 verdict: Verdict::Pending,
                 info: PermInfo {

@@ -1,14 +1,14 @@
-//! The opener: a short film as Forge opens (`design/opener-mock.html`).
+//! The opener: a short film as KodAct opens (`design/opener-mock.html`).
 //!
 //! The ingot heats in the dark, from iron through ember and orange to
 //! almost white, and locks white hot with a flash, a shockwave and sparks.
 //! Then it cools as metal does, through orange and ember red to its own
-//! colours, and becomes the O of the wordmark, FORGE (`ingot::wordmark`).
+//! colours, and becomes the O of the wordmark, KODACT (`ingot::wordmark`).
 //!
 //! - [`Cut::First`] (no name saved yet), 8.3 s: the three lines slam in on
-//!   the beat ("Describe it. Forge builds it. You approve."), a viewfinder
+//!   the beat ("Describe it. KodAct builds it. You approve."), a viewfinder
 //!   frames it, a teal ring runs through a field of dots as the cube cools,
-//!   and the line "Forge asks before it changes anything." Then the film
+//!   and the line "KodAct asks before it changes anything." Then the film
 //!   fades away and the cube rises into the naming screen's hero.
 //! - [`Cut::Again`] (every launch after), 2.6 s: heat, lock, cool into the
 //!   wordmark, then an iris opens from the cube onto the app.
@@ -18,7 +18,7 @@
 //! Every frame is a pure function of the time since it started (`scene`),
 //! on a 1920 x 1080 stage scaled to fit the window, over all of it. It is drawn in the dark
 //! theme's colours in either theme, as a film is; the handoff fades it into
-//! whatever the window shows. `FORGE_OPENER_AT=<seconds>` holds it still at
+//! whatever the window shows. `KODACT_OPENER_AT=<seconds>` holds it still at
 //! one moment, for screenshots.
 
 use std::f32::consts::TAU;
@@ -120,7 +120,7 @@ const fn on(bar: f32, beat: f32) -> f32 {
 
 const WORDS: [(f32, f32, &str); 3] = [
     (on(2., 3.), on(3., 1.), "DESCRIBE IT."),
-    (on(3., 1.), on(3., 3.), "FORGE BUILDS IT."),
+    (on(3., 1.), on(3., 3.), "KODACT BUILDS IT."),
     (on(3., 3.), on(4., 2.), "YOU APPROVE."),
 ];
 
@@ -327,7 +327,7 @@ impl Fit {
     }
 }
 
-/// The wordmark's layout: where "F", the cube and "RGE" sit on the stage.
+/// The wordmark's layout: where "K", the cube and "DACT" sit on the stage.
 #[derive(Clone, Copy, Debug)]
 struct Word {
     x0: f32,
@@ -424,7 +424,7 @@ fn scene(cut: Cut, t: f32, word: Word, hero: Place) -> Scene {
 pub struct Opener {
     cut: Cut,
     start: Instant,
-    /// `FORGE_OPENER_AT`: hold the film at this moment.
+    /// `KODACT_OPENER_AT`: hold the film at this moment.
     held: Option<f32>,
     focus: FocusHandle,
     palette: Palette,
@@ -444,7 +444,7 @@ impl Opener {
     }
 
     pub fn new(cut: Cut, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let held = std::env::var("FORGE_OPENER_AT")
+        let held = std::env::var("KODACT_OPENER_AT")
             .ok()
             .and_then(|v| v.parse::<f32>().ok());
         let focus = cx.focus_handle();
@@ -774,7 +774,7 @@ fn paint_layer(
             }
         }
     }
-    // The wordmark: "F" and "RGE" slide out of the cube; in the first cut
+    // The wordmark: "K" and "DACT" slide out of the cube; in the first cut
     // they part again for the naming screen.
     if t >= m.lockup && sc.iris < 0.3 {
         let k = out_cubic((t - m.lockup - 0.18) / 0.5)
@@ -784,7 +784,7 @@ fn paint_layer(
         let part = 160. * sc.away;
         let base = o.y + px(f.y(WORD_BASE));
         let fl = shape(
-            "F",
+            "K",
             &fonts.word,
             WORD_SIZE * f.s,
             pal.paper.opacity(k),
@@ -792,7 +792,7 @@ fn paint_layer(
         );
         paint_text(&fl, o.x + px(f.x(word.x0 + slide - part)), base, window, cx);
         let rge = shape(
-            "RGE",
+            "DACT",
             &fonts.word,
             WORD_SIZE * f.s,
             pal.paper.opacity(k),
@@ -804,7 +804,7 @@ fn paint_layer(
             let tg = smooth((t - tag) / 0.4) * (1. - smooth(sc.away * 2.5));
             if tg > 0. {
                 let line = shape(
-                    "Forge asks before it changes anything.",
+                    "KodAct asks before it changes anything.",
                     &fonts.sans,
                     34. * f.s,
                     pal.muted.opacity(tg),
@@ -853,7 +853,7 @@ fn paint_layer(
             let mid = |y: f32, l: &gpui::ShapedLine| o.y + px(f.y(y)) + (l.ascent - l.descent) / 2.;
             let l = shape(chapter, &fonts.mono, fs, ink, window);
             paint_text(&l, o.x + px(f.x(mg + 30.)), mid(mg + 30., &l), window, cx);
-            let l = shape("FORGE", &fonts.mono, fs, ink, window);
+            let l = shape("KODACT", &fonts.mono, fs, ink, window);
             paint_text(
                 &l,
                 o.x + px(f.x(STAGE_W - mg - 30.)) - l.width,
@@ -943,7 +943,7 @@ impl Render for Opener {
         let f = Fit::new(bw, bh);
         let probe =
             |s: &str| f32::from(shape(s, &fonts.word, WORD_SIZE, self.palette.paper, window).width);
-        let word = Word::new(probe("F"), probe("RGE"));
+        let word = Word::new(probe("K"), probe("DACT"));
         // The naming screen's hero cube, as `onboarding.rs` lays it out, on the stage.
         let steps_top = bar
             + f32::from(t.space.xl)
