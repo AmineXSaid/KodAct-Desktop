@@ -65,7 +65,7 @@ fn render() -> String {
 
     let _ = writeln!(w, "## Direction\n");
     let _ = writeln!(w, "**Personality:** calmly smooth: a warm editorial workspace, confident and unhurried, closer to a printed quarterly than a dashboard (after the Anchor style reference).\n");
-    let _ = writeln!(w, "**Foundation:** Forge Ember. Warm paper by day: the window and sidebar #ebe8e1, the session a sheet of #f7f5f1 on it, cards white on that. Warm graphite at night: #1b1a19, #242322, cards #2e2d2b. One ink carries the type. One colour, ember copper (#b4532a; #e2895b at night): the decisive action, links, a switch that is on, the mark's top, a waiting dot. Inline code in coral on a faint wash. Everything else is neutral; colour otherwise only for meaning (modes, status).\n");
+    let _ = writeln!(w, "**Foundation:** KodAct Signal, the terminal's ink, paper and turquoise. Cool paper by day: the window and sidebar #eceef0, the session a sheet of #f6f7f8 on it, cards white on that. Ink at night: #0b0c0e, #131518, cards #1b1e22. One ink carries the type. One colour, turquoise (#0e7568; #5fd8c4 at night): the decisive action, links, a switch that is on, the mark, a waiting dot. Inline code in peach on a faint wash. Everything else is neutral; colour otherwise only for meaning (modes, status).\n");
     let _ = writeln!(w, "**Depth:** nearly flat. Hairlines inside cards; the session and the user's message lift on paper grain (three 1px shadows at 6/4/1% ink); popovers and the permission card a touch more.\n");
     let _ = writeln!(w, "**Shape:** two shapes. Everything you press is a pill (buttons, chips, icon buttons, the new-chat and needs-you pills); everything that holds content is 4px (cards, rows, menus, fields, the composer, the session).\n");
     let _ = writeln!(w, "**Type:** Anthropic Sans only, the Text cut for every word (code included) and the Display cut for the greeting and headings: 400 for text, 500 for labels, 600 for headings and buttons. Small labels in sentence case, never uppercase and never above a heading. The app bundles no font; diagrams are redrawn in it whatever they name.\n");
@@ -321,7 +321,7 @@ fn render() -> String {
     );
     // Each row: the token, then the pair whose contrast is shown.
     type Pick = fn(&Theme) -> Hsla;
-    let rows: [(&str, Pick, Pick, Pick, &str); 27] = [
+    let rows: [(&str, Pick, Pick, Pick, &str); 25] = [
         (
             "text_strong",
             |t| t.colors.text_strong,
@@ -404,7 +404,7 @@ fn render() -> String {
             |t| t.extra.mark_top,
             |t| t.extra.mark_top,
             |t| t.extra.stage,
-            "the ingot mark's top face (`ui/ingot.rs`)",
+            "KodAct's mark, both strokes (`ui/kodact_mark.rs`)",
         ),
         (
             "page_ink",
@@ -414,46 +414,32 @@ fn render() -> String {
             "marks drawn on a design page, on their halo (`ui/design_marks.rs`)",
         ),
         (
-            "mark_left",
-            |t| t.extra.mark_left,
-            |t| t.extra.mark_left,
-            |t| t.extra.stage,
-            "the ingot's left face",
-        ),
-        (
-            "mark_right",
-            |t| t.extra.mark_right,
-            |t| t.extra.mark_right,
-            |t| t.extra.stage,
-            "the ingot's right face",
-        ),
-        (
             "mark_heat_white",
             |t| t.extra.mark_heat_white,
             |t| t.extra.mark_heat_white,
             |t| t.extra.stage,
-            "the ingot white hot from the forge (onboarding); never at rest",
+            "the mark at its brightest as it arrives (onboarding); never at rest",
         ),
         (
             "mark_heat",
             |t| t.extra.mark_heat,
             |t| t.extra.mark_heat,
             |t| t.extra.stage,
-            "the ingot's orange glow as it cools, and a strike's flare",
+            "the mark's bright signal as it settles, and a push's flare",
         ),
         (
             "mark_heat_ember",
             |t| t.extra.mark_heat_ember,
             |t| t.extra.mark_heat_ember,
             |t| t.extra.stage,
-            "the ingot's ember red as it cools",
+            "the mark's deep turquoise as it settles",
         ),
         (
             "mark_heat_iron",
             |t| t.extra.mark_heat_iron,
             |t| t.extra.mark_heat_iron,
             |t| t.extra.stage,
-            "the ingot's dark iron, last before its own colours",
+            "the mark near dark, last before its own colour",
         ),
         (
             "fill_danger",
@@ -550,6 +536,7 @@ fn render() -> String {
         ("Anthropic Sans only", "One family everywhere, in its Text and Display cuts: the interface, replies, code, the terminal and diagrams. No other face is bundled or named.", "2026-10-26"),
         ("One look", "The theme picker and its eleven other looks are gone; Calmly smooth, light and dark, is the app's one look.", "2026-10-26"),
         ("Forge Ember", "Warm paper and warm graphite, the sidebar a step deeper than the session, and one copper heat for the action, the current state and links: the forge's own colour, as calm as Claude Code's.", "2026-10-23"),
+        ("KodAct Signal", "The app takes KodAct's identity from its terminal: ink and cool paper for the surfaces, the terminal's turquoise as the one colour, and KodAct's mark (a step, then a chevron) in place of the ingot. It replaces Forge Ember.", "2026-11-10"),
         ("A neutral wash for the open row", "The accent stays for the action; the open chat and the open screen lift by a grey wash.", "2026-10-23"),
         ("Composer at 620px", "A comfortable measure for a prompt, the same in a chat and on the welcome page.", "2026-10-11"),
         ("Composer on the reading column", "In a chat the composer takes the 760px column the reply is read in, so the two line up; on the welcome page it keeps its own measure.", "2026-10-23"),

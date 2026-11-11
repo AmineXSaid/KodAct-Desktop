@@ -1,14 +1,15 @@
-//! The opener: a short film as Forge opens (`design/opener-mock.html`).
+//! The opener: a short film as the app opens (`design/opener-mock.html`).
 //!
-//! The ingot heats in the dark, from iron through ember and orange to
-//! almost white, and locks white hot with a flash, a shockwave and sparks.
-//! Then it cools as metal does, through orange and ember red to its own
-//! colours, and becomes the O of the wordmark, FORGE (`ingot::wordmark`).
+//! KodAct's mark lights in the dark, from a deep turquoise to almost
+//! white, and locks with a flash, a shockwave and sparks. Then it settles
+//! through the bright signal to its own colour, and leads the wordmark,
+//! KodAct (`kodact_mark::wordmark`). The code calls the mark's place
+//! `cube`, from the mark this film was first cut for.
 //!
 //! - [`Cut::First`] (no name saved yet), 8.3 s: the three lines slam in on
-//!   the beat ("Describe it. Forge builds it. You approve."), a viewfinder
+//!   the beat ("Describe it. KodAct builds it. You approve."), a viewfinder
 //!   frames it, a teal ring runs through a field of dots as the cube cools,
-//!   and the line "Forge asks before it changes anything." Then the film
+//!   and the line "KodAct asks before it changes anything." Then the film
 //!   fades away and the cube rises into the naming screen's hero.
 //! - [`Cut::Again`] (every launch after), 2.6 s: heat, lock, cool into the
 //!   wordmark, then an iris opens from the cube onto the app.
@@ -29,7 +30,7 @@ use gpui::{
     Font, FontWeight, Hsla, Pixels, Point, Render, SharedString, Task, TextAlign, TextRun, Window,
 };
 
-use super::{ingot, motion};
+use super::{kodact_mark, motion};
 use crate::theme::Theme;
 
 /// Which film plays.
@@ -120,7 +121,7 @@ const fn on(bar: f32, beat: f32) -> f32 {
 
 const WORDS: [(f32, f32, &str); 3] = [
     (on(2., 3.), on(3., 1.), "DESCRIBE IT."),
-    (on(3., 1.), on(3., 3.), "FORGE BUILDS IT."),
+    (on(3., 1.), on(3., 3.), "KODACT BUILDS IT."),
     (on(3., 3.), on(4., 2.), "YOU APPROVE."),
 ];
 
@@ -248,7 +249,7 @@ struct Palette {
     muted: Hsla,
     subtle: Hsla,
     teal: Hsla,
-    marks: [Hsla; 3],
+    mark: Hsla,
     /// The heat ramp: iron, ember, glow, white.
     ramp: [Hsla; 4],
 }
@@ -262,7 +263,7 @@ impl Palette {
             muted: dark.colors.text_muted,
             subtle: dark.colors.text_subtle,
             teal: dark.colors.primary,
-            marks: [x.mark_top, x.mark_left, x.mark_right],
+            mark: x.mark_top,
             ramp: [
                 x.mark_heat_iron,
                 x.mark_heat_ember,
@@ -327,30 +328,33 @@ impl Fit {
     }
 }
 
-/// The wordmark's layout: where "F", the cube and "RGE" sit on the stage.
+/// The wordmark's layout: where the mark, "Kod" and "Act" sit on the stage.
 #[derive(Clone, Copy, Debug)]
 struct Word {
     x0: f32,
-    wf: f32,
+    wk: f32,
     o: f32,
     gap: f32,
     cube: Place,
 }
 
 impl Word {
-    fn new(wf: f32, wr: f32) -> Self {
-        // The cube in the O's place, as the sidebar's wordmark sets it,
+    fn new(wk: f32, wa: f32) -> Self {
+        // The mark leads the name, as the title bar's wordmark sets it,
         // centred on the capitals.
-        let (o, gap) = (ingot::o_box(WORD_SIZE), WORD_SIZE * 0.02);
-        let x0 = STAGE_W / 2. - (wf + o + wr + gap * 2.) / 2.;
+        let (o, gap) = (
+            kodact_mark::mark_box(WORD_SIZE),
+            WORD_SIZE * kodact_mark::WORD_GAP,
+        );
+        let x0 = STAGE_W / 2. - (o + gap + wk + wa) / 2.;
         Self {
             x0,
-            wf,
+            wk,
             o,
             gap,
             cube: Place {
-                x: x0 + wf + gap + o / 2.,
-                y: WORD_BASE - WORD_SIZE * ingot::WORD_CAP / 2.,
+                x: x0 + o / 2.,
+                y: WORD_BASE - WORD_SIZE * kodact_mark::WORD_CAP / 2.,
                 s: o,
             },
         }
@@ -364,7 +368,7 @@ struct Scene {
     /// The cube's heat (1 white hot) and where it is.
     heat: f32,
     cube: Place,
-    /// 0..1 before the lock: how far the ingot has heated in the dark.
+    /// 0..1 before the lock: how far the mark has lit in the dark.
     kindle: f32,
     forged: bool,
     shake: (f32, f32),
@@ -774,8 +778,8 @@ fn paint_layer(
             }
         }
     }
-    // The wordmark: "F" and "RGE" slide out of the cube; in the first cut
-    // they part again for the naming screen.
+    // The wordmark: "Kod" and "Act" slide out from behind the mark; in the
+    // first cut they move off again for the naming screen.
     if t >= m.lockup && sc.iris < 0.3 {
         let k = out_cubic((t - m.lockup - 0.18) / 0.5)
             * (1. - smooth(sc.away * 2.5))
@@ -783,28 +787,28 @@ fn paint_layer(
         let slide = 60. * (1. - (k + sc.away).min(1.));
         let part = 160. * sc.away;
         let base = o.y + px(f.y(WORD_BASE));
-        let fl = shape(
-            "F",
+        let kod = shape(
+            "Kod",
             &fonts.word,
             WORD_SIZE * f.s,
             pal.paper.opacity(k),
             window,
         );
-        paint_text(&fl, o.x + px(f.x(word.x0 + slide - part)), base, window, cx);
-        let rge = shape(
-            "RGE",
+        let kx = word.x0 + word.o + word.gap - slide + part;
+        paint_text(&kod, o.x + px(f.x(kx)), base, window, cx);
+        let act = shape(
+            "Act",
             &fonts.word,
             WORD_SIZE * f.s,
-            pal.paper.opacity(k),
+            pal.teal.opacity(k),
             window,
         );
-        let rx = word.x0 + word.wf + word.o + word.gap * 2. - slide + part;
-        paint_text(&rge, o.x + px(f.x(rx)), base, window, cx);
+        paint_text(&act, o.x + px(f.x(kx + word.wk)), base, window, cx);
         if let Some(tag) = m.tag {
             let tg = smooth((t - tag) / 0.4) * (1. - smooth(sc.away * 2.5));
             if tg > 0. {
                 let line = shape(
-                    "Forge asks before it changes anything.",
+                    "KodAct asks before it changes anything.",
                     &fonts.sans,
                     34. * f.s,
                     pal.muted.opacity(tg),
@@ -908,7 +912,7 @@ fn paint_layer(
 #[derive(Clone)]
 struct Fonts {
     words: Font,
-    /// The wordmark's: the interface face in semibold, as `ingot::wordmark`.
+    /// The wordmark's: the interface face in semibold, as `kodact_mark::wordmark`.
     word: Font,
     sans: Font,
     mono: Font,
@@ -943,7 +947,7 @@ impl Render for Opener {
         let f = Fit::new(bw, bh);
         let probe =
             |s: &str| f32::from(shape(s, &fonts.word, WORD_SIZE, self.palette.paper, window).width);
-        let word = Word::new(probe("F"), probe("RGE"));
+        let word = Word::new(probe("Kod"), probe("Act"));
         // The naming screen's hero cube, as `onboarding.rs` lays it out, on the stage.
         let steps_top = bar
             + f32::from(t.space.xl)
@@ -1030,7 +1034,7 @@ impl Render for Opener {
             .left(px(f.x(sc.cube.x + sx) - cs / 2.))
             .top(px(f.y(sc.cube.y + sy) - cs / 2.))
             .opacity(cube_alpha)
-            .child(ingot::forging(cs, 1., hot).marks(pal.marks));
+            .child(kodact_mark::landing(cs, 1., hot).color(pal.mark));
 
         let (sparks, embers) = (self.sparks.clone(), self.embers.clone());
         let back_fonts = fonts.clone();

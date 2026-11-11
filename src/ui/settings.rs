@@ -2007,7 +2007,7 @@ impl Settings {
                     .flex()
                     .flex_col()
                     .gap(t.space.sm)
-                    .child(super::ingot::wordmark(40., t))
+                    .child(super::kodact_mark::wordmark(40., t))
                     .child(
                         div()
                             .text_size(t.text.caption)

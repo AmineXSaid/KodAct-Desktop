@@ -169,9 +169,9 @@ impl AssetSource for Assets {
         ) {
             return Ok(crate::fonts::text_regular().map(Cow::Owned));
         }
-        if path.starts_with("ingot/") {
-            // The mark's faces, drawn from its geometry (`ui/ingot.rs`).
-            return Ok(crate::ui::ingot::face_svg(path).map(Cow::Owned));
+        if path.starts_with("kodact/") {
+            // The mark's strokes, drawn from its geometry (`ui/kodact_mark.rs`).
+            return Ok(crate::ui::kodact_mark::stroke_svg(path).map(Cow::Owned));
         }
         if path.starts_with("avatars/") {
             // Sized to the pixels they're drawn at (`avatars.rs`).

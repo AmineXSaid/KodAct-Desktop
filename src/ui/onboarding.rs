@@ -4,11 +4,12 @@
 //! sidebar. Reopened from the command palette: "Change your name" starts at
 //! the name, "Change your avatar" at the avatars.
 //!
-//! The name step forges itself in: the ingot's faces land white hot and
-//! lock with a burst of heat, then the whole cube cools as metal does,
-//! through orange and ember red to its own colours; a halo and an orbiting
-//! spark settle under the cube, the question arrives word by word, and
-//! Enter strikes the cube (a hot quarter turn) before the avatars slide in.
+//! The name step arrives lit: KodAct's mark lands near white (the step,
+//! then the chevron) and locks with a burst of light, then settles through
+//! the bright signal to its own colour; a halo and an orbiting spark settle
+//! under it, the question arrives word by word, and Enter pushes the mark
+//! (its chevron drives ahead and flares) before the avatars slide in. The
+//! code calls the mark's box `CUBE`, from the mark this step was made for.
 //! Reduced motion: all of it at rest.
 
 use gpui::component::input::{Input, InputEvent, InputState};
@@ -19,7 +20,7 @@ use gpui::{
     Entity, FocusHandle, IntoElement, Render, SharedString, Subscription, Task, Window,
 };
 
-use super::{icon, ingot, motion};
+use super::{icon, kodact_mark, motion};
 use crate::avatars;
 use crate::state::AppState;
 use crate::theme::{ActiveTheme, Theme};
@@ -382,8 +383,8 @@ impl Onboarding {
             .into_any_element()
     }
 
-    /// The ingot over its halo and orbit: forging in as the step opens, a
-    /// hot quarter turn when struck, at rest under reduced motion.
+    /// The mark over its halo and orbit: arriving as the step opens, a
+    /// push ahead when struck, at rest under reduced motion.
     fn hero(&self, t: &Theme, cx: &App) -> AnyElement {
         let glow = Glow {
             halo: t.extra.accent,
@@ -395,14 +396,14 @@ impl Onboarding {
         if still(cx) {
             return frame
                 .child(halo(glow, 1.))
-                .child(placed(ingot::mark(CUBE)))
+                .child(placed(kodact_mark::mark(CUBE)))
                 .into_any_element();
         }
         if self.forged && self.strike == 0 {
             return frame
                 .child(halo(glow, 1.))
                 .child(orbit(glow, 1.))
-                .child(placed(ingot::mark(CUBE)))
+                .child(placed(kodact_mark::mark(CUBE)))
                 .into_any_element();
         }
         if self.strike > 0 {
@@ -414,7 +415,7 @@ impl Onboarding {
                     Animation::new(STRIKE),
                     move |d, k| {
                         d.child(flash(glow, (k * 1.4).min(1.)))
-                            .child(placed(ingot::struck(CUBE, k)))
+                            .child(placed(kodact_mark::struck(CUBE, k)))
                     },
                 ))
                 .into_any_element();
@@ -432,7 +433,7 @@ impl Onboarding {
                         .child(orbit(glow, after))
                         .child(radiance(glow, heat))
                         .child(flash(glow, (ms - LOCK_MS + 60.) / 800.))
-                        .child(placed(ingot::forging(CUBE, ms / LAND_MS, heat)))
+                        .child(placed(kodact_mark::landing(CUBE, ms / LAND_MS, heat)))
                 },
             )
             .into_any_element()
@@ -553,7 +554,7 @@ struct Glow {
 }
 
 /// The cube in the hero's box, a little above centre over its halo.
-fn placed(cube: ingot::Ingot) -> impl IntoElement {
+fn placed(cube: kodact_mark::Mark) -> impl IntoElement {
     div()
         .absolute()
         .left(px((HERO - CUBE) / 2.))

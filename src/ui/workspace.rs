@@ -461,7 +461,7 @@ impl Workspace {
                                 .gap(t.space.sm)
                                 .pr(t.space.sm)
                                 .child(toggle)
-                                .child(super::ingot::wordmark(15., &t)),
+                                .child(super::kodact_mark::wordmark(15., &t)),
                         )
                     } else {
                         d.child(toggle)

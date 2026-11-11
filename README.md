@@ -332,11 +332,12 @@ Changes apply the next time they're used; no restart.
     `skills_editor`, `hooks_editor`, `mcp_editor`, `permissions_editor`,
     `sandbox_editor`, `env_editor`, `memory_view`, `plugins_editor`,
     `planned` (Network), `guide`, and `editor_kit`, the pieces they share;
-  - the brand: `ingot` (Forge's mark, the ingot cube, still and turning, and
-    the wordmark FORGE, the cube in the O's place, as the VS Code extension
-    sets it; its faces are SVGs drawn from its geometry and tinted from the
-    theme). The wordmark heads the sidebar always, the project under it.
-- `scripts/make_ico.py`: `assets/forge.ico`, the ingot on an accent tile, each
+  - the brand: `kodact_mark` (KodAct's mark, a step then a chevron, at rest
+    and working, and the wordmark, the mark then KodAct with its Act in the
+    theme's colour; its two strokes are SVGs drawn from its geometry and
+    tinted from the theme). The wordmark heads the sidebar always, the
+    project under it.
+- `scripts/make_ico.py`: `assets/forge.ico`, KodAct's mark on an accent tile, each
   size Windows asks for drawn on its own.
 - `scripts/screenshots.sh`: light and dark screenshots of every screen (see below).
 - `.github/workflows/windows.yml`: fmt, clippy (`-D warnings`) and tests on

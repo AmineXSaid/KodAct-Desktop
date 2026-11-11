@@ -1,7 +1,8 @@
 //! Design tokens for GPUI in the "calmly smooth" system (after the Anchor
-//! style reference): sun-bleached cream surfaces stacked like paper on paper,
-//! one ink, one copper accent rationed to the decisive action, Anthropic Sans
-//! throughout, 4px cards against pill buttons, and shadows thin as grain.
+//! style reference), in KodAct's colours: cool paper surfaces stacked like
+//! paper on paper (ink at night), one ink, one turquoise accent rationed to
+//! the decisive action, Anthropic Sans throughout, 4px cards against pill
+//! buttons, and shadows thin as grain.
 //! Pure UI: colors, type, spacing, radius, elevation, motion + a few styled primitives.
 //! Written against GPUI's current API; field/method names may need small tweaks per GPUI version.
 
@@ -14,13 +15,13 @@ use gpui::{
 
 #[derive(Clone, Copy)]
 pub struct Colors {
-    pub canvas: Hsla,  // page / window background (warm paper)
+    pub canvas: Hsla,  // page / window background (cool paper)
     pub surface: Hsla, // cards, panels, popovers
     #[allow(dead_code)] // in the palette; the sidebar now uses `ExtraColors::pane`
     pub sidebar: Hsla, // app-specific: sidebar sits between canvas and surface
     pub text: Hsla,    // ink 95%
     pub text_strong: Hsla, // ink 100% (headings)
-    pub text_body: Hsla, // graphite – warm body text
+    pub text_body: Hsla, // graphite: body text
     pub text_muted: Hsla, // ink 60%
     pub text_subtle: Hsla, // ink 40% (placeholders, disabled)
     pub border: Hsla,  // hairline, ink 8%
@@ -80,7 +81,7 @@ pub struct Radius {
 /// for now; every face is Anthropic Sans (`fonts.rs`).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Look {
-    /// Warm paper and graphite, one copper for the action.
+    /// Cool paper and ink, one turquoise for the action.
     #[default]
     Calm,
 }
@@ -142,17 +143,18 @@ impl Look {
             link_hover,
             mark_top,
         };
-        // Forge Ember: warm paper and warm graphite, one copper heat for
-        // the action, the current row and state (`.impeccable`, 2026-10-23).
+        // KodAct Signal: the terminal's ink and paper (`#0b0c0e`, white)
+        // and its turquoise (`#5fd8c4`; `#0e7568` on paper), the one colour
+        // for the action, the current state, links and the mark.
         if dark {
             t(
-                0x1b1a19, 0x242322, 0x2e2d2b, 0x1f1e1d, 0xe2895b, 0x1b1a19, 0x3e2b22, 0xeb9d74,
-                0xf3b694, 0xe2895b,
+                0x0b0c0e, 0x131518, 0x1b1e22, 0x0f1113, 0x5fd8c4, 0x0b0c0e, 0x14332f, 0x5fd8c4,
+                0x8ee6d7, 0x5fd8c4,
             )
         } else {
             t(
-                0xebe8e1, 0xf7f5f1, 0xffffff, 0xf1eee8, 0xb4532a, 0xffffff, 0xf5e2d7, 0xa44a24,
-                0x86391a, 0x93401c,
+                0xeceef0, 0xf6f7f8, 0xffffff, 0xf0f2f3, 0x0e7568, 0xffffff, 0xd3efe9, 0x0e7568,
+                0x0a584e, 0x0e7568,
             )
         }
     }
@@ -217,9 +219,9 @@ impl Global for Theme {}
 fn ink(alpha: f32) -> Hsla {
     hsla(0., 0., 0., alpha)
 }
-/// The reference's ink (#2b2a27) at `alpha`: hairlines and washes on paper.
-fn warm_ink(alpha: f32) -> Hsla {
-    hsla(45. / 360., 0.05, 0.16, alpha)
+/// KodAct's ink (#0b0c0e) at `alpha`: hairlines and washes on paper.
+fn cool_ink(alpha: f32) -> Hsla {
+    hsla(220. / 360., 0.12, 0.05, alpha)
 }
 
 impl Theme {
@@ -327,23 +329,24 @@ impl Theme {
         Self::base(
             false,
             Colors {
-                // Forge Ember by day: warm paper, the session a sheet on it.
-                canvas: rgb(0xf7f5f1).into(),
+                // KodAct Signal by day: cool paper, the session a sheet on it.
+                canvas: rgb(0xf6f7f8).into(),
                 surface: rgb(0xffffff).into(),
-                sidebar: rgb(0xebe8e1).into(),
-                // One ink, #1e1e1e, carries the type; Stone for what is secondary.
-                text: rgb(0x1e1e1e).into(),
-                text_strong: rgb(0x1e1e1e).into(),
-                text_body: rgb(0x2b2825).into(),
-                text_muted: rgb(0x5a554f).into(),
-                text_subtle: rgb(0x7d776f).into(),
-                border: hsla(0., 0., 0.118, 0.13),
-                hover: hsla(0., 0., 0.118, 0.05),
-                // Links and selected text: ember copper, the one colour.
-                primary: rgb(0xa44a24).into(),
-                primary_hover: rgb(0x86391a).into(),
+                sidebar: rgb(0xeceef0).into(),
+                // One ink, KodAct's #0b0c0e, carries the type; the
+                // terminal's greys for what is secondary.
+                text: rgb(0x16181b).into(),
+                text_strong: rgb(0x0b0c0e).into(),
+                text_body: rgb(0x24272b).into(),
+                text_muted: rgb(0x55595e).into(),
+                text_subtle: rgb(0x73777d).into(),
+                border: cool_ink(0.13),
+                hover: cool_ink(0.05),
+                // Links and selected text: turquoise, the one colour.
+                primary: rgb(0x0e7568).into(),
+                primary_hover: rgb(0x0a584e).into(),
                 primary_fg: rgb(0xffffff).into(),
-                primary_tint: hsla(18. / 360., 0.64, 0.39, 0.12),
+                primary_tint: Hsla::from(rgb(0x0e7568)).opacity(0.12),
                 marigold: rgb(0xffb110).into(),
                 coral: rgb(0xc84b55).into(),
                 sky: rgb(0x62aef0).into(),
@@ -353,25 +356,25 @@ impl Theme {
         )
     }
 
-    /// The same room at night: warm graphite, the ember lifted to read on it.
+    /// The same room at night: ink, the turquoise lifted to read on it.
     pub fn dark() -> Self {
         Self::base(
             true,
             Colors {
-                canvas: rgb(0x242322).into(),
-                surface: rgb(0x2e2d2b).into(),
-                sidebar: rgb(0x1b1a19).into(),
-                text: rgb(0xf0e9e5).into(),
-                text_strong: rgb(0xf5f2f0).into(),
-                text_body: rgb(0xd9d1cb).into(),
-                text_muted: rgb(0xa8a29b).into(),
-                text_subtle: rgb(0x857f77).into(),
-                border: hsla(22. / 360., 0.37, 0.92, 0.12),
-                hover: hsla(22. / 360., 0.37, 0.92, 0.06),
-                primary: rgb(0xeb9d74).into(),
-                primary_hover: rgb(0xf3b694).into(),
-                primary_fg: rgb(0x1b1a19).into(),
-                primary_tint: hsla(20. / 360., 0.74, 0.69, 0.16),
+                canvas: rgb(0x131518).into(),
+                surface: rgb(0x1b1e22).into(),
+                sidebar: rgb(0x0b0c0e).into(),
+                text: rgb(0xe9ebed).into(),
+                text_strong: rgb(0xf4f5f6).into(),
+                text_body: rgb(0xd3d6da).into(),
+                text_muted: rgb(0xa9adb2).into(),
+                text_subtle: rgb(0x7f848b).into(),
+                border: hsla(215. / 360., 0.2, 0.92, 0.12),
+                hover: hsla(215. / 360., 0.2, 0.92, 0.06),
+                primary: rgb(0x5fd8c4).into(),
+                primary_hover: rgb(0x8ee6d7).into(),
+                primary_fg: rgb(0x0b0c0e).into(),
+                primary_tint: Hsla::from(rgb(0x5fd8c4)).opacity(0.16),
                 marigold: rgb(0xffb110).into(),
                 coral: rgb(0xd8646d).into(),
                 sky: rgb(0x62aef0).into(),
@@ -458,27 +461,22 @@ pub struct ExtraColors {
     pub fill_hover: Hsla,
     pub fill_danger: Hsla, // a destructive confirm ("Allow bypass")
     pub fill_fg: Hsla,     // text and icons on `fill` (ink in light, paper in dark)
-    // The accent: patina teal (forged copper as it weathers), one colour in
-    // both modes (`#216d70`), kept for the few places
-    // it earns: the send button, the mark's core.
+    // The accent: KodAct's turquoise (`#0e7568` on paper, `#5fd8c4` on
+    // ink), kept for the few places it earns: the send button, the mark.
     pub accent: Hsla,
     pub accent_soft: Hsla, // the send button with nothing to send; a soft wash
     pub accent_fg: Hsla,
-    // Forge's mark, the ingot (`ui/ingot.rs`): its top in the accent, its
-    // left side ink (paper in dark), its right a grey a clear step from
-    // both, so the three faces part by lightness and not by hue alone.
+    // KodAct's mark (`ui/kodact_mark.rs`): both strokes, in the accent's hue.
     pub mark_top: Hsla,
-    pub mark_left: Hsla,
-    pub mark_right: Hsla,
     // Marks drawn on a design page (`ui/design_marks.rs`): the page is
     // usually light whatever the app's mode, so the ink is the look's
     // light-mode link in both modes, over a thin halo for dark pages.
     pub page_ink: Hsla,
     pub page_halo: Hsla,
-    // The ingot fresh from the forge (onboarding, a strike), as hot metal
-    // cools: white hot, then the orange glow, then a dull ember red, then
-    // dark iron, before each face settles to its own colour. Never a resting colour; the same
-    // in both modes, as heat looks the same in any light.
+    // The mark as it arrives (onboarding, the opener, a push), a signal
+    // settling: near white, then bright turquoise, then a deep one, then
+    // near dark, before the mark takes its own colour. Never a resting
+    // colour; the same in both modes.
     pub mark_heat_white: Hsla,
     pub mark_heat: Hsla,
     pub mark_heat_ember: Hsla,
@@ -497,8 +495,8 @@ pub struct ExtraColors {
     // Memory and rules: the reference's ochre.
     pub memory: Hsla,
     pub memory_tint: Hsla,
-    // Inline code in prose (a file, a command): Forge's coral on a faint
-    // wash, a rounded chip (`ui/markdown.rs`).
+    // Inline code in prose (a file, a command): the terminal's peach on a
+    // faint wash, a rounded chip (`ui/markdown.rs`).
     pub code_inline_fg: Hsla,
     pub code_inline_bg: Hsla,
     // Permission modes, as Forge for VS Code tints them (forge-tokens.css).
@@ -538,43 +536,41 @@ impl ExtraColors {
                 diff_add: hsla(135. / 360., 0.27, 0.65, 0.12),
                 diff_del: hsla(12. / 360., 0.73, 0.68, 0.12),
                 scrim: ink(0.55),
-                selected: rgb(0x242322).into(),
-                // The cream stack at night: the canvas under the title bar
-                // and the sidebar, the session a step up, cards above it.
-                chrome: rgb(0x1b1a19).into(),
-                pane: rgb(0x1b1a19).into(),
-                stage: rgb(0x242322).into(),
-                // The filled action is cream on umber, as ink on cream in light.
-                fill: rgb(0xf0e9e5).into(),
-                fill_hover: rgb(0xf5f2f0).into(),
+                selected: rgb(0x131518).into(),
+                // The paper stack at night: ink under the title bar and
+                // the sidebar, the session a step up, cards above it.
+                chrome: rgb(0x0b0c0e).into(),
+                pane: rgb(0x0b0c0e).into(),
+                stage: rgb(0x131518).into(),
+                // The filled action is paper on ink, as ink on paper in light.
+                fill: rgb(0xe9ebed).into(),
+                fill_hover: rgb(0xf4f5f6).into(),
                 // Brick, lifted for the night, under the dark label.
                 fill_danger: rgb(0xe98a72).into(),
-                fill_fg: rgb(0x171513).into(),
-                accent: rgb(0xe2895b).into(),
-                accent_soft: rgb(0x3e2b22).into(),
-                accent_fg: rgb(0x1b1a19).into(),
-                mark_top: rgb(0xe2895b).into(),
-                page_ink: rgb(0xa44a24).into(),
+                fill_fg: rgb(0x0b0c0e).into(),
+                accent: rgb(0x5fd8c4).into(),
+                accent_soft: rgb(0x14332f).into(),
+                accent_fg: rgb(0x0b0c0e).into(),
+                mark_top: rgb(0x5fd8c4).into(),
+                page_ink: rgb(0x0e7568).into(),
                 page_halo: rgb(0xffffff).into(),
-                mark_left: rgb(0xf0e9e5).into(),
-                mark_right: rgb(0x7d776f).into(),
-                mark_heat_white: rgb(0xfff2cc).into(),
-                mark_heat: rgb(0xf5892c).into(),
-                mark_heat_ember: rgb(0xa3311c).into(),
-                mark_heat_iron: rgb(0x3b3633).into(),
-                border_strong: rgb(0x4a4540).into(),
-                sunk: rgb(0x1f1e1d).into(),
-                toggle_on: rgb(0xeb9d74).into(),
-                live: rgb(0xeb9d74).into(),
+                mark_heat_white: rgb(0xf2fffc).into(),
+                mark_heat: rgb(0x7df0dc).into(),
+                mark_heat_ember: rgb(0x1f8f80).into(),
+                mark_heat_iron: rgb(0x16302d).into(),
+                border_strong: rgb(0x3a3f46).into(),
+                sunk: rgb(0x0f1113).into(),
+                toggle_on: rgb(0x5fd8c4).into(),
+                live: rgb(0x5fd8c4).into(),
                 agent: None,
                 memory: rgb(0xe5c77a).into(),
                 memory_tint: rgb(0x3a3220).into(),
-                code_inline_fg: rgb(0xef968b).into(),
-                code_inline_bg: Hsla::from(rgb(0xf0e6dc)).opacity(0.09),
+                code_inline_fg: rgb(0xffb98f).into(),
+                code_inline_bg: Hsla::from(rgb(0xe9ebed)).opacity(0.09),
                 mode_edit: rgb(0x2da160).into(),
                 mode_plan: rgb(0x428fdc).into(),
                 mode_bypass: rgb(0xec5941).into(),
-                skill: rgb(0xc3a3ec).into(),
+                skill: rgb(0xb4a2ff).into(),
                 ping_fast_bg: hsla(148. / 360., 0.78, 0.29, 0.22),
                 ping_fast_fg: rgb(0x91d4a8).into(),
                 ping_fair_bg: hsla(30. / 360., 0.04, 0.92, 0.1),
@@ -602,7 +598,7 @@ impl ExtraColors {
             }
         } else {
             Self {
-                inset: warm_ink(0.03),
+                inset: cool_ink(0.03),
                 success: rgb(0x3f6b4b).into(),
                 success_tint: rgb(0xe3ebe3).into(),
                 danger: rgb(0xa3402c).into(),
@@ -611,44 +607,42 @@ impl ExtraColors {
                 warning_tint: hsla(40. / 360., 1., 0.53, 0.2),
                 diff_add: hsla(137. / 360., 0.26, 0.33, 0.10),
                 diff_del: hsla(10. / 360., 0.57, 0.41, 0.09),
-                scrim: hsla(25. / 360., 0.2, 0.08, 0.38), // the dialog stands clear of the chat
-                selected: rgb(0xf7f5f1).into(),
-                // Cream Canvas under the title bar and the sidebar, Warm
-                // White for the session, white for the cards on it.
-                chrome: rgb(0xebe8e1).into(),
-                pane: rgb(0xebe8e1).into(),
-                stage: rgb(0xf7f5f1).into(),
+                scrim: hsla(220. / 360., 0.2, 0.08, 0.38), // the dialog stands clear of the chat
+                selected: rgb(0xf6f7f8).into(),
+                // Cool paper under the title bar and the sidebar, a
+                // lighter sheet for the session, white for the cards on it.
+                chrome: rgb(0xeceef0).into(),
+                pane: rgb(0xeceef0).into(),
+                stage: rgb(0xf6f7f8).into(),
                 // The filled action is the ink pill: quiet, never the accent.
-                fill: rgb(0x1e1e1e).into(),
-                fill_hover: rgb(0x34322f).into(),
+                fill: rgb(0x0b0c0e).into(),
+                fill_hover: rgb(0x24272b).into(),
                 fill_danger: rgb(0xa3402c).into(),
-                fill_fg: rgb(0xf0e9e5).into(),
-                // Dusty blue, where the reference has terracotta: the one colour.
-                accent: rgb(0xb4532a).into(),
-                accent_soft: rgb(0xf5e2d7).into(),
+                fill_fg: rgb(0xf4f5f6).into(),
+                // Turquoise, deepened to read on paper: the one colour.
+                accent: rgb(0x0e7568).into(),
+                accent_soft: rgb(0xd3efe9).into(),
                 accent_fg: rgb(0xffffff).into(),
-                mark_top: rgb(0x93401c).into(),
-                page_ink: rgb(0xa44a24).into(),
+                mark_top: rgb(0x0e7568).into(),
+                page_ink: rgb(0x0e7568).into(),
                 page_halo: rgb(0xffffff).into(),
-                mark_left: rgb(0x1e1e1e).into(),
-                mark_right: rgb(0x8b857e).into(),
-                mark_heat_white: rgb(0xfff2cc).into(),
-                mark_heat: rgb(0xf5892c).into(),
-                mark_heat_ember: rgb(0xa3311c).into(),
-                mark_heat_iron: rgb(0x3b3633).into(),
-                border_strong: rgb(0xc9c9c7).into(),
-                sunk: rgb(0xf1eee8).into(),
-                toggle_on: rgb(0xa44a24).into(),
-                live: rgb(0xa44a24).into(),
+                mark_heat_white: rgb(0xf2fffc).into(),
+                mark_heat: rgb(0x7df0dc).into(),
+                mark_heat_ember: rgb(0x1f8f80).into(),
+                mark_heat_iron: rgb(0x16302d).into(),
+                border_strong: rgb(0xc5c8cc).into(),
+                sunk: rgb(0xf0f2f3).into(),
+                toggle_on: rgb(0x0e7568).into(),
+                live: rgb(0x0e7568).into(),
                 agent: None,
                 memory: rgb(0x75591a).into(),
                 memory_tint: rgb(0xf6ecd2).into(),
-                code_inline_fg: rgb(0xa13430).into(),
-                code_inline_bg: Hsla::from(rgb(0x2b2622)).opacity(0.065),
+                code_inline_fg: rgb(0xa4461c).into(),
+                code_inline_bg: Hsla::from(rgb(0x0b0c0e)).opacity(0.065),
                 mode_edit: rgb(0x108548).into(),
                 mode_plan: rgb(0x1f75cb).into(),
                 mode_bypass: rgb(0xa32c12).into(),
-                skill: rgb(0x7a3fb0).into(),
+                skill: rgb(0x5a44c0).into(),
                 ping_fast_bg: rgb(0xc3e6cd).into(),
                 ping_fast_fg: rgb(0x306440).into(),
                 ping_fair_bg: rgb(0xdcdbd9).into(),
@@ -704,7 +698,7 @@ impl TerminalColors {
     fn for_mode(is_dark: bool) -> Self {
         if is_dark {
             Self {
-                background: rgb(0x18171d).into(),
+                background: rgb(0x0b0c0e).into(),
                 foreground: rgb(0xdcdbd9).into(),
                 muted: rgb(0x8a8888).into(),
                 divider: hsla(30. / 360., 0.04, 0.92, 0.1),
@@ -724,7 +718,7 @@ impl TerminalColors {
             }
         } else {
             Self {
-                background: rgb(0xecebea).into(),
+                background: rgb(0xeceef0).into(),
                 foreground: rgb(0x28272d).into(),
                 muted: rgb(0x747273).into(),
                 divider: hsla(250. / 360., 0.07, 0.16, 0.12),
@@ -987,7 +981,7 @@ impl ActiveTheme for App {
 
 // ---------- Primitives (styled Divs you compose into components) ----------
 
-/// Root window container: warm canvas, sans font, default UI text.
+/// Root window container: canvas, sans font, default UI text.
 pub fn app_root(t: &Theme) -> Div {
     div()
         .size_full()

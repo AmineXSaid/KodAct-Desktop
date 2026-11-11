@@ -23,7 +23,7 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
 }
 
 fn main() {
-    // On Windows, the Forge cube becomes the .exe's icon (resource 1, which
+    // On Windows, KodAct's mark becomes the .exe's icon (resource 1, which
     // the window and the taskbar load too): `assets/forge.rc`. A build
     // without a resource compiler fails here, rather than ship a blank icon.
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {

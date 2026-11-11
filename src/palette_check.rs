@@ -3,7 +3,7 @@
 //!
 //! - The window's surfaces (title bar, sidebar, session, cards) step evenly
 //!   in perceived lightness (OKLab L), darkest at the top of the window in
-//!   light and dark alike, and stay near-neutral warm paper.
+//!   light and dark alike, and stay near-neutral: paper and ink.
 //! - Text that carries meaning reads at WCAG AA (4.5:1) on every surface it
 //!   sits on, hover washes included; icons and hairlines reach their own
 //!   floors. `text_subtle` is for placeholders and disabled text only.
@@ -101,7 +101,7 @@ fn grounds(t: &Theme) -> Vec<(String, Hsla)> {
 }
 
 #[test]
-fn surfaces_stack_like_paper_on_the_cream() {
+fn surfaces_stack_like_paper_on_paper() {
     for (mode, t) in both() {
         // The title bar and the sidebar share the canvas; the session is
         // a sheet a step up from it, and cards a step up again.
@@ -114,11 +114,11 @@ fn surfaces_stack_like_paper_on_the_cream() {
                 "{mode}: step {i} is {s:.4}, too close to tell apart"
             );
         }
-        // Warm, never coloured: cream, not tan.
+        // Neutral, never coloured: paper and ink.
         for (i, (_, chroma)) in ladder.iter().enumerate() {
             assert!(
                 *chroma <= 0.03,
-                "{mode}: surface {i} has chroma {chroma:.4}; cream, not colour"
+                "{mode}: surface {i} has chroma {chroma:.4}; paper, not colour"
             );
         }
         // The selected row lifts off the sidebar as the session does.
@@ -136,7 +136,7 @@ fn surfaces_stack_like_paper_on_the_cream() {
 }
 
 /// One colour per theme: the accent, the links, the switches and the
-/// mark's top are one hue (Ink has none); the system's own theme is ember copper.
+/// mark are one hue; the system's own theme is KodAct's turquoise.
 #[test]
 fn each_theme_has_one_colour() {
     let hue = |c: Hsla| {
@@ -171,7 +171,7 @@ fn each_theme_has_one_colour() {
             for (name, c) in [
                 ("link", t.colors.primary),
                 ("switch", x.toggle_on),
-                ("mark top", x.mark_top),
+                ("mark", x.mark_top),
             ] {
                 let d = (hue(c) - hue(x.accent) + 540.) % 360. - 180.;
                 assert!(
@@ -194,7 +194,7 @@ fn each_theme_has_one_colour() {
         );
     }
     let calm = Theme::light();
-    assert_eq!(rgba(calm.extra.accent), rgba(gpui::rgb(0xb4532a).into()));
+    assert_eq!(rgba(calm.extra.accent), rgba(gpui::rgb(0x0e7568).into()));
 }
 
 #[test]
@@ -339,31 +339,23 @@ fn terminal_colours_read_on_the_dock() {
 }
 
 #[test]
-fn the_mark_reads_on_every_surface_and_its_faces_read_apart() {
+fn the_mark_reads_on_every_surface() {
     for (mode, t) in both() {
-        let x = &t.extra;
-        // The ingot's silhouette: its top and its nearer-to-ground side
-        // hold a UI part's 3:1 on each surface it sits on.
+        // Both strokes are one colour: a UI part's 3:1 on each surface the
+        // mark sits on.
         for (ground, g) in grounds(&t) {
-            let top = contrast(x.mark_top, g);
-            assert!(
-                top >= AA_UI,
-                "{mode}: the mark's top is {top:.2}:1 on {ground}"
-            );
-            let side = contrast(x.mark_left, g).max(contrast(x.mark_right, g));
-            assert!(
-                side >= AA_UI,
-                "{mode}: the mark's sides are {side:.2}:1 on {ground}"
-            );
+            let c = contrast(t.extra.mark_top, g);
+            assert!(c >= AA_UI, "{mode}: the mark is {c:.2}:1 on {ground}");
         }
-        // Its two sides, and the top against each, read as separate faces.
-        for (name, a, b) in [
-            ("left and right", x.mark_left, x.mark_right),
-            ("top and left", x.mark_top, x.mark_left),
-            ("top and right", x.mark_top, x.mark_right),
+        // As it arrives the mark runs from near dark to near white; the
+        // bright signal and the white read on the dark the opener plays on.
+        let dark = Theme::dark().extra.chrome;
+        for (name, c) in [
+            ("bright", t.extra.mark_heat),
+            ("white", t.extra.mark_heat_white),
         ] {
-            let c = contrast(a, b);
-            assert!(c >= 1.5, "{mode}: the mark's {name} faces are {c:.2}:1");
+            let r = contrast(c, dark);
+            assert!(r >= AA_UI, "{mode}: the mark's {name} is {r:.2}:1");
         }
     }
 }

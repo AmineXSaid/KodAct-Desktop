@@ -55,8 +55,8 @@ instructions, knowledge and memory.
 ## Brand Commitments
 
 - Quality reference: Claude Desktop's calm and restraint, with Forge's own
-  identity (its mark, palette and themes), not a copy of Claude.
-- Nothing in the current visual identity is binding: the ingot mark, the
+  identity (KodAct's mark, its ink, paper and turquoise), not a copy of Claude.
+- Nothing in the current visual identity is binding: the KodAct mark, the
   wordmark, the theme set and the home screen's dots may all change when it
   serves the product.
 - Voice: plain words, the product's own terms; controls name their action,

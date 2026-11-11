@@ -1,10 +1,9 @@
 """Build assets/forge.ico (the Windows icon: taskbar, title bar, installer).
 
-Forge's app icon: the ingot (src/ui/ingot.rs) reversed onto a tile of the
-accent, so it reads on a light or a dark taskbar alike. The cube is the same
-isometric drawing as the in-app mark: its top in paper, like metal at heat,
-its left face the accent's shadow and its right the accent lit, the faces a
-hair apart so the tile shows between them.
+The app icon: KodAct's mark (src/ui/kodact_mark.rs) in paper on a tile of the
+accent, the turquoise as it is set on paper, so it reads on a light or a dark
+taskbar alike. The mark is the same drawing as the in-app one: a step up from
+the left, then a chevron pointing right, their corners rounded by the join.
 
 Every size Windows asks for is drawn on its own from the geometry (supersampled,
 then reduced), never scaled from another size, so 16 and 24 px stay crisp.
@@ -12,7 +11,6 @@ then reduced), never scaled from another size, so 16 and 24 px stay crisp.
     python3 -I scripts/make_ico.py   # writes assets/forge.ico (+ a preview PNG with --preview)
 """
 
-import math
 import pathlib
 import sys
 
@@ -25,51 +23,31 @@ OUT = ROOT / "assets/forge.ico"
 SIZES = [16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 128, 256]
 SS = 8  # supersampling
 
-TILE = (0x21, 0x6D, 0x70)  # theme.rs `accent`
-TOP = (0xF9, 0xF8, 0xF5)  # paper
-LEFT = (0x0E, 0x3B, 0x3D)  # the accent in shadow
-RIGHT = (0x8E, 0xCA, 0xCD)  # the accent lit (dark theme's `primary`)
+TILE = (0x0E, 0x75, 0x68)  # theme.rs `accent`, light
+MARK = (0xFF, 0xFF, 0xFF)  # paper
 
-PITCH = math.atan(1 / math.sqrt(2))  # the true isometric view, as ingot.rs
-
-
-def cube_faces(size, fill, gap, cx, cy):
-    """The ingot at rest: (colour, polygon) for left, right and top."""
-    sp, cp = math.sin(PITCH), math.cos(PITCH)
-    scale = size * fill / (math.sqrt(2) * sp + cp)
-    yaw = math.pi / 4
-    s, c = math.sin(yaw), math.cos(yaw)
-
-    def p(x, y, z):
-        xr = x * c + z * s
-        zr = -x * s + z * c
-        return (cx + xr * scale, cy + (-y * cp + zr * sp) * scale)
-
-    left = [p(-0.5, 0.5, -0.5), p(-0.5, 0.5, 0.5), p(-0.5, -0.5, 0.5), p(-0.5, -0.5, -0.5)]
-    right = [p(-0.5, 0.5, 0.5), p(0.5, 0.5, 0.5), p(0.5, -0.5, 0.5), p(-0.5, -0.5, 0.5)]
-    top = [p(-0.5, 0.5, -0.5), p(0.5, 0.5, -0.5), p(0.5, 0.5, 0.5), p(-0.5, 0.5, 0.5)]
-    return [(LEFT, inset(left, gap)), (RIGHT, inset(right, gap)), (TOP, inset(top, gap))]
+# The mark, as kodact_mark.rs: its box, its two strokes, the join's width.
+VIEW = (505.7, 302.0)
+STEP = [(4, 242), (177.17, 100), (241, 100), (295.88, 145), (244, 145), (125.7, 242)]
+CHEVRON = [
+    (316, 4),
+    (497.71, 153),
+    (320.88, 298),
+    (171, 298),
+    (307.59, 186),
+    (347, 186),
+    (378.71, 160),
+    (277.49, 77),
+    (226.98, 77),
+]
+JOIN = 8.0
 
 
-def inset(poly, d):
-    """A convex polygon with each edge moved `d` inward (as ingot.rs)."""
-    n = len(poly)
-    area = sum(poly[i][0] * poly[(i + 1) % n][1] - poly[(i + 1) % n][0] * poly[i][1] for i in range(n)) / 2
-    sign = 1 if area > 0 else -1
-    lines = []
-    for i in range(n):
-        a, b = poly[i], poly[(i + 1) % n]
-        ex, ey = b[0] - a[0], b[1] - a[1]
-        ln = math.hypot(ex, ey)
-        nx, ny = -ey / ln * sign, ex / ln * sign
-        lines.append(((a[0] + nx * d, a[1] + ny * d), (ex, ey)))
-    out = []
-    for i in range(n):
-        (p, r), (q, s) = lines[i - 1], lines[i]
-        cross = r[0] * s[1] - r[1] * s[0]
-        t = ((q[0] - p[0]) * s[1] - (q[1] - p[1]) * s[0]) / cross
-        out.append((p[0] + r[0] * t, p[1] + r[1] * t))
-    return out
+def strokes(size, fill):
+    """The mark centred in a `size` box, `fill` of it wide: (polygons, join width)."""
+    s = size * fill / VIEW[0]
+    ox, oy = (size - VIEW[0] * s) / 2, (size - VIEW[1] * s) / 2
+    return [[(ox + x * s, oy + y * s) for x, y in poly] for poly in (STEP, CHEVRON)], JOIN * s
 
 
 def icon(n):
@@ -84,11 +62,11 @@ def icon(n):
         radius=round((big - 2 * margin) * 0.22),
         fill=TILE + (255,),
     )
-    # The cube fills more of a small tile, so it still reads at 16 px.
-    fill = 0.72 if n <= 24 else 0.64
-    gap = max(big / 64, SS * 0.5) if n <= 32 else big / 64
-    for colour, poly in cube_faces(big, fill, gap, big / 2, big / 2):
-        d.polygon(poly, fill=colour + (255,))
+    # The mark fills more of a small tile, so it still reads at 16 px.
+    polys, join = strokes(big, 0.8 if n <= 24 else 0.68)
+    for poly in polys:
+        d.polygon(poly, fill=MARK + (255,))
+        d.line(poly + poly[:2], fill=MARK + (255,), width=max(round(join), 1), joint="curve")
     return img.resize((n, n), Image.LANCZOS)
 
 

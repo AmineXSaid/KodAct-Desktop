@@ -40,11 +40,10 @@ pub mod file_icon_map;
 pub mod file_mark;
 pub mod files_pane;
 pub mod find_bar;
-mod forge_cube;
 pub mod goal_bar;
 pub mod guide;
 pub mod hooks_editor;
-pub mod ingot;
+pub mod kodact_mark;
 mod lens;
 pub mod markdown;
 pub mod marketplaces;
@@ -230,27 +229,26 @@ pub fn icon(path: &'static str, size: Pixels, color: Hsla) -> Svg {
     svg().path(path).size(size).flex_none().text_color(color)
 }
 
-/// The Forge logo, the ingot (`ingot.rs`), `size` px square.
-pub fn logo(size: f32) -> ingot::Ingot {
-    ingot::mark(size)
+/// KodAct's mark (`kodact_mark.rs`), `size` px square.
+pub fn logo(size: f32) -> kodact_mark::Mark {
+    kodact_mark::mark(size)
 }
 
-/// The Forge logo turning while Forge works, a quarter turn at a time.
-/// Reduced motion: the logo at rest.
+/// The mark while KodAct works: the step lights, then the chevron.
+/// Reduced motion: the mark at rest.
 pub fn turning_logo(size: f32, id: impl Into<gpui::ElementId>) -> gpui::AnyElement {
-    ingot::turning(size, id)
+    kodact_mark::working(size, id, None)
 }
 
-/// The Forge logo turning, painted in `color` (lit from above): the mark of
-/// work in progress in the conversation, in the theme's live colour.
+/// The working mark painted in `color`: the mark of work in progress in
+/// the conversation, in the theme's live colour.
 pub fn turning_logo_in(
     size: f32,
     id: impl Into<gpui::ElementId>,
     color: gpui::Hsla,
 ) -> gpui::AnyElement {
-    // Forge for VS Code's working cube: stock struck true, a quarter turn a
-    // beat, drawn a little larger than an icon so its voxels read.
-    forge_cube::working(size * 1.25, id, color)
+    // Drawn a little larger than an icon so its two strokes read.
+    kodact_mark::working(size * 1.25, id, Some(color))
 }
 
 /// Your avatar, drawn `size` px square at this screen's density.
