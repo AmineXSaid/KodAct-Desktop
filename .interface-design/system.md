@@ -8,7 +8,7 @@
 
 **Personality:** calmly smooth: a warm editorial workspace, confident and unhurried, closer to a printed quarterly than a dashboard (after the Anchor style reference).
 
-**Foundation:** KodAct Signal, the terminal's ink, paper and turquoise. Cool paper by day: the window and sidebar #eceef0, the session a sheet of #f6f7f8 on it, cards white on that. Ink at night: #0b0c0e, #131518, cards #1b1e22. One ink carries the type. One colour, turquoise (#0e7568; #5fd8c4 at night): the decisive action, links, a switch that is on, the mark, a waiting dot. Inline code in peach on a faint wash. Everything else is neutral; colour otherwise only for meaning (modes, status).
+**Foundation:** KodAct Signal. Warm paper by day: the window and sidebar #efedea, the session a sheet of #f8f7f5 on it, cards white on that. Warm ink at night: #0e0d0c, #171615, cards #201f1d. One ink carries the type and the buttons. Two colours with separate jobs: turquoise (#0e7568; #5fd8c4 at night) for the mark, Send, the one decisive action and a waiting dot; peach (#a4461c; #ffb98f at night) for links, focus, selection and a switch that is on. Work in progress and inline code are ink. Everything else is neutral; colour otherwise only for meaning (modes, status).
 
 **Depth:** nearly flat. Hairlines inside cards; the session and the user's message lift on paper grain (three 1px shadows at 6/4/1% ink); popovers and the permission card a touch more.
 
@@ -76,18 +76,18 @@ The cream stack: the title bar and the sidebar share the canvas, the session ste
 
 | Token | Light | L | Dark | L | Role |
 |---|---|---|---|---|---|
-| `chrome` | `#eceef0` | 0.948 | `#0b0c0e` | 0.154 | the title bar |
-| `pane` | `#eceef0` | 0.948 | `#0b0c0e` | 0.154 | the sidebar |
-| `stage` | `#f6f7f8` | 0.976 | `#131518` | 0.195 | the session: chat, welcome, Rules, Projects |
-| `surface` | `#ffffff` | 1.000 | `#1b1e22` | 0.234 | cards, the composer, popovers |
-| `selected` | `#f6f7f8` | 0.976 | `#131518` | 0.195 | the selected sidebar row |
+| `chrome` | `#efedea` | 0.947 | `#0e0d0c` | 0.160 | the title bar |
+| `pane` | `#efedea` | 0.947 | `#0e0d0c` | 0.160 | the sidebar |
+| `stage` | `#f8f7f5` | 0.976 | `#171615` | 0.201 | the session: chat, welcome, Rules, Projects |
+| `surface` | `#ffffff` | 1.000 | `#201f1d` | 0.240 | cards, the composer, popovers |
+| `selected` | `#f8f7f5` | 0.976 | `#171615` | 0.201 | the selected sidebar row |
 
 ### Theme
 One look, Calmly smooth, in light and dark (`window.json` keeps the mode). Every face is Anthropic Sans: Text for every word (interface, replies, code, the terminal, diagrams), Display for the large lines (`fonts.rs`). It passes `palette_check.rs` in both modes.
 
 | | Light | Dark |
 |---|---|---|
-| Canvas / session / accent | `#eceef0` / `#f6f7f8` / `#0e7568` | `#0b0c0e` / `#131518` / `#5fd8c4` |
+| Canvas / session / accent | `#efedea` / `#f8f7f5` / `#0e7568` | `#0e0d0c` / `#171615` / `#5fd8c4` |
 
 Faces (UI / display / code / replies): Anthropic Sans Text / Anthropic Sans Display / Anthropic Sans Text / Anthropic Sans Text. Corners button · card · field · composer · pressed: 4 · 4 · 4 · 4 · pill. Row · title bar · chat: 30 · 36 · 14.
 
@@ -118,29 +118,29 @@ Contrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of w
 
 | Token | Light | Contrast | Dark | Contrast | Role |
 |---|---|---|---|---|---|
-| `text_strong` | `#0b0c0e` | 18.2:1 | `#f4f5f6` | 16.8:1 | headings, names |
-| `text` | `#16181b` | 16.6:1 | `#e9ebed` | 15.3:1 | body text |
-| `text_body` | `#24272b` | 14.0:1 | `#d3d6da` | 12.5:1 | secondary prose |
-| `text_muted` | `#55595e` | 6.6:1 | `#a9adb2` | 8.1:1 | labels, captions, icons |
-| `text_subtle` | `#73777d` | 4.2:1 | `#7f848b` | 4.9:1 | placeholders and disabled only |
-| `border` | `#0b0c0e @ 13.0%` | 1.3:1 | `#e7eaef @ 12.0%` | 1.4:1 | hairlines |
-| `border_strong` | `#c5c8cc` | 1.7:1 | `#3a3f46` | 1.6:1 | outlined buttons, a switch at rest |
-| `primary` | `#0e7568` | 5.6:1 | `#5fd8c4` | 9.6:1 | links, selected text, the focus edge |
-| `accent` | `#0e7568` | 5.6:1 | `#5fd8c4` | 11.3:1 | send, the new-chat mark, accent dots (white icon on it) |
-| `fill` | `#0b0c0e` | 17.9:1 | `#e9ebed` | 16.4:1 | filled buttons: ink on paper, paper on charcoal |
-| `toggle_on` | `#0e7568` | 5.6:1 | `#5fd8c4` | 9.6:1 | a switch that is on |
-| `mark_top` | `#0e7568` | 5.2:1 | `#5fd8c4` | 10.5:1 | KodAct's mark, both strokes (`ui/kodact_mark.rs`) |
+| `text_strong` | `#0e0d0c` | 18.1:1 | `#f6f4f1` | 16.5:1 | headings, names |
+| `text` | `#1a1816` | 16.5:1 | `#edeae6` | 15.1:1 | body text |
+| `text_body` | `#2a2724` | 13.9:1 | `#d8d4ce` | 12.2:1 | secondary prose |
+| `text_muted` | `#5c5853` | 6.6:1 | `#aeaaa4` | 7.8:1 | labels, captions, icons |
+| `text_subtle` | `#7a756f` | 4.3:1 | `#86817a` | 4.7:1 | placeholders and disabled only |
+| `border` | `#0e0d0c @ 13.0%` | 1.3:1 | `#eeebe8 @ 12.0%` | 1.4:1 | hairlines |
+| `border_strong` | `#cbc8c3` | 1.7:1 | `#45423e` | 1.6:1 | outlined buttons, a switch at rest |
+| `primary` | `#a4461c` | 6.0:1 | `#ffb98f` | 9.9:1 | links, selected text, the focus edge |
+| `accent` | `#0e7568` | 5.6:1 | `#5fd8c4` | 11.2:1 | send, the new-chat mark, accent dots (white icon on it) |
+| `fill` | `#0e0d0c` | 17.7:1 | `#edeae6` | 16.2:1 | filled buttons: ink on paper, paper on charcoal |
+| `toggle_on` | `#a4461c` | 6.0:1 | `#ffb98f` | 9.9:1 | a switch that is on |
+| `mark_top` | `#0e7568` | 5.2:1 | `#5fd8c4` | 10.4:1 | KodAct's mark, both strokes (`ui/kodact_mark.rs`) |
 | `page_ink` | `#0e7568` | 5.6:1 | `#0e7568` | 5.6:1 | marks drawn on a design page, on their halo (`ui/design_marks.rs`) |
-| `mark_heat_white` | `#f2fffc` | 1.0:1 | `#f2fffc` | 17.8:1 | the mark at its brightest as it arrives (onboarding); never at rest |
-| `mark_heat` | `#7df0dc` | 1.3:1 | `#7df0dc` | 13.4:1 | the mark's bright signal as it settles, and a push's flare |
+| `mark_heat_white` | `#f2fffc` | 1.0:1 | `#f2fffc` | 17.6:1 | the mark at its brightest as it arrives (onboarding); never at rest |
+| `mark_heat` | `#7df0dc` | 1.3:1 | `#7df0dc` | 13.2:1 | the mark's bright signal as it settles, and a push's flare |
 | `mark_heat_ember` | `#1f8f80` | 3.7:1 | `#1f8f80` | 4.6:1 | the mark's deep turquoise as it settles |
 | `mark_heat_iron` | `#16302d` | 13.1:1 | `#16302d` | 1.3:1 | the mark near dark, last before its own colour |
-| `fill_danger` | `#a3402c` | 6.3:1 | `#e98a72` | 7.8:1 | destructive confirms |
-| `success` | `#3f6b4b` | 6.1:1 | `#8fbf9b` | 8.0:1 | done, passed |
-| `danger` | `#a3402c` | 6.3:1 | `#e98a72` | 6.6:1 | failed, errors |
-| `warning` | `#8a5600` | 6.2:1 | `#ffc85a` | 10.9:1 | needs you |
+| `fill_danger` | `#a3402c` | 6.3:1 | `#e98a72` | 7.7:1 | destructive confirms |
+| `success` | `#3f6b4b` | 6.1:1 | `#8fbf9b` | 7.9:1 | done, passed |
+| `danger` | `#a3402c` | 6.3:1 | `#e98a72` | 6.5:1 | failed, errors |
+| `warning` | `#8a5600` | 6.2:1 | `#ffc85a` | 10.7:1 | needs you |
 | `memory` | `#75591a` | 5.6:1 | `#e5c77a` | 7.7:1 | memory and rules, on its tint |
-| `skill` | `#5a44c0` | 6.9:1 | `#b4a2ff` | 7.6:1 | a skill named in the composer, bold |
+| `skill` | `#5a44c0` | 6.9:1 | `#b4a2ff` | 7.5:1 | a skill named in the composer, bold |
 | `mode_plan` | `#1f75cb` | 4.7:1 | `#428fdc` | 4.9:1 | Plan mode |
 | `mode_bypass` | `#a32c12` | 7.2:1 | `#ec5941` | 4.8:1 | Bypass permissions |
 
@@ -216,7 +216,7 @@ One family; every control takes keyboard focus (a `primary` edge shows for the k
 | The heat rail | KodAct's signature: a run's opened steps hang on one rail, a node each in the shared status language (ember working, ink done, danger failed or declined, warning stopped); while the run is live the rail glows ember and the working node breathes, then it cools to a hairline (`heat_rail.rs`). | 2026-11-02 |
 | One control per kind of choice | One of a few short options is a segmented control (`editor_kit::choice`); one of several options that each need a line of description is a radio list; chips are for picking several, or one from a long list. Where a setting is kept reads the same everywhere: This project, just me · This project, shared · All my projects. | 2026-11-02 |
 | KodAct Ember | Warm paper and warm graphite, the sidebar a step deeper than the session, and one copper heat for the action, the current state and links: the forge's own colour, as calm as Claude Code's. | 2026-10-23 |
-| KodAct Signal | The app takes KodAct's identity from its terminal: ink and cool paper for the surfaces, the terminal's turquoise as the one colour, and KodAct's mark (a step, then a chevron) in place of the ingot. It replaces KodAct Ember. | 2026-11-10 |
+| KodAct Signal | The app takes KodAct's identity: its mark (a step, then a chevron) in place of the ingot, warm ink and paper, and two colours with separate jobs. Turquoise is rationed to the mark, Send, the one decisive action and a waiting dot; peach, the terminal's warm accent, is for links, focus, selection and switches; buttons and work in progress are ink. It replaces KodAct Ember, and an all-turquoise first pass that put the accent on every control. | 2026-11-11 |
 | A neutral wash for the open row | The accent stays for the action; the open chat and the open screen lift by a grey wash. | 2026-10-23 |
 | Composer at 620px | A comfortable measure for a prompt, the same in a chat and on the welcome page. | 2026-10-11 |
 | Composer on the reading column | In a chat the composer takes the 760px column the reply is read in, so the two line up; on the welcome page it keeps its own measure. | 2026-10-23 |

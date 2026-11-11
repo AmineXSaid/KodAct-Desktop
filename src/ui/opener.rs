@@ -262,7 +262,7 @@ impl Palette {
             paper: dark.colors.text_strong,
             muted: dark.colors.text_muted,
             subtle: dark.colors.text_subtle,
-            teal: dark.colors.primary,
+            teal: x.mark_top,
             mark: x.mark_top,
             ramp: [
                 x.mark_heat_iron,

@@ -135,8 +135,9 @@ fn surfaces_stack_like_paper_on_paper() {
     }
 }
 
-/// One colour per theme: the accent, the links, the switches and the
-/// mark are one hue; the system's own theme is KodAct's turquoise.
+/// Two colours with separate jobs: the accent and the mark share a hue
+/// (KodAct's turquoise); links and switches share another (peach); live
+/// work is ink.
 #[test]
 fn each_theme_has_one_colour() {
     let hue = |c: Hsla| {
@@ -168,17 +169,17 @@ fn each_theme_has_one_colour() {
         let chroma = oklab(rgba(x.accent)).1;
         {
             assert!(chroma > 0.04, "{mode}: the accent has no colour");
-            for (name, c) in [
-                ("link", t.colors.primary),
-                ("switch", x.toggle_on),
-                ("mark", x.mark_top),
-            ] {
-                let d = (hue(c) - hue(x.accent) + 540.) % 360. - 180.;
-                assert!(
-                    d.abs() <= 20.,
-                    "{mode}: the {name} is {d:.0}° off the accent"
-                );
-            }
+            let d = (hue(x.mark_top) - hue(x.accent) + 540.) % 360. - 180.;
+            assert!(d.abs() <= 20., "{mode}: the mark is {d:.0}° off the accent");
+            // The second colour, peach, is the links' and the switches',
+            // one hue, well away from the accent's; work in progress has
+            // no colour of its own.
+            let d = (hue(x.toggle_on) - hue(t.colors.primary) + 540.) % 360. - 180.;
+            assert!(d.abs() <= 20., "{mode}: the switch is {d:.0}° off the link");
+            let d = (hue(t.colors.primary) - hue(x.accent) + 540.) % 360. - 180.;
+            assert!(d.abs() >= 90., "{mode}: the link is {d:.0}° from the accent");
+            let chroma = oklab(rgba(x.live)).1;
+            assert!(chroma <= 0.02, "{mode}: live work has colour ({chroma:.3})");
         }
         // The accent holds a UI part's 3:1 on the session and on a card,
         // and its label reads on it.

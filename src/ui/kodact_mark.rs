@@ -329,7 +329,7 @@ pub fn wordmark(height: f32, t: &Theme) -> AnyElement {
                 .child(mark(mark_box(height))),
         )
         .child(letters("Kod", t.colors.text_strong))
-        .child(letters("Act", t.colors.primary))
+        .child(letters("Act", t.extra.mark_top))
         .into_any_element()
 }
 
