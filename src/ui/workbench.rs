@@ -368,7 +368,7 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
                     item(
                         PanelTab::Agents,
                         "Agents",
-                        "icons/bot.svg",
+                        "icons/boxes.svg",
                         of(v.agents.len() - running, v.agents.len()),
                         running > 0,
                         "2",

@@ -33,6 +33,7 @@ mod fonts;
 mod i18n;
 mod forge_files;
 mod git_status;
+mod github_knowledge;
 mod greeting;
 mod health;
 mod highlight;

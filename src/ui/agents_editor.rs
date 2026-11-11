@@ -41,7 +41,7 @@ impl AgentsEditor {
             name: cx.new(|cx| InputState::new(window, cx).placeholder("reviewer")),
             description: cx.new(|cx| {
                 InputState::new(window, cx)
-                    .placeholder("Reviews a diff for bugs. Use it after a change is made.")
+                    .placeholder("e.g. Reviews a diff for bugs. Use it after a change is made.")
             }),
             model: cx.new(|cx| InputState::new(window, cx).placeholder("Empty: the chat's model")),
             prompt: cx.new(|cx| {
@@ -279,7 +279,7 @@ impl AgentsEditor {
         });
         let (edit, del) = (a.clone(), a.path.clone());
         kit::card(t)
-            .child(icon("icons/bot.svg", t.size.icon, t.colors.text_muted))
+            .child(icon("icons/boxes.svg", t.size.icon, t.colors.text_muted))
             .child(kit::card_text(
                 t,
                 a.name.clone(),

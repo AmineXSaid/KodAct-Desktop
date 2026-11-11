@@ -988,15 +988,6 @@ pub enum TitleMenu {
     Account,
 }
 
-/// Which chats the sidebar lists, as Claude Code's Chat and Code: plain
-/// chats, or chats that work in a folder.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub enum SidebarKind {
-    Chat,
-    #[default]
-    Code,
-}
-
 /// The chat menu's submenus.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ChatSub {
@@ -1257,6 +1248,9 @@ pub enum SettingsTab {
     Mcp,
     Permissions,
     Sandbox,
+    /// Not listed until ForgeCLI reads a proxy and extra certificates
+    /// (`planned::NETWORK`): a page there would change nothing yet.
+    #[allow(dead_code)]
     Network,
     Environments,
     Memory,
@@ -1743,6 +1737,8 @@ pub enum Confirm {
         msg: usize,
         files: Vec<String>,
     },
+    /// Allow Bypass permissions (it runs every tool without asking)?
+    Bypass,
 }
 
 /// A command `/` offers, and the group it is listed under.
@@ -1822,10 +1818,10 @@ pub struct AppState {
     pub session_folded: Vec<&'static str>,
     /// What fills each chat's context, as ForgeCLI last counted it.
     pub context_usage: std::collections::HashMap<usize, crate::context::ContextUsage>,
-    /// The sidebar lists plain chats or chats in a folder.
-    pub sidebar_kind: SidebarKind,
     /// The title bar's project switcher, and the sidebar's chat filter, are open.
     pub switcher_open: bool,
+    /// The composer's project menu (the same list as the switcher, above its chip).
+    pub project_menu: bool,
     pub filter_open: bool,
     /// The current project's name, shown in the title bar.
     pub project: SharedString,
@@ -2303,8 +2299,8 @@ impl AppState {
             session_open: false,
             session_folded: vec![],
             context_usage: Default::default(),
-            sidebar_kind: SidebarKind::default(),
             switcher_open: false,
+            project_menu: false,
             filter_open: false,
             screen: Screen::Chat,
             current: None,
@@ -3217,6 +3213,7 @@ impl AppState {
         self.project_dir = path;
         self.branch = branch;
         self.switcher_open = false;
+        self.project_menu = false;
         if keep {
             self.save_projects(cx);
         }
@@ -3753,6 +3750,63 @@ impl AppState {
         );
     }
 
+    /// Add the picked files and folders of a GitHub repository's `tree` to
+    /// project `id`'s knowledge (`github_knowledge.rs`).
+    pub fn knowledge_github_add(
+        &mut self,
+        id: usize,
+        tree: crate::github_knowledge::Tree,
+        picks: Vec<String>,
+        cx: &mut Context<Self>,
+    ) {
+        let repo = tree.repo.clone();
+        self.knowledge_change(
+            id,
+            move |p| {
+                crate::github_knowledge::add(p, &tree, &picks).map(|n| match n {
+                    1 => format!("Added 1 file from {repo} to the knowledge."),
+                    n => format!("Added {n} files from {repo} to the knowledge."),
+                })
+            },
+            cx,
+        );
+    }
+
+    /// Bring a GitHub repository's files in project `id`'s knowledge up to
+    /// its branch's latest.
+    pub fn knowledge_github_sync(&mut self, id: usize, repo: String, cx: &mut Context<Self>) {
+        self.knowledge_change(
+            id,
+            move |p| {
+                crate::github_knowledge::sync(p, &repo).map(|d| {
+                    if d.unchanged {
+                        format!("{repo} is up to date.")
+                    } else if d.removed > 0 {
+                        format!(
+                            "Synced {repo}: {} files, {} gone upstream taken out.",
+                            d.updated, d.removed
+                        )
+                    } else {
+                        format!("Synced {repo}: {} files.", d.updated)
+                    }
+                })
+            },
+            cx,
+        );
+    }
+
+    /// Take a GitHub repository, and its files, out of project `id`'s knowledge.
+    pub fn knowledge_github_remove(&mut self, id: usize, repo: String, cx: &mut Context<Self>) {
+        self.knowledge_change(
+            id,
+            move |p| {
+                crate::github_knowledge::remove(p, &repo)
+                    .map(|_| format!("Took {repo} out of the knowledge."))
+            },
+            cx,
+        );
+    }
+
     /// Add a note you wrote to project `id`'s knowledge.
     pub fn knowledge_add_text(
         &mut self,
@@ -3972,60 +4026,10 @@ impl AppState {
         }
         self.current = Some(id);
         self.sync_mode();
-        self.follow_kind();
         if let Some(c) = self.chat_mut(id) {
             c.unread = false;
         }
         cx.notify();
-    }
-
-    /// The sidebar shows the kind of chat now open (plain, or in a folder).
-    fn follow_kind(&mut self) {
-        self.sidebar_kind = if self.in_folder() {
-            SidebarKind::Code
-        } else {
-            SidebarKind::Chat
-        };
-    }
-
-    /// Switch the sidebar between plain chats and chats in a folder.
-    pub fn set_sidebar_kind(&mut self, kind: SidebarKind, cx: &mut Context<Self>) {
-        self.sidebar_kind = kind;
-        cx.notify();
-    }
-
-    /// New, as the sidebar's kind says: a plain chat, or a chat in the
-    /// folder you're in (else the one you worked in last; with none, the
-    /// Projects page, to open one).
-    pub fn new_in_kind(&mut self, cx: &mut Context<Self>) {
-        if self.sidebar_kind == SidebarKind::Chat {
-            return self.new_plain_chat(cx);
-        }
-        let folder = if self.in_folder() {
-            Some(self.current_project)
-        } else {
-            self.chats
-                .iter()
-                .filter(|c| self.project(c.project).is_some_and(|p| !p.scratch))
-                .max_by_key(|c| c.updated)
-                .map(|c| c.project)
-                .or_else(|| {
-                    self.projects
-                        .iter()
-                        .find(|p| !p.scratch && p.saved)
-                        .map(|p| p.id)
-                })
-        };
-        match folder {
-            Some(id) => {
-                self.select_project(id, cx);
-                self.new_chat(cx);
-            }
-            None => {
-                self.screen = Screen::Projects;
-                self.show_toast("Open a folder to start a chat that works in it.", cx);
-            }
-        }
     }
 
     /// Plain chats' place.
@@ -4051,7 +4055,6 @@ impl AppState {
     pub fn new_chat(&mut self, cx: &mut Context<Self>) {
         self.screen = Screen::Chat;
         self.current = None;
-        self.follow_kind();
         self.doc = None;
         self.find = None;
         self.greeting_seed = self.greeting_seed.wrapping_add(1);
@@ -6397,7 +6400,7 @@ fix everything under 8, render it again to check, then tell me the scores before
     /// refresh the metrics deck"), in this project, with this chat's design
     /// setup. It waits for its first time.
     pub fn add_routine(&mut self, spec: &str, cx: &mut Context<Self>) {
-        use crate::design::routines::{Every, Routine};
+        use crate::design::routines::Every;
         // The schedule ends at a colon; "at 9:30: …" has one in its time,
         // so the last colon that leaves a schedule before it.
         let found = spec.match_indices(':').rev().find_map(|(i, _)| {
@@ -6412,6 +6415,19 @@ fix everything under 8, render it again to check, then tell me the scores before
         if prompt.is_empty() {
             return self.show_toast("Say what the routine asks for, after the colon.", cx);
         }
+        self.make_routine(when, prompt, cx);
+    }
+
+    /// Make a routine that asks `prompt` on schedule `when`, in this
+    /// project, with this chat's design setup (the Routines form, and
+    /// `/routine` once read). It waits for its first time.
+    pub fn make_routine(
+        &mut self,
+        when: crate::design::routines::Every,
+        prompt: String,
+        cx: &mut Context<Self>,
+    ) {
+        use crate::design::routines::Routine;
         let now = chrono::Local::now().timestamp();
         let project = self
             .project(self.current_project)

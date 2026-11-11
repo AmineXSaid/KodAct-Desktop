@@ -54,7 +54,7 @@ pub fn trigger(
         super::button::selector(t, "design-trigger", open)
             .aria_label("Design chat")
             .text_color(fg)
-            .child(icon("icons/sparkles.svg", t.size.icon_sm, fg))
+            .child(icon("icons/pencil-ruler.svg", t.size.icon_sm, fg))
             .children(label.map(|label| {
                 div()
                     .max_w(px(140.))
@@ -269,52 +269,66 @@ pub fn menu(
         }
     }
 
+    // Ending the design chat sits in the header, so picking something
+    // never grows the menu: it stays put above its chip while you work in it.
     let end = setup.is_some().then(|| {
         let st = state.clone();
         div()
-            .mt(t.space.xs)
-            .pt(t.space.xs)
-            .border_t_1()
-            .border_color(t.colors.border)
-            .child(
-                div()
-                    .id("design-end")
-                    .mx(t.space.xs)
-                    .px(t.space.sm)
-                    .py(t.space.xs)
-                    .flex()
-                    .items_center()
-                    .gap(t.space.snug)
-                    .rounded(t.radius.button)
-                    .cursor_pointer()
-                    .text_color(t.colors.text_muted)
-                    .hover(move |d| d.bg(hover))
-                    .child(icon("icons/x.svg", t.size.icon_sm, t.colors.text_muted))
-                    .child("End the design chat")
-                    .on_click(move |_, _, cx| st.update(cx, |s, cx| s.set_design(None, cx))),
-            )
+            .id("design-end")
+            .flex_none()
+            .flex()
+            .items_center()
+            .gap(t.space.xs)
+            .px(t.space.sm)
+            .h(t.size.control)
+            .rounded(t.radius.compact)
+            .cursor_pointer()
+            .text_color(t.colors.text_muted)
+            .hover(move |d| d.bg(hover))
+            .child(icon("icons/x.svg", t.size.icon_xs, t.colors.text_muted))
+            .child("End")
+            .tooltip(|window, cx| {
+                gpui::component::tooltip::Tooltip::new("End the design chat").build(window, cx)
+            })
+            .on_click(move |_, _, cx| st.update(cx, |s, cx| s.set_design(None, cx)))
     });
 
     let header = div()
-        .px(t.space.md)
-        .py(t.space.xs)
+        .pl(t.space.md)
+        .pr(t.space.xs)
+        .pb(t.space.xs)
+        .flex()
+        .items_center()
+        .justify_between()
         .text_size(t.text.caption)
         .text_color(t.colors.text_subtle)
         .child(match (setup.is_some(), s.current.is_some()) {
             (true, _) => "Design chat",
             (false, true) => "Make this a design chat",
             (false, false) => "Make the next chat a design chat",
-        });
+        })
+        .children(end);
 
-    let list = crate::theme::fit_window(
-        div().id("design-rows"),
+    // One height on every tab, the search included: the menu opens above
+    // its chip, so a list that changed height would move the tabs under the
+    // pointer between two clicks.
+    let tall = t.size.design_menu_list.min(crate::theme::fit_height(
         window,
         t,
         t.size.viewport_margin + px(140.),
-        // Room for all seven kinds of work at once.
-        Some(t.size.design_menu_list),
-    )
-    .child(rows);
+    ));
+    let list = div()
+        .id("design-rows")
+        .flex_1()
+        .min_h_0()
+        .overflow_y_scroll()
+        .child(rows);
+    let body = div()
+        .h(tall)
+        .flex()
+        .flex_col()
+        .when(needs_search, |d| d.child(search))
+        .child(list);
     let menu = div()
         .id("design-menu")
         .on_mouse_down_out(move |ev, _, cx| on_out(ev.position, cx))
@@ -331,9 +345,7 @@ pub fn menu(
         .text_size(t.text.body_sm)
         .child(header)
         .child(tabs)
-        .when(needs_search, |d| d.child(search))
-        .child(list)
-        .children(end);
+        .child(body);
     div().absolute().top_0().left_0().child(
         gpui::deferred(
             gpui::anchored()

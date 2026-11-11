@@ -31,6 +31,13 @@ pub struct DesignHome {
     shown: usize,
     /// The routines list shows, above the cards.
     routines_open: bool,
+    /// The New routine form: open, how often, which day, at what time,
+    /// and what it asks.
+    routine_form: bool,
+    every: Often,
+    day: &'static str,
+    at: Entity<InputState>,
+    ask: Entity<InputState>,
     /// The previews last asked to be pictured, in order.
     asked: Vec<PathBuf>,
     /// The cards' area's width, as last laid out.
@@ -40,8 +47,11 @@ pub struct DesignHome {
 
 impl DesignHome {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let search = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("Search: pitch deck, editorial, dashboard…")
+        let search =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Search the whole library"));
+        let at = cx.new(|cx| InputState::new(window, cx).default_value("09:00"));
+        let ask = cx.new(|cx| {
+            InputState::new(window, cx).placeholder("e.g. Refresh the metrics deck from data.csv")
         });
         let subs = vec![
             cx.subscribe(&search, |this, _, ev: &InputEvent, cx| {
@@ -57,10 +67,195 @@ impl DesignHome {
             search,
             shown: PAGE,
             routines_open: false,
+            routine_form: false,
+            every: Often::Week,
+            day: "mon",
+            at,
+            ask,
             asked: vec![],
             width: Default::default(),
             _subs: subs,
         }
+    }
+}
+
+/// How often a routine runs, as the form offers it.
+#[derive(Clone, Copy, PartialEq)]
+enum Often {
+    Hour,
+    Day,
+    Week,
+}
+
+const DAYS: [(&str, &str); 7] = [
+    ("mon", "Mon"),
+    ("tue", "Tue"),
+    ("wed", "Wed"),
+    ("thu", "Thu"),
+    ("fri", "Fri"),
+    ("sat", "Sat"),
+    ("sun", "Sun"),
+];
+
+impl DesignHome {
+    /// The form's schedule, or why it can't be one.
+    fn schedule(&self, cx: &gpui::App) -> Result<crate::design::routines::Every, &'static str> {
+        use crate::design::routines::Every;
+        let at = self.at.read(cx).value().trim().to_string();
+        let time = chrono::NaiveTime::parse_from_str(&at, "%H:%M")
+            .map_err(|_| "Give the time as hours and minutes, e.g. 09:00 or 17:30.")?;
+        Ok(match self.every {
+            Often::Hour => Every::Hour {
+                minute: chrono::Timelike::minute(&time),
+            },
+            Often::Day => Every::Day {
+                at: time.format("%H:%M").to_string(),
+            },
+            Often::Week => Every::Week {
+                day: self.day.to_string(),
+                at: time.format("%H:%M").to_string(),
+            },
+        })
+    }
+
+    /// The New routine form, above the list.
+    fn routine_form(&self, t: &Theme, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let kit = super::editor_kit::choice(
+            "routine-every",
+            "How often",
+            &[
+                (Often::Hour, "Every hour"),
+                (Often::Day, "Every day"),
+                (Often::Week, "Every week"),
+            ],
+            self.every,
+            cx,
+            |this, e, cx| {
+                this.every = e;
+                cx.notify();
+            },
+        );
+        let days = (self.every == Often::Week).then(|| {
+            super::editor_kit::choice("routine-day", "Day", &DAYS, self.day, cx, |this, d, cx| {
+                this.day = d;
+                cx.notify();
+            })
+        });
+        let schedule = self.schedule(cx);
+        let said = match &schedule {
+            Ok(e) => format!("Runs {}, while Forge is open.", e.say()),
+            Err(why) => why.to_string(),
+        };
+        let ready = schedule.is_ok() && !self.ask.read(cx).value().trim().is_empty();
+        let label = |text: &'static str| {
+            div()
+                .text_size(t.text.caption)
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(t.colors.text_muted)
+                .child(text)
+        };
+        div()
+            .flex()
+            .flex_col()
+            .gap(t.space.md)
+            .p(t.space.md)
+            .rounded(t.radius.card)
+            .bg(t.extra.inset)
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_end()
+                    .gap(t.space.lg)
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(t.space.xs)
+                            .child(label("How often"))
+                            .child(kit),
+                    )
+                    .children(days.map(|d| {
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(t.space.xs)
+                            .child(label("Day"))
+                            .child(d)
+                    }))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(t.space.xs)
+                            .child(label(if self.every == Often::Hour {
+                                "Minute (hh:mm)"
+                            } else {
+                                "Time"
+                            }))
+                            .child(
+                                div()
+                                    .w(px(96.))
+                                    .child(super::editor_kit::line(t, &self.at, false)),
+                            ),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(t.space.xs)
+                    .child(label("What Forge does each time"))
+                    .child(super::editor_kit::line(t, &self.ask, false)),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap(t.space.md)
+                    .child(
+                        div()
+                            .text_size(t.text.caption)
+                            .text_color(if schedule.is_ok() {
+                                t.colors.text_muted
+                            } else {
+                                t.extra.danger
+                            })
+                            .child(said),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .gap(t.space.sm)
+                            .child(
+                                theme::text_button(t, "Cancel")
+                                    .id("routine-cancel")
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.routine_form = false;
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                theme::primary_button(t, "Make routine")
+                                    .id("routine-make")
+                                    .when(!ready, |d| d.opacity(0.5))
+                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                        let Ok(when) = this.schedule(cx) else { return };
+                                        let ask = this.ask.read(cx).value().trim().to_string();
+                                        if ask.is_empty() {
+                                            return;
+                                        }
+                                        this.state
+                                            .update(cx, |s, cx| s.make_routine(when, ask, cx));
+                                        this.ask.update(cx, |i, cx| i.set_value("", window, cx));
+                                        this.routine_form = false;
+                                        cx.notify();
+                                    })),
+                            ),
+                    ),
+            )
+            .into_any_element()
     }
 }
 
@@ -105,21 +300,10 @@ fn card(
                 .size_full()
                 .object_fit(ObjectFit::Cover)
                 .into_any_element(),
-            Some(Thumb::Queued) => div()
-                .text_size(t.text.caption)
-                .text_color(t.colors.text_subtle)
-                .child(crate::i18n::tr("Drawing…"))
-                .into_any_element(),
-            _ => icon(
-                match kind {
-                    Kind::DesignSystem => "icons/sliders-horizontal.svg",
-                    Kind::Skill => "icons/wand-sparkles.svg",
-                    _ => "icons/layers.svg",
-                },
-                t.size.icon_lg,
-                t.colors.text_subtle,
-            )
-            .into_any_element(),
+            // No picture (yet, or ever): a cover set in type, its kind
+            // above its name, never an empty square or a "drawing" note.
+            // The picture replaces it once drawn.
+            _ => cover(t, kind, &e.title),
         });
     let use_it = {
         let (state, id) = (state.clone(), id.clone());
@@ -171,23 +355,64 @@ fn card(
                         .child(e.description.clone()),
                 ),
         )
+        // Preview on the left, Use on the right, on every card alike.
         .child(
             div()
                 .flex()
                 .items_center()
-                .justify_end()
+                .justify_between()
                 .gap(t.space.xs)
                 .px(t.space.sm)
                 .py(t.space.xs)
-                .children(look)
+                .child(div().children(look))
                 .child(use_it),
         )
+}
+
+/// A cover set in type for an entry with no picture: its kind small at
+/// the top, its name in the display cut at the foot, on the inset paper.
+fn cover(t: &Theme, kind: Kind, title: &str) -> gpui::AnyElement {
+    let (glyph, word) = match kind {
+        Kind::DesignSystem => ("icons/sliders-horizontal.svg", "Design system"),
+        Kind::Skill => ("icons/scroll-text.svg", "Skill"),
+        Kind::Template => ("icons/layers.svg", "Template"),
+        _ => ("icons/layers.svg", "Example"),
+    };
+    div()
+        .size_full()
+        .p(t.space.md)
+        .flex()
+        .flex_col()
+        .justify_between()
+        .bg(t.extra.inset)
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(t.space.tight)
+                .text_size(t.text.caption)
+                .text_color(t.colors.text_subtle)
+                .child(icon(glyph, t.size.icon_xs, t.colors.text_subtle))
+                .child(word),
+        )
+        .child(
+            div()
+                .font_family(t.font_display.clone())
+                .font_weight(t.display_weight)
+                .text_size(t.text.subheading)
+                .line_height(gpui::relative(1.2))
+                .text_color(t.colors.text_strong)
+                .line_clamp(3)
+                .child(title.to_string()),
+        )
+        .into_any_element()
 }
 
 impl Render for DesignHome {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let state = self.state.clone();
+        let form = (self.routines_open && self.routine_form).then(|| self.routine_form(&t, cx));
         let query = self.search.read(cx).value().to_string();
         let s = state.read(cx);
         let tab = s.gallery_tab;
@@ -221,7 +446,9 @@ impl Render for DesignHome {
                     ),
             );
 
-        let search = super::search_field(&t, &self.search).w(px(280.)).flex_none();
+        let search = super::search_field(&t, &self.search)
+            .w(px(300.))
+            .flex_none();
 
         let Some(ix) = ix else {
             return div()
@@ -268,10 +495,23 @@ impl Render for DesignHome {
             .iter()
             .map(|p| p.as_ref().and_then(|p| s.design_thumbs.get(p).cloned()))
             .collect();
+        // A search looks in every list: each tab counts what matches, so
+        // the one that has it is plain to see.
         let counts: Vec<(GalleryTab, usize)> = GalleryTab::ALL
             .iter()
-            .map(|g| (*g, ix.of(g.kind()).filter(|e| !e.hidden).count()))
+            .map(|g| {
+                let n = ix
+                    .of(g.kind())
+                    .filter(|e| !e.hidden && matches(e, &query))
+                    .count();
+                (*g, n)
+            })
             .collect();
+        let elsewhere = counts
+            .iter()
+            .filter(|(g, n)| *g != tab && *n > 0)
+            .max_by_key(|(_, n)| *n)
+            .copied();
         // Ask for the pictures of what shows, in order, when that changes.
         let wanted: Vec<PathBuf> = previews.iter().flatten().cloned().collect();
         if wanted != self.asked {
@@ -320,10 +560,22 @@ impl Render for DesignHome {
                 })
         };
         // Routines: requests Forge runs on a schedule.
+        // It opens the list above the cards: a chevron says so, the count
+        // says how many there are.
         let routines_button = theme::ghost_button(
             &t,
-            format!("{} ({})", crate::i18n::tr("Routines"), routines.len()),
+            format!("{} · {}", crate::i18n::tr("Routines"), routines.len()),
         )
+        .gap(t.space.xs)
+        .child(icon(
+            if self.routines_open {
+                "icons/chevron-up.svg"
+            } else {
+                "icons/chevron-down.svg"
+            },
+            t.size.icon_xs,
+            t.colors.text_muted,
+        ))
         .id("gallery-routines")
         .on_click(cx.listener(|this, _, _, cx| {
             this.routines_open = !this.routines_open;
@@ -370,7 +622,6 @@ impl Render for DesignHome {
                     .child(theme::text_button(&t, if r.enabled { crate::i18n::tr("Turn off") } else { crate::i18n::tr("Turn on") }).id(SharedString::from(format!("flip-{b}"))).on_click(move |_, _, cx| flip.update(cx, |s, cx| s.toggle_routine(&b, cx))))
                     .child(theme::text_button(&t, crate::i18n::tr("Delete")).id(SharedString::from(format!("del-{c}"))).on_click(move |_, _, cx| del.update(cx, |s, cx| s.delete_routine(&c, cx))))
             });
-            let st = state.clone();
             div()
                 .flex()
                 .flex_col()
@@ -392,21 +643,21 @@ impl Render for DesignHome {
                                 .min_w_0()
                                 .text_size(t.text.caption)
                                 .text_color(t.colors.text_muted)
-                                .child(crate::i18n::tr("Requests Forge runs on a schedule, while it's open, as a new chat in their project. Make one in the composer: /routine weekly on monday at 9:00: refresh the metrics deck")),
+                                .child(crate::i18n::tr("Requests Forge runs on a schedule, while it's open, each as a new chat in this project.")),
                         )
-                        .child(
-                            theme::ghost_button(&t, crate::i18n::tr("New routine…"))
-                                .flex_none()
-                                .id("routine-new")
-                                .on_click(move |_, _, cx| {
-                                    st.update(cx, |s, cx| {
-                                        s.screen = crate::state::Screen::Chat;
-                                        s.draft = Some("/routine weekly on monday at 9:00: ".into());
+                        .when(!self.routine_form, |d| {
+                            d.child(
+                                theme::ghost_button(&t, crate::i18n::tr("New routine…"))
+                                    .flex_none()
+                                    .id("routine-new")
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.routine_form = true;
                                         cx.notify();
-                                    })
-                                }),
-                        ),
+                                    })),
+                            )
+                        }),
                 )
+                .children(form)
                 .children(rows)
         });
         // A design system of your own, from a website.
@@ -438,11 +689,21 @@ impl Render for DesignHome {
             }))
         });
         let empty = (total == 0).then(|| {
-            div().text_color(t.colors.text_muted).child(format!(
-                "{}: {} · \"{query}\"",
-                crate::i18n::tr("Nothing matches"),
-                tab.label()
-            ))
+            let st = state.clone();
+            div()
+                .flex()
+                .items_center()
+                .gap(t.space.md)
+                .text_color(t.colors.text_muted)
+                .child(format!(
+                    "Nothing in {} matches \u{201c}{query}\u{201d}.",
+                    tab.label()
+                ))
+                .children(elsewhere.map(|(g, n)| {
+                    theme::ghost_button(&t, format!("Show {} ({n})", g.label()))
+                        .id("gallery-elsewhere")
+                        .on_click(move |_, _, cx| st.update(cx, |s, cx| s.set_gallery_tab(g, cx)))
+                }))
         });
 
         div()

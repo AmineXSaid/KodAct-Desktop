@@ -1218,7 +1218,7 @@ impl Render for BrowserView {
                             )
                             .into_any_element()
                     } else {
-                        icon("icons/sparkles.svg", t.size.icon_xs, t.colors.primary).into_any_element()
+                        icon("icons/pencil-ruler.svg", t.size.icon_xs, t.colors.primary).into_any_element()
                     })
                     .child(
                         div()
@@ -1247,8 +1247,9 @@ impl Render for BrowserView {
                     )
             }))
             // Forge at the wheel: a badge over the page.
+            // It rises into place when Forge takes the wheel.
             .when(agent && design.is_none(), |d| {
-                d.child(
+                d.child(super::motion::rise_in(
                     crate::theme::popover(&t)
                         .occlude()
                         .absolute()
@@ -1270,7 +1271,10 @@ impl Render for BrowserView {
                             ),
                         )
                         .child("Forge is using the browser"),
-                )
+                    "web-agent-badge-in",
+                    6.,
+                    &t,
+                ))
             });
 
         // A page this chat designed has the design bar for its toolbar.
@@ -1465,7 +1469,7 @@ impl Render for BrowserView {
                             })
                             .on_click(move |_, _, cx| cx.open_with_system(&folder))
                     }))
-                    .child(icon("icons/bot.svg", t.size.icon_xs, t.colors.text_subtle))
+                    .child(icon("icons/boxes.svg", t.size.icon_xs, t.colors.text_subtle))
                     .child(div().flex_1().min_w_0().child(if browser_on {
                         "Forge can use this browser. Each step asks first."
                     } else {

@@ -421,7 +421,7 @@ impl SkillInstall {
             .items_start()
             .when(!on, |d| d.opacity(0.7))
             .child(div().pt(px(2.)).child(icon(
-                "icons/wand-sparkles.svg",
+                "icons/scroll-text.svg",
                 t.size.icon,
                 t.colors.text_muted,
             )))
@@ -500,30 +500,21 @@ impl Render for SkillInstall {
                 .into_any_element(),
         ));
 
-        let mut into = div().flex().gap(px(6.));
-        for (v, label) in [
-            (
-                Into::Yours,
-                "Yours, every project (~/.claude/skills)".to_string(),
-            ),
-            (
-                Into::Project,
-                format!("{project_name} only (.claude/skills)"),
-            ),
-        ] {
-            into = into.child(
-                kit::chip(
-                    &t,
-                    SharedString::from(format!("install-into-{}", v == Into::Yours)),
-                    label,
-                    self.into == v,
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.into = v;
-                    cx.notify();
-                })),
-            );
-        }
+        let only = format!("{project_name} only");
+        let into = kit::choice(
+            "install-into",
+            "Install for",
+            &[
+                (Into::Yours, kit::SCOPE_ALL),
+                (Into::Project, only.as_str()),
+            ],
+            self.into,
+            cx,
+            |this, v, cx| {
+                this.into = v;
+                cx.notify();
+            },
+        );
         let hint = match &remote {
             Some(r) => format!("On {r}, where this project's chats run."),
             None => "Claude Code reads the same folders.".to_string(),

@@ -168,7 +168,7 @@ fn item(
                 .child(
                     super::button::Button::icon(
                         SharedString::from(format!("gh-ask-{key}")),
-                        "icons/sparkles.svg",
+                        "icons/message-square.svg",
                         "Ask Forge about this",
                     )
                     .compact()

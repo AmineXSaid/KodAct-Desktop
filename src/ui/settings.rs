@@ -103,8 +103,8 @@ const SECTIONS: &[Section] = &[
                 "icons/square-slash.svg",
                 "Slash commands",
             ),
-            (SettingsTab::Agents, "icons/bot.svg", "Agents"),
-            (SettingsTab::Skills, "icons/wand-sparkles.svg", "Skills"),
+            (SettingsTab::Agents, "icons/boxes.svg", "Agents"),
+            (SettingsTab::Skills, "icons/scroll-text.svg", "Skills"),
             (SettingsTab::Hooks, "icons/webhook.svg", "Hooks"),
             (SettingsTab::Mcp, "icons/plug.svg", "MCP servers"),
             (
@@ -118,13 +118,14 @@ const SECTIONS: &[Section] = &[
         "Workspace",
         &[
             (SettingsTab::Sandbox, "icons/box.svg", "Sandbox"),
-            (SettingsTab::Network, "icons/network.svg", "Network"),
+            // Network waits on ForgeCLI (a proxy, extra certificates): listed
+            // once a setting there would change something (`planned.rs`).
             (
                 SettingsTab::Environments,
                 "icons/server.svg",
                 "Environments",
             ),
-            (SettingsTab::Memory, "icons/brain.svg", "Memory and rules"),
+            (SettingsTab::Memory, "icons/notebook-pen.svg", "Memory and rules"),
             (SettingsTab::Plugins, "icons/puzzle.svg", "Plugins"),
         ],
     ),
@@ -877,8 +878,14 @@ impl Settings {
         let bypass_row = super::button::Switch::new("bypass", bypass, "Bypass permissions")
             .on_toggle(move |on, _, cx| {
                 state.update(cx, |s, cx| {
-                    s.bypass_allowed = on;
-                    if !on && s.default_mode == crate::modes::ModeId::Bypass {
+                    // Turning it on asks first (the confirm window); off is at once.
+                    if on {
+                        s.confirm = Some(crate::state::Confirm::Bypass);
+                        cx.notify();
+                        return;
+                    }
+                    s.bypass_allowed = false;
+                    if s.default_mode == crate::modes::ModeId::Bypass {
                         s.default_mode = crate::modes::ModeId::Manual;
                     }
                     cx.notify();
@@ -1052,11 +1059,7 @@ impl Settings {
                             .border_1()
                             .border_color(t.colors.border)
                             .child(icon(
-                                if p.wire == Wire::Anthropic {
-                                    "icons/sparkles.svg"
-                                } else {
-                                    "icons/cpu.svg"
-                                },
+                                "icons/cpu.svg",
                                 t.size.icon,
                                 t.colors.text_muted,
                             )),

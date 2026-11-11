@@ -1,4 +1,4 @@
-//! Rules and memory: what Claude Code reads in this project, and when.
+//! Rules and memory: what Forge reads in this project, and when.
 //!
 //! The list groups every instruction file by when it loads (every session,
 //! for matching files, in a folder, or as a skill when it fits), with a rough
@@ -73,7 +73,7 @@ fn kind_icon(kind: Kind) -> &'static str {
         Kind::Import => "icons/at-sign.svg",
         Kind::Rule => "icons/list-todo.svg",
         Kind::Folder => "icons/folder-open.svg",
-        Kind::Skill => "icons/sparkles.svg",
+        Kind::Skill => "icons/scroll-text.svg",
     }
 }
 
@@ -298,7 +298,7 @@ impl RulesView {
                             .font_family(t.font_display.clone())
                             .text_size(t.text.subheading)
                             .text_color(t.colors.text_body)
-                            .child(format!("What Claude Code reads in {where_}, and when. Files read every session cost context every time; the rest load only when they apply.")),
+                            .child(format!("What Forge reads in {where_}, and when. Files read every session cost context every time; the rest load only when they apply.")),
                     ),
             )
             .child(
@@ -839,7 +839,12 @@ impl Render for RulesView {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let s = self.state.read(cx);
-        let where_ = rules::display_path(&s.project_dir, rules::home_dir().as_deref());
+        // The project by its name; plain chats' own workspace by what it is.
+        let where_ = match s.project(s.current_project) {
+            Some(p) if p.scratch => "plain chats".to_string(),
+            Some(p) => p.name.to_string(),
+            None => rules::display_path(&s.project_dir, rules::home_dir().as_deref()),
+        };
         let scan = self.scan.clone();
         let test = scan
             .as_ref()
@@ -905,9 +910,9 @@ impl Render for RulesView {
                     .flex()
                     .flex_col()
                     .gap(t.space.sm)
-                    .child(div().font_weight(FontWeight::MEDIUM).text_color(t.colors.text_strong).child("Claude Code has no rules for this project yet."))
+                    .child(div().font_weight(FontWeight::MEDIUM).text_color(t.colors.text_strong).child(format!("No rules for {where_} yet.")))
                     .child(div().text_color(t.colors.text_muted).child(format!(
-                        "Add a CLAUDE.md to {where_} for rules every session needs, or a rule that loads only for the files it is about."
+                        "Add a CLAUDE.md for rules every chat needs, or a rule that loads only for the files it is about."
                     ))),
             );
         }

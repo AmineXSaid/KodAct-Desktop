@@ -3,7 +3,7 @@
 //! reaches Forge at its next step, with Edit (back into the box) and Remove.
 //! Once Forge takes one, it moves into the transcript where the model read it.
 
-use gpui::{div, prelude::*, px, relative, AnyElement, Entity, SharedString};
+use gpui::{div, prelude::*, relative, AnyElement, Entity, SharedString};
 
 use super::button::Button;
 use super::icon;
@@ -28,8 +28,12 @@ fn bubble(t: &Theme, state: &Entity<AppState>, chat: usize, q: &Queued) -> AnyEl
     let id = |name: &str| SharedString::from(format!("queued-{name}-{}", q.uuid));
     let (edit, remove) = (state.clone(), state.clone());
     let (uuid_edit, uuid_remove) = (q.uuid.clone(), q.uuid.clone());
+    // A steady width on your side, so the header stays one line and the
+    // text wraps as a sent message does.
     div()
+        .w_full()
         .max_w(relative(0.85))
+        .flex_none()
         .flex()
         .flex_col()
         .gap(t.space.xs)
@@ -52,6 +56,9 @@ fn bubble(t: &Theme, state: &Entity<AppState>, chat: usize, q: &Queued) -> AnyEl
                     div()
                         .flex_1()
                         .min_w_0()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
                         .child("Queued · reaches Forge at its next step"),
                 )
                 .child(
@@ -90,6 +97,5 @@ fn bubble(t: &Theme, state: &Entity<AppState>, chat: usize, q: &Queued) -> AnyEl
             &format!("queued-{}", q.uuid),
             state,
         ))
-        .min_w(px(220.))
         .into_any_element()
 }

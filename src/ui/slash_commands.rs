@@ -38,14 +38,14 @@ impl SlashCommands {
         Self {
             _sub,
             name: cx.new(|cx| {
-                InputState::new(window, cx).placeholder("review  (or git:review for a subfolder)")
+                InputState::new(window, cx).placeholder("e.g. review  (or git:review for a subfolder)")
             }),
             description: cx
                 .new(|cx| InputState::new(window, cx).placeholder("Shown beside it in the / list")),
-            hint: cx.new(|cx| InputState::new(window, cx).placeholder("[file]")),
+            hint: cx.new(|cx| InputState::new(window, cx).placeholder("e.g. [file]")),
             body: cx.new(|cx| {
                 TextareaState::new(window, cx)
-                    .placeholder("Review $ARGUMENTS for bugs and missing tests.")
+                    .placeholder("e.g. Review $ARGUMENTS for bugs and missing tests.")
             }),
             state,
             form: None,

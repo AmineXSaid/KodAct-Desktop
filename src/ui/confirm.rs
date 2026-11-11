@@ -1,5 +1,5 @@
 //! The confirm window: "Delete this chat?", or "Revert these files?" with
-//! the files ForgeCLI's dry run named. A small window over a scrim; Enter
+//! the files ForgeCLI's dry run named, or "Allow Bypass permissions?". A small window over a scrim; Enter
 //! confirms, Esc or a click outside cancels. It takes the keyboard when it
 //! opens.
 
@@ -53,6 +53,11 @@ impl ConfirmWindow {
             Some(Confirm::Revert { chat, msg, .. }) => {
                 self.state.update(cx, |s, cx| s.revert(chat, msg, cx))
             }
+            Some(Confirm::Bypass) => self.state.update(cx, |s, cx| {
+                s.bypass_allowed = true;
+                s.confirm = None;
+                cx.notify();
+            }),
             None => {}
         }
         window.dispatch_action(Box::new(super::FocusComposer), cx);
@@ -62,6 +67,11 @@ impl ConfirmWindow {
 impl Render for ConfirmWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
+        // It owns the keys while it asks, even when the control that asked
+        // (a switch in Settings) took focus on its own click afterwards.
+        if self.state.read(cx).confirm.is_some() && !self.focus.contains_focused(window, cx) {
+            window.focus(&self.focus, cx);
+        }
         let s = self.state.read(cx);
         // Answered or dismissed: it stays a beat while it sinks away.
         let Some((asked, leaving)) =
@@ -124,6 +134,17 @@ impl Render for ConfirmWindow {
                 "Revert",
                 )
             }
+            Confirm::Bypass => (
+                "Allow Bypass permissions?",
+                "Forge runs every tool without asking you first".into(),
+                "Edits, deletions, commands and web requests all go ahead with no answer card, in any project. Use it only in a throwaway folder or a sandbox. Once allowed, Bypass is offered in each chat's mode menu and by Shift+Tab; no chat changes mode until you pick it.",
+                vec![],
+                "Allow Bypass",
+            ),
+        };
+        let action_icon = match asked {
+            Confirm::Bypass => "icons/triangle-alert.svg",
+            _ => "icons/trash.svg",
         };
         let mut list = div()
             .id("confirm-files")
@@ -158,6 +179,12 @@ impl Render for ConfirmWindow {
                 .items_center()
                 .justify_center()
                 .bg(t.extra.scrim)
+                // Esc arrives as the workspace's StopReply (its binding wins
+                // over a key listener); Enter as a key.
+                .on_action(cx.listener(|this, _: &super::StopReply, window, cx| {
+                    this.cancel(window, cx);
+                    cx.stop_propagation();
+                }))
                 .on_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| {
                     match ev.keystroke.key.as_str() {
                         "escape" => this.cancel(window, cx),
@@ -219,7 +246,7 @@ impl Render for ConfirmWindow {
                                 )
                                 .child(
                                     super::button::Button::danger("confirm-delete", action)
-                                        .with_icon("icons/trash.svg")
+                                        .with_icon(action_icon)
                                         .on_click(cx.listener(|this, _, window, cx| {
                                             this.confirm(window, cx)
                                         })),

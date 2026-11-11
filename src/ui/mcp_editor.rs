@@ -47,12 +47,12 @@ impl McpEditor {
         Self {
             _sub: cx.observe(&state, |_, _, cx| cx.notify()),
             name: cx.new(|cx| InputState::new(window, cx).placeholder("github")),
-            command: cx.new(|cx| InputState::new(window, cx).placeholder("npx")),
+            command: cx.new(|cx| InputState::new(window, cx).placeholder("e.g. npx")),
             args: cx.new(|cx| {
-                InputState::new(window, cx).placeholder("-y @modelcontextprotocol/server-github")
+                InputState::new(window, cx).placeholder("e.g. -y @modelcontextprotocol/server-github")
             }),
             url: cx
-                .new(|cx| InputState::new(window, cx).placeholder("https://mcp.example.com/mcp")),
+                .new(|cx| InputState::new(window, cx).placeholder("e.g. https://mcp.example.com/mcp")),
             pairs: cx.new(|cx| TextareaState::new(window, cx)),
             state,
             form: None,
@@ -473,25 +473,21 @@ impl McpEditor {
 
     fn form(&self, t: &Theme, cx: &mut Context<Self>) -> gpui::AnyElement {
         let editing = matches!(self.form, Some(Some(_)));
-        let mut scopes = div().flex().flex_wrap().gap(px(6.));
-        for (scope, label) in [
-            (McpScope::User, "Yours, every project"),
-            (McpScope::Project, "Project, shared (.mcp.json)"),
-            (McpScope::Local, "Project, this PC only"),
-        ] {
-            scopes = scopes.child(
-                kit::chip(
-                    t,
-                    SharedString::from(format!("mcp-scope-{scope:?}")),
-                    label,
-                    self.scope == scope,
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.scope = scope;
-                    cx.notify();
-                })),
-            );
-        }
+        let scopes = kit::choice(
+            "mcp-scope",
+            "Saved in",
+            &[
+                (McpScope::Local, kit::SCOPE_ME),
+                (McpScope::Project, kit::SCOPE_SHARED),
+                (McpScope::User, kit::SCOPE_ALL),
+            ],
+            self.scope,
+            cx,
+            |this, s, cx| {
+                this.scope = s;
+                cx.notify();
+            },
+        );
         let mut kinds = div().flex().gap(px(6.));
         for (kind, label) in [
             (Kind::Stdio, "Command (stdio)"),

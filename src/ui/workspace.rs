@@ -1198,7 +1198,7 @@ impl Render for Workspace {
                 })
             }))
             .on_action(cx.listener(|this, _: &NewChat, window, cx| {
-                this.state.update(cx, |s, cx| s.new_in_kind(cx));
+                this.state.update(cx, |s, cx| s.new_plain_chat(cx));
                 this.focus_composer(window, cx);
             }))
             .on_action(cx.listener(|this, _: &ShowProjectMap, _, cx| {
@@ -2069,9 +2069,18 @@ fn greeting_line(line: &str, t: &crate::theme::Theme) -> impl IntoElement {
                 .min_w_0()
                 .font_family(t.font_display.clone())
                 .font_weight(t.display_weight)
-                .text_size(t.size.home_heading)
+                // A long line steps down the scale rather than breaking: a
+                // greeting is one line, never a word (or a "?") left over.
+                .text_size(if line.chars().count() > 26 {
+                    t.size.greeting
+                } else {
+                    t.size.home_heading
+                })
                 .text_color(t.colors.text_strong)
                 .line_height(gpui::relative(1.1))
+                .whitespace_nowrap()
+                .overflow_hidden()
+                .text_ellipsis()
                 .child(line.to_string()),
         )
 }
@@ -2085,6 +2094,23 @@ pub fn project_switcher(
     cx: &App,
     top: Pixels,
 ) -> impl IntoElement + use<> {
+    let t = cx.theme().clone();
+    let menu = switcher_menu(state, window, cx, t.size.titlebar)
+        .absolute()
+        .top(top)
+        .left_0();
+    super::motion::edge_draw(menu, "switcher-in", t.colors.primary, 0., &t)
+}
+
+/// The switcher's list, unplaced: the title bar drops it below its opener,
+/// the composer's project chip lifts it above. `room_top` is how far down
+/// the window the menu can start, for its height.
+pub fn switcher_menu(
+    state: &Entity<AppState>,
+    window: &Window,
+    cx: &App,
+    room_top: Pixels,
+) -> gpui::Stateful<gpui::Div> {
     let t = cx.theme().clone();
     let s = state.read(cx);
     let home = crate::rules::home_dir();
@@ -2202,16 +2228,13 @@ pub fn project_switcher(
     let (all, open, change) = (state.clone(), state.clone(), state.clone());
     // Connected to a host: another folder there, without reconnecting.
     let elsewhere = s.current_remote().map(|r| r.target.label());
-    let menu = theme::fit_window(
+    theme::fit_window(
         theme::popover(&t).id("switcher"),
         window,
         &t,
-        t.size.titlebar,
+        room_top,
         None,
     )
-    .absolute()
-    .top(top)
-    .left_0()
     .w(px(340.))
     .p(t.space.xs)
     .child(list)
@@ -2235,7 +2258,12 @@ pub fn project_switcher(
                     .text_color(t.colors.text)
                     .child(format!("Open another folder on {host}…")),
             )
-            .on_click(move |_, _, cx| change.update(cx, |s, cx| s.change_remote_folder(cx)))
+            .on_click(move |_, _, cx| {
+                change.update(cx, |s, cx| {
+                    s.project_menu = false;
+                    s.change_remote_folder(cx)
+                })
+            })
     }))
     .child(
         row("switch-all".into(), false)
@@ -2255,6 +2283,7 @@ pub fn project_switcher(
             .on_click(move |_, _, cx| {
                 all.update(cx, |s, cx| {
                     s.switcher_open = false;
+                    s.project_menu = false;
                     s.screen = Screen::Projects;
                     cx.notify();
                 })
@@ -2271,9 +2300,13 @@ pub fn project_switcher(
                     .child(icon("icons/plus.svg", t.size.icon_sm, t.colors.text_muted)),
             )
             .child(div().text_color(t.colors.text).child("New project…"))
-            .on_click(move |_, _, cx| open.update(cx, |s, cx| s.open_new_project(cx))),
-    );
-    super::motion::edge_draw(menu, "switcher-in", t.colors.primary, 0., &t)
+            .on_click(move |_, _, cx| {
+                open.update(cx, |s, cx| {
+                    s.project_menu = false;
+                    s.open_new_project(cx)
+                })
+            }),
+    )
 }
 
 #[cfg(test)]

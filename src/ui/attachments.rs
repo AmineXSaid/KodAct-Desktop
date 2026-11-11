@@ -217,6 +217,8 @@ fn chip(a: &Attachment, id: SharedString, t: &Theme, remove: Option<OnRemove>) -
 /// pasted text shows its first words, small and wrapped, over a "Pasted"
 /// badge; a picture fills it. In the box the tile has × (on hover) and a
 /// pencil: edit the text, or draw on the picture (`attachment_editor.rs`).
+/// `quiet`: the editor is open over it, so it shows no tooltips (one left
+/// from the click would sit on the text being edited).
 fn tile(
     a: &Attachment,
     id: SharedString,
@@ -224,6 +226,7 @@ fn tile(
     remove: Option<OnRemove>,
     edit: Option<OnRemove>,
     open: Option<OnRemove>,
+    quiet: bool,
 ) -> AnyElement {
     let hover = t.colors.hover;
     let group: SharedString = format!("{id}-group").into();
@@ -248,10 +251,10 @@ fn tile(
                 .collect::<Vec<_>>()
                 .join(" ");
             div()
-                .text_size(px(9.))
-                .line_height(gpui::relative(1.35))
+                .text_size(t.text.caption)
+                .line_height(gpui::relative(1.3))
                 .text_color(t.colors.text_muted)
-                .line_clamp(5)
+                .line_clamp(3)
                 .overflow_hidden()
                 .child(text)
                 .into_any_element()
@@ -261,15 +264,15 @@ fn tile(
     let badge = is_text.then(|| {
         div()
             .flex_none()
-            .px(px(5.))
-            .h(px(16.))
+            .px(px(6.))
+            .h(px(18.))
             .flex()
             .items_center()
             .rounded(t.radius.small)
             .border_1()
             .border_color(t.colors.border)
             .bg(t.colors.surface)
-            .text_size(px(10.))
+            .text_size(t.text.caption)
             .font_weight(gpui::FontWeight::MEDIUM)
             .text_color(t.colors.text_muted)
             .child("Pasted")
@@ -288,13 +291,15 @@ fn tile(
             .border_color(t.colors.border)
             .cursor_pointer()
             .hover(move |d| d.bg(hover))
-            .tooltip(move |window, cx| {
-                gpui::component::tooltip::Tooltip::new(if is_text {
-                    "Edit the pasted text"
-                } else {
-                    "Draw on the picture"
+            .when(!quiet, |d| {
+                d.tooltip(move |window, cx| {
+                    gpui::component::tooltip::Tooltip::new(if is_text {
+                        "Edit the pasted text"
+                    } else {
+                        "Draw on the picture"
+                    })
+                    .build(window, cx)
                 })
-                .build(window, cx)
             })
             .child(icon(
                 "icons/pencil.svg",
@@ -343,8 +348,11 @@ fn tile(
         .border_color(t.colors.border)
         .bg(t.extra.inset)
         .when(open.is_some(), |d| d.cursor_pointer())
-        .tooltip(move |window, cx| {
-            gpui::component::tooltip::Tooltip::new(format!("{name}\n{summary}")).build(window, cx)
+        .when(!quiet, |d| {
+            d.tooltip(move |window, cx| {
+                gpui::component::tooltip::Tooltip::new(format!("{name}\n{summary}"))
+                    .build(window, cx)
+            })
         })
         .child(
             div()
@@ -380,6 +388,7 @@ fn tiled(a: &Attachment) -> bool {
 /// The composer's pending attachments, each removable.
 pub fn pending(t: &Theme, state: &Entity<AppState>, cx: &gpui::App) -> Option<AnyElement> {
     let list = &state.read(cx).attachments;
+    let quiet = state.read(cx).editing_attachment.is_some();
     if list.is_empty() {
         return None;
     }
@@ -414,6 +423,7 @@ pub fn pending(t: &Theme, state: &Entity<AppState>, cx: &gpui::App) -> Option<An
                         }
                     })
                 })),
+                quiet,
             ));
         } else {
             row = row.child(chip(a, format!("attach-{i}").into(), t, Some(remove)));
@@ -449,6 +459,7 @@ pub fn sent(
                         st.update(cx, |s, cx| s.open_attachment(a, cx))
                     })
                 }),
+                false,
             ));
             continue;
         }

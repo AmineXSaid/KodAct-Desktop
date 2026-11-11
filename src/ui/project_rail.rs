@@ -43,7 +43,21 @@ pub struct ProjectRail {
     github: Entity<super::project_github::ProjectGithub>,
     /// The Share card (`project_sharing.rs`).
     sharing: Entity<super::project_sharing::ProjectSharing>,
+    /// The one row opened to its card, if any.
+    open: Option<Part>,
     _subs: Vec<Subscription>,
+}
+
+/// The rail's rows, each opening its card below the list.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Part {
+    Instructions,
+    Knowledge,
+    Memory,
+    Context,
+    Repository,
+    Defaults,
+    Share,
 }
 
 impl ProjectRail {
@@ -70,7 +84,18 @@ impl ProjectRail {
             sharing,
             mine: false,
             editing: false,
+            open: None,
         }
+    }
+
+    /// Open a row's card, or close it when it's the one open.
+    fn toggle(&mut self, part: Part, cx: &mut Context<Self>) {
+        self.open = if self.open == Some(part) {
+            None
+        } else {
+            Some(part)
+        };
+        cx.notify();
     }
 
     fn edit(&mut self, brief: &Brief, window: &mut Window, cx: &mut Context<Self>) {
@@ -233,10 +258,10 @@ impl Render for ProjectRail {
             .overflow_y_scroll()
             .flex()
             .flex_col()
-            .gap(t.space.lg)
-            .p(t.space.lg)
-            .border_l_1()
-            .border_color(t.colors.border);
+            .gap(t.space.md)
+            .px(t.space.lg)
+            .pt(t.space.xxl + t.space.lg)
+            .pb(t.space.lg);
         if crate::remote::Remote::parse(&project.path).is_some() {
             return rail
                 .child(
@@ -282,20 +307,18 @@ impl Render for ProjectRail {
             .strip_prefix(&project.path)
             .map(|r| r.display().to_string())
             .unwrap_or_else(|_| file.display().to_string());
-        let tab = |label: &'static str, on: bool, to_mine: bool, cx: &mut Context<Self>| {
-            kit::chip(&t, SharedString::from(format!("instr-{label}")), label, on).on_click(
-                cx.listener(move |this, _, _, cx| {
-                    this.mine = to_mine;
-                    this.editing = false;
-                    cx.notify();
-                }),
-            )
-        };
-        let tabs = div()
-            .flex()
-            .gap(t.space.xs)
-            .child(tab("Shared", !mine, false, cx))
-            .child(tab("Only me", mine, true, cx));
+        let tabs = kit::choice(
+            "instr-whose",
+            "Whose instructions",
+            &[(false, "Shared"), (true, "Only me")],
+            mine,
+            cx,
+            |this, to_mine, cx| {
+                this.mine = to_mine;
+                this.editing = false;
+                cx.notify();
+            },
+        );
         let hint = if mine {
             "Only you, on this computer: FORGE.local.md stays out of the project's files you share."
         } else {
@@ -462,13 +485,147 @@ impl Render for ProjectRail {
                     ))
                     .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenRules), cx)),
             );
-        rail.child(budget(&t, &brief, &project.path, window))
-            .child(instructions)
-            .child(self.knowledge.clone())
-            .child(self.memory.clone())
-            .child(self.github.clone())
-            .child(defaults)
-            .child(self.sharing.clone())
+        // The rows, as Claude's project page lists them: what it is, and
+        // what you can do; a row opens its card under the list.
+        let has_instructions = !(brief.shared.trim().is_empty() && brief.mine.trim().is_empty());
+        let open = self.open;
+        let hover = t.colors.hover;
+        let row = |part: Part,
+                   glyph: &'static str,
+                   title: &'static str,
+                   action: String,
+                   cx: &mut Context<Self>| {
+            let on = open == Some(part);
+            div()
+                .id(SharedString::from(format!("rail-row-{title}")))
+                .flex()
+                .items_center()
+                .gap(t.space.md)
+                .h(t.size.row + px(10.))
+                .px(t.space.sm)
+                .rounded(t.radius.button)
+                .cursor_pointer()
+                .when(on, |d| d.bg(hover))
+                .hover(move |st| st.bg(hover))
+                .child(icon(glyph, t.size.icon_sm, t.colors.text_muted))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .text_color(t.colors.text_strong)
+                        .child(title),
+                )
+                .child(
+                    div()
+                        .text_size(t.text.body_sm)
+                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .text_color(if on {
+                            t.colors.text_muted
+                        } else {
+                            t.colors.text
+                        })
+                        .child(if on { "Close".to_string() } else { action }),
+                )
+                .on_click(cx.listener(move |this, _, _, cx| this.toggle(part, cx)))
+        };
+        let rows = div()
+            .flex()
+            .flex_col()
+            .child(row(
+                Part::Instructions,
+                "icons/sticky-note.svg",
+                "Instructions",
+                if has_instructions {
+                    "Edit".into()
+                } else {
+                    "Add".into()
+                },
+                cx,
+            ))
+            .child(theme::rule(&t))
+            .child(row(
+                Part::Knowledge,
+                "icons/file-text.svg",
+                "Knowledge",
+                "Add".into(),
+                cx,
+            ))
+            .child(theme::rule(&t))
+            .child(row(
+                Part::Memory,
+                "icons/notebook-pen.svg",
+                "Memory",
+                "View".into(),
+                cx,
+            ))
+            .child(theme::rule(&t))
+            .child(row(
+                Part::Context,
+                "icons/gauge.svg",
+                "Context",
+                "View".into(),
+                cx,
+            ))
+            .child(theme::rule(&t))
+            .child(row(
+                Part::Repository,
+                "icons/git-branch.svg",
+                "Repository",
+                if project.branch.is_empty() {
+                    "View".into()
+                } else {
+                    project.branch.to_string()
+                },
+                cx,
+            ))
+            .child(theme::rule(&t))
+            .child(row(
+                Part::Defaults,
+                "icons/sliders-horizontal.svg",
+                "Defaults",
+                "Set".into(),
+                cx,
+            ))
+            .child(theme::rule(&t))
+            .child(row(
+                Part::Share,
+                "icons/share-2.svg",
+                "Share setup",
+                "Share".into(),
+                cx,
+            ));
+        let card: Option<AnyElement> = match open {
+            Some(Part::Instructions) => Some(instructions.into_any_element()),
+            Some(Part::Knowledge) => Some(self.knowledge.clone().into_any_element()),
+            Some(Part::Memory) => Some(self.memory.clone().into_any_element()),
+            Some(Part::Context) => {
+                Some(budget(&t, &brief, &project.path, window).into_any_element())
+            }
+            Some(Part::Repository) => Some(self.github.clone().into_any_element()),
+            Some(Part::Defaults) => Some(defaults.into_any_element()),
+            Some(Part::Share) => Some(self.sharing.clone().into_any_element()),
+            None => None,
+        };
+        // Where the project lives, quietly, under the list.
+        let home = crate::rules::home_dir();
+        let place = crate::rules::display_path(&project.path, home.as_deref());
+        rail.child(rows)
+            .child(
+                div()
+                    .px(t.space.sm)
+                    .text_size(t.text.caption)
+                    .text_color(t.colors.text_subtle)
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
+                    .child(place),
+            )
+            // The opened card rises into place under the list, each time a
+            // row opens it.
+            .children(card.map(|c| {
+                let key = open.map_or(0, |p| p as usize);
+                super::motion::rise_in(div().child(c), ("rail-card-in", key), 6., &t)
+            }))
             .into_any_element()
     }
 }

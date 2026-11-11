@@ -66,7 +66,7 @@ impl PluginsEditor {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let path = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("tools/forge-plugin  or  C:\\plugins\\review-kit")
+                .placeholder("e.g. tools/forge-plugin  or  C:\\plugins\\review-kit")
         });
         let subs = vec![
             cx.observe(&state, |this, state, cx| {

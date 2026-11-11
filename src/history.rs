@@ -571,9 +571,20 @@ pub fn messages_of(saved: &SavedChat) -> Vec<Message> {
                     .iter()
                     .map(|a| {
                         let kind = crate::attach::Kind::from_key(&a.kind);
-                        // An image's picture is read back for its thumbnail, if it's still there.
+                        // An image's picture is read back for its thumbnail, if it's
+                        // still there: where it was picked from, else its copy in the
+                        // project (a pasted picture has only that).
                         let bytes = matches!(kind, crate::attach::Kind::Image(_))
-                            .then(|| a.path.as_ref().and_then(|p| std::fs::read(p).ok()))
+                            .then(|| {
+                                a.path
+                                    .as_ref()
+                                    .and_then(|p| std::fs::read(p).ok())
+                                    .or_else(|| {
+                                        a.saved_at.as_ref().and_then(|rel| {
+                                            std::fs::read(saved.project.join(rel)).ok()
+                                        })
+                                    })
+                            })
                             .flatten()
                             .map(|b| std::sync::Arc::from(b.into_boxed_slice()));
                         crate::attach::Attachment {

@@ -38,7 +38,7 @@ pub struct PermissionsEditor {
 impl PermissionsEditor {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let rule = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("Bash(npm test)  or  Read(./secrets/**)")
+            InputState::new(window, cx).placeholder("e.g. Bash(npm test:*)  or  Read(./secrets/**)")
         });
         let subs = vec![
             // A new read of ForgeCLI's files: read the rules again with it.
@@ -53,8 +53,16 @@ impl PermissionsEditor {
                 &rule,
                 window,
                 |this, _, ev: &gpui::component::input::InputEvent, window, cx| {
-                    if matches!(ev, gpui::component::input::InputEvent::PressEnter { .. }) {
-                        this.add(window, cx);
+                    match ev {
+                        gpui::component::input::InputEvent::PressEnter { .. } => {
+                            this.add(window, cx)
+                        }
+                        // The line under the field says what the rule covers as it's typed.
+                        gpui::component::input::InputEvent::Change => {
+                            this.error = None;
+                            cx.notify()
+                        }
+                        _ => {}
                     }
                 },
             ),
@@ -198,21 +206,33 @@ impl Render for PermissionsEditor {
             this.layer = l;
             cx.notify();
         });
-        let mut kinds = div().flex().gap(px(6.));
-        for (kind, label) in KINDS {
-            kinds = kinds.child(
-                kit::chip(
-                    &t,
-                    SharedString::from(format!("perm-kind-{kind}")),
-                    label,
-                    self.kind == kind,
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.kind = kind;
-                    cx.notify();
-                })),
-            );
-        }
+        let kinds = kit::choice(
+            "perm-kind",
+            "The rule",
+            &KINDS,
+            self.kind,
+            cx,
+            |this, k, cx| {
+                this.kind = k;
+                cx.notify();
+            },
+        );
+        // What the rule covers, in words, before it's added.
+        let typed = self.rule.read(cx).value().trim().to_string();
+        let said = (!typed.is_empty()).then(|| {
+            let (text, ok) = match explain(&typed, self.kind) {
+                Ok(s) => (s, true),
+                Err(e) => (e, false),
+            };
+            div()
+                .text_size(t.text.caption)
+                .text_color(if ok {
+                    t.colors.text_muted
+                } else {
+                    t.extra.danger
+                })
+                .child(text)
+        });
         let add_row = div()
             .flex()
             .items_center()
@@ -250,6 +270,7 @@ impl Render for PermissionsEditor {
                     .child(kit::field(&t, "Saved in", None, layers.into_any_element()))
                     .child(kit::field(&t, "The rule", None, kinds.into_any_element()))
                     .child(add_row)
+                    .children(said)
                     .children(kit::status(&t, &self.error)),
             );
         match &self.rules {
@@ -299,5 +320,105 @@ impl Render for PermissionsEditor {
             }
         }
         out
+    }
+}
+
+/// A rule in plain words: what it covers, after what it does ("Runs
+/// without asking: commands that start with npm test."), or what's wrong.
+pub fn explain(rule: &str, kind: &str) -> Result<String, String> {
+    ff::check_rule(rule)?;
+    let r = rule.trim();
+    let (tool, spec) = match r.split_once('(') {
+        Some((t, rest)) => (t, rest.strip_suffix(')').map(str::trim)),
+        None => (r, None),
+    };
+    let what = match (tool, spec) {
+        ("Bash", None) => "every command".to_string(),
+        ("Bash", Some(c)) => match c
+            .strip_suffix(":*")
+            .or_else(|| c.strip_suffix(" *"))
+            .or_else(|| c.strip_suffix('*'))
+        {
+            Some(prefix) => format!("commands that start with {}", prefix.trim()),
+            None => format!("the command {c} exactly"),
+        },
+        ("Read", s) | ("Edit", s) | ("Write", s) | ("MultiEdit", s) => {
+            let verb = match tool {
+                "Read" => "reading",
+                "Write" => "writing",
+                _ => "editing",
+            };
+            match s {
+                Some(p) => format!("{verb} files matching {p}"),
+                None => format!("{verb} any file"),
+            }
+        }
+        ("WebFetch", None) => "fetching any web page".to_string(),
+        ("WebFetch", Some(s)) => match s.strip_prefix("domain:") {
+            Some(d) => format!("fetching pages on {d}"),
+            None => format!("fetching {s}"),
+        },
+        ("WebSearch", _) => "web searches".to_string(),
+        (t, s) if t.starts_with("mcp__") => {
+            let mut parts = t.trim_start_matches("mcp__").splitn(2, "__");
+            let server = parts.next().unwrap_or_default();
+            let what = match parts.next() {
+                Some(name) if name != "*" => format!("the tool {name} of the MCP server {server}"),
+                _ => format!("every tool of the MCP server {server}"),
+            };
+            match s {
+                Some(s) => format!("{what}, for {s}"),
+                None => what,
+            }
+        }
+        (t, None) => format!("the {t} tool"),
+        (t, Some(s)) => format!("the {t} tool, for {s}"),
+    };
+    let does = match kind {
+        "allow" => "Runs without asking",
+        "deny" => "Never runs",
+        _ => "Always asks first",
+    };
+    Ok(format!("{does}: {what}."))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::explain;
+
+    #[test]
+    fn a_rule_reads_as_what_it_covers() {
+        assert_eq!(
+            explain("Bash(npm test:*)", "allow").unwrap(),
+            "Runs without asking: commands that start with npm test."
+        );
+        assert_eq!(
+            explain("Bash(git push)", "ask").unwrap(),
+            "Always asks first: the command git push exactly."
+        );
+        assert_eq!(
+            explain("Read(./secrets/**)", "deny").unwrap(),
+            "Never runs: reading files matching ./secrets/**."
+        );
+        assert_eq!(
+            explain("WebFetch(domain:example.com)", "allow").unwrap(),
+            "Runs without asking: fetching pages on example.com."
+        );
+        assert_eq!(
+            explain("mcp__github__create_issue", "ask").unwrap(),
+            "Always asks first: the tool create_issue of the MCP server github."
+        );
+        assert_eq!(
+            explain("Bash", "deny").unwrap(),
+            "Never runs: every command."
+        );
+    }
+
+    #[test]
+    fn a_broken_rule_says_what_to_fix() {
+        assert!(explain("Bash(npm test", "allow")
+            .unwrap_err()
+            .contains("close the bracket"));
+        assert!(explain("(x)", "allow").unwrap_err().contains("tool name"));
     }
 }

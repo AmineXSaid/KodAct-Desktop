@@ -12,7 +12,7 @@ use gpui::{
 };
 
 use super::*;
-use crate::state::{AppState, ChatStatus, Screen, SidebarKind, TitleMenu};
+use crate::state::{AppState, ChatStatus, Screen, TitleMenu};
 use crate::theme;
 use crate::theme::ActiveTheme;
 
@@ -175,17 +175,17 @@ impl Sidebar {
                     .child("Show chats from"),
             )
             .child(option(
-                "filter-this",
-                format!("This project ({name})").into(),
-                !all,
-                false,
+                "filter-all",
+                "All chats".into(),
+                all,
+                true,
                 self.state.clone(),
             ))
             .child(option(
-                "filter-all",
-                "All projects".into(),
-                all,
-                true,
+                "filter-this",
+                format!("Only {name}").into(),
+                !all,
+                false,
                 self.state.clone(),
             ))
             .child(theme::rule(t).my(t.space.xs))
@@ -294,13 +294,9 @@ impl Render for Sidebar {
             .pb(t.space.md);
         // Chats of this project (or of every project, by the filter).
         let shown = |c: &&crate::state::Chat| {
-            let plain = s.project(c.project).is_some_and(|p| p.scratch);
-            // Chat lists plain chats; Code, chats in a folder (this one's,
-            // or every one's, by the filter).
-            let kind = match s.sidebar_kind {
-                SidebarKind::Chat => plain,
-                SidebarKind::Code => !plain && (s.all_chats || c.project == s.current_project),
-            };
+            // One list: plain chats and every project's, newest first; the
+            // filter can narrow it to the project you're in.
+            let kind = s.all_chats || c.project == s.current_project;
             kind && (q.is_empty() || c.title.to_lowercase().contains(&q))
                 // Archived chats only when the filter asks for them.
                 && c.archived == s.show_archived
@@ -310,7 +306,7 @@ impl Render for Sidebar {
             .iter()
             .filter(|p| p.pinned && q.is_empty())
             .collect();
-        let narrowed = (s.sidebar_kind == SidebarKind::Code && !s.all_chats) || s.show_archived;
+        let narrowed = !s.all_chats || s.show_archived;
         let mut any = false;
         let mut place = 0usize;
         for group in GROUPS {
@@ -326,7 +322,7 @@ impl Render for Sidebar {
             if group != "Pinned" {
                 rows.sort_by(|a, b| b.updated.cmp(&a.updated));
             }
-            let projects_here = if group == "Pinned" && s.sidebar_kind == SidebarKind::Code {
+            let projects_here = if group == "Pinned" {
                 pinned_projects.as_slice()
             } else {
                 &[]
@@ -432,8 +428,26 @@ impl Render for Sidebar {
                         .on_click(move |_, _, cx| state.update(cx, |s, cx| s.show_project(id, cx))),
                 );
             }
+            let mut age_was = None;
             for (local, c) in rows.into_iter().enumerate() {
                 let id = c.id;
+                // In Recents a quiet label where the age changes; the
+                // newest rows sit under Recents itself.
+                if group == "Recents" {
+                    let age = age_of(c.updated);
+                    if local > 0 && age_was != Some(age) {
+                        list = list.child(
+                            div()
+                                .px(t.space.md)
+                                .pt(t.space.sm)
+                                .pb(px(2.))
+                                .text_size(t.text.caption)
+                                .text_color(t.colors.text_subtle)
+                                .child(age),
+                        );
+                    }
+                    age_was = Some(age);
+                }
                 // Risen to the top of its group since last time: it rises
                 // into place there.
                 let was = self.places.insert(id, place);
@@ -451,6 +465,10 @@ impl Render for Sidebar {
                 let unread = status == ChatStatus::Unread;
                 let editing = s.renaming == Some(id);
                 let menu_open = s.chat_menu == Some(id);
+                let folder: Option<SharedString> = s
+                    .project(c.project)
+                    .filter(|p| !p.scratch)
+                    .map(|p| p.name.clone());
                 let (state_menu, state_right) = (self.state.clone(), self.state.clone());
                 let row = div()
                     .id(("chat", id))
@@ -553,6 +571,30 @@ impl Render for Sidebar {
                                             .group_hover("row", |st| st.invisible())
                                             .when(menu_open, |d| d.invisible())
                                             .child(status_mark(status, id, &t)),
+                                    )
+                                },
+                            )
+                            // At rest, a chat that works in a project shows a
+                            // quiet folder (its project in the tooltip), so the
+                            // one list still tells plain chats from project ones.
+                            .when_some(
+                                folder.filter(|_| remote.is_none() && status == ChatStatus::Idle),
+                                |d, name| {
+                                    d.child(
+                                        div()
+                                            .id(("chat-folder", id))
+                                            .flex_none()
+                                            .group_hover("row", |st| st.invisible())
+                                            .when(menu_open, |d| d.invisible())
+                                            .tooltip(move |w, cx| {
+                                                gpui::component::tooltip::Tooltip::new(name.clone())
+                                                    .build(w, cx)
+                                            })
+                                            .child(icon(
+                                                "icons/folder.svg",
+                                                t.size.icon_xs,
+                                                t.colors.text_subtle,
+                                            )),
                                     )
                                 },
                             )
@@ -807,11 +849,6 @@ impl Render for Sidebar {
                     .px(t.space.sm)
                     .pt(t.space.xs)
                     .pb(t.space.sm)
-                    .child(
-                        div()
-                            .mb(t.space.sm)
-                            .child(kind_switch(&t, &self.state, s.sidebar_kind)),
-                    )
                     // Search, as Claude Code's sidebar opens with it: a
                     // field that opens the palette over the window.
                     .child(
@@ -928,20 +965,18 @@ impl Render for Sidebar {
                     .child(
                         nav(
                             "design",
-                            "icons/pen-tool.svg",
+                            "icons/pencil-ruler.svg",
                             "Design",
                             design_open,
                             Some(shortcut("Shift D")),
                         )
-                        .on_click(|_, window, cx| {
-                            window.dispatch_action(Box::new(OpenDesign), cx)
-                        }),
+                        .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenDesign), cx)),
                     )
                     .child(
                         nav(
                             "customize",
                             "icons/sliders-horizontal.svg",
-                            "Customize",
+                            "Rules and memory",
                             rules_open,
                             Some(shortcut("Shift R")),
                         )
@@ -1062,78 +1097,6 @@ impl Render for Sidebar {
     }
 }
 
-/// Chat | Code, as Claude Code's: which kind of chat the sidebar lists
-/// (plain chats, or chats in a folder), the active one raised. It sits in
-/// the window's top row, over the sidebar.
-pub fn kind_switch(
-    t: &crate::theme::Theme,
-    state: &Entity<AppState>,
-    kind: SidebarKind,
-) -> impl IntoElement {
-    let hover = t.colors.hover;
-    // Each segment names what it lists, so the switch says what it does.
-    let segment = |id: &'static str,
-                   path: &'static str,
-                   label: &'static str,
-                   tip: &'static str,
-                   k: SidebarKind| {
-        let on = kind == k;
-        let state = state.clone();
-        let ink = if on {
-            t.colors.text_strong
-        } else {
-            t.colors.text_muted
-        };
-        div()
-            .id(id)
-            .flex_1()
-            .flex()
-            .items_center()
-            .justify_center()
-            .gap(t.space.xs)
-            .px(t.space.sm)
-            .h(t.size.control - t.space.xs)
-            .rounded(t.radius.small)
-            .cursor_pointer()
-            .text_size(t.text.caption)
-            .text_color(ink)
-            .when(on, |d| {
-                d.bg(t.colors.surface)
-                    .shadow(t.elevation_grain())
-                    .font_weight(FontWeight::MEDIUM)
-            })
-            .when(!on, |d| d.hover(move |st| st.bg(hover)))
-            .child(icon(path, t.size.icon_xs, ink))
-            .child(label)
-            .tooltip(move |w, cx| gpui::component::tooltip::Tooltip::new(tip).build(w, cx))
-            .on_click(move |_, _, cx| state.update(cx, |s, cx| s.set_sidebar_kind(k, cx)))
-    };
-    div()
-        .w_full()
-        .flex()
-        .items_center()
-        .gap(px(2.))
-        .p(px(2.))
-        .rounded(t.radius.button)
-        .bg(t.extra.sunk)
-        .border_1()
-        .border_color(t.colors.border)
-        .child(segment(
-            "kind-chat",
-            "icons/message-square.svg",
-            "Chats",
-            "Plain chats: the sidebar lists them, and New starts one",
-            SidebarKind::Chat,
-        ))
-        .child(segment(
-            "kind-code",
-            "icons/code-xml.svg",
-            "Code",
-            "Chats in a project folder: the sidebar lists them, and New starts one in your folder",
-            SidebarKind::Code,
-        ))
-}
-
 /// The sidebar collapsed (Ctrl+B): a narrow rail of the same actions as
 /// icon buttons, each named in its tooltip, so nothing goes out of reach.
 pub fn rail(t: &crate::theme::Theme, screen: Screen) -> impl IntoElement {
@@ -1209,7 +1172,7 @@ pub fn rail(t: &crate::theme::Theme, screen: Screen) -> impl IntoElement {
         .child(
             nav(
                 "rail-design",
-                "icons/pen-tool.svg",
+                "icons/pencil-ruler.svg",
                 format!("Design ({})", shortcut("Shift D")),
                 screen == Screen::Design,
             )
@@ -1284,5 +1247,47 @@ pub fn ago(minutes: u32) -> String {
         1..=59 => format!("{minutes}m"),
         60..=1439 => format!("{}h", minutes / 60),
         _ => format!("{}d", minutes / 1440),
+    }
+}
+
+/// How long ago a chat last moved, as Recents groups it.
+fn age_of(updated: std::time::SystemTime) -> &'static str {
+    let secs = std::time::SystemTime::now()
+        .duration_since(updated)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    age_label(secs, seconds_into_today())
+}
+
+/// Seconds since local midnight.
+fn seconds_into_today() -> u64 {
+    use chrono::Timelike;
+    chrono::Local::now().num_seconds_from_midnight() as u64
+}
+
+fn age_label(ago: u64, into_today: u64) -> &'static str {
+    const DAY: u64 = 86_400;
+    if ago <= into_today {
+        "Today"
+    } else if ago <= into_today + DAY {
+        "Yesterday"
+    } else if ago <= into_today + 7 * DAY {
+        "Previous 7 days"
+    } else {
+        "Earlier"
+    }
+}
+
+#[cfg(test)]
+mod age_tests {
+    use super::age_label;
+
+    #[test]
+    fn recents_group_by_calendar_day() {
+        let noon = 12 * 3600;
+        assert_eq!(age_label(3600, noon), "Today");
+        assert_eq!(age_label(noon + 3600, noon), "Yesterday");
+        assert_eq!(age_label(noon + 3 * 86_400, noon), "Previous 7 days");
+        assert_eq!(age_label(noon + 30 * 86_400, noon), "Earlier");
     }
 }

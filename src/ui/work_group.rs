@@ -327,7 +327,13 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
         .on_click(move |_, _, app| state.update(app, |s, cx| s.toggle_group(chat, msg, start, cx)));
 
     // Opened: the steps in one framed list, a row each between hairlines;
-    // a row opens in place to its change, output or pictures.
+    // a row opens in place to its change, output or pictures. The heat rail
+    // runs down their left, a node per step (`heat_rail.rs`).
+    let shown: Vec<usize> = run
+        .clone()
+        .filter(|&i| part(blocks, i, streaming) == Part::Step)
+        .collect();
+    let count = shown.len();
     let steps = open.then(|| {
         div()
             .flex()
@@ -337,42 +343,56 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
             .border_1()
             .border_color(t.colors.border)
             .overflow_hidden()
-            .children(
-                run.clone()
-                    .filter(|&i| part(blocks, i, streaming) == Part::Step)
-                    .enumerate()
-                    .filter_map(|(n, i)| {
-                        let row = match &blocks[i] {
-                            Block::Tool(c) => {
-                                let answer = message::answer_for(blocks, i);
-                                let step = message::flash(
-                                    div()
-                                        .flex()
-                                        .flex_col()
-                                        .child(message::tool_header(c, i, blocks, cx, t))
-                                        .children(message::tool_body(c, i, cx, t))
-                                        .children(
-                                            answer
-                                                .map(|p| message::approval_line(&blocks[p], cx, t)),
-                                        ),
-                                    i,
-                                    cx,
-                                    t,
-                                );
-                                message::mark(step, i, cx)
-                            }
-                            Block::Thinking { .. } => message::block(blocks, i, cx, t),
-                            _ => return None,
-                        };
-                        Some(
+            .children(shown.iter().copied().enumerate().filter_map(|(n, i)| {
+                let row = match &blocks[i] {
+                    Block::Tool(c) => {
+                        let answer = message::answer_for(blocks, i);
+                        let step = message::flash(
                             div()
-                                .px(t.space.md)
+                                .flex()
+                                .flex_col()
+                                .child(message::tool_header(c, i, blocks, cx, t))
+                                .children(message::tool_body(c, i, cx, t))
+                                .children(
+                                    answer.map(|p| message::approval_line(&blocks[p], cx, t)),
+                                ),
+                            i,
+                            cx,
+                            t,
+                        );
+                        message::mark(step, i, cx)
+                    }
+                    Block::Thinking { .. } => message::block(blocks, i, cx, t),
+                    _ => return None,
+                };
+                let node = match &blocks[i] {
+                    Block::Tool(c) => super::heat_rail::Node::of(c.status),
+                    _ => super::heat_rail::Node::Done,
+                };
+                Some(
+                    div()
+                        .flex()
+                        .pl(t.space.sm)
+                        .child(super::heat_rail::gutter(
+                            node,
+                            n == 0,
+                            n + 1 == count,
+                            live,
+                            SharedString::from(format!("rail-{chat}-{msg}-{i}")),
+                            t,
+                        ))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .pl(t.space.sm)
+                                .pr(t.space.md)
                                 .py(px(3.))
                                 .when(n > 0, |d| d.border_t_1().border_color(t.colors.border))
                                 .child(row),
-                        )
-                    }),
-            )
+                        ),
+                )
+            }))
     });
 
     div()

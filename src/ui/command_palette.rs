@@ -387,7 +387,7 @@ impl CommandPalette {
             ),
             act(
                 "Side panel: Agents",
-                "icons/bot.svg",
+                "icons/boxes.svg",
                 Some(shortcut("2")),
                 Box::new(ShowAgentsView),
             ),
@@ -432,13 +432,13 @@ impl CommandPalette {
             ),
             act(
                 if s.pet.is_some() { "Pet: the next one" } else { "Pet: a companion beside the chat" },
-                "icons/sparkles.svg",
+                "icons/paw-print.svg",
                 None,
                 Box::new(NextPet),
             ),
             act(
                 "Design: templates, design systems and skills",
-                "icons/pen-tool.svg",
+                "icons/pencil-ruler.svg",
                 Some(shortcut("Shift D")),
                 Box::new(OpenDesign),
             ),
@@ -454,10 +454,10 @@ impl CommandPalette {
                 None,
                 Box::new(OpenSlashCommands),
             ),
-            act("Open Agents…", "icons/bot.svg", None, Box::new(OpenAgents)),
+            act("Open Agents…", "icons/boxes.svg", None, Box::new(OpenAgents)),
             act(
                 "Open Skills…",
-                "icons/wand-sparkles.svg",
+                "icons/scroll-text.svg",
                 None,
                 Box::new(OpenSkills),
             ),
@@ -529,7 +529,7 @@ impl CommandPalette {
             ),
             act(
                 "Change your avatar",
-                "icons/sparkles.svg",
+                "icons/circle-user.svg",
                 None,
                 Box::new(ChangeAvatar),
             ),
@@ -748,7 +748,7 @@ impl CommandPalette {
             ];
             for (surface, label, action) in kinds {
                 if now != Some(surface) {
-                    out.push(act(label, "icons/sparkles.svg", None, action));
+                    out.push(act(label, "icons/pencil-ruler.svg", None, action));
                 }
             }
             if now.is_some() {
