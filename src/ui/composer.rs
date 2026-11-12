@@ -807,7 +807,7 @@ impl Render for Composer {
             .min_w_0()
             .flex_shrink(1.)
             .aria_label("Model")
-            .child(icon("icons/cpu.svg", t.size.icon_sm, t.colors.text_muted))
+            .child(icon("icons/model.svg", t.size.icon_sm, t.colors.text_muted))
             .child(
                 div()
                     .min_w_0()

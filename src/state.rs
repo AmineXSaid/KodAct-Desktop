@@ -1572,6 +1572,8 @@ pub struct Side {
     pub visible: bool,
     /// Folded to its title bar, still asking and answering.
     pub minimized: bool,
+    /// Grown, for a long answer: wider, with a taller thread.
+    pub expanded: bool,
     pub thread: Vec<SideItem>,
     /// Questions sent and not yet answered, oldest first.
     pub pending: std::collections::VecDeque<SharedString>,
@@ -11792,6 +11794,16 @@ impl AppState {
         if let Some(side) = self.current.and_then(|id| self.side.get_mut(&id)) {
             side.minimized = !side.minimized;
             self.side_focus = !side.minimized;
+        }
+        cx.notify();
+    }
+
+    /// Grow the side card, or bring it back to its size; a folded card opens.
+    pub fn toggle_side_expand(&mut self, cx: &mut Context<Self>) {
+        if let Some(side) = self.current.and_then(|id| self.side.get_mut(&id)) {
+            side.expanded = !side.expanded || side.minimized;
+            side.minimized = false;
+            self.side_focus = true;
         }
         cx.notify();
     }

@@ -200,7 +200,7 @@ pub fn render(
                     .flex()
                     .items_center()
                     .gap(t.space.sm)
-                    .child(icon("icons/cpu.svg", t.size.icon_sm, t.colors.text_muted))
+                    .child(icon("icons/model.svg", t.size.icon_sm, t.colors.text_muted))
                     .child(div().flex_1().font_weight(FontWeight::MEDIUM).text_color(t.colors.text_strong).child("Context window"))
                     .child(div().text_size(t.text.caption).text_color(t.colors.text_subtle).child(model)),
             )

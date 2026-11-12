@@ -315,7 +315,7 @@ impl CommandPalette {
             ),
             act(
                 "Choose a model",
-                "icons/cpu.svg",
+                "icons/model.svg",
                 Some(shortcut("/")),
                 Box::new(ToggleModelPicker),
             ),
@@ -944,7 +944,7 @@ impl CommandPalette {
                 ),
                 act(
                     "Show the context window",
-                    "icons/cpu.svg",
+                    "icons/model.svg",
                     None,
                     Box::new(ShowContext),
                 ),
@@ -1074,7 +1074,7 @@ impl CommandPalette {
                 }
                 .into(),
                 group: "Models",
-                icon: "icons/cpu.svg",
+                icon: "icons/model.svg",
                 hint,
                 detail: None,
                 target: Target::Model(row.name),

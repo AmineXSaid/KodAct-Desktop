@@ -91,7 +91,7 @@ const SECTIONS: &[Section] = &[
                 "icons/sliders-horizontal.svg",
                 "General",
             ),
-            (SettingsTab::Models, "icons/cpu.svg", "Models"),
+            (SettingsTab::Models, "icons/model.svg", "Models"),
             (SettingsTab::Profiles, "icons/layers.svg", "Profiles"),
         ],
     ),
@@ -1059,7 +1059,7 @@ impl Settings {
                             .border_1()
                             .border_color(t.colors.border)
                             .child(icon(
-                                "icons/cpu.svg",
+                                "icons/model.svg",
                                 t.size.icon,
                                 t.colors.text_muted,
                             )),
@@ -1549,7 +1549,7 @@ impl Settings {
                 })
                 .child(icon(
                     if empty {
-                        "icons/cpu.svg"
+                        "icons/model.svg"
                     } else {
                         "icons/circle-check.svg"
                     },

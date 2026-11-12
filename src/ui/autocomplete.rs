@@ -155,7 +155,7 @@ fn app_actions() -> Vec<(&'static str, &'static str, &'static str, Box<dyn Actio
         (
             "context-window",
             "Open the context window breakdown",
-            "icons/cpu.svg",
+            "icons/model.svg",
             Box::new(ShowContext),
         ),
         (

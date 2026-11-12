@@ -1,7 +1,8 @@
 //! `/btw`: the side-question card. A floating card over the chat, as KodAct
 //! for VS Code has it: questions answered from this conversation's context,
-//! without tools, while the conversation goes on. It folds to its title bar
-//! and closes with Esc; the thread keeps the last 20 exchanges.
+//! without tools, while the conversation goes on. It grows for a long answer,
+//! folds to its title bar and closes with Esc; the thread keeps the last 20
+//! exchanges.
 
 use gpui::component::input::{Input, InputEvent, InputState};
 use gpui::{
@@ -12,6 +13,20 @@ use gpui::{
 use super::*;
 use crate::state::{AppState, SideItem, SIDE_EMPTY, SIDE_PENDING, SIDE_PLACEHOLDER, SIDE_TITLE};
 use crate::theme::ActiveTheme;
+
+/// The card's width and its thread's height, at rest and grown; the least
+/// they shrink to in a small window.
+const SIDE_W: f32 = 360.;
+const SIDE_H: f32 = 300.;
+const SIDE_W_GROWN: f32 = 560.;
+const SIDE_H_GROWN: f32 = 560.;
+const SIDE_W_MIN: f32 = 240.;
+const SIDE_H_MIN: f32 = 120.;
+/// Where it sits: in from the right, above the composer's row; and what of
+/// the window's height isn't thread (title bars, its own head and field).
+const SIDE_EDGE: f32 = 20.;
+const SIDE_BOTTOM: f32 = 150.;
+const SIDE_CHROME: f32 = 190.;
 
 pub struct SideChat {
     state: Entity<AppState>,
@@ -66,10 +81,20 @@ impl Render for SideChat {
         };
         let hover = t.colors.hover;
         let state = self.state.clone();
+        // Its size: a card, or grown for a long answer; never past the window.
+        let view = window.viewport_size();
+        let (want_w, want_h) = if side.expanded {
+            (SIDE_W_GROWN, SIDE_H_GROWN)
+        } else {
+            (SIDE_W, SIDE_H)
+        };
+        let card_w = px(want_w.min((f32::from(view.width) - 2. * SIDE_EDGE).max(SIDE_W_MIN)));
+        let thread_h =
+            px(want_h.min((f32::from(view.height) - SIDE_BOTTOM - SIDE_CHROME).max(SIDE_H_MIN)));
         let head_button = |id: &'static str, path: &'static str, tip: &'static str| {
             div()
                 .id(id)
-                .size(px(22.))
+                .size(t.size.control)
                 .flex()
                 .items_center()
                 .justify_center()
@@ -137,6 +162,20 @@ impl Render for SideChat {
             })
             .child({
                 let state = state.clone();
+                let grown = side.expanded && !side.minimized;
+                head_button(
+                    "side-grow",
+                    if grown {
+                        "icons/minimize-2.svg"
+                    } else {
+                        "icons/maximize-2.svg"
+                    },
+                    if grown { "Smaller" } else { "Larger" },
+                )
+                .on_click(move |_, _, cx| state.update(cx, |s, cx| s.toggle_side_expand(cx)))
+            })
+            .child({
+                let state = state.clone();
                 head_button(
                     "side-min",
                     if side.minimized {
@@ -155,15 +194,22 @@ impl Render for SideChat {
             });
 
         let exchange = |question: SharedString, body: gpui::AnyElement| {
+            // The question as the chat sets yours: a bubble, to the right.
             div()
                 .flex()
                 .flex_col()
-                .gap(px(4.))
+                .gap(px(8.))
                 .child(
                     div()
-                        .text_size(t.text.caption)
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(t.colors.text_muted)
+                        .self_end()
+                        .max_w(gpui::relative(0.86))
+                        .px(px(10.))
+                        .py(px(5.))
+                        .rounded(t.radius.card)
+                        .bg(t.colors.hover)
+                        .text_size(t.text.body_sm)
+                        .text_color(t.colors.text_strong)
+                        .line_height(gpui::relative(1.4))
                         .child(question),
                 )
                 .child(body)
@@ -173,10 +219,10 @@ impl Render for SideChat {
             .flex()
             .flex_col()
             .gap(px(14.))
-            .max_h(px(300.))
+            .max_h(thread_h)
             .overflow_y_scroll()
             .px(px(14.))
-            .py(px(10.));
+            .py(px(12.));
         if side.thread.is_empty() && side.pending.is_empty() {
             thread = thread.child(
                 div()
@@ -226,20 +272,26 @@ impl Render for SideChat {
             ));
         }
 
-        let send_bg = t.extra.accent;
+        // The field: the composer's, smaller. Its edge darkens with focus,
+        // and Send is filled only once there is something to send.
+        let focused = gpui::Focusable::focus_handle(self.input.read(cx), cx).is_focused(window);
+        let typed = !self.input.read(cx).value().trim().is_empty();
         let input_row = div()
             .flex()
             .items_center()
-            .gap(px(6.))
-            .m(px(8.))
-            .mt(px(0.))
-            .pl(px(10.))
-            .pr(px(4.))
-            .h(px(34.))
+            .gap(px(4.))
+            .mx(px(10.))
+            .mb(px(10.))
+            .pr(px(5.))
+            .h(t.size.field_h)
             .rounded(t.radius.card)
             .bg(t.colors.canvas)
             .border_1()
-            .border_color(t.colors.border)
+            .border_color(if focused {
+                t.extra.border_strong
+            } else {
+                t.colors.border
+            })
             .child(
                 div().flex_1().min_w_0().child(
                     Input::new(&self.input)
@@ -254,14 +306,24 @@ impl Render for SideChat {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .rounded(t.radius.control)
-                    .bg(send_bg)
-                    .cursor_pointer()
-                    .hover(|st| st.opacity(0.9))
+                    .rounded_full()
+                    .map(|d| {
+                        if typed {
+                            d.bg(t.extra.accent)
+                                .cursor_pointer()
+                                .hover(|st| st.opacity(0.9))
+                        } else {
+                            d.bg(t.colors.hover)
+                        }
+                    })
                     .child(icon(
                         "icons/arrow-up.svg",
                         t.size.icon_sm,
-                        t.extra.accent_fg,
+                        if typed {
+                            t.extra.accent_fg
+                        } else {
+                            t.colors.text_subtle
+                        },
                     ))
                     .tooltip(|window, cx| {
                         gpui::component::tooltip::Tooltip::new("Send side question")
@@ -273,7 +335,7 @@ impl Render for SideChat {
         let card = div()
             .id("side-chat")
             .occlude()
-            .w(px(360.))
+            .w(card_w)
             .flex()
             .flex_col()
             .bg(t.colors.surface)
@@ -298,8 +360,8 @@ impl Render for SideChat {
         // Bottom right, above the composer's row.
         div()
             .absolute()
-            .right(px(20.))
-            .bottom(px(150.))
+            .right(px(SIDE_EDGE))
+            .bottom(px(SIDE_BOTTOM))
             .child(super::motion::notice(card, "side-chat", leaving, &t))
             .into_any_element()
     }
