@@ -7506,14 +7506,14 @@ fix everything under 8, render it again to check, then tell me the scores before
         cx.notify();
     }
 
-    /// Share: the JSON goes to the clipboard now; a link waits on upload (a stub).
+    /// Copy as JSON: the conversation goes to the clipboard.
     pub fn share_chat(&mut self, id: usize, cx: &mut Context<Self>) {
         self.chat_menu = None;
         let Some((_, json)) = self.chat_json(id) else {
             return;
         };
         cx.write_to_clipboard(gpui::ClipboardItem::new_string(json));
-        self.stub(crate::stubs::SHARE_LINK, cx);
+        self.show_toast("Copied the conversation as JSON.", cx);
     }
 
     /// Bring back version `v`: the conversation from its message on becomes

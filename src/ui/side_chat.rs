@@ -357,9 +357,14 @@ impl Render for SideChat {
                     .rounded_full()
                     .map(|d| {
                         if typed {
-                            d.bg(t.extra.accent)
+                            // The composer's Send, smaller.
+                            let flat = t.extra.accent.opacity(0.9);
+                            let face = t.button_face(flat);
+                            d.bg(t.button_face(t.extra.accent))
+                                .shadow(t.elevation_button())
                                 .cursor_pointer()
-                                .hover(|st| st.opacity(0.9))
+                                .hover(move |st| st.bg(face))
+                                .active(move |st| st.bg(flat).shadow(vec![]))
                         } else {
                             d.bg(t.colors.hover)
                         }

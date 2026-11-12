@@ -1,16 +1,15 @@
 //! Every control KodAct shows that has nothing behind it yet, in one table:
 //! where it is, what it will do, what it says when pressed, and the step
 //! that wires it. Views never write their own "isn't wired yet" text: they
-//! look the stub up here (`AppState::stub`), and draw the control with the
-//! one honest treatment, `ui::soon` (muted, a "Soon" tooltip).
+//! look the stub up here (`AppState::stub`). A control whose feature never
+//! works isn't drawn at all: what is left here works in part, or elsewhere.
 //!
 //! When a stub is wired, delete its row; the tests keep the table tidy.
 //!
 //! After the three-step upgrade (P1 to P3), what is left here is blocked:
 //! on something KodAct CLI doesn't do yet, or on a hosted service KodAct
 //! doesn't have (each row's `waits_on` says which), or it is missing only
-//! in `KODACT_DEMO`. P3 wired the Settings sections, Diagnostics and Profiles;
-//! the model-side capability probe stays here, waiting on KodAct CLI.
+//! in `KODACT_DEMO`. P3 wired the Settings sections, Diagnostics and Profiles.
 
 /// Why a stub is still a stub.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -30,11 +29,14 @@ pub struct Stub {
     #[cfg_attr(not(test), allow(dead_code))]
     pub place: &'static str,
     /// What it will do once wired.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub does: &'static str,
     /// What pressing it says now.
     pub toast: &'static str,
     /// What it waits on, in a few words: KodAct CLI support, or a service.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub waits_on: &'static str,
+    #[cfg_attr(not(test), allow(dead_code))]
     pub step: Step,
 }
 
@@ -42,10 +44,7 @@ pub const FEEDBACK_UPLOAD: &str = "feedback-upload";
 pub const CONTINUE_NO_SESSION: &str = "continue-no-session";
 pub const REVERT_DEMO: &str = "revert-demo";
 pub const REVERT_NO_CHECKPOINT: &str = "revert-no-checkpoint";
-pub const REAPPLY: &str = "reapply";
-pub const SHARE_LINK: &str = "share-link";
 pub const COMPACT_DEMO: &str = "compact-demo";
-pub const CAPABILITY_PROBE: &str = "capability-probe";
 
 pub const STUBS: &[Stub] = &[
     Stub {
@@ -81,22 +80,6 @@ pub const STUBS: &[Stub] = &[
         step: Step::Blocked,
     },
     Stub {
-        id: REAPPLY,
-        place: "src/ui/message.rs, #reapply-*",
-        does: "Apply a reverted change again.",
-        toast: "Applying a reverted change again needs KodAct CLI to roll checkpoints forward, which it can't yet. Ask KodAct to make the change again.",
-        waits_on: "KodAct CLI rolling checkpoints forward",
-        step: Step::Blocked,
-    },
-    Stub {
-        id: SHARE_LINK,
-        place: "src/ui/chat_menu.rs, #chat-menu-share",
-        does: "Upload a conversation and copy a link to it.",
-        toast: "Copied the conversation as JSON. Share links are coming soon.",
-        waits_on: "a hosted service for share links",
-        step: Step::Blocked,
-    },
-    Stub {
         id: COMPACT_DEMO,
         place: "src/ui/context_menu.rs, #compact (src/state.rs, compact)",
         does: "Summarize the conversation to free context (KodAct CLI's /compact).",
@@ -104,30 +87,12 @@ pub const STUBS: &[Stub] = &[
         waits_on: "KodAct CLI (the demo has none)",
         step: Step::Demo,
     },
-    Stub {
-        id: CAPABILITY_PROBE,
-        place: "src/ui/diagnostics.rs, #capability-probe",
-        does: "Check what a model can do: stream, call tools, read images, think.",
-        toast: "Model checks are coming. They need KodAct CLI to report what a model supports. The endpoint's check already sends one real message.",
-        waits_on: "KodAct CLI reporting what a model supports",
-        step: Step::Blocked,
-    },
 ];
 
 /// Icons bundled now for features a later step wires. Kept so they aren't
 /// mistaken for dead assets and dropped (the tests check they are bundled).
 #[cfg_attr(not(test), allow(dead_code))]
 pub const RESERVED_ICONS: &[(&str, &str, Step)] = &[];
-
-impl Stub {
-    /// The tooltip line: what it will do, and when.
-    pub fn soon_line(&self) -> String {
-        match self.step {
-            Step::Blocked => format!("Soon (waits on {}) · {}", self.waits_on, self.does),
-            Step::Demo => format!("Not in the demo · {}", self.does),
-        }
-    }
-}
 
 pub fn get(id: &str) -> Option<&'static Stub> {
     STUBS.iter().find(|s| s.id == id)

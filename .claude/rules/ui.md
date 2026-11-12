@@ -11,7 +11,8 @@ paths:
 - One filled (primary) action per surface; secondary actions are ghost or text
   buttons. Sheets and cards lift with `t.elevation_grain()`, which follows the
   theme's depth (grain, a soft lift, or a flat 1px edge); other shadows only
-  on popovers. A selected row goes through `theme::selected`, so it follows
+  on popovers, and under a button (`t.elevation_button()`, which the button
+  system applies: never by hand). A selected row goes through `theme::selected`, so it follows
   the theme.
 - Call `.hover()` at most once per element: a second call panics at runtime
   ("hover style already set"). The `theme::*_button` helpers already set it.

@@ -1938,21 +1938,6 @@ fn file_review(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> Option
                 t.colors.text_muted,
                 "Reverted",
             ))
-            .child(
-                super::soon(
-                    small(
-                        format!("reapply-{key}"),
-                        "Re-apply",
-                        "icons/refresh-cw.svg",
-                        t.colors.text_muted,
-                    ),
-                    crate::stubs::REAPPLY,
-                )
-                .on_click(move |_, _, app| {
-                    app.stop_propagation();
-                    state.update(app, |s, cx| s.stub(crate::stubs::REAPPLY, cx));
-                }),
-            )
             .into_any_element(),
     };
     Some(el)

@@ -54,6 +54,16 @@ pub struct Paint {
 }
 
 impl Variant {
+    /// A solid fill: it wears `Theme::button_face` and `elevation_button`.
+    pub fn filled(self) -> bool {
+        matches!(self, Variant::Primary | Variant::Danger | Variant::Accent)
+    }
+
+    /// A bordered surface button: it sits on `elevation_button` too.
+    pub fn raised(self) -> bool {
+        self == Variant::Secondary
+    }
+
     pub fn paint(self, t: &Theme) -> Paint {
         let clear = t.colors.surface.opacity(0.);
         match self {
@@ -322,7 +332,18 @@ impl RenderOnce for Button {
             .rounded(radius)
             .border_1()
             .border_color(paint.border.unwrap_or(t.colors.surface.opacity(0.)))
-            .bg(bg)
+            .map(|d| {
+                // What you press has a face and sits a hair off its surface.
+                if self.disabled || self.selected {
+                    d.bg(bg)
+                } else if self.variant.filled() {
+                    d.bg(t.button_face(bg)).shadow(t.elevation_button())
+                } else if self.variant.raised() {
+                    d.bg(bg).shadow(t.elevation_button())
+                } else {
+                    d.bg(bg)
+                }
+            })
             .text_size(text)
             .text_color(fg)
             // Labels on buttons are set in the heavier cut.
@@ -338,9 +359,25 @@ impl RenderOnce for Button {
                 move |s| s.border_color(edge)
             })
             .when(!inert, |d| {
+                let lifted = self.variant.filled() || self.variant.raised();
+                let face = t.button_face(hover_bg);
+                let filled = self.variant.filled();
                 d.cursor_pointer()
-                    .hover(move |s| s.bg(hover_bg))
-                    .active(|s| s.opacity(0.85))
+                    .hover(move |s| {
+                        if filled {
+                            s.bg(face)
+                        } else {
+                            s.bg(hover_bg)
+                        }
+                    })
+                    // Pressed, it goes down: flat, a shade deeper, no lift.
+                    .active(move |s| {
+                        if lifted {
+                            s.bg(hover_bg).shadow(vec![])
+                        } else {
+                            s.opacity(0.85)
+                        }
+                    })
             })
             .when(self.disabled, |d| d.cursor_default().opacity(0.7))
             .children(lead)
@@ -433,11 +470,13 @@ pub fn send_button(
         SendState::Ready => {
             let p = Variant::Accent.paint(t);
             let hover = p.hover_bg;
+            let face = t.button_face(hover);
             base.aria_label("Send")
-                .bg(p.bg)
+                .bg(t.button_face(p.bg))
+                .shadow(t.elevation_button())
                 .cursor_pointer()
-                .hover(move |s| s.bg(hover))
-                .active(|s| s.opacity(0.85))
+                .hover(move |s| s.bg(face))
+                .active(move |s| s.bg(hover).shadow(vec![]))
                 .child(icon("icons/arrow-up.svg", t.size.icon, p.fg))
                 .on_click(on_click)
         }

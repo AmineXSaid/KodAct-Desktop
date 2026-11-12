@@ -1,13 +1,13 @@
 //! Settings → Models → Diagnose: an endpoint's checks as a step list (DNS,
 //! TCP, TLS, HTTP, the key), each with pass or fail, its detail and its
 //! time, filled in as each step ends (`diagnose.rs` runs them off the UI
-//! thread). The model-side checks are listed after them as what they are:
-//! not built yet (`stubs::CAPABILITY_PROBE`).
+//! thread). What the model itself can do isn't checked here: that needs
+//! KodAct CLI's own view of the model.
 
-use gpui::{div, prelude::*, px, relative, Entity, FontWeight, IntoElement, SharedString};
+use gpui::{div, prelude::*, px, relative, Entity, FontWeight, IntoElement};
 
 use super::editor_kit as kit;
-use super::{icon, soon};
+use super::icon;
 use crate::diagnose::Outcome;
 use crate::state::{AppState, Diagnosis};
 use crate::theme::{self, Theme};
@@ -92,7 +92,7 @@ pub fn render(t: &Theme, d: &Diagnosis, state: &Entity<AppState>) -> impl IntoEl
             "Everything up to the key works from this PC.".to_string(),
         ))
     };
-    let (back, again, probe) = (state.clone(), state.clone(), state.clone());
+    let (back, again) = (state.clone(), state.clone());
     let name = d.profile.clone();
     div()
         .flex()
@@ -144,32 +144,4 @@ pub fn render(t: &Theme, d: &Diagnosis, state: &Entity<AppState>) -> impl IntoEl
                 .text_color(t.colors.text)
                 .child(text)
         }))
-        .child(kit::group(t, "The model itself"))
-        .child(
-            soon(
-                div()
-                    .id("capability-probe")
-                    .flex()
-                    .items_center()
-                    .gap(t.space.md)
-                    .px(px(14.))
-                    .py(px(10.))
-                    .rounded(t.radius.card)
-                    .border_1()
-                    .border_color(t.colors.border)
-                    .cursor_pointer()
-                    .child(icon("icons/stethoscope.svg", t.size.icon, t.colors.text_muted))
-                    .child(kit::card_text(
-                        t,
-                        SharedString::from("Streaming, tools, images, thinking"),
-                        false,
-                        Some("Checks what the model can do, one short request each.".into()),
-                        None,
-                    )),
-                crate::stubs::CAPABILITY_PROBE,
-            )
-            .on_click(move |_, _, cx| {
-                probe.update(cx, |s, cx| s.stub(crate::stubs::CAPABILITY_PROBE, cx))
-            }),
-        )
 }

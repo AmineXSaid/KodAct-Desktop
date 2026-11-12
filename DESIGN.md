@@ -99,7 +99,7 @@ The transcript and the composer share one 760px column and one edge. Paragraphs 
 
 ## Elevation & Depth
 
-Nearly flat. Lift (`elevation_grain`) only for what holds content you act on: the composer, a card that needs you; popovers a touch more. No glows, no hard offset shadows.
+Nearly flat. Lift (`elevation_grain`) only for what holds content you act on: the composer, a card that needs you; popovers a touch more. A filled or bordered button sits a hair off its surface (`elevation_button`) on a face a shade lighter at the top (`button_face`), and goes flat when pressed. No glows, no hard offset shadows.
 
 ## Shapes
 

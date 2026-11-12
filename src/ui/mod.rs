@@ -274,19 +274,6 @@ pub fn shortcut(key: &str) -> SharedString {
     format!("{}{key}", mod_key()).into()
 }
 
-/// The one treatment for a control whose feature isn't wired yet
-/// (`stubs.rs`): drawn muted, with a "Soon" tooltip naming what it will do.
-/// It stays clickable, and its click says so (`AppState::stub`), never
-/// pretending to work.
-pub fn soon<E: gpui::StatefulInteractiveElement + gpui::Styled>(el: E, stub: &'static str) -> E {
-    let line = crate::stubs::get(stub)
-        .map(|s| s.soon_line())
-        .unwrap_or_else(|| "Soon".into());
-    el.opacity(0.5).tooltip(move |window, cx| {
-        gpui::component::tooltip::Tooltip::new(line.clone()).build(window, cx)
-    })
-}
-
 /// A search field as the app draws one (the sidebar's): a recessed box
 /// with a hairline edge that firms on hover, a search icon, the input.
 pub fn search_field(t: &Theme, input: &gpui::Entity<gpui::component::input::InputState>) -> Div {

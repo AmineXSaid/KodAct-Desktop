@@ -407,6 +407,38 @@ impl Theme {
         ]
     }
 
+    /// What lifts a button you press off its surface: one hairline of
+    /// shadow under it and a breath of blur below that, as a key sits on a
+    /// board. Pressed, it has none (the button goes down).
+    pub fn elevation_button(&self) -> Vec<BoxShadow> {
+        let d = self.is_dark;
+        [(1., 1., 0.10, 0.45), (2., 4., 0.06, 0.25)]
+            .into_iter()
+            .map(|(y, blur, light, dark)| BoxShadow {
+                color: ink(if d { dark } else { light }),
+                offset: point(px(0.), px(y)),
+                blur_radius: px(blur),
+                spread_radius: px(0.),
+                inset: false,
+            })
+            .collect()
+    }
+
+    /// A filled button's face: its fill, a shade lighter along the top and a
+    /// shade deeper at the foot, so it reads as a pressable thing rather
+    /// than a flat patch. Never enough to see as a gradient.
+    pub fn button_face(&self, fill: Hsla) -> gpui::Background {
+        let shade = |by: f32| Hsla {
+            l: (fill.l + by).clamp(0., 1.),
+            ..fill
+        };
+        gpui::linear_gradient(
+            180.,
+            gpui::linear_color_stop(shade(0.045), 0.),
+            gpui::linear_color_stop(shade(-0.03), 1.),
+        )
+    }
+
     /// What lifts a card or the session off the canvas: paper grain (three
     /// hairline shadows under 4px of blur and 6% ink).
     pub fn elevation_grain(&self) -> Vec<BoxShadow> {
@@ -1031,7 +1063,6 @@ fn styled_button(t: &Theme, variant: crate::ui::button::Variant, label: SharedSt
         .rounded(t.radius.pill)
         .border_1()
         .border_color(p.border.unwrap_or(t.colors.surface.opacity(0.)))
-        .bg(p.bg)
         .text_color(p.fg)
         .text_size(t.text.body_sm)
         .when(
@@ -1043,7 +1074,21 @@ fn styled_button(t: &Theme, variant: crate::ui::button::Variant, label: SharedSt
         )
         .whitespace_nowrap()
         .cursor_pointer()
-        .hover(move |s| s.bg(hover))
+        .map(|d| {
+            // The same face and lift as `ui::button::Button`.
+            if variant.filled() {
+                let face = t.button_face(hover);
+                d.bg(t.button_face(p.bg))
+                    .shadow(t.elevation_button())
+                    .hover(move |s| s.bg(face))
+            } else if variant.raised() {
+                d.bg(p.bg)
+                    .shadow(t.elevation_button())
+                    .hover(move |s| s.bg(hover))
+            } else {
+                d.bg(p.bg).hover(move |s| s.bg(hover))
+            }
+        })
         .child(label)
 }
 

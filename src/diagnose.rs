@@ -10,7 +10,7 @@
 //!
 //! Anything model-side (does it stream, call tools, read images, think?)
 //! needs a model request per feature and KodAct CLI's own view of the model,
-//! so it stays in the stub registry (`stubs::CAPABILITY_PROBE`).
+//! so it isn't checked here.
 //!
 //! Blocking network I/O: call off the UI thread.
 
