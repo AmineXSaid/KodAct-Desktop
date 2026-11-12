@@ -92,6 +92,17 @@ Section "KodAct desktop app" SecApp
   CreateShortcut "$SMPROGRAMS\KodAct.lnk" "$INSTDIR\KodAct.exe" "" "$INSTDIR\KodAct.exe" 0
 SectionEnd
 
+Section "Document tools" SecPython
+  SectionIn RO
+  ; Python with the libraries KodAct edits Word, Excel, PowerPoint and PDF
+  ; files with (staged by stage_python.sh), so nothing has to be installed
+  ; by hand. Replaced whole: it is KodAct's own, and an update's libraries
+  ; must not mix with the last one's.
+  RMDir /r "$INSTDIR\python"
+  SetOutPath "$INSTDIR\python"
+  File /r "${PYTHON_DIR}\*.*"
+SectionEnd
+
 Section "Design library" SecDesign
   SectionIn RO
   ; Open Design's skills, templates, design systems and craft rules, which
@@ -125,6 +136,7 @@ SectionEnd
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
   !insertmacro MUI_DESCRIPTION_TEXT ${SecApp} "The KodAct desktop chat app."
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecPython} "Python with the libraries KodAct edits Word, Excel, PowerPoint and PDF files with."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecDesign} "Skills, templates and design systems for design chats."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecCli} "KodAct CLI, the engine behind every chat. The app needs it."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecPath} "Run kodact from any terminal (your user's PATH)."
@@ -283,6 +295,7 @@ Section "Uninstall"
   Delete "$INSTDIR\KodAct.exe"
   Delete "$INSTDIR\kodact.ico"
   RMDir /r "$INSTDIR\fonts"
+  RMDir /r "$INSTDIR\python"
   IfFileExists "$INSTDIR\design-library\UPSTREAM.json" 0 +2
     RMDir /r "$INSTDIR\design-library"
   Delete "$INSTDIR\Uninstall.exe"

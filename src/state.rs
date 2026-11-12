@@ -1872,6 +1872,10 @@ pub struct AppState {
     nav_at: Option<Place>,
     nav_stepping: bool,
     pub sidebar_open: bool,
+    /// LibreOffice is being installed (`install_libreoffice`).
+    pub office_installing: bool,
+    /// LibreOffice is on this computer, as last looked (off the UI thread).
+    pub libreoffice: bool,
     pub search: SharedString,
     /// Endpoint profiles (each one endpoint and its model); None while
     /// they load. No model is built in.
@@ -2318,6 +2322,8 @@ impl AppState {
             nav_stepping: false,
             chats,
             sidebar_open: true,
+            office_installing: false,
+            libreoffice: false,
             search: "".into(),
             endpoints: None,
             health: Default::default(),
@@ -7822,6 +7828,133 @@ fix everything under 8, render it again to check, then tell me the scores before
             },
             cx,
         );
+        cx.notify();
+    }
+
+    /// At launch: find the Python the office-documents skill runs on, and
+    /// set its libraries up when a Python is here without them
+    /// (`doc_tools::prepare`). Not in the demo, which has no KodAct CLI, nor
+    /// with `KODACT_NO_DOC_SETUP=1`.
+    pub fn prepare_doc_tools(&mut self, cx: &mut Context<Self>) {
+        let off = std::env::var("KODACT_NO_DOC_SETUP").is_ok_and(|v| v == "1");
+        if demo_mode() || off {
+            // Still worth knowing what is here: Settings says so.
+            cx.spawn(async move |this, cx| {
+                let office = cx
+                    .background_spawn(async {
+                        crate::doc_tools::find();
+                        crate::doc_tools::libreoffice()
+                    })
+                    .await;
+                let _ = this.update(cx, |s, cx| {
+                    s.libreoffice = office;
+                    cx.notify();
+                });
+            })
+            .detach();
+            return;
+        }
+        cx.spawn(async move |this, cx| {
+            let (before, office) = cx
+                .background_spawn(async {
+                    (crate::doc_tools::find(), crate::doc_tools::libreoffice())
+                })
+                .await;
+            let _ = this.update(cx, |s, cx| {
+                s.libreoffice = office;
+                cx.notify();
+            });
+            let now = cx.background_spawn(async { crate::doc_tools::prepare() }).await;
+            let _ = this.update(cx, |s, cx| {
+                // Only an install is worth a word: finding one says nothing.
+                if before != now {
+                    s.doc_tools_said(&now, cx);
+                    s.restart_idle_engines();
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Settings and the palette: set the document libraries up now.
+    pub fn set_up_doc_tools(&mut self, cx: &mut Context<Self>) {
+        use crate::doc_tools::Python;
+        if crate::doc_tools::python() == Python::Installing {
+            return self.show_toast("The document tools are being set up.", cx);
+        }
+        self.show_toast("Setting up the document tools…", cx);
+        cx.spawn(async move |this, cx| {
+            let now = cx
+                .background_spawn(async {
+                    match crate::doc_tools::find() {
+                        Python::Ready(p) => Python::Ready(p),
+                        _ => crate::doc_tools::install(),
+                    }
+                })
+                .await;
+            let _ = this.update(cx, |s, cx| {
+                s.doc_tools_said(&now, cx);
+                s.restart_idle_engines();
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
+    fn doc_tools_said(&mut self, now: &crate::doc_tools::Python, cx: &mut Context<Self>) {
+        use crate::doc_tools::Python;
+        match now {
+            Python::Ready(_) => self.show_toast(
+                "The document tools are ready: KodAct can edit Word, Excel, PowerPoint and PDF files.",
+                cx,
+            ),
+            Python::Missing(why) => self.show_toast(
+                format!("Couldn't set up the document tools. {why} Try again from Settings."),
+                cx,
+            ),
+            Python::NoPython => self.show_toast(
+                "The document tools need Python, and this computer has none. Install Python 3, then try again from Settings.",
+                cx,
+            ),
+            Python::Installing | Python::Unknown => {}
+        }
+    }
+
+    /// Settings and the palette: install LibreOffice (winget on Windows),
+    /// or open its download page where that can't be done from here.
+    pub fn install_libreoffice(&mut self, cx: &mut Context<Self>) {
+        if self.libreoffice {
+            return self.show_toast("LibreOffice is already installed.", cx);
+        }
+        if self.office_installing {
+            return self.show_toast("LibreOffice is being installed.", cx);
+        }
+        if !cfg!(windows) {
+            cx.open_url(crate::doc_tools::LIBREOFFICE_URL);
+            return self.show_toast("Opened LibreOffice's download page.", cx);
+        }
+        self.office_installing = true;
+        self.show_toast("Installing LibreOffice. This takes a few minutes.", cx);
+        cx.spawn(async move |this, cx| {
+            let done = cx
+                .background_spawn(async { crate::doc_tools::install_libreoffice() })
+                .await;
+            let _ = this.update(cx, |s, cx| {
+                s.office_installing = false;
+                s.libreoffice = done.is_ok();
+                match done {
+                    Ok(()) => s.show_toast("LibreOffice is installed.", cx),
+                    Err(why) => {
+                        cx.open_url(crate::doc_tools::LIBREOFFICE_URL);
+                        s.show_toast(why, cx)
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
         cx.notify();
     }
 

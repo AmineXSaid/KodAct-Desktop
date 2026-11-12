@@ -314,6 +314,18 @@ impl CommandPalette {
                 Box::new(ToggleBrowser),
             ),
             act(
+                "Set up the document tools (Word, Excel, PowerPoint, PDF)",
+                "icons/file-text.svg",
+                None,
+                Box::new(SetUpDocumentTools),
+            ),
+            act(
+                "Install LibreOffice (document previews, recalculation, PDF export)",
+                "icons/download.svg",
+                None,
+                Box::new(InstallLibreOffice),
+            ),
+            act(
                 "Choose a model",
                 "icons/model.svg",
                 Some(shortcut("/")),

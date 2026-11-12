@@ -70,6 +70,7 @@ impl Workspace {
         let state = cx.new(|cx| {
             let mut s = AppState::new();
             s.load(cx);
+            s.prepare_doc_tools(cx);
             s.start_routines(cx);
             s
         });
@@ -1368,6 +1369,12 @@ impl Render for Workspace {
             }))
             .on_action(cx.listener(|this, _: &ToggleBrowser, _, cx| {
                 this.state.update(cx, |s, cx| s.toggle_browser(cx))
+            }))
+            .on_action(cx.listener(|this, _: &SetUpDocumentTools, _, cx| {
+                this.state.update(cx, |s, cx| s.set_up_doc_tools(cx))
+            }))
+            .on_action(cx.listener(|this, _: &InstallLibreOffice, _, cx| {
+                this.state.update(cx, |s, cx| s.install_libreoffice(cx))
             }))
             // Remote development (`ui/remote_menu.rs`): the sidebar opens so
             // its indicator's menu shows.

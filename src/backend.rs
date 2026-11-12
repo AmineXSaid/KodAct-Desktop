@@ -302,6 +302,9 @@ impl Session {
     pub fn spawn(exe: &Path, launch: &Launch, cwd: &Path) -> Result<Session, String> {
         let mut cmd = Command::new(exe);
         cmd.args(&launch.args).current_dir(cwd);
+        // The Python that has the document libraries, first on PATH
+        // (`doc_tools.rs`), so the office-documents skill's tools run.
+        cmd.envs(crate::doc_tools::session_env());
         Self::start(cmd, launch, &[], &exe.display().to_string())
     }
 

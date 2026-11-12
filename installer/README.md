@@ -10,6 +10,7 @@
 | The desktop app | `%LOCALAPPDATA%\Programs\KodAct\KodAct.exe` |
 | KodAct CLI | `%LOCALAPPDATA%\Programs\KodAct\bin\kodact.exe` (the app finds it there) |
 | Design library | `%LOCALAPPDATA%\Programs\KodAct\design-library\` (`design-library/`, its media fetched by `scripts/sync_open_design.py media`) |
+| Document tools | `%LOCALAPPDATA%\Programs\KodAct\python\` (python.org's embeddable Python, pinned by hash, with the document libraries `src/doc_tools.rs` pins; staged by `installer/stage_python.sh`) |
 | Shortcuts | Start menu; desktop (optional) |
 | `kodact` on PATH | the user's PATH (optional, on by default) |
 | Uninstaller | `Uninstall.exe`, listed in Apps & features |

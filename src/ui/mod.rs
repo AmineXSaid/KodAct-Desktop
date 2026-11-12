@@ -110,6 +110,8 @@ gpui::actions!(
         ToggleCommandPalette,
         ToggleTheme,
         ToggleBrowser,
+        SetUpDocumentTools,
+        InstallLibreOffice,
         OpenRemoteMenu,
         ConnectWsl,
         ConnectHost,

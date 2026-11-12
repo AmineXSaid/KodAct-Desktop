@@ -5,7 +5,8 @@
 #   KODACT_DIR=../kodact installer/build.sh [out-dir]
 #
 # Needs: rustup targets x86_64-pc-windows-gnu and x86_64-unknown-linux-musl,
-# x86_64-w64-mingw32-gcc, musl-gcc (musl-tools), makensis.
+# x86_64-w64-mingw32-gcc, musl-gcc (musl-tools), makensis; python3 with pip,
+# curl and unzip (the bundled Python, `stage_python.sh`).
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 cli="${KODACT_DIR:-$here/../kodact}"
@@ -47,8 +48,13 @@ python3 -I "$here/scripts/sync_open_design.py" media
 python3 -I "$here/scripts/sync_open_design.py" check
 python3 -I "$here/scripts/sync_open_design.py" stage "$out/stage/design-library"
 
+# Python with the document libraries, for a PC that has none: what the
+# office-documents skill's tools run on (`src/doc_tools.rs` finds it).
+"$here/installer/stage_python.sh" "$out/stage/python"
+
 makensis -V2 -WX \
   "${fonts[@]}" \
+  -DPYTHON_DIR="$out/stage/python" \
   -DDESIGN_DIR="$out/stage/design-library" \
   -DAPP_EXE="$out/stage/app/KodAct.exe" \
   -DCLI_EXE="$out/stage/cli/kodact.exe" \

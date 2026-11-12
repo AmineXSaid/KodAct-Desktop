@@ -807,6 +807,7 @@ impl Settings {
         let s = self.state.read(cx);
         let (dark, default_mode, bypass, browser) =
             (s.dark, s.default_mode, s.bypass_allowed, s.browser);
+        let (libreoffice, office_installing) = (s.libreoffice, s.office_installing);
         let name_row = div()
             .flex()
             .items_center()
@@ -896,7 +897,62 @@ impl Settings {
         // Each group is one white card with hairline rows: the setting on
         // the left, its control on the right (or below, when it is a row of
         // choices), and the cards rise in one after another.
-        let groups: [(&str, Vec<AnyElement>); 3] = [
+        // What the office-documents skill runs on (`doc_tools.rs`): found or
+        // set up at launch; each row says where it stands and offers the
+        // one thing left to do.
+        let said = |text: &str, ok: bool| {
+            div()
+                .flex()
+                .items_center()
+                .gap(t.space.xs)
+                .text_size(t.text.caption)
+                .text_color(t.colors.text_muted)
+                .when(ok, |d| {
+                    d.child(icon("icons/check.svg", t.size.icon_sm, t.extra.success))
+                })
+                .child(text.to_string())
+        };
+        let doc_tools_row = {
+            use crate::doc_tools::Python;
+            let set_up = |label: &'static str| {
+                super::button::Button::secondary("doc-tools-set-up", label).on_click(
+                    |_, window, cx| {
+                        window.dispatch_action(Box::new(super::SetUpDocumentTools), cx)
+                    },
+                )
+            };
+            let row = div().flex().items_center().gap(t.space.sm);
+            match crate::doc_tools::python() {
+                Python::Ready(_) => row.child(said("Ready", true)),
+                Python::Installing => row.child(said("Setting up…", false)),
+                Python::Unknown => row.child(said("Checking…", false)),
+                Python::Missing(_) => row
+                    .child(said("Not set up", false))
+                    .child(set_up("Set up")),
+                Python::NoPython => row
+                    .child(said("Needs Python 3", false))
+                    .child(set_up("Try again")),
+            }
+        };
+        let office_row = {
+            let row = div().flex().items_center().gap(t.space.sm);
+            if libreoffice {
+                row.child(said("Installed", true))
+            } else if office_installing {
+                row.child(said("Installing…", false))
+            } else {
+                row.child(said("Not installed", false)).child(
+                    super::button::Button::secondary(
+                        "libreoffice-install",
+                        if cfg!(windows) { "Install" } else { "Get it" },
+                    )
+                    .on_click(|_, window, cx| {
+                        window.dispatch_action(Box::new(super::InstallLibreOffice), cx)
+                    }),
+                )
+            }
+        };
+        let groups: [(&str, Vec<AnyElement>); 4] = [
             (
                 "You",
                 vec![
@@ -941,6 +997,25 @@ impl Settings {
                         "Web browser",
                         Some("Lets KodAct's agents drive the browser in the side panel: open pages and tabs, click, type, read, run scripts, take screenshots. You watch it live. Each step asks first."),
                         browser_row.into_any_element(),
+                        false,
+                    ),
+                ],
+            ),
+            (
+                "Documents",
+                vec![
+                    Self::row(
+                        t,
+                        "Document tools",
+                        Some("What KodAct edits Word, Excel, PowerPoint and PDF files with. Set up for you the first time KodAct starts."),
+                        doc_tools_row.into_any_element(),
+                        false,
+                    ),
+                    Self::row(
+                        t,
+                        "LibreOffice",
+                        Some("Shows documents as they print, recalculates workbooks and exports to PDF. Without it, the panel shows a file's text."),
+                        office_row.into_any_element(),
                         false,
                     ),
                 ],

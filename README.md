@@ -41,6 +41,14 @@ the rename is lost; the app follows the same rules as the CLI:
 - `forge.autoApproveSafeCommands` still reads; `.forgeproject` setups still
   import, their files landing under the project's own names.
 
+KodAct edits Word, Excel, PowerPoint and PDF files with Python and five
+libraries. You install neither: the Windows installer carries its own
+Python with them, and elsewhere KodAct finds a Python that has them or, the
+first time it starts, makes its own in the config folder (`doc-tools/venv`)
+and installs them there (`KODACT_NO_DOC_SETUP=1` stops that). Settings →
+General → Documents says where this stands; LibreOffice is offered there
+too (installed with winget on Windows).
+
 Word, PowerPoint and Excel files KodAct writes open beside the chat as they
 print when [LibreOffice](https://www.libreoffice.org/) is installed (KodAct
 finds it on PATH or where its installer puts it; `KODACT_SOFFICE` names it).
@@ -357,6 +365,22 @@ Changes apply the next time they're used; no restart.
 - `scripts/screenshots.sh`: light and dark screenshots of every screen (see below).
 - `.github/workflows/windows.yml`: fmt, clippy (`-D warnings`) and tests on
   Linux for every push and pull request; the Windows build and tests.
+
+## End-to-end test
+
+```
+cargo build && scripts/e2e/chat.sh              # into target/e2e-chat/
+```
+
+One real chat, start to finish: the app on a virtual display, the real
+KodAct CLI (`KODACT_CLI_BIN`, default `../kodact/target/debug/kodact`) and a
+scripted model (`scripts/e2e/chat_model.py`). It sends a message, allows
+each permission the reply asks for, sends a follow-up, then checks what
+happened rather than how it looks: the files written, a workbook made by the
+office-documents skill's tool on the Python the app hands the session, the
+order of the tool calls, that nothing ran before it was allowed, and that
+both replies are in the saved chat. It exits 1 naming each check that
+failed. `scripts/e2e/real_kodact.sh` drives the browser tools the same way.
 
 ## Screenshots
 

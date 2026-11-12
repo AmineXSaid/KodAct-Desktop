@@ -22,6 +22,7 @@ mod context;
 mod design;
 mod design_mcp;
 mod diagnose;
+mod doc_tools;
 mod diagram;
 mod doc_versions;
 mod downloads;

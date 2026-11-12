@@ -14,6 +14,11 @@ The tools are in `scripts/` (Python 3 with python-docx, openpyxl,
 python-pptx, pypdf and reportlab; LibreOffice for `recalc`, `convert` and
 `render`, poppler's pdftoppm for `render`).
 Run them as `python <skill-dir>/scripts/<tool>.py …`. Each has `--help`.
+KodAct puts a Python that has these libraries first on PATH, and names it
+in `KODACT_PYTHON`: if `python` is not found or lacks a library, run the
+tools with `"$KODACT_PYTHON"` (`%KODACT_PYTHON%` in cmd,
+`$env:KODACT_PYTHON` in PowerShell). If that is unset too, tell the person
+to choose Settings → General → Documents → Set up, and stop.
 
 ## The rules
 
