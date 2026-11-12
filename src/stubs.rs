@@ -36,7 +36,8 @@ pub struct Stub {
     /// What it waits on, in a few words: KodAct CLI support, or a service.
     #[cfg_attr(not(test), allow(dead_code))]
     pub waits_on: &'static str,
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// For whoever reads the table: nothing draws it.
+    #[allow(dead_code)]
     pub step: Step,
 }
 

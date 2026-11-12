@@ -197,7 +197,14 @@ mod tests {
         let Some(root) = crate::design::root() else {
             return;
         };
-        let pets = read_dir(&root.join("assets/community-pets"));
+        let dir = root.join("assets/community-pets");
+        // The sprite sheets are media: pinned in media.lock.json and fetched
+        // by `scripts/sync_open_design.py media`, never committed. A checkout
+        // that hasn't fetched them has no pets to load.
+        if !dir.join("tux/spritesheet.webp").is_file() {
+            return;
+        }
+        let pets = read_dir(&dir);
         assert!(pets.len() >= 8, "{pets:?}");
         let tux = pets.iter().find(|p| p.id == "tux").expect("tux");
         assert_eq!(tux.name, "Tux");
