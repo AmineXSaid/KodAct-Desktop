@@ -161,7 +161,7 @@ class ExcelChecks(Excel):
 
 
 class Word(Tmp):
-    MD = "# Release notes\n\nForge now draws **diagrams** and reads *documents*.\n\n## Changes\n\n- Diagrams in replies\n- A document viewer\n\n| Area | Status |\n|---|---|\n| Viewer | Done |\n| **Total** | **2** |\n"
+    MD = "# Release notes\n\nKodAct now draws **diagrams** and reads *documents*.\n\n## Changes\n\n- Diagrams in replies\n- A document viewer\n\n| Area | Status |\n|---|---|\n| Viewer | Done |\n| **Total** | **2** |\n"
 
     def test_create_read_replace_append(self):
         src = self.path("notes.docx")
