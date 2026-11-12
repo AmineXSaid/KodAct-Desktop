@@ -855,7 +855,7 @@ impl Render for Workspace {
 
         // The session is a sheet on the cream: 4px corners, paper grain,
         // a gutter to its right and below.
-        let main = div()
+        let sheet = div()
             .flex_1()
             .min_w_0()
             .flex()
@@ -866,6 +866,17 @@ impl Render for Workspace {
             .shadow(t.elevation_grain())
             .overflow_hidden()
             .bg(t.extra.stage);
+        // What's on the sheet: each screen arrives on it (`screen_in`),
+        // while the sheet itself stays.
+        let main = div().flex_1().min_w_0().min_h_0().flex().flex_col();
+        let screen_key = match screen {
+            Screen::Chat => 0,
+            Screen::Rules => 1,
+            Screen::Projects => 2,
+            Screen::Documents => 3,
+            Screen::Design => 4,
+            Screen::Project(id) => 5 + id,
+        };
         // A file opened from a reply, or the setup guide, sits beside the session.
         let pane = {
             let s = self.state.read(cx);
@@ -1835,7 +1846,8 @@ impl Render for Workspace {
                                 ))
                             } else {
                                 d.child(super::motion::sidebar_slide(
-                                    super::sidebar::rail(&t, screen).into_any_element(),
+                                    super::sidebar::rail(&t, screen, &self.state)
+                                        .into_any_element(),
                                     t.size.sidebar,
                                     t.size.rail,
                                     "sidebar-close",
@@ -1845,7 +1857,9 @@ impl Render for Workspace {
                         })
                         // The sidebar's shadow falls across the session's edge.
                         .child(
-                            main.relative()
+                            sheet
+                                .relative()
+                                .child(super::motion::screen_in(main, screen_key, &t))
                                 .children(super::motion::side_shade(&t))
                                 .when(screen == Screen::Chat, |m| m.child(self.pet.clone())),
                         )

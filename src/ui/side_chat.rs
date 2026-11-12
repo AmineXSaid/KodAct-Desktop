@@ -6,8 +6,8 @@
 
 use gpui::component::input::{Input, InputEvent, InputState};
 use gpui::{
-    div, prelude::*, px, Context, Entity, FontWeight, IntoElement, Render, SharedString,
-    Subscription, Window,
+    div, prelude::*, px, AnimationExt as _, Context, Entity, FontWeight, IntoElement, Render,
+    SharedString, Subscription, Window,
 };
 
 use super::*;
@@ -27,12 +27,26 @@ const SIDE_H_MIN: f32 = 120.;
 const SIDE_EDGE: f32 = 20.;
 const SIDE_BOTTOM: f32 = 150.;
 const SIDE_CHROME: f32 = 190.;
+/// The rule and the field under the thread.
+const SIDE_FOOT: f32 = 60.;
 
 pub struct SideChat {
     state: Entity<AppState>,
     input: Entity<InputState>,
     /// The card, kept while it leaves.
     presence: super::motion::Presence<crate::state::Side>,
+    /// Its body, kept while it folds to the title bar.
+    fold: super::motion::Presence<()>,
+    /// Folded last frame, and opening out of that now.
+    was_folded: bool,
+    unfolding: bool,
+    /// Its width and thread height last frame and before the last change,
+    /// and how many changes there were: each one eases (`motion::resize`).
+    sized: Option<(f32, f32)>,
+    sized_from: (f32, f32),
+    turns: usize,
+    sized_at: std::time::Instant,
+    folds: usize,
     _subs: Vec<Subscription>,
 }
 
@@ -57,6 +71,14 @@ impl SideChat {
             state,
             input,
             presence: Default::default(),
+            fold: Default::default(),
+            was_folded: false,
+            unfolding: false,
+            sized: None,
+            sized_from: (SIDE_W, SIDE_H),
+            turns: 0,
+            sized_at: std::time::Instant::now(),
+            folds: 0,
             _subs: subs,
         }
     }
@@ -88,9 +110,35 @@ impl Render for SideChat {
         } else {
             (SIDE_W, SIDE_H)
         };
-        let card_w = px(want_w.min((f32::from(view.width) - 2. * SIDE_EDGE).max(SIDE_W_MIN)));
-        let thread_h =
-            px(want_h.min((f32::from(view.height) - SIDE_BOTTOM - SIDE_CHROME).max(SIDE_H_MIN)));
+        let to_w = want_w.min((f32::from(view.width) - 2. * SIDE_EDGE).max(SIDE_W_MIN));
+        let to_h = want_h.min((f32::from(view.height) - SIDE_BOTTOM - SIDE_CHROME).max(SIDE_H_MIN));
+        // Growing or shrinking eases from the size it had.
+        if self.sized != Some((to_w, to_h)) {
+            self.sized_from = self.sized.unwrap_or((to_w, to_h));
+            self.sized = Some((to_w, to_h));
+            self.sized_at = std::time::Instant::now();
+            self.turns += 1;
+        } else if self.sized_at.elapsed()
+            > std::time::Duration::from_millis(super::motion::played(t.size.panel_in_ms))
+        {
+            // Settled: drawn afresh (unfolded, reopened), it starts there.
+            self.sized_from = (to_w, to_h);
+        }
+        let (from_w, from_h) = self.sized_from;
+        let turns = self.turns;
+        // Folding keeps the body for the beat it takes to close; opening out
+        // of the fold unrolls it (a card just summoned arrives whole).
+        if !leaving {
+            if self.was_folded != side.minimized {
+                self.unfolding = self.was_folded;
+                self.folds += 1;
+            }
+            self.was_folded = side.minimized;
+        }
+        let (unfolding, folds) = (self.unfolding, self.folds);
+        let body_f = self
+            .fold
+            .frame((!side.minimized).then_some(()), t.size.panel_in_ms, window);
         let head_button = |id: &'static str, path: &'static str, tip: &'static str| {
             div()
                 .id(id)
@@ -219,7 +267,7 @@ impl Render for SideChat {
             .flex()
             .flex_col()
             .gap(px(14.))
-            .max_h(thread_h)
+            .max_h(px(to_h))
             .overflow_y_scroll()
             .px(px(14.))
             .py(px(12.));
@@ -335,7 +383,7 @@ impl Render for SideChat {
         let card = div()
             .id("side-chat")
             .occlude()
-            .w(card_w)
+            .w(px(to_w))
             .flex()
             .flex_col()
             .bg(t.colors.surface)
@@ -351,11 +399,48 @@ impl Render for SideChat {
                 }
             }))
             .child(head)
-            .when(!side.minimized, |d| {
-                d.child(crate::theme::rule(&t))
+            .children(body_f.map(|(_, folding)| {
+                let thread = thread.with_animation(
+                    ("side-thread", turns),
+                    super::motion::resize(&t),
+                    move |d, k| d.max_h(px(from_h + (to_h - from_h) * k)),
+                );
+                let body = div()
+                    .flex()
+                    .flex_col()
+                    .child(crate::theme::rule(&t))
                     .child(thread)
-                    .child(input_row)
-            });
+                    .child(input_row);
+                // The most it can be: the thread, its rule and its field.
+                let full = to_h + SIDE_FOOT;
+                if folding {
+                    body.overflow_hidden()
+                        .with_animation(
+                            ("side-fold", folds),
+                            super::motion::resize(&t),
+                            move |d, k| d.max_h(px(full * (1. - k))).opacity(1. - k),
+                        )
+                        .into_any_element()
+                } else if unfolding {
+                    body.with_animation(
+                        ("side-unfold", folds),
+                        super::motion::resize(&t),
+                        move |d, k| {
+                            d.when(k < 1., |d| d.overflow_hidden().max_h(px(full * k)))
+                                .opacity(k)
+                        },
+                    )
+                    .into_any_element()
+                } else {
+                    body.into_any_element()
+                }
+            }))
+            .with_animation(
+                ("side-size", turns),
+                super::motion::resize(&t),
+                move |d, k| d.w(px(from_w + (to_w - from_w) * k)),
+            );
+        let card = div().child(card);
 
         // Bottom right, above the composer's row.
         div()

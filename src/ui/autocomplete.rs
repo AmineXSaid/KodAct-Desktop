@@ -407,6 +407,7 @@ pub fn render(
     loading: bool,
     place: Place,
     ranked: bool,
+    leaving: bool,
     on_pick: impl Fn(usize, &mut gpui::Window, &mut gpui::App) + Clone + 'static,
     on_hover: impl Fn(usize, &mut gpui::App) + Clone + 'static,
 ) -> AnyElement {
@@ -602,20 +603,33 @@ pub fn render(
                 .position(pos)
                 .anchor(corner)
                 .snap_to_window_with_margin(t.space.sm)
-                .child(card.w(t.size.completion_width))
+                .child(super::motion::unfold(
+                    card.w(t.size.completion_width),
+                    "autocomplete",
+                    !place.below,
+                    leaving,
+                    t,
+                ))
                 .into_any_element()
         }
-        None => card
+        None => div()
             .absolute()
             .map(|d| {
                 if place.below {
-                    d.top_full().mt(px(8.))
+                    d.top_full().pt(px(8.))
                 } else {
-                    d.bottom_full().mb(px(8.))
+                    d.bottom_full().pb(px(8.))
                 }
             })
             .left_0()
             .w(t.size.completion_width)
+            .child(super::motion::unfold(
+                card,
+                "autocomplete",
+                !place.below,
+                leaving,
+                t,
+            ))
             .into_any_element(),
     }
 }

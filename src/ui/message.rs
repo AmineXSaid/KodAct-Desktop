@@ -54,6 +54,8 @@ pub struct ItemContext {
     /// whether their list is open.
     pub versions: Vec<super::versions::Row>,
     pub versions_open: bool,
+    /// Just closed: its list is drawn while it leaves.
+    pub versions_leaving: bool,
     /// Diagrams showing their source (`AppState::diagram_code`).
     pub sources: std::sync::Arc<std::collections::HashSet<SharedString>>,
     pub zooms: std::sync::Arc<std::collections::HashMap<SharedString, f32>>,
@@ -722,6 +724,7 @@ fn user(
                 cx.index,
                 &cx.versions,
                 cx.versions_open,
+                cx.versions_leaving,
             ))
         })
         .into_any_element()

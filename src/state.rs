@@ -11697,7 +11697,9 @@ impl AppState {
 
     /// The side card of the chat showing, if it is open.
     pub fn side_shown(&self) -> Option<&Side> {
+        // A chat's own: on its screen only, not over Projects or Design.
         self.current
+            .filter(|_| self.screen == Screen::Chat)
             .and_then(|id| self.side.get(&id))
             .filter(|s| s.visible)
     }

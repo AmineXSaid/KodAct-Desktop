@@ -16,6 +16,8 @@ use crate::state::AppState;
 use crate::theme::{self, ActiveTheme};
 
 pub struct DesignCommentBox {
+    /// The part being commented on, kept while the card leaves.
+    presence: super::motion::Presence<crate::web_view::PagePart>,
     state: Entity<AppState>,
     input: Entity<InputState>,
     /// @KodAct: the comment asks KodAct to act; without it, it is a note.
@@ -64,6 +66,7 @@ impl DesignCommentBox {
             to_forge: true,
             queue: true,
             on: None,
+            presence: Default::default(),
             _subs: subs,
         }
     }
@@ -83,10 +86,12 @@ impl DesignCommentBox {
 }
 
 impl Render for DesignCommentBox {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let s = self.state.read(cx);
-        let Some(part) = s.design_pick.clone() else {
+        // Closed: the card stays as it was for the beat it takes to leave.
+        let now = s.design_pick.clone();
+        let Some((part, leaving)) = self.presence.frame(now, t.size.menu_out_ms, window) else {
             return div().into_any_element();
         };
         let busy = s.busy();
@@ -279,6 +284,6 @@ impl Render for DesignCommentBox {
                     .text_color(t.colors.text_subtle)
                     .child(say),
             );
-        super::motion::drop_menu(card, "design-comment", false, &t)
+        super::motion::drop_menu(card, "design-comment", leaving, &t)
     }
 }

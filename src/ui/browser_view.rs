@@ -73,6 +73,11 @@ pub struct BrowserView {
     design_menu: Option<super::design_bar::Menu>,
     /// The bar's menu as it shows: open, or on its way out.
     menu_presence: super::motion::Presence<super::design_bar::Menu>,
+    /// The floating bars and cards over the page, kept while they leave.
+    typing_presence: super::motion::Presence<(crate::design::marks::Shape, (f32, f32))>,
+    marks_presence: super::motion::Presence<usize>,
+    hint_presence: super::motion::Presence<()>,
+    agent_presence: super::motion::Presence<()>,
     /// The comment tool's box, over the part picked.
     comment_box: Entity<super::design_comment::DesignCommentBox>,
     /// A comment was open when the app last changed.
@@ -161,6 +166,10 @@ impl BrowserView {
             zoom: 1.0,
             design_menu: None,
             menu_presence: Default::default(),
+            typing_presence: Default::default(),
+            marks_presence: Default::default(),
+            hint_presence: Default::default(),
+            agent_presence: Default::default(),
             comment_box,
             picked: false,
             drawing: None,
@@ -515,6 +524,22 @@ impl Render for BrowserView {
             .typing
             .filter(|_| tool_now.is_some())
             .map(|(shape, p)| (shape, marks_place.at(p)));
+        let out_ms = t.size.menu_out_ms;
+        let typing_f = self.typing_presence.frame(typing_at, out_ms, window);
+        let marks_f = self.marks_presence.frame(
+            (marks_count > 0 && s.design_pick.is_none() && !(s.design_select && design_bar.is_some()))
+                .then_some(marks_count),
+            out_ms,
+            window,
+        );
+        let hint_f = self.hint_presence.frame(
+            (s.design_select && design_bar.is_some() && s.design_pick.is_none()).then_some(()),
+            out_ms,
+            window,
+        );
+        let agent_f =
+            self.agent_presence
+                .frame((agent && design.is_none()).then_some(()), out_ms, window);
         // The page's outline: its headings, the one at the top marked.
         let outline = (s.design_outline && design_bar.is_some()).then(|| {
             let top = f64::from(page.frame_info.scroll.1) + 80.0;
@@ -1070,8 +1095,8 @@ impl Render for BrowserView {
             // The Insert tools' marks, over the page.
             .when(!marks.is_empty(), |d| d.child(super::design_marks::render(marks, marks_place, &t)))
             // A label or note being typed, where it goes.
-            .children(typing_at.map(|(shape, (x, y))| {
-                crate::theme::popover(&t)
+            .children(typing_f.map(|((shape, (x, y)), leaving)| {
+                let card = crate::theme::popover(&t)
                     .id("design-mark-words")
                     .occlude()
                     .absolute()
@@ -1094,9 +1119,11 @@ impl Render for BrowserView {
                             .child(if shape == crate::design::marks::Shape::Note { "Note" } else { "Text" }),
                     )
                     .child(Input::new(&self.mark_input).appearance(false).text_size(t.text.body_sm))
-            }).map(|card| super::motion::drop_menu(card, "design-mark-words", false, &t)))
+                ;
+                super::motion::drop_menu(card, "design-mark-words", leaving, &t)
+            }))
             // Marks made: comment on them for KodAct, or clear them.
-            .when(marks_count > 0 && s.design_pick.is_none() && !selecting, |d| {
+            .when_some(marks_f, |d, (marks_count, leaving)| {
                 d.child(
                     div()
                         .absolute()
@@ -1105,7 +1132,7 @@ impl Render for BrowserView {
                         .right_0()
                         .flex()
                         .justify_center()
-                        .child(super::motion::rise_in(
+                        .child(super::motion::float(
                             crate::theme::popover(&t)
                                 .occlude()
                                 .flex()
@@ -1135,11 +1162,12 @@ impl Render for BrowserView {
                                 ),
                             "design-marks-bar",
                             6.,
+                            leaving,
                             &t,
                         )),
                 )
             })
-            .when(selecting && s.design_pick.is_none(), |d| {
+            .when_some(hint_f, |d, (_, leaving)| {
                 d.child(
                     div()
                         .absolute()
@@ -1148,7 +1176,7 @@ impl Render for BrowserView {
                         .right_0()
                         .flex()
                         .justify_center()
-                        .child(super::motion::rise_in(
+                        .child(super::motion::float(
                             crate::theme::popover(&t)
                                 .px(t.space.md)
                                 .py(t.space.xs)
@@ -1161,6 +1189,7 @@ impl Render for BrowserView {
                                 .child("Point at any part and click to comment. Esc to stop."),
                             "design-select-hint",
                             6.,
+                            leaving,
                             &t,
                         )),
                 )
@@ -1248,8 +1277,8 @@ impl Render for BrowserView {
             }))
             // KodAct at the wheel: a badge over the page.
             // It rises into place when KodAct takes the wheel.
-            .when(agent && design.is_none(), |d| {
-                d.child(super::motion::rise_in(
+            .when_some(agent_f, |d, (_, leaving)| {
+                d.child(super::motion::float(
                     crate::theme::popover(&t)
                         .occlude()
                         .absolute()
@@ -1271,8 +1300,9 @@ impl Render for BrowserView {
                             ),
                         )
                         .child("KodAct is using the browser"),
-                    "web-agent-badge-in",
+                    "web-agent-badge",
                     6.,
+                    leaving,
                     &t,
                 ))
             });

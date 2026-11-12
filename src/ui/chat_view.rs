@@ -19,6 +19,8 @@ use crate::theme::ActiveTheme;
 
 pub struct ChatView {
     state: Entity<AppState>,
+    /// The open list of earlier versions, kept while it leaves.
+    versions_presence: super::motion::Presence<(usize, usize)>,
     list: ListState,
     shown_chat: Option<usize>,
     shown_count: usize,
@@ -71,6 +73,7 @@ impl ChatView {
         .detach();
         let mut view = Self {
             state,
+            versions_presence: Default::default(),
             list,
             shown_chat: None,
             shown_count: 0,
@@ -575,6 +578,13 @@ impl Render for ChatView {
         // Paragraphs take their reading order afresh, top to bottom.
         super::select::begin_frame();
         self.finish_reveal(window, cx);
+        let versions_frame = {
+            let (now, out) = (
+                self.state.read(cx).versions_open,
+                cx.theme().size.menu_out_ms,
+            );
+            self.versions_presence.frame(now, out, window)
+        };
         let reveal = self.reveal.clone();
         let state = self.state.clone();
         let step = self.step.clone();
@@ -644,7 +654,8 @@ impl Render for ChatView {
                         } else {
                             vec![]
                         },
-                        versions_open: s.versions_open == Some((chat.id, ix)),
+                        versions_open: versions_frame == Some(((chat.id, ix), false)),
+                        versions_leaving: versions_frame == Some(((chat.id, ix), true)),
                         edited_open: s.edited_open.contains(&(chat.id, ix)),
                         agents: agents.clone(),
                         sources: s.diagram_code.clone(),

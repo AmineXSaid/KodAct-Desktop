@@ -36,6 +36,16 @@ fn placeholder(in_folder: bool, asking: Option<bool>, busy: bool, in_chat: bool)
     }
 }
 
+/// The completion list as last shown: its rows, the one selected, whether
+/// more are loading, where it sits, and whether the rows are ranked.
+type AcShown = (
+    std::rc::Rc<Vec<super::autocomplete::Item>>,
+    usize,
+    bool,
+    super::autocomplete::Place,
+    bool,
+);
+
 pub struct Composer {
     state: Entity<AppState>,
     input: Entity<EditorState>,
@@ -57,6 +67,7 @@ pub struct Composer {
     design_presence: super::motion::Presence<crate::state::DesignTab>,
     project_presence: super::motion::Presence<()>,
     context_presence: super::motion::Presence<()>,
+    ac_presence: super::motion::Presence<AcShown>,
     /// Where the press that just closed a menu happened: the click it ends
     /// in, on that menu's own button, must not open it again.
     dismissed_at: Option<gpui::Point<gpui::Pixels>>,
@@ -210,6 +221,7 @@ impl Composer {
             active: None,
             picker_was_open: false,
             model_presence: Default::default(),
+            ac_presence: Default::default(),
             modes_presence: Default::default(),
             add_presence: Default::default(),
             design_presence: Default::default(),
@@ -737,9 +749,7 @@ impl Render for Composer {
             });
         }
         let caret = self.ac_anchor.map(|(_, at, line)| (at, line));
-        let completion = self.completion(cx).map(|(_, rows)| {
-            let me = cx.entity().downgrade();
-            let me2 = me.clone();
+        let ac_now = self.completion(cx).map(|(_, rows)| {
             let selected = self.ac_selected.min(rows.len().saturating_sub(1));
             let (loading, welcome) = {
                 let s = self.state.read(cx);
@@ -750,16 +760,25 @@ impl Render for Composer {
             };
             let ranked =
                 super::autocomplete::trigger(&self.text(cx)).is_some_and(|t| !t.query.is_empty());
+            let place = super::autocomplete::Place {
+                caret,
+                below: welcome,
+            };
+            (std::rc::Rc::new(rows), selected, loading, place, ranked)
+        });
+        // Kept as it was for the beat it takes to leave.
+        let ac_frame = self.ac_presence.frame(ac_now, t.size.menu_out_ms, window);
+        let completion = ac_frame.map(|((rows, selected, loading, place, ranked), leaving)| {
+            let me = cx.entity().downgrade();
+            let me2 = me.clone();
             super::autocomplete::render(
                 &t,
                 &rows,
                 selected,
                 loading,
-                super::autocomplete::Place {
-                    caret,
-                    below: welcome,
-                },
+                place,
                 ranked,
+                leaving,
                 move |i, window, cx| {
                     let _ = me.update(cx, |c, cx| c.pick(i, window, cx));
                 },

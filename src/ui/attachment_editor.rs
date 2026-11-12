@@ -58,6 +58,8 @@ pub struct AttachmentEditor {
     shown: Rc<Cell<Option<Bounds<Pixels>>>>,
     saving: bool,
     error: Option<SharedString>,
+    /// Closed, and sinking away: what it showed stays for that beat.
+    leaving: bool,
     _subs: Vec<Subscription>,
 }
 
@@ -70,7 +72,29 @@ impl AttachmentEditor {
                 Open::Text { id, .. } => *id,
                 Open::Picture(p) => p.id,
             });
-            if want != have {
+            if want == have {
+                this.leaving = false;
+            } else if want.is_none() && !super::motion::reduced_motion() {
+                if !this.leaving {
+                    this.leaving = true;
+                    let out = super::motion::played(cx.theme().size.window_out_ms);
+                    cx.spawn_in(window, async move |this, cx| {
+                        cx.background_executor()
+                            .timer(std::time::Duration::from_millis(out))
+                            .await;
+                        let _ = this.update_in(cx, |this, window, cx| {
+                            if this.leaving && this.state.read(cx).editing_attachment.is_none() {
+                                this.leaving = false;
+                                this.load(None, window, cx);
+                                cx.notify();
+                            }
+                        });
+                    })
+                    .detach();
+                    cx.notify();
+                }
+            } else {
+                this.leaving = false;
                 this.load(want, window, cx);
             }
         })];
@@ -86,6 +110,7 @@ impl AttachmentEditor {
             shown: Rc::new(Cell::new(None)),
             saving: false,
             error: None,
+            leaving: false,
             _subs: subs,
         }
     }
@@ -557,12 +582,12 @@ impl Render for AttachmentEditor {
                         .child(footer),
                     "attachment-editor",
                     t.colors.primary,
-                    false,
+                    self.leaving,
                     &t,
                 )),
             "attachment-editor",
             t.extra.scrim,
-            false,
+            self.leaving,
             &t,
         )
     }

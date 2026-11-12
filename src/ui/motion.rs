@@ -471,6 +471,47 @@ pub fn rise_in<E: gpui::Styled + gpui::IntoElement + 'static>(
     .into_any_element()
 }
 
+/// A floating bar or badge (the browser's hints, a card at a pin): it rises
+/// `rise` pixels into place as it fades in, as `rise_in`; leaving, it sinks
+/// half of that back and fades, slow at first.
+pub fn float<E: gpui::Styled + gpui::IntoElement + 'static>(
+    el: E,
+    id: &str,
+    rise: f32,
+    leaving: bool,
+    t: &crate::theme::Theme,
+) -> gpui::AnyElement {
+    use gpui::{prelude::*, px, AnimationExt as _, SharedString};
+    if leaving {
+        el.with_animation(
+            SharedString::from(format!("{id}-out")),
+            leave(t.size.menu_out_ms),
+            move |d, k| d.opacity(1. - k).mt(px(rise * 0.5 * k)),
+        )
+        .into_any_element()
+    } else {
+        rise_in(el, SharedString::from(format!("{id}-in")), rise, t)
+    }
+}
+
+/// A screen arriving on the session's sheet (Projects, Documents, Design,
+/// Rules, back to the chat): it fades in while it rises 10px, over
+/// `panel_in_ms`, as a chat's transcript does. Keyed by the screen, so each
+/// switch plays it; the sheet under it stays.
+pub fn screen_in(el: gpui::Div, screen: usize, t: &crate::theme::Theme) -> gpui::AnyElement {
+    use gpui::{prelude::*, px, AnimationExt as _};
+    el.with_animation(("screen-in", screen), once(t.size.panel_in_ms), |d, k| {
+        d.opacity(k).mt(px(10. * (1. - k)))
+    })
+    .into_any_element()
+}
+
+/// The pace of a card changing size (the side question card growing or
+/// folding): `panel_in_ms`, fast then settling.
+pub fn resize(t: &crate::theme::Theme) -> gpui::Animation {
+    once(t.size.panel_in_ms)
+}
+
 /// The sidebar opening out of its rail, or folding back into it: the width
 /// eases from `from` to `to` while what's inside keeps its own width, pinned
 /// to the left, so it slides out with the edge rather than being squeezed.

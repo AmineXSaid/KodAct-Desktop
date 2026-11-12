@@ -39,6 +39,7 @@ pub fn render(
     msg: usize,
     rows: &[Row],
     open: bool,
+    leaving: bool,
 ) -> AnyElement {
     let hover = t.colors.hover;
     let toggle = state.clone();
@@ -68,7 +69,7 @@ pub fn render(
             .build(window, cx)
         })
         .on_click(move |_, _, cx| toggle.update(cx, |s, cx| s.toggle_versions(chat, msg, cx)));
-    let list = open.then(|| {
+    let list = (open || leaving).then(|| {
         let mut list = div()
             .id(SharedString::from(format!("versions-list-{chat}-{msg}")))
             .flex()
@@ -107,7 +108,7 @@ pub fn render(
             theme::popover(t).w(px(420.)).p(t.space.sm).flex().flex_col().gap(t.space.xs).child(div().px(t.space.xs).text_size(t.text.caption).text_color(t.colors.text_subtle).child("Read-only. Restore brings that version back; the one showing now is kept as a version.")).child(list),
             &format!("versions-{chat}-{msg}"),
             false,
-            false,
+            leaving,
             t,
         )
     });

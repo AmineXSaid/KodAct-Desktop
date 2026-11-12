@@ -1099,7 +1099,14 @@ impl Render for Sidebar {
 
 /// The sidebar collapsed (Ctrl+B): a narrow rail of the same actions as
 /// icon buttons, each named in its tooltip, so nothing goes out of reach.
-pub fn rail(t: &crate::theme::Theme, screen: Screen) -> impl IntoElement {
+/// A click anywhere on it opens the sidebar again: on its bare strip that
+/// alone, on a button along with what the button does.
+pub fn rail(
+    t: &crate::theme::Theme,
+    screen: Screen,
+    state: &Entity<AppState>,
+) -> impl IntoElement {
+    let open = state.clone();
     use super::button::Button;
     let nav = |id: &'static str, path: &'static str, tip: String, on: bool| {
         Button::icon(id, path, tip).selected(on)
@@ -1111,6 +1118,12 @@ pub fn rail(t: &crate::theme::Theme, screen: Screen) -> impl IntoElement {
     };
     div()
         .id("sidebar-rail")
+        .on_click(move |_, _, cx| {
+            open.update(cx, |s, cx| {
+                s.sidebar_open = true;
+                cx.notify();
+            })
+        })
         .w(t.size.rail)
         .flex_none()
         .h_full()

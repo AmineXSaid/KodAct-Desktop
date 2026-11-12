@@ -22,3 +22,20 @@ Reviewed on Linux screenshots (Xvfb, lavapipe), light and dark, demo mode.
 - P2: grown, the card can cover a permission prompt's second button in the
   chat. Minimise or Smaller uncovers it; the card could move aside instead.
 - P3: Clear sits beside Larger; a mis-click clears the thread without undo.
+
+## Motion (every window opens and leaves)
+
+Seen on Linux (Xvfb, lavapipe), in a recording and in slow motion
+(`KODACT_SLOW_MOTION`).
+
+- The completion list (`/`, `@`) had no motion: it unfolds at the caret and
+  leaves as a menu does.
+- Opened with motion but vanished on close: the list of earlier versions, the
+  design comment card, a mark's label being typed, the browser panel's bars
+  (marks, the pointing hint, KodAct at the wheel), the attachment editor.
+  Each now leaves (`Presence`).
+- A screen (Projects, Documents, Design, Rules, back to the chat) arrives on
+  the sheet as a chat's transcript does (`motion::screen_in`); the sheet stays.
+- The side card eases between its sizes and folds to its title bar; it shows
+  on its chat's screen only.
+- A click anywhere on the collapsed rail opens the sidebar.
