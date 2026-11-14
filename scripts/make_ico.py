@@ -7,9 +7,10 @@ chevron pointing right, their corners rounded by the join. Each stroke is
 shaded top to bottom (the step deep, the chevron bright) over a soft shadow, so
 it reads on a light or a dark taskbar alike.
 
-The mark keeps its own proportions (never stretched) and fills the icon's full
-width, edge to edge, the largest it can be in the square: it is about 1.7
-times as wide as it is tall, so at 24 px it is 24 wide and about 15 high.
+The mark keeps its own proportions (never stretched) and is drawn at 180% of
+the icon's width (SCALE), so it fills the square like the other taskbar icons:
+the icon crops the step's tail, the chevron's point and a little of the top and
+bottom, and what is left is centred.
 
 Every size Windows asks for is drawn on its own from the geometry (supersampled,
 then reduced), never scaled from another size, so 16 and 24 px stay crisp.
@@ -49,14 +50,16 @@ CHEVRON = [
     (226.98, 77),
 ]
 JOIN = 8.0
+SCALE = 1.8  # the mark's width, as a share of the icon's
 
 
 def stroke_mask(poly, size, dy=0.0):
     """One stroke, full width and centred (a touch high, for the shadow), as a mask."""
-    s = size / VIEW[0]
+    s = size * SCALE / VIEW[0]
     sy = s
     oy = (size - VIEW[1] * sy) / 2 - size * 0.01 + dy * size
-    pts = [(x * s, oy + y * sy) for x, y in poly]
+    ox = (size - VIEW[0] * s) / 2
+    pts = [(ox + x * s, oy + y * sy) for x, y in poly]
     m = Image.new("L", (size, size), 0)
     d = ImageDraw.Draw(m)
     d.polygon(pts, fill=255)
