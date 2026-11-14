@@ -1,9 +1,15 @@
 """Build assets/kodact.ico (the Windows icon: taskbar, title bar, installer).
 
-The app icon: KodAct's mark (src/ui/kodact_mark.rs) in paper on a tile of the
-accent, the turquoise as it is set on paper, so it reads on a light or a dark
-taskbar alike. The mark is the same drawing as the in-app one: a step up from
-the left, then a chevron pointing right, their corners rounded by the join.
+The app icon: KodAct's mark (src/ui/kodact_mark.rs) alone, with no tile behind
+it, on a transparent ground like the other icons on a Windows 11 taskbar. The
+mark is the same drawing as the in-app one: a step up from the left, then a
+chevron pointing right, their corners rounded by the join. Each stroke is
+shaded top to bottom (the step deep, the chevron bright) over a soft shadow, so
+it reads on a light or a dark taskbar alike.
+
+The mark keeps its own proportions (never stretched) and fills the icon's full
+width, edge to edge, the largest it can be in the square: it is about 1.7
+times as wide as it is tall, so at 24 px it is 24 wide and about 15 high.
 
 Every size Windows asks for is drawn on its own from the geometry (supersampled,
 then reduced), never scaled from another size, so 16 and 24 px stay crisp.
@@ -14,7 +20,7 @@ then reduced), never scaled from another size, so 16 and 24 px stay crisp.
 import pathlib
 import sys
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / "assets/kodact.ico"
@@ -23,8 +29,10 @@ OUT = ROOT / "assets/kodact.ico"
 SIZES = [16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 128, 256]
 SS = 8  # supersampling
 
-TILE = (0x0E, 0x75, 0x68)  # theme.rs `accent`, light
-MARK = (0xFF, 0xFF, 0xFF)  # paper
+# Each stroke's shading, top to bottom: the accent's turquoise (theme.rs).
+STEP_SHADE = ((0x1A, 0x8F, 0x80), (0x08, 0x55, 0x4C))
+CHEVRON_SHADE = ((0x7F, 0xE6, 0xD3), (0x12, 0x9A, 0x87))
+SHADOW = 0.35  # the shadow's opacity; it falls 3% of the icon below the mark
 
 # The mark, as kodact_mark.rs: its box, its two strokes, the join's width.
 VIEW = (505.7, 302.0)
@@ -43,30 +51,36 @@ CHEVRON = [
 JOIN = 8.0
 
 
-def strokes(size, fill):
-    """The mark centred in a `size` box, `fill` of it wide: (polygons, join width)."""
-    s = size * fill / VIEW[0]
-    ox, oy = (size - VIEW[0] * s) / 2, (size - VIEW[1] * s) / 2
-    return [[(ox + x * s, oy + y * s) for x, y in poly] for poly in (STEP, CHEVRON)], JOIN * s
+def stroke_mask(poly, size, dy=0.0):
+    """One stroke, full width and centred (a touch high, for the shadow), as a mask."""
+    s = size / VIEW[0]
+    sy = s
+    oy = (size - VIEW[1] * sy) / 2 - size * 0.01 + dy * size
+    pts = [(x * s, oy + y * sy) for x, y in poly]
+    m = Image.new("L", (size, size), 0)
+    d = ImageDraw.Draw(m)
+    d.polygon(pts, fill=255)
+    d.line(pts + pts[:2], fill=255, width=max(round(JOIN * s), 1), joint="curve")
+    return m
+
+
+def shade(size, top, bottom):
+    col = Image.new("RGBA", (1, size))
+    for y in range(size):
+        t = y / (size - 1)
+        col.putpixel((0, y), tuple(round(a + (b - a) * t) for a, b in zip(top, bottom)) + (255,))
+    return col.resize((size, size), Image.NEAREST)
 
 
 def icon(n):
     big = n * SS
     img = Image.new("RGBA", (big, big), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    # Small sizes fill the whole square (Windows draws no plate behind them);
-    # the corner radius follows Windows 11's app tiles, about a fifth.
-    margin = 0 if n <= 24 else round(big * 0.04)
-    d.rounded_rectangle(
-        (margin, margin, big - 1 - margin, big - 1 - margin),
-        radius=round((big - 2 * margin) * 0.22),
-        fill=TILE + (255,),
-    )
-    # The mark fills more of a small tile, so it still reads at 16 px.
-    polys, join = strokes(big, 0.8 if n <= 24 else 0.68)
-    for poly in polys:
-        d.polygon(poly, fill=MARK + (255,))
-        d.line(poly + poly[:2], fill=MARK + (255,), width=max(round(join), 1), joint="curve")
+    shadow = stroke_mask(STEP, big, 0.03)
+    shadow.paste(255, (0, 0), stroke_mask(CHEVRON, big, 0.03))
+    shadow = shadow.filter(ImageFilter.GaussianBlur(big * 0.02)).point(lambda v: round(v * SHADOW))
+    img.paste((0, 0, 0, 255), (0, 0), shadow)
+    img.paste(shade(big, *STEP_SHADE), (0, 0), stroke_mask(STEP, big))
+    img.paste(shade(big, *CHEVRON_SHADE), (0, 0), stroke_mask(CHEVRON, big))
     return img.resize((n, n), Image.LANCZOS)
 
 
