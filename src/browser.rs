@@ -53,6 +53,13 @@ pub fn set_enabled(on: bool) -> std::io::Result<()> {
     std::fs::write(dir.join("browser.txt"), if on { "on" } else { "off" })
 }
 
+/// The log of the browser's downloads, beside the focus file: the panel
+/// writes a line as each starts (`started\t<name>`) and ends
+/// (`saved\t<path>`, `failed\t<name>`); the agent's tools report them.
+pub fn downloads_log(focus: &Path) -> PathBuf {
+    focus.with_file_name("browser-downloads.txt")
+}
+
 /// The file the panel and the agent's tools keep the current tab in.
 pub fn focus_file() -> PathBuf {
     crate::profile::dir()

@@ -199,6 +199,7 @@ fn kind_name(k: ToolKind) -> &'static str {
         ToolKind::Bash => "bash",
         ToolKind::Search => "search",
         ToolKind::Web => "web",
+        ToolKind::WebSearch => "websearch",
         ToolKind::Other => "other",
     }
 }
@@ -211,6 +212,7 @@ fn kind_of(s: &str) -> ToolKind {
         "bash" => ToolKind::Bash,
         "search" => ToolKind::Search,
         "web" => ToolKind::Web,
+        "websearch" => ToolKind::WebSearch,
         _ => ToolKind::Other,
     }
 }

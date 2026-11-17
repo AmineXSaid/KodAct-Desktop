@@ -843,6 +843,9 @@ fn tool(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
                 .child(
                     div()
                         .min_w_0()
+                        // With a note, the target is a short name (`browser ·
+                        // eval`) and keeps its room; the note is cut instead.
+                        .when(call.note.is_some(), |d| d.flex_none())
                         .overflow_hidden()
                         .whitespace_nowrap()
                         .text_ellipsis()
@@ -853,7 +856,10 @@ fn tool(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
                 )
                 .children(call.note.clone().map(|n| {
                     div()
-                        .flex_none()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
                         .text_color(t.colors.text_subtle)
                         .text_size(t.text.caption)
                         .child(n)
@@ -955,6 +961,56 @@ fn review_controls(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> Op
     if !matches!(call.kind, ToolKind::Edit | ToolKind::Write) || call.status != ToolStatus::Done {
         return None;
     }
+    let review = file_review(call, b, cx, t);
+    // A web page Forge wrote here: a look at it in the side panel's browser.
+    let page = matches!(
+        markdown::lang_of(&call.target)
+            .to_ascii_lowercase()
+            .as_str(),
+        "html" | "htm"
+    );
+    if !page || cx.place.is_some() || call.review == Review::Reverted {
+        return review;
+    }
+    let (state, chat, path) = (cx.state.clone(), cx.chat, call.target.to_string());
+    let hover = t.colors.hover;
+    let key = format!("{}-{}-{b}", cx.chat, cx.index);
+    let preview = div()
+        .id(SharedString::from(format!("preview-{key}")))
+        .flex()
+        .items_center()
+        .gap(px(3.))
+        .px(t.space.sm)
+        .h(t.size.control - px(4.))
+        .rounded(t.radius.button)
+        .cursor_pointer()
+        .hover(move |s| s.bg(hover))
+        .text_size(t.text.caption)
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(t.colors.primary)
+        .child(icon("icons/globe.svg", t.size.icon_xs, t.colors.primary))
+        .child("Preview")
+        .tooltip(|window, cx| {
+            gpui::component::tooltip::Tooltip::new("Open the page in the side panel's browser")
+                .build(window, cx)
+        })
+        .on_click(move |_, _, app| {
+            app.stop_propagation();
+            state.update(app, |s, cx| s.preview_page(chat, &path, cx));
+        });
+    Some(
+        div()
+            .flex()
+            .items_center()
+            .gap(px(2.))
+            .child(preview)
+            .children(review)
+            .into_any_element(),
+    )
+}
+
+/// Keep or revert a file change, or what was decided.
+fn file_review(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> Option<AnyElement> {
     let key = format!("{}-{}-{b}", cx.chat, cx.index);
     let hover = t.colors.hover;
     let small = |id: String, label: &'static str, path: &'static str, color: gpui::Hsla| {
@@ -1283,7 +1339,7 @@ fn answer_group(
     let noun = match info.kind {
         Some(ToolKind::Bash) => "commands",
         Some(ToolKind::Edit | ToolKind::Write) => "edits",
-        Some(ToolKind::Web) => "web requests",
+        Some(ToolKind::Web | ToolKind::WebSearch) => "web requests",
         Some(ToolKind::Read | ToolKind::Search) => "reads",
         _ => "requests",
     };
@@ -1517,7 +1573,42 @@ fn permission(
                 .child(div().flex_1())
                 .when(!is_plan, |d| d.child(env_badge(&cx.place, t))),
         )
-        .child(div().text_color(t.colors.text_body).child(detail.clone()))
+        .child(if title.as_ref() == crate::backend::JS_ASK_TITLE {
+            // The script, whole and as code: what you allow is what runs.
+            div()
+                .id(id("script"))
+                .max_h(px(240.))
+                .overflow_y_scroll()
+                .p(t.space.md)
+                .rounded(t.radius.button)
+                .bg(t.extra.inset)
+                .font_family(t.font_mono.clone())
+                .text_size(t.text.body_sm)
+                .child(super::markdown::code_text(detail, "js", t))
+                .into_any_element()
+        } else {
+            div()
+                .text_color(t.colors.text_body)
+                .child(detail.clone())
+                .into_any_element()
+        })
+        // A long script scrolls: say so, so its end isn't missed.
+        .when(
+            title.as_ref() == crate::backend::JS_ASK_TITLE
+                && (detail.lines().count() > 10 || detail.len() > 600),
+            |d| {
+                d.child(
+                    div()
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_muted)
+                        .child(format!(
+                            "{} lines, {} characters: scroll the script to read all of it.",
+                            detail.lines().count(),
+                            detail.chars().count()
+                        )),
+                )
+            },
+        )
         .child(
             div()
                 .flex()
