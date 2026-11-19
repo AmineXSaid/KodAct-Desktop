@@ -112,6 +112,9 @@ pub fn dialog<E: gpui::Styled + gpui::IntoElement + 'static>(
     t: &crate::theme::Theme,
 ) -> gpui::AnyElement {
     use gpui::{prelude::*, px, AnimationExt as _, SharedString};
+    if reduced_motion() && !leaving {
+        return el.into_any_element();
+    }
     if leaving {
         el.with_animation(
             SharedString::from(format!("{id}-out")),
@@ -139,6 +142,9 @@ pub fn backdrop<E: gpui::Styled + gpui::IntoElement + 'static>(
     t: &crate::theme::Theme,
 ) -> gpui::AnyElement {
     use gpui::{prelude::*, AnimationExt as _, SharedString};
+    if reduced_motion() && !leaving {
+        return el.bg(color).into_any_element();
+    }
     let (anim, key) = if leaving {
         (leave(t.size.window_out_ms), format!("{id}-out"))
     } else {
@@ -163,6 +169,9 @@ pub fn spotlight<E: gpui::Styled + gpui::IntoElement + 'static>(
     t: &crate::theme::Theme,
 ) -> gpui::AnyElement {
     use gpui::{prelude::*, px, AnimationExt as _, SharedString};
+    if reduced_motion() && !leaving {
+        return el.into_any_element();
+    }
     if leaving {
         el.with_animation(
             SharedString::from(format!("{id}-out")),
@@ -192,6 +201,10 @@ pub fn unfold<E: gpui::Styled + gpui::IntoElement + 'static>(
     t: &crate::theme::Theme,
 ) -> gpui::AnyElement {
     use gpui::{prelude::*, px, AnimationExt as _, SharedString};
+    if reduced_motion() && !leaving {
+        return if up { el.mb(px(8.)) } else { el }
+            .into_any_element();
+    }
     if leaving {
         el.with_animation(
             SharedString::from(format!("{id}-out")),
@@ -263,6 +276,9 @@ pub fn composer_menu(
     t: &crate::theme::Theme,
 ) -> gpui::AnyElement {
     use gpui::{prelude::*, px, AnimationExt as _, SharedString};
+    if reduced_motion() && !leaving {
+        return body.mb(px(lift)).into_any_element();
+    }
     if leaving {
         body.with_animation(
             SharedString::from(format!("{id}-out")),
@@ -353,9 +369,9 @@ pub fn slide_in(
 ) -> gpui::AnyElement {
     use gpui::{div, prelude::*, px, AnimationExt as _};
     let anim = once(t.size.panel_in_ms);
-    if below {
-        // Below the chat the pane's height is a share of its parent's, and
-        // it fades in on its own.
+    if below || reduced_motion() {
+        // Below the chat (or under reduced motion) the pane stays at its
+        // resting size immediately.
         return pane;
     }
     // The panel keeps its full width inside, pinned to the wrapper's left
@@ -405,9 +421,11 @@ pub fn row_in(
     t: &crate::theme::Theme,
 ) -> gpui::AnyElement {
     use gpui::{div, prelude::*, px, AnimationExt as _};
-    div()
-        .flex_none()
-        .child(row)
+    let box_el = div().flex_none().child(row);
+    if reduced_motion() {
+        return box_el.into_any_element();
+    }
+    box_el
         .with_animation(id, stagger(t, index), |d, k| {
             d.opacity(k).mt(px(4. * (1. - k))).mb(px(-4. * (1. - k)))
         })
@@ -422,9 +440,11 @@ pub fn row_in_full(
     t: &crate::theme::Theme,
 ) -> gpui::AnyElement {
     use gpui::{div, prelude::*, px, AnimationExt as _};
-    div()
-        .w_full()
-        .child(row)
+    let box_el = div().w_full().child(row);
+    if reduced_motion() {
+        return box_el.into_any_element();
+    }
+    box_el
         .with_animation(id, stagger(t, index), |d, k| {
             d.opacity(k).mt(px(4. * (1. - k))).mb(px(-4. * (1. - k)))
         })
@@ -494,6 +514,9 @@ pub fn rise_in<E: gpui::Styled + gpui::IntoElement + 'static>(
     t: &crate::theme::Theme,
 ) -> gpui::AnyElement {
     use gpui::{prelude::*, px, AnimationExt as _};
+    if reduced_motion() {
+        return el.into_any_element();
+    }
     el.with_animation(id, once(t.size.pop_in_ms), move |d, k| {
         d.opacity(k).mt(px(rise * (1. - k)))
     })
@@ -529,6 +552,9 @@ pub fn float<E: gpui::Styled + gpui::IntoElement + 'static>(
 /// switch plays it; the sheet under it stays.
 pub fn screen_in(el: gpui::Div, screen: usize, t: &crate::theme::Theme) -> gpui::AnyElement {
     use gpui::{prelude::*, px, AnimationExt as _};
+    if reduced_motion() {
+        return el.into_any_element();
+    }
     el.with_animation(("screen-in", screen), once(t.size.panel_in_ms), |d, k| {
         d.opacity(k).mt(px(10. * (1. - k)))
     })
@@ -553,6 +579,15 @@ pub fn sidebar_slide(
     t: &crate::theme::Theme,
 ) -> gpui::AnyElement {
     use gpui::{div, prelude::*, AnimationExt as _};
+    if reduced_motion() {
+        return div()
+            .flex_none()
+            .h_full()
+            .w(to)
+            .flex()
+            .child(pane)
+            .into_any_element();
+    }
     let full = if from > to { from } else { to };
     let opening = to > from;
     div()

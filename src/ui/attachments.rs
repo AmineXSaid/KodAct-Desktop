@@ -41,7 +41,7 @@ thread_local! {
     static THUMBS: RefCell<HashMap<(usize, usize), Arc<Image>>> = RefCell::new(HashMap::new());
 }
 
-fn thumbnail(a: &Attachment) -> Option<Arc<Image>> {
+pub(super) fn thumbnail(a: &Attachment) -> Option<Arc<Image>> {
     let (Kind::Image(mime), Some(bytes)) = (a.kind, a.bytes.as_ref()) else {
         return None;
     };

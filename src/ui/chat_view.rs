@@ -100,16 +100,12 @@ impl ChatView {
         let s = self.state.read(cx);
         // The last row holds the working line and what you queued.
         let busy = s.busy();
-        let queued = s
-            .chat()
-            .and_then(|c| s.queued.get(&c.id))
-            .map_or(0, Vec::len);
-        let tail = busy || queued > 0;
+        let tail = busy;
         let (id, count, version) = match s.chat() {
             Some(c) => (
                 Some(c.id),
                 c.messages.len() + tail as usize,
-                (c.version, queued),
+                (c.version, 0),
             ),
             None => (None, 0, (0, 0)),
         };
@@ -725,17 +721,7 @@ impl Render for ChatView {
                         ),
                         None => div().into_any_element(),
                     };
-                    let queued = s
-                        .queued
-                        .get(&chat.id)
-                        .map(Vec::as_slice)
-                        .unwrap_or_default();
-                    div()
-                        .flex()
-                        .flex_col()
-                        .child(line)
-                        .child(super::queued::render(&t, &state, chat.id, queued))
-                        .into_any_element()
+                    div().flex().flex_col().child(line).into_any_element()
                 }
             };
             // Turn hierarchy: strong separation between turns, tighter rhythm inside a turn.

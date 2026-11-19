@@ -2268,7 +2268,164 @@ pub(super) fn flash(row: gpui::Div, b: usize, cx: &ItemContext, t: &Theme) -> An
         .into_any_element()
 }
 
+fn parse_todo_rows(call: &ToolCall) -> Vec<(ToolStatus, String)> {
+    call.diff
+        .iter()
+        .filter_map(|l| {
+            let trimmed = l.text.trim();
+            if let Some(rest) = trimmed.strip_prefix("[x]") {
+                Some((ToolStatus::Done, rest.trim().to_string()))
+            } else if let Some(rest) = trimmed.strip_prefix("[~]") {
+                Some((ToolStatus::Running, rest.trim().to_string()))
+            } else if let Some(rest) = trimmed.strip_prefix("[ ]") {
+                Some((ToolStatus::Declined, rest.trim().to_string()))
+            } else if !trimmed.is_empty() {
+                Some((ToolStatus::Declined, trimmed.to_string()))
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn todo_card(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
+    let items = parse_todo_rows(call);
+    if items.is_empty() {
+        let mut row = div().flex().flex_col();
+        row = row.child(tool_header(call, b, &[], cx, t));
+        return flash(row, b, cx, t);
+    }
+    let total = items.len();
+    let done = items
+        .iter()
+        .filter(|(st, _)| *st == ToolStatus::Done)
+        .count();
+    let active = items
+        .iter()
+        .find(|(st, _)| *st == ToolStatus::Running)
+        .map(|(_, text)| text.clone())
+        .or_else(|| {
+            items
+                .iter()
+                .find(|(st, _)| *st != ToolStatus::Done)
+                .map(|(_, text)| text.clone())
+        });
+    let key = format!("{}-{}-{b}", cx.chat, cx.index);
+    let hover = t.colors.hover;
+    let plan_state = cx.state.clone();
+
+    let rows = items.into_iter().enumerate().map(|(i, (st, label))| {
+        let mark: AnyElement = match st {
+            ToolStatus::Done => {
+                icon("icons/circle-check.svg", t.size.icon_sm, t.colors.text_muted)
+                    .into_any_element()
+            }
+            ToolStatus::Running => super::turning_logo(
+                f32::from(t.size.icon_sm),
+                SharedString::from(format!("todo-run-{key}-{i}")),
+            ),
+            _ => icon("icons/circle-dashed.svg", t.size.icon_sm, t.colors.text_subtle)
+                .into_any_element(),
+        };
+        let fg = match st {
+            ToolStatus::Done => t.colors.text_muted,
+            ToolStatus::Running => t.colors.text_strong,
+            _ => t.colors.text,
+        };
+        div()
+            .flex()
+            .items_start()
+            .gap(t.space.sm)
+            .py(px(1.))
+            .child(div().pt(px(2.)).flex_none().child(mark))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .text_size(t.text.body_sm)
+                    .line_height(relative(1.45))
+                    .font_weight(if st == ToolStatus::Running {
+                        FontWeight::MEDIUM
+                    } else {
+                        FontWeight::NORMAL
+                    })
+                    .text_color(fg)
+                    .child(label),
+            )
+    });
+
+    let summary_text = match active {
+        Some(task) => task,
+        None if done == total => format!("All {total} tasks completed"),
+        None => format!("{done} of {total} done"),
+    };
+
+    let card = div()
+        .rounded(t.radius.card)
+        .border_1()
+        .border_color(t.colors.border)
+        .bg(t.colors.surface)
+        .px(t.space.md)
+        .py(t.space.sm + px(2.))
+        .flex()
+        .flex_col()
+        .gap(t.space.xs + px(1.))
+        .children(rows);
+
+    let bar = div()
+        .id(SharedString::from(format!("todo-summary-{key}")))
+        .mt(px(4.))
+        .px(t.space.xs)
+        .py(px(4.))
+        .rounded(t.radius.compact)
+        .flex()
+        .items_center()
+        .gap(t.space.sm)
+        .cursor_pointer()
+        .hover(move |s| s.bg(hover))
+        .on_click(move |_, _, cx| {
+            plan_state.update(cx, |s, cx| s.show_panel(crate::state::PanelTab::Plan, cx));
+        })
+        .child(icon(
+            "icons/ellipsis.svg",
+            t.size.icon_sm,
+            if done == total {
+                t.extra.success
+            } else {
+                t.colors.primary
+            },
+        ))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .text_size(t.text.body_sm)
+                .text_color(t.colors.text_muted)
+                .child(summary_text),
+        )
+        .child(
+            div()
+                .flex_none()
+                .text_size(t.text.caption)
+                .text_color(t.colors.text_subtle)
+                .child(format!("{done}/{total}")),
+        )
+        .child(icon(
+            "icons/chevron-right.svg",
+            t.size.icon_xs,
+            t.colors.text_subtle,
+        ));
+
+    flash(div().flex().flex_col().child(card).child(bar), b, cx, t)
+}
+
 fn tool(call: &ToolCall, b: usize, blocks: &[Block], cx: &ItemContext, t: &Theme) -> AnyElement {
+    if call.target.as_ref() == "TodoWrite" {
+        return todo_card(call, b, cx, t);
+    }
     let is_agent = crate::state::is_agent_tool(&call.target);
     // A lone call is a quiet line, as one in a run is; its body opens under it
     // (sub-agent cards open in the right-side Agents inspector instead).
@@ -3365,5 +3522,44 @@ mod tests {
         );
         bash_fail.status = crate::state::ToolStatus::Failed;
         assert_eq!(super::tool_outcome(&bash_fail).as_deref(), Some("failed"));
+    }
+
+    #[test]
+    fn parses_todo_write_rows() {
+        use crate::state::{DiffKind, DiffLine, Review, ToolCall, ToolKind, ToolStatus};
+        let call = ToolCall {
+            kind: ToolKind::Other,
+            target: "TodoWrite".into(),
+            note: None,
+            output: "".into(),
+            diff: vec![
+                DiffLine {
+                    kind: DiffKind::Same,
+                    text: "[x] Read the budget sheet".into(),
+                },
+                DiffLine {
+                    kind: DiffKind::Same,
+                    text: "[~] Update and recalculate".into(),
+                },
+                DiffLine {
+                    kind: DiffKind::Same,
+                    text: "[ ] Write the memo".into(),
+                },
+            ],
+            status: ToolStatus::Done,
+            open: false,
+            full: false,
+            review: Review::Open,
+            images: vec![],
+        };
+        let rows = super::parse_todo_rows(&call);
+        assert_eq!(
+            rows,
+            vec![
+                (ToolStatus::Done, "Read the budget sheet".to_string()),
+                (ToolStatus::Running, "Update and recalculate".to_string()),
+                (ToolStatus::Declined, "Write the memo".to_string()),
+            ]
+        );
     }
 }

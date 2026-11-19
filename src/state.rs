@@ -1789,6 +1789,11 @@ pub enum Request {
         uuid: String,
         edit: bool,
     },
+    /// Cancel queueing in CLI and send that queued message right away.
+    SendQueuedNow {
+        chat: usize,
+        uuid: String,
+    },
     /// What fills the chat's context, for the Session column.
     ContextUsage { chat: usize },
 }
@@ -2251,6 +2256,8 @@ pub struct AppState {
     pub open_groups: std::collections::HashSet<(usize, usize, usize)>,
     /// Transient presentation-only UI toggles (show more lines, sub-groups, collapsed intermediate notes).
     pub ui_toggles: std::collections::HashSet<String>,
+    /// Last outside-press positions for transient UI toggles so clicking the trigger closes cleanly.
+    pub ui_dismissed: std::collections::HashMap<String, gpui::Point<gpui::Pixels>>,
     /// Last title/footer menu dismissed by clicking outside, with its press position,
     /// so clicking the trigger button while open closes cleanly instead of reopening.
     pub title_menu_dismissed: Option<(TitleMenu, gpui::Point<gpui::Pixels>)>,
@@ -2525,6 +2532,7 @@ impl AppState {
             jump_seq: 0,
             open_groups: Default::default(),
             ui_toggles: Default::default(),
+            ui_dismissed: Default::default(),
             title_menu_dismissed: None,
             remote_dismissed_at: None,
             flash: None,
@@ -8474,6 +8482,17 @@ fix everything under 8, render it again to check, then tell me the scores before
             }
             return;
         }
+        if let Request::SendQueuedNow { chat, uuid } = req {
+            match result {
+                Ok(v) if v["cancelled"] == true => self.dispatch_queued_now(chat, &uuid, cx),
+                Ok(_) => self.show_toast(
+                    "Already with KodAct: it is already being processed.",
+                    cx,
+                ),
+                Err(e) => self.show_toast(format!("Couldn't send now: {e}"), cx),
+            }
+            return;
+        }
         let files = |v: &serde_json::Value| -> Result<Vec<String>, String> {
             if v["canRewind"] == false {
                 return Err(v["error"]
@@ -8530,6 +8549,7 @@ fix everything under 8, render it again to check, then tell me the scores before
             (
                 Request::StopAgents { .. }
                 | Request::CancelQueued { .. }
+                | Request::SendQueuedNow { .. }
                 | Request::ContextUsage { .. },
                 _,
             ) => {}
@@ -8810,6 +8830,41 @@ fix everything under 8, render it again to check, then tell me the scores before
 
     /// Toggle a transient presentation-only UI key (e.g., show more lines, sub-group expand).
     pub fn toggle_ui(&mut self, key: String, chat: Option<usize>, cx: &mut Context<Self>) {
+        self.toggle_ui_at(key, chat, None, cx);
+    }
+
+    /// Dismiss a transient UI key from an outside click, remembering `at` so
+    /// clicking the trigger button itself does not immediately reopen it.
+    pub fn dismiss_ui(
+        &mut self,
+        key: &str,
+        at: gpui::Point<gpui::Pixels>,
+        cx: &mut Context<Self>,
+    ) {
+        if self.ui_toggles.remove(key) {
+            self.ui_dismissed.insert(key.to_string(), at);
+            cx.notify();
+        }
+    }
+
+    /// Toggle a transient UI key from a click at `at`, suppressing immediate
+    /// reopen if `dismiss_ui` just closed it at the same pointer location.
+    pub fn toggle_ui_at(
+        &mut self,
+        key: String,
+        chat: Option<usize>,
+        at: Option<gpui::Point<gpui::Pixels>>,
+        cx: &mut Context<Self>,
+    ) {
+        let just_dismissed = self
+            .ui_dismissed
+            .remove(&key)
+            .zip(at)
+            .is_some_and(|(d, p)| (d.x - p.x).abs() <= gpui::px(2.) && (d.y - p.y).abs() <= gpui::px(2.));
+        if just_dismissed {
+            cx.notify();
+            return;
+        }
         if !self.ui_toggles.remove(&key) {
             self.ui_toggles.insert(key);
         }
@@ -9640,6 +9695,85 @@ fix everything under 8, render it again to check, then tell me the scores before
             Some(Err(e)) => self.show_toast(format!("Couldn't take it back: {e}"), cx),
             None => {}
         }
+    }
+
+    /// Interrupt the running turn if needed and send this queued message immediately.
+    pub fn send_queued_now(&mut self, chat: usize, uuid: String, cx: &mut Context<Self>) {
+        if demo_mode() || !self.sessions.contains_key(&chat) {
+            return self.dispatch_queued_now(chat, &uuid, cx);
+        }
+        let sent = self
+            .sessions
+            .get(&chat)
+            .map(|l| l.session.cancel_queued(&uuid));
+        match sent {
+            Some(Ok(id)) => {
+                self.requests
+                    .insert(id, Request::SendQueuedNow { chat, uuid });
+            }
+            Some(Err(e)) => self.show_toast(format!("Couldn't send now: {e}"), cx),
+            None => self.dispatch_queued_now(chat, &uuid, cx),
+        }
+    }
+
+    fn pop_queued(&mut self, chat: usize, uuid: &str) -> Option<Queued> {
+        self.queued
+            .get_mut(&chat)
+            .and_then(|list| list.iter().position(|q| q.uuid == uuid).map(|i| list.remove(i)))
+    }
+
+    fn dispatch_queued_now(&mut self, chat: usize, uuid: &str, cx: &mut Context<Self>) {
+        let Some(q) = self.pop_queued(chat, uuid) else {
+            return;
+        };
+        if self.replies.remove(&chat).is_some() {
+            self.turn_started.remove(&chat);
+            if let Some(live) = self.sessions.get(&chat) {
+                if live.session.interrupt().is_ok() {
+                    *self.stale_turns.entry(chat).or_default() += 1;
+                } else {
+                    self.sessions.remove(&chat);
+                }
+            }
+            if let Some(ask) = self.asks.remove(&chat) {
+                self.answer(chat, ask.msg, ask.block, Verdict::Denied, cx);
+                self.set_decider(chat, ask.msg, ask.block, Decider::Stopped);
+            }
+            if let Some(c) = self.chat_mut(chat) {
+                for m in c.messages.iter_mut() {
+                    if let Message::Assistant { blocks } = m {
+                        for b in blocks.iter_mut() {
+                            if let Block::Tool(t) = b {
+                                if t.status == ToolStatus::Running {
+                                    t.status = ToolStatus::Interrupted;
+                                    t.output = INTERRUPTED_CALL.into();
+                                }
+                            }
+                        }
+                    }
+                }
+                c.version += 1;
+            }
+        }
+        self.current = Some(chat);
+        self.screen = Screen::Chat;
+        let text = q.text.to_string();
+        if let Some(c) = self.chat_mut(chat) {
+            c.messages.push(Message::User {
+                text: text.clone().into(),
+                sent: SystemTime::now(),
+                attachments: q.attachments.clone(),
+                turn: None,
+            });
+            c.version += 1;
+        }
+        self.touch(chat, cx);
+        if demo_mode() {
+            self.play_script(chat, text, cx);
+        } else {
+            self.send_to_forge(chat, text, q.attachments, cx);
+        }
+        cx.notify();
     }
 
     /// The newest queued message of the chat you're looking at, back in the box.
@@ -13157,6 +13291,86 @@ fn demo_six_agents() -> Vec<Step> {
     s
 }
 
+/// Ten parallel sub-agents ("10 agents" in the demo) to stress-test the jumper
+/// popover, status filters, and scale behavior when >= 10 agents run together.
+fn demo_ten_agents() -> Vec<Step> {
+    use crate::backend::Event;
+    use serde_json::json;
+    let start = |id: &str, kind: &str, task: &str| {
+        Step::Agent(Event::ToolUse {
+            id: id.into(),
+            name: "Task".into(),
+            input: json!({ "subagent_type": kind, "description": task, "prompt": task }),
+        })
+    };
+    let tool = |parent: &str, id: &str, name: &str, input: serde_json::Value| {
+        Step::Agent(Event::SubTool {
+            parent: parent.into(),
+            id: id.into(),
+            name: name.into(),
+            input,
+        })
+    };
+    let done = |parent: &str, id: &str| {
+        Step::Agent(Event::SubResult {
+            parent: parent.into(),
+            id: id.into(),
+            output: String::new(),
+            is_error: false,
+        })
+    };
+    let end = |id: &str, out: &str, failed: bool| {
+        Step::Agent(Event::ToolResult {
+            id: id.into(),
+            output: out.into(),
+            is_error: failed,
+            images: vec![],
+        })
+    };
+    let mut s = words(
+        "Spinning up ten specialized sub-agents across the repository.",
+        Step::Say,
+    );
+    let specs = [
+        ("t1", "Explore", "Audit UI components", "src/ui"),
+        ("t2", "Explore", "Check state reducers", "src/state"),
+        ("t3", "code-reviewer", "Review Office parser", "src/office.rs"),
+        ("t4", "Explore", "Inspect Git integration", "src/git_status.rs"),
+        ("t5", "Explore", "Verify SVG icons bundle", "assets/icons"),
+        ("t6", "general-purpose", "Check theme palette", "src/theme.rs"),
+        ("t7", "code-reviewer", "Scan IPC backend", "src/backend.rs"),
+        ("t8", "Explore", "Check i18n coverage", "src/i18n.rs"),
+        ("t9", "general-purpose", "Validate project config", "src/projects"),
+        ("t10", "Explore", "Profile startup path", "src/main.rs"),
+    ];
+    for (id, kind, task, _) in specs {
+        s.push(start(id, kind, task));
+    }
+    for (id, _, _, path) in specs {
+        let tid = format!("{id}a");
+        s.push(tool(
+            id,
+            &tid,
+            "Read",
+            json!({ "file_path": path }),
+        ));
+    }
+    for (i, (id, _, task, _)) in specs.iter().enumerate() {
+        let tid = format!("{id}a");
+        s.push(done(id, &tid));
+        if i == 2 {
+            s.push(end(id, "Office XLSX formula validation found a schema warning.", true));
+        } else {
+            s.push(end(id, &format!("{task} completed cleanly."), false));
+        }
+    }
+    s.extend(words(
+        "Nine of ten sub-agents passed; one flagged an Office XLSX formula warning.",
+        Step::Say,
+    ));
+    s
+}
+
 /// The demo's planned task: a plan, its task list, a look in the browser
 /// and the files it made, which the side panel's tabs show.
 /// The demo plan, reworked: a sentence reworded, a step changed, one added.
@@ -13265,6 +13479,8 @@ fn demo_plan() -> Vec<Step> {
 fn demo_title(prompt: &str) -> Option<&'static str> {
     let lower = prompt.to_lowercase();
     [
+        ("10 agents", "Ten-agent audit"),
+        ("ten agents", "Ten-agent audit"),
         ("6 agents", "Repository survey"),
         ("agent", "Chat pipeline review"),
         ("approv", "Repo survey"),
@@ -13330,6 +13546,11 @@ fn script(prompt: &str) -> Vec<Step> {
     if ["design", "deck", "slides", "course"].iter().any(|w| lower.contains(w)) {
         s.extend(demo_design());
         s.push(Step::End { seconds: 21.4 });
+        return s;
+    }
+    if lower.contains("10 agents") || lower.contains("ten agents") {
+        s.extend(demo_ten_agents());
+        s.push(Step::End { seconds: 18.0 });
         return s;
     }
     if lower.contains("6 agents") || lower.contains("six agents") {
@@ -14567,5 +14788,49 @@ mod tests {
             .filter(|(m, pos)| *m == TitleMenu::Account && *pos == other_point)
             .is_some();
         assert!(!just_dismissed_next);
+    }
+
+    #[test]
+    fn pop_queued_preserves_remaining_items_and_demo_ten_agents_spawns_ten() {
+        let mut s = AppState::new();
+        let chat = 7;
+        s.queued.insert(
+            chat,
+            vec![
+                Queued {
+                    uuid: "q1".into(),
+                    text: "first".into(),
+                    attachments: vec![],
+                },
+                Queued {
+                    uuid: "q2".into(),
+                    text: "second".into(),
+                    attachments: vec![],
+                },
+                Queued {
+                    uuid: "q3".into(),
+                    text: "third".into(),
+                    attachments: vec![],
+                },
+            ],
+        );
+
+        let popped = s.pop_queued(chat, "q2").expect("middle item");
+        assert_eq!(popped.text, "second");
+        let left: Vec<&str> = s.queued[&chat].iter().map(|q| q.uuid.as_ref()).collect();
+        assert_eq!(left, ["q1", "q3"]);
+        assert!(s.pop_queued(chat, "missing").is_none());
+
+        let steps = demo_ten_agents();
+        let started = steps
+            .iter()
+            .filter(|st| {
+                matches!(
+                    st,
+                    Step::Agent(crate::backend::Event::ToolUse { name, .. }) if name == "Task"
+                )
+            })
+            .count();
+        assert_eq!(started, 10);
     }
 }

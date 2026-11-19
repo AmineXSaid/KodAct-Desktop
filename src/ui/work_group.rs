@@ -31,6 +31,7 @@ enum Part {
 
 fn part(blocks: &[Block], b: usize, streaming: bool) -> Part {
     match &blocks[b] {
+        Block::Tool(t) if t.target.as_ref() == "TodoWrite" => Part::Breaks,
         Block::Tool(_) if message::awaits_you(blocks, b) => Part::Breaks,
         Block::Tool(_) if message::denied_call(blocks, b) || message::asked_call(blocks, b) => {
             Part::Hidden

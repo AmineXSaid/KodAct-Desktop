@@ -769,6 +769,14 @@ impl Render for Composer {
         });
 
         let pending = super::attachments::pending(&t, &state, cx);
+        let queued_dock = {
+            let s = self.state.read(cx);
+            s.chat().and_then(|c| {
+                let list = s.queued.get(&c.id).filter(|q| !q.is_empty())?;
+                let collapsed = s.ui_toggles.contains("queued-collapsed");
+                Some(super::queued::render(&t, &state, c.id, list, collapsed))
+            })
+        };
         let goal = {
             let s = self.state.read(cx);
             s.current
@@ -1179,6 +1187,7 @@ impl Render for Composer {
                     .flex()
                     .flex_col()
                     .children(goal)
+                    .children(queued_dock.map(|q| div().mb(px(6.)).child(q)))
                     .child(
                         div()
                             .flex()

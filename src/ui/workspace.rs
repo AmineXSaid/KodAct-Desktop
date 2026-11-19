@@ -646,7 +646,7 @@ impl Workspace {
     /// A new chat: the greeting in the display serif beside KodAct's mark, a
     /// quiet line under it, the composer and the starters, on a plain
     /// ground.
-    fn welcome(&self, _window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn welcome(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
         let s = self.state.read(cx);
         let name = s.user_name.clone().unwrap_or_default();
@@ -663,20 +663,196 @@ impl Workspace {
         } else {
             format!("Working in {project}. Changes always wait for your review.")
         };
+        let recent = crate::ui::documents::all(s);
+        let recent_section = (!recent.is_empty()).then(|| {
+            let cards: Vec<gpui::AnyElement> = recent
+                .into_iter()
+                .take(3)
+                .enumerate()
+                .map(|(i, (f, _chat_id, chat_title))| {
+                    let hover = t.colors.hover;
+                    let open_state = self.state.clone();
+                    let to_open = f.clone();
+                    let kind_label = f.kind();
+                    let title = f.title();
+                    let preview_mark: gpui::AnyElement = match f.office() {
+                        Some(kind) => super::file_mark::render(kind, 26., window.scale_factor()),
+                        None if crate::diagram::extract_svg(&f.content).is_some() => {
+                            icon("icons/network.svg", t.size.icon_lg, t.colors.sky).into_any_element()
+                        }
+                        None => gpui::img(super::file_icon::asset(
+                            &f.name,
+                            false,
+                            f.path.as_deref().unwrap_or(&f.name),
+                        ))
+                        .flex_none()
+                        .size(px(24.))
+                        .into_any_element(),
+                    };
+                    let snippet = f
+                        .content
+                        .lines()
+                        .map(str::trim)
+                        .find(|l| !l.is_empty() && !l.starts_with('<'))
+                        .map(|l| l.trim_start_matches('#').trim().to_string());
+
+                    div()
+                        .id(("welcome-artifact", i))
+                        .flex_1()
+                        .min_w_0()
+                        .rounded(t.radius.card)
+                        .border_1()
+                        .border_color(t.colors.border)
+                        .bg(t.colors.surface)
+                        .p(t.space.sm + px(2.))
+                        .flex()
+                        .flex_col()
+                        .gap(t.space.sm)
+                        .cursor_pointer()
+                        .hover(move |st| st.bg(hover))
+                        .on_click(move |_, _, cx| {
+                            let file = to_open.clone();
+                            open_state.update(cx, |s, cx| s.open_doc(file, cx));
+                        })
+                        .child(
+                            div()
+                                .relative()
+                                .h(px(62.))
+                                .w_full()
+                                .rounded(t.radius.compact)
+                                .border_1()
+                                .border_color(t.colors.border)
+                                .bg(t.extra.sunk)
+                                .p(t.space.xs + px(2.))
+                                .flex()
+                                .flex_col()
+                                .items_center()
+                                .justify_center()
+                                .gap(px(4.))
+                                .child(preview_mark)
+                                .when_some(snippet, |d, line| {
+                                    d.child(
+                                        div()
+                                            .w_full()
+                                            .overflow_hidden()
+                                            .whitespace_nowrap()
+                                            .text_ellipsis()
+                                            .text_center()
+                                            .text_size(px(10.))
+                                            .text_color(t.colors.text_subtle)
+                                            .child(line),
+                                    )
+                                })
+                                .child(
+                                    div()
+                                        .absolute()
+                                        .top(px(4.))
+                                        .right(px(5.))
+                                        .px(px(5.))
+                                        .py(px(1.))
+                                        .rounded(t.radius.pill)
+                                        .bg(t.colors.surface.opacity(0.9))
+                                        .border_1()
+                                        .border_color(t.colors.border)
+                                        .text_size(px(10.))
+                                        .text_color(t.colors.text_muted)
+                                        .child(kind_label),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap(px(1.))
+                                .min_w_0()
+                                .child(
+                                    div()
+                                        .overflow_hidden()
+                                        .whitespace_nowrap()
+                                        .text_ellipsis()
+                                        .text_size(t.text.body_sm)
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .text_color(t.colors.text_strong)
+                                        .child(title),
+                                )
+                                .child(
+                                    div()
+                                        .overflow_hidden()
+                                        .whitespace_nowrap()
+                                        .text_ellipsis()
+                                        .text_size(t.text.caption)
+                                        .text_color(t.colors.text_subtle)
+                                        .child(format!("From {chat_title}")),
+                                ),
+                        )
+                        .into_any_element()
+                })
+                .collect();
+
+            let view_all = self.state.clone();
+            let text_hover = t.colors.text;
+            div()
+                .w_full()
+                .max_w(t.size.composer_width)
+                .pt(t.space.xs)
+                .flex()
+                .flex_col()
+                .gap(t.space.sm)
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .child(
+                            div()
+                                .text_size(t.text.caption)
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(t.colors.text_muted)
+                                .child("Recent artifacts"),
+                        )
+                        .child(
+                            div()
+                                .id("welcome-view-artifacts")
+                                .text_size(t.text.caption)
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(t.colors.text_muted)
+                                .cursor_pointer()
+                                .hover(move |st| st.text_color(text_hover).underline())
+                                .child("View all")
+                                .on_click(move |_, _, cx| {
+                                    view_all.update(cx, |s, cx| {
+                                        s.screen = Screen::Documents;
+                                        cx.notify();
+                                    });
+                                }),
+                        ),
+                )
+                .child(
+                    div()
+                        .w_full()
+                        .flex()
+                        .items_stretch()
+                        .gap(t.space.sm)
+                        .children(cards),
+                )
+        });
+
         div().flex_1().min_h_0().relative().flex().flex_col().child(
-            // A short window scrolls it rather than cutting off the starters.
+            // `my_auto()` centers when tall and scrolls smoothly without clipping when short.
             div()
                 .id("welcome")
                 .flex_1()
                 .min_h_0()
                 .overflow_y_scroll()
+                .flex()
+                .flex_col()
                 .child(
                     div()
-                        .min_h_full()
+                        .my_auto()
+                        .w_full()
                         .flex()
                         .flex_col()
                         .items_center()
-                        .justify_center()
                         .px(t.space.xl)
                         .py(t.space.xxl)
                         .child(
@@ -697,7 +873,11 @@ impl Workspace {
                                         .flex_col()
                                         .items_center()
                                         .gap(t.space.xs + px(2.))
-                                        .child(greeting_line(&line, &t))
+                                        .child(greeting_line(
+                                            &line,
+                                            s.panel.is_some() || s.doc.is_some(),
+                                            &t,
+                                        ))
                                         .child(
                                             div()
                                                 .max_w(t.size.composer_width)
@@ -716,7 +896,8 @@ impl Workspace {
                                     &self.state,
                                     &self.composer,
                                     cx,
-                                )),
+                                ))
+                                .children(recent_section),
                         ),
                 ),
         )
@@ -2093,38 +2274,43 @@ fn share_out(
 
 /// The greeting, in the display serif, after KodAct's mark: an editorial
 /// line, not a banner.
-fn greeting_line(line: &str, t: &crate::theme::Theme) -> impl IntoElement {
+fn greeting_line(line: &str, split: bool, t: &crate::theme::Theme) -> impl IntoElement {
+    let long = line.chars().count() > 26;
+    let mark_size = if split {
+        (f32::from(t.size.mark_home) * 0.78).round()
+    } else {
+        f32::from(t.size.mark_home)
+    };
+    let text_size = if split {
+        px(24.)
+    } else if long {
+        t.size.greeting
+    } else {
+        t.size.home_heading
+    };
     div()
         .w_full()
         .flex()
         .justify_center()
         .items_center()
-        .gap(t.space.md)
+        .gap(if split { t.space.sm } else { t.space.md })
         // Centred on the capitals rather than the line box, whose descender
         // room would otherwise leave the mark sitting high.
         .child(
             div()
                 .flex_none()
                 .mt(px(3.))
-                .child(super::logo(f32::from(t.size.mark_home))),
+                .child(super::logo(mark_size)),
         )
         .child(
             div()
                 .min_w_0()
                 .font_family(t.font_display.clone())
                 .font_weight(t.display_weight)
-                // A long line steps down the scale rather than breaking: a
-                // greeting is one line, never a word (or a "?") left over.
-                .text_size(if line.chars().count() > 26 {
-                    t.size.greeting
-                } else {
-                    t.size.home_heading
-                })
+                .text_size(text_size)
                 .text_color(t.colors.text_strong)
-                .line_height(gpui::relative(1.1))
-                .whitespace_nowrap()
-                .overflow_hidden()
-                .text_ellipsis()
+                .line_height(gpui::relative(1.15))
+                .text_center()
                 .child(line.to_string()),
         )
 }
