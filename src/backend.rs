@@ -49,6 +49,7 @@ pub enum Event {
     SubResult {
         parent: String,
         id: String,
+        output: String,
         is_error: bool,
     },
     /// A sub-agent's words (its latest message, which ends as its answer).
@@ -829,6 +830,7 @@ impl Parser {
                         out.push(Event::SubResult {
                             parent: parent.clone(),
                             id: b["tool_use_id"].as_str().unwrap_or_default().into(),
+                            output: result_text(&b["content"]),
                             is_error: b["is_error"].as_bool().unwrap_or(false),
                         });
                     }
@@ -1466,6 +1468,7 @@ mod tests {
                 Event::SubResult {
                     parent: "task1".into(),
                     id: "s1".into(),
+                    output: "x".into(),
                     is_error: false
                 },
                 Event::Immediate {

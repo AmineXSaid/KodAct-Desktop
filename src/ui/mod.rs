@@ -239,6 +239,7 @@ pub fn logo(size: f32) -> kodact_mark::Mark {
 
 /// The mark while KodAct works: the step lights, then the chevron.
 /// Reduced motion: the mark at rest.
+#[allow(dead_code)]
 pub fn turning_logo(size: f32, id: impl Into<gpui::ElementId>) -> gpui::AnyElement {
     kodact_mark::working(size, id, None)
 }
@@ -397,3 +398,99 @@ pub fn set_theme(look: crate::theme::Look, dark: bool, cx: &mut App) {
     sync_component_theme(cx);
     cx.refresh_windows();
 }
+
+/// Mouse-down position for a `ClickEvent` (matches `MouseDownOutEvent.position`).
+pub fn click_down(ev: &gpui::ClickEvent) -> gpui::Point<Pixels> {
+    match ev {
+        gpui::ClickEvent::Mouse(m) => m.down.position,
+        gpui::ClickEvent::Keyboard(_) | gpui::ClickEvent::Touch(_) => ev.position(),
+    }
+}
+
+/// A line-limited view over tool output or diffs (`> max_lines`), keeping the
+/// full string intact behind a "Show more" toggle.
+pub struct Truncated<'a> {
+    pub shown: &'a str,
+    pub hidden_lines: usize,
+    pub truncated: bool,
+}
+
+/// Return at most `max_lines` of `text` (and cap an enormous single line at ~800
+/// chars) so long output collapses cleanly without deleting anything.
+pub fn truncate_lines(text: &str, max_lines: usize) -> Truncated<'_> {
+    let trimmed = text.trim_end();
+    let total_lines = if trimmed.is_empty() {
+        0
+    } else {
+        trimmed.lines().count()
+    };
+    if total_lines > max_lines {
+        let mut seen = 0usize;
+        let mut cut = trimmed.len();
+        for (i, ch) in trimmed.char_indices() {
+            if ch == '\n' {
+                seen += 1;
+                if seen == max_lines {
+                    cut = i;
+                    break;
+                }
+            }
+        }
+        return Truncated {
+            shown: trimmed[..cut].trim_end_matches('\r'),
+            hidden_lines: total_lines - max_lines,
+            truncated: true,
+        };
+    }
+    const MAX_SINGLE_CHARS: usize = 800;
+    if trimmed.chars().count() > MAX_SINGLE_CHARS {
+        let cut = trimmed
+            .char_indices()
+            .nth(MAX_SINGLE_CHARS)
+            .map(|(i, _)| i)
+            .unwrap_or(trimmed.len());
+        return Truncated {
+            shown: trimmed[..cut].trim_end(),
+            hidden_lines: 0,
+            truncated: true,
+        };
+    }
+    Truncated {
+        shown: trimmed,
+        hidden_lines: 0,
+        truncated: false,
+    }
+}
+
+#[cfg(test)]
+mod ui_helper_tests {
+    use super::*;
+
+    #[test]
+    fn truncate_lines_keeps_short_and_splits_long() {
+        let short = "line 1\nline 2\nline 3";
+        let t = truncate_lines(short, 10);
+        assert!(!t.truncated);
+        assert_eq!(t.hidden_lines, 0);
+        assert_eq!(t.shown, short);
+
+        let long = (1..=15)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let t = truncate_lines(&long, 10);
+        assert!(t.truncated);
+        assert_eq!(t.hidden_lines, 5);
+        assert_eq!(t.shown.lines().count(), 10);
+        assert!(t.shown.ends_with("line 10"));
+    }
+
+    #[test]
+    fn truncate_lines_caps_huge_single_line() {
+        let big = "a".repeat(1200);
+        let t = truncate_lines(&big, 10);
+        assert!(t.truncated);
+        assert_eq!(t.shown.len(), 800);
+    }
+}
+

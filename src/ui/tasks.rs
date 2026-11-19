@@ -190,7 +190,10 @@ pub fn render(
             t.size.icon_xs,
             t.colors.text_subtle,
         ))
-        .on_click(move |_, _, cx| toggle.update(cx, |s, cx| s.toggle_tasks(cx)));
+        .on_click(move |ev, _, cx| {
+            let at = super::click_down(ev);
+            toggle.update(cx, |s, cx| s.toggle_tasks_at(Some(at), cx));
+        });
     let panel = shown.map(|leaving| {
         let mut rows = div()
             .id("tasks-list")
@@ -249,12 +252,9 @@ pub fn render(
             .top(t.size.control + t.space.xs)
             .right_0()
             .w(px(340.))
-            .on_mouse_down_out(move |_, _, cx| {
-                close.update(cx, |s, cx| {
-                    if s.tasks_open {
-                        s.tasks_open = false;
-                        cx.notify();
-                    }
+            .when(!leaving, |d| {
+                d.on_mouse_down_out(move |ev, _, cx| {
+                    close.update(cx, |s, cx| s.dismiss_tasks(ev.position, cx))
                 })
             })
             .child(

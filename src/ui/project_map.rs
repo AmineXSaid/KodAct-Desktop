@@ -201,10 +201,15 @@ pub fn render(
                 .rounded(t.radius.button)
                 .cursor_pointer()
                 .hover(move |st| st.bg(hover))
-                .child({
-                    let (path, color) = super::file_icon::for_name(&e.path, false, t);
-                    icon(path, t.size.icon_sm, color)
-                })
+                .child(
+                    gpui::img(super::file_icon::asset(
+                        e.path.rsplit('/').next().unwrap_or(&e.path),
+                        false,
+                        &e.path,
+                    ))
+                    .flex_none()
+                    .size(t.size.icon_sm),
+                )
                 .child(
                     div()
                         .flex_1()

@@ -2273,8 +2273,14 @@ impl Render for Settings {
                             .rounded_bl(PANEL_RADIUS - t.size.hairline)
                             .bg(gpui::linear_gradient(
                                 180.,
-                                gpui::linear_color_stop(t.extra.pane.opacity(0.), 0.),
-                                gpui::linear_color_stop(t.extra.pane, 1.),
+                                gpui::linear_color_stop(
+                                    (if t.is_dark { t.extra.sunk } else { t.extra.pane }).opacity(0.),
+                                    0.,
+                                ),
+                                gpui::linear_color_stop(
+                                    if t.is_dark { t.extra.sunk } else { t.extra.pane },
+                                    1.,
+                                ),
                             )),
                     ),
             )
@@ -2284,7 +2290,7 @@ impl Render for Settings {
                     .min_w_0()
                     .flex()
                     .flex_col()
-                    .bg(t.colors.canvas)
+                    .bg(if t.is_dark { t.extra.pane } else { t.colors.canvas })
                     .rounded_tr(PANEL_RADIUS - t.size.hairline)
                     .rounded_br(PANEL_RADIUS - t.size.hairline)
                     .child(

@@ -29,9 +29,21 @@ fn once(ms: u64) -> gpui::Animation {
         .with_easing(gpui::ease_out_quint())
 }
 
+/// Menu arrival: soft quartic deceleration so fade and glide track together smoothly.
+fn menu_once(ms: u64) -> gpui::Animation {
+    gpui::Animation::new(std::time::Duration::from_millis(played(ms)))
+        .with_easing(|k: f32| 1. - (1. - k).powi(4))
+}
+
 /// Leaving: slow at first, then gone (the reverse of `ease_out_quint`).
 fn leave(ms: u64) -> gpui::Animation {
     gpui::Animation::new(std::time::Duration::from_millis(played(ms))).with_easing(|k: f32| k * k)
+}
+
+/// Menu exit: immediate, silky deceleration toward the anchor.
+fn menu_leave(ms: u64) -> gpui::Animation {
+    gpui::Animation::new(std::time::Duration::from_millis(played(ms)))
+        .with_easing(|k: f32| 1. - (1. - k).powi(3))
 }
 
 /// A spring that runs a little past its rest and settles back.
@@ -71,6 +83,11 @@ impl<K: Clone> Presence<K> {
             self.shown = Some(k.clone());
             self.left_at = None;
             return Some((k, false));
+        }
+        if reduced_motion() {
+            self.shown = None;
+            self.left_at = None;
+            return None;
         }
         let k = self.shown.clone()?;
         let left = *self.left_at.get_or_insert_with(std::time::Instant::now);
@@ -138,7 +155,7 @@ pub fn backdrop<E: gpui::Styled + gpui::IntoElement + 'static>(
 }
 
 /// The command palette: it drops 10px from above as it fades in, as a
-/// spotlight does; leaving, it lifts back up and fades, quickly.
+/// spotlight does; leaving, it lifts back up and fades, smoothly.
 pub fn spotlight<E: gpui::Styled + gpui::IntoElement + 'static>(
     el: E,
     id: &str,
@@ -149,24 +166,24 @@ pub fn spotlight<E: gpui::Styled + gpui::IntoElement + 'static>(
     if leaving {
         el.with_animation(
             SharedString::from(format!("{id}-out")),
-            leave(t.size.menu_out_ms),
-            |d, k| d.opacity(1. - k).mt(px(-8. * k)),
+            menu_leave(t.size.menu_out_ms),
+            |d, k| d.opacity((1. - k).powf(1.25)).mt(px(-8. * k)),
         )
         .into_any_element()
     } else {
         el.with_animation(
             SharedString::from(format!("{id}-in")),
-            once(t.size.pop_in_ms + 40),
-            |d, k| d.opacity(k).mt(px(-10. * (1. - k))),
+            menu_once(t.size.pop_in_ms + 60),
+            |d, k| d.opacity(k.powf(0.8)).mt(px(-10. * (1. - k))),
         )
         .into_any_element()
     }
 }
 
-/// A menu at its anchor (the title bar's, a chat's, the composer's): it
-/// unfolds from the anchor, its height opening while it fades in; leaving,
-/// it fades and drifts 3px back toward the anchor. The quick, light one.
-/// `up`: it opens upward (anchored by its foot).
+/// A menu at its anchor (the title bar's, the sidebar's, a chat's): it
+/// glides 8–10px smoothly out from its anchor while fading in without clipping
+/// shadows; leaving, it settles 8px back toward its anchor while fading cleanly.
+/// `up`: it opens upward (anchored by its foot, so bottom margin moves it).
 pub fn unfold<E: gpui::Styled + gpui::IntoElement + 'static>(
     el: E,
     id: &str,
@@ -175,27 +192,33 @@ pub fn unfold<E: gpui::Styled + gpui::IntoElement + 'static>(
     t: &crate::theme::Theme,
 ) -> gpui::AnyElement {
     use gpui::{prelude::*, px, AnimationExt as _, SharedString};
-    let toward = if up { 3. } else { -3. };
     if leaving {
         el.with_animation(
             SharedString::from(format!("{id}-out")),
-            leave(t.size.menu_out_ms),
-            move |d, k| d.opacity(1. - k).mt(px(toward * k)),
+            menu_leave(t.size.menu_out_ms),
+            move |d, k| {
+                let d = d.opacity((1. - k).powf(1.25));
+                if up {
+                    d.mb(px(8. * (1. - k)))
+                } else {
+                    d.mt(px(-8. * k))
+                }
+            },
         )
         .into_any_element()
     } else {
-        // On linear time: the reveal runs at an even 1.6px a millisecond
-        // (so a short menu unfolds as visibly as a long one), the fade eased.
-        let ms = t.size.pop_in_ms + 60;
-        let anim = gpui::Animation::new(std::time::Duration::from_millis(played(ms)));
-        let ease = gpui::ease_out_quint();
-        el.with_animation(SharedString::from(format!("{id}-in")), anim, move |d, k| {
-            // Clipped only while it opens, so its shadow shows at rest.
-            d.when(k < 1., |d| {
-                d.overflow_hidden().max_h(px(16. + 1.6 * ms as f32 * k))
-            })
-            .opacity(ease(k).min(1.))
-        })
+        el.with_animation(
+            SharedString::from(format!("{id}-in")),
+            menu_once(t.size.pop_in_ms + 60),
+            move |d, k| {
+                let d = d.opacity(k.powf(0.8));
+                if up {
+                    d.mb(px(8. * k))
+                } else {
+                    d.mt(px(-10. * (1. - k)))
+                }
+            },
+        )
         .into_any_element()
     }
 }
@@ -218,24 +241,20 @@ pub fn alert(
 }
 
 /// A menu that hangs below what opened it (the terminal's shell list, a
-/// right-click menu): it draws its jewel edge as it opens; leaving, it
-/// fades and drifts back up toward its anchor.
+/// right-click menu): it glides cleanly down into place and fades softly out
+/// toward its anchor.
 pub fn drop_menu(
     body: gpui::Stateful<gpui::Div>,
     id: &str,
     leaving: bool,
     t: &crate::theme::Theme,
 ) -> gpui::AnyElement {
-    if leaving {
-        unfold(body, id, false, true, t)
-    } else {
-        edge_draw(body, format!("{id}-in"), t.colors.primary, 0., t)
-    }
+    unfold(body, id, false, leaving, t)
 }
 
-/// A menu over the composer (the model, the mode, the +): it opens by
-/// drawing its jewel edge (`edge_draw`); leaving, it fades and drifts back
-/// down toward the composer. `lift` is its bottom margin at rest.
+/// A menu over the composer (the model, the mode, the design chips, the +):
+/// it glides 10px upward into place with quartic easing on open and settles back
+/// 8px toward its trigger on close. `lift` is its bottom margin at rest.
 pub fn composer_menu(
     body: gpui::Stateful<gpui::Div>,
     id: &str,
@@ -243,11 +262,21 @@ pub fn composer_menu(
     leaving: bool,
     t: &crate::theme::Theme,
 ) -> gpui::AnyElement {
-    use gpui::{prelude::*, px};
+    use gpui::{prelude::*, px, AnimationExt as _, SharedString};
     if leaving {
-        unfold(body.mb(px(lift)), id, true, true, t)
+        body.with_animation(
+            SharedString::from(format!("{id}-out")),
+            menu_leave(t.size.menu_out_ms),
+            move |d, k| d.opacity((1. - k).powf(1.25)).mb(px(lift - 8. * k)),
+        )
+        .into_any_element()
     } else {
-        edge_draw(body, format!("{id}-in"), t.colors.primary, lift, t)
+        body.with_animation(
+            SharedString::from(format!("{id}-in")),
+            menu_once(t.size.pop_in_ms + 60),
+            move |d, k| d.opacity(k.powf(0.8)).mb(px(lift - 10. * (1. - k))),
+        )
+        .into_any_element()
     }
 }
 

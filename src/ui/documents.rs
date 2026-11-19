@@ -47,15 +47,16 @@ pub fn render(t: &Theme, state: &Entity<AppState>, s: &AppState, scale: f32) -> 
         let key = format!("documents-{i}");
         let mark: AnyElement = match f.office() {
             Some(kind) => super::file_mark::render(kind, 24., scale),
-            None => super::icon(
-                if crate::diagram::extract_svg(&f.content).is_some() {
-                    "icons/network.svg"
-                } else {
-                    "icons/file-text.svg"
-                },
-                t.size.icon,
-                t.colors.text_muted,
-            )
+            None if crate::diagram::extract_svg(&f.content).is_some() => {
+                super::icon("icons/network.svg", t.size.icon, t.colors.sky).into_any_element()
+            }
+            None => gpui::img(super::file_icon::asset(
+                &f.name,
+                false,
+                f.path.as_deref().unwrap_or(&f.name),
+            ))
+            .flex_none()
+            .size(px(20.))
             .into_any_element(),
         };
         div()

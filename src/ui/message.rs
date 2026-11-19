@@ -64,6 +64,8 @@ pub struct ItemContext {
     /// The runs of calls opened to their steps, by their first block (in
     /// the detailed view, the ones closed).
     pub open_groups: Vec<usize>,
+    /// Transient presentation-only toggles (`ui_toggles` from AppState).
+    pub ui_toggles: std::sync::Arc<std::collections::HashSet<String>>,
     /// The chat's transcript view is Detailed: runs and thoughts open.
     pub detailed: bool,
     /// The block a jump just landed on, to mark it for a moment.
@@ -78,6 +80,10 @@ pub struct ItemContext {
     pub edited_open: bool,
     /// The chat's sub-agents, for their rows' details.
     pub agents: std::rc::Rc<Vec<crate::state::AgentRun>>,
+    /// Number of sub-agent calls in earlier messages of this chat.
+    pub agent_offset: usize,
+    /// Currently inspected sub-agent id in the Agents panel, if active.
+    pub inspected_agent: Option<String>,
 }
 
 /// Where a jump's block is drawn, so the list can scroll it into view: the
@@ -1037,49 +1043,58 @@ fn thinking(
     };
     let key = format!("{}-{}-{b}", cx.chat, cx.index);
     let long = text.len() > 900;
+    let (st_click, chat, msg) = (cx.state.clone(), cx.chat, cx.index);
+    let header_inner = div()
+        .flex()
+        .items_center()
+        .gap(t.space.xs + px(2.))
+        .min_h(t.size.quiet_line)
+        .px(px(2.))
+        .text_size(t.text.body_sm)
+        .text_color(t.colors.text_muted)
+        .hover(move |s| s.text_color(strong))
+        .when(streaming, |d| {
+            d.child(super::activity::strike(
+                t.extra.accent,
+                t.extra.mark_heat_white,
+                f32::from(t.size.icon_xs),
+                SharedString::from(format!("think-strike-{key}")),
+            ))
+        })
+        .when(!streaming, |d| {
+            d.child(icon(
+                "icons/lightbulb.svg",
+                t.size.icon_xs,
+                t.colors.text_subtle,
+            ))
+        })
+        .child(label.clone())
+        .child(icon(
+            if open {
+                "icons/chevron-down.svg"
+            } else {
+                "icons/chevron-right.svg"
+            },
+            t.size.icon_xs,
+            t.colors.text_subtle,
+        ));
+
     div()
         .flex()
         .flex_col()
         .child(
-            div()
-                .id(SharedString::from(format!("think-{key}")))
-                .role(gpui::accesskit::Role::Button)
-                .aria_label(SharedString::from(format!(
+            super::button::KeyRow::new(
+                SharedString::from(format!("think-{key}")),
+                SharedString::from(format!(
                     "{label}, {}",
-                    if open {
-                        "hide the thinking"
-                    } else {
-                        "show the thinking"
-                    }
-                )))
-                .flex()
-                .items_center()
-                .gap(t.space.xs + px(2.))
-                .min_h(t.size.quiet_line)
-                .cursor_pointer()
-                .text_size(t.text.body_sm)
-                .text_color(t.colors.text_muted)
-                .hover(move |s| s.text_color(strong))
-                .when(streaming, |d| {
-                    // Thinking: KodAct's own strike mark, as on the working line.
-                    d.child(super::activity::strike(
-                        t.extra.accent,
-                        t.extra.mark_heat_white,
-                        f32::from(t.size.icon_xs),
-                        SharedString::from(format!("think-strike-{key}")),
-                    ))
-                })
-                .child(label)
-                .child(icon(
-                    if open {
-                        "icons/chevron-down.svg"
-                    } else {
-                        "icons/chevron-right.svg"
-                    },
-                    t.size.icon_xs,
-                    t.colors.text_subtle,
-                ))
-                .on_click(toggle(cx, b)),
+                    if open { "expanded" } else { "collapsed" }
+                )),
+                header_inner,
+            )
+            .expanded(open)
+            .on_activate(move |_, app| {
+                st_click.update(app, |s, cx| s.toggle_block(chat, msg, b, cx));
+            }),
         )
         .when(open, |d| {
             d.child(
@@ -1333,36 +1348,173 @@ fn pictures(call: &ToolCall, t: &Theme) -> gpui::Div {
         }))
 }
 
-/// What a call's line names: a file by its name (its folder is in the
-/// opened body), anything else as its row says it.
+/// Maximum lines rendered initially for tool output / diffs before "Show more".
+const OUTPUT_FOLD: usize = 10;
+
+/// What a call's line names: a file by up to its last two path components
+/// (`src/app.ts`, `…/dir/file.rs`), anything else as its row says it.
 fn target_label(call: &ToolCall) -> SharedString {
     match call.kind {
         ToolKind::Read | ToolKind::Edit | ToolKind::Write => {
             let t = call.target.as_ref();
-            t.rsplit(['/', '\\']).next().unwrap_or(t).to_string().into()
+            let parts: Vec<&str> = t.split(['/', '\\']).filter(|p| !p.is_empty()).collect();
+            if parts.len() <= 2 {
+                call.target.clone()
+            } else {
+                format!("…/{}/{}", parts[parts.len() - 2], parts[parts.len() - 1]).into()
+            }
         }
         _ => call.shown_target(),
     }
 }
 
-/// A tool call's one line, as quiet as Claude's: "Read main.rs", "Edited
-/// lib.rs +3 −1", a command by its description. Muted text, no frame and no
-/// icon for a call that worked; a mark only while it runs, or when it
-/// failed or was stopped (with why). Clicking it opens the body.
+pub(super) fn is_problem(status: ToolStatus) -> bool {
+    matches!(status, ToolStatus::Failed | ToolStatus::Interrupted)
+}
+
+pub(super) fn prob_fold_key(chat: usize, msg: usize, b: usize) -> String {
+    format!("prob-fold-{chat}-{msg}-{b}")
+}
+
+/// Effective open state of a tool block: errors/warnings start expanded by
+/// default (never hidden behind a collapse) until toggled via `ui_toggles`.
+pub(super) fn tool_is_open(call: &ToolCall, b: usize, cx: &ItemContext) -> bool {
+    if is_problem(call.status) {
+        !cx.ui_toggles.contains(&prob_fold_key(cx.chat, cx.index, b))
+    } else {
+        call.open
+    }
+}
+
+/// Concise single-line outcome suffix (e.g. `"42 lines"`, `"exit 0"`, `"failed"`).
+pub(super) fn tool_outcome(call: &ToolCall) -> Option<String> {
+    match call.status {
+        ToolStatus::Running => None,
+        ToolStatus::Declined => {
+            if call.output.starts_with(crate::state::AGENT_STOPPED) {
+                None
+            } else {
+                Some("skipped".into())
+            }
+        }
+        ToolStatus::Interrupted => Some("stopped".into()),
+        ToolStatus::Failed => {
+            if call.kind == ToolKind::Bash {
+                Some("failed".into())
+            } else if call.output.trim().is_empty() {
+                Some("failed".into())
+            } else {
+                None
+            }
+        }
+        ToolStatus::Done => {
+            let trimmed = call.output.trim();
+            let lines = if trimmed.is_empty() {
+                0
+            } else {
+                trimmed.lines().count()
+            };
+            match call.kind {
+                ToolKind::Read if lines > 0 => Some(format!(
+                    "{lines} line{}",
+                    if lines == 1 { "" } else { "s" }
+                )),
+                ToolKind::Bash if lines > 0 => Some(format!(
+                    "exit 0 · {lines} line{}",
+                    if lines == 1 { "" } else { "s" }
+                )),
+                ToolKind::Bash => Some("exit 0".into()),
+                ToolKind::Search => {
+                    let hits = trimmed.lines().filter(|l| !l.trim().is_empty()).count();
+                    if hits > 0 {
+                        Some(format!("{hits} match{}", if hits == 1 { "" } else { "es" }))
+                    } else {
+                        Some("no matches".into())
+                    }
+                }
+                ToolKind::Edit | ToolKind::Write if call.diff.is_empty() => Some("saved".into()),
+                ToolKind::Edit | ToolKind::Write => None,
+                _ if lines > 0 => Some(format!(
+                    "{lines} line{}",
+                    if lines == 1 { "" } else { "s" }
+                )),
+                _ => None,
+            }
+        }
+    }
+}
+
+/// Keyboard-accessible "Show more / Show less" toggle row backed by `ui_toggles`.
+pub(super) fn show_more_toggle(
+    id: String,
+    toggle_key: String,
+    more_label: String,
+    chat: Option<usize>,
+    expanded: bool,
+    state: Entity<AppState>,
+    t: &Theme,
+) -> AnyElement {
+    let label = if expanded {
+        "Show less".to_string()
+    } else {
+        more_label
+    };
+    let hover = t.colors.hover;
+    let accent = t.colors.primary;
+    let inner = div()
+        .flex()
+        .items_center()
+        .gap(t.space.xs)
+        .px(t.space.md)
+        .h(px(26.))
+        .border_t_1()
+        .border_color(t.colors.border)
+        .bg(t.extra.sunk)
+        .hover(move |s| s.bg(hover))
+        .text_size(t.text.caption)
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(accent)
+        .child(icon(
+            if expanded {
+                "icons/chevron-up.svg"
+            } else {
+                "icons/chevron-down.svg"
+            },
+            t.size.icon_xs,
+            accent,
+        ))
+        .child(label.clone());
+    super::button::KeyRow::new(
+        SharedString::from(id),
+        SharedString::from(format!(
+            "{label}, {}",
+            if expanded { "expanded" } else { "collapsed" }
+        )),
+        inner,
+    )
+    .w_full()
+    .radius(px(0.))
+    .expanded(expanded)
+    .on_activate(move |_, app| {
+        state.update(app, |s, cx| s.toggle_ui(toggle_key.clone(), chat, cx));
+    })
+    .into_any_element()
+}
+
+/// A tool call's one quiet line: `icon + action + target + outcome`. Clicking
+/// (or pressing Enter/Space) toggles details; errors stay expanded by default.
 pub(super) fn tool_header(
     call: &ToolCall,
     b: usize,
     blocks: &[Block],
     cx: &ItemContext,
     t: &Theme,
-) -> gpui::Stateful<gpui::Div> {
+) -> AnyElement {
     if crate::state::is_agent_tool(&call.target) {
-        return agent_header(call, b, cx, t);
+        return agent_header(call, b, blocks, cx, t);
     }
     let strong = t.colors.text;
     let failed = call.status == ToolStatus::Failed;
-    // A failed change was never made, a stopped one may not have been: no
-    // counts for either.
     let unknown = call.status == ToolStatus::Interrupted;
     let adds = call
         .diff
@@ -1376,96 +1528,96 @@ pub(super) fn tool_header(
         .count();
     let shell = call.kind == ToolKind::Bash;
     let has_body = has_body(call);
+    let shown_open = has_body && tool_is_open(call, b, cx);
     let why = failure_line(call).filter(|_| !shell);
+    let outcome = tool_outcome(call);
     let waiting = call.status == ToolStatus::Running && awaits_you(blocks, b);
     let verb = if call.status == ToolStatus::Declined
         && call.output.starts_with(crate::state::AGENT_STOPPED)
     {
-        // A sub-agent you stopped reads "Stopped", not "Skipped".
         "Stopped"
     } else {
         call.kind.verb(call.status)
     };
+    let mono_target = matches!(
+        call.kind,
+        ToolKind::Read | ToolKind::Edit | ToolKind::Write | ToolKind::Search | ToolKind::Bash
+    );
     let one_line = |d: gpui::Div| {
         d.min_w_0()
             .overflow_hidden()
             .whitespace_nowrap()
             .text_ellipsis()
     };
-    div()
-        .id(SharedString::from(format!(
-            "tool-{}-{}-{b}",
-            cx.chat, cx.index
-        )))
-        .role(gpui::accesskit::Role::Button)
-        .aria_label(SharedString::from(format!(
-            "{verb} {}{}{}",
-            call.shown_target(),
-            why.as_ref().map(|w| format!(": {w}")).unwrap_or_default(),
-            if !has_body {
-                ""
-            } else if call.open {
-                ", hide details"
-            } else {
-                ", show details"
-            }
-        )))
+    let key = format!("{}-{}-{b}", cx.chat, cx.index);
+    let inner = div()
         .flex()
         .items_center()
         .gap(t.space.xs + px(2.))
         .min_h(t.size.quiet_line)
+        .px(px(2.))
         .text_size(t.text.body_sm)
         .text_color(t.colors.text_muted)
-        .when(has_body, |d| {
-            d.cursor_pointer().hover(move |s| s.text_color(strong))
-        })
-        // A mark only when there is something to say: it runs, waits on
-        // you, failed, was stopped or skipped.
-        .children(match call.status {
+        .when(has_body, |d| d.hover(move |s| s.text_color(strong)))
+        .child(match call.status {
             _ if waiting => {
-                Some(icon("icons/hand.svg", t.size.icon_xs, t.extra.accent).into_any_element())
+                icon("icons/hand.svg", t.size.icon_xs, t.extra.accent).into_any_element()
             }
-            ToolStatus::Done => None,
+            ToolStatus::Done => icon(call.kind.icon(), t.size.icon_xs, t.colors.text_muted)
+                .into_any_element(),
             ToolStatus::Failed => {
-                // The whole error, on hover.
                 let full = SharedString::from(call.output.trim().to_string());
-                Some(
-                    div()
-                        .id(SharedString::from(format!(
-                            "tool-why-{}-{}-{b}",
-                            cx.chat, cx.index
-                        )))
-                        .flex_none()
-                        .child(status_icon(call.status, t))
-                        .tooltip(move |w, cx| {
+                div()
+                    .id(SharedString::from(format!("tool-why-{key}")))
+                    .flex_none()
+                    .child(status_icon(call.status, t))
+                    .when(!full.is_empty(), |d| {
+                        d.tooltip(move |w, cx| {
                             gpui::component::tooltip::Tooltip::new(full.clone()).build(w, cx)
                         })
-                        .into_any_element(),
-                )
+                    })
+                    .into_any_element()
             }
-            s => Some(
-                div()
-                    .flex_none()
-                    .child(status_icon(s, t))
-                    .into_any_element(),
-            ),
+            s => status_icon(s, t),
         })
         .map(|d| match (&call.note, shell) {
-            // A command reads as its description; the command itself is in
-            // the terminal block it opens to.
-            (Some(note), true) => d.child(
-                one_line(div())
-                    .text_color(t.colors.text)
-                    .child(note.clone()),
-            ),
-            _ => d
-                .child(div().flex_none().child(verb))
+            (Some(note), true) => d
+                .child(
+                    div()
+                        .flex_none()
+                        .text_color(if failed {
+                            t.extra.danger
+                        } else if unknown {
+                            t.extra.warning
+                        } else {
+                            t.colors.text_muted
+                        })
+                        .child(if failed || unknown { verb } else { "Bash" }),
+                )
                 .child(
                     one_line(div())
-                        // With a note or a reason, the target keeps its room
-                        // and the words after it are cut instead.
+                        .text_color(t.colors.text)
+                        .font_weight(FontWeight::MEDIUM)
+                        .child(note.clone()),
+                ),
+            _ => d
+                .child(
+                    div()
+                        .flex_none()
+                        .when(failed, |d| d.text_color(t.extra.danger))
+                        .when(unknown, |d| d.text_color(t.extra.warning))
+                        .child(verb),
+                )
+                .child(
+                    one_line(div())
                         .when(call.note.is_some() || why.is_some(), |d| {
                             d.flex_none().max_w(px(260.))
+                        })
+                        .when(mono_target, |d| d.font_family(t.font_mono.clone()))
+                        .text_size(if mono_target {
+                            t.text.caption + px(0.5)
+                        } else {
+                            t.text.body_sm
                         })
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(t.colors.text)
@@ -1474,24 +1626,36 @@ pub(super) fn tool_header(
                 .children(
                     call.note
                         .clone()
-                        .filter(|_| why.is_none())
+                        .filter(|_| why.is_none() && outcome.is_none())
                         .map(|n| one_line(div()).text_color(t.colors.text_subtle).child(n)),
                 ),
         })
-        // Why it failed, in its own words, cut to the line.
-        .children(why.map(|w| {
+        .children(why.as_ref().map(|w| {
             one_line(div())
                 .text_color(if unknown {
                     t.extra.warning
                 } else {
                     t.extra.danger
                 })
-                .child(w)
+                .child(format!("· {w}"))
+        }))
+        .children(outcome.as_ref().map(|out| {
+            div()
+                .flex_none()
+                .text_size(t.text.caption)
+                .text_color(if failed {
+                    t.extra.danger
+                } else if unknown {
+                    t.extra.warning
+                } else {
+                    t.colors.text_subtle
+                })
+                .child(format!("· {out}"))
         }))
         .when(adds + dels > 0, |d| d.child(diff_counts(adds, dels, t)))
         .when(has_body, |d| {
             d.child(icon(
-                if call.open {
+                if shown_open {
                     "icons/chevron-down.svg"
                 } else {
                     "icons/chevron-right.svg"
@@ -1500,164 +1664,394 @@ pub(super) fn tool_header(
                 t.colors.text_subtle,
             ))
         })
-        // Opened, the pictures show whole below instead.
         .when_some(
-            thumbs(call.images.iter(), t).filter(|_| !call.open),
+            thumbs(call.images.iter(), t).filter(|_| !shown_open),
             |d, th| d.child(div().flex_1()).child(th),
-        )
-        .on_click(toggle(cx, b))
+        );
+
+    let aria = format!(
+        "{verb} {}{}{}",
+        call.shown_target(),
+        outcome
+            .as_deref()
+            .or_else(|| why.as_deref())
+            .map(|o| format!(", {o}"))
+            .unwrap_or_default(),
+        if !has_body {
+            ""
+        } else if shown_open {
+            ", expanded"
+        } else {
+            ", collapsed"
+        }
+    );
+    let mut row = super::button::KeyRow::new(SharedString::from(format!("tool-{key}")), aria, inner)
+        .w_full();
+    if has_body {
+        let (st, chat, msg) = (cx.state.clone(), cx.chat, cx.index);
+        let problem = is_problem(call.status);
+        let fold_key = prob_fold_key(chat, msg, b);
+        row = row.expanded(shown_open).on_activate(move |_, app| {
+            st.update(app, |s, cx| {
+                if problem {
+                    s.toggle_ui(fold_key.clone(), Some(chat), cx);
+                } else {
+                    s.toggle_block(chat, msg, b, cx);
+                }
+            });
+        });
+    }
+    row.into_any_element()
 }
 
 /// Quiet this long while it runs, an agent looks stuck and says so.
 const AGENT_STALLED: std::time::Duration = std::time::Duration::from_secs(120);
 
-/// A sub-agent's line: its state, its kind, its task, what it is doing
-/// now (or what it found), and its steps and time. A click opens the
-/// Agents panel, where it has its whole story and a Stop.
+/// A compact, single-line sub-agent row in the chat stream: status mark,
+/// task title, optional kind badge, single concise status/step readout, optional
+/// inline Stop button, and Inspect action. Failures & warnings render a compact
+/// error strip directly below so failures are never hidden.
 fn agent_header(
     call: &ToolCall,
     b: usize,
+    blocks: &[Block],
     cx: &ItemContext,
     t: &Theme,
-) -> gpui::Stateful<gpui::Div> {
-    let task = call.note.clone().unwrap_or_else(|| "A sub-task".into());
-    let run = cx.agents.iter().find(|r| r.task == task.as_ref());
+) -> AnyElement {
+    let nth = cx.agent_offset
+        + blocks[..b]
+            .iter()
+            .filter(|blk| matches!(blk, Block::Tool(tc) if crate::state::is_agent_tool(&tc.target)))
+            .count();
+    let fallback_task = call.note.clone().unwrap_or_else(|| "Sub-agent task".into());
+    let run = cx
+        .agents
+        .get(nth)
+        .or_else(|| cx.agents.iter().find(|r| r.task == fallback_task.as_ref()));
+
+    let key = format!("{}-{}-{b}", cx.chat, cx.index);
+    let title: String = run
+        .map(|r| r.task.clone())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| fallback_task.to_string());
+    let kind = run.map(|r| r.kind.clone()).filter(|s| !s.is_empty());
+
+    let running = run.is_some_and(|r| r.ended.is_none()) || call.status == ToolStatus::Running;
+    let stopping = run.is_some_and(|r| r.stopping);
+    let stopped = run.is_some_and(|r| r.stopped)
+        || call.status == ToolStatus::Declined
+        || call.output.starts_with(crate::state::AGENT_STOPPED);
+    let interrupted = !stopped && call.status == ToolStatus::Interrupted;
+    let failed =
+        !stopped && !interrupted && (run.is_some_and(|r| r.failed) || call.status == ToolStatus::Failed);
+    let inspected = run.is_some_and(|r| cx.inspected_agent.as_deref() == Some(r.id.as_str()));
+
     let now = std::time::Instant::now();
     let stalled = run.is_some_and(|r| {
         r.ended.is_none()
             && call.status == ToolStatus::Running
             && now.duration_since(r.heard) >= AGENT_STALLED
     });
-    let (detail, detail_ink) = match run {
-        _ if stalled => (
-            format!(
-                "No word from it for {}",
-                super::chat_view::elapsed(run.map_or(0, |r| now.duration_since(r.heard).as_secs()))
-            ),
-            t.extra.warning,
-        ),
-        Some(r) => match (r.ended, r.steps.last()) {
-            (None, Some(step)) => (step.label(), t.colors.text_subtle),
-            (None, None) => ("Starting".into(), t.colors.text_subtle),
-            (Some(_), _) => (
-                r.said
-                    .lines()
-                    .map(str::trim)
-                    .find(|l| !l.is_empty())
-                    .unwrap_or_default()
-                    .to_string(),
-                t.colors.text_subtle,
-            ),
-        },
-        None => (String::new(), t.colors.text_subtle),
-    };
-    let meta = run.map(|r| {
-        let steps = match r.steps.len() {
-            1 => "1 step".to_string(),
-            n => format!("{n} steps"),
-        };
-        let took = r
+    let elapsed_str = run.map(|r| {
+        let secs = r
             .ended
             .unwrap_or(now)
             .saturating_duration_since(r.started)
             .as_secs();
-        format!("{steps} · {}", super::chat_view::elapsed(took))
+        super::chat_view::elapsed(secs)
     });
-    let strong = t.colors.text;
-    let state = cx.state.clone();
-    let one_line = |d: gpui::Div| {
-        d.min_w_0()
-            .overflow_hidden()
-            .whitespace_nowrap()
-            .text_ellipsis()
+    let step_count = run.map_or(0, |r| r.steps.len());
+    let live_step = if running && !stopping && !stalled {
+        run.and_then(|r| r.steps.last().map(|s| s.label()))
+    } else {
+        None
     };
-    div()
-        .id(SharedString::from(format!(
-            "tool-{}-{}-{b}",
-            cx.chat, cx.index
-        )))
-        .role(gpui::accesskit::Role::Button)
-        .aria_label(SharedString::from(format!(
-            "Agent: {task}. {detail}. Open the Agents panel"
-        )))
-        .flex()
-        .items_center()
-        .gap(t.space.sm)
-        .min_h(t.size.quiet_line)
-        .text_size(t.text.body_sm)
-        .text_color(t.colors.text_muted)
-        .cursor_pointer()
-        .hover(move |s| s.text_color(strong))
-        // At work, KodAct's cube turns; stuck, a warning; else how it ended.
-        .child(div().flex_none().child(if stalled {
-            icon("icons/triangle-alert.svg", t.size.icon_sm, t.extra.warning).into_any_element()
-        } else if call.status == ToolStatus::Running {
-            super::turning_logo_in(
-                f32::from(t.size.icon_sm),
-                SharedString::from(format!("agent-turn-{}-{}-{b}", cx.chat, cx.index)),
-                t.extra.live,
-            )
-        } else {
-            status_icon(call.status, t)
-        }))
-        // Its kind as quiet text: the task is what reads.
-        .children(run.map(|r| {
-            div()
-                .flex_none()
-                .text_color(t.colors.text_subtle)
-                .child(r.kind.clone())
-        }))
-        .child(
-            one_line(div())
-                .flex_none()
-                .max_w(px(260.))
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(t.colors.text)
-                .child(task),
+
+    let mark: AnyElement = if stalled {
+        icon("icons/triangle-alert.svg", t.size.icon_xs, t.extra.warning).into_any_element()
+    } else if running {
+        super::turning_logo_in(
+            f32::from(t.size.icon_xs),
+            SharedString::from(format!("agent-turn-{key}")),
+            t.extra.live,
         )
-        .child(
-            one_line(div())
-                .flex_1()
-                .text_color(detail_ink)
-                .child(detail),
+    } else if stopped {
+        icon("icons/square.svg", t.size.icon_xs, t.colors.text_subtle).into_any_element()
+    } else if interrupted {
+        icon("icons/triangle-alert.svg", t.size.icon_xs, t.extra.warning).into_any_element()
+    } else if failed {
+        icon("icons/circle-x.svg", t.size.icon_xs, t.extra.danger).into_any_element()
+    } else {
+        icon("icons/circle-check.svg", t.size.icon_xs, t.extra.success).into_any_element()
+    };
+
+    let status_summary = if stalled {
+        format!(
+            "No word for {}",
+            super::chat_view::elapsed(run.map_or(0, |r| now.duration_since(r.heard).as_secs()))
         )
-        .children(meta.map(|m| {
-            div()
-                .flex_none()
-                .text_size(t.text.caption)
-                .text_color(t.colors.text_subtle)
-                .child(m)
-        }))
-        .child(icon(
-            "icons/chevron-right.svg",
-            t.size.icon_xs,
-            t.colors.text_subtle,
-        ))
-        .on_click(move |_, _, app| {
-            state.update(app, |s, cx| {
-                s.show_panel(crate::state::PanelTab::Agents, cx);
-                cx.notify();
+    } else if stopped {
+        match elapsed_str {
+            Some(el) => format!("Stopped · {el}"),
+            None => "Stopped".to_string(),
+        }
+    } else if interrupted {
+        match elapsed_str {
+            Some(el) => format!("Interrupted · {el}"),
+            None => "Interrupted".to_string(),
+        }
+    } else if failed {
+        match (step_count, elapsed_str) {
+            (0, Some(el)) => format!("Failed · {el}"),
+            (n, Some(el)) => format!("Failed · {n} steps · {el}"),
+            (n, None) => format!("Failed · {n} steps"),
+        }
+    } else if running {
+        let verb = if stopping { "Stopping" } else { "Running" };
+        match (live_step.as_deref(), elapsed_str) {
+            (Some(st), Some(el)) => format!("{st} · {el}"),
+            (Some(st), None) => st.to_string(),
+            (None, Some(el)) => format!("{verb} · {el}"),
+            (None, None) => verb.to_string(),
+        }
+    } else {
+        match (step_count, elapsed_str) {
+            (0, Some(el)) => format!("Done · {el}"),
+            (0, None) => "Done".to_string(),
+            (n, Some(el)) => format!("{n} step{} · {el}", if n == 1 { "" } else { "s" }),
+            (n, None) => format!("{n} step{}", if n == 1 { "" } else { "s" }),
+        }
+    };
+
+    // Never hide a sub-agent failure or warning behind collapse.
+    let problem_note: Option<String> = if failed || interrupted || stalled {
+        let from_step = run
+            .and_then(|r| {
+                r.steps
+                    .iter()
+                    .rev()
+                    .find(|s| matches!(s.status, ToolStatus::Failed | ToolStatus::Interrupted))
+                    .and_then(|s| {
+                        let first = s.output.lines().map(str::trim).find(|l| !l.is_empty());
+                        match first {
+                            Some(line) => Some(format!("{}: {line}", s.label())),
+                            None => Some(format!("{} failed", s.label())),
+                        }
+                    })
+            });
+        from_step
+            .or_else(|| {
+                failure_line(call).map(|l| l.to_string()).or_else(|| {
+                    run.and_then(|r| {
+                        r.said
+                            .lines()
+                            .map(str::trim)
+                            .find(|l| !l.is_empty())
+                            .map(|l| l.to_string())
+                    })
+                })
             })
+            .or_else(|| {
+                stalled.then(|| "Agent appears stalled — no recent progress".to_string())
+            })
+    } else {
+        None
+    };
+
+    let hover_bg = t.colors.hover;
+    let opener = cx.state.clone();
+    let (chat, msg) = (cx.chat, cx.index);
+    let stop_id = run.map(|r| r.id.clone());
+    let stopper = cx.state.clone();
+    let stopper_key = cx.state.clone();
+
+    let row_inner = div()
+        .w_full()
+        .min_w_0()
+        .flex()
+        .flex_col()
+        .gap(px(2.))
+        .px(t.space.xs + px(2.))
+        .py(px(3.))
+        .rounded(t.radius.compact)
+        .when(inspected, |d| d.bg(t.colors.primary_tint.opacity(0.65)))
+        .when(failed && !inspected, |d| d.bg(t.extra.danger_tint.opacity(0.65)))
+        .when((interrupted || stalled) && !failed && !inspected, |d| {
+            d.bg(t.extra.warning_tint.opacity(0.65))
         })
+        .hover(move |s| s.bg(hover_bg))
+        .child(
+            div()
+                .w_full()
+                .min_w_0()
+                .flex()
+                .items_center()
+                .gap(t.space.xs + px(2.))
+                .min_h(t.size.quiet_line)
+                .child(div().flex_none().child(mark))
+                .child(
+                    div()
+                        .min_w_0()
+                        .max_w(px(240.))
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .text_size(t.text.body_sm)
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(t.colors.text_strong)
+                        .child(title.clone()),
+                )
+                .when_some(kind, |d, k| {
+                    d.child(
+                        div()
+                            .flex_none()
+                            .px(t.space.xs + px(2.))
+                            .py(px(1.))
+                            .rounded(t.radius.pill)
+                            .bg(t.colors.hover)
+                            .text_size(t.text.caption - px(0.5))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(t.colors.text_muted)
+                            .child(k),
+                    )
+                })
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .text_size(t.text.caption)
+                        .text_color(if stalled || interrupted {
+                            t.extra.warning
+                        } else if running {
+                            t.extra.live
+                        } else if failed {
+                            t.extra.danger
+                        } else {
+                            t.colors.text_subtle
+                        })
+                        .child(format!("· {status_summary}")),
+                )
+                .when_some(
+                    stop_id.filter(|_| running && !stopping),
+                    |d, id| {
+                        let btn_hover = t.colors.hover;
+                        let id_key = id.clone();
+                        d.child(
+                            div()
+                                .id(SharedString::from(format!("agent-row-stop-{key}")))
+                                .role(gpui::accesskit::Role::Button)
+                                .aria_label(SharedString::from(format!("Stop agent {title}")))
+                                .tab_index(0)
+                                .flex_none()
+                                .flex()
+                                .items_center()
+                                .gap(px(4.))
+                                .px(t.space.sm)
+                                .h(px(20.))
+                                .rounded(t.radius.compact)
+                                .border_1()
+                                .border_color(t.extra.border_strong)
+                                .bg(t.colors.surface)
+                                .text_size(t.text.caption)
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(t.colors.text_muted)
+                                .cursor_pointer()
+                                .hover(move |s| s.bg(btn_hover))
+                                .child(icon(
+                                    "icons/square.svg",
+                                    t.size.icon_xs,
+                                    t.colors.text_muted,
+                                ))
+                                .child("Stop")
+                                .on_click(move |_, _, app| {
+                                    app.stop_propagation();
+                                    stopper.update(app, |s, cx| s.stop_agent(&id, cx));
+                                })
+                                .on_key_down(move |ev, _, app| {
+                                    if matches!(ev.keystroke.key.as_str(), "enter" | "space") {
+                                        app.stop_propagation();
+                                        stopper_key.update(app, |s, cx| s.stop_agent(&id_key, cx));
+                                    }
+                                }),
+                        )
+                    },
+                )
+                .child(
+                    div()
+                        .flex_none()
+                        .flex()
+                        .items_center()
+                        .gap(px(2.))
+                        .text_size(t.text.caption)
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(if inspected {
+                            t.colors.primary
+                        } else {
+                            t.colors.text_muted
+                        })
+                        .child(if inspected { "Inspecting" } else { "Inspect" })
+                        .child(icon(
+                            "icons/chevron-right.svg",
+                            t.size.icon_xs,
+                            if inspected {
+                                t.colors.primary
+                            } else {
+                                t.colors.text_subtle
+                            },
+                        )),
+                ),
+        )
+        .when_some(problem_note, |d, note| {
+            d.child(
+                div()
+                    .pl(t.size.icon_xs + t.space.xs + px(2.))
+                    .font_family(t.font_mono.clone())
+                    .text_size(t.text.caption)
+                    .line_height(relative(1.4))
+                    .text_color(if failed {
+                        t.extra.danger
+                    } else {
+                        t.extra.warning
+                    })
+                    .child(note),
+            )
+        });
+
+    super::button::KeyRow::new(
+        SharedString::from(format!("tool-{key}")),
+        SharedString::from(format!(
+            "Agent: {title}, {status_summary}. Press to inspect in Agents panel"
+        )),
+        row_inner,
+    )
+    .w_full()
+    .on_activate(move |_, app| {
+        opener.update(app, |s, cx| s.open_agent_for_block(chat, msg, b, cx));
+    })
+    .into_any_element()
 }
 
 /// What a tool call's line opens to, in one quiet frame: a file change
 /// headed by its full path (with Keep and Revert), a command's terminal
-/// block, or what went in and came out. A failed call shows its error
-/// first, and the change it would have made, marked as not made.
+/// block, or what went in and came out. A failed/interrupted call starts
+/// expanded with its error/warning first, and long outputs (>10 lines)
+/// collapse cleanly behind a "Show more" toggle without losing text.
 pub(super) fn tool_body(
     call: &ToolCall,
     b: usize,
     cx: &ItemContext,
     t: &Theme,
 ) -> Option<AnyElement> {
-    if !(call.open && has_body(call)) {
+    if !(tool_is_open(call, b, cx) && has_body(call)) {
         return None;
     }
     let frame = || {
         div()
             .mt(t.space.xs)
-            .mb(t.space.sm)
+            .mb(t.space.xs)
             .rounded(t.radius.button)
             .border_1()
             .border_color(t.colors.border)
@@ -1666,6 +2060,7 @@ pub(super) fn tool_body(
             .flex()
             .flex_col()
     };
+    let key = format!("{}-{}-{b}", cx.chat, cx.index);
     let lang = markdown::lang_of(&call.target);
     if call.kind == ToolKind::Bash {
         let at = terminal::Where {
@@ -1683,7 +2078,6 @@ pub(super) fn tool_body(
                 .into_any_element(),
         );
     }
-    // A file's change is headed by where it is, and what you can do about it.
     let file = matches!(call.kind, ToolKind::Read | ToolKind::Edit | ToolKind::Write);
     let path_bar = file.then(|| {
         div()
@@ -1716,25 +2110,67 @@ pub(super) fn tool_body(
                 .into_any_element(),
         );
     }
+    let diff_more_key = format!("diff-more-{key}");
+    let diff_expanded = cx.ui_toggles.contains(&diff_more_key);
+    let diff_truncated = call.diff.len() > OUTPUT_FOLD;
+    let shown_diff = if diff_truncated && !diff_expanded {
+        &call.diff[..OUTPUT_FOLD]
+    } else {
+        call.diff.as_slice()
+    };
+
+    let out_more_key = format!("out-more-{key}");
+    let out_expanded = cx.ui_toggles.contains(&out_more_key);
+
     if matches!(call.status, ToolStatus::Failed | ToolStatus::Interrupted) {
         let stopped = call.status == ToolStatus::Interrupted;
+        let err_trunc = super::truncate_lines(&call.output, OUTPUT_FOLD);
+        let err_text = if err_trunc.truncated && !out_expanded {
+            err_trunc.shown.to_string()
+        } else {
+            call.output.trim().to_string()
+        };
         return Some(
             frame()
+                .border_color(if stopped {
+                    t.extra.warning.opacity(0.45)
+                } else {
+                    t.extra.danger.opacity(0.45)
+                })
                 .children(path_bar)
-                .child(
-                    div()
-                        .px(t.space.md)
-                        .py(t.space.sm)
-                        .bg(if stopped {
-                            t.extra.warning_tint
+                .when(!call.output.trim().is_empty(), |d| {
+                    d.child(
+                        div()
+                            .px(t.space.md)
+                            .py(t.space.sm)
+                            .bg(if stopped {
+                                t.extra.warning_tint
+                            } else {
+                                t.extra.danger_tint
+                            })
+                            .font_family(t.font_mono.clone())
+                            .text_size(t.text.caption + px(0.5))
+                            .line_height(relative(1.45))
+                            .text_color(t.colors.text)
+                            .child(err_text),
+                    )
+                    .when(err_trunc.truncated, |d| {
+                        let more_lbl = if err_trunc.hidden_lines > 0 {
+                            format!("Show {} more lines", err_trunc.hidden_lines)
                         } else {
-                            t.extra.danger_tint
-                        })
-                        .font_family(t.font_mono.clone())
-                        .text_size(t.text.caption + px(0.5))
-                        .text_color(t.colors.text)
-                        .child(call.output.trim().to_string()),
-                )
+                            "Show full error".to_string()
+                        };
+                        d.child(show_more_toggle(
+                            format!("err-more-{key}"),
+                            out_more_key.clone(),
+                            more_lbl,
+                            Some(cx.chat),
+                            out_expanded,
+                            cx.state.clone(),
+                            t,
+                        ))
+                    })
+                })
                 .when(!call.diff.is_empty(), |d| {
                     d.child(
                         div()
@@ -1748,7 +2184,18 @@ pub(super) fn tool_body(
                                 "Not applied"
                             }),
                     )
-                    .child(diff_lines(&call.diff, lang, t).opacity(0.75))
+                    .child(diff_lines(shown_diff, lang, t).opacity(0.75))
+                    .when(diff_truncated, |d| {
+                        d.child(show_more_toggle(
+                            format!("diff-more-btn-{key}"),
+                            diff_more_key.clone(),
+                            format!("Show {} more lines", call.diff.len() - OUTPUT_FOLD),
+                            Some(cx.chat),
+                            diff_expanded,
+                            cx.state.clone(),
+                            t,
+                        ))
+                    })
                 })
                 .into_any_element(),
         );
@@ -1756,23 +2203,49 @@ pub(super) fn tool_body(
     Some(if !call.diff.is_empty() {
         frame()
             .children(path_bar)
-            .child(diff_lines(&call.diff, lang, t))
+            .child(diff_lines(shown_diff, lang, t))
+            .when(diff_truncated, |d| {
+                d.child(show_more_toggle(
+                    format!("diff-more-btn-{key}"),
+                    diff_more_key,
+                    format!("Show {} more lines", call.diff.len() - OUTPUT_FOLD),
+                    Some(cx.chat),
+                    diff_expanded,
+                    cx.state.clone(),
+                    t,
+                ))
+            })
             .into_any_element()
     } else {
+        let out_trunc = super::truncate_lines(&call.output, OUTPUT_FOLD);
+        let out_text: SharedString = if out_trunc.truncated && !out_expanded {
+            out_trunc.shown.to_string().into()
+        } else {
+            call.output.clone()
+        };
+        let out_lang = if call.kind == ToolKind::Read { lang } else { "" };
         frame()
             .children(path_bar)
             .child(io_row("IN", call.target.clone(), "", t))
-            // A file's contents are coloured by its language.
-            .child(io_row(
-                "OUT",
-                call.output.clone(),
-                if call.kind == ToolKind::Read {
-                    lang
-                } else {
-                    ""
-                },
-                t,
-            ))
+            .when(!call.output.trim().is_empty(), |d| {
+                d.child(io_row("OUT", out_text, out_lang, t))
+                    .when(out_trunc.truncated, |d| {
+                        let more_lbl = if out_trunc.hidden_lines > 0 {
+                            format!("Show {} more lines", out_trunc.hidden_lines)
+                        } else {
+                            "Show full output".to_string()
+                        };
+                        d.child(show_more_toggle(
+                            format!("out-more-btn-{key}"),
+                            out_more_key,
+                            more_lbl,
+                            Some(cx.chat),
+                            out_expanded,
+                            cx.state.clone(),
+                            t,
+                        ))
+                    })
+            })
             .into_any_element()
     })
 }
@@ -1798,12 +2271,14 @@ pub(super) fn flash(row: gpui::Div, b: usize, cx: &ItemContext, t: &Theme) -> An
 }
 
 fn tool(call: &ToolCall, b: usize, blocks: &[Block], cx: &ItemContext, t: &Theme) -> AnyElement {
-    // A lone call is a quiet line, as one in a run is; its body opens under it.
+    let is_agent = crate::state::is_agent_tool(&call.target);
+    // A lone call is a quiet line, as one in a run is; its body opens under it
+    // (sub-agent cards open in the right-side Agents inspector instead).
     let row = div()
         .flex()
         .flex_col()
         .child(tool_header(call, b, blocks, cx, t))
-        .children(tool_body(call, b, cx, t));
+        .when(!is_agent, |d| d.children(tool_body(call, b, cx, t)));
     flash(row, b, cx, t)
 }
 
@@ -2873,5 +3348,24 @@ mod tests {
         assert!(denied_call(&blocks, 0));
         assert!(!denied_call(&blocks, 1));
         assert!(!denied_call(&blocks, 2));
+    }
+
+    #[test]
+    fn tool_outcome_reports_concise_counts_and_failures() {
+        let mut read = crate::backend::tool_call(
+            "Read",
+            &serde_json::json!({ "file_path": "/repo/src/app.ts" }),
+        );
+        read.status = crate::state::ToolStatus::Done;
+        read.output = "line 1\nline 2\nline 3".into();
+        assert_eq!(super::tool_outcome(&read).as_deref(), Some("3 lines"));
+        assert_eq!(super::target_label(&read).as_ref(), "…/src/app.ts");
+
+        let mut bash_fail = crate::backend::tool_call(
+            "Bash",
+            &serde_json::json!({ "command": "npm test" }),
+        );
+        bash_fail.status = crate::state::ToolStatus::Failed;
+        assert_eq!(super::tool_outcome(&bash_fail).as_deref(), Some("failed"));
     }
 }

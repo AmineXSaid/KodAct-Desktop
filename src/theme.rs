@@ -151,7 +151,7 @@ impl Look {
         // work in progress are ink.
         if dark {
             t(
-                0x0e0d0c, 0x171615, 0x201f1d, 0x121110, 0x5fd8c4, 0x0e0d0c, 0x14332f, 0xffb98f,
+                0x15181e, 0x0a0b0d, 0x1d2129, 0x101216, 0x5fd8c4, 0x0a0b0d, 0x14332f, 0xffb98f,
                 0xffd0b3, 0x5fd8c4,
             )
         } else {
@@ -292,8 +292,8 @@ impl Theme {
         self.look = look;
         (self.extra.chrome, self.extra.pane, self.colors.sidebar) =
             (c(k.canvas), c(k.canvas), c(k.canvas));
-        (self.extra.stage, self.colors.canvas, self.extra.selected) =
-            (c(k.stage), c(k.stage), c(k.stage));
+        (self.extra.stage, self.colors.canvas) = (c(k.stage), c(k.stage));
+        self.extra.selected = c(if self.is_dark { 0x242934 } else { k.stage });
         self.colors.surface = c(k.card);
         self.extra.sunk = c(k.sunk);
         self.extra.accent = c(k.accent);
@@ -359,24 +359,24 @@ impl Theme {
         )
     }
 
-    /// The same room at night: ink, the turquoise lifted to read on it.
+    /// The same room at night: deepest obsidian stage, lifted slate sidebars and cards.
     pub fn dark() -> Self {
         Self::base(
             true,
             Colors {
-                canvas: rgb(0x171615).into(),
-                surface: rgb(0x201f1d).into(),
-                sidebar: rgb(0x0e0d0c).into(),
-                text: rgb(0xedeae6).into(),
-                text_strong: rgb(0xf6f4f1).into(),
-                text_body: rgb(0xd8d4ce).into(),
-                text_muted: rgb(0xaeaaa4).into(),
-                text_subtle: rgb(0x86817a).into(),
-                border: hsla(30. / 360., 0.15, 0.92, 0.12),
-                hover: hsla(30. / 360., 0.15, 0.92, 0.06),
+                canvas: rgb(0x0a0b0d).into(),
+                surface: rgb(0x1d2129).into(),
+                sidebar: rgb(0x15181e).into(),
+                text: rgb(0xebeef2).into(),
+                text_strong: rgb(0xf5f7fa).into(),
+                text_body: rgb(0xd2d7e0).into(),
+                text_muted: rgb(0xabaeb5).into(),
+                text_subtle: rgb(0x7c8391).into(),
+                border: hsla(220. / 360., 0.16, 0.90, 0.12),
+                hover: hsla(220. / 360., 0.20, 0.92, 0.07),
                 primary: rgb(0xffb98f).into(),
                 primary_hover: rgb(0xffd0b3).into(),
-                primary_fg: rgb(0x0e0d0c).into(),
+                primary_fg: rgb(0x0a0b0d).into(),
                 primary_tint: Hsla::from(rgb(0xffb98f)).opacity(0.14),
                 marigold: rgb(0xffb110).into(),
                 coral: rgb(0xd8646d).into(),
@@ -561,31 +561,31 @@ impl ExtraColors {
     fn for_mode(is_dark: bool) -> Self {
         if is_dark {
             Self {
-                inset: hsla(0., 0., 1., 0.035),
+                inset: hsla(220. / 360., 0.25, 0.95, 0.04),
                 success: rgb(0x8fbf9b).into(),
-                success_tint: rgb(0x26302a).into(),
+                success_tint: rgb(0x1b2c22).into(),
                 danger: rgb(0xe98a72).into(),
-                danger_tint: hsla(7. / 360., 0.7, 0.55, 0.1),
+                danger_tint: hsla(7. / 360., 0.7, 0.55, 0.12),
                 warning: rgb(0xffc85a).into(),
                 warning_tint: hsla(40. / 360., 1., 0.53, 0.18),
                 diff_add: hsla(135. / 360., 0.27, 0.65, 0.12),
                 diff_del: hsla(12. / 360., 0.73, 0.68, 0.12),
-                scrim: ink(0.55),
-                selected: rgb(0x171615).into(),
-                // The paper stack at night: ink under the title bar and
-                // the sidebar, the session a step up, cards above it.
-                chrome: rgb(0x0e0d0c).into(),
-                pane: rgb(0x0e0d0c).into(),
-                stage: rgb(0x171615).into(),
+                scrim: ink(0.60),
+                selected: rgb(0x242934).into(),
+                // Obsidian night: deepest black main stage, softly lifted slate
+                // sidebars, title bar & Settings, crisp card surfaces above.
+                chrome: rgb(0x15181e).into(),
+                pane: rgb(0x15181e).into(),
+                stage: rgb(0x0a0b0d).into(),
                 // The filled action is paper on ink, as ink on paper in light.
-                fill: rgb(0xedeae6).into(),
-                fill_hover: rgb(0xf6f4f1).into(),
+                fill: rgb(0xebeef2).into(),
+                fill_hover: rgb(0xf5f7fa).into(),
                 // Brick, lifted for the night, under the dark label.
                 fill_danger: rgb(0xe98a72).into(),
-                fill_fg: rgb(0x0e0d0c).into(),
+                fill_fg: rgb(0x0a0b0d).into(),
                 accent: rgb(0x5fd8c4).into(),
                 accent_soft: rgb(0x14332f).into(),
-                accent_fg: rgb(0x0e0d0c).into(),
+                accent_fg: rgb(0x0a0b0d).into(),
                 mark_top: rgb(0x5fd8c4).into(),
                 page_ink: rgb(0x0e7568).into(),
                 page_halo: rgb(0xffffff).into(),
@@ -593,15 +593,15 @@ impl ExtraColors {
                 mark_heat: rgb(0x7df0dc).into(),
                 mark_heat_ember: rgb(0x1f8f80).into(),
                 mark_heat_iron: rgb(0x16302d).into(),
-                border_strong: rgb(0x45423e).into(),
-                sunk: rgb(0x121110).into(),
+                border_strong: rgb(0x363d4a).into(),
+                sunk: rgb(0x101216).into(),
                 toggle_on: rgb(0xffb98f).into(),
-                live: rgb(0xaeaaa4).into(),
+                live: rgb(0xabaeb5).into(),
                 agent: None,
                 memory: rgb(0xe5c77a).into(),
-                memory_tint: rgb(0x3a3220).into(),
-                code_inline_fg: rgb(0xedeae6).into(),
-                code_inline_bg: Hsla::from(rgb(0xedeae6)).opacity(0.09),
+                memory_tint: rgb(0x332b19).into(),
+                code_inline_fg: rgb(0xebeef2).into(),
+                code_inline_bg: Hsla::from(rgb(0xebeef2)).opacity(0.09),
                 mode_edit: rgb(0x2da160).into(),
                 mode_plan: rgb(0x428fdc).into(),
                 mode_bypass: rgb(0xec5941).into(),
@@ -733,10 +733,10 @@ impl TerminalColors {
     fn for_mode(is_dark: bool) -> Self {
         if is_dark {
             Self {
-                background: rgb(0x0e0d0c).into(),
+                background: rgb(0x0d0f13).into(),
                 foreground: rgb(0xdcdbd9).into(),
                 muted: rgb(0x8a8888).into(),
-                divider: hsla(30. / 360., 0.04, 0.92, 0.1),
+                divider: hsla(220. / 360., 0.14, 0.92, 0.1),
                 prompt: rgb(0xac93e6).into(),
                 command: rgb(0x52b87a).into(),
                 keyword: rgb(0xac93e6).into(),
@@ -861,7 +861,8 @@ pub struct Sizes {
     pub chat_text: Pixels,          // 15: replies and your messages
     pub greeting: Pixels,           // 32: the new-chat greeting, Anthropic Sans Display 600
     pub statusbar: Pixels,          // 26: the status bar at the foot of the window
-    pub figure: Pixels,             // 28: one figure that leads a view (agents finished)
+    #[allow(dead_code)] // in the design tokens; previously used in the Agents summary header
+    pub figure: Pixels, // 28: one figure that leads a view (agents finished)
     // Motion uses three durations only: fast 120 (leaving, small things
     // arriving), base 200 (most arrivals, hovers), slow 280 (the side panel).
     pub panel_in_ms: u64,           // 280 slow: the side panel sliding in
@@ -870,7 +871,7 @@ pub struct Sizes {
     pub edge_draw_ms: u64,          // 120 fast: a window's jewel edge drawing down as it opens
     pub window_in_ms: u64,          // 200 base: a dialog rising into place over its dimmed backdrop
     pub window_out_ms: u64,         // 120 fast: a dialog sinking away
-    pub menu_out_ms: u64,           // 120 fast: a menu or the palette fading back toward its anchor
+    pub menu_out_ms: u64,           // 140: a menu or the palette fading back toward its anchor
     pub panel_out_ms: u64,          // 200 base: a side panel sliding back out
     pub toast_in_ms: u64,           // 200 base: a notice springing up from the foot
     pub edge_bar: Pixels,           // 3: that jewel edge's width
@@ -954,7 +955,7 @@ impl Default for Sizes {
             edge_draw_ms: 120,
             window_in_ms: 200,
             window_out_ms: 120,
-            menu_out_ms: 120,
+            menu_out_ms: 140,
             panel_out_ms: 200,
             toast_in_ms: 200,
             edge_bar: px(3.),

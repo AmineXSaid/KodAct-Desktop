@@ -894,14 +894,12 @@ impl Render for RemotePicker {
                 cx.stop_propagation();
                 cx.notify();
             }))
-            .on_mouse_down_out(cx.listener(|this, _, _, cx| {
-                this.state.update(cx, |s, cx| {
-                    if s.remote_menu.as_ref().is_some_and(|m| m.host_key.is_none()) {
-                        s.remote_menu = None;
-                        cx.notify();
-                    }
-                })
-            }))
+            .when(!leaving, |d| {
+                d.on_mouse_down_out(cx.listener(|this, ev: &gpui::MouseDownEvent, _, cx| {
+                    this.state
+                        .update(cx, |s, cx| s.dismiss_remote_menu(ev.position, cx))
+                }))
+            })
             .child(body);
         super::motion::composer_menu(menu, "remote-menu", lift, leaving, &t)
     }
@@ -1019,6 +1017,9 @@ pub fn indicator(s: &AppState, state: Entity<AppState>, t: &Theme) -> AnyElement
         .tooltip(move |window, cx| {
             gpui::component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
         })
-        .on_click(move |_, _, cx| state.update(cx, |s, cx| s.toggle_remote_menu(cx)))
+        .on_click(move |ev, _, cx| {
+            let at = super::click_down(ev);
+            state.update(cx, |s, cx| s.toggle_remote_menu_at(Some(at), cx));
+        })
         .into_any_element()
 }

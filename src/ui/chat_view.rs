@@ -215,13 +215,11 @@ impl ChatView {
                     c.messages.last(),
                     Some(Message::Assistant { blocks }) if matches!(blocks.last(), Some(Block::Thinking { .. }))
                 );
-                if thought {
+                if thought || activity == Activity::Agents {
                     return None;
                 }
                 Some(match (activity, about) {
-                    (Activity::AwaitingYou | Activity::Compacting | Activity::Agents, _) => {
-                        (activity, words, None)
-                    }
+                    (Activity::AwaitingYou | Activity::Compacting, _) => (activity, words, None),
                     (_, Some(about)) => (activity, about, Some(words)),
                     (_, None) if own_row => (activity, "Working".into(), Some(words)),
                     (_, None) => (activity, words, None),
@@ -601,6 +599,21 @@ impl Render for ChatView {
             let agents = std::rc::Rc::new(s.agents.get(&chat.id).cloned().unwrap_or_default());
             let body = match chat.messages.get(ix) {
                 Some(m) => {
+                    let agent_offset: usize = chat.messages[..ix]
+                        .iter()
+                        .filter_map(|m| match m {
+                            Message::Assistant { blocks } => Some(blocks.as_slice()),
+                            _ => None,
+                        })
+                        .flatten()
+                        .filter(|b| {
+                            matches!(b, Block::Tool(t) if crate::state::is_agent_tool(&t.target))
+                        })
+                        .count();
+                    let inspected_agent = (s.doc.is_none()
+                        && s.panel == Some(crate::state::PanelTab::Agents))
+                    .then(|| s.selected_agent_id().map(str::to_string))
+                    .flatten();
                     let ctx = ItemContext {
                         state: state.clone(),
                         marks: match m {
@@ -658,6 +671,8 @@ impl Render for ChatView {
                         versions_leaving: versions_frame == Some(((chat.id, ix), true)),
                         edited_open: s.edited_open.contains(&(chat.id, ix)),
                         agents: agents.clone(),
+                        agent_offset,
+                        inspected_agent,
                         sources: s.diagram_code.clone(),
                         zooms: s.diagram_zoom.clone(),
                         detailed: chat.detailed,
@@ -667,6 +682,7 @@ impl Render for ChatView {
                             .filter(|(c, m, _)| *c == chat.id && *m == ix)
                             .map(|(_, _, start)| *start)
                             .collect(),
+                        ui_toggles: std::sync::Arc::new(s.ui_toggles.clone()),
                         flash: s
                             .flash
                             .filter(|(c, m, _)| *c == chat.id && *m == ix)
@@ -722,6 +738,29 @@ impl Render for ChatView {
                         .into_any_element()
                 }
             };
+            // Turn hierarchy: strong separation between turns, tighter rhythm inside a turn.
+            let msg = chat.messages.get(ix);
+            let next_msg = chat.messages.get(ix + 1);
+            let is_user = matches!(msg, Some(Message::User { .. }));
+            let is_turn_end = matches!(msg, Some(Message::TurnEnd { .. } | Message::Notice { .. }));
+            let has_turn_footer_next = matches!(
+                next_msg,
+                Some(Message::TurnEnd { .. } | Message::Notice { .. })
+            );
+            let top_pad = if ix == 0 {
+                t.space.xl
+            } else if is_user {
+                t.space.lg
+            } else {
+                px(0.)
+            };
+            let bot_pad = if is_turn_end {
+                t.space.lg
+            } else if is_user || has_turn_footer_next {
+                t.space.sm
+            } else {
+                t.space.md
+            };
             // Find: every match gets a faint bar at its left, the one shown a strong one.
             let mark = s
                 .find
@@ -739,19 +778,19 @@ impl Render for ChatView {
                 .flex()
                 .justify_center()
                 .px(t.space.xl)
-                .when(ix == 0, |d| d.pt(t.space.xl))
+                .when(top_pad > px(0.), |d| d.pt(top_pad))
                 .child(
                     div()
                         .relative()
                         .w_full()
                         .max_w(t.size.column)
-                        .pb(t.space.md)
+                        .pb(bot_pad)
                         .child(body)
                         .children(mark.map(|c| {
                             div()
                                 .absolute()
                                 .top_0()
-                                .bottom(t.space.md)
+                                .bottom(bot_pad)
                                 .left(-t.space.md)
                                 .w(px(3.))
                                 .rounded(t.radius.line)
@@ -905,32 +944,46 @@ fn working_line(
     let text = label.to_string();
     div()
         .id("working-line")
+        .w_full()
+        .min_w_0()
         .flex()
         .items_center()
         .gap(t.space.tight)
-        .h(px(24.))
+        .min_h(px(24.))
         .mt(px(4.))
+        .text_size(t.text.body_sm)
         // KodAct's cube turning in the theme's live colour, as on agent rows;
         // the words say what kind of step it is.
         .child(super::turning_logo_in(
-            f32::from(t.size.icon),
+            f32::from(t.size.icon_sm),
             SharedString::from(format!("working-mark-{activity:?}")),
             t.extra.live,
         ))
-        .child(div().font_weight(FontWeight::MEDIUM).with_animation(
-            SharedString::from(format!("working-{label}")),
-            Animation::new(Duration::from_millis(2200)).repeat(),
-            move |d, delta| d.child(shimmer(&text, -0.3 + delta * 1.6, &theme)),
-        ))
         .child(
             div()
-                .ml(px(4.))
+                .min_w_0()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .font_weight(FontWeight::MEDIUM)
+                .with_animation(
+                    SharedString::from(format!("working-{label}")),
+                    Animation::new(Duration::from_millis(2200)).repeat(),
+                    move |d, delta| d.child(shimmer(&text, -0.3 + delta * 1.6, &theme)),
+                ),
+        )
+        .child(
+            div()
+                .flex_none()
+                .ml(px(2.))
+                .text_size(t.text.caption)
                 .text_color(t.colors.text_subtle)
                 .child(elapsed(since.elapsed().as_secs())),
         )
         .when(written > 0, |d| {
             d.child(
                 div()
+                    .flex_none()
+                    .text_size(t.text.caption)
                     .text_color(t.colors.text_subtle)
                     .child(format!("· ~{} tokens", tokens(written))),
             )

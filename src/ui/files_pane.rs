@@ -501,7 +501,7 @@ impl Render for FilesPane {
             .size_full()
             .flex()
             .flex_col()
-            .bg(t.colors.surface)
+            .bg(if t.is_dark { t.extra.pane } else { t.colors.surface })
             .child(header)
             .child(
                 div()

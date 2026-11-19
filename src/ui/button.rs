@@ -737,6 +737,118 @@ pub fn chevron(t: &Theme, open: bool) -> gpui::Svg {
     )
 }
 
+/// A keyboard-accessible clickable / expandable row usable from pure `AnyElement`
+/// builders (which don't receive `&mut Window`): obtains a keyed `FocusHandle`
+/// in `RenderOnce::render`, exposes `Role::Button`, `aria_label`, optional
+/// `aria_toggled`, `tab_index(0)`, a `focus_visible` border ring, mouse click,
+/// and Enter/Space keyboard activation.
+#[derive(IntoElement)]
+pub struct KeyRow {
+    id: ElementId,
+    aria_label: SharedString,
+    expanded: Option<bool>,
+    radius: Option<gpui::Pixels>,
+    full_w: bool,
+    on_activate: Option<std::rc::Rc<dyn Fn(&mut Window, &mut App) + 'static>>,
+    inner: AnyElement,
+}
+
+impl KeyRow {
+    pub fn new(
+        id: impl Into<ElementId>,
+        aria_label: impl Into<SharedString>,
+        inner: impl IntoElement,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            aria_label: aria_label.into(),
+            expanded: None,
+            radius: None,
+            full_w: false,
+            on_activate: None,
+            inner: inner.into_any_element(),
+        }
+    }
+
+    pub fn expanded(mut self, open: bool) -> Self {
+        self.expanded = Some(open);
+        self
+    }
+
+    pub fn radius(mut self, r: gpui::Pixels) -> Self {
+        self.radius = Some(r);
+        self
+    }
+
+    pub fn w_full(mut self) -> Self {
+        self.full_w = true;
+        self
+    }
+
+    pub fn on_activate(mut self, f: impl Fn(&mut Window, &mut App) + 'static) -> Self {
+        self.on_activate = Some(std::rc::Rc::new(f));
+        self
+    }
+}
+
+impl RenderOnce for KeyRow {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let t = cx.theme().clone();
+        let radius = self.radius.unwrap_or(t.radius.compact);
+        let base = div()
+            .id(self.id.clone())
+            .when(self.full_w, |d| d.w_full().min_w_0())
+            .when(!self.full_w, |d| d.flex().flex_none())
+            .rounded(radius);
+        let Some(on_activate) = self.on_activate else {
+            return base.child(self.inner).into_any_element();
+        };
+        let focus = focus_handle(&self.id, window, cx);
+        let on_click = on_activate.clone();
+        let on_key = on_activate;
+        let state_word = match self.expanded {
+            Some(true) => "expanded",
+            Some(false) => "collapsed",
+            None => "",
+        };
+        let label: SharedString = if state_word.is_empty()
+            || self.aria_label.contains("expanded")
+            || self.aria_label.contains("collapsed")
+        {
+            self.aria_label
+        } else {
+            format!("{}, {state_word}", self.aria_label).into()
+        };
+        base.role(accesskit::Role::Button)
+            .aria_label(label)
+            .when_some(self.expanded, |d, open| {
+                d.aria_toggled(if open {
+                    accesskit::Toggled::True
+                } else {
+                    accesskit::Toggled::False
+                })
+            })
+            .track_focus(&focus)
+            .tab_index(0)
+            .border_1()
+            .border_color(t.colors.surface.opacity(0.))
+            .focus_visible({
+                let edge = focus_edge(&t);
+                move |s| s.border_color(edge)
+            })
+            .cursor_pointer()
+            .child(self.inner)
+            .on_click(move |_, window, cx| on_click(window, cx))
+            .on_key_down(move |ev, window, cx| {
+                if matches!(ev.keystroke.key.as_str(), "enter" | "space") {
+                    on_key(window, cx);
+                    cx.stop_propagation();
+                }
+            })
+            .into_any_element()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

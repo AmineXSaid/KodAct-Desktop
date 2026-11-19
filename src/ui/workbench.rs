@@ -174,13 +174,13 @@ pub struct View<'a> {
     pub messages: &'a [Message],
     /// The Browser tab's live view (`browser_view.rs`).
     pub browser: gpui::AnyView,
-    /// The chat's sub-agents, and the cards opened.
+    /// The chat's sub-agents, open prompt disclosures, and focused agent.
     pub agents: &'a [crate::state::AgentRun],
     pub agents_open: &'a std::collections::HashSet<String>,
-    /// KodAct's mark, for the top of the agents' tree.
-    pub logo: AnyElement,
-    /// The chat's turn is still going.
-    pub working: bool,
+    pub ui_toggles: &'a std::collections::HashSet<String>,
+    pub selected_agent: Option<String>,
+    /// True when the Agents inspector expands across the session column.
+    pub full: bool,
     pub copied: Option<SharedString>,
     pub width: f32,
     pub below: bool,
@@ -421,13 +421,9 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
             .pt(t.space.xl)
             .pb(t.space.xxl * 2.)
     };
-    // The Agents overview sits on the sidebar's deeper ground, so its
-    // cards stand off it; the other tabs are pages on the surface.
-    let ground = if v.tab == PanelTab::Agents {
-        t.extra.pane
-    } else {
-        t.colors.surface
-    };
+    // Every tab sits on the clean card surface so the Agents inspector shares
+    // the crisp page ground without losing hierarchy against recessed blocks.
+    let ground = t.colors.surface;
     let body: AnyElement = match v.tab {
         PanelTab::Plan if plan.is_none() && todos.is_empty() => empty(
             t,
@@ -504,15 +500,14 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
         PanelTab::Agents => super::agents_view::render(
             super::agents_view::View {
                 runs: v.agents,
-                request: v.messages.iter().rev().find_map(|m| match m {
-                    Message::User { text, .. } => Some(text.clone()),
-                    _ => None,
-                }),
-                logo: v.logo,
-                working: v.working,
+                selected: v.selected_agent.as_deref(),
+                full: v.full,
+                copied: v.copied.clone(),
+                scale: v.scale,
             },
             state.clone(),
             v.agents_open,
+            v.ui_toggles,
             t,
         ),
         PanelTab::Files if files.is_empty() => empty(
@@ -527,11 +522,16 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
             let hover = t.colors.hover;
             let mark: AnyElement = match f.office() {
                 Some(kind) => super::file_mark::render(kind, f32::from(t.size.icon_lg), v.scale),
-                None => icon(
-                    if f.is_diagram() { "icons/network.svg" } else { "icons/file-text.svg" },
-                    t.size.icon,
-                    t.colors.text_muted,
-                )
+                None if f.is_diagram() => {
+                    icon("icons/network.svg", t.size.icon, t.colors.sky).into_any_element()
+                }
+                None => gpui::img(super::file_icon::asset(
+                    &f.name,
+                    false,
+                    f.path.as_deref().unwrap_or(&f.name),
+                ))
+                .flex_none()
+                .size(t.size.icon)
                 .into_any_element(),
             };
             div()
@@ -582,14 +582,18 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
         PanelTab::Browser => div().size_full().child(v.browser.clone()).into_any_element(),
     };
 
-    let fills = v.tab == PanelTab::Browser;
+    let fills = matches!(v.tab, PanelTab::Browser | PanelTab::Agents);
+    let full_agents = v.full && v.tab == PanelTab::Agents;
     div()
-        .flex_none()
-        .when(!v.below, |d| d.w(px(v.width)).h_full().border_l_1())
-        .when(v.below, |d| d.w_full().h(relative(0.45)).border_t_1())
+        .when(full_agents, |d| d.flex_1().min_w_0().w_full().h_full())
+        .when(!full_agents, |d| {
+            d.flex_none()
+                .when(!v.below, |d| d.w(px(v.width)).h_full().border_l_1())
+                .when(v.below, |d| d.w_full().h(relative(0.45)).border_t_1())
+        })
         .flex()
         .flex_col()
-        .bg(t.colors.surface)
+        .bg(if t.is_dark { t.extra.pane } else { t.colors.surface })
         .border_color(t.colors.border)
         .child(header)
         .children(plan.as_ref().filter(|_| v.tab == PanelTab::Plan).map(|md| {
@@ -609,17 +613,29 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
                 .flex_1()
                 .min_h_0()
                 .bg(ground)
-                // The browser fills the panel and scrolls its own page;
-                // the other views scroll here.
+                // The browser and the Agents inspector manage their own internal scroll
+                // and pinned chrome; the other views scroll here.
                 .map(|d| if fills { d.flex().flex_col() } else { d.overflow_y_scroll() })
-                // Each view arrives as the capsule lands on it: it fades in
-                // and rises a few pixels into place.
-                .child(super::motion::rise_in(
-                    div().when(fills, |d| d.flex_1().min_h_0()).child(body),
-                    SharedString::from(format!("panel-view-{:?}", v.tab)),
-                    6.,
-                    t,
-                )),
+                // Each non-Agents view arrives as the capsule lands on it; the Agents
+                // inspector skips the opacity fade so Split <-> Full toggles never flash.
+                .child(if v.tab == PanelTab::Agents {
+                    div()
+                        .flex_1()
+                        .min_h_0()
+                        .flex()
+                        .flex_col()
+                        .child(body)
+                        .into_any_element()
+                } else {
+                    super::motion::rise_in(
+                        div()
+                            .when(fills, |d| d.flex_1().min_h_0().flex().flex_col())
+                            .child(body),
+                        SharedString::from(format!("panel-view-{:?}", v.tab)),
+                        6.,
+                        t,
+                    )
+                }),
         )
         .into_any_element()
 }

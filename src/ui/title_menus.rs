@@ -4,7 +4,7 @@
 //! (shortcuts, the guide, settings) and your name (settings, models, the
 //! theme, your name and picture).
 
-use gpui::{div, prelude::*, AnimationExt, AnyElement, Entity, SharedString};
+use gpui::{div, prelude::*, AnyElement, Entity, SharedString};
 
 use crate::state::{AppState, TitleMenu};
 use crate::theme::{self, Theme};
@@ -201,11 +201,5 @@ pub fn render(
     .flex()
     .flex_col()
     .children(rows)
-    .with_animation(
-        "title-menu-in",
-        gpui::Animation::new(std::time::Duration::from_millis(t.motion_ms))
-            .with_easing(gpui::ease_in_out),
-        |d, delta| d.opacity(delta),
-    )
     .into_any_element()
 }

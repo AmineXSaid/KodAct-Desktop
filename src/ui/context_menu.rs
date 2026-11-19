@@ -19,6 +19,7 @@ pub fn render(
     // Some(leaving) while it shows or leaves.
     shown: Option<bool>,
     cx: &gpui::App,
+    on_out: impl Fn(gpui::Point<gpui::Pixels>, &mut gpui::App) + 'static,
 ) -> Option<AnyElement> {
     let leaving = shown?;
     let s = state.read(cx);
@@ -166,7 +167,7 @@ pub fn render(
         );
     }
 
-    let (compact, close) = (state.clone(), state.clone());
+    let compact = state.clone();
     let section = |title: &'static str| {
         div()
             .text_size(t.text.caption)
@@ -182,18 +183,14 @@ pub fn render(
             .absolute()
             .bottom_full()
             .left_0()
+            .mb(px(8.))
             .w(px(420.))
             .p(t.space.lg)
             .flex()
             .flex_col()
             .gap(t.space.md)
-            .on_mouse_down_out(move |_, _, cx| {
-                close.update(cx, |s, cx| {
-                    if s.context_open {
-                        s.context_open = false;
-                        cx.notify();
-                    }
-                })
+            .when(!leaving, |d| {
+                d.on_mouse_down_out(move |ev, _, cx| on_out(ev.position, cx))
             })
             .child(
                 div()

@@ -49,7 +49,10 @@ pub fn render(
         .tooltip(|window, cx| {
             gpui::component::tooltip::Tooltip::new("Chats waiting on your answer").build(window, cx)
         })
-        .on_click(move |_, _, cx| toggle.update(cx, |s, cx| s.toggle_approvals(cx)))
+        .on_click(move |ev, _, cx| {
+            let at = super::click_down(ev);
+            toggle.update(cx, |s, cx| s.toggle_approvals_at(Some(at), cx));
+        })
         .with_animation(
             "approvals-in",
             gpui::Animation::new(std::time::Duration::from_millis(t.motion_ms)),
@@ -132,12 +135,9 @@ pub fn render(
             .top(t.size.control + t.space.xs)
             .right_0()
             .w(px(340.))
-            .on_mouse_down_out(move |_, _, cx| {
-                close.update(cx, |s, cx| {
-                    if s.approvals_open {
-                        s.approvals_open = false;
-                        cx.notify();
-                    }
+            .when(!leaving, |d| {
+                d.on_mouse_down_out(move |ev, _, cx| {
+                    close.update(cx, |s, cx| s.dismiss_approvals(ev.position, cx))
                 })
             })
             .child(

@@ -642,6 +642,13 @@ pub fn rule_name(suggestions: &serde_json::Value) -> Option<String> {
         })
 }
 
+/// One entry in a sub-agent's chronological activity stream: prose or a tool step.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AgentEntry {
+    Text(String),
+    Step(usize),
+}
+
 /// A sub-agent KodAct started (a `Task` / `Agent` tool call), as the
 /// Agents panel shows it.
 #[derive(Clone, Debug)]
@@ -661,6 +668,8 @@ pub struct AgentRun {
     pub heard: std::time::Instant,
     pub failed: bool,
     pub steps: Vec<AgentStep>,
+    /// Chronological activity stream: interleaved prose and tool step indices.
+    pub entries: Vec<AgentEntry>,
     /// Its latest words; once it ends, its answer.
     pub said: String,
     /// You asked KodAct to stop it, and KodAct hasn't said it has yet.
@@ -678,7 +687,14 @@ pub struct AgentStep {
     pub what: String,
     /// A command's own description stands alone ("Run the tests").
     pub described: bool,
+    /// Full target (command, file path, search pattern) for expanding the step.
+    pub detail: String,
+    /// Output returned by this step's tool call.
+    pub output: String,
+    pub started: std::time::Instant,
+    pub ended: Option<std::time::Instant>,
     pub status: ToolStatus,
+    pub open: bool,
 }
 
 impl AgentStep {
@@ -2020,8 +2036,12 @@ pub struct AppState {
     pub design_extra: Vec<(usize, std::path::PathBuf)>,
     /// Each chat's sub-agents, in the order they started (`agents_view.rs`).
     pub agents: std::collections::HashMap<usize, Vec<AgentRun>>,
-    /// Agent cards opened to show their steps, by the agent's id.
+    /// Sub-agent prompt cards opened to show their full prompt, by agent id.
     pub agents_open: std::collections::HashSet<String>,
+    /// Which sub-agent is focused in the Agents panel, by chat id.
+    pub selected_agent: std::collections::HashMap<usize, String>,
+    /// The Agents panel is expanded across the main session area (Full View).
+    pub panel_full: bool,
     /// A diagram in the panel fits its width (else it shows at actual size).
     pub doc_fit: bool,
     /// The side panel sits below the chat instead of beside it.
@@ -2229,6 +2249,13 @@ pub struct AppState {
     jump_seq: u64,
     /// Runs of calls opened to their steps: (chat, message, first block).
     pub open_groups: std::collections::HashSet<(usize, usize, usize)>,
+    /// Transient presentation-only UI toggles (show more lines, sub-groups, collapsed intermediate notes).
+    pub ui_toggles: std::collections::HashSet<String>,
+    /// Last title/footer menu dismissed by clicking outside, with its press position,
+    /// so clicking the trigger button while open closes cleanly instead of reopening.
+    pub title_menu_dismissed: Option<(TitleMenu, gpui::Point<gpui::Pixels>)>,
+    /// Last remote indicator press that dismissed its popup, for click-open / click-close.
+    pub remote_dismissed_at: Option<gpui::Point<gpui::Pixels>>,
     /// The row a jump landed on, marked for a moment: (chat, message, block).
     pub flash: Option<(usize, usize, usize)>,
     /// When each thought began and ended: (chat, message, block).
@@ -2239,6 +2266,8 @@ pub struct AppState {
     /// The task panel and the approvals list are open.
     pub tasks_open: bool,
     pub approvals_open: bool,
+    pub tasks_dismissed_at: Option<gpui::Point<gpui::Pixels>>,
+    pub approvals_dismissed_at: Option<gpui::Point<gpui::Pixels>>,
     /// Chats whose running turn is a compaction.
     compacting: std::collections::HashSet<usize>,
     /// KodAct CLI's own files, for the Settings editors.
@@ -2401,6 +2430,8 @@ impl AppState {
             design_extra: Vec::new(),
             agents: std::collections::HashMap::new(),
             agents_open: std::collections::HashSet::new(),
+            selected_agent: std::collections::HashMap::new(),
+            panel_full: false,
             doc_fit: true,
             doc_below: false,
             doc_preview: None,
@@ -2493,10 +2524,15 @@ impl AppState {
             jump: None,
             jump_seq: 0,
             open_groups: Default::default(),
+            ui_toggles: Default::default(),
+            title_menu_dismissed: None,
+            remote_dismissed_at: None,
             flash: None,
             thought: Default::default(),
             tasks_open: false,
             approvals_open: false,
+            tasks_dismissed_at: None,
+            approvals_dismissed_at: None,
             compacting: Default::default(),
             engine: Default::default(),
             diagnosis: None,
@@ -6153,6 +6189,10 @@ fix everything under 8, render it again to check, then tell me the scores before
         if tab.is_some() {
             self.picker_open = false;
             self.modes_open = false;
+            self.project_menu = false;
+            self.context_open = false;
+            self.title_menu = None;
+            self.title_menu_dismissed = None;
             self.design_load_index(cx);
         }
         cx.notify();
@@ -6720,11 +6760,198 @@ fix everything under 8, render it again to check, then tell me the scores before
             .filter(|l| !l.writing && l.unseen && self.current == Some(l.chat))
     }
 
-    /// Open or close an agent's card.
+    /// Open or close a sub-agent's prompt disclosure ("Message from parent agent").
     pub fn toggle_agent(&mut self, id: &str, cx: &mut Context<Self>) {
         if !self.agents_open.remove(id) {
             self.agents_open.insert(id.to_string());
         }
+        cx.notify();
+    }
+
+    /// Which sub-agent is currently focused in the Agents panel for the active chat.
+    pub fn selected_agent_id(&self) -> Option<&str> {
+        let chat = self.current?;
+        let runs = self.agents.get(&chat)?;
+        if let Some(id) = self.selected_agent.get(&chat) {
+            if runs.iter().any(|r| &r.id == id) {
+                return Some(id.as_str());
+            }
+        }
+        runs.iter()
+            .find(|r| r.ended.is_none())
+            .or_else(|| runs.first())
+            .map(|r| r.id.as_str())
+    }
+
+    /// Focus a specific sub-agent in the right-side Agents inspector.
+    pub fn select_agent(&mut self, id: &str, cx: &mut Context<Self>) {
+        if let Some(chat) = self.current {
+            self.selected_agent.insert(chat, id.to_string());
+        }
+        self.doc = None;
+        self.panel = Some(PanelTab::Agents);
+        cx.notify();
+    }
+
+    /// Move to the previous or next sub-agent in `chat` (`delta` = -1 or +1).
+    fn cycle_agent_in(&mut self, chat: usize, delta: isize) -> bool {
+        let Some(runs) = self.agents.get(&chat) else {
+            return false;
+        };
+        if runs.is_empty() {
+            return false;
+        }
+        let cur_idx = self
+            .selected_agent
+            .get(&chat)
+            .and_then(|id| runs.iter().position(|r| r.id == *id))
+            .or_else(|| runs.iter().position(|r| r.ended.is_none()))
+            .unwrap_or(0) as isize;
+        let len = runs.len() as isize;
+        let next = (cur_idx + delta).rem_euclid(len) as usize;
+        let id = runs[next].id.clone();
+        self.selected_agent.insert(chat, id);
+        true
+    }
+
+    /// Move to the previous or next sub-agent in the current chat (`delta` = -1 or +1).
+    pub fn cycle_agent(&mut self, delta: isize, cx: &mut Context<Self>) {
+        let Some(chat) = self.current else { return };
+        if self.cycle_agent_in(chat, delta) {
+            cx.notify();
+        }
+    }
+
+    /// Toggle a single tool step's open state for `(chat, agent_id, step_idx)`.
+    fn toggle_step_in(&mut self, chat: usize, agent_id: &str, step_idx: usize) -> bool {
+        if let Some(step) = self
+            .agents
+            .get_mut(&chat)
+            .and_then(|runs| runs.iter_mut().find(|r| r.id == agent_id))
+            .and_then(|r| r.steps.get_mut(step_idx))
+        {
+            step.open = !step.open;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Expand or collapse a single tool step inside a sub-agent's activity feed.
+    pub fn toggle_agent_step(&mut self, agent_id: &str, step_idx: usize, cx: &mut Context<Self>) {
+        let Some(chat) = self.current else { return };
+        if self.toggle_step_in(chat, agent_id, step_idx) {
+            cx.notify();
+        }
+    }
+
+    /// Toggle Full View (expand the Agents inspector across the main session area).
+    pub fn toggle_panel_full(&mut self, cx: &mut Context<Self>) {
+        self.panel_full = !self.panel_full;
+        cx.notify();
+    }
+
+    /// Copy a sub-agent's output (final answer, or step outputs if no summary yet).
+    pub fn copy_agent_output(&mut self, id: &str, cx: &mut Context<Self>) {
+        let Some(run) = self
+            .current
+            .and_then(|c| self.agents.get(&c))
+            .and_then(|runs| runs.iter().find(|r| r.id == id))
+        else {
+            return;
+        };
+        let text = if !run.said.trim().is_empty() {
+            run.said.clone()
+        } else {
+            run.steps
+                .iter()
+                .filter(|s| !s.output.trim().is_empty())
+                .map(|s| format!("{}\n{}", s.label(), s.output.trim_end()))
+                .collect::<Vec<_>>()
+                .join("\n\n")
+        };
+        if text.trim().is_empty() {
+            self.show_toast("This agent has no output to copy yet.", cx);
+            return;
+        }
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+        self.mark_copied(format!("agent-{id}").into(), cx);
+    }
+
+    /// Map `(msg, block)` in `chat` to its `AgentRun` (synthesizing historical runs when absent)
+    /// and update `selected_agent`.
+    fn focus_agent_for_block(&mut self, chat: usize, msg: usize, block: usize) -> bool {
+        let Some(c) = self.chats.iter().find(|c| c.id == chat) else {
+            return false;
+        };
+        let mut all_agent_blocks = vec![];
+        let mut target_nth = None;
+        for (mi, m) in c.messages.iter().enumerate() {
+            if let Message::Assistant { blocks } = m {
+                for (bi, b) in blocks.iter().enumerate() {
+                    if let Block::Tool(t) = b {
+                        if is_agent_tool(&t.target) {
+                            if mi == msg && bi == block {
+                                target_nth = Some(all_agent_blocks.len());
+                            }
+                            all_agent_blocks.push((mi, bi, t.clone()));
+                        }
+                    }
+                }
+            }
+        }
+        let Some(nth) = target_nth else {
+            return false;
+        };
+        let runs = self.agents.entry(chat).or_default();
+        // Historical chats reloaded from disk have blocks without live `AgentRun`s:
+        // synthesize read-only runs in block order so clicking still inspects them.
+        if runs.len() <= nth {
+            let now = std::time::Instant::now();
+            for (mi, bi, call) in all_agent_blocks.into_iter().skip(runs.len()) {
+                runs.push(AgentRun {
+                    id: format!("hist-{chat}-{mi}-{bi}"),
+                    kind: "agent".into(),
+                    task: call
+                        .note
+                        .as_deref()
+                        .filter(|s| !s.is_empty())
+                        .unwrap_or("Sub-agent task")
+                        .to_string(),
+                    prompt: String::new(),
+                    started: now,
+                    ended: (call.status != ToolStatus::Running).then_some(now),
+                    heard: now,
+                    failed: call.status == ToolStatus::Failed,
+                    steps: vec![],
+                    entries: vec![],
+                    said: call.output.to_string(),
+                    stopping: false,
+                    stopped: call.status == ToolStatus::Declined,
+                });
+            }
+        }
+        if let Some(id) = runs.get(nth).map(|r| r.id.clone()) {
+            self.selected_agent.insert(chat, id);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Open and focus the sub-agent belonging to the `(msg, block)` row in `chat`.
+    pub fn open_agent_for_block(
+        &mut self,
+        chat: usize,
+        msg: usize,
+        block: usize,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.focus_agent_for_block(chat, msg, block) {
+            return;
+        }
+        self.doc = None;
+        self.panel = Some(PanelTab::Agents);
         cx.notify();
     }
 
@@ -6759,10 +6986,18 @@ fix everything under 8, render it again to check, then tell me the scores before
                     heard: now,
                     failed: false,
                     steps: vec![],
+                    entries: vec![],
                     said: String::new(),
                     stopping: false,
                     stopped: false,
                 });
+                let has_selected = self
+                    .selected_agent
+                    .get(&chat)
+                    .is_some_and(|sel| runs.iter().any(|r| &r.id == sel));
+                if !has_selected {
+                    self.selected_agent.insert(chat, id.clone());
+                }
                 // The Agents panel opens with the first agent; each also has
                 // its row in the conversation.
                 if self.doc.is_none() && self.current == Some(chat) {
@@ -6778,6 +7013,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                 // A run you stopped here (no engine, in the demo) has already ended.
                 if let Some(r) = runs.iter_mut().find(|r| &r.id == id && !r.stopped) {
                     r.ended = Some(now);
+                    r.heard = now;
                     r.stopping = false;
                     r.stopped = output.starts_with(AGENT_STOPPED);
                     r.failed = *is_error && !r.stopped;
@@ -6790,6 +7026,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                         .filter(|s| s.status == ToolStatus::Running)
                     {
                         s.status = ToolStatus::Done;
+                        s.ended.get_or_insert(now);
                     }
                 }
             }
@@ -6810,33 +7047,39 @@ fix everything under 8, render it again to check, then tell me the scores before
                         _ => (call.shown_target().to_string(), false),
                     };
                     r.heard = now;
+                    let idx = r.steps.len();
                     r.steps.push(AgentStep {
                         id: id.clone(),
                         kind: call.kind,
                         what,
                         described,
+                        detail: call.target.to_string(),
+                        output: String::new(),
+                        started: now,
+                        ended: None,
                         status: ToolStatus::Running,
+                        open: false,
                     });
+                    r.entries.push(AgentEntry::Step(idx));
                 }
             }
             Event::SubResult {
                 parent,
                 id,
+                output,
                 is_error,
             } => {
                 if let Some(r) = runs.iter_mut().find(|r| &r.id == parent) {
                     r.heard = now;
-                }
-                if let Some(s) = runs
-                    .iter_mut()
-                    .find(|r| &r.id == parent)
-                    .and_then(|r| r.steps.iter_mut().find(|s| &s.id == id))
-                {
-                    s.status = if *is_error {
-                        ToolStatus::Failed
-                    } else {
-                        ToolStatus::Done
-                    };
+                    if let Some(s) = r.steps.iter_mut().find(|s| &s.id == id) {
+                        s.status = if *is_error {
+                            ToolStatus::Failed
+                        } else {
+                            ToolStatus::Done
+                        };
+                        s.ended = Some(now);
+                        s.output = output.clone();
+                    }
                 }
             }
             Event::SubText { parent, text } => {
@@ -6845,6 +7088,15 @@ fix everything under 8, render it again to check, then tell me the scores before
                     .find(|r| &r.id == parent && r.ended.is_none())
                 {
                     r.heard = now;
+                    if !text.trim().is_empty() {
+                        let dup = matches!(
+                            r.entries.last(),
+                            Some(AgentEntry::Text(prev)) if prev.trim() == text.trim()
+                        );
+                        if !dup {
+                            r.entries.push(AgentEntry::Text(text.clone()));
+                        }
+                    }
                     r.said = text.clone();
                 }
             }
@@ -6854,6 +7106,19 @@ fix everything under 8, render it again to check, then tell me the scores before
                     r.ended = Some(now);
                     r.stopped = r.stopping;
                     r.failed = !r.stopping;
+                    let step_end = if r.stopping {
+                        ToolStatus::Declined
+                    } else {
+                        ToolStatus::Failed
+                    };
+                    for s in r
+                        .steps
+                        .iter_mut()
+                        .filter(|s| s.status == ToolStatus::Running)
+                    {
+                        s.status = step_end;
+                        s.ended.get_or_insert(now);
+                    }
                     r.stopping = false;
                 }
             }
@@ -6878,6 +7143,9 @@ fix everything under 8, render it again to check, then tell me the scores before
     pub fn show_panel(&mut self, tab: PanelTab, cx: &mut Context<Self>) {
         self.doc = None;
         self.panel = Some(tab);
+        if tab != PanelTab::Agents {
+            self.panel_full = false;
+        }
         if tab == PanelTab::Browser {
             self.ensure_web(cx);
         }
@@ -7077,6 +7345,7 @@ fix everything under 8, render it again to check, then tell me the scores before
     pub fn toggle_panel_tab(&mut self, tab: PanelTab, cx: &mut Context<Self>) {
         if self.doc.is_none() && self.panel == Some(tab) {
             self.panel = None;
+            self.panel_full = false;
             cx.notify();
         } else {
             self.show_panel(tab, cx);
@@ -7088,6 +7357,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         if self.doc.is_some() || self.panel.is_some() {
             self.doc = None;
             self.panel = None;
+            self.panel_full = false;
         } else {
             self.panel = Some(PanelTab::Plan);
         }
@@ -7097,6 +7367,7 @@ fix everything under 8, render it again to check, then tell me the scores before
     pub fn close_panel(&mut self, cx: &mut Context<Self>) {
         self.doc = None;
         self.panel = None;
+        self.panel_full = false;
         cx.notify();
     }
 
@@ -7418,9 +7689,55 @@ fix everything under 8, render it again to check, then tell me the scores before
         cx.notify();
     }
 
+    pub fn dismiss_tasks(&mut self, at: gpui::Point<gpui::Pixels>, cx: &mut Context<Self>) {
+        if self.tasks_open {
+            self.tasks_dismissed_at = Some(at);
+            self.tasks_open = false;
+            cx.notify();
+        }
+    }
+
+    pub fn toggle_tasks_at(
+        &mut self,
+        at: Option<gpui::Point<gpui::Pixels>>,
+        cx: &mut Context<Self>,
+    ) {
+        let dismissed = self.tasks_dismissed_at.take();
+        if let (Some(d), Some(p)) = (dismissed, at) {
+            if d == p {
+                cx.notify();
+                return;
+            }
+        }
+        self.toggle_tasks(cx);
+    }
+
     pub fn toggle_tasks(&mut self, cx: &mut Context<Self>) {
         self.tasks_open = !self.tasks_open;
         cx.notify();
+    }
+
+    pub fn dismiss_approvals(&mut self, at: gpui::Point<gpui::Pixels>, cx: &mut Context<Self>) {
+        if self.approvals_open {
+            self.approvals_dismissed_at = Some(at);
+            self.approvals_open = false;
+            cx.notify();
+        }
+    }
+
+    pub fn toggle_approvals_at(
+        &mut self,
+        at: Option<gpui::Point<gpui::Pixels>>,
+        cx: &mut Context<Self>,
+    ) {
+        let dismissed = self.approvals_dismissed_at.take();
+        if let (Some(d), Some(p)) = (dismissed, at) {
+            if d == p {
+                cx.notify();
+                return;
+            }
+        }
+        self.toggle_approvals(cx);
     }
 
     pub fn toggle_approvals(&mut self, cx: &mut Context<Self>) {
@@ -7605,6 +7922,12 @@ fix everything under 8, render it again to check, then tell me the scores before
         self.context_open = !self.context_open && self.chat().is_some();
         self.picker_open = false;
         self.modes_open = false;
+        self.project_menu = false;
+        self.design_menu = None;
+        if self.context_open {
+            self.title_menu = None;
+            self.title_menu_dismissed = None;
+        }
         cx.notify();
     }
 
@@ -8441,18 +8764,60 @@ fix everything under 8, render it again to check, then tell me the scores before
         cx.notify();
     }
 
-    /// Open or close one of the title bar's menus, at `at`.
+    /// Record that a title/footer menu closed on mouse-down outside at `at`.
+    pub fn dismiss_title_menu(
+        &mut self,
+        which: TitleMenu,
+        at: gpui::Point<gpui::Pixels>,
+        cx: &mut Context<Self>,
+    ) {
+        if self.title_menu.is_some_and(|(m, _)| m == which) {
+            self.title_menu_dismissed = Some((which, at));
+            self.title_menu = None;
+            cx.notify();
+        }
+    }
+
+    /// Open or close one of the title bar's or sidebar's menus, at `at`.
+    /// Clicking its own trigger while open closes it cleanly instead of immediately reopening.
     pub fn toggle_title_menu(
         &mut self,
         which: TitleMenu,
         at: gpui::Point<gpui::Pixels>,
         cx: &mut Context<Self>,
     ) {
+        if let Some((dismissed, pos)) = self.title_menu_dismissed.take() {
+            if dismissed == which && pos == at {
+                cx.notify();
+                return;
+            }
+        }
         self.title_menu = match self.title_menu {
             Some((open, _)) if open == which => None,
-            _ => Some((which, at)),
+            _ => {
+                self.picker_open = false;
+                self.modes_open = false;
+                self.bypass_warning = false;
+                self.design_menu = None;
+                self.project_menu = false;
+                self.context_open = false;
+                Some((which, at))
+            }
         };
         self.chat_menu = None;
+        cx.notify();
+    }
+
+    /// Toggle a transient presentation-only UI key (e.g., show more lines, sub-group expand).
+    pub fn toggle_ui(&mut self, key: String, chat: Option<usize>, cx: &mut Context<Self>) {
+        if !self.ui_toggles.remove(&key) {
+            self.ui_toggles.insert(key);
+        }
+        if let Some(id) = chat {
+            if let Some(c) = self.chat_mut(id) {
+                c.version += 1;
+            }
+        }
         cx.notify();
     }
 
@@ -9605,6 +9970,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                     .filter(|s| s.status == ToolStatus::Running)
                 {
                     s.status = ToolStatus::Declined;
+                    s.ended = Some(now);
                 }
             }
         }
@@ -11002,6 +11368,31 @@ impl AppState {
         .detach();
     }
 
+    /// Record that the remote menu closed on mouse-down outside at `at`.
+    pub fn dismiss_remote_menu(&mut self, at: gpui::Point<gpui::Pixels>, cx: &mut Context<Self>) {
+        if self.remote_menu.as_ref().is_some_and(|m| m.host_key.is_none()) {
+            self.remote_dismissed_at = Some(at);
+            self.remote_menu = None;
+            cx.notify();
+        }
+    }
+
+    /// Click-open / click-close handler for the remote indicator button.
+    pub fn toggle_remote_menu_at(
+        &mut self,
+        at: Option<gpui::Point<gpui::Pixels>>,
+        cx: &mut Context<Self>,
+    ) {
+        let dismissed = self.remote_dismissed_at.take();
+        if let (Some(d), Some(p)) = (dismissed, at) {
+            if d == p {
+                cx.notify();
+                return;
+            }
+        }
+        self.toggle_remote_menu(cx);
+    }
+
     /// Open or close the remote indicator's menu. Opening looks for WSL
     /// distros, SSH hosts, containers and a dev container (off this thread).
     pub fn toggle_remote_menu(&mut self, cx: &mut Context<Self>) {
@@ -12002,21 +12393,40 @@ impl AppState {
                         cx,
                     );
                 }
-                crate::backend::Event::ToolResult { id, .. } => {
+                crate::backend::Event::ToolResult { id, output, is_error, .. } => {
                     // A run you stopped already shows so.
-                    let stopped = self
+                    let agent_pos = self
                         .agents
                         .get(&chat)
-                        .is_some_and(|runs| runs.iter().any(|r| &r.id == id && r.stopped));
-                    // The oldest agent row still running is the one done.
+                        .and_then(|runs| runs.iter().position(|r| &r.id == id));
+                    let stopped = agent_pos.is_some_and(|i| self.agents[&chat][i].stopped);
                     if stopped {
                     } else if let Some(Message::Assistant { blocks }) =
                         self.chat_mut(chat).and_then(|c| c.messages.last_mut())
                     {
-                        if let Some(Block::Tool(t)) = blocks.iter_mut().find(|b| {
-                            matches!(b, Block::Tool(t) if is_agent_tool(&t.target) && t.status == ToolStatus::Running)
-                        }) {
-                            t.status = ToolStatus::Done;
+                        let idx = agent_pos
+                            .and_then(|n| {
+                                blocks
+                                    .iter()
+                                    .enumerate()
+                                    .filter(|(_, b)| matches!(b, Block::Tool(t) if is_agent_tool(&t.target)))
+                                    .nth(n)
+                                    .map(|(i, _)| i)
+                            })
+                            .or_else(|| {
+                                blocks.iter().position(|b| {
+                                    matches!(b, Block::Tool(t) if is_agent_tool(&t.target) && t.status == ToolStatus::Running)
+                                })
+                            });
+                        if let Some(Block::Tool(t)) = idx.and_then(|i| blocks.get_mut(i)) {
+                            t.status = if *is_error {
+                                ToolStatus::Failed
+                            } else {
+                                ToolStatus::Done
+                            };
+                            if !output.trim().is_empty() {
+                                t.output = output.clone().into();
+                            }
                         }
                     }
                 }
@@ -12597,10 +13007,11 @@ fn demo_agents() -> Vec<Step> {
             input,
         })
     };
-    let done = |parent: &str, id: &str| {
+    let done = |parent: &str, id: &str, out: &str| {
         Step::Agent(Event::SubResult {
             parent: parent.into(),
             id: id.into(),
+            output: out.into(),
             is_error: false,
         })
     };
@@ -12626,26 +13037,30 @@ fn demo_agents() -> Vec<Step> {
         start("a1", "Explore", "Map the chat pipeline", "Find how a message travels from the composer to KodAct CLI and back. List the files and the functions on the path."),
         start("a2", "code-reviewer", "Review the side panel", "Review src/ui/workbench.rs and src/ui/doc_pane.rs for bugs and dead code. Report findings with file:line."),
         start("a3", "test-runner", "Check the tests", "Run the test suite, and list any test that is slow or flaky."),
+        say("a1", "Starting by searching for `fn send` across `src/` to locate the outbound dispatch path."),
+        say("a2", "I'll inspect `workbench.rs` and `doc_pane.rs` first to trace how tabs and documents switch."),
         tool("a1", "a1t1", "Grep", json!({ "pattern": "fn send", "path": "src" })),
         tool("a2", "a2t1", "Read", json!({ "file_path": "src/ui/workbench.rs" })),
         tool("a3", "a3t1", "Bash", json!({ "command": "cargo test", "description": "Run the tests" })),
-        done("a1", "a1t1"),
+        done("a1", "a1t1", "src/backend.rs:380: pub fn send(&self, text: &str) -> Result<(), String>\nsrc/state.rs:4712: pub fn send(&mut self, text: &str, cx: &mut Context<Self>)"),
+        say("a1", "Found `AppState::send` and `Session::send`. Reading `src/state.rs` and `src/backend.rs` to trace the reply stream back to the transcript."),
         tool("a1", "a1t2", "Read", json!({ "file_path": "src/state.rs" })),
-        done("a2", "a2t1"),
+        done("a2", "a2t1", "529 lines read from src/ui/workbench.rs"),
         tool("a2", "a2t2", "Read", json!({ "file_path": "src/ui/doc_pane.rs" })),
-        done("a1", "a1t2"),
+        done("a1", "a1t2", "AppState::on_event dispatches Event::Text, Event::ToolUse, and Event::TurnEnd into Chat::messages."),
         tool("a1", "a1t3", "Read", json!({ "file_path": "src/backend.rs" })),
-        say("a2", "workbench.rs looks sound; checking how doc_pane leads back to the file list."),
-        done("a2", "a2t2"),
+        say("a2", "`workbench.rs` looks sound; checking how `doc_pane.rs` leads back to the file list."),
+        done("a2", "a2t2", "431 lines read from src/ui/doc_pane.rs"),
         tool("a2", "a2t3", "Grep", json!({ "pattern": "from_panel", "path": "src/ui" })),
-        done("a1", "a1t3"),
-        say("a1", "The path: composer.rs → AppState::send → backend::Session::send (stream-json) → Parser::line → AppState::on_event → the transcript."),
-        end("a1", "The path: composer.rs → AppState::send → backend::Session::send (stream-json) → Parser::line → AppState::on_event → the transcript."),
-        done("a2", "a2t3"),
-        done("a3", "a3t1"),
+        done("a1", "a1t3", "Parser::line parses stream-json events from KodAct CLI stdout."),
+        say("a1", "The path: `composer.rs` → `AppState::send` → `backend::Session::send` (`stream-json`) → `Parser::line` → `AppState::on_event` → transcript."),
+        end("a1", "The path: composer.rs → AppState::send → backend::Session::send (stream-json) → Parser::line → AppState::on_event → transcript."),
+        done("a2", "a2t3", "src/ui/doc_pane.rs:56: pub from_panel: bool\nsrc/ui/doc_pane.rs:92: let from_panel = fit.from_panel;"),
+        done("a3", "a3t1", "test result: ok. 235 passed; 0 failed; 1 ignored; finished in 2.41s"),
+        say("a3", "All unit tests passed quickly. Timing individual tests now to identify outliers."),
         tool("a3", "a3t2", "Bash", json!({ "command": "cargo test -- --report-time", "description": "Time each test" })),
         end("a2", "No bugs found. One note: the panel's Files list dedupes by name, so two files with the same name in different folders show once."),
-        done("a3", "a3t2"),
+        done("a3", "a3t2", "All 235 unit tests < 15ms; web_view::tests::real_browser_roundtrip (~20s, #[ignore])."),
         end("a3", "235 tests pass. The slowest is the real-browser test (about 20 s, ignored by default); none is flaky."),
     ]);
     s.extend(words("All three are done: the chat path is mapped, the side panel review found no bugs (one note on duplicate names), and the 235 tests pass.", Step::Say));
@@ -12676,6 +13091,7 @@ fn demo_six_agents() -> Vec<Step> {
         Step::Agent(Event::SubResult {
             parent: parent.into(),
             id: id.into(),
+            output: String::new(),
             is_error: false,
         })
     };
@@ -13910,5 +14326,246 @@ mod tests {
         assert!(second.starts_with("One unused import"), "{second}");
         assert_eq!(turn_question(rich, 3), Some(0));
         assert_eq!(turn_question(rich, 6), Some(4));
+    }
+
+    #[test]
+    fn on_agent_event_interleaves_entries_dedups_text_and_captures_step_output() {
+        use crate::backend::Event;
+        let mut s = AppState::new();
+        let chat = 42;
+
+        s.on_agent_event(
+            chat,
+            &Event::ToolUse {
+                id: "ag-1".into(),
+                name: "Agent".into(),
+                input: serde_json::json!({
+                    "subagent_type": "Explore",
+                    "description": "Audit state module",
+                    "prompt": "Check state transitions"
+                }),
+            },
+        );
+        assert_eq!(s.selected_agent.get(&chat).map(String::as_str), Some("ag-1"));
+
+        s.on_agent_event(
+            chat,
+            &Event::SubText {
+                parent: "ag-1".into(),
+                text: "Looking at `src/state.rs` first.".into(),
+            },
+        );
+        // Duplicate consecutive text with same trimmed content is ignored.
+        s.on_agent_event(
+            chat,
+            &Event::SubText {
+                parent: "ag-1".into(),
+                text: "  Looking at `src/state.rs` first.  ".into(),
+            },
+        );
+        s.on_agent_event(
+            chat,
+            &Event::SubTool {
+                parent: "ag-1".into(),
+                id: "step-1".into(),
+                name: "Read".into(),
+                input: serde_json::json!({"file_path": "src/state.rs"}),
+            },
+        );
+        s.on_agent_event(
+            chat,
+            &Event::SubResult {
+                parent: "ag-1".into(),
+                id: "step-1".into(),
+                output: "pub struct AppState { ... }".into(),
+                is_error: false,
+            },
+        );
+        s.on_agent_event(
+            chat,
+            &Event::SubText {
+                parent: "ag-1".into(),
+                text: "Found AppState definition.".into(),
+            },
+        );
+        s.on_agent_event(
+            chat,
+            &Event::ToolResult {
+                id: "ag-1".into(),
+                output: "Audit complete.".into(),
+                is_error: false,
+                images: vec![],
+            },
+        );
+
+        let runs = &s.agents[&chat];
+        assert_eq!(runs.len(), 1);
+        let r = &runs[0];
+        assert_eq!(r.entries.len(), 3);
+        assert!(matches!(&r.entries[0], AgentEntry::Text(t) if t.contains("Looking at")));
+        assert!(matches!(r.entries[1], AgentEntry::Step(0)));
+        assert!(matches!(&r.entries[2], AgentEntry::Text(t) if t == "Found AppState definition."));
+        assert_eq!(r.steps.len(), 1);
+        assert_eq!(r.steps[0].status, ToolStatus::Done);
+        assert_eq!(r.steps[0].output, "pub struct AppState { ... }");
+        assert!(r.steps[0].ended.is_some());
+        assert_eq!(r.said, "Audit complete.");
+    }
+
+    #[test]
+    fn open_agent_for_block_maps_live_and_synthesizes_historical_runs() {
+        let mut s = AppState::new();
+        let chat = 77;
+        let mut chat_obj = Chat::new(chat, 1, "Review".into());
+        chat_obj.messages = vec![Message::Assistant {
+            blocks: vec![
+                Block::Text("Dispatching two agents.".into()),
+                Block::Tool(ToolCall {
+                    kind: ToolKind::Other,
+                    target: "Agent".into(),
+                    note: Some("Inspect parser".into()),
+                    status: ToolStatus::Done,
+                    output: "Parser looks clean.".into(),
+                    diff: vec![],
+                    open: false,
+                    full: false,
+                    review: Review::Open,
+                    images: vec![],
+                }),
+                Block::Tool(ToolCall {
+                    kind: ToolKind::Other,
+                    target: "Task".into(),
+                    note: Some("Inspect UI".into()),
+                    status: ToolStatus::Failed,
+                    output: "Found contrast issue.".into(),
+                    diff: vec![],
+                    open: false,
+                    full: false,
+                    review: Review::Open,
+                    images: vec![],
+                }),
+            ],
+        }];
+        s.chats.push(chat_obj);
+        s.current = Some(chat);
+
+        // Historical chat has no live entries in s.agents yet: clicking the 2nd block synthesizes both.
+        assert!(s.focus_agent_for_block(chat, 0, 2));
+        let runs = &s.agents[&chat];
+        assert_eq!(runs.len(), 2);
+        assert_eq!(runs[0].task, "Inspect parser");
+        assert_eq!(runs[1].task, "Inspect UI");
+        assert!(runs[1].failed);
+        assert_eq!(runs[1].said, "Found contrast issue.");
+        assert_eq!(s.selected_agent_id(), Some(runs[1].id.as_str()));
+
+        // Clicking the 1st block focuses the first run without duplicating runs.
+        assert!(s.focus_agent_for_block(chat, 0, 1));
+        assert_eq!(s.agents[&chat].len(), 2);
+        assert_eq!(s.selected_agent_id(), Some(s.agents[&chat][0].id.as_str()));
+    }
+
+    #[test]
+    fn toggle_step_and_cycle_agent_work_with_wraparound() {
+        let mut s = AppState::new();
+        let chat = 99;
+        let now = std::time::Instant::now();
+        s.current = Some(chat);
+        s.agents.insert(
+            chat,
+            vec![
+                AgentRun {
+                    id: "a1".into(),
+                    kind: "Explore".into(),
+                    task: "First".into(),
+                    prompt: "".into(),
+                    started: now,
+                    ended: Some(now),
+                    heard: now,
+                    failed: false,
+                    steps: vec![AgentStep {
+                        id: "s1".into(),
+                        kind: ToolKind::Read,
+                        what: "src/lib.rs".into(),
+                        described: false,
+                        detail: "src/lib.rs".into(),
+                        output: "fn main() {}".into(),
+                        started: now,
+                        ended: Some(now),
+                        status: ToolStatus::Done,
+                        open: false,
+                    }],
+                    entries: vec![AgentEntry::Step(0)],
+                    said: "Done 1".into(),
+                    stopping: false,
+                    stopped: false,
+                },
+                AgentRun {
+                    id: "a2".into(),
+                    kind: "Plan".into(),
+                    task: "Second".into(),
+                    prompt: "".into(),
+                    started: now,
+                    ended: None,
+                    heard: now,
+                    failed: false,
+                    steps: vec![],
+                    entries: vec![],
+                    said: String::new(),
+                    stopping: false,
+                    stopped: false,
+                },
+            ],
+        );
+
+        // No explicit selection defaults to first active agent ("a2").
+        assert_eq!(s.selected_agent_id(), Some("a2"));
+        // Cycle forward wraps to "a1".
+        assert!(s.cycle_agent_in(chat, 1));
+        assert_eq!(s.selected_agent_id(), Some("a1"));
+        // Cycle backward wraps back to "a2".
+        assert!(s.cycle_agent_in(chat, -1));
+        assert_eq!(s.selected_agent_id(), Some("a2"));
+
+        // Step toggle opens and closes step 0 on "a1".
+        assert!(!s.agents[&chat][0].steps[0].open);
+        assert!(s.toggle_step_in(chat, "a1", 0));
+        assert!(s.agents[&chat][0].steps[0].open);
+        assert!(s.toggle_step_in(chat, "a1", 0));
+        assert!(!s.agents[&chat][0].steps[0].open);
+    }
+
+    #[test]
+    fn click_outside_same_position_does_not_reopen_menu_on_button_click() {
+        let s_point = gpui::point(gpui::px(100.), gpui::px(40.));
+        let other_point = gpui::point(gpui::px(220.), gpui::px(40.));
+
+        // Simulate AppState::toggle_title_menu / dismiss_title_menu logic directly:
+        let mut open = Some(TitleMenu::Account);
+        let mut dismissed: Option<(TitleMenu, gpui::Point<gpui::Pixels>)> = None;
+
+        // First: outside mouse down dismisses menu at s_point.
+        if let Some(was) = open.take() {
+            dismissed = Some((was, s_point));
+        }
+        assert!(open.is_none());
+
+        // Click landing at the same coordinates must NOT reopen Account.
+        let just_dismissed = dismissed
+            .take()
+            .filter(|(m, pos)| {
+                *m == TitleMenu::Account
+                    && (pos.x - s_point.x).abs() <= gpui::px(2.)
+                    && (pos.y - s_point.y).abs() <= gpui::px(2.)
+            })
+            .is_some();
+        assert!(just_dismissed);
+
+        // Next click (no prior dismiss) opens it cleanly.
+        let just_dismissed_next = dismissed
+            .take()
+            .filter(|(m, pos)| *m == TitleMenu::Account && *pos == other_point)
+            .is_some();
+        assert!(!just_dismissed_next);
     }
 }

@@ -166,9 +166,17 @@ pub fn render(
         })
         .child(match office {
             Some(kind) => super::file_mark::render(kind, f32::from(t.size.icon_lg), fit.scale),
-            None => {
-                icon("icons/file-text.svg", t.size.icon_sm, t.colors.text_muted).into_any_element()
+            None if diagram => {
+                icon("icons/network.svg", t.size.icon_sm, t.colors.sky).into_any_element()
             }
+            None => gpui::img(super::file_icon::asset(
+                &file.name,
+                false,
+                file.path.as_deref().unwrap_or(&file.name),
+            ))
+            .flex_none()
+            .size(t.size.icon)
+            .into_any_element(),
         })
         .child(
             div()
@@ -661,7 +669,7 @@ fn finish_at(
         .when(below, |d| d.w_full().h(relative(BELOW_SHARE)).border_t_1())
         .flex()
         .flex_col()
-        .bg(t.colors.surface)
+        .bg(if t.is_dark { t.extra.pane } else { t.colors.surface })
         .border_color(t.colors.border)
         .child(header)
         .child(body)

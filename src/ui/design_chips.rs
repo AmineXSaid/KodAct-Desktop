@@ -331,7 +331,9 @@ pub fn menu(
         .child(list);
     let menu = div()
         .id("design-menu")
-        .on_mouse_down_out(move |ev, _, cx| on_out(ev.position, cx))
+        .when(!leaving, |d| {
+            d.on_mouse_down_out(move |ev, _, cx| on_out(ev.position, cx))
+        })
         .relative()
         .w(t.size.design_menu)
         .pt(t.space.tight)

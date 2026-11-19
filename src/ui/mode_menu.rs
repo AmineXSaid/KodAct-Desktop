@@ -107,6 +107,10 @@ pub fn trigger(
                 s.bypass_warning = false;
                 s.picker_open = false;
                 s.design_menu = None;
+                s.project_menu = false;
+                s.context_open = false;
+                s.title_menu = None;
+                s.title_menu_dismissed = None;
                 cx.notify();
             })
         })
@@ -206,7 +210,9 @@ pub fn menu(
         t.size.viewport_margin,
         None,
     )
-    .on_mouse_down_out(move |ev, _, cx| on_out(ev.position, cx))
+    .when(!leaving, |d| {
+        d.on_mouse_down_out(move |ev, _, cx| on_out(ev.position, cx))
+    })
     .relative()
     .w(px(320.))
     .pt(px(6.))

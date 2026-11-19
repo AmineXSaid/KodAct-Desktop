@@ -183,17 +183,187 @@ fn step_label(c: &ToolCall) -> String {
     }
 }
 
-/// The run at `run` as one line that opens to its steps.
+/// Category used for grouping consecutive `Done` steps inside an expanded `work_group`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum SubKind {
+    Read,
+    Edit,
+    Write,
+    Bash,
+    Search,
+    Web,
+    WebSearch,
+    Agent,
+    Other,
+}
+
+impl SubKind {
+    fn of(c: &ToolCall) -> Self {
+        if crate::state::is_agent_tool(&c.target) {
+            return SubKind::Agent;
+        }
+        match c.kind {
+            ToolKind::Read => SubKind::Read,
+            ToolKind::Edit => SubKind::Edit,
+            ToolKind::Write => SubKind::Write,
+            ToolKind::Bash => SubKind::Bash,
+            ToolKind::Search => SubKind::Search,
+            ToolKind::Web => SubKind::Web,
+            ToolKind::WebSearch => SubKind::WebSearch,
+            ToolKind::Other => SubKind::Other,
+        }
+    }
+
+    fn icon(self) -> &'static str {
+        match self {
+            SubKind::Agent => "icons/boxes.svg",
+            SubKind::Read => ToolKind::Read.icon(),
+            SubKind::Edit => ToolKind::Edit.icon(),
+            SubKind::Write => ToolKind::Write.icon(),
+            SubKind::Bash => ToolKind::Bash.icon(),
+            SubKind::Search => ToolKind::Search.icon(),
+            SubKind::Web => ToolKind::Web.icon(),
+            SubKind::WebSearch => ToolKind::WebSearch.icon(),
+            SubKind::Other => ToolKind::Other.icon(),
+        }
+    }
+
+    fn label(self, count: usize) -> String {
+        match self {
+            SubKind::Read => format!("Read {count} files"),
+            SubKind::Edit => format!("Edited {count} files"),
+            SubKind::Write => format!("Wrote {count} files"),
+            SubKind::Bash => format!("Ran {count} commands"),
+            SubKind::Search => format!("Searched {count} times"),
+            SubKind::Web => format!("Fetched {count} pages"),
+            SubKind::WebSearch => format!("Searched web {count} times"),
+            SubKind::Agent => format!("Ran {count} agents"),
+            SubKind::Other => format!("Used {count} tools"),
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+enum GroupedStep {
+    Single(usize),
+    Group { kind: SubKind, indices: Vec<usize> },
+}
+
+/// Group consecutive `>= 2` completed (`Done`) calls of the same `SubKind` into
+/// one row with a count; active, failed, stopped, or individually opened items
+/// always remain standalone.
+fn group_steps(blocks: &[Block], shown: &[usize]) -> Vec<GroupedStep> {
+    let eligible_kind = |i: usize| -> Option<SubKind> {
+        let Block::Tool(c) = &blocks[i] else {
+            return None;
+        };
+        if c.status != ToolStatus::Done
+            || !c.images.is_empty()
+            || message::answer_for(blocks, i).is_some()
+            || c.open
+        {
+            return None;
+        }
+        Some(SubKind::of(c))
+    };
+
+    let mut out = Vec::new();
+    let mut idx = 0;
+    while idx < shown.len() {
+        let block_i = shown[idx];
+        let Some(kind) = eligible_kind(block_i) else {
+            out.push(GroupedStep::Single(block_i));
+            idx += 1;
+            continue;
+        };
+        let mut end = idx + 1;
+        while end < shown.len() && eligible_kind(shown[end]) == Some(kind) {
+            end += 1;
+        }
+        if end - idx >= 2 {
+            out.push(GroupedStep::Group {
+                kind,
+                indices: shown[idx..end].to_vec(),
+            });
+        } else {
+            out.push(GroupedStep::Single(block_i));
+        }
+        idx = end;
+    }
+    out
+}
+
+/// Concise unique paths touched (preferring edited/written files, then read),
+/// returned as up to 2 short labels + optional `+N` count.
+fn touched_paths(calls: &[&ToolCall]) -> Option<String> {
+    use std::collections::HashSet;
+    let mut seen = HashSet::new();
+    let mut paths: Vec<String> = Vec::new();
+    let short_name = |p: &str| {
+        let parts: Vec<&str> = p.split(['/', '\\']).filter(|s| !s.is_empty()).collect();
+        if parts.len() <= 2 {
+            p.to_string()
+        } else {
+            format!("{}/{}", parts[parts.len() - 2], parts[parts.len() - 1])
+        }
+    };
+    for &kind_pass in &[true, false] {
+        for c in calls {
+            let is_edit = matches!(c.kind, ToolKind::Edit | ToolKind::Write);
+            let is_read = c.kind == ToolKind::Read;
+            if (kind_pass && !is_edit) || (!kind_pass && !is_read) {
+                continue;
+            }
+            if c.status == ToolStatus::Failed {
+                continue;
+            }
+            let name = short_name(c.target.as_ref());
+            if seen.insert(name.clone()) {
+                paths.push(name);
+            }
+        }
+    }
+    if paths.is_empty() {
+        return None;
+    }
+    if paths.len() <= 2 {
+        Some(paths.join(", "))
+    } else {
+        Some(format!("{}, {} +{}", paths[0], paths[1], paths.len() - 2))
+    }
+}
+
+fn render_step_row(blocks: &[Block], i: usize, cx: &ItemContext, t: &Theme) -> Option<AnyElement> {
+    match &blocks[i] {
+        Block::Tool(c) => {
+            let is_agent = crate::state::is_agent_tool(&c.target);
+            let answer = message::answer_for(blocks, i);
+            let step = message::flash(
+                div()
+                    .flex()
+                    .flex_col()
+                    .child(message::tool_header(c, i, blocks, cx, t))
+                    .when(!is_agent, |d| d.children(message::tool_body(c, i, cx, t)))
+                    .children(answer.map(|p| message::approval_line(&blocks[p], cx, t))),
+                i,
+                cx,
+                t,
+            );
+            Some(message::mark(step, i, cx))
+        }
+        Block::Thinking { .. } => Some(message::block(blocks, i, cx, t)),
+        _ => None,
+    }
+}
+
+/// The run at `run` as one line that opens to its steps; failures and active
+/// problems stay visibly exposed even while collapsed.
 pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) -> AnyElement {
     let streaming = cx.busy && cx.last;
     let calls = calls(blocks, &run, streaming);
     let all: Vec<&ToolCall> = calls.iter().map(|(_, c)| *c).collect();
-    // Detailed, a run starts open and a click closes it. So does a run with
-    // agents at work: what each is doing shows without a click.
-    let agents_at_work = calls
-        .iter()
-        .any(|(_, c)| c.status == ToolStatus::Running && crate::state::is_agent_tool(&c.target));
-    let open = (cx.detailed || agents_at_work) != cx.open_groups.contains(&run.start);
+    // Collapsed by default unless Detailed mode is active (or toggled open).
+    let open = cx.detailed != cx.open_groups.contains(&run.start);
     let failed = all
         .iter()
         .filter(|c| c.status == ToolStatus::Failed)
@@ -222,6 +392,7 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
         .iter()
         .filter(|c| c.status == ToolStatus::Running && crate::state::is_agent_tool(&c.target))
         .count();
+    let touched = (!open && live_step.is_none()).then(|| touched_paths(&all)).flatten();
     let pictures = message::thumbs(
         run.clone()
             .filter_map(|i| match &blocks[i] {
@@ -232,79 +403,90 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
         t,
     );
 
-    // One quiet line, as Claude shows its work: "Edited 7 files, ran 2
-    // commands (1 failed) ›". While it works, the step in progress.
-    let header = div()
-        .id(SharedString::from(format!("work-{chat}-{msg}-{start}")))
-        .role(gpui::accesskit::Role::Button)
-        .aria_label(SharedString::from(format!(
-            "{words}{}{}, {}",
-            if failed > 0 {
-                format!(", {failed} failed")
-            } else {
-                String::new()
-            },
-            if stopped > 0 {
-                format!(", {stopped} stopped")
-            } else {
-                String::new()
-            },
-            if open { "hide steps" } else { "show steps" }
-        )))
+    let header_title = match live_step {
+        Some(c) if crate::state::is_agent_tool(&c.target) && agents_running > 1 => {
+            format!("{agents_running} agents working")
+        }
+        Some(c) => step_label(c),
+        None => words.clone(),
+    };
+    let header_icon: AnyElement = if let Some(c) = live_step {
+        if crate::state::is_agent_tool(&c.target) {
+            super::turning_logo_in(
+                f32::from(t.size.icon_xs),
+                format!("work-turn-{chat}-{msg}-{start}"),
+                t.extra.live,
+            )
+        } else {
+            super::tasks::status_icon(
+                ToolStatus::Running,
+                t,
+                format!("work-spin-{chat}-{msg}-{start}").into(),
+            )
+        }
+    } else if failed > 0 {
+        icon("icons/circle-x.svg", t.size.icon_xs, t.extra.danger).into_any_element()
+    } else if stopped > 0 {
+        icon("icons/triangle-alert.svg", t.size.icon_xs, t.extra.warning).into_any_element()
+    } else {
+        icon("icons/circle-check.svg", t.size.icon_xs, t.extra.success).into_any_element()
+    };
+
+    let header_inner = div()
         .flex()
         .items_center()
         .gap(t.space.xs + px(2.))
         .min_h(t.size.quiet_line)
+        .px(px(2.))
         .text_size(t.text.body_sm)
         .text_color(t.colors.text_muted)
-        .cursor_pointer()
         .hover(move |s| s.text_color(strong))
-        .children(live_step.map(|c| {
-            // Agents at work: KodAct's cube turning, as on each agent's row.
-            if crate::state::is_agent_tool(&c.target) {
-                super::turning_logo_in(
-                    f32::from(t.size.icon_sm),
-                    format!("work-turn-{chat}-{msg}-{start}"),
-                    t.extra.live,
-                )
-            } else {
-                super::tasks::status_icon(
-                    ToolStatus::Running,
-                    t,
-                    format!("work-spin-{chat}-{msg}-{start}").into(),
-                )
-            }
-        }))
+        .child(header_icon)
         .child(
             div()
                 .min_w_0()
                 .overflow_hidden()
                 .whitespace_nowrap()
                 .text_ellipsis()
-                .child(match live_step {
-                    // Several agents at once: how many, not the newest one's task.
-                    Some(c) if crate::state::is_agent_tool(&c.target) && agents_running > 1 => {
-                        format!("{agents_running} agents working")
-                    }
-                    Some(c) => step_label(c),
-                    None => words.clone(),
-                }),
+                .font_weight(if live_step.is_some() || failed > 0 {
+                    gpui::FontWeight::MEDIUM
+                } else {
+                    gpui::FontWeight::NORMAL
+                })
+                .child(header_title.clone()),
         )
+        .when_some(touched, |d, paths| {
+            d.child(
+                div()
+                    .min_w_0()
+                    .max_w(px(240.))
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
+                    .font_family(t.font_mono.clone())
+                    .text_size(t.text.caption)
+                    .text_color(t.colors.text_subtle)
+                    .child(format!("· {paths}")),
+            )
+        })
         .when(failed > 0, |d| {
             d.child(
                 div()
                     .flex_none()
+                    .text_size(t.text.caption)
+                    .font_weight(gpui::FontWeight::MEDIUM)
                     .text_color(t.extra.danger)
-                    .child(format!("({failed} failed)")),
+                    .child(format!("· {failed} failed")),
             )
         })
-        // Stopped mid-way: their outcome is unknown, so they are counted apart.
         .when(stopped > 0, |d| {
             d.child(
                 div()
                     .flex_none()
+                    .text_size(t.text.caption)
+                    .font_weight(gpui::FontWeight::MEDIUM)
                     .text_color(t.extra.warning)
-                    .child(format!("({stopped} stopped)")),
+                    .child(format!("· {stopped} stopped")),
             )
         })
         .when(adds + dels > 0 && live_step.is_none(), |d| {
@@ -319,21 +501,185 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
             t.size.icon_xs,
             t.colors.text_subtle,
         ))
-        // The pictures the run's calls returned, at the end of the line.
-        // Opened, the rows show their own.
         .when_some(pictures.filter(|_| !open), |d, th| {
             d.child(div().flex_1()).child(th)
-        })
-        .on_click(move |_, _, app| state.update(app, |s, cx| s.toggle_group(chat, msg, start, cx)));
+        });
 
-    // Opened: the steps in one framed list, a row each between hairlines;
-    // a row opens in place to its change, output or pictures. The heat rail
-    // runs down their left, a node per step (`heat_rail.rs`).
+    let header = super::button::KeyRow::new(
+        SharedString::from(format!("work-{chat}-{msg}-{start}")),
+        SharedString::from(format!(
+            "{header_title}{}{}, {}",
+            if failed > 0 {
+                format!(", {failed} failed")
+            } else {
+                String::new()
+            },
+            if stopped > 0 {
+                format!(", {stopped} stopped")
+            } else {
+                String::new()
+            },
+            if open { "expanded" } else { "collapsed" }
+        )),
+        header_inner,
+    )
+    .w_full()
+    .expanded(open)
+    .on_activate(move |_, app| {
+        state.update(app, |s, cx| s.toggle_group(chat, msg, start, cx));
+    });
+
     let shown: Vec<usize> = run
         .clone()
         .filter(|&i| part(blocks, i, streaming) == Part::Step)
         .collect();
-    let count = shown.len();
+
+    // Never hide a failure or warning behind a collapsed group.
+    let problem_rows: Vec<AnyElement> = if !open {
+        shown
+            .iter()
+            .copied()
+            .filter(|&i| {
+                matches!(
+                    &blocks[i],
+                    Block::Tool(c) if matches!(c.status, ToolStatus::Failed | ToolStatus::Interrupted)
+                )
+            })
+            .filter_map(|i| render_step_row(blocks, i, cx, t))
+            .collect()
+    } else {
+        vec![]
+    };
+    let exposed_problems = (!problem_rows.is_empty()).then(|| {
+        div()
+            .flex()
+            .flex_col()
+            .gap(t.space.xs)
+            .mt(t.space.xs)
+            .pl(t.space.sm)
+            .border_l_2()
+            .border_color(if failed > 0 {
+                t.extra.danger.opacity(0.6)
+            } else {
+                t.extra.warning.opacity(0.6)
+            })
+            .children(problem_rows)
+    });
+
+    let grouped = group_steps(blocks, &shown);
+    let mut step_rows: Vec<(super::heat_rail::Node, usize, AnyElement)> = Vec::new();
+    for entry in grouped {
+        match entry {
+            GroupedStep::Single(i) => {
+                if let Some(el) = render_step_row(blocks, i, cx, t) {
+                    let node = match &blocks[i] {
+                        Block::Tool(c) => super::heat_rail::Node::of(c.status),
+                        _ => super::heat_rail::Node::Done,
+                    };
+                    step_rows.push((node, i, el));
+                }
+            }
+            GroupedStep::Group { kind, indices } => {
+                let first_i = indices[0];
+                let count = indices.len();
+                let sub_key = format!("subgrp-{chat}-{msg}-{start}-{first_i}");
+                let sub_open = cx.ui_toggles.contains(&sub_key);
+                let label = kind.label(count);
+                let total_lines: usize = indices
+                    .iter()
+                    .filter_map(|&i| match &blocks[i] {
+                        Block::Tool(c) if !c.output.trim().is_empty() => {
+                            Some(c.output.trim_end().lines().count())
+                        }
+                        _ => None,
+                    })
+                    .sum();
+                let (adds, dels) = indices
+                    .iter()
+                    .filter_map(|&i| match &blocks[i] {
+                        Block::Tool(c) => Some(c.diff.iter()),
+                        _ => None,
+                    })
+                    .flatten()
+                    .fold((0, 0), |(a, d), l| match l.kind {
+                        DiffKind::Add => (a + 1, d),
+                        DiffKind::Del => (a, d + 1),
+                        DiffKind::Same => (a, d),
+                    });
+
+                let st_sub = cx.state.clone();
+                let sub_toggle = sub_key.clone();
+                let sub_hover = t.colors.text;
+                let group_header = super::button::KeyRow::new(
+                    SharedString::from(format!("subgrp-btn-{chat}-{msg}-{start}-{first_i}")),
+                    SharedString::from(format!(
+                        "{label}, {}",
+                        if sub_open { "expanded" } else { "collapsed" }
+                    )),
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(t.space.xs + px(2.))
+                        .min_h(t.size.quiet_line)
+                        .px(px(2.))
+                        .text_size(t.text.body_sm)
+                        .text_color(t.colors.text_muted)
+                        .hover(move |s| s.text_color(sub_hover))
+                        .child(icon(kind.icon(), t.size.icon_xs, t.colors.text_muted))
+                        .child(
+                            div()
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .text_color(t.colors.text)
+                                .child(label),
+                        )
+                        .when(total_lines > 0 && adds + dels == 0, |d| {
+                            d.child(
+                                div()
+                                    .flex_none()
+                                    .text_size(t.text.caption)
+                                    .text_color(t.colors.text_subtle)
+                                    .child(format!("· {total_lines} lines")),
+                            )
+                        })
+                        .when(adds + dels > 0, |d| d.child(message::diff_counts(adds, dels, t)))
+                        .child(icon(
+                            if sub_open {
+                                "icons/chevron-down.svg"
+                            } else {
+                                "icons/chevron-right.svg"
+                            },
+                            t.size.icon_xs,
+                            t.colors.text_subtle,
+                        )),
+                )
+                .w_full()
+                .expanded(sub_open)
+                .on_activate(move |_, app| {
+                    st_sub.update(app, |s, cx| s.toggle_ui(sub_toggle.clone(), Some(chat), cx));
+                });
+
+                let el = div()
+                    .flex()
+                    .flex_col()
+                    .child(group_header)
+                    .when(sub_open, |d| {
+                        d.child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .pl(t.space.md)
+                                .mt(px(2.))
+                                .border_l_1()
+                                .border_color(t.colors.border)
+                                .children(indices.iter().filter_map(|&i| render_step_row(blocks, i, cx, t))),
+                        )
+                    })
+                    .into_any_element();
+                step_rows.push((super::heat_rail::Node::Done, first_i, el));
+            }
+        }
+    }
+    let count = step_rows.len();
     let steps = open.then(|| {
         div()
             .flex()
@@ -343,55 +689,28 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
             .border_1()
             .border_color(t.colors.border)
             .overflow_hidden()
-            .children(shown.iter().copied().enumerate().filter_map(|(n, i)| {
-                let row = match &blocks[i] {
-                    Block::Tool(c) => {
-                        let answer = message::answer_for(blocks, i);
-                        let step = message::flash(
-                            div()
-                                .flex()
-                                .flex_col()
-                                .child(message::tool_header(c, i, blocks, cx, t))
-                                .children(message::tool_body(c, i, cx, t))
-                                .children(
-                                    answer.map(|p| message::approval_line(&blocks[p], cx, t)),
-                                ),
-                            i,
-                            cx,
-                            t,
-                        );
-                        message::mark(step, i, cx)
-                    }
-                    Block::Thinking { .. } => message::block(blocks, i, cx, t),
-                    _ => return None,
-                };
-                let node = match &blocks[i] {
-                    Block::Tool(c) => super::heat_rail::Node::of(c.status),
-                    _ => super::heat_rail::Node::Done,
-                };
-                Some(
-                    div()
-                        .flex()
-                        .pl(t.space.sm)
-                        .child(super::heat_rail::gutter(
-                            node,
-                            n == 0,
-                            n + 1 == count,
-                            live,
-                            SharedString::from(format!("rail-{chat}-{msg}-{i}")),
-                            t,
-                        ))
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .pl(t.space.sm)
-                                .pr(t.space.md)
-                                .py(px(3.))
-                                .when(n > 0, |d| d.border_t_1().border_color(t.colors.border))
-                                .child(row),
-                        ),
-                )
+            .children(step_rows.into_iter().enumerate().map(|(n, (node, i, row))| {
+                div()
+                    .flex()
+                    .pl(t.space.sm)
+                    .child(super::heat_rail::gutter(
+                        node,
+                        n == 0,
+                        n + 1 == count,
+                        live,
+                        SharedString::from(format!("rail-{chat}-{msg}-{i}")),
+                        t,
+                    ))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .pl(t.space.sm)
+                            .pr(t.space.md)
+                            .py(px(3.))
+                            .when(n > 0, |d| d.border_t_1().border_color(t.colors.border))
+                            .child(row),
+                    )
             }))
     });
 
@@ -399,6 +718,7 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
         .flex()
         .flex_col()
         .child(header)
+        .children(exposed_problems)
         .children(steps)
         .into_any_element()
 }
@@ -513,5 +833,55 @@ mod tests {
         ];
         let refs: Vec<&ToolCall> = failed.iter().collect();
         assert_eq!(summary(&refs), "Tried 2 steps");
+    }
+
+    #[test]
+    fn groups_consecutive_done_steps_and_keeps_failures_or_agents_distinct() {
+        let mut agent1 = call(ToolKind::Other, "Task", ToolStatus::Done);
+        agent1.note = Some("Explore repo".into());
+        let mut agent2 = call(ToolKind::Other, "Agent", ToolStatus::Done);
+        agent2.note = Some("Audit CSS".into());
+        let blocks = vec![
+            tool(ToolKind::Read, "src/a.rs"),
+            tool(ToolKind::Read, "src/b.rs"),
+            tool(ToolKind::Read, "src/c.rs"),
+            Block::Tool(call(ToolKind::Bash, "cargo test", ToolStatus::Failed)),
+            Block::Tool(agent1),
+            Block::Tool(agent2),
+            tool(ToolKind::Other, "lint"),
+        ];
+        // Sub-agents fold into the run alongside reads and failing commands.
+        assert_eq!(runs(&blocks, false), vec![0..7]);
+        let shown: Vec<usize> = (0..blocks.len()).collect();
+        assert_eq!(
+            group_steps(&blocks, &shown),
+            vec![
+                GroupedStep::Group {
+                    kind: SubKind::Read,
+                    indices: vec![0, 1, 2],
+                },
+                GroupedStep::Single(3),
+                GroupedStep::Group {
+                    kind: SubKind::Agent,
+                    indices: vec![4, 5],
+                },
+                GroupedStep::Single(6),
+            ]
+        );
+    }
+
+    #[test]
+    fn touched_paths_prefers_edits_then_reads_with_overflow_count() {
+        let calls = [
+            call(ToolKind::Read, "/repo/src/one.rs", ToolStatus::Done),
+            call(ToolKind::Edit, "/repo/src/two.rs", ToolStatus::Done),
+            call(ToolKind::Write, "/repo/src/three.rs", ToolStatus::Done),
+            call(ToolKind::Read, "/repo/src/four.rs", ToolStatus::Done),
+        ];
+        let refs: Vec<&ToolCall> = calls.iter().collect();
+        assert_eq!(
+            touched_paths(&refs).as_deref(),
+            Some("src/two.rs, src/three.rs +2")
+        );
     }
 }

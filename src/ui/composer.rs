@@ -70,7 +70,7 @@ pub struct Composer {
     ac_presence: super::motion::Presence<AcShown>,
     /// Where the press that just closed a menu happened: the click it ends
     /// in, on that menu's own button, must not open it again.
-    dismissed_at: Option<gpui::Point<gpui::Pixels>>,
+    dismissed_at: Option<(Menu, gpui::Point<gpui::Pixels>)>,
     /// The "+" menu is open.
     add_open: bool,
     /// Holds the keyboard while the model window is open (no search box),
@@ -286,7 +286,7 @@ impl Composer {
             }),
             on_out: std::rc::Rc::new(move |pos, cx| {
                 let _ = out.update(cx, |c, cx| {
-                    c.dismissed_at = Some(pos);
+                    c.dismissed_at = Some((Menu::Add, pos));
                     c.add_open = false;
                     cx.notify();
                 });
@@ -456,17 +456,22 @@ impl Composer {
         taken
     }
 
-    /// Whether this click ends the press that just closed a menu (and so
+    /// Whether this click ends the press that just closed `menu` (and so
     /// should do nothing). Clears the record either way.
-    fn just_dismissed(&mut self, ev: &gpui::ClickEvent) -> bool {
+    fn just_dismissed(&mut self, menu: Menu, ev: &gpui::ClickEvent) -> bool {
         let at = self.dismissed_at.take();
-        matches!(ev, gpui::ClickEvent::Mouse(m) if Some(m.down.position) == at)
+        matches!((at, ev), (Some((m, pos)), gpui::ClickEvent::Mouse(ev)) if m == menu && ev.down.position == pos)
     }
 
     /// Esc in the box: close whichever menu floats over it. True when one was open.
     fn close_menus(&mut self, cx: &mut Context<Self>) -> bool {
         let s = self.state.read(cx);
-        let open = self.add_open || s.modes_open || s.design_menu.is_some() || s.project_menu;
+        let open = self.add_open
+            || s.modes_open
+            || s.design_menu.is_some()
+            || s.project_menu
+            || s.context_open
+            || s.picker_open;
         if open {
             self.add_open = false;
             self.state.update(cx, |s, cx| {
@@ -474,6 +479,8 @@ impl Composer {
                 s.bypass_warning = false;
                 s.design_menu = None;
                 s.project_menu = false;
+                s.context_open = false;
+                s.picker_open = false;
                 cx.notify();
             });
             cx.notify();
@@ -589,7 +596,24 @@ impl Render for Composer {
         let me = cx.entity().downgrade();
         let dismiss = move |pos: gpui::Point<gpui::Pixels>, menu: Menu, cx: &mut gpui::App| {
             let _ = me.update(cx, |c, cx| {
-                c.dismissed_at = Some(pos);
+                let is_open = {
+                    let s = c.state.read(cx);
+                    match menu {
+                        Menu::Models => s.picker_open,
+                        Menu::Modes => s.modes_open,
+                        Menu::Design => s.design_menu.is_some(),
+                        Menu::Project => s.project_menu,
+                        Menu::Context => s.context_open,
+                        Menu::Add => c.add_open,
+                    }
+                };
+                if !is_open {
+                    return;
+                }
+                c.dismissed_at = Some((menu, pos));
+                if menu == Menu::Add {
+                    c.add_open = false;
+                }
                 c.state.update(cx, |s, cx| {
                     match menu {
                         Menu::Models => s.picker_open = false,
@@ -599,23 +623,39 @@ impl Render for Composer {
                         }
                         Menu::Design => s.design_menu = None,
                         Menu::Project => s.project_menu = false,
+                        Menu::Context => s.context_open = false,
+                        Menu::Add => {}
                     }
                     cx.notify();
                 });
             });
         };
-        let (dismiss_models, dismiss_modes, dismiss_design, dismiss_project) =
-            (dismiss.clone(), dismiss.clone(), dismiss.clone(), dismiss);
-        let me = cx.entity().downgrade();
-        let skip = move |ev: &gpui::ClickEvent, cx: &mut gpui::App| -> bool {
-            me.update(cx, |c, _| c.just_dismissed(ev)).unwrap_or(false)
+        let (dismiss_models, dismiss_modes, dismiss_design, dismiss_project, dismiss_context) = (
+            dismiss.clone(),
+            dismiss.clone(),
+            dismiss.clone(),
+            dismiss.clone(),
+            dismiss,
+        );
+        let skip_for = |menu: Menu| {
+            let me = cx.entity().downgrade();
+            move |ev: &gpui::ClickEvent, cx: &mut gpui::App| -> bool {
+                me.update(cx, |c, _| {
+                    let skipped = c.just_dismissed(menu, ev);
+                    if !skipped {
+                        c.add_open = false;
+                    }
+                    skipped
+                })
+                .unwrap_or(false)
+            }
         };
+        let skip_modes = skip_for(Menu::Modes);
+        let skip_design = skip_for(Menu::Design);
+        let skip_project = skip_for(Menu::Project);
+        let skip_context = skip_for(Menu::Context);
 
         // The pieces that read the state are built first.
-        let me = cx.entity().downgrade();
-        let skip_design = move |ev: &gpui::ClickEvent, cx: &mut gpui::App| -> bool {
-            me.update(cx, |c, _| c.just_dismissed(ev)).unwrap_or(false)
-        };
         let design_trigger = super::design_chips::trigger(&t, &state, cx, skip_design);
         let design_now = self.state.read(cx).design_menu;
         let design_out = t.size.menu_out_ms;
@@ -640,7 +680,7 @@ impl Render for Composer {
                     leaving,
                 )
             });
-        let mode_trigger = super::mode_menu::trigger(&t, &state, cx, skip);
+        let mode_trigger = super::mode_menu::trigger(&t, &state, cx, skip_modes);
         let out = t.size.menu_out_ms;
         let modes_now = self.state.read(cx).modes_open.then_some(());
         let modes_menu = self
@@ -848,7 +888,8 @@ impl Render for Composer {
             }))
             .child(super::button::chevron(&t, picker_open))
             .on_click(cx.listener(|this, ev: &gpui::ClickEvent, window, cx| {
-                if !this.just_dismissed(ev) {
+                if !this.just_dismissed(Menu::Models, ev) {
+                    this.add_open = false;
                     window.dispatch_action(Box::new(ToggleModelPicker), cx);
                 }
             }));
@@ -861,8 +902,10 @@ impl Render for Composer {
             .frame(project_now, t.size.menu_out_ms, window)
             .map(|(_, leaving)| {
                 let body = super::workspace::switcher_menu(&state, window, cx, px(140.))
-                    .on_mouse_down_out(move |ev, _, cx| {
-                        dismiss_project(ev.position, Menu::Project, cx)
+                    .when(!leaving, |d| {
+                        d.on_mouse_down_out(move |ev, _, cx| {
+                            dismiss_project(ev.position, Menu::Project, cx)
+                        })
                     });
                 div().absolute().top_0().left_0().child(
                     gpui::deferred(
@@ -876,10 +919,6 @@ impl Render for Composer {
                     .with_priority(2),
                 )
             });
-        let me = cx.entity().downgrade();
-        let skip_project = move |ev: &gpui::ClickEvent, cx: &mut gpui::App| -> bool {
-            me.update(cx, |c, _| c.just_dismissed(ev)).unwrap_or(false)
-        };
         let project_open = project_now.is_some();
         let project_name: SharedString = self
             .state
@@ -893,7 +932,7 @@ impl Render for Composer {
             .read(cx)
             .current_remote()
             .map(|r| r.target.label());
-        let project_button = quiet("project", false)
+        let project_button = quiet("project", project_open)
             .min_w_0()
             .flex_shrink(1.)
             .aria_label("Project")
@@ -929,6 +968,15 @@ impl Render for Composer {
                     if !skip_project(ev, cx) {
                         state.update(cx, |s, cx| {
                             s.project_menu = !s.project_menu;
+                            if s.project_menu {
+                                s.picker_open = false;
+                                s.modes_open = false;
+                                s.bypass_warning = false;
+                                s.design_menu = None;
+                                s.context_open = false;
+                                s.title_menu = None;
+                                s.title_menu_dismissed = None;
+                            }
                             cx.notify();
                         })
                     }
@@ -982,13 +1030,24 @@ impl Render for Composer {
                     ))
                     .build(window, cx)
                 })
-                .on_click(|_, window, cx| window.dispatch_action(Box::new(super::ShowContext), cx))
+                .on_click(move |ev, window, cx| {
+                    if !skip_context(ev, cx) {
+                        window.dispatch_action(Box::new(super::ShowContext), cx);
+                    }
+                })
         });
         let context_shown = self
             .context_presence
             .frame(self.state.read(cx).context_open.then_some(()), out, window)
             .map(|f| f.1);
-        let context_popover = super::context_menu::render(&t, &state, window, context_shown, cx);
+        let context_popover = super::context_menu::render(
+            &t,
+            &state,
+            window,
+            context_shown,
+            cx,
+            move |pos, cx| dismiss_context(pos, Menu::Context, cx),
+        );
 
         // In a chat the box is as wide as the text above it, on the same
         // edges; on the new-chat screen it keeps its own width.
@@ -1167,10 +1226,23 @@ impl Render for Composer {
                                                 // Its name, not over its own open menu.
                                                 .tooltip(!self.add_open)
                                                 .on_click(cx.listener(|this, ev, _, cx| {
-                                                    if this.just_dismissed(ev) {
+                                                    if this.just_dismissed(Menu::Add, ev) {
                                                         return;
                                                     }
                                                     this.add_open = !this.add_open;
+                                                    if this.add_open {
+                                                        this.state.update(cx, |s, cx| {
+                                                            s.picker_open = false;
+                                                            s.modes_open = false;
+                                                            s.bypass_warning = false;
+                                                            s.design_menu = None;
+                                                            s.project_menu = false;
+                                                            s.context_open = false;
+                                                            s.title_menu = None;
+                                                            s.title_menu_dismissed = None;
+                                                            cx.notify();
+                                                        });
+                                                    }
                                                     cx.notify();
                                                 })),
                                             )
@@ -1246,10 +1318,12 @@ impl Render for Composer {
 }
 
 /// The composer's menus, for closing the one a press fell outside of.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum Menu {
     Models,
     Modes,
     Design,
     Project,
+    Add,
+    Context,
 }

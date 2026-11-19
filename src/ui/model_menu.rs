@@ -570,7 +570,9 @@ pub fn render(
 
     let menu = div()
         .id("models-menu")
-        .on_mouse_down_out(move |ev, _, cx| on_out(ev.position, cx))
+        .when(!leaving, |d| {
+            d.on_mouse_down_out(move |ev, _, cx| on_out(ev.position, cx))
+        })
         .absolute()
         .bottom_full()
         .left_0()

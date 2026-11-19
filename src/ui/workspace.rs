@@ -493,14 +493,16 @@ impl Workspace {
                     d.child(
                         div()
                             .relative()
-                            .on_mouse_down_out(cx.listener(|this, _, _, cx| {
-                                if this.state.read(cx).switcher_open {
-                                    this.state.update(cx, |s, cx| {
-                                        s.switcher_open = false;
-                                        cx.notify();
-                                    });
-                                }
-                            }))
+                            .when(s.switcher_open, |d| {
+                                d.on_mouse_down_out(cx.listener(|this, _, _, cx| {
+                                    if this.state.read(cx).switcher_open {
+                                        this.state.update(cx, |s, cx| {
+                                            s.switcher_open = false;
+                                            cx.notify();
+                                        });
+                                    }
+                                }))
+                            })
                             .child(
                                 div()
                                     .id("project")
@@ -610,7 +612,7 @@ impl Workspace {
                     d.child(
                         toggle("share-chat", "icons/share.svg", "Share", share_on).on_click(
                             cx.listener(|this, ev: &gpui::ClickEvent, _, cx| {
-                                let at = gpui::point(ev.position().x, ev.position().y);
+                                let at = super::click_down(ev);
                                 this.state.update(cx, |s, cx| {
                                     s.toggle_title_menu(TitleMenu::Share, at, cx)
                                 })
@@ -633,7 +635,7 @@ impl Workspace {
                             )
                         })
                         .on_click(cx.listener(|this, ev: &gpui::ClickEvent, _, cx| {
-                            let at = gpui::point(ev.position().x, ev.position().y);
+                            let at = super::click_down(ev);
                             this.state
                                 .update(cx, |s, cx| s.toggle_title_menu(TitleMenu::More, at, cx))
                         })),
@@ -819,8 +821,15 @@ impl Render for Workspace {
         let side_open = side_f.is_some();
         let (side_doc, side_panel, files_open) =
             side_f.map(|(k, _)| k).unwrap_or((None, None, false));
+        let panel_full = !loading
+            && !empty
+            && screen == Screen::Chat
+            && side_doc.is_none()
+            && side_panel == Some(crate::state::PanelTab::Agents)
+            && s.panel_full
+            && !files_open;
         // With Files open the side column stands beside the chat.
-        let below = s.doc_below && !files_open;
+        let below = s.doc_below && !files_open && !panel_full;
         // The terminal dock, kept while it slides back out.
         let dock_f =
             self.presence
@@ -842,7 +851,7 @@ impl Render for Workspace {
             .is_some_and(|f| f.is_diagram() || f.office() == Some(crate::office::Kind::Xlsx));
         let (panel_w, dock_w) = share_out(
             beside,
-            (side_open && !below).then(|| {
+            (side_open && !below && !panel_full).then(|| {
                 let after_dock = beside - if terminal_open { dock_want } else { 0. };
                 (
                     super::doc_pane::width(after_dock, wide, &t),
@@ -850,7 +859,11 @@ impl Render for Workspace {
                 )
             }),
             terminal_open.then(|| (dock_want, f32::from(t.size.terminal_min))),
-            f32::from(t.size.chat_min),
+            if panel_full {
+                0.
+            } else {
+                f32::from(t.size.chat_min)
+            },
         );
         let dock = self.dock(dock_w, dock_leaving, cx);
 
@@ -928,17 +941,9 @@ impl Render for Workspace {
                             .and_then(|c| s.agents.get(&c))
                             .map_or(&[][..], |r| r.as_slice()),
                         agents_open: &s.agents_open,
-                        // The logo turns while an agent runs or the reply is still going.
-                        logo: if s.busy()
-                            || s.current
-                                .and_then(|c| s.agents.get(&c))
-                                .is_some_and(|r| r.iter().any(|run| run.ended.is_none()))
-                        {
-                            super::turning_logo(32., "agents-logo")
-                        } else {
-                            super::logo(32.).into_any_element()
-                        },
-                        working: s.busy(),
+                        ui_toggles: &s.ui_toggles,
+                        selected_agent: s.selected_agent_id().map(str::to_string),
+                        full: panel_full,
                         copied: s.copied.clone(),
                         width: fit.width,
                         below,
@@ -998,10 +1003,19 @@ impl Render for Workspace {
             };
             column.and_then(|p| match side_leaving {
                 // Leaving: back out to the edge (below the chat, gone at once).
-                true => {
-                    (!pane_below).then(|| super::motion::slide_out(p, pane_width, "side-panel", &t))
-                }
-                false => Some(super::motion::slide_in(p, pane_width, pane_below, &t)),
+                true => (!pane_below && !panel_full)
+                    .then(|| super::motion::slide_out(p, pane_width, "side-panel", &t)),
+                false => Some(if panel_full {
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .h_full()
+                        .flex()
+                        .child(p)
+                        .into_any_element()
+                } else {
+                    super::motion::slide_in(p, pane_width, pane_below, &t)
+                }),
             })
         };
         let main = if screen == Screen::Rules {
@@ -1165,8 +1179,7 @@ impl Render for Workspace {
                     .min_h_0()
                     .flex()
                     .when(below, |d| d.flex_col())
-                    .child(conversation)
-                    .children(session)
+                    .when(!panel_full, |d| d.child(conversation).children(session))
                     .children(pane),
             )
         };
@@ -1427,7 +1440,12 @@ impl Render for Workspace {
                 this.state.update(cx, |s, cx| {
                     s.picker_open = !s.picker_open;
                     s.modes_open = false;
+                    s.bypass_warning = false;
                     s.design_menu = None;
+                    s.project_menu = false;
+                    s.context_open = false;
+                    s.title_menu = None;
+                    s.title_menu_dismissed = None;
                     cx.notify();
                 })
             }))
@@ -1490,6 +1508,9 @@ impl Render for Workspace {
                     } else if s.doc_finding {
                         // The find bar first, then the file.
                         s.toggle_doc_find(cx);
+                    } else if s.panel_full && s.panel == Some(crate::state::PanelTab::Agents) {
+                        s.panel_full = false;
+                        cx.notify();
                     } else if s.doc.is_some() && !s.busy() {
                         s.close_doc(cx);
                     } else if s.answer_waiting(crate::state::Verdict::Denied, cx) {
@@ -1964,10 +1985,11 @@ impl Workspace {
                     .snap_to_window_with_margin(t.space.sm)
                     .child(
                         div()
-                            .on_mouse_down_out(move |_, _, cx| {
-                                close.update(cx, |s, cx| {
-                                    s.title_menu = None;
-                                    cx.notify();
+                            .when(!leaving, |d| {
+                                d.on_mouse_down_out(move |ev, _, cx| {
+                                    close.update(cx, |s, cx| {
+                                        s.dismiss_title_menu(which, ev.position, cx)
+                                    })
                                 })
                             })
                             .child(super::motion::unfold(
@@ -2022,8 +2044,10 @@ impl Workspace {
                     .snap_to_window_with_margin(t.space.sm)
                     .child(
                         div()
-                            .on_mouse_down_out(move |_, _, cx| {
-                                close.update(cx, |s, cx| s.open_chat_menu(None, cx))
+                            .when(!leaving, |d| {
+                                d.on_mouse_down_out(move |_, _, cx| {
+                                    close.update(cx, |s, cx| s.open_chat_menu(None, cx))
+                                })
                             })
                             .child(super::motion::unfold(
                                 div().child(super::chat_menu::render(
@@ -2116,11 +2140,10 @@ pub fn project_switcher(
     top: Pixels,
 ) -> impl IntoElement + use<> {
     let t = cx.theme().clone();
-    let menu = switcher_menu(state, window, cx, t.size.titlebar)
+    switcher_menu(state, window, cx, t.size.titlebar)
         .absolute()
         .top(top)
-        .left_0();
-    super::motion::edge_draw(menu, "switcher-in", t.colors.primary, 0., &t)
+        .left_0()
 }
 
 /// The switcher's list, unplaced: the title bar drops it below its opener,

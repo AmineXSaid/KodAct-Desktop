@@ -103,10 +103,17 @@ fn grounds(t: &Theme) -> Vec<(String, Hsla)> {
 #[test]
 fn surfaces_stack_like_paper_on_paper() {
     for (mode, t) in both() {
-        // The title bar and the sidebar share the canvas; the session is
-        // a sheet a step up from it, and cards a step up again.
+        // The title bar and sidebars share `pane`. In light mode, paper stacks
+        // brightest-above (`pane < stage < surface`); in dark mode, the main
+        // workspace stage is deepest obsidian (`stage < pane < surface`) while
+        // sidebars, Settings and cards lift off it softly.
         assert_eq!(rgba(t.extra.chrome), rgba(t.extra.pane), "{mode}");
-        let ladder = [t.extra.pane, t.extra.stage, t.colors.surface].map(|c| oklab(rgba(c)));
+        let ladder = if t.is_dark {
+            [t.extra.stage, t.extra.pane, t.colors.surface]
+        } else {
+            [t.extra.pane, t.extra.stage, t.colors.surface]
+        }
+        .map(|c| oklab(rgba(c)));
         for (i, w) in ladder.windows(2).enumerate() {
             let s = w[1].0 - w[0].0;
             assert!(
@@ -121,14 +128,15 @@ fn surfaces_stack_like_paper_on_paper() {
                 "{mode}: surface {i} has chroma {chroma:.4}; paper, not colour"
             );
         }
-        // The selected row lifts off the sidebar as the session does.
+        // The selected row lifts off the sidebar in both modes.
         let (pane, sel, stage) = (
             oklab(rgba(t.extra.pane)).0,
             oklab(rgba(t.extra.selected)).0,
             oklab(rgba(t.extra.stage)).0,
         );
+        let floor = if t.is_dark { 0.02 } else { (stage - pane) * 0.9 };
         assert!(
-            sel - pane >= (stage - pane) * 0.9,
+            sel - pane >= floor,
             "{mode}: the selected row sits {:.4} above the sidebar",
             sel - pane
         );

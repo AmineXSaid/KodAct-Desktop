@@ -219,13 +219,15 @@ impl Sidebar {
         let (toggle, close) = (self.state.clone(), self.state.clone());
         div()
             .relative()
-            .on_mouse_down_out(move |_, _, cx| {
-                if close.read(cx).filter_open {
-                    close.update(cx, |s, cx| {
-                        s.filter_open = false;
-                        cx.notify();
-                    });
-                }
+            .when(open, |d| {
+                d.on_mouse_down_out(move |_, _, cx| {
+                    if close.read(cx).filter_open {
+                        close.update(cx, |s, cx| {
+                            s.filter_open = false;
+                            cx.notify();
+                        });
+                    }
+                })
             })
             .child(
                 div()
@@ -830,6 +832,7 @@ impl Render for Sidebar {
         };
         let documents_open = s.screen == Screen::Documents;
         let help_open = s.title_menu.is_some_and(|(m, _)| m == TitleMenu::Help);
+        let account_open = s.title_menu.is_some_and(|(m, _)| m == TitleMenu::Account);
         let (help, account) = (self.state.clone(), self.state.clone());
 
         let sheet = div()
@@ -985,7 +988,7 @@ impl Render for Sidebar {
                     .child(
                         nav("more", "icons/ellipsis.svg", "More", help_open, None).on_click(
                             move |ev, _, cx| {
-                                let at = ev.position();
+                                let at = super::click_down(ev);
                                 help.update(cx, |s, cx| {
                                     s.toggle_title_menu(TitleMenu::Help, at, cx)
                                 })
@@ -1042,6 +1045,7 @@ impl Render for Sidebar {
                             .rounded(t.radius.button)
                             .cursor_pointer()
                             .hover(move |st| st.bg(hover))
+                            .when(account_open, |d| d.bg(hover))
                             .child(super::avatar_image(&avatar, 24., window))
                             .child(
                                 div()
@@ -1060,14 +1064,10 @@ impl Render for Sidebar {
                                         ),
                                     ),
                             )
-                            .child(icon(
-                                "icons/chevron-down.svg",
-                                t.size.icon_sm,
-                                t.colors.text_subtle,
-                            ))
+                            .child(super::button::chevron(&t, account_open))
                             .child(div().flex_1())
                             .on_click(move |ev, _, cx| {
-                                let at = ev.position();
+                                let at = super::click_down(ev);
                                 account.update(cx, |s, cx| {
                                     s.toggle_title_menu(TitleMenu::Account, at, cx)
                                 })

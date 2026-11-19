@@ -289,15 +289,11 @@ impl ProjectKnowledge {
                                 t.colors.text_subtle
                             },
                         ))
-                        .child(icon(
-                            if dir {
-                                "icons/folder.svg"
-                            } else {
-                                "icons/file-text.svg"
-                            },
-                            t.size.icon_xs,
-                            t.colors.text_muted,
-                        ))
+                        .child(
+                            gpui::img(super::file_icon::asset(&name, dir, &n.path))
+                                .flex_none()
+                                .size(t.size.icon),
+                        )
                         .child(
                             div()
                                 .flex_1()
@@ -580,7 +576,9 @@ impl Render for ProjectKnowledge {
                     .unwrap_or_default();
                 let mark: AnyElement = match crate::office::Kind::of(&name) {
                     Some(kind) => super::file_mark::render(kind, 20., scale),
-                    None => icon("icons/file-text.svg", t.size.icon_sm, t.colors.text_muted)
+                    None => gpui::img(super::file_icon::asset(&name, false, &item.rel))
+                        .flex_none()
+                        .size(t.size.icon)
                         .into_any_element(),
                 };
                 let detail = if item.missing {

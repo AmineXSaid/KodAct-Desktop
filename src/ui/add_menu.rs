@@ -127,7 +127,9 @@ pub fn menu(
     let card = list(t, state, browser, &hooks);
     let out = hooks.on_out.clone();
     let card = card
-        .on_mouse_down_out(move |ev, _, cx| out(ev.position, cx))
+        .when(!leaving, |d| {
+            d.on_mouse_down_out(move |ev, _, cx| out(ev.position, cx))
+        })
         .bg(t.colors.surface)
         .border_1()
         .border_color(t.colors.border)
