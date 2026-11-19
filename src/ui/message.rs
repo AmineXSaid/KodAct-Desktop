@@ -1054,10 +1054,8 @@ fn thinking(
         .text_color(t.colors.text_muted)
         .hover(move |s| s.text_color(strong))
         .when(streaming, |d| {
-            d.child(super::activity::strike(
-                t.extra.accent,
-                t.extra.mark_heat_white,
-                f32::from(t.size.icon_xs),
+            d.child(super::turning_logo(
+                f32::from(t.size.icon_sm) * 1.15,
                 SharedString::from(format!("think-strike-{key}")),
             ))
         })

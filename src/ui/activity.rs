@@ -35,6 +35,7 @@ pub enum Activity {
 }
 
 /// Two beats: a blow from above, then one from the side.
+#[allow(dead_code)]
 const LAP: Duration = Duration::from_millis(1800);
 /// Within a beat (0..1): at rest, the hammer falling, held on the anvil,
 /// springing back.
@@ -42,7 +43,9 @@ const BLOW: (f32, f32, f32, f32) = (0.40, 0.52, 0.60, 0.86);
 /// The diamond's points, (x, y) in 0..1 of the box: top, right, bottom, left.
 const DIAMOND: [(f32, f32); 4] = [(0.5, 0.13), (0.87, 0.5), (0.5, 0.87), (0.13, 0.5)];
 /// Struck flat: how much the struck axis gives, and the other spreads.
+#[allow(dead_code)]
 const SQUASH: f32 = 0.55;
+#[allow(dead_code)]
 const SPREAD: f32 = 0.18;
 
 /// A quick fall: slow at the top, fast at the anvil.
@@ -74,6 +77,7 @@ fn struck(h: f32) -> f32 {
 }
 
 /// `a` moved `k` (0..1) of the way to `b`.
+#[allow(dead_code)]
 fn mix(a: Hsla, b: Hsla, k: f32) -> Hsla {
     let (a, b) = (a.to_rgb(), b.to_rgb());
     let l = |x: f32, y: f32| x + (y - x) * k;
@@ -87,6 +91,7 @@ fn mix(a: Hsla, b: Hsla, k: f32) -> Hsla {
 }
 
 /// The four dots at `k` (0..1) of a lap, in a box `size` px square.
+#[allow(dead_code)]
 fn dots(ember: Hsla, heat: Hsla, size: f32, k: f32) -> Div {
     let mut d = div().relative().size(px(size)).flex_none();
     let dot = size * 0.22;
@@ -118,6 +123,7 @@ fn dots(ember: Hsla, heat: Hsla, size: f32, k: f32) -> Div {
 
 /// The strike mark, `size` px square: dots in `ember` that flash toward
 /// `heat` when struck; `id` names its animation.
+#[allow(dead_code)]
 pub fn strike(ember: Hsla, heat: Hsla, size: f32, id: impl Into<ElementId>) -> AnyElement {
     if super::motion::reduced_motion() {
         return dots(ember, heat, size, 0.).into_any_element();

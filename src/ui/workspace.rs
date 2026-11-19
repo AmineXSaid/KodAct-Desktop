@@ -657,13 +657,11 @@ impl Workspace {
             .map(|p| p.name.to_string())
             .unwrap_or_default();
         let sub = if !s.in_folder() {
-            "Ask anything, or pick a folder below to work on code. KodAct asks before it changes anything."
-                .to_string()
+            "Pick a folder below to code, or ask anything right away.".to_string()
         } else if project.is_empty() {
-            "Ask, plan or build. KodAct works in your project and asks before it changes anything."
-                .to_string()
+            "Ask, plan or build. Changes always wait for your review.".to_string()
         } else {
-            format!("Working in {project}. KodAct asks before it changes anything.")
+            format!("Working in {project}. Changes always wait for your review.")
         };
         div().flex_1().min_h_0().relative().flex().flex_col().child(
             // A short window scrolls it rather than cutting off the starters.
@@ -680,28 +678,29 @@ impl Workspace {
                         .items_center()
                         .justify_center()
                         .px(t.space.xl)
-                        .py(t.space.xxxl)
-                        // A little above the middle, where the eye lands.
-                        .pb(t.space.xxl * 2.)
+                        .py(t.space.xxl)
                         .child(
                             div()
                                 .w_full()
-                                .max_w(t.size.composer_width + t.space.xxl)
+                                .max_w(t.size.composer_width + t.space.lg)
                                 .relative()
                                 .flex()
                                 .flex_col()
                                 .items_center()
-                                .gap(t.space.xl)
+                                .gap(t.space.lg + px(4.))
                                 // The page rises in piece by piece as it opens.
                                 .child(super::motion::row_in_full(
                                     div()
+                                        .w_full()
+                                        .max_w(t.size.composer_width)
                                         .flex()
                                         .flex_col()
                                         .items_center()
-                                        .gap(t.space.snug)
+                                        .gap(t.space.xs + px(2.))
                                         .child(greeting_line(&line, &t))
                                         .child(
                                             div()
+                                                .max_w(t.size.composer_width)
                                                 .text_size(t.text.body_sm)
                                                 .text_color(t.colors.text_muted)
                                                 .text_center()

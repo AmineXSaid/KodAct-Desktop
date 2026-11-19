@@ -237,22 +237,22 @@ pub fn logo(size: f32) -> kodact_mark::Mark {
     kodact_mark::mark(size)
 }
 
-/// The mark while KodAct works: the step lights, then the chevron.
-/// Reduced motion: the mark at rest.
+/// The mark while KodAct works: its three strokes (`.` `/` `<`) sweep
+/// through a 3D perspective wave. Reduced motion: the mark at rest.
 #[allow(dead_code)]
 pub fn turning_logo(size: f32, id: impl Into<gpui::ElementId>) -> gpui::AnyElement {
     kodact_mark::working(size, id, None)
 }
 
-/// The working mark painted in `color`: the mark of work in progress in
-/// the conversation, in the theme's live colour.
+/// The working mark for work in progress in the conversation, retaining the
+/// high-contrast `./<` sprite palette with its 3D wave.
 pub fn turning_logo_in(
     size: f32,
     id: impl Into<gpui::ElementId>,
-    color: gpui::Hsla,
+    _color: gpui::Hsla,
 ) -> gpui::AnyElement {
-    // Drawn a little larger than an icon so its two strokes read.
-    kodact_mark::working(size * 1.25, id, Some(color))
+    // Drawn a little larger than an icon so its three strokes read.
+    kodact_mark::working(size * 1.25, id, None)
 }
 
 /// Your avatar, drawn `size` px square at this screen's density.

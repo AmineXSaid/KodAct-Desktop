@@ -1219,12 +1219,7 @@ pub fn rail(
 pub fn status_mark(status: ChatStatus, id: usize, t: &crate::theme::Theme) -> gpui::AnyElement {
     let dot = || div().size(px(7.)).rounded(t.radius.pill);
     let inner: gpui::AnyElement = match status {
-        ChatStatus::Working => super::activity::strike(
-            t.extra.accent,
-            t.extra.mark_heat_white,
-            12.,
-            ("chat-working", id),
-        ),
+        ChatStatus::Working => super::turning_logo(14., ("chat-working", id)),
         ChatStatus::NeedsYou => dot()
             .bg(t.extra.accent)
             .with_animation(
