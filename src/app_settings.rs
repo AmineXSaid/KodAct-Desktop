@@ -185,6 +185,8 @@ pub fn ensure_file() -> Option<PathBuf> {
 pub struct WindowState {
     pub terminal_open: bool,
     pub terminal_share: f32,
+    /// User-resized side panel width fraction (`None` uses default width formula).
+    pub panel_share: Option<f32>,
     /// Light or dark, and which theme (`theme::Look::id`), from Settings.
     pub dark: bool,
     pub theme: String,
@@ -195,6 +197,7 @@ impl Default for WindowState {
         Self {
             terminal_open: false,
             terminal_share: 0.35,
+            panel_share: None,
             dark: false,
             theme: crate::theme::Look::default().id().into(),
         }
@@ -210,6 +213,10 @@ pub fn load_window() -> WindowState {
         w.terminal_share = 0.35;
     }
     w.terminal_share = w.terminal_share.clamp(0.05, 0.6);
+    w.panel_share = w
+        .panel_share
+        .filter(|v| v.is_finite())
+        .map(|v| v.clamp(0.25, 0.72));
     w
 }
 

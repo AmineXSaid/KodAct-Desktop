@@ -416,6 +416,338 @@ fn sheets(bytes: &[u8]) -> Result<Vec<Sheet>, String> {
     Ok(out)
 }
 
+/// Pending workbook cell edits keyed by `(sheet_index, row_0, col_0) -> raw value`.
+pub type CellEdits = std::collections::HashMap<(usize, usize, usize), String>;
+
+/// Write edited cell values/formulas into a copy of an `.xlsx` workbook in
+/// pure Rust (`zip` + `quick_xml`), preserving sheets, styles, and column widths.
+pub fn write_xlsx_edits(bytes: &[u8], edits: &CellEdits) -> Result<Vec<u8>, String> {
+    use std::collections::BTreeMap;
+    use std::io::Write as _;
+
+    if edits.is_empty() {
+        return Ok(bytes.to_vec());
+    }
+    let paths = crate::xlsx_style::sheet_paths(bytes);
+    let mut by_path: std::collections::HashMap<String, BTreeMap<usize, BTreeMap<usize, String>>> =
+        std::collections::HashMap::new();
+    for (&(si, r, c), val) in edits {
+        let Some(Some(path)) = paths.get(si) else {
+            return Err(format!("sheet {} not found in workbook", si + 1));
+        };
+        by_path
+            .entry(path.clone())
+            .or_default()
+            .entry(r)
+            .or_default()
+            .insert(c, val.clone());
+    }
+
+    let mut archive = open_zip(bytes)?;
+    let mut out = Vec::with_capacity(bytes.len() + 1024);
+    {
+        let mut writer = zip::ZipWriter::new(Cursor::new(&mut out));
+        let opts = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        for i in 0..archive.len() {
+            let entry_name = {
+                let f = archive.by_index(i).map_err(|e| e.to_string())?;
+                f.name().to_string()
+            };
+            if let Some(sheet_edits) = by_path.get(&entry_name) {
+                let xml = {
+                    let mut f = archive.by_index(i).map_err(|e| e.to_string())?;
+                    let mut s = String::new();
+                    f.read_to_string(&mut s).map_err(|e| e.to_string())?;
+                    s
+                };
+                let patched = patch_sheet_xml(&xml, sheet_edits)?;
+                writer.start_file(&entry_name, opts).map_err(|e| e.to_string())?;
+                writer
+                    .write_all(patched.as_bytes())
+                    .map_err(|e| e.to_string())?;
+            } else {
+                let f = archive.by_index(i).map_err(|e| e.to_string())?;
+                writer.raw_copy_file(f).map_err(|e| e.to_string())?;
+            }
+        }
+        writer.finish().map_err(|e| e.to_string())?;
+    }
+    Ok(out)
+}
+
+fn push_cell_xml(out: &mut String, r: usize, c: usize, val: &str, style: Option<&str>) {
+    let ref_name = format!("{}{}", column_letters(c), r + 1);
+    let style_attr = style
+        .map(|s| format!(" s=\"{}\"", quick_xml::escape::escape(s)))
+        .unwrap_or_default();
+    let trimmed = val.trim();
+    if val.is_empty() {
+        out.push_str(&format!("<c r=\"{ref_name}\"{style_attr}/>"));
+    } else if let Some(formula) = trimmed.strip_prefix('=') {
+        out.push_str(&format!(
+            "<c r=\"{ref_name}\"{style_attr}><f>{}</f></c>",
+            quick_xml::escape::escape(formula)
+        ));
+    } else if let Ok(n) = trimmed.parse::<f64>() {
+        if n.is_finite() {
+            out.push_str(&format!(
+                "<c r=\"{ref_name}\"{style_attr}><v>{trimmed}</v></c>"
+            ));
+        } else {
+            out.push_str(&format!(
+                "<c r=\"{ref_name}\"{style_attr} t=\"inlineStr\"><is><t xml:space=\"preserve\">{}</t></is></c>",
+                quick_xml::escape::escape(val)
+            ));
+        }
+    } else {
+        out.push_str(&format!(
+            "<c r=\"{ref_name}\"{style_attr} t=\"inlineStr\"><is><t xml:space=\"preserve\">{}</t></is></c>",
+            quick_xml::escape::escape(val)
+        ));
+    }
+}
+
+fn push_row_xml(
+    out: &mut String,
+    r: usize,
+    cells: &std::collections::BTreeMap<usize, String>,
+    styles: &std::collections::HashMap<(usize, usize), String>,
+) {
+    out.push_str(&format!("<row r=\"{}\">", r + 1));
+    for (&c, val) in cells {
+        push_cell_xml(
+            out,
+            r,
+            c,
+            val,
+            styles.get(&(r, c)).map(String::as_str),
+        );
+    }
+    out.push_str("</row>");
+}
+
+fn write_xml_event(
+    writer: &mut quick_xml::Writer<Vec<u8>>,
+    ev: quick_xml::events::Event<'_>,
+) -> Result<(), String> {
+    writer.write_event(ev).map_err(|e| e.to_string())
+}
+
+fn patch_sheet_xml(
+    xml: &str,
+    edits: &std::collections::BTreeMap<usize, std::collections::BTreeMap<usize, String>>,
+) -> Result<String, String> {
+    use quick_xml::events::BytesEnd;
+
+    let mut styles: std::collections::HashMap<(usize, usize), String> =
+        std::collections::HashMap::new();
+    let mut style_reader = Reader::from_str(xml);
+    loop {
+        match style_reader.read_event() {
+            Ok(Event::Start(e)) | Ok(Event::Empty(e)) if e.local_name().as_ref() == b"c" => {
+                if let (Some(at), Some(s)) = (
+                    attr(&e, b"r").and_then(|r| crate::xlsx_style::cell_ref(&r)),
+                    attr(&e, b"s"),
+                ) {
+                    styles.insert(at, s);
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+    }
+
+    let max_edit_r = edits.keys().copied().max().unwrap_or(0);
+    let max_edit_c = edits
+        .values()
+        .flat_map(|m| m.keys().copied())
+        .max()
+        .unwrap_or(0);
+
+    let mut reader = Reader::from_str(xml);
+    let mut writer = quick_xml::Writer::new(Vec::with_capacity(xml.len() + 512));
+    let mut remaining = edits.clone();
+    let mut current_row: Option<usize> = None;
+    let mut row_remaining: std::collections::BTreeMap<usize, String> =
+        std::collections::BTreeMap::new();
+    let mut skip_cell_depth = 0usize;
+
+    loop {
+        match reader.read_event() {
+            Ok(Event::Eof) => break,
+            Ok(ev) => {
+                if skip_cell_depth > 0 {
+                    match ev {
+                        Event::Start(_) => skip_cell_depth += 1,
+                        Event::End(_) => skip_cell_depth -= 1,
+                        _ => {}
+                    }
+                    continue;
+                }
+                match &ev {
+                    Event::Empty(e) if e.local_name().as_ref() == b"dimension" => {
+                        if let Some(dim) = attr(e, b"ref") {
+                            let (mut r1, mut c1) = (max_edit_r, max_edit_c);
+                            if let Some((_, end_ref)) = dim.split_once(':') {
+                                if let Some((er, ec)) = crate::xlsx_style::cell_ref(end_ref) {
+                                    r1 = r1.max(er);
+                                    c1 = c1.max(ec);
+                                }
+                            } else if let Some((er, ec)) = crate::xlsx_style::cell_ref(&dim) {
+                                r1 = r1.max(er);
+                                c1 = c1.max(ec);
+                            }
+                            let start = dim.split(':').next().unwrap_or("A1");
+                            let new_dim = format!("{start}:{}{}", column_letters(c1), r1 + 1);
+                            let mut next = BytesStart::new("dimension");
+                            next.push_attribute(("ref", new_dim.as_str()));
+                            write_xml_event(&mut writer, Event::Empty(next))?;
+                            continue;
+                        }
+                    }
+                    Event::Empty(e) if e.local_name().as_ref() == b"sheetData" => {
+                        write_xml_event(&mut writer, Event::Start(e.clone().into_owned()))?;
+                        let mut extra = String::new();
+                        for (r, cells) in std::mem::take(&mut remaining) {
+                            push_row_xml(&mut extra, r, &cells, &styles);
+                        }
+                        writer
+                            .get_mut()
+                            .extend_from_slice(extra.as_bytes());
+                        write_xml_event(&mut writer, Event::End(BytesEnd::new("sheetData")))?;
+                        continue;
+                    }
+                    Event::Start(e) if e.local_name().as_ref() == b"row" => {
+                        let r_idx = attr(e, b"r")
+                            .and_then(|v| v.parse::<usize>().ok())
+                            .and_then(|v| v.checked_sub(1));
+                        if let Some(ri) = r_idx {
+                            let earlier: Vec<usize> =
+                                remaining.range(..ri).map(|(&k, _)| k).collect();
+                            if !earlier.is_empty() {
+                                let mut extra = String::new();
+                                for er in earlier {
+                                    if let Some(cells) = remaining.remove(&er) {
+                                        push_row_xml(&mut extra, er, &cells, &styles);
+                                    }
+                                }
+                                writer.get_mut().extend_from_slice(extra.as_bytes());
+                            }
+                            row_remaining = remaining.remove(&ri).unwrap_or_default();
+                        }
+                        current_row = r_idx;
+                    }
+                    Event::Empty(e) if e.local_name().as_ref() == b"row" => {
+                        let r_idx = attr(e, b"r")
+                            .and_then(|v| v.parse::<usize>().ok())
+                            .and_then(|v| v.checked_sub(1));
+                        if let Some(ri) = r_idx {
+                            let earlier: Vec<usize> =
+                                remaining.range(..ri).map(|(&k, _)| k).collect();
+                            if !earlier.is_empty() {
+                                let mut extra = String::new();
+                                for er in earlier {
+                                    if let Some(cells) = remaining.remove(&er) {
+                                        push_row_xml(&mut extra, er, &cells, &styles);
+                                    }
+                                }
+                                writer.get_mut().extend_from_slice(extra.as_bytes());
+                            }
+                            if let Some(cells) = remaining.remove(&ri) {
+                                write_xml_event(&mut writer, Event::Start(e.clone().into_owned()))?;
+                                let mut extra = String::new();
+                                for (&c, val) in &cells {
+                                    push_cell_xml(
+                                        &mut extra,
+                                        ri,
+                                        c,
+                                        val,
+                                        styles.get(&(ri, c)).map(String::as_str),
+                                    );
+                                }
+                                writer.get_mut().extend_from_slice(extra.as_bytes());
+                                write_xml_event(&mut writer, Event::End(BytesEnd::new("row")))?;
+                                continue;
+                            }
+                        }
+                    }
+                    Event::Start(e) | Event::Empty(e) if e.local_name().as_ref() == b"c" => {
+                        if let (Some(ri), Some((cr, cc))) =
+                            (current_row, attr(e, b"r").and_then(|r| crate::xlsx_style::cell_ref(&r)))
+                        {
+                            let earlier: Vec<usize> =
+                                row_remaining.range(..cc).map(|(&k, _)| k).collect();
+                            if !earlier.is_empty() {
+                                let mut extra = String::new();
+                                for ec in earlier {
+                                    if let Some(val) = row_remaining.remove(&ec) {
+                                        push_cell_xml(
+                                            &mut extra,
+                                            ri,
+                                            ec,
+                                            &val,
+                                            styles.get(&(ri, ec)).map(String::as_str),
+                                        );
+                                    }
+                                }
+                                writer.get_mut().extend_from_slice(extra.as_bytes());
+                            }
+                            if cr == ri {
+                                if let Some(val) = row_remaining.remove(&cc) {
+                                    let mut extra = String::new();
+                                    push_cell_xml(
+                                        &mut extra,
+                                        ri,
+                                        cc,
+                                        &val,
+                                        styles.get(&(ri, cc)).map(String::as_str),
+                                    );
+                                    writer.get_mut().extend_from_slice(extra.as_bytes());
+                                    if matches!(ev, Event::Start(_)) {
+                                        skip_cell_depth = 1;
+                                    }
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                    Event::End(e) if e.local_name().as_ref() == b"row" => {
+                        if let Some(ri) = current_row.take() {
+                            if !row_remaining.is_empty() {
+                                let mut extra = String::new();
+                                for (c, val) in std::mem::take(&mut row_remaining) {
+                                    push_cell_xml(
+                                        &mut extra,
+                                        ri,
+                                        c,
+                                        &val,
+                                        styles.get(&(ri, c)).map(String::as_str),
+                                    );
+                                }
+                                writer.get_mut().extend_from_slice(extra.as_bytes());
+                            }
+                        }
+                    }
+                    Event::End(e) if e.local_name().as_ref() == b"sheetData" => {
+                        if !remaining.is_empty() {
+                            let mut extra = String::new();
+                            for (r, cells) in std::mem::take(&mut remaining) {
+                                push_row_xml(&mut extra, r, &cells, &styles);
+                            }
+                            writer.get_mut().extend_from_slice(extra.as_bytes());
+                        }
+                    }
+                    _ => {}
+                }
+                write_xml_event(&mut writer, ev)?;
+            }
+            Err(e) => return Err(format!("could not update worksheet XML: {e}")),
+        }
+    }
+    String::from_utf8(writer.into_inner()).map_err(|e| e.to_string())
+}
+
 /// One file inside an Office zip, as text.
 fn part(zip: &mut zip::ZipArchive<Cursor<&[u8]>>, path: &str) -> Option<String> {
     let mut f = zip.by_name(path).ok()?;
@@ -1011,5 +1343,38 @@ mod tests {
                 "BA".into()
             )
         );
+    }
+
+    #[test]
+    fn write_xlsx_edits_round_trips_numbers_strings_rows_and_cols() {
+        let mut edits = CellEdits::new();
+        // Edit existing numeric cell C3 (row 2, col 2) and text cell A1 (row 0, col 0)
+        edits.insert((0, 2, 2), "995".into());
+        edits.insert((0, 0, 0), "Category & Note".into());
+        // Insert new row & new column beyond original bounds (7x4 -> 8x5)
+        edits.insert((0, 7, 0), "Bonus".into());
+        edits.insert((0, 7, 4), "250".into());
+        // Formula on sheet 1 (Notes)
+        edits.insert((1, 1, 0), "=1+2".into());
+
+        let updated = write_xlsx_edits(XLSX, &edits).expect("write edits");
+        let Preview::Sheets(sheets) = preview("q3-budget.xlsx", &updated).expect("preview updated")
+        else {
+            panic!()
+        };
+        let b = &sheets[0];
+        assert_eq!(cell(b, "A1"), "Category & Note");
+        assert_eq!(cell(b, "C3"), "995");
+        assert_eq!(cell(b, "A8"), "Bonus");
+        assert_eq!(cell(b, "E8"), "250");
+        assert!(b.total_rows >= 8 && b.total_cols >= 5);
+
+        let looks = crate::xlsx_style::read(&updated);
+        assert_eq!(
+            looks["Notes"].cells.get(&(1, 0)).and_then(|l| l.formula.as_deref()),
+            Some("=1+2")
+        );
+        // Preserves bold header style on A1
+        assert!(looks["Budget"].cells.get(&(0, 0)).is_some_and(|l| l.bold));
     }
 }

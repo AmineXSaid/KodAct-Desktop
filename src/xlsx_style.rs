@@ -70,6 +70,36 @@ pub fn read(bytes: &[u8]) -> HashMap<String, SheetLook> {
     out
 }
 
+/// Ordered archive paths (`xl/worksheets/sheetN.xml`) for each sheet in an `.xlsx`.
+pub(crate) fn sheet_paths(bytes: &[u8]) -> Vec<Option<String>> {
+    let Ok(mut zip) = zip::ZipArchive::new(Cursor::new(bytes)) else {
+        return Vec::new();
+    };
+    let mut text = |path: &str| -> Option<String> {
+        let mut f = zip.by_name(path).ok()?;
+        let mut s = String::new();
+        std::io::Read::read_to_string(&mut f, &mut s).ok()?;
+        Some(s)
+    };
+    let Some(book) = text("xl/workbook.xml") else {
+        return Vec::new();
+    };
+    let rels = text("xl/_rels/workbook.xml.rels").unwrap_or_default();
+    let targets = relationships(&rels);
+    sheet_ids(&book)
+        .into_iter()
+        .map(|(_, rid)| {
+            targets.get(&rid).map(|target| {
+                if let Some(abs) = target.strip_prefix('/') {
+                    abs.to_string()
+                } else {
+                    format!("xl/{target}")
+                }
+            })
+        })
+        .collect()
+}
+
 fn attr(e: &BytesStart, key: &[u8]) -> Option<String> {
     let a = e
         .attributes()

@@ -395,6 +395,38 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
             )
         })
         .child(div().flex_1())
+        .when(
+            v.agents.iter().any(|r| r.ended.is_none())
+                || todos.iter().any(|(s, _)| *s == ToolStatus::Running),
+            |d| {
+                d.child(
+                    div()
+                        .flex_none()
+                        .flex()
+                        .items_center()
+                        .gap(px(5.))
+                        .px(t.space.sm)
+                        .h(px(22.))
+                        .rounded(t.radius.pill)
+                        .bg(t.extra.success_tint)
+                        .border_1()
+                        .border_color(t.extra.success.opacity(0.35))
+                        .child(
+                            div()
+                                .size(px(6.))
+                                .rounded(t.radius.pill)
+                                .bg(t.extra.success),
+                        )
+                        .child(
+                            div()
+                                .text_size(t.text.caption)
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(t.extra.success)
+                                .child("Live"),
+                        ),
+                )
+            },
+        )
         .child(
             icon_button(
                 t,

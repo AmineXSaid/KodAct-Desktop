@@ -2179,6 +2179,18 @@ pub struct AppState {
     pub terminal_share: f32,
     /// The dock's left edge is being dragged.
     pub terminal_resizing: bool,
+    /// User-resized side panel share of the space after dock (`None`: default width).
+    pub panel_share: Option<f32>,
+    /// The side panel's left edge is being dragged.
+    pub panel_resizing: bool,
+    /// Pending unsaved cell edits for the workbook open in the side panel.
+    pub sheet_edits: crate::office::CellEdits,
+    /// Extra blank rows appended per sheet index while editing.
+    pub sheet_extra_rows: std::collections::HashMap<usize, usize>,
+    /// Extra blank columns appended per sheet index while editing.
+    pub sheet_extra_cols: std::collections::HashMap<usize, usize>,
+    /// Incremented when double-clicking a cell or pressing Enter so SheetBar grabs focus.
+    pub sheet_focus_seq: u64,
     /// Each remote chat's model route in the proxy (`model_proxy.rs`), by
     /// chat: replaced when its session restarts.
     model_routes: std::collections::HashMap<usize, String>,
@@ -2497,6 +2509,12 @@ impl AppState {
             terminal_open: crate::app_settings::load_window().terminal_open,
             terminal_share: crate::app_settings::load_window().terminal_share,
             terminal_resizing: false,
+            panel_share: crate::app_settings::load_window().panel_share,
+            panel_resizing: false,
+            sheet_edits: Default::default(),
+            sheet_extra_rows: Default::default(),
+            sheet_extra_cols: Default::default(),
+            sheet_focus_seq: 0,
             agent_feed: None,
             askpass: Default::default(),
             model_routes: Default::default(),
@@ -5052,6 +5070,9 @@ impl AppState {
     fn show_doc(&mut self, file: FileRef, cx: &mut Context<Self>) {
         self.doc_sheet = 0;
         self.doc_pick = None;
+        self.sheet_edits.clear();
+        self.sheet_extra_rows.clear();
+        self.sheet_extra_cols.clear();
         if let (Some(_), Some(bytes)) = (file.office(), file.bytes.clone()) {
             let key: SharedString =
                 format!("{}#{:x}", file.name, crate::office_render::key(&bytes)).into();
@@ -5224,6 +5245,132 @@ impl AppState {
         self.doc_pick = None;
         self.doc_sheet = i;
         cx.notify();
+    }
+
+    pub fn edit_sheet_cell(&mut self, at: (usize, usize), cx: &mut Context<Self>) {
+        self.doc_pick = Some((at, at));
+        self.sheet_focus_seq = self.sheet_focus_seq.wrapping_add(1);
+        cx.notify();
+    }
+
+    pub fn set_sheet_cell(
+        &mut self,
+        sheet: usize,
+        row: usize,
+        col: usize,
+        value: String,
+        cx: &mut Context<Self>,
+    ) {
+        self.sheet_edits.insert((sheet, row, col), value);
+        self.doc_pick = Some(((row, col), (row, col)));
+        cx.notify();
+    }
+
+    pub fn add_sheet_row(&mut self, sheet: usize, cx: &mut Context<Self>) {
+        let base_rows = self
+            .doc_preview
+            .as_ref()
+            .and_then(|(_, r)| r.as_ref().ok())
+            .and_then(|p| match p.as_ref() {
+                crate::office::Preview::Sheets(sheets) => sheets.get(sheet).map(|s| s.rows.len()),
+                _ => None,
+            })
+            .unwrap_or(0);
+        let extra = self.sheet_extra_rows.entry(sheet).or_insert(0);
+        let next_row = base_rows + *extra;
+        *extra += 1;
+        self.doc_pick = Some(((next_row, 0), (next_row, 0)));
+        self.sheet_focus_seq = self.sheet_focus_seq.wrapping_add(1);
+        cx.notify();
+    }
+
+    pub fn add_sheet_col(&mut self, sheet: usize, cx: &mut Context<Self>) {
+        let base_cols = self
+            .doc_preview
+            .as_ref()
+            .and_then(|(_, r)| r.as_ref().ok())
+            .and_then(|p| match p.as_ref() {
+                crate::office::Preview::Sheets(sheets) => sheets
+                    .get(sheet)
+                    .and_then(|s| s.rows.first().map(|r| r.len())),
+                _ => None,
+            })
+            .unwrap_or(0);
+        let extra = self.sheet_extra_cols.entry(sheet).or_insert(0);
+        let next_col = base_cols + *extra;
+        *extra += 1;
+        self.doc_pick = Some(((0, next_col), (0, next_col)));
+        self.sheet_focus_seq = self.sheet_focus_seq.wrapping_add(1);
+        cx.notify();
+    }
+
+    pub fn discard_sheet_edits(&mut self, cx: &mut Context<Self>) {
+        if self.sheet_edits.is_empty()
+            && self.sheet_extra_rows.is_empty()
+            && self.sheet_extra_cols.is_empty()
+        {
+            return;
+        }
+        self.sheet_edits.clear();
+        self.sheet_extra_rows.clear();
+        self.sheet_extra_cols.clear();
+        cx.notify();
+    }
+
+    pub fn save_sheet_edits(&mut self, cx: &mut Context<Self>) {
+        let Some(file) = self.doc.clone() else {
+            return;
+        };
+        if self.sheet_edits.is_empty() {
+            return;
+        }
+        let edits = self.sheet_edits.clone();
+        let orig_bytes = file.data();
+        let name = file.name.clone();
+        let disk_path = file.path.clone().and_then(|p| {
+            let pb = std::path::PathBuf::from(p.as_ref());
+            pb.is_absolute().then_some(pb)
+        });
+        cx.spawn(async move |this, cx| {
+            let name_bg = name.to_string();
+            let result = cx
+                .background_spawn(async move {
+                    let updated = crate::office::write_xlsx_edits(&orig_bytes, &edits)?;
+                    if let Some(p) = &disk_path {
+                        if let Some(parent) = p.parent() {
+                            let _ = std::fs::create_dir_all(parent);
+                        }
+                        std::fs::write(p, &updated).map_err(|e| e.to_string())?;
+                    }
+                    let preview = crate::office::preview(&name_bg, &updated)?;
+                    Ok::<(Vec<u8>, crate::office::Preview), String>((updated, preview))
+                })
+                .await;
+            let _ = this.update(cx, |s, cx| match result {
+                Ok((updated, preview)) => {
+                    let bytes_arc: std::sync::Arc<[u8]> = std::sync::Arc::from(updated);
+                    let key: SharedString = format!(
+                        "{}#{:x}",
+                        name,
+                        crate::office_render::key(&bytes_arc)
+                    )
+                    .into();
+                    if let Some(d) = s.doc.as_mut() {
+                        if d.name == name {
+                            d.bytes = Some(bytes_arc);
+                        }
+                    }
+                    s.doc_preview = Some((key, Ok(std::sync::Arc::new(preview))));
+                    s.sheet_edits.clear();
+                    s.sheet_extra_rows.clear();
+                    s.sheet_extra_cols.clear();
+                    s.show_toast(format!("Saved {name}"), cx);
+                    cx.notify();
+                }
+                Err(e) => s.show_toast(format!("Could not save {name}: {e}"), cx),
+            });
+        })
+        .detach();
     }
 
     pub fn toggle_doc_fit(&mut self, cx: &mut Context<Self>) {
@@ -7381,6 +7528,9 @@ fix everything under 8, render it again to check, then tell me the scores before
 
     pub fn close_doc(&mut self, cx: &mut Context<Self>) {
         self.doc_finding = false;
+        self.sheet_edits.clear();
+        self.sheet_extra_rows.clear();
+        self.sheet_extra_cols.clear();
         if self.doc.take().is_some() {
             cx.notify();
         }
@@ -11334,6 +11484,7 @@ impl AppState {
         crate::app_settings::save_window(crate::app_settings::WindowState {
             terminal_open: self.terminal_open,
             terminal_share: self.terminal_share,
+            panel_share: self.panel_share,
             dark: self.dark,
             theme: self.look.id().into(),
         });

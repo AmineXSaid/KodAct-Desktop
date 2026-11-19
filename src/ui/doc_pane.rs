@@ -65,6 +65,7 @@ pub fn width(main: f32, diagram: bool, t: &Theme) -> f32 {
 /// An Office file or PDF, as `office.rs` read it: None while it is read.
 pub type Read<'a> = Option<&'a Result<std::sync::Arc<crate::office::Preview>, String>>;
 
+#[allow(clippy::too_many_arguments)]
 pub fn render(
     file: &FileRef,
     state: Entity<AppState>,
@@ -73,6 +74,9 @@ pub fn render(
     read: Read,
     sheet: usize,
     pick: super::sheet_view::Pick,
+    sheet_edits: &crate::office::CellEdits,
+    sheet_extra: (usize, usize),
+    sheet_editor: AnyElement,
     changes: ChangesRead,
     comments: AnyElement,
     find: AnyElement,
@@ -145,6 +149,7 @@ pub fn render(
         office,
         Some(crate::office::Kind::Docx | crate::office::Kind::Pptx | crate::office::Kind::Xlsx)
     );
+    let dirty_sheet = office == Some(crate::office::Kind::Xlsx) && !sheet_edits.is_empty();
     let header = div()
         .flex_none()
         .h(px(48.))
@@ -201,7 +206,21 @@ pub fn render(
                         .text_size(t.text.caption)
                         .text_color(t.colors.text_muted)
                         .child(file.kind()),
-                ),
+                )
+                .when(dirty_sheet, |d| {
+                    d.child(
+                        div()
+                            .flex_none()
+                            .px(px(6.))
+                            .py(px(1.))
+                            .rounded(t.radius.pill)
+                            .bg(t.extra.warning_tint)
+                            .text_size(t.text.caption)
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(t.extra.warning)
+                            .child("Edited"),
+                    )
+                }),
         )
         .child(
             tool_button("doc-close", "icons/x.svg", "Close")
@@ -437,11 +456,15 @@ pub fn render(
                         fit.below,
                         file,
                         header,
-                        body.child(div().p(t.space.xl).child(super::sheet_view::render(
+                        body.child(div().p(t.space.lg).child(super::sheet_view::render(
                             sheets,
                             sheet,
                             pick,
                             changed_cells,
+                            sheet_edits,
+                            sheet_extra.0,
+                            sheet_extra.1,
+                            sheet_editor,
                             state,
                             t,
                         ))),

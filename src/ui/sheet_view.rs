@@ -5,19 +5,272 @@
 //! for a range) and the formula bar shows its address and formula. Read by
 //! `office.rs` and `xlsx_style.rs`.
 
-use gpui::{div, prelude::*, px, relative, AnyElement, Entity, FontWeight, SharedString};
+use gpui::component::input::{Input, InputEvent, InputState};
+use gpui::{
+    div, prelude::*, px, relative, AnyElement, Context, Entity, FontWeight, IntoElement, Render,
+    SharedString, Subscription, Window,
+};
 
+use super::icon;
 use crate::office::{column_letters, Sheet};
 use crate::state::AppState;
-use crate::theme::Theme;
+use crate::theme::{self, ActiveTheme, Theme};
+
+/// Live interactive spreadsheet formula/action bar rendered above the grid.
+pub struct SheetEditor {
+    state: Entity<AppState>,
+    input: Entity<InputState>,
+    last_cell: Option<(usize, usize, usize, String)>,
+    last_focus_seq: u64,
+    _subs: Vec<Subscription>,
+}
+
+impl SheetEditor {
+    pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let input = cx.new(|cx| {
+            InputState::new(window, cx).placeholder("Pick a cell to edit value or =formula")
+        });
+        let subs = vec![
+            cx.observe(&state, |_, _, cx| cx.notify()),
+            cx.subscribe_in(&input, window, |this, _, ev: &InputEvent, _, cx| {
+                if matches!(ev, InputEvent::PressEnter { .. }) {
+                    this.commit(true, cx);
+                }
+            }),
+        ];
+        Self {
+            state,
+            input,
+            last_cell: None,
+            last_focus_seq: 0,
+            _subs: subs,
+        }
+    }
+
+    fn current_cell_value(s: &AppState) -> Option<(usize, usize, usize, String)> {
+        let sheet_idx = s.doc_sheet;
+        let ((r, c), _) = s.doc_pick?;
+        if let Some(edited) = s.sheet_edits.get(&(sheet_idx, r, c)) {
+            return Some((sheet_idx, r, c, edited.clone()));
+        }
+        let val = s
+            .doc_preview
+            .as_ref()
+            .and_then(|(_, res)| res.as_ref().ok())
+            .and_then(|p| match p.as_ref() {
+                crate::office::Preview::Sheets(sheets) => sheets.get(sheet_idx),
+                _ => None,
+            })
+            .and_then(|sh| sh.rows.get(r))
+            .and_then(|row| row.get(c))
+            .map(|cell| cell.look.formula.clone().unwrap_or_else(|| cell.text.clone()))
+            .unwrap_or_default();
+        Some((sheet_idx, r, c, val))
+    }
+
+    fn commit(&mut self, advance: bool, cx: &mut Context<Self>) {
+        let val = self.input.read(cx).value().to_string();
+        let Some((si, r, c)) = self
+            .state
+            .read(cx)
+            .doc_pick
+            .map(|((r, c), _)| (self.state.read(cx).doc_sheet, r, c))
+        else {
+            return;
+        };
+        self.last_cell = Some((si, r, c, val.clone()));
+        self.state.update(cx, |s, cx| {
+            s.set_sheet_cell(si, r, c, val, cx);
+            if advance {
+                s.pick_cell((r + 1, c), false, cx);
+            }
+        });
+    }
+}
+
+impl Render for SheetEditor {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = cx.theme().clone();
+        let (cell_info, edit_count, focus_seq, pick, sheet_idx) = {
+            let s = self.state.read(cx);
+            (
+                Self::current_cell_value(s),
+                s.sheet_edits.len(),
+                s.sheet_focus_seq,
+                s.doc_pick,
+                s.doc_sheet,
+            )
+        };
+        if self.last_cell != cell_info {
+            self.last_cell = cell_info.clone();
+            let text = cell_info
+                .as_ref()
+                .map(|(_, _, _, v)| v.clone())
+                .unwrap_or_default();
+            self.input
+                .update(cx, |i, cx| i.set_value(text, window, cx));
+        }
+        if focus_seq != self.last_focus_seq {
+            self.last_focus_seq = focus_seq;
+            self.input.update(cx, |i, cx| i.focus(window, cx));
+        }
+
+        let line = t.colors.border;
+        let has_pick = pick.is_some();
+        let addr = pick.map(address).unwrap_or_else(|| "—".to_string());
+        let st_row = self.state.clone();
+        let st_col = self.state.clone();
+        let st_save = self.state.clone();
+        let st_discard = self.state.clone();
+        let current_input_val = self.input.read(cx).value().to_string();
+        let synced_val = cell_info.map(|(_, _, _, v)| v).unwrap_or_default();
+        let input_dirty = has_pick && current_input_val != synced_val;
+
+        div()
+            .flex()
+            .flex_col()
+            .gap(t.space.xs)
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap(t.space.xs)
+                    .child(
+                        div()
+                            .flex_none()
+                            .px(t.space.xs + px(2.))
+                            .h(px(26.))
+                            .flex()
+                            .items_center()
+                            .rounded(t.radius.compact)
+                            .bg(t.extra.sunk)
+                            .border_1()
+                            .border_color(line)
+                            .font_family(t.font_mono.clone())
+                            .text_size(t.text.caption)
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(if has_pick {
+                                t.colors.text_strong
+                            } else {
+                                t.colors.text_subtle
+                            })
+                            .child(addr),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w(px(140.))
+                            .h(px(28.))
+                            .px(t.space.sm)
+                            .flex()
+                            .items_center()
+                            .rounded(t.radius.button)
+                            .border_1()
+                            .border_color(if input_dirty {
+                                t.colors.primary.opacity(0.6)
+                            } else {
+                                line
+                            })
+                            .bg(t.colors.surface)
+                            .font_family(t.font_mono.clone())
+                            .text_size(t.text.caption)
+                            .child(Input::new(&self.input).appearance(false)),
+                    )
+                    .when(has_pick, |d| {
+                        d.child(
+                            super::button::Button::icon("sheet-apply", "icons/check.svg", "Apply cell value (Enter)")
+                                .compact()
+                                .on_click(cx.listener(|this, _, _, cx| this.commit(false, cx))),
+                        )
+                    }),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap(t.space.xs)
+                    .child(
+                        theme::ghost_button(&t, "+ Row")
+                            .id("sheet-add-row")
+                            .h(px(24.))
+                            .px(t.space.sm)
+                            .text_size(t.text.caption)
+                            .on_click(move |_, _, cx| {
+                                st_row.update(cx, |s, cx| s.add_sheet_row(sheet_idx, cx))
+                            }),
+                    )
+                    .child(
+                        theme::ghost_button(&t, "+ Col")
+                            .id("sheet-add-col")
+                            .h(px(24.))
+                            .px(t.space.sm)
+                            .text_size(t.text.caption)
+                            .on_click(move |_, _, cx| {
+                                st_col.update(cx, |s, cx| s.add_sheet_col(sheet_idx, cx))
+                            }),
+                    )
+                    .child(div().flex_1())
+                    .when(edit_count > 0, |d| {
+                        d.child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(4.))
+                                .px(t.space.sm)
+                                .h(px(22.))
+                                .rounded(t.radius.pill)
+                                .bg(t.extra.warning_tint)
+                                .text_size(t.text.caption)
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(t.extra.warning)
+                                .child(format!("{edit_count} edited")),
+                        )
+                        .child(
+                            theme::ghost_button(&t, "Discard")
+                                .id("sheet-discard")
+                                .h(px(24.))
+                                .px(t.space.sm)
+                                .text_size(t.text.caption)
+                                .on_click(move |_, _, cx| {
+                                    st_discard.update(cx, |s, cx| s.discard_sheet_edits(cx))
+                                }),
+                        )
+                        .child(
+                            theme::primary_button(&t, "Save")
+                                .id("sheet-save")
+                                .h(px(24.))
+                                .px(t.space.sm)
+                                .text_size(t.text.caption)
+                                .on_click(move |_, _, cx| {
+                                    st_save.update(cx, |s, cx| s.save_sheet_edits(cx))
+                                }),
+                        )
+                    })
+                    .when(edit_count == 0, |d| {
+                        d.child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(4.))
+                                .text_size(t.text.caption)
+                                .text_color(t.colors.text_subtle)
+                                .child(icon("icons/pencil.svg", px(11.), t.colors.text_subtle))
+                                .child("Double-click any cell to edit"),
+                        )
+                    }),
+            )
+    }
+}
 
 /// A column's width: the workbook's own (Excel counts characters), else
 /// from its longest cell, within reason.
-fn width(sheet: &Sheet, c: usize) -> f32 {
+fn width(sheet: &Sheet, c: usize, edits: &crate::office::CellEdits, selected: usize) -> f32 {
     if let Some(w) = sheet.widths.get(c).copied().flatten() {
-        return (w * 7.2 + 8.).clamp(36., 360.);
+        return (w * 7.2 + 8.).clamp(48., 360.);
     }
-    let longest = sheet
+    let mut longest = sheet
         .rows
         .iter()
         .take(200)
@@ -25,7 +278,12 @@ fn width(sheet: &Sheet, c: usize) -> f32 {
         .map(|cell| cell.text.chars().count())
         .max()
         .unwrap_or(0);
-    (longest as f32 * 7.4 + 20.).clamp(56., 260.)
+    for (&(si, _, ec), val) in edits {
+        if si == selected && ec == c {
+            longest = longest.max(val.chars().count());
+        }
+    }
+    (longest as f32 * 7.4 + 24.).clamp(64., 260.)
 }
 
 /// A colour from the workbook, made to sit in this theme: as it is on
@@ -69,6 +327,7 @@ fn picked(pick: Pick, r: usize, c: usize) -> bool {
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn render(
     sheets: &[Sheet],
     selected: usize,
@@ -76,6 +335,10 @@ pub fn render(
     changed: Option<
         &std::collections::HashMap<String, std::collections::HashMap<(usize, usize), String>>,
     >,
+    edits: &crate::office::CellEdits,
+    extra_rows: usize,
+    extra_cols: usize,
+    editor: AnyElement,
     state: Entity<AppState>,
     t: &Theme,
 ) -> AnyElement {
@@ -91,8 +354,25 @@ pub fn render(
     // The cells this version changed, and what they held before.
     let changed = changed.and_then(|c| c.get(&sheet.name));
     let gutter = 44.;
-    let widths: Vec<f32> = (0..sheet.rows.first().map_or(0, |r| r.len()))
-        .map(|c| width(sheet, c))
+
+    let max_edit_r = edits
+        .keys()
+        .filter(|&&(si, _, _)| si == selected)
+        .map(|&(_, r, _)| r + 1)
+        .max()
+        .unwrap_or(0);
+    let max_edit_c = edits
+        .keys()
+        .filter(|&&(si, _, _)| si == selected)
+        .map(|&(_, _, c)| c + 1)
+        .max()
+        .unwrap_or(0);
+    let base_cols = sheet.rows.first().map_or(0, |r| r.len());
+    let row_count = (sheet.rows.len() + extra_rows).max(max_edit_r);
+    let col_count = (base_cols + extra_cols).max(max_edit_c);
+
+    let widths: Vec<f32> = (0..col_count)
+        .map(|c| width(sheet, c, edits, selected))
         .collect();
     // A workbook with no styles of its own: its first row reads as a header
     // when it is all text over a row with numbers.
@@ -132,7 +412,8 @@ pub fn render(
         letters = letters.child(cell(*w).justify_center().child(column_letters(c)));
     }
     grid = grid.child(letters);
-    for (r, row) in sheet.rows.iter().enumerate() {
+    for r in 0..row_count {
+        let row = sheet.rows.get(r);
         let mut line_el = div().flex().child(
             cell(gutter)
                 .justify_end()
@@ -143,7 +424,12 @@ pub fn render(
         );
         let frozen_edge = sheet.frozen_rows > 0 && r + 1 == sheet.frozen_rows;
         for (c, w) in widths.iter().enumerate() {
-            let value = row.get(c).cloned().unwrap_or_default();
+            let mut value = row.and_then(|row| row.get(c)).cloned().unwrap_or_default();
+            let locally_edited = edits.get(&(selected, r, c)).cloned();
+            if let Some(ref raw) = locally_edited {
+                value.text = raw.clone();
+                value.numeric = raw.trim().parse::<f64>().is_ok_and(f64::is_finite);
+            }
             let bold = value.look.bold || (header && r == 0);
             let on = picked(pick, r, c);
             let st = state.clone();
@@ -172,13 +458,21 @@ pub fn render(
                             gpui::component::tooltip::Tooltip::new(tip.clone()).build(w, cx)
                         })
                     })
+                    .when(locally_edited.is_some(), |d| d.bg(t.extra.warning_tint))
                     .when(on, |d| {
                         d.bg(t.colors.primary_tint).border_color(t.colors.primary)
                     })
                     .child(value.text)
                     .on_click(move |e, _, cx| {
                         let extend = e.modifiers().shift;
-                        st.update(cx, |s, cx| s.pick_cell((r, c), extend, cx))
+                        let dbl = e.click_count() >= 2;
+                        st.update(cx, |s, cx| {
+                            if dbl {
+                                s.edit_sheet_cell((r, c), cx);
+                            } else {
+                                s.pick_cell((r, c), extend, cx);
+                            }
+                        })
                     }),
             );
         }
@@ -186,7 +480,7 @@ pub fn render(
     }
 
     let tabs = (sheets.len() > 1).then(|| {
-        let mut row = div().flex().gap(px(2.)).pb(t.space.sm);
+        let mut row = div().flex().gap(px(2.)).pb(t.space.xs);
         for (i, s) in sheets.iter().enumerate() {
             let on = i == selected;
             let st = state.clone();
@@ -216,7 +510,7 @@ pub fn render(
         row
     });
 
-    let shown = sheet.rows.len();
+    let shown = row_count;
     let note = (sheet.total_rows > shown || sheet.total_cols > widths.len()).then(|| {
         format!(
             "Showing {shown} of {} rows and {} of {} columns.",
@@ -226,55 +520,12 @@ pub fn render(
         )
     });
 
-    // The formula bar: the picked cell's address, and its formula (or value).
-    let bar = pick.map(|p| {
-        let ((r, c), _) = p;
-        let cell = sheet
-            .rows
-            .get(r)
-            .and_then(|row| row.get(c))
-            .cloned()
-            .unwrap_or_default();
-        let content = cell.look.formula.clone().unwrap_or(cell.text);
-        div()
-            .flex()
-            .items_center()
-            .gap(t.space.sm)
-            .h(t.size.control + px(2.))
-            .px(t.space.sm)
-            .rounded(t.radius.button)
-            .border_1()
-            .border_color(line)
-            .bg(t.colors.surface)
-            .text_size(t.text.caption)
-            .child(
-                div()
-                    .flex_none()
-                    .min_w(px(56.))
-                    .font_family(t.font_mono.clone())
-                    .text_color(t.colors.text_muted)
-                    .child(address(p)),
-            )
-            .child(div().w(t.size.hairline).h(px(14.)).bg(line))
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .overflow_hidden()
-                    .whitespace_nowrap()
-                    .text_ellipsis()
-                    .font_family(t.font_mono.clone())
-                    .text_color(t.colors.text)
-                    .child(content),
-            )
-    });
-
     div()
         .flex()
         .flex_col()
         .gap(t.space.sm)
         .children(tabs)
-        .children(bar)
+        .child(editor)
         .child(
             div()
                 .id(SharedString::from(format!("sheet-grid-{selected}")))

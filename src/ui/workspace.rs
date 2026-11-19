@@ -53,6 +53,8 @@ pub struct Workspace {
     doc_comments: Entity<super::doc_comments::DocComments>,
     /// Find in the file in the side panel (`doc_find.rs`).
     doc_find: Entity<super::doc_find::DocFind>,
+    /// Interactive spreadsheet editor bar (`sheet_view.rs`).
+    sheet_editor: Entity<super::sheet_view::SheetEditor>,
     /// The project's tree and a viewer, under the side panel (`files_pane.rs`).
     files: Entity<super::files_pane::FilesPane>,
     /// The film as KodAct opens, while it plays (`opener.rs`).
@@ -112,6 +114,8 @@ impl Workspace {
         let doc_comments =
             cx.new(|cx| super::doc_comments::DocComments::new(state.clone(), window, cx));
         let doc_find = cx.new(|cx| super::doc_find::DocFind::new(state.clone(), window, cx));
+        let sheet_editor =
+            cx.new(|cx| super::sheet_view::SheetEditor::new(state.clone(), window, cx));
         let files = cx.new(|cx| super::files_pane::FilesPane::new(state.clone(), window, cx));
         let first_run = state.read(cx).onboarding;
         // The opener: the full film on a first run, ending on the naming
@@ -165,6 +169,7 @@ impl Workspace {
             askpass,
             doc_comments,
             doc_find,
+            sheet_editor,
             files,
             opener,
             presence: Presences::default(),
@@ -1029,14 +1034,17 @@ impl Render for Workspace {
         let wide = side_doc
             .as_ref()
             .is_some_and(|f| f.is_diagram() || f.office() == Some(crate::office::Kind::Xlsx));
+        let panel_share = self.state.read(cx).panel_share;
         let (panel_w, dock_w) = share_out(
             beside,
             (side_open && !below && !panel_full).then(|| {
                 let after_dock = beside - if terminal_open { dock_want } else { 0. };
-                (
-                    super::doc_pane::width(after_dock, wide, &t),
-                    f32::from(t.size.doc_pane),
-                )
+                let panel_min = 320.0_f32.min(f32::from(t.size.doc_pane));
+                let want = match panel_share {
+                    Some(share) => (after_dock * share).max(panel_min),
+                    None => super::doc_pane::width(after_dock, wide, &t),
+                };
+                (want, panel_min)
             }),
             terminal_open.then(|| (dock_want, f32::from(t.size.terminal_min))),
             if panel_full {
@@ -1136,6 +1144,9 @@ impl Render for Workspace {
                 )
             });
             let has_top = side_doc.is_some() || side_panel.is_some();
+            let extra_rows = s.sheet_extra_rows.get(&s.doc_sheet).copied().unwrap_or(0);
+            let extra_cols = s.sheet_extra_cols.get(&s.doc_sheet).copied().unwrap_or(0);
+            let panel_resizing = s.panel_resizing;
             let top = side_doc
                 .as_ref()
                 .map(|f| {
@@ -1147,6 +1158,9 @@ impl Render for Workspace {
                         read,
                         s.doc_sheet,
                         s.doc_pick,
+                        &s.sheet_edits,
+                        (extra_rows, extra_cols),
+                        self.sheet_editor.clone().into_any_element(),
                         doc_changes,
                         self.doc_comments.clone().into_any_element(),
                         self.doc_find.clone().into_any_element(),
@@ -1180,7 +1194,56 @@ impl Render for Workspace {
                         .into_any_element(),
                 ),
                 (top, false) => top,
-            };
+            }
+            .map(|inner| {
+                if pane_below || panel_full || side_leaving {
+                    return inner;
+                }
+                let grip_state = self.state.clone();
+                let line = t.colors.primary;
+                div()
+                    .relative()
+                    .flex_none()
+                    .h_full()
+                    .flex()
+                    .child(inner)
+                    .child(
+                        div()
+                            .id("side-panel-grip")
+                            .occlude()
+                            .tooltip(|w, cx| {
+                                gpui::component::tooltip::Tooltip::new(
+                                    "Drag to resize · Double-click to reset",
+                                )
+                                .build(w, cx)
+                            })
+                            .absolute()
+                            .left(px(-4.))
+                            .top_0()
+                            .bottom_0()
+                            .w(px(8.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .cursor(gpui::CursorStyle::ResizeLeftRight)
+                            .when(panel_resizing, |d| d.bg(line.opacity(0.35)))
+                            .hover(move |st| st.bg(line.opacity(0.35)))
+                            .on_mouse_down(gpui::MouseButton::Left, move |ev, _, cx| {
+                                grip_state.update(cx, |s, cx| {
+                                    if ev.click_count >= 2 {
+                                        s.panel_share = None;
+                                        s.panel_resizing = false;
+                                        s.save_window();
+                                    } else {
+                                        s.panel_resizing = true;
+                                    }
+                                    cx.notify();
+                                });
+                                cx.stop_propagation();
+                            }),
+                    )
+                    .into_any_element()
+            });
             column.and_then(|p| match side_leaving {
                 // Leaving: back out to the edge (below the chat, gone at once).
                 true => (!pane_below && !panel_full)
@@ -2001,22 +2064,54 @@ impl Render for Workspace {
                 this.state.update(cx, |s, cx| s.open_app_settings(cx))
             }))
             .on_mouse_move(cx.listener(|this, ev: &gpui::MouseMoveEvent, window, cx| {
-                if !this.state.read(cx).terminal_resizing {
+                let (term_drag, panel_drag, sidebar_open, terminal_open) = {
+                    let s = this.state.read(cx);
+                    (
+                        s.terminal_resizing,
+                        s.panel_resizing,
+                        s.sidebar_open,
+                        s.terminal_open,
+                    )
+                };
+                if !term_drag && !panel_drag {
                     return;
                 }
                 let vw = f32::from(window.viewport_size().width);
-                let share = ((vw - f32::from(ev.position.x)) / vw).clamp(0.05, 0.6);
-                this.state.update(cx, |s, cx| {
-                    s.terminal_share = share;
-                    cx.notify();
-                });
+                if term_drag {
+                    let share = ((vw - f32::from(ev.position.x)) / vw).clamp(0.05, 0.6);
+                    this.state.update(cx, |s, cx| {
+                        s.terminal_share = share;
+                        cx.notify();
+                    });
+                } else if panel_drag {
+                    let t = cx.theme().clone();
+                    let sidebar_w = if sidebar_open {
+                        f32::from(t.size.sidebar)
+                    } else {
+                        f32::from(t.size.rail)
+                    };
+                    let dock_used = if terminal_open {
+                        this.dock_want(window, cx)
+                    } else {
+                        0.
+                    };
+                    let after_dock = (vw - sidebar_w - dock_used).max(1.);
+                    let right_edge = vw - dock_used - f32::from(t.space.sm);
+                    let share =
+                        ((right_edge - f32::from(ev.position.x)) / after_dock).clamp(0.25, 0.72);
+                    this.state.update(cx, |s, cx| {
+                        s.panel_share = Some(share);
+                        cx.notify();
+                    });
+                }
             }))
             .on_mouse_up(
                 gpui::MouseButton::Left,
                 cx.listener(|this, _, _, cx| {
                     this.state.update(cx, |s, cx| {
-                        if s.terminal_resizing {
+                        if s.terminal_resizing || s.panel_resizing {
                             s.terminal_resizing = false;
+                            s.panel_resizing = false;
                             s.save_window();
                             cx.notify();
                         }
