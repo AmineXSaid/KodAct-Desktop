@@ -48,6 +48,7 @@ pub const SHORTCUTS: &[(&str, &str, &str)] = &[
     ("secondary-2", "Side panel: Agents", "Conversation"),
     ("secondary-3", "Side panel: Files", "Conversation"),
     ("secondary-4", "Side panel: Browser", "Conversation"),
+    ("alt-f", "Open file: full screen, or back", "Conversation"),
     (
         "secondary-\\",
         "Side panel beside or below the chat",

@@ -97,6 +97,7 @@ table in step.
 | Ctrl/⌘ 2 | Side panel: Agents |
 | Ctrl/⌘ 3 | Side panel: Files |
 | Ctrl/⌘ 4 | Side panel: Browser |
+| Alt F | Open file: full screen, or back |
 | Ctrl/⌘ \ | Side panel beside or below the chat |
 | Ctrl/⌘ F | Find in the conversation |
 | Ctrl/⌘ Shift F | Find in the file beside the chat |
