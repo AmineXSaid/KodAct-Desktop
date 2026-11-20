@@ -249,6 +249,12 @@ fn main() {
                 // close buttons show on Linux as they do on Windows. GPUI falls
                 // back to the system frame where the desktop can't support it.
                 window_decorations: Some(WindowDecorations::Client),
+                // The title bar is drawn by the app, but the window still
+                // needs a name for the taskbar, Alt+Tab and the window list.
+                titlebar: Some(gpui::TitlebarOptions {
+                    title: Some("KodAct".into()),
+                    ..TitleBar::title_bar_options()
+                }),
                 ..TitleBar::window_options()
             };
             gpui::open_window(options, cx, |window, cx| {

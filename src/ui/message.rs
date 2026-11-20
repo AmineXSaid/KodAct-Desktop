@@ -1801,7 +1801,9 @@ fn agent_header(
     } else if failed {
         match (step_count, elapsed_str) {
             (0, Some(el)) => format!("Failed · {el}"),
+            (1, Some(el)) => format!("Failed · 1 step · {el}"),
             (n, Some(el)) => format!("Failed · {n} steps · {el}"),
+            (1, None) => "Failed · 1 step".to_string(),
             (n, None) => format!("Failed · {n} steps"),
         }
     } else if running {
