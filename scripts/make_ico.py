@@ -1,21 +1,24 @@
-"""Build assets/kodact.ico (the Windows icon: taskbar, title bar, installer).
+"""Build assets/kodact.ico (the Windows icon: taskbar, title bar, Start,
+Explorer, the installer).
 
-The app icon: KodAct's mark (src/ui/kodact_mark.rs) alone, with no tile behind
-it, on a transparent ground like the other icons on a Windows 11 taskbar. The
-mark is the same drawing as the in-app one: a step up from the left, then a
-chevron pointing right, their corners rounded by the join. Each stroke is
-shaded top to bottom (the step deep, the chevron bright) over a soft shadow, so
-it reads on a light or a dark taskbar alike.
+The icon is KodAct's mark alone, `./<` (src/ui/kodact_mark.rs: the dot, the
+slash and the angle that read as a K), with nothing behind it: a transparent
+ground, like the other icons on a Windows 11 taskbar. It has to stand out on
+any desktop (white, black, a photo), so:
 
-The mark keeps its own proportions (never stretched) and is drawn at 180% of
-the icon's width (SCALE), so it fills the square like the other taskbar icons:
-the icon crops the step's tail, the chevron's point and a little of the top and
-bottom, and what is left is centred.
+- the dot and the angle are the mark's electric lime and the slash is near
+  white, as the mark is in dark mode;
+- each stroke carries a dark keyline, so lime and white still read on a
+  white or pale wallpaper, and the angle stays apart where it meets the slash;
+- each stroke is shaded a little, top to bottom, and the mark sits on a soft
+  shadow, which lifts it off a busy picture.
 
-Every size Windows asks for is drawn on its own from the geometry (supersampled,
-then reduced), never scaled from another size, so 16 and 24 px stay crisp.
+Every size Windows asks for is drawn on its own from the geometry
+(supersampled, then reduced), never scaled from another size, so 16 and
+24 px stay crisp; the keyline never drops below one pixel.
 
-    python3 -I scripts/make_ico.py   # writes assets/kodact.ico (+ a preview PNG with --preview)
+    python3 -I scripts/make_ico.py                  # writes assets/kodact.ico
+    python3 -I scripts/make_ico.py --preview out.png  # and a sheet of it on desktops
 """
 
 import pathlib
@@ -26,45 +29,57 @@ from PIL import Image, ImageDraw, ImageFilter
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / "assets/kodact.ico"
 
-# 100/125/150/200% taskbar and title bar, Explorer views, Alt-Tab.
+# 100/125/150/200% taskbar and title bar, Explorer views, Alt-Tab, Start.
 SIZES = [16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 128, 256]
 SS = 8  # supersampling
 
-# Each stroke's shading, top to bottom: the accent's turquoise (theme.rs).
-STEP_SHADE = ((0x1A, 0x8F, 0x80), (0x08, 0x55, 0x4C))
-CHEVRON_SHADE = ((0x7F, 0xE6, 0xD3), (0x12, 0x9A, 0x87))
-SHADOW = 0.35  # the shadow's opacity; it falls 3% of the icon below the mark
-
-# The mark, as kodact_mark.rs: its box, its two strokes, the join's width.
-VIEW = (505.7, 302.0)
-STEP = [(4, 242), (177.17, 100), (241, 100), (295.88, 145), (244, 145), (125.7, 242)]
-CHEVRON = [
-    (316, 4),
-    (497.71, 153),
-    (320.88, 298),
-    (171, 298),
-    (307.59, 186),
-    (347, 186),
-    (378.71, 160),
-    (277.49, 77),
-    (226.98, 77),
+# The mark, as kodact_mark.rs: its box and its three strokes, in drawing order
+# (the angle last, over the slash it meets).
+VIEW = (260.0, 252.0)
+DOT = [
+    (53.00, 205.00), (51.63, 211.89), (47.73, 217.73), (41.89, 221.63),
+    (35.00, 223.00), (28.11, 221.63), (22.27, 217.73), (18.37, 211.89),
+    (17.00, 205.00), (18.37, 198.11), (22.27, 192.27), (28.11, 188.37),
+    (35.00, 187.00), (41.89, 188.37), (47.73, 192.27), (51.63, 198.11),
 ]
-JOIN = 8.0
-SCALE = 1.8  # the mark's width, as a share of the icon's
+SLASH = [(68.0, 224.0), (96.0, 232.0), (148.0, 22.0), (120.0, 14.0)]
+ANGLE = [(114.0, 130.0), (223.0, 22.0), (243.0, 42.0), (154.0, 130.0), (243.0, 218.0), (223.0, 238.0)]
+JOIN = 3.0  # the strokes' rounded join, in the mark's units
+
+# Colours: each stroke's shade top to bottom, and its keyline.
+LIME = ((0xD8, 0xFF, 0x63), (0x9B, 0xE0, 0x0A))  # the mark's #b7ff1a, lit and settled
+LIME_LINE = (0x16, 0x22, 0x00)
+INK = ((0xFF, 0xFF, 0xFF), (0xD9, 0xDE, 0xE6))  # the slash: near white
+INK_LINE = (0x0B, 0x0D, 0x10)
+STROKES = [(DOT, LIME, LIME_LINE), (SLASH, INK, INK_LINE), (ANGLE, LIME, LIME_LINE)]
+
+FILL = 0.84  # the mark's width, as a share of the icon (room for keyline and shadow)
+KEYLINE = 0.032  # the keyline's width, as a share of the icon; at least 1 px
+SHADOW = 0.45  # the shadow's opacity; it falls 2.5% of the icon below the mark
 
 
-def stroke_mask(poly, size, dy=0.0):
-    """One stroke, full width and centred (a touch high, for the shadow), as a mask."""
-    s = size * SCALE / VIEW[0]
-    sy = s
-    oy = (size - VIEW[1] * sy) / 2 - size * 0.01 + dy * size
+def mask(poly, size, dy=0.0):
+    """One stroke filled, the mark centred in a `size` square, as a mask."""
+    s = size * FILL / VIEW[0]
     ox = (size - VIEW[0] * s) / 2
-    pts = [(ox + x * s, oy + y * sy) for x, y in poly]
+    oy = (size - VIEW[1] * s) / 2 + dy * size
+    pts = [(ox + x * s, oy + y * s) for x, y in poly]
     m = Image.new("L", (size, size), 0)
     d = ImageDraw.Draw(m)
     d.polygon(pts, fill=255)
     d.line(pts + pts[:2], fill=255, width=max(round(JOIN * s), 1), joint="curve")
     return m
+
+
+def grow(m, by):
+    """The mask widened by `by` pixels all round (a round keyline)."""
+    if by <= 0:
+        return m
+    k = 2 * by + 1
+    if k <= 9:
+        return m.filter(ImageFilter.MaxFilter(k))
+    # A wide keyline: blur, then threshold just past the edge.
+    return m.filter(ImageFilter.GaussianBlur(by / 1.6)).point(lambda v: 255 if v > 24 else 0)
 
 
 def shade(size, top, bottom):
@@ -77,14 +92,71 @@ def shade(size, top, bottom):
 
 def icon(n):
     big = n * SS
+    # The keyline in final pixels: never thinner than one, and tapering at
+    # the large sizes (5 px at 256), where a proportional one turns heavy.
+    line = max(1.0, min(KEYLINE * n, 0.014 * n + 1.4)) * SS
     img = Image.new("RGBA", (big, big), (0, 0, 0, 0))
-    shadow = stroke_mask(STEP, big, 0.03)
-    shadow.paste(255, (0, 0), stroke_mask(CHEVRON, big, 0.03))
-    shadow = shadow.filter(ImageFilter.GaussianBlur(big * 0.02)).point(lambda v: round(v * SHADOW))
+
+    # The soft shadow under the whole mark, outline included.
+    shadow = Image.new("L", (big, big), 0)
+    for poly, _, _ in STROKES:
+        shadow.paste(255, (0, 0), grow(mask(poly, big, 0.025), round(line)))
+    shadow = shadow.filter(ImageFilter.GaussianBlur(big * 0.03)).point(lambda v: round(v * SHADOW))
     img.paste((0, 0, 0, 255), (0, 0), shadow)
-    img.paste(shade(big, *STEP_SHADE), (0, 0), stroke_mask(STEP, big))
-    img.paste(shade(big, *CHEVRON_SHADE), (0, 0), stroke_mask(CHEVRON, big))
+
+    # Each stroke: its keyline, then its fill, in order.
+    for poly, colours, keyline in STROKES:
+        m = mask(poly, big)
+        img.paste(keyline + (255,), (0, 0), grow(m, round(line)))
+        img.paste(shade(big, *colours), (0, 0), m)
     return img.resize((n, n), Image.LANCZOS)
+
+
+def desktops(w, h):
+    """Wallpapers to judge it on: white, black, Windows 11's light and dark
+    bloom, a warm photo-like gradient, and a busy pattern."""
+    out = []
+    for c in [(255, 255, 255), (0, 0, 0)]:
+        out.append(("plain", Image.new("RGBA", (w, h), c + (255,))))
+
+    def grad(a, b, c):
+        img = Image.new("RGBA", (w, h))
+        for y in range(h):
+            for x in range(w):
+                t, u = x / (w - 1), y / (h - 1)
+                img.putpixel(
+                    (x, y),
+                    tuple(round(a[i] * (1 - t) * (1 - u) + b[i] * t + c[i] * u * (1 - t)) for i in range(3)) + (255,),
+                )
+        return img
+
+    out.append(("bloom light", grad((0xDD, 0xE8, 0xF7), (0x9F, 0xC3, 0xF0), (0xF4, 0xF6, 0xFB))))
+    out.append(("bloom dark", grad((0x0B, 0x1A, 0x3A), (0x1F, 0x4E, 0xA8), (0x05, 0x08, 0x14))))
+    out.append(("photo", grad((0xF2, 0xB8, 0x6A), (0x5A, 0x9E, 0x4B), (0x2E, 0x55, 0x7A))))
+    busy = Image.new("RGBA", (w, h), (0x7C, 0xB3, 0x42, 255))
+    d = ImageDraw.Draw(busy)
+    for i in range(0, w + h, 14):
+        d.line([(i, 0), (i - h, h)], fill=(0xE8, 0xF5, 0xD0, 255), width=6)
+    out.append(("busy", busy))
+    return out
+
+
+def preview(frames, path):
+    shown = [f for f in frames if f.width in (16, 24, 32, 48, 96, 256)]
+    w = sum(f.width for f in shown) + 24 * (len(shown) + 1)
+    h = 256 + 48
+    rows = []
+    for _, bg in desktops(w, h):
+        row = bg.copy()
+        x = 24
+        for f in shown:
+            row.alpha_composite(f, (x, (h - f.height) // 2))
+            x += f.width + 24
+        rows.append(row)
+    sheet = Image.new("RGBA", (w, h * len(rows)))
+    for i, r in enumerate(rows):
+        sheet.paste(r, (0, i * h))
+    sheet.save(path)
 
 
 def main() -> int:
@@ -92,12 +164,7 @@ def main() -> int:
     frames[-1].save(OUT, format="ICO", sizes=[f.size for f in frames], append_images=frames[:-1])
     print(f"{OUT.relative_to(ROOT)}: {len(frames)} sizes")
     if "--preview" in sys.argv:
-        strip = Image.new("RGBA", (sum(SIZES) + 8 * len(SIZES), 256), (0, 0, 0, 0))
-        x = 0
-        for f in frames:
-            strip.alpha_composite(f, (x, 256 - f.height))
-            x += f.width + 8
-        strip.save(sys.argv[sys.argv.index("--preview") + 1])
+        preview(frames, sys.argv[sys.argv.index("--preview") + 1])
     return 0
 
 

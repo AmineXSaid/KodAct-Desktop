@@ -360,8 +360,10 @@ Changes apply the next time they're used; no restart.
     theme's colour; its two strokes are SVGs drawn from its geometry and
     tinted from the theme). The wordmark heads the sidebar always, the
     project under it.
-- `scripts/make_ico.py`: `assets/kodact.ico`, KodAct's mark on an accent tile, each
-  size Windows asks for drawn on its own.
+- `scripts/make_ico.py`: `assets/kodact.ico`, KodAct's `./<` mark alone on a
+  transparent ground (lime and white, each stroke on a dark keyline, so it
+  reads on any wallpaper), each size Windows asks for drawn on its own;
+  `--preview out.png` shows it on light, dark and busy desktops.
 - `scripts/screenshots.sh`: light and dark screenshots of every screen (see below).
 - `.github/workflows/windows.yml`: fmt, clippy (`-D warnings`) and tests on
   Linux for every push and pull request; the Windows build and tests.
