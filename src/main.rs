@@ -118,6 +118,7 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("secondary-shift-t", ToggleTasks, Some("Workspace")),
         KeyBinding::new("secondary-shift-a", ShowApprovals, None),
         KeyBinding::new("secondary-\\", ToggleSplit, Some("Workspace")),
+        KeyBinding::new("alt-f", ToggleDocFull, Some("Workspace")),
         KeyBinding::new("secondary-shift-e", TogglePanel, Some("Workspace")),
         KeyBinding::new("secondary-1", ShowPlanView, Some("Workspace")),
         KeyBinding::new("secondary-2", ShowAgentsView, Some("Workspace")),

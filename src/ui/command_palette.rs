@@ -426,6 +426,20 @@ impl CommandPalette {
                 Box::new(ToggleSplit),
             ),
             act(
+                if s.doc_full {
+                    "Exit full screen"
+                } else {
+                    "Full screen document"
+                },
+                if s.doc_full {
+                    "icons/minimize-2.svg"
+                } else {
+                    "icons/maximize-2.svg"
+                },
+                Some("Alt F".into()),
+                Box::new(ToggleDocFull),
+            ),
+            act(
                 "Rules and memory",
                 "icons/list-todo.svg",
                 Some(shortcut("Shift R")),

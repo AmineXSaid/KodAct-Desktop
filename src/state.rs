@@ -2055,6 +2055,8 @@ pub struct AppState {
     pub doc_fit: bool,
     /// The side panel sits below the chat instead of beside it.
     pub doc_below: bool,
+    /// The document pane is expanded across the full main stage.
+    pub doc_full: bool,
     /// An Office file or PDF in the panel, read: by file name and content
     /// (`name#key`), the preview or why it couldn't be read. None while it
     /// is being read.
@@ -2458,6 +2460,7 @@ impl AppState {
             panel_full: false,
             doc_fit: true,
             doc_below: false,
+            doc_full: false,
             doc_preview: None,
             doc_text: false,
             source_view: false,
@@ -7553,17 +7556,29 @@ fix everything under 8, render it again to check, then tell me the scores before
         self.doc = None;
         self.panel = None;
         self.panel_full = false;
+        self.doc_full = false;
         cx.notify();
     }
 
     pub fn close_doc(&mut self, cx: &mut Context<Self>) {
         self.doc_finding = false;
+        self.doc_full = false;
         self.sheet_edits.clear();
         self.sheet_extra_rows.clear();
         self.sheet_extra_cols.clear();
         if self.doc.take().is_some() {
             cx.notify();
         }
+    }
+
+    /// Toggle full-screen focus mode for the open document pane.
+    pub fn toggle_doc_full(&mut self, cx: &mut Context<Self>) {
+        if self.doc.is_none() {
+            self.doc_full = false;
+            return;
+        }
+        self.doc_full = !self.doc_full;
+        cx.notify();
     }
 
     /// Save a copy into Downloads, off the UI thread, and say where it went.

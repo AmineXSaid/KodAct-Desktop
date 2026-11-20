@@ -36,6 +36,10 @@ pub struct Fit {
     pub fit: bool,
     /// Split below the chat (else beside it).
     pub below: bool,
+    /// Expanded across the full main stage.
+    pub full: bool,
+    /// Smooth full-screen transition progress in `0.0..=1.0`.
+    pub full_t: f32,
     /// Opened from the panel's Files tab: the header leads back to it.
     pub from_panel: bool,
     /// A document shows its text instead of its pages.
@@ -150,7 +154,51 @@ pub fn render(
         Some(crate::office::Kind::Docx | crate::office::Kind::Pptx | crate::office::Kind::Xlsx)
     );
     let dirty_sheet = office == Some(crate::office::Kind::Xlsx) && !sheet_edits.is_empty();
+    let full = fit.full;
+    let full_t = fit.full_t;
+    let fuller = state.clone();
+    let shimmer_alpha = if full_t > 0.005 && full_t < 0.995 {
+        (full_t * std::f32::consts::PI).sin() * 0.72
+    } else {
+        0.0
+    };
+    let full_btn: AnyElement = if full {
+        div()
+            .id("doc-full")
+            .flex_none()
+            .h(px(28.))
+            .px(t.space.sm)
+            .rounded(t.radius.pill)
+            .bg(t.colors.primary_tint)
+            .border_1()
+            .border_color(gpui::Hsla {
+                a: 0.28,
+                ..t.colors.primary
+            })
+            .flex()
+            .items_center()
+            .gap(px(5.))
+            .cursor_pointer()
+            .text_size(t.text.caption)
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(t.colors.primary)
+            .hover(|s| {
+                s.bg(gpui::Hsla {
+                    a: (t.colors.primary_tint.a + 0.08).min(1.0),
+                    ..t.colors.primary_tint
+                })
+            })
+            .child(icon("icons/minimize-2.svg", t.size.icon_xs, t.colors.primary))
+            .child("Exit full screen")
+            .on_click(move |_, _, cx| fuller.update(cx, |s, cx| s.toggle_doc_full(cx)))
+            .into_any_element()
+    } else {
+        tool_button("doc-full", "icons/maximize-2.svg", "Full screen (Alt+F)")
+            .on_click(move |_, _, cx| fuller.update(cx, |s, cx| s.toggle_doc_full(cx)))
+            .into_any_element()
+    };
     let header = div()
+        .relative()
         .flex_none()
         .h(px(48.))
         .flex()
@@ -160,6 +208,20 @@ pub fn render(
         .pr(t.space.sm)
         .border_b_1()
         .border_color(t.colors.border)
+        .when(shimmer_alpha > 0.001, |d| {
+            d.child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .h(px(2.))
+                    .w(relative(full_t.clamp(0.0, 1.0)))
+                    .bg(gpui::Hsla {
+                        a: shimmer_alpha,
+                        ..t.colors.primary
+                    }),
+            )
+        })
         .when(from_panel, |d| {
             d.child(
                 tool_button("doc-back", "icons/arrow-left.svg", "All files").on_click(
@@ -321,18 +383,20 @@ pub fn render(
                 }),
             )
         })
-        .child(
-            tool_button(
-                "doc-split",
-                "icons/split.svg",
-                if fit.below {
-                    "Put it beside the chat"
-                } else {
-                    "Put it below the chat"
-                },
+        .when(!full, |d| {
+            d.child(
+                tool_button(
+                    "doc-split",
+                    "icons/split.svg",
+                    if fit.below {
+                        "Put it beside the chat"
+                    } else {
+                        "Put it below the chat"
+                    },
+                )
+                .on_click(|_, window, cx| window.dispatch_action(Box::new(super::ToggleSplit), cx)),
             )
-            .on_click(|_, window, cx| window.dispatch_action(Box::new(super::ToggleSplit), cx)),
-        )
+        })
         .child(
             tool_button("doc-download", "icons/download.svg", "Download")
                 .on_click(move |_, _, cx| saver.update(cx, |s, cx| s.download(&to_save, cx))),
@@ -341,6 +405,7 @@ pub fn render(
     let header = header
         .child(toolbar)
         .child(div().flex_none().w(px(1.)).h(t.size.icon).bg(t.colors.border))
+        .child(full_btn)
         .child(
             tool_button("doc-close", "icons/x.svg", "Close")
                 .on_click(move |_, _, cx| closer.update(cx, |s, cx| s.close_doc(cx))),
@@ -379,7 +444,7 @@ pub fn render(
                 .pb(t.space.xxl * 2.)
                 .child(div().w_full().max_w(t.size.doc_measure).child(content)),
         );
-        return finish_at(fit.below, file, header, body, footer(), fit.width, t);
+        return finish_at(fit.below, full_t, file, header, body, footer(), fit.width, t);
     }
     let body = if source || (office.is_none() && !binary && !file.is_markdown() && !diagram) {
         // The source, as an editor shows it: a file that is only text, or
@@ -452,6 +517,7 @@ pub fn render(
                 crate::office::Preview::Sheets(sheets) => {
                     return finish_at(
                         fit.below,
+                        full_t,
                         file,
                         header,
                         body.child(div().p(t.space.lg).child(super::sheet_view::render(
@@ -476,6 +542,7 @@ pub fn render(
                     if !text_view {
                         return finish_at(
                             fit.below,
+                            full_t,
                             file,
                             header,
                             pages_view(body.bg(t.extra.inset), d, &fit, page_pick, state, t),
@@ -541,7 +608,7 @@ pub fn render(
         )
     };
 
-    finish_at(fit.below, file, header, body, footer(), fit.width, t)
+    finish_at(fit.below, full_t, file, header, body, footer(), fit.width, t)
 }
 
 /// A document's text as you can select it, to comment on a passage or
@@ -677,6 +744,7 @@ fn pages_view(
 /// height with a hairline on top. The card surface, and a short entrance.
 fn finish_at(
     below: bool,
+    full_t: f32,
     file: &FileRef,
     header: gpui::Div,
     body: gpui::Stateful<gpui::Div>,
@@ -684,14 +752,24 @@ fn finish_at(
     width: f32,
     t: &Theme,
 ) -> AnyElement {
+    let settled_full = full_t >= 0.999;
+    let border_alpha = (1.0 - full_t).clamp(0.0, 1.0);
+    let border_color = gpui::Hsla {
+        a: t.colors.border.a * border_alpha,
+        ..t.colors.border
+    };
     div()
-        .flex_none()
-        .when(!below, |d| d.w(px(width)).h_full().border_l_1())
-        .when(below, |d| d.w_full().h(relative(BELOW_SHARE)).border_t_1())
+        .when(settled_full, |d| d.flex_1().min_w_0().h_full())
+        .when(!settled_full && !below, |d| {
+            d.flex_none().w(px(width)).h_full().border_l_1()
+        })
+        .when(!settled_full && below, |d| {
+            d.flex_none().w_full().h(relative(BELOW_SHARE)).border_t_1()
+        })
         .flex()
         .flex_col()
         .bg(if t.is_dark { t.extra.pane } else { t.colors.surface })
-        .border_color(t.colors.border)
+        .border_color(border_color)
         .child(header)
         .child(body)
         .children(footer)

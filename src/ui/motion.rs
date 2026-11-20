@@ -102,6 +102,67 @@ impl<K: Clone> Presence<K> {
     }
 }
 
+/// Smooth bidirectional interpolation (`0.0` ↔ `1.0`) for a boolean state
+/// (such as expanding a document pane into full-screen focus mode and
+/// returning it to split view). Supports mid-flight reversal and respects
+/// `KODACT_REDUCED_MOTION` and `KODACT_SLOW_MOTION`.
+#[derive(Default)]
+pub struct Tween {
+    target: bool,
+    from: f32,
+    started: Option<std::time::Instant>,
+    last_value: f32,
+}
+
+impl Tween {
+    /// Current eased progress in `0.0..=1.0`, requesting another frame
+    /// while the transition is still in flight.
+    pub fn value(
+        &mut self,
+        target: bool,
+        enter_ms: u64,
+        exit_ms: u64,
+        window: &mut gpui::Window,
+    ) -> f32 {
+        let goal = if target { 1.0 } else { 0.0 };
+        if reduced_motion() {
+            self.target = target;
+            self.from = goal;
+            self.started = None;
+            self.last_value = goal;
+            return goal;
+        }
+        if target != self.target {
+            self.from = self.last_value;
+            self.target = target;
+            self.started = Some(std::time::Instant::now());
+        }
+        let Some(started) = self.started else {
+            self.last_value = goal;
+            return goal;
+        };
+        let dur_ms = played(if target { enter_ms } else { exit_ms }).max(1);
+        let raw = (started.elapsed().as_secs_f32() / (dur_ms as f32 / 1000.0)).clamp(0.0, 1.0);
+        // Entering: poised quintic ease-out; exiting: crisp quartic ease-out.
+        let eased = if target {
+            1.0 - (1.0 - raw).powi(5)
+        } else {
+            1.0 - (1.0 - raw).powi(4)
+        };
+        let val = self.from + (goal - self.from) * eased;
+        self.last_value = val;
+        if raw >= 1.0 {
+            self.started = None;
+            self.from = goal;
+            self.last_value = goal;
+            goal
+        } else {
+            window.request_animation_frame();
+            val
+        }
+    }
+}
+
 /// A dialog (Settings, the shortcuts, the map, a confirmation): it rises
 /// 14px into place as it fades in over its dimmed backdrop; leaving, it
 /// sinks 6px and fades, slow at first. The steady, weighty one.
