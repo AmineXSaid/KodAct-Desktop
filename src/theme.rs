@@ -143,19 +143,19 @@ impl Look {
             link_hover,
             mark_top,
         };
-        // KodAct burgundy: warm ink and paper, and one colour. Burgundy
+        // KodAct burgundy: neutral greys (after Postman's) and one colour. Burgundy
         // (`#8c1d40` on paper; `#e8809f` on ink) is the mark, Send, the one
         // decisive action and what waits on you; a step lighter, it is
         // links, focus, selection and a switch that is on. Buttons and
         // work in progress are ink.
         if dark {
             t(
-                0x15181e, 0x0a0b0d, 0x1d2129, 0x101216, 0xe8809f, 0x1a0710, 0x3a1422, 0xf0a3ba,
+                0x282828, 0x212121, 0x303030, 0x1c1c1c, 0xe8809f, 0x1a0710, 0x3a1422, 0xf0a3ba,
                 0xf7c3d2, 0xe8809f,
             )
         } else {
             t(
-                0xefedea, 0xf8f7f5, 0xffffff, 0xf3f1ee, 0x8c1d40, 0xffffff, 0xf2dde4, 0x9b2348,
+                0xefefef, 0xf7f7f7, 0xffffff, 0xf2f2f2, 0x8c1d40, 0xffffff, 0xf2dde4, 0x9b2348,
                 0x761835, 0x8c1d40,
             )
         }
@@ -220,10 +220,6 @@ impl Global for Theme {}
 
 fn ink(alpha: f32) -> Hsla {
     hsla(0., 0., 0., alpha)
-}
-/// The ink (#0e0d0c) at `alpha`: hairlines and washes on paper.
-fn warm_ink(alpha: f32) -> Hsla {
-    hsla(30. / 360., 0.08, 0.05, alpha)
 }
 
 impl Theme {
@@ -292,7 +288,7 @@ impl Theme {
         (self.extra.chrome, self.extra.pane, self.colors.sidebar) =
             (c(k.canvas), c(k.canvas), c(k.canvas));
         (self.extra.stage, self.colors.canvas) = (c(k.stage), c(k.stage));
-        self.extra.selected = c(if self.is_dark { 0x242934 } else { k.stage });
+        self.extra.selected = c(if self.is_dark { 0x353535 } else { k.stage });
         self.colors.surface = c(k.card);
         self.extra.sunk = c(k.sunk);
         self.extra.accent = c(k.accent);
@@ -330,19 +326,20 @@ impl Theme {
         Self::base(
             false,
             Colors {
-                // KodAct Signal by day: warm paper, the session a sheet on it.
-                canvas: rgb(0xf8f7f5).into(),
+                // Neutral greys by day (after Postman's): the sidebar a step
+                // under the session, white cards on it.
+                canvas: rgb(0xf7f7f7).into(),
                 surface: rgb(0xffffff).into(),
-                sidebar: rgb(0xefedea).into(),
-                // One ink, KodAct's #0e0d0c, carries the type; the
-                // terminal's greys for what is secondary.
-                text: rgb(0x1a1816).into(),
-                text_strong: rgb(0x0e0d0c).into(),
-                text_body: rgb(0x2a2724).into(),
-                text_muted: rgb(0x5c5853).into(),
-                text_subtle: rgb(0x7a756f).into(),
-                border: warm_ink(0.13),
-                hover: warm_ink(0.05),
+                sidebar: rgb(0xefefef).into(),
+                // One charcoal ink carries the type; plain greys for what is
+                // secondary.
+                text: rgb(0x262626).into(),
+                text_strong: rgb(0x212121).into(),
+                text_body: rgb(0x333333).into(),
+                text_muted: rgb(0x616161).into(),
+                text_subtle: rgb(0x8f8f8f).into(),
+                border: ink(0.12),
+                hover: ink(0.05),
                 // Links, focus and selected text: the burgundy, a step
                 // lighter than the action's.
                 primary: rgb(0x9b2348).into(),
@@ -358,21 +355,22 @@ impl Theme {
         )
     }
 
-    /// The same room at night: deepest obsidian stage, lifted slate sidebars and cards.
+    /// The same room at night, in Postman's greys: a charcoal session, the
+    /// sidebar and title bar a step up, cards a step above that.
     pub fn dark() -> Self {
         Self::base(
             true,
             Colors {
-                canvas: rgb(0x0a0b0d).into(),
-                surface: rgb(0x1d2129).into(),
-                sidebar: rgb(0x15181e).into(),
-                text: rgb(0xebeef2).into(),
-                text_strong: rgb(0xf5f7fa).into(),
-                text_body: rgb(0xd2d7e0).into(),
-                text_muted: rgb(0xabaeb5).into(),
-                text_subtle: rgb(0x7c8391).into(),
-                border: hsla(220. / 360., 0.16, 0.90, 0.12),
-                hover: hsla(220. / 360., 0.20, 0.92, 0.07),
+                canvas: rgb(0x212121).into(),
+                surface: rgb(0x303030).into(),
+                sidebar: rgb(0x282828).into(),
+                text: rgb(0xf0f0f0).into(),
+                text_strong: rgb(0xffffff).into(),
+                text_body: rgb(0xe6e6e6).into(),
+                text_muted: rgb(0xb0b0b0).into(),
+                text_subtle: rgb(0x858585).into(),
+                border: hsla(0., 0., 1., 0.10),
+                hover: hsla(0., 0., 1., 0.06),
                 primary: rgb(0xf0a3ba).into(),
                 primary_hover: rgb(0xf7c3d2).into(),
                 primary_fg: rgb(0x0a0b0d).into(),
@@ -560,7 +558,7 @@ impl ExtraColors {
     fn for_mode(is_dark: bool) -> Self {
         if is_dark {
             Self {
-                inset: hsla(220. / 360., 0.25, 0.95, 0.04),
+                inset: hsla(0., 0., 1., 0.04),
                 success: rgb(0x8fbf9b).into(),
                 success_tint: rgb(0x1b2c22).into(),
                 danger: rgb(0xe98a72).into(),
@@ -570,12 +568,12 @@ impl ExtraColors {
                 diff_add: hsla(135. / 360., 0.27, 0.65, 0.12),
                 diff_del: hsla(12. / 360., 0.73, 0.68, 0.12),
                 scrim: ink(0.60),
-                selected: rgb(0x242934).into(),
-                // Obsidian night: deepest black main stage, softly lifted slate
-                // sidebars, title bar & Settings, crisp card surfaces above.
-                chrome: rgb(0x15181e).into(),
-                pane: rgb(0x15181e).into(),
-                stage: rgb(0x0a0b0d).into(),
+                selected: rgb(0x353535).into(),
+                // Charcoal night: the session #212121, the sidebar and title
+                // bar a step up, cards a step above that.
+                chrome: rgb(0x282828).into(),
+                pane: rgb(0x282828).into(),
+                stage: rgb(0x212121).into(),
                 // The filled action is paper on ink, as ink on paper in light.
                 // The filled action is the burgundy, lifted for the night,
                 // under a dark label.
@@ -594,15 +592,15 @@ impl ExtraColors {
                 mark_heat: rgb(0xf7a8bf).into(),
                 mark_heat_ember: rgb(0xa8304f).into(),
                 mark_heat_iron: rgb(0x3a0f1c).into(),
-                border_strong: rgb(0x363d4a).into(),
-                sunk: rgb(0x101216).into(),
+                border_strong: rgb(0x4a4a4a).into(),
+                sunk: rgb(0x1c1c1c).into(),
                 toggle_on: rgb(0xf0a3ba).into(),
-                live: rgb(0xabaeb5).into(),
+                live: rgb(0xb0b0b0).into(),
                 agent: None,
                 memory: rgb(0xe5c77a).into(),
                 memory_tint: rgb(0x332b19).into(),
-                code_inline_fg: rgb(0xebeef2).into(),
-                code_inline_bg: Hsla::from(rgb(0xebeef2)).opacity(0.09),
+                code_inline_fg: rgb(0xf0f0f0).into(),
+                code_inline_bg: Hsla::from(rgb(0xf0f0f0)).opacity(0.09),
                 mode_edit: rgb(0x2da160).into(),
                 mode_plan: rgb(0x428fdc).into(),
                 mode_bypass: rgb(0xec5941).into(),
@@ -634,7 +632,7 @@ impl ExtraColors {
             }
         } else {
             Self {
-                inset: warm_ink(0.03),
+                inset: ink(0.03),
                 success: rgb(0x3f6b4b).into(),
                 success_tint: rgb(0xe3ebe3).into(),
                 danger: rgb(0xa3402c).into(),
@@ -643,13 +641,13 @@ impl ExtraColors {
                 warning_tint: hsla(40. / 360., 1., 0.53, 0.2),
                 diff_add: hsla(137. / 360., 0.26, 0.33, 0.10),
                 diff_del: hsla(10. / 360., 0.57, 0.41, 0.09),
-                scrim: hsla(25. / 360., 0.2, 0.08, 0.38), // the dialog stands clear of the chat
-                selected: rgb(0xf8f7f5).into(),
-                // Warm paper under the title bar and the sidebar, a
-                // lighter sheet for the session, white for the cards on it.
-                chrome: rgb(0xefedea).into(),
-                pane: rgb(0xefedea).into(),
-                stage: rgb(0xf8f7f5).into(),
+                scrim: ink(0.38), // the dialog stands clear of the chat
+                selected: rgb(0xf7f7f7).into(),
+                // Light grey under the title bar and the sidebar, a lighter
+                // one for the session, white for the cards on it.
+                chrome: rgb(0xefefef).into(),
+                pane: rgb(0xefefef).into(),
+                stage: rgb(0xf7f7f7).into(),
                 // The filled action is the burgundy pill.
                 fill: rgb(0x8c1d40).into(),
                 fill_hover: rgb(0x761835).into(),
@@ -666,15 +664,15 @@ impl ExtraColors {
                 mark_heat: rgb(0xf7a8bf).into(),
                 mark_heat_ember: rgb(0xa8304f).into(),
                 mark_heat_iron: rgb(0x3a0f1c).into(),
-                border_strong: rgb(0xcbc8c3).into(),
-                sunk: rgb(0xf3f1ee).into(),
+                border_strong: rgb(0xd4d4d4).into(),
+                sunk: rgb(0xf2f2f2).into(),
                 toggle_on: rgb(0x9b2348).into(),
-                live: rgb(0x5c5853).into(),
+                live: rgb(0x616161).into(),
                 agent: None,
                 memory: rgb(0x75591a).into(),
                 memory_tint: rgb(0xf6ecd2).into(),
-                code_inline_fg: rgb(0x1a1816).into(),
-                code_inline_bg: Hsla::from(rgb(0x0e0d0c)).opacity(0.065),
+                code_inline_fg: rgb(0x262626).into(),
+                code_inline_bg: Hsla::from(rgb(0x212121)).opacity(0.065),
                 mode_edit: rgb(0x108548).into(),
                 mode_plan: rgb(0x1f75cb).into(),
                 mode_bypass: rgb(0xa32c12).into(),
