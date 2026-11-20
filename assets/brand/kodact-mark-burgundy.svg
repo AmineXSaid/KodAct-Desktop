@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 272" width="280" height="272">
+  <!-- KodAct's ./< mark (src/ui/kodact_mark.rs): burgundy dot and angle, near-white
+       slash, each on a dark keyline, over a soft shadow; transparent ground. -->
+  <defs>
+    <linearGradient id="burgundy" gradientUnits="userSpaceOnUse" x1="0" y1="14" x2="0" y2="238">
+      <stop offset="0" stop-color="#B23A5C"/>
+      <stop offset="1" stop-color="#6E1531"/>
+    </linearGradient>
+    <linearGradient id="ink" gradientUnits="userSpaceOnUse" x1="0" y1="14" x2="0" y2="238">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#D9DEE6"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#000" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+  <g transform="translate(10 10)" filter="url(#shadow)">
+  <circle cx="35" cy="205" r="25.5" fill="#22060F"/>
+  <circle cx="35" cy="205" r="19.5" fill="url(#burgundy)"/>
+  <path d="M68 224 L96 232 L148 22 L120 14Z" fill="#0B0D10" stroke="#0B0D10" stroke-width="15" stroke-linejoin="round"/>
+  <path d="M68 224 L96 232 L148 22 L120 14Z" fill="url(#ink)" stroke="url(#ink)" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M114 130 L223 22 L243 42 L154 130 L243 218 L223 238Z" fill="#22060F" stroke="#22060F" stroke-width="15" stroke-linejoin="round"/>
+  <path d="M114 130 L223 22 L243 42 L154 130 L243 218 L223 238Z" fill="url(#burgundy)" stroke="url(#burgundy)" stroke-width="3" stroke-linejoin="round"/>
+  </g>
+</svg>
