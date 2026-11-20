@@ -57,11 +57,8 @@ pub struct Workspace {
     sheet_editor: Entity<super::sheet_view::SheetEditor>,
     /// The project's tree and a viewer, under the side panel (`files_pane.rs`).
     files: Entity<super::files_pane::FilesPane>,
-    /// The film as KodAct opens, while it plays (`opener.rs`).
-    opener: Option<Entity<super::opener::Opener>>,
     /// The windows drawn here, kept for the beat each takes to leave.
     presence: Presences,
-    _opener_sub: Option<gpui::Subscription>,
     focus: FocusHandle,
 }
 
@@ -118,35 +115,6 @@ impl Workspace {
             cx.new(|cx| super::sheet_view::SheetEditor::new(state.clone(), window, cx));
         let files = cx.new(|cx| super::files_pane::FilesPane::new(state.clone(), window, cx));
         let first_run = state.read(cx).onboarding;
-        // The opener: the full film on a first run, ending on the naming
-        // screen; a short one after, ending in the app.
-        let (opener, opener_sub) = if super::opener::Opener::plays() {
-            use super::opener::{Cut, Opener, OpenerEvent};
-            let cut = if first_run { Cut::First } else { Cut::Again };
-            let o = cx.new(|cx| Opener::new(cut, window, cx));
-            let sub = cx.subscribe_in(
-                &o,
-                window,
-                move |ws: &mut Self, _, ev, window, cx| match ev {
-                    OpenerEvent::Handoff if cut == Cut::First => {
-                        ws.onboarding.update(cx, |o, cx| o.open_forged(window, cx))
-                    }
-                    OpenerEvent::Handoff => {}
-                    OpenerEvent::Done => {
-                        ws.opener = None;
-                        ws._opener_sub = None;
-                        if cut == Cut::Again {
-                            ws.composer.update(cx, |c, cx| c.focus(window, cx));
-                        }
-                        cx.notify();
-                    }
-                },
-            );
-            (Some(o), Some(sub))
-        } else {
-            (None, None)
-        };
-        let playing = opener.is_some();
         let ws = Self {
             state,
             sidebar,
@@ -171,14 +139,10 @@ impl Workspace {
             doc_find,
             sheet_editor,
             files,
-            opener,
             presence: Presences::default(),
-            _opener_sub: opener_sub,
             focus: cx.focus_handle(),
         };
-        if playing {
-            // The opener has the keyboard; it hands over when it's done.
-        } else if first_run {
+        if first_run {
             ws.onboarding.update(cx, |o, cx| o.open(window, cx));
         } else {
             ws.composer.update(cx, |c, cx| c.focus(window, cx));
@@ -187,11 +151,7 @@ impl Workspace {
         // keyboard stays with the composer.
         if !first_run && ws.state.read(cx).terminal_open {
             ws.terminal.update(cx, |d, cx| d.open(None, window, cx));
-            match &ws.opener {
-                // The opener keeps the keyboard, so any key skips it.
-                Some(o) => o.update(cx, |o, cx| o.take_focus(window, cx)),
-                None => ws.composer.update(cx, |c, cx| c.focus(window, cx)),
-            }
+            ws.composer.update(cx, |c, cx| c.focus(window, cx));
         }
         ws
     }
@@ -2160,7 +2120,6 @@ impl Render for Workspace {
             .child(self.attachment_editor.clone())
             .child(self.askpass.clone())
             .children(self.toast(toast_f, cx))
-            .children(self.opener.clone())
     }
 }
 

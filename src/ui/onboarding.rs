@@ -16,7 +16,7 @@ use gpui::component::input::{Input, InputEvent, InputState};
 use std::time::Duration;
 
 use gpui::{
-    canvas, div, prelude::*, px, relative, Animation, AnimationExt, AnyElement, App, Context,
+    div, prelude::*, px, relative, Animation, AnimationExt, AnyElement, App, Context,
     Entity, FocusHandle, IntoElement, Render, SharedString, Subscription, Task, Window,
 };
 
@@ -77,9 +77,6 @@ pub struct Onboarding {
     /// Whether you had a name when the step opened (the question asks for
     /// it "now"); kept, so the question doesn't change as you strike.
     returning: bool,
-    /// Opened by the opener, which has already forged the cube: the hero
-    /// rests while the question and the field arrive.
-    forged: bool,
     _subs: Vec<Subscription>,
 }
 
@@ -115,7 +112,6 @@ impl Onboarding {
             strike: 0,
             striking: None,
             returning: false,
-            forged: false,
             _subs: subs,
         }
     }
@@ -139,15 +135,7 @@ impl Onboarding {
             i.set_value(current, window, cx);
             i.focus(window, cx);
         });
-        self.forged = false;
         self.forge();
-    }
-
-    /// Show it at the name as the opener hands over: the cube it forged
-    /// rests in the hero; the question and the field arrive as usual.
-    pub fn open_forged(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.open(window, cx);
-        self.forged = true;
     }
 
     /// Show it at the avatars.
@@ -383,13 +371,11 @@ impl Onboarding {
             .into_any_element()
     }
 
-    /// The mark over its halo and orbit: arriving as the step opens, a
+    /// The mark over its halo: arriving as the step opens, a
     /// push ahead when struck, at rest under reduced motion.
     fn hero(&self, t: &Theme, cx: &App) -> AnyElement {
         let glow = Glow {
             halo: t.extra.accent,
-            ring: t.colors.text_subtle,
-            spark: t.colors.primary,
             heat: t.extra.mark_heat,
         };
         let frame = div().relative().size(px(HERO)).flex_none();
@@ -399,17 +385,9 @@ impl Onboarding {
                 .child(placed(kodact_mark::mark(CUBE)))
                 .into_any_element();
         }
-        if self.forged && self.strike == 0 {
-            return frame
-                .child(halo(glow, 1.))
-                .child(orbit(glow, 1.))
-                .child(placed(kodact_mark::mark(CUBE)))
-                .into_any_element();
-        }
         if self.strike > 0 {
             return frame
                 .child(halo(glow, 1.))
-                .child(orbit(glow, 1.))
                 .child(div().absolute().inset_0().with_animation(
                     ("onboarding-strike", self.strike),
                     Animation::new(STRIKE),
@@ -426,11 +404,10 @@ impl Onboarding {
                 Animation::new(Duration::from_millis(INTRO_MS as u64)),
                 move |d, k| {
                     let ms = k * INTRO_MS;
-                    // After the lock: the halo and orbit settle in.
+                    // After the lock: the halo settles in.
                     let after = smooth((ms - LOCK_MS) / 700.);
                     let heat = 1. - smooth((ms - LOCK_MS) / (COOL_MS - LOCK_MS));
                     d.child(halo(glow, after))
-                        .child(orbit(glow, after))
                         .child(radiance(glow, heat))
                         .child(flash(glow, (ms - LOCK_MS + 60.) / 800.))
                         .child(placed(kodact_mark::landing(CUBE, ms / LAND_MS, heat)))
@@ -548,8 +525,6 @@ fn smooth(x: f32) -> f32 {
 #[derive(Clone, Copy)]
 struct Glow {
     halo: gpui::Hsla,
-    ring: gpui::Hsla,
-    spark: gpui::Hsla,
     heat: gpui::Hsla,
 }
 
@@ -585,57 +560,6 @@ fn halo(g: Glow, a: f32) -> impl IntoElement {
                         spread_radius: px(0.),
                         inset: false,
                     }])
-            },
-        )
-}
-
-/// A dotted ring round the cube's base with a spark running along it.
-fn orbit(g: Glow, a: f32) -> impl IntoElement {
-    const PAD: f32 = 18.;
-    div()
-        .absolute()
-        .left(px(-PAD))
-        .top(px(-PAD))
-        .size(px(HERO + PAD * 2.))
-        .with_animation(
-            "onboarding-orbit",
-            Animation::new(Duration::from_millis(7000)).repeat(),
-            move |d, k| {
-                d.child(
-                    canvas(
-                        |_, _, _| {},
-                        move |b, _, window, _| {
-                            let (cx, cy) = (HERO / 2. + PAD, HERO * 0.66 + PAD);
-                            let (rx, ry) = (78., 23.);
-                            let at = |th: f32| {
-                                b.origin
-                                    + gpui::point(px(cx + rx * th.cos()), px(cy + ry * th.sin()))
-                            };
-                            let mut ring =
-                                gpui::PathBuilder::stroke(px(1.)).dash_array(&[px(2.), px(5.)]);
-                            ring.move_to(at(0.));
-                            for i in 1..=96 {
-                                ring.line_to(at(i as f32 / 96. * std::f32::consts::TAU));
-                            }
-                            if let Ok(path) = ring.build() {
-                                window.paint_path(path, g.ring.opacity(a));
-                            }
-                            let p = at(k * std::f32::consts::TAU);
-                            let r = px(2.2);
-                            window.paint_quad(
-                                gpui::fill(
-                                    gpui::Bounds::new(
-                                        p - gpui::point(r, r),
-                                        gpui::size(r * 2., r * 2.),
-                                    ),
-                                    g.spark.opacity(a),
-                                )
-                                .corner_radii(r),
-                            );
-                        },
-                    )
-                    .size_full(),
-                )
             },
         )
 }

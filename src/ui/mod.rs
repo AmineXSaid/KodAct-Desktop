@@ -58,7 +58,6 @@ pub mod model_menu;
 pub mod motion;
 pub mod new_project;
 pub mod onboarding;
-pub mod opener;
 pub mod permissions_editor;
 pub mod planned;
 pub mod plugins_editor;
