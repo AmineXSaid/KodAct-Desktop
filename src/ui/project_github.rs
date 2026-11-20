@@ -361,8 +361,9 @@ impl Render for ProjectGithub {
                         .on_click(move |_, _, cx| pull.update(cx, |s, cx| s.repo_pull(id, cx))),
                 )
             })
-            .when_some(repo.github.clone(), |d, (owner, name)| {
-                let url = format!("https://github.com/{owner}/{name}");
+            .when_some(repo.forge.clone(), |d, forge| {
+                let url = forge.web_url;
+                let slug = forge.slug;
                 d.child(
                     div()
                         .id("gh-repo")
@@ -380,7 +381,7 @@ impl Render for ProjectGithub {
                                 .overflow_hidden()
                                 .whitespace_nowrap()
                                 .text_ellipsis()
-                                .child(format!("{owner}/{name}")),
+                                .child(slug),
                         )
                         .child(icon(
                             "icons/external-link.svg",
@@ -456,15 +457,39 @@ impl Render for ProjectGithub {
             )
         });
 
+        let card_title = match &repo.forge {
+            Some(f) if f.kind == crate::git_status::ForgeKind::GitHub => "GitHub".to_string(),
+            Some(f) if f.kind == crate::git_status::ForgeKind::GitLab => {
+                if f.host == "gitlab.com" {
+                    "GitLab".to_string()
+                } else {
+                    format!("GitLab · {}", f.host)
+                }
+            }
+            Some(f) => f.host.clone(),
+            None => "Repository".to_string(),
+        };
+
         let mut out = card
-            .child(title(if repo.github.is_some() {
-                "GitHub"
-            } else {
-                "Repository"
-            }))
+            .child(title(&card_title))
             .child(branch_row)
             .children(branches)
             .child(actions);
+
+        let is_gitlab = repo
+            .forge
+            .as_ref()
+            .is_some_and(|f| f.kind == crate::git_status::ForgeKind::GitLab);
+        let slug = repo
+            .forge
+            .as_ref()
+            .map(|f| f.slug.clone())
+            .unwrap_or_else(|| {
+                repo.github
+                    .as_ref()
+                    .map(|(o, n)| format!("{o}/{n}"))
+                    .unwrap_or_else(|| "this repo".to_string())
+            });
 
         match &repo.hub {
             None => {}
@@ -477,7 +502,6 @@ impl Render for ProjectGithub {
                 );
             }
             Some(Ok(hub)) => {
-                let (owner, name) = repo.github.clone().unwrap_or_default();
                 if let Some(run) = &hub.run {
                     let c = run.checks();
                     let label = match c {
@@ -486,10 +510,17 @@ impl Render for ProjectGithub {
                         Checks::Pending => "running",
                     };
                     let (ask, url) = (self.state.clone(), run.url.clone());
-                    let fix = format!(
-                        "The latest CI run “{}” on {} failed ({}). Find out why (gh run view --log-failed if you can), then fix it and tell me what was wrong.",
-                        run.name, run.branch, run.url
-                    );
+                    let fix = if is_gitlab {
+                        format!(
+                            "The latest CI pipeline “{}” on {} failed ({}). Inspect why (glab ci trace if you can), then fix it and tell me what was wrong.",
+                            run.name, run.branch, run.url
+                        )
+                    } else {
+                        format!(
+                            "The latest CI run “{}” on {} failed ({}). Find out why (gh run view --log-failed if you can), then fix it and tell me what was wrong.",
+                            run.name, run.branch, run.url
+                        )
+                    };
                     out = out.child(
                         div()
                             .id("gh-run")
@@ -528,7 +559,12 @@ impl Render for ProjectGithub {
                             .on_click(move |_, _, cx| cx.open_url(&url)),
                     );
                 }
-                out = out.child(section(&t, format!("Pull requests · {}", hub.prs.len())));
+                let pr_heading = if is_gitlab {
+                    format!("Merge requests · {}", hub.prs.len())
+                } else {
+                    format!("Pull requests · {}", hub.prs.len())
+                };
+                out = out.child(section(&t, pr_heading));
                 if hub.prs.is_empty() {
                     out = out.child(
                         div()
@@ -548,10 +584,17 @@ impl Render for ProjectGithub {
                         p.author,
                         p.branch
                     );
-                    let ask = format!(
-                        "Review pull request #{} “{}” in {owner}/{name} ({}): read it (gh pr view {} and gh pr diff {} if you can), summarise what it changes, and point out bugs or risks with file:line. Don't change anything yet.",
-                        p.number, p.title, p.url, p.number, p.number
-                    );
+                    let ask = if is_gitlab {
+                        format!(
+                            "Review merge request !{} “{}” in {slug} ({}): summarise what it changes, and point out bugs or risks with file:line. Don't change anything yet.",
+                            p.number, p.title, p.url
+                        )
+                    } else {
+                        format!(
+                            "Review pull request #{} “{}” in {slug} ({}): read it (gh pr view {} and gh pr diff {} if you can), summarise what it changes, and point out bugs or risks with file:line. Don't change anything yet.",
+                            p.number, p.title, p.url, p.number, p.number
+                        )
+                    };
                     out = out.child(item(
                         &t,
                         format!("pr-{}", p.number),
@@ -575,10 +618,17 @@ impl Render for ProjectGithub {
                     );
                 }
                 for i in &hub.issues {
-                    let ask = format!(
-                        "Work on issue #{} “{}” in {owner}/{name} ({}): read it (gh issue view {} if you can), find the code it's about, and propose a fix before changing anything.",
-                        i.number, i.title, i.url, i.number
-                    );
+                    let ask = if is_gitlab {
+                        format!(
+                            "Work on issue #{} “{}” in {slug} ({}): read it, find the code it's about, and propose a fix before changing anything.",
+                            i.number, i.title, i.url
+                        )
+                    } else {
+                        format!(
+                            "Work on issue #{} “{}” in {slug} ({}): read it (gh issue view {} if you can), find the code it's about, and propose a fix before changing anything.",
+                            i.number, i.title, i.url, i.number
+                        )
+                    };
                     out = out.child(item(
                         &t,
                         format!("issue-{}", i.number),

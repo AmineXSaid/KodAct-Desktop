@@ -18,6 +18,22 @@ use std::time::Duration;
 
 use serde_json::Value;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum ForgeKind {
+    #[default]
+    GitHub,
+    GitLab,
+    Custom,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemoteHost {
+    pub kind: ForgeKind,
+    pub host: String,
+    pub slug: String,
+    pub web_url: String,
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Repo {
     pub branch: String,
@@ -27,10 +43,11 @@ pub struct Repo {
     /// Files changed (staged or not), and files git doesn't track yet.
     pub changed: u32,
     pub untracked: u32,
-    /// The origin's URL, and its GitHub owner and name when it is GitHub's.
+    /// The origin's URL, its GitHub owner/name, and generalized forge metadata.
     pub remote: Option<String>,
     pub github: Option<(String, String)>,
-    /// What GitHub says; None when the repo isn't on GitHub.
+    pub forge: Option<RemoteHost>,
+    /// What GitHub/GitLab says; None when the remote isn't a supported API forge.
     pub hub: Option<Result<Hub, String>>,
 }
 
@@ -39,7 +56,7 @@ pub struct Hub {
     pub prs: Vec<Pr>,
     pub issues: Vec<Issue>,
     pub run: Option<Run>,
-    /// "gh" or "GitHub API".
+    /// "gh", "glab", "GitHub API", or "GitLab API".
     pub via: &'static str,
 }
 
@@ -150,6 +167,68 @@ pub fn parse_remote(config: &str) -> Option<String> {
         }
     }
     first
+}
+
+/// Parse a GitHub, GitLab (cloud or self-hosted), or custom Git remote URL.
+pub fn parse_forge_remote(url: &str) -> Option<RemoteHost> {
+    let trimmed = url.trim().trim_end_matches('/');
+    let (scheme_https, rest) = if let Some(r) = trimmed.strip_prefix("https://") {
+        (true, r)
+    } else if let Some(r) = trimmed.strip_prefix("http://") {
+        (false, r)
+    } else if let Some(r) = trimmed.strip_prefix("ssh://") {
+        (true, r)
+    } else if let Some((left, path)) = trimmed.split_once(':') {
+        let host = left.split('@').next_back()?.trim();
+        if host.is_empty() || host.contains('/') {
+            return None;
+        }
+        let slug = path.trim_start_matches('/').trim_end_matches(".git").to_string();
+        if slug.is_empty() || !slug.contains('/') {
+            return None;
+        }
+        let kind = classify_host(host);
+        return Some(RemoteHost {
+            kind,
+            host: host.to_string(),
+            web_url: format!("https://{host}/{slug}"),
+            slug,
+        });
+    } else {
+        return None;
+    };
+
+    let (authority, path) = rest.split_once('/')?;
+    let host_port = authority.split('@').next_back()?.trim();
+    let host = host_port
+        .split(':')
+        .next()
+        .unwrap_or(host_port)
+        .trim()
+        .to_string();
+    let slug = path.trim_end_matches('/').trim_end_matches(".git").to_string();
+    if host.is_empty() || slug.is_empty() || !slug.contains('/') {
+        return None;
+    }
+    let scheme = if scheme_https { "https" } else { "http" };
+    let kind = classify_host(&host);
+    Some(RemoteHost {
+        kind,
+        web_url: format!("{scheme}://{host_port}/{slug}"),
+        host,
+        slug,
+    })
+}
+
+fn classify_host(host: &str) -> ForgeKind {
+    let h = host.to_ascii_lowercase();
+    if h == "github.com" || h.ends_with(".github.com") {
+        ForgeKind::GitHub
+    } else if h == "gitlab.com" || h.contains("gitlab") {
+        ForgeKind::GitLab
+    } else {
+        ForgeKind::Custom
+    }
 }
 
 /// A GitHub remote's owner and name: `git@github.com:o/r.git`,
@@ -375,6 +454,102 @@ fn via_api(repo: &str) -> Result<Hub, String> {
     })
 }
 
+pub(crate) fn url_encode_component(s: &str) -> String {
+    s.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (b as char).to_string()
+            }
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
+}
+
+fn via_gitlab_api(host: &str, slug: &str) -> Result<Hub, String> {
+    let agent = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(10))
+        .build();
+    let token = std::env::var("GITLAB_TOKEN")
+        .or_else(|_| std::env::var("GL_TOKEN"))
+        .ok()
+        .filter(|t| !t.trim().is_empty());
+    let encoded_proj = url_encode_component(slug);
+    let get = |path: &str| -> Result<Value, String> {
+        let mut req = agent
+            .get(&format!(
+                "https://{host}/api/v4/projects/{encoded_proj}/{path}"
+            ))
+            .set("Accept", "application/json")
+            .set("User-Agent", "KodAct-Desktop");
+        if let Some(t) = &token {
+            req = req.set("PRIVATE-TOKEN", t);
+        }
+        match req.call() {
+            Ok(r) => r.into_json().map_err(|e| e.to_string()),
+            Err(ureq::Error::Status(401 | 404, _)) => Err(
+                "GitLab didn't show this project: it may be private. Set GITLAB_TOKEN or clone via SSH.".into(),
+            ),
+            Err(e) => Err(e.to_string()),
+        }
+    };
+    let mrs = get("merge_requests?state=opened&per_page=8")?;
+    let issues = get("issues?state=opened&per_page=8").unwrap_or(Value::Null);
+    let pipelines = get("pipelines?per_page=1").unwrap_or(Value::Null);
+    Ok(Hub {
+        prs: mrs
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|p| Pr {
+                number: p["iid"].as_u64().unwrap_or(0),
+                title: p["title"].as_str().unwrap_or("").to_string(),
+                author: p["author"]["username"]
+                    .as_str()
+                    .or_else(|| p["author"]["name"].as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                branch: p["source_branch"].as_str().unwrap_or("").to_string(),
+                url: p["web_url"].as_str().unwrap_or("").to_string(),
+                draft: p["draft"]
+                    .as_bool()
+                    .or_else(|| p["work_in_progress"].as_bool())
+                    .unwrap_or(false),
+                checks: None,
+            })
+            .collect(),
+        issues: issues
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|i| Issue {
+                number: i["iid"].as_u64().unwrap_or(0),
+                title: i["title"].as_str().unwrap_or("").to_string(),
+                url: i["web_url"].as_str().unwrap_or("").to_string(),
+            })
+            .collect(),
+        run: pipelines
+            .as_array()
+            .and_then(|a| a.first())
+            .map(|r| {
+                let st = r["status"].as_str().unwrap_or("").to_lowercase();
+                let (status, conclusion) = match st.as_str() {
+                    "success" => ("completed".to_string(), Some("success".to_string())),
+                    "failed" | "canceled" => ("completed".to_string(), Some("failure".to_string())),
+                    "skipped" => ("completed".to_string(), Some("skipped".to_string())),
+                    other => (other.to_string(), None),
+                };
+                Run {
+                    name: "Pipeline".into(),
+                    branch: r["ref"].as_str().unwrap_or("").to_string(),
+                    status,
+                    conclusion,
+                    url: r["web_url"].as_str().unwrap_or("").to_string(),
+                }
+            }),
+        via: "GitLab API",
+    })
+}
+
 /// The project's repository as it is now; None when it isn't one.
 pub fn read(project: &Path) -> Option<Repo> {
     let config = std::fs::read_to_string(project.join(".git").join("config")).ok()?;
@@ -386,6 +561,7 @@ pub fn read(project: &Path) -> Option<Repo> {
         });
     repo.remote = parse_remote(&config);
     repo.github = repo.remote.as_deref().and_then(github_repo);
+    repo.forge = repo.remote.as_deref().and_then(parse_forge_remote);
     if let Some((owner, name)) = &repo.github {
         let slug = format!("{owner}/{name}");
         repo.hub = Some(if crate::state::demo_mode() {
@@ -393,6 +569,10 @@ pub fn read(project: &Path) -> Option<Repo> {
         } else {
             via_gh(project, &slug).or_else(|_| via_api(&slug))
         });
+    } else if let Some(forge) = &repo.forge {
+        if forge.kind == ForgeKind::GitLab && !crate::state::demo_mode() {
+            repo.hub = Some(via_gitlab_api(&forge.host, &forge.slug));
+        }
     }
     Some(repo)
 }
@@ -559,5 +739,34 @@ mod tests {
             url: String::new(),
         };
         assert_eq!(run.checks(), Checks::Failing);
+    }
+
+    #[test]
+    fn parses_github_gitlab_and_custom_self_hosted_remotes() {
+        let gh = parse_forge_remote("git@github.com:amine/kodact-desktop.git").unwrap();
+        assert_eq!(gh.kind, ForgeKind::GitHub);
+        assert_eq!(gh.host, "github.com");
+        assert_eq!(gh.slug, "amine/kodact-desktop");
+        assert_eq!(gh.web_url, "https://github.com/amine/kodact-desktop");
+
+        let gl = parse_forge_remote("https://gitlab.com/team/sub/service.git").unwrap();
+        assert_eq!(gl.kind, ForgeKind::GitLab);
+        assert_eq!(gl.host, "gitlab.com");
+        assert_eq!(gl.slug, "team/sub/service");
+        assert_eq!(gl.web_url, "https://gitlab.com/team/sub/service");
+
+        let gl_corp = parse_forge_remote("https://gitlab.company.com/team/sub/repo.git").unwrap();
+        assert_eq!(gl_corp.kind, ForgeKind::GitLab);
+        assert_eq!(gl_corp.host, "gitlab.company.com");
+        assert_eq!(gl_corp.slug, "team/sub/repo");
+        assert_eq!(gl_corp.web_url, "https://gitlab.company.com/team/sub/repo");
+
+        let custom = parse_forge_remote("ssh://git@git.company.com/org/repo.git").unwrap();
+        assert_eq!(custom.kind, ForgeKind::Custom);
+        assert_eq!(custom.host, "git.company.com");
+        assert_eq!(custom.slug, "org/repo");
+        assert_eq!(custom.web_url, "https://git.company.com/org/repo");
+
+        assert_eq!(url_encode_component("team/sub/repo"), "team%2Fsub%2Frepo");
     }
 }

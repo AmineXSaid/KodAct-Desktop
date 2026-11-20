@@ -139,7 +139,7 @@ impl Composer {
                 );
                 if now != this.placeholder_now {
                     let line: SharedString = match &now.4 {
-                        Some(name) if !now.3 => format!("New chat in {name}").into(),
+                        Some(name) if !now.3 => format!("New session in {name}").into(),
                         _ => placeholder(now.0, now.1, now.2, now.3).into(),
                     };
                     this.placeholder_now = now;

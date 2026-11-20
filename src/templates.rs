@@ -122,6 +122,63 @@ pub fn clone_target(home: &std::path::Path, url: &str) -> Option<std::path::Path
     folder_name(name).map(|n| home.join(n))
 }
 
+/// Normalize a repository address or shorthand (`owner/repo`, `group/sub/repo`)
+/// into a cloneable URL for GitHub, GitLab, or a custom self-hosted Git host.
+pub fn normalize_git_clone_url(
+    kind: crate::git_status::ForgeKind,
+    custom_host: Option<&str>,
+    raw_input: &str,
+) -> Option<String> {
+    let raw = raw_input.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let is_full_ssh = raw.starts_with("git@")
+        || (!raw.contains("://")
+            && raw
+                .split_once(':')
+                .is_some_and(|(lhs, _)| !lhs.contains('/') && lhs.contains('@')));
+    if raw.contains("://") || is_full_ssh {
+        return Some(raw.to_string());
+    }
+
+    let slug = raw.trim_start_matches('/').trim_end_matches('/');
+    if !slug.contains('/') {
+        return None;
+    }
+
+    let clean_host = custom_host
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| {
+            s.trim_start_matches("https://")
+                .trim_start_matches("http://")
+                .trim_end_matches('/')
+        });
+
+    let first_seg = slug.split('/').next().unwrap_or("");
+    if clean_host.is_none() && first_seg.contains('.') {
+        let with_scheme = format!("https://{slug}");
+        return Some(if with_scheme.ends_with(".git") {
+            with_scheme
+        } else {
+            format!("{with_scheme}.git")
+        });
+    }
+
+    let host = match kind {
+        crate::git_status::ForgeKind::GitHub => clean_host.unwrap_or("github.com"),
+        crate::git_status::ForgeKind::GitLab => clean_host.unwrap_or("gitlab.com"),
+        crate::git_status::ForgeKind::Custom => clean_host?,
+    };
+    let out = format!("https://{host}/{slug}");
+    Some(if out.ends_with(".git") {
+        out
+    } else {
+        format!("{out}.git")
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -159,6 +216,46 @@ mod tests {
         assert_eq!(
             clone_target(home, "git@github.com:a/tool"),
             Some(home.join("tool"))
+        );
+        assert_eq!(
+            clone_target(home, "https://gitlab.company.com/team/sub/repo.git"),
+            Some(home.join("repo"))
+        );
+    }
+
+    #[test]
+    fn normalizes_clone_urls_for_github_gitlab_and_custom_hosts() {
+        use crate::git_status::ForgeKind;
+        assert_eq!(
+            normalize_git_clone_url(ForgeKind::GitHub, None, "owner/repo").as_deref(),
+            Some("https://github.com/owner/repo.git")
+        );
+        assert_eq!(
+            normalize_git_clone_url(ForgeKind::GitLab, None, "team/sub/service").as_deref(),
+            Some("https://gitlab.com/team/sub/service.git")
+        );
+        assert_eq!(
+            normalize_git_clone_url(
+                ForgeKind::GitLab,
+                Some("https://gitlab.company.com/"),
+                "team/sub/service"
+            )
+            .as_deref(),
+            Some("https://gitlab.company.com/team/sub/service.git")
+        );
+        assert_eq!(
+            normalize_git_clone_url(ForgeKind::Custom, Some("git.acme.internal"), "org/app")
+                .as_deref(),
+            Some("https://git.acme.internal/org/app.git")
+        );
+        assert_eq!(
+            normalize_git_clone_url(ForgeKind::Custom, None, "org/app"),
+            None
+        );
+        assert_eq!(
+            normalize_git_clone_url(ForgeKind::Custom, None, "ssh://git@git.acme.internal/org/app.git")
+                .as_deref(),
+            Some("ssh://git@git.acme.internal/org/app.git")
         );
     }
 }

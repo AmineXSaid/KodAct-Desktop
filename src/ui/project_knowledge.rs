@@ -25,9 +25,11 @@ pub struct ProjectKnowledge {
     title: Entity<InputState>,
     note: Entity<TextareaState>,
     writing: bool,
-    /// Adding from GitHub: the repository typed, its tree once read, what
-    /// is ticked and which folders are open.
+    add_open: bool,
+    /// Adding from GitHub / GitLab / Custom host: repository typed, tree once read,
+    /// what is ticked and which folders are open.
     gh_open: bool,
+    gh_kind: crate::git_status::ForgeKind,
     gh_input: Entity<InputState>,
     gh_loading: bool,
     gh_error: Option<String>,
@@ -40,7 +42,7 @@ pub struct ProjectKnowledge {
 impl ProjectKnowledge {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let gh_input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("e.g. owner/repo, or a github.com link")
+            InputState::new(window, cx).placeholder("e.g. owner/repo, or a repository link")
         });
         Self {
             _subs: vec![
@@ -63,7 +65,9 @@ impl ProjectKnowledge {
                     .placeholder("What every chat here should know: facts, decisions, a glossary…")
             }),
             writing: false,
+            add_open: false,
             gh_open: false,
+            gh_kind: crate::git_status::ForgeKind::GitHub,
             gh_input,
             gh_loading: false,
             gh_error: None,
@@ -73,12 +77,48 @@ impl ProjectKnowledge {
         }
     }
 
+    fn open_remote(
+        &mut self,
+        kind: crate::git_status::ForgeKind,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.add_open = false;
+        self.writing = false;
+        self.gh_open = true;
+        self.gh_kind = kind;
+        self.gh_error = None;
+        self.gh_tree = None;
+        self.gh_input.update(cx, |i, cx| i.focus(window, cx));
+        cx.notify();
+    }
+
     /// Read the typed repository's tree, off the UI thread.
     fn gh_look(&mut self, cx: &mut Context<Self>) {
-        let typed = self.gh_input.read(cx).value().to_string();
-        let Some(r) = crate::github_knowledge::parse(&typed) else {
-            self.gh_error =
-                Some("Type a repository as owner/repo, or paste its github.com link.".into());
+        let raw = self.gh_input.read(cx).value().to_string();
+        let trimmed = raw.trim();
+        let normalized = if self.gh_kind == crate::git_status::ForgeKind::GitLab
+            && !trimmed.is_empty()
+            && !trimmed.contains("://")
+            && !trimmed.split('/').next().unwrap_or("").contains('.')
+        {
+            format!("https://gitlab.com/{}", trimmed.trim_start_matches('/'))
+        } else {
+            trimmed.to_string()
+        };
+        let Some(r) = crate::github_knowledge::parse(&normalized) else {
+            self.gh_error = Some(match self.gh_kind {
+                crate::git_status::ForgeKind::GitHub => {
+                    "Type owner/repo or paste a github.com repository link.".into()
+                }
+                crate::git_status::ForgeKind::GitLab => {
+                    "Paste a gitlab.com or self-hosted GitLab URL, or group/repo.".into()
+                }
+                crate::git_status::ForgeKind::Custom => {
+                    "Paste a full HTTPS repository URL (e.g. https://git.company.com/org/repo)."
+                        .into()
+                }
+            });
             return cx.notify();
         };
         self.gh_loading = true;
@@ -407,7 +447,11 @@ impl ProjectKnowledge {
                             .text_size(t.text.body_sm)
                             .font_weight(FontWeight::MEDIUM)
                             .text_color(t.colors.text_strong)
-                            .child("Add from GitHub"),
+                            .child(match self.gh_kind {
+                                crate::git_status::ForgeKind::GitHub => "Add from GitHub",
+                                crate::git_status::ForgeKind::GitLab => "Add from GitLab",
+                                crate::git_status::ForgeKind::Custom => "Add from Custom Git Host",
+                            }),
                     )
                     .when(!has_tree, |d| {
                         d.child(
@@ -430,7 +474,11 @@ impl ProjectKnowledge {
                         .text_size(t.text.caption)
                         .text_color(t.colors.text_subtle)
                         .line_height(relative(1.4))
-                        .child("KodAct copies the files you tick into this project, so every chat can read them; Sync brings them up to the branch's latest. Private repositories need gh signed in (gh auth login)."),
+                        .child(match self.gh_kind {
+                            crate::git_status::ForgeKind::GitHub => "Paste owner/repo or a github.com URL. KodAct copies the files you tick into this project; private repos use gh auth login.",
+                            crate::git_status::ForgeKind::GitLab => "Paste a gitlab.com or self-hosted GitLab URL (e.g. https://gitlab.com/group/repo or https://gitlab.company.com/team/repo).",
+                            crate::git_status::ForgeKind::Custom => "Paste a repository URL from your self-hosted Git host (e.g. https://git.company.com/org/repo).",
+                        }),
                 )
             })
             // The tree rises in once GitHub has listed it.
@@ -899,34 +947,112 @@ impl Render for ProjectKnowledge {
             .children(writer)
             .children(gh_panel)
             .when(!self.writing && !self.gh_open, |d| {
-                d.child(
+                let menu_row = |row_id: &'static str, glyph: &'static str, label: &'static str| {
                     div()
+                        .id(row_id)
                         .flex()
-                        .flex_wrap()
+                        .items_center()
                         .gap(t.space.sm)
+                        .h(t.size.row)
+                        .px(t.space.sm)
+                        .rounded(t.radius.compact)
+                        .cursor_pointer()
+                        .text_size(t.text.body_sm)
+                        .text_color(t.colors.text)
+                        .hover(move |st| st.bg(hover))
+                        .child(icon(glyph, t.size.icon_sm, t.colors.text_muted))
+                        .child(label)
+                };
+                let add_menu = self.add_open.then(|| {
+                    div()
+                        .id("knowledge-add-menu")
+                        .absolute()
+                        .left_0()
+                        .bottom_full()
+                        .mb(t.space.xs)
+                        .w(px(220.))
+                        .p(t.space.xs)
+                        .rounded(t.radius.card)
+                        .bg(t.extra.pane)
+                        .border_1()
+                        .border_color(t.colors.border)
+                        .shadow_lg()
+                        .flex()
+                        .flex_col()
+                        .gap(px(2.))
                         .child(
-                            theme::ghost_button(&t, "Add files")
-                                .id("knowledge-add")
-                                .on_click(cx.listener(move |this, _, _, cx| this.pick(id, cx))),
+                            menu_row("knowledge-add-upload", "icons/file-plus.svg", "Upload from device")
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.add_open = false;
+                                    this.pick(id, cx);
+                                    cx.notify();
+                                })),
                         )
                         .child(
-                            theme::ghost_button(&t, "Write a note")
-                                .id("knowledge-note")
+                            menu_row("knowledge-add-text", "icons/file-text.svg", "Add text content")
                                 .on_click(cx.listener(|this, _, window, cx| {
+                                    this.add_open = false;
                                     this.writing = true;
                                     this.title.update(cx, |i, cx| i.focus(window, cx));
                                     cx.notify();
                                 })),
                         )
+                        .child(div().h(px(1.)).my(px(2.)).bg(t.colors.border))
                         .child(
-                            theme::ghost_button(&t, "Add from GitHub")
-                                .id("knowledge-github")
+                            menu_row("knowledge-add-github", "icons/folder-git-2.svg", "GitHub")
                                 .on_click(cx.listener(|this, _, window, cx| {
-                                    this.gh_open = true;
-                                    this.gh_input.update(cx, |i, cx| i.focus(window, cx));
+                                    this.open_remote(
+                                        crate::git_status::ForgeKind::GitHub,
+                                        window,
+                                        cx,
+                                    );
+                                })),
+                        )
+                        .child(
+                            menu_row("knowledge-add-gitlab", "icons/git-branch.svg", "GitLab")
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.open_remote(
+                                        crate::git_status::ForgeKind::GitLab,
+                                        window,
+                                        cx,
+                                    );
+                                })),
+                        )
+                        .child(
+                            menu_row("knowledge-add-custom", "icons/globe.svg", "Custom Git host")
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.open_remote(
+                                        crate::git_status::ForgeKind::Custom,
+                                        window,
+                                        cx,
+                                    );
+                                })),
+                        )
+                });
+                d.child(
+                    div()
+                        .relative()
+                        .flex()
+                        .items_center()
+                        .gap(t.space.sm)
+                        .child(
+                            theme::ghost_button(&t, "+ Add")
+                                .id("knowledge-add-trigger")
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.add_open = !this.add_open;
                                     cx.notify();
                                 })),
-                        ),
+                        )
+                        .children(add_menu.map(|m| {
+                            gpui::deferred(super::motion::unfold(
+                                m,
+                                "knowledge-add-pop",
+                                false,
+                                false,
+                                &t,
+                            ))
+                            .with_priority(1)
+                        })),
                 )
             })
             .into_any_element()

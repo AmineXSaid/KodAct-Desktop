@@ -645,91 +645,99 @@ impl ProjectsView {
             }));
 
         div()
-            .id("projects-page")
+            .relative()
             .flex_1()
             .min_h_0()
-            .overflow_y_scroll()
             .flex()
-            .justify_center()
-            .px(t.space.xxl)
-            .pt(t.space.xxl + t.space.lg)
-            .pb(t.space.xxl)
+            .flex_col()
             .child(
                 div()
-                    .w_full()
-                    .max_w(t.size.column)
+                    .id("projects-page")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
                     .flex()
-                    .flex_col()
-                    .gap(t.space.xl)
+                    .justify_center()
+                    .px(t.space.xxl)
+                    .pt(t.space.xxl + t.space.lg)
+                    .pb(t.space.xxl)
                     .child(
                         div()
+                            .w_full()
+                            .max_w(t.size.column)
                             .flex()
-                            .items_center()
-                            .gap(t.space.sm)
+                            .flex_col()
+                            .gap(t.space.xl)
                             .child(
                                 div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .font_family(t.font_display.clone())
-                                    .font_weight(t.display_weight)
-                                    .text_size(t.text.heading_sm + px(4.))
-                                    .text_color(t.colors.text_strong)
-                                    .child(if tab == Tab::Archived {
-                                        "Archived projects"
-                                    } else {
-                                        "Projects"
-                                    }),
+                                    .flex()
+                                    .items_center()
+                                    .gap(t.space.sm)
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w_0()
+                                            .font_family(t.font_display.clone())
+                                            .font_weight(t.display_weight)
+                                            .text_size(t.text.heading_sm + px(4.))
+                                            .text_color(t.colors.text_strong)
+                                            .child(if tab == Tab::Archived {
+                                                "Archived projects"
+                                            } else {
+                                                "Projects"
+                                            }),
+                                    )
+                                    .children(search)
+                                    .children(search_button)
+                                    .child(sort_button)
+                                    .child(
+                                        theme::primary_button(t, "New project")
+                                            .id("open-folder")
+                                            .flex_none()
+                                            .ml(t.space.xs)
+                                            .on_click(move |_, _, cx| {
+                                                state.update(cx, |s, cx| {
+                                                    s.new_project_open = !s.new_project_open;
+                                                    cx.notify();
+                                                })
+                                            }),
+                                    ),
                             )
-                            .children(search)
-                            .children(search_button)
-                            .child(sort_button)
-                            .child(
-                                theme::primary_button(t, "New project")
-                                    .id("open-folder")
-                                    .flex_none()
-                                    .ml(t.space.xs)
-                                    .on_click(move |_, _, cx| {
-                                        state.update(cx, |s, cx| {
-                                            s.new_project_open = !s.new_project_open;
-                                            cx.notify();
-                                        })
-                                    }),
-                            ),
-                    )
-                    .when(sheet_open, |d| d.child(self.new_project.clone()))
-                    .when(none_shown, |d| {
-                        d.child(div().py(t.space.xl).text_color(t.colors.text_subtle).child(
-                            if !query.trim().is_empty() {
-                                format!("No project matches “{}”.", query.trim())
-                            } else {
-                                match tab {
-                                    Tab::All => {
-                                        "No projects yet. New project opens a folder as one.".into()
-                                    }
-                                    Tab::Archived => "Nothing archived.".into(),
-                                }
-                            },
-                        ))
-                    })
-                    .child(grid)
-                    .when(has_connected && tab == Tab::All, |d| {
-                        d.child(
-                            div()
-                                .flex()
-                                .flex_col()
-                                .gap(t.space.xs)
-                                .child(
+                            .when(none_shown, |d| {
+                                d.child(div().py(t.space.xl).text_color(t.colors.text_subtle).child(
+                                    if !query.trim().is_empty() {
+                                        format!("No project matches “{}”.", query.trim())
+                                    } else {
+                                        match tab {
+                                            Tab::All => {
+                                                "No projects yet. New project opens a folder as one.".into()
+                                            }
+                                            Tab::Archived => "Nothing archived.".into(),
+                                        }
+                                    },
+                                ))
+                            })
+                            .child(grid)
+                            .when(has_connected && tab == Tab::All, |d| {
+                                d.child(
                                     div()
-                                        .px(t.space.md)
-                                        .text_size(t.text.caption)
-                                        .font_weight(FontWeight::MEDIUM)
-                                        .text_color(t.colors.text_subtle)
-                                        .child("Connected, not saved as projects"),
+                                        .flex()
+                                        .flex_col()
+                                        .gap(t.space.xs)
+                                        .child(
+                                            div()
+                                                .px(t.space.md)
+                                                .text_size(t.text.caption)
+                                                .font_weight(FontWeight::MEDIUM)
+                                                .text_color(t.colors.text_subtle)
+                                                .child("Connected, not saved as projects"),
+                                        )
+                                        .children(connected_rows),
                                 )
-                                .children(connected_rows),
-                        )
-                    }),
+                            }),
+                    ),
             )
+            .when(sheet_open, |d| d.child(self.new_project.clone()))
             .into_any_element()
     }
 

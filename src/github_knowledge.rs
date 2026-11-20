@@ -28,10 +28,12 @@ pub const FILE_MAX: u64 = 2 * 1024 * 1024;
 /// One add or sync downloads at most this many files.
 pub const FILES_MAX: usize = 300;
 
-/// A repository as typed: `owner/repo`, a github.com link, or a link to a
-/// branch or folder in it (`…/tree/main/docs`).
+/// A repository as typed: `owner/repo`, a github.com / gitlab.com / custom
+/// self-hosted link, or a link to a branch or folder in it (`…/tree/main/docs`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RepoRef {
+    pub kind: crate::git_status::ForgeKind,
+    pub host: String,
     pub repo: String,
     /// The branch, tag or commit named, if any (else the default branch).
     pub reference: Option<String>,
@@ -41,34 +43,94 @@ pub struct RepoRef {
 
 pub fn parse(input: &str) -> Option<RepoRef> {
     let s = input.trim().trim_end_matches('/');
+    let has_scheme = s.starts_with("https://") || s.starts_with("http://");
     let s = s
         .strip_prefix("https://")
         .or_else(|| s.strip_prefix("http://"))
         .unwrap_or(s);
     let s = s.strip_prefix("www.").unwrap_or(s);
-    let s = s.strip_prefix("github.com/").unwrap_or(s);
-    let mut parts = s.split('/').filter(|p| !p.is_empty());
-    let owner = parts.next()?;
-    let name = parts.next()?.trim_end_matches(".git");
     let ok = |p: &str| {
         !p.is_empty()
             && p.chars()
                 .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+            && !matches!(p, "." | "..")
     };
-    if !ok(owner) || !ok(name) || matches!(owner, "." | "..") || matches!(name, "." | "..") {
+
+    let first = s.split('/').next().unwrap_or("");
+    let (kind, host, path_after_host) = if first.contains('.') || has_scheme {
+        let (h, rest) = s.split_once('/')?;
+        let host = h.to_ascii_lowercase();
+        let kind = if host == "github.com" {
+            crate::git_status::ForgeKind::GitHub
+        } else if host == "gitlab.com" || host.contains("gitlab") {
+            crate::git_status::ForgeKind::GitLab
+        } else {
+            crate::git_status::ForgeKind::Custom
+        };
+        (kind, host, rest)
+    } else {
+        (
+            crate::git_status::ForgeKind::GitHub,
+            "github.com".to_string(),
+            s,
+        )
+    };
+
+    if kind == crate::git_status::ForgeKind::GitHub {
+        let mut parts = path_after_host.split('/').filter(|p| !p.is_empty());
+        let owner = parts.next()?;
+        let name = parts.next()?.trim_end_matches(".git");
+        if !ok(owner) || !ok(name) {
+            return None;
+        }
+        let rest: Vec<&str> = parts.collect();
+        let (reference, folder) = match rest.as_slice() {
+            ["tree" | "blob", r, more @ ..] => (
+                Some(r.to_string()),
+                (!more.is_empty()).then(|| more.join("/")),
+            ),
+            [] => (None, None),
+            _ => return None,
+        };
+        return Some(RepoRef {
+            kind,
+            host,
+            repo: format!("{owner}/{name}"),
+            reference,
+            folder,
+        });
+    }
+
+    let (repo_part, after_sep) = match path_after_host.split_once("/-/") {
+        Some((l, r)) => (l, Some(r)),
+        None => (path_after_host, None),
+    };
+    let mut segs: Vec<&str> = repo_part.split('/').filter(|p| !p.is_empty()).collect();
+    if segs.len() < 2 {
         return None;
     }
-    let rest: Vec<&str> = parts.collect();
-    let (reference, folder) = match rest.as_slice() {
-        ["tree" | "blob", r, more @ ..] => (
-            Some(r.to_string()),
-            (!more.is_empty()).then(|| more.join("/")),
-        ),
-        [] => (None, None),
-        _ => return None,
+    let last_clean = segs.last()?.trim_end_matches(".git");
+    *segs.last_mut()? = last_clean;
+    if segs.iter().any(|p| !ok(p)) {
+        return None;
+    }
+    let (reference, folder) = match after_sep {
+        None => (None, None),
+        Some(tail) => {
+            let tail_parts: Vec<&str> = tail.split('/').filter(|p| !p.is_empty()).collect();
+            match tail_parts.as_slice() {
+                ["tree" | "blob", r, more @ ..] => (
+                    Some(r.to_string()),
+                    (!more.is_empty()).then(|| more.join("/")),
+                ),
+                _ => return None,
+            }
+        }
     };
     Some(RepoRef {
-        repo: format!("{owner}/{name}"),
+        kind,
+        host,
+        repo: segs.join("/"),
         reference,
         folder,
     })
@@ -85,17 +147,27 @@ pub struct Node {
 /// A repository's tree at a commit, as listed for picking.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tree {
+    pub kind: crate::git_status::ForgeKind,
+    pub host: String,
     pub repo: String,
     pub reference: String,
     pub commit: String,
     pub nodes: Vec<Node>,
-    /// GitHub cut the listing short (a very large repository).
+    /// The remote cut the listing short (a very large repository).
     pub truncated: bool,
+}
+
+fn default_host() -> String {
+    "github.com".to_string()
 }
 
 /// A repository in the project's knowledge.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Source {
+    #[serde(default)]
+    pub kind: crate::git_status::ForgeKind,
+    #[serde(default = "default_host")]
+    pub host: String,
     pub repo: String,
     pub reference: String,
     pub commit: String,
@@ -163,13 +235,14 @@ pub fn expand(nodes: &[Node], picks: &[String]) -> Vec<String> {
     out
 }
 
-/// How GitHub is reached: `gh` when it is installed (its own sign-in, so
-/// private repositories work), and GitHub's REST API when `gh` isn't there
-/// or a call through it fails.
+/// How GitHub / GitLab / self-hosted Git is reached: `gh` when installed
+/// for GitHub, else GitHub REST API or GitLab REST v4 API (`GITLAB_TOKEN` /
+/// `GL_TOKEN` when set).
 struct Hub {
     gh: bool,
     agent: ureq::Agent,
     token: Option<String>,
+    gl_token: Option<String>,
 }
 
 fn hub() -> Hub {
@@ -184,7 +257,16 @@ fn hub() -> Hub {
         .or_else(|_| std::env::var("GITHUB_TOKEN"))
         .ok()
         .filter(|t| !t.trim().is_empty());
-    Hub { gh, agent, token }
+    let gl_token = std::env::var("GITLAB_TOKEN")
+        .or_else(|_| std::env::var("GL_TOKEN"))
+        .ok()
+        .filter(|t| !t.trim().is_empty());
+    Hub {
+        gh,
+        agent,
+        token,
+        gl_token,
+    }
 }
 
 impl Hub {
@@ -202,8 +284,8 @@ impl Hub {
         }
     }
 
-    /// One REST call; a token GitHub turns down is tried once without, for
-    /// a public repository.
+    /// One GitHub REST call; a token GitHub turns down is tried once without,
+    /// for a public repository.
     fn rest(&self, accept: &str, path: &str) -> Result<ureq::Response, String> {
         let call = |token: Option<&String>| {
             let mut req = self
@@ -220,6 +302,40 @@ impl Hub {
             Err(e) if e == UNAUTHORIZED => call(None),
             other => other,
         }
+    }
+
+    fn gl_rest(&self, host: &str, path: &str) -> Result<ureq::Response, String> {
+        let call = |token: Option<&String>| {
+            let mut req = self
+                .agent
+                .get(&format!("https://{host}/api/v4/{path}"))
+                .set("Accept", "application/json")
+                .set("User-Agent", "KodAct-Desktop");
+            if let Some(t) = token {
+                req = req.set("PRIVATE-TOKEN", t);
+            }
+            req.call().map_err(|e| gl_api_error(host, e))
+        };
+        match call(self.gl_token.as_ref()) {
+            Err(e) if e.starts_with("GitLab turned down") => call(None),
+            other => other,
+        }
+    }
+
+    fn gl_json(&self, host: &str, path: &str) -> Result<Value, String> {
+        self.gl_rest(host, path)?
+            .into_json()
+            .map_err(|e| e.to_string())
+    }
+
+    fn gl_raw(&self, host: &str, path: &str) -> Result<Vec<u8>, String> {
+        let r = self.gl_rest(host, path)?;
+        let mut bytes = Vec::new();
+        r.into_reader()
+            .take(FILE_MAX + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|e| e.to_string())?;
+        Ok(bytes)
     }
 
     fn json(&self, path: &str) -> Result<Value, String> {
@@ -265,6 +381,21 @@ fn api_error(e: ureq::Error) -> String {
     }
 }
 
+fn gl_api_error(host: &str, e: ureq::Error) -> String {
+    match e {
+        ureq::Error::Status(401, _) => {
+            format!("GitLab turned down the token in GITLAB_TOKEN or GL_TOKEN for {host}.")
+        }
+        ureq::Error::Status(404, _) => format!(
+            "{host} doesn't show this repository via GitLab API: check the path or set GITLAB_TOKEN for private projects."
+        ),
+        ureq::Error::Status(403 | 429, _) => {
+            format!("{host} rejected or rate-limited the request. Set GITLAB_TOKEN to continue.")
+        }
+        e => e.to_string(),
+    }
+}
+
 /// A path's segments, encoded for a URL.
 fn encode(path: &str) -> String {
     path.split('/')
@@ -284,44 +415,92 @@ fn encode(path: &str) -> String {
 
 /// The commit a reference stands at, and the reference resolved (the
 /// default branch when none is given).
-fn resolve(hub: &Hub, repo: &str, reference: Option<&str>) -> Result<(String, String), String> {
-    let reference = match reference {
-        Some(r) => r.to_string(),
-        None => hub.json(&format!("repos/{repo}"))?["default_branch"]
+fn resolve(hub: &Hub, r: &RepoRef) -> Result<(String, String), String> {
+    if r.kind == crate::git_status::ForgeKind::GitHub {
+        let reference = match &r.reference {
+            Some(rf) => rf.clone(),
+            None => hub.json(&format!("repos/{}", r.repo))?["default_branch"]
+                .as_str()
+                .unwrap_or("main")
+                .to_string(),
+        };
+        let commit = hub.json(&format!("repos/{}/commits/{}", r.repo, encode(&reference)))?["sha"]
             .as_str()
-            .unwrap_or("main")
-            .to_string(),
-    };
-    let commit = hub.json(&format!("repos/{repo}/commits/{}", encode(&reference)))?["sha"]
-        .as_str()
-        .ok_or_else(|| format!("{repo} has no commit at {reference}"))?
-        .to_string();
-    Ok((reference, commit))
+            .ok_or_else(|| format!("{} has no commit at {reference}", r.repo))?
+            .to_string();
+        Ok((reference, commit))
+    } else {
+        let pid = crate::git_status::url_encode_component(&r.repo);
+        let reference = match &r.reference {
+            Some(rf) => rf.clone(),
+            None => hub.gl_json(&r.host, &format!("projects/{pid}"))?["default_branch"]
+                .as_str()
+                .unwrap_or("main")
+                .to_string(),
+        };
+        let commit = hub.gl_json(
+            &r.host,
+            &format!("projects/{pid}/repository/commits/{}", encode(&reference)),
+        )?["id"]
+            .as_str()
+            .ok_or_else(|| format!("{} has no commit at {reference}", r.repo))?
+            .to_string();
+        Ok((reference, commit))
+    }
 }
 
 /// List a repository's files for picking.
 pub fn tree(r: &RepoRef) -> Result<Tree, String> {
     let hub = hub();
-    let (reference, commit) = resolve(&hub, &r.repo, r.reference.as_deref())?;
-    let v = hub.json(&format!("repos/{}/git/trees/{commit}?recursive=1", r.repo))?;
-    let mut nodes: Vec<Node> = v["tree"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|n| {
-            let path = n["path"].as_str()?.to_string();
-            let dir = match n["type"].as_str()? {
-                "tree" => true,
-                "blob" => false,
-                _ => return None,
-            };
-            Some(Node {
-                path,
-                dir,
-                size: n["size"].as_u64().unwrap_or(0),
+    let (reference, commit) = resolve(&hub, r)?;
+    let (mut nodes, truncated) = if r.kind == crate::git_status::ForgeKind::GitHub {
+        let v = hub.json(&format!("repos/{}/git/trees/{commit}?recursive=1", r.repo))?;
+        let nodes = v["tree"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|n| {
+                let path = n["path"].as_str()?.to_string();
+                let dir = match n["type"].as_str()? {
+                    "tree" => true,
+                    "blob" => false,
+                    _ => return None,
+                };
+                Some(Node {
+                    path,
+                    dir,
+                    size: n["size"].as_u64().unwrap_or(0),
+                })
             })
-        })
-        .collect();
+            .collect();
+        (nodes, v["truncated"].as_bool().unwrap_or(false))
+    } else {
+        let pid = crate::git_status::url_encode_component(&r.repo);
+        let v = hub.gl_json(
+            &r.host,
+            &format!("projects/{pid}/repository/tree?recursive=1&per_page=100&ref={commit}"),
+        )?;
+        let nodes: Vec<Node> = v
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|n| {
+                let path = n["path"].as_str()?.to_string();
+                let dir = match n["type"].as_str()? {
+                    "tree" => true,
+                    "blob" => false,
+                    _ => return None,
+                };
+                Some(Node {
+                    path,
+                    dir,
+                    size: 0,
+                })
+            })
+            .collect();
+        let truncated = nodes.len() >= 100;
+        (nodes, truncated)
+    };
     if let Some(f) = &r.folder {
         // The folder itself stays, so its files hang under it.
         let under = format!("{f}/");
@@ -329,11 +508,13 @@ pub fn tree(r: &RepoRef) -> Result<Tree, String> {
     }
     nodes.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(Tree {
+        kind: r.kind,
+        host: r.host.clone(),
         repo: r.repo.clone(),
         reference,
         commit,
         nodes,
-        truncated: v["truncated"].as_bool().unwrap_or(false),
+        truncated,
     })
 }
 
@@ -342,6 +523,8 @@ pub fn tree(r: &RepoRef) -> Result<Tree, String> {
 fn download(
     project: &Path,
     hub: &Hub,
+    kind: crate::git_status::ForgeKind,
+    host: &str,
     repo: &str,
     commit: &str,
     files: &[String],
@@ -352,7 +535,16 @@ fn download(
         let Some(to) = local_path(project, repo, f) else {
             continue;
         };
-        let bytes = hub.raw(&format!("repos/{repo}/contents/{}?ref={commit}", encode(f)))?;
+        let bytes = if kind == crate::git_status::ForgeKind::GitHub {
+            hub.raw(&format!("repos/{repo}/contents/{}?ref={commit}", encode(f)))?
+        } else {
+            let pid = crate::git_status::url_encode_component(repo);
+            let f_enc = crate::git_status::url_encode_component(f);
+            hub.gl_raw(
+                host,
+                &format!("projects/{pid}/repository/files/{f_enc}/raw?ref={commit}"),
+            )?
+        };
         if bytes.len() as u64 > FILE_MAX {
             continue;
         }
@@ -375,11 +567,21 @@ pub fn add(project: &Path, tree: &Tree, picks: &[String]) -> Result<usize, Strin
         return Err("Nothing to add: pick a file or a folder with text in it.".into());
     }
     let hub = hub();
-    let got = download(project, &hub, &tree.repo, &tree.commit, &files)?;
+    let got = download(
+        project,
+        &hub,
+        tree.kind,
+        &tree.host,
+        &tree.repo,
+        &tree.commit,
+        &files,
+    )?;
     let mut list = sources(project);
     let now = now();
     match list.iter_mut().find(|s| s.repo == tree.repo) {
         Some(s) => {
+            s.kind = tree.kind;
+            s.host = tree.host.clone();
             s.reference = tree.reference.clone();
             s.commit = tree.commit.clone();
             for p in picks {
@@ -395,6 +597,8 @@ pub fn add(project: &Path, tree: &Tree, picks: &[String]) -> Result<usize, Strin
             s.synced_at = now;
         }
         None => list.push(Source {
+            kind: tree.kind,
+            host: tree.host.clone(),
             repo: tree.repo.clone(),
             reference: tree.reference.clone(),
             commit: tree.commit.clone(),
@@ -424,6 +628,8 @@ pub fn sync(project: &Path, repo: &str) -> Result<Synced, String> {
     };
     let s = list[i].clone();
     let r = RepoRef {
+        kind: s.kind,
+        host: s.host.clone(),
         repo: s.repo.clone(),
         reference: Some(s.reference.clone()),
         folder: None,
@@ -452,7 +658,7 @@ pub fn sync(project: &Path, repo: &str) -> Result<Synced, String> {
         }
     }
     let hub = hub();
-    let got = download(project, &hub, repo, &t.commit, &files)?;
+    let got = download(project, &hub, s.kind, &s.host, repo, &t.commit, &files)?;
     list[i].commit = t.commit;
     list[i].files = got.clone();
     list[i].synced_at = now();
@@ -502,6 +708,8 @@ mod tests {
     #[test]
     fn a_repository_reads_however_it_is_typed() {
         let plain = parse("anthropics/claude-code").unwrap();
+        assert_eq!(plain.kind, crate::git_status::ForgeKind::GitHub);
+        assert_eq!(plain.host, "github.com");
         assert_eq!(plain.repo, "anthropics/claude-code");
         assert_eq!((plain.reference, plain.folder), (None, None));
         let link = parse("https://github.com/owner/repo.git/").unwrap();
@@ -509,6 +717,24 @@ mod tests {
         let deep = parse("github.com/owner/repo/tree/dev/docs/api").unwrap();
         assert_eq!(deep.reference.as_deref(), Some("dev"));
         assert_eq!(deep.folder.as_deref(), Some("docs/api"));
+
+        let gl = parse("https://gitlab.com/team/sub/service.git").unwrap();
+        assert_eq!(gl.kind, crate::git_status::ForgeKind::GitLab);
+        assert_eq!(gl.host, "gitlab.com");
+        assert_eq!(gl.repo, "team/sub/service");
+
+        let gl_deep = parse("https://gitlab.company.com/team/repo/-/tree/main/docs/adr").unwrap();
+        assert_eq!(gl_deep.kind, crate::git_status::ForgeKind::GitLab);
+        assert_eq!(gl_deep.host, "gitlab.company.com");
+        assert_eq!(gl_deep.repo, "team/repo");
+        assert_eq!(gl_deep.reference.as_deref(), Some("main"));
+        assert_eq!(gl_deep.folder.as_deref(), Some("docs/adr"));
+
+        let custom = parse("https://git.acme.internal/org/app").unwrap();
+        assert_eq!(custom.kind, crate::git_status::ForgeKind::Custom);
+        assert_eq!(custom.host, "git.acme.internal");
+        assert_eq!(custom.repo, "org/app");
+
         assert!(parse("just-one-word").is_none());
         assert!(parse("owner/repo/issues/3").is_none());
         assert!(parse("own er/repo").is_none());
@@ -564,6 +790,8 @@ mod tests {
         save(
             &dir,
             &[Source {
+                kind: crate::git_status::ForgeKind::GitHub,
+                host: "github.com".into(),
                 repo: "o/r".into(),
                 reference: "main".into(),
                 commit: "abc".into(),
