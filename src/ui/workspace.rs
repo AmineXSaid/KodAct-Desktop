@@ -1293,9 +1293,20 @@ impl Render for Workspace {
                 );
             // The Session column, between the chat and any pane, as Claude
             // Code's: environment, context and changes at a glance.
+            // It shows only while the chat keeps its narrowest beside it: a
+            // side panel and the dock come first, and the column steps aside
+            // (it stays on, and returns when there is room again).
+            let session_fits = beside
+                - if side_open && !below { panel_w } else { 0. }
+                - if terminal_open { dock_w } else { 0. }
+                - f32::from(t.size.session_panel)
+                >= f32::from(t.size.chat_min);
             let session_now = {
                 let s = self.state.read(cx);
-                s.session_open.then_some(s.current).flatten()
+                s.session_open
+                    .then_some(s.current)
+                    .flatten()
+                    .filter(|_| session_fits)
             };
             let session = self
                 .presence
