@@ -429,7 +429,7 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
     let roster = super::agent_roster::Counts::of_calls(&all);
     let only_agents = roster.total > 0 && roster.total == all.len();
     let header_title = match live_step {
-        Some(c) if crate::state::is_agent_tool(&c.target) && agents_running > 1 => {
+        Some(c) if crate::state::is_agent_tool(&c.target) && agents_running > 0 => {
             super::agent_roster::Counts { running: agents_running, ..roster }.run_line()
         }
         Some(c) => step_label(c),

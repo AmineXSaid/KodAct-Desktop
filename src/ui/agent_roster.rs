@@ -20,6 +20,23 @@ pub fn status(run: &AgentRun) -> ToolStatus {
     }
 }
 
+/// Quiet this long while it runs, an agent looks stuck and says so.
+pub const STALLED_AFTER: Duration = Duration::from_secs(120);
+
+/// Still running, but nothing heard from it for `STALLED_AFTER`: its row in
+/// the transcript shows it as a problem, in the warning colour.
+pub fn is_stalled(run: &AgentRun, now: std::time::Instant) -> bool {
+    run.ended.is_none() && now.saturating_duration_since(run.heard) >= STALLED_AFTER
+}
+
+/// A stalled agent's status line: "No word for 2m 5s".
+pub fn stalled_line(run: &AgentRun, now: std::time::Instant) -> String {
+    format!(
+        "No word for {}",
+        super::chat_view::elapsed(now.saturating_duration_since(run.heard).as_secs())
+    )
+}
+
 /// The jumper's filter segments.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Filter {
@@ -308,6 +325,19 @@ mod tests {
         let c = Counts::of_calls(&refs);
         assert_eq!((c.run_line(), c.failed), ("Ran 10 agents".to_string(), 1));
         assert_eq!(Counts::of(&ten()).running_line(), "3 of 10 agents running");
+    }
+
+    #[test]
+    fn a_quiet_running_agent_is_stalled() {
+        let mut r = run("a", false, false);
+        let now = r.heard;
+        assert!(!is_stalled(&r, now + Duration::from_secs(119)));
+        let later = now + Duration::from_secs(125);
+        assert!(is_stalled(&r, later));
+        assert!(stalled_line(&r, later).starts_with("No word for "));
+        // An agent that has ended is never stalled.
+        r.ended = Some(now);
+        assert!(!is_stalled(&r, later));
     }
 
     #[test]

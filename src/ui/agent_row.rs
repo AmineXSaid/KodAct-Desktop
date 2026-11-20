@@ -13,9 +13,6 @@ use super::message::ItemContext;
 use crate::state::{Block, ToolCall, ToolStatus};
 use crate::theme::Theme;
 
-/// Quiet this long while it runs, an agent looks stuck and says so.
-const AGENT_STALLED: std::time::Duration = std::time::Duration::from_secs(120);
-
 /// The row: status mark,
 /// task title, optional kind badge, single concise status/step readout, optional
 /// inline Stop button, and Inspect action. Failures & warnings render a compact
@@ -57,9 +54,7 @@ pub fn render(
 
     let now = std::time::Instant::now();
     let stalled = run.is_some_and(|r| {
-        r.ended.is_none()
-            && call.status == ToolStatus::Running
-            && now.duration_since(r.heard) >= AGENT_STALLED
+        call.status == ToolStatus::Running && super::agent_roster::is_stalled(r, now)
     });
     let elapsed_str = run.map(|r| {
         let secs = r
@@ -96,10 +91,7 @@ pub fn render(
     };
 
     let status_summary = if stalled {
-        format!(
-            "No word for {}",
-            super::chat_view::elapsed(run.map_or(0, |r| now.duration_since(r.heard).as_secs()))
-        )
+        run.map_or_else(String::new, |r| super::agent_roster::stalled_line(r, now))
     } else if stopped || interrupted || failed {
         // As the Agents panel words it (`agent_roster`): "Failed · 1 step ·
         // 10s", just "Failed" with no steps.
@@ -333,6 +325,8 @@ pub fn render(
         )),
         row_inner,
     )
+    // The focus ring follows the row's own 4px corners.
+    .radius(t.radius.card)
     .w_full()
     .on_activate(move |_, app| {
         opener.update(app, |s, cx| s.open_agent_for_block(chat, msg, b, cx));
