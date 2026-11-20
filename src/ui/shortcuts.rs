@@ -47,6 +47,8 @@ pub const SHORTCUTS: &[(&str, &str, &str)] = &[
     ("secondary-1", "Side panel: Plan", "Conversation"),
     ("secondary-2", "Side panel: Agents", "Conversation"),
     ("secondary-shift-j", "Jump to an agent", "Conversation"),
+    ("secondary-alt-f", "Agents panel: full view", "Conversation"),
+    ("secondary-alt-c", "Copy the shown agent's output", "Conversation"),
     ("secondary-3", "Side panel: Files", "Conversation"),
     ("secondary-4", "Side panel: Browser", "Conversation"),
     ("alt-f", "Open file: full screen, or back", "Conversation"),
@@ -85,6 +87,7 @@ pub const SHORTCUTS: &[(&str, &str, &str)] = &[
         "Stop every agent; the reply goes on",
         "Conversation",
     ),
+    ("secondary-alt-x", "Stop the shown agent", "Conversation"),
     ("secondary-=", "Zoom the page in", "Browser"),
     ("secondary--", "Zoom the page out", "Browser"),
     ("secondary-0", "The page at its own size", "Browser"),
@@ -270,6 +273,33 @@ mod tests {
 
     /// Every `KeyBinding::new("…"` in main.rs is on the sheet, and the sheet
     /// shows nothing main.rs doesn't bind.
+    /// Every action of the plan and the agents (the side panel's Plan and
+    /// Agents tabs, the jumper, Stop, Stop all, Copy output and Full view) is
+    /// bound to keys and also reachable from the command palette.
+    #[test]
+    fn every_agent_action_has_keys_and_a_palette_entry() {
+        let main = include_str!("../main.rs");
+        let palette = include_str!("command_palette.rs");
+        for action in [
+            "ShowPlanView",
+            "ShowAgentsView",
+            "ToggleAgentJumper",
+            "StopShownAgent",
+            "StopAgents",
+            "CopyAgentOutput",
+            "TogglePanelFull",
+        ] {
+            assert!(
+                main.contains(&format!(", {action}, Some(")),
+                "{action} has no key binding in main.rs"
+            );
+            assert!(
+                palette.contains(&format!("Box::new({action})")),
+                "{action} is not in the command palette"
+            );
+        }
+    }
+
     #[test]
     fn the_sheet_matches_the_keymap() {
         let main = include_str!("../main.rs");

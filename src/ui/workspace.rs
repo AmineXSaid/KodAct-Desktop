@@ -1666,6 +1666,38 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &StopAgents, _, cx| {
                 this.state.update(cx, |s, cx| s.stop_agents(cx))
             }))
+            // The agent the Agents panel shows: stop it, copy what it said,
+            // or give the panel the whole window.
+            .on_action(cx.listener(|this, _: &StopShownAgent, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    if let Some(id) = s.selected_agent_id().map(str::to_string) {
+                        s.stop_agent(&id, cx);
+                    }
+                })
+            }))
+            .on_action(cx.listener(|this, _: &CopyAgentOutput, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    if let Some(id) = s.selected_agent_id().map(str::to_string) {
+                        s.copy_agent_output(&id, cx);
+                    }
+                })
+            }))
+            .on_action(cx.listener(|this, _: &TogglePanelFull, window, cx| {
+                let full = this.state.update(cx, |s, cx| {
+                    if s.panel != Some(crate::state::PanelTab::Agents) {
+                        s.show_panel(crate::state::PanelTab::Agents, cx);
+                    }
+                    s.toggle_panel_full(cx);
+                    s.panel_full
+                });
+                // Full view hides the composer: the keyboard stays with the
+                // workspace, so its shortcuts (this one too) keep working.
+                if full {
+                    window.focus(&this.focus, cx);
+                } else {
+                    this.focus_composer(window, cx);
+                }
+            }))
             .on_action(cx.listener(|this, _: &EditQueued, window, cx| {
                 this.state.update(cx, |s, cx| s.edit_last_queued(cx));
                 window.dispatch_action(Box::new(FocusComposer), cx);

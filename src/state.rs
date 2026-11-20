@@ -9988,6 +9988,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                 }
                 c.version += 1;
             }
+            self.end_open_agent_runs(chat);
         }
         self.current = Some(chat);
         self.screen = Screen::Chat;
@@ -10323,6 +10324,23 @@ fix everything under 8, render it again to check, then tell me the scores before
         cx.notify();
     }
 
+    /// The reply stopped: its sub-agents still open stop with it, so the
+    /// Agents panel counts them as the transcript does (stopped, not running).
+    fn end_open_agent_runs(&mut self, chat: usize) {
+        let now = std::time::Instant::now();
+        for r in self.agents.entry(chat).or_default() {
+            if r.ended.is_none() {
+                r.ended = Some(now);
+                r.stopping = false;
+                r.stopped = true;
+                for s in r.steps.iter_mut().filter(|s| s.status == ToolStatus::Running) {
+                    s.status = ToolStatus::Interrupted;
+                    s.ended = Some(now);
+                }
+            }
+        }
+    }
+
     /// Show sub-agents as stopped, and their rows in the chat with them.
     fn mark_agents_stopped(&mut self, chat: usize, ids: &[String]) {
         let now = std::time::Instant::now();
@@ -10445,6 +10463,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                 });
                 c.version += 1;
             }
+            self.end_open_agent_runs(id);
         }
         self.touch(id, cx);
         cx.notify();
@@ -13526,6 +13545,36 @@ fn demo_six_agents() -> Vec<Step> {
     s
 }
 
+/// Two sub-agents, one of which goes quiet and never reports back ("stall"
+/// in the demo): after `agent_roster::STALLED_AFTER` its row shows it.
+fn demo_stalled_agent() -> Vec<Step> {
+    use crate::backend::Event;
+    use serde_json::json;
+    let mut s = words("Sending two sub-agents to look around.", Step::Say);
+    for (id, task) in [("s1", "Map the settings code"), ("s2", "Trace the sync worker")] {
+        s.push(Step::Agent(Event::ToolUse {
+            id: id.into(),
+            name: "Task".into(),
+            input: json!({ "subagent_type": "Explore", "description": task, "prompt": task }),
+        }));
+    }
+    s.push(Step::Agent(Event::SubTool {
+        parent: "s2".into(),
+        id: "s2a".into(),
+        name: "Read".into(),
+        input: json!({ "file_path": "src/sync/worker.rs" }),
+    }));
+    s.push(Step::Agent(Event::ToolResult {
+        id: "s1".into(),
+        output: "Settings live in src/settings; nothing unusual.".into(),
+        is_error: false,
+        images: vec![],
+    }));
+    // s2 never answers.
+    s.extend(words("One agent is still reading the sync worker.", Step::Say));
+    s
+}
+
 /// Ten parallel sub-agents ("10 agents" in the demo) to stress-test the jumper
 /// popover, status filters, and scale behavior when >= 10 agents run together.
 fn demo_ten_agents() -> Vec<Step> {
@@ -13781,6 +13830,11 @@ fn script(prompt: &str) -> Vec<Step> {
     if ["design", "deck", "slides", "course"].iter().any(|w| lower.contains(w)) {
         s.extend(demo_design());
         s.push(Step::End { seconds: 21.4 });
+        return s;
+    }
+    if lower.contains("stall") {
+        s.extend(demo_stalled_agent());
+        s.push(Step::End { seconds: 6.0 });
         return s;
     }
     if lower.contains("10 agents") || lower.contains("ten agents") {

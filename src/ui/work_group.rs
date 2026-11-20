@@ -373,6 +373,18 @@ fn render_step_row(blocks: &[Block], i: usize, cx: &ItemContext, t: &Theme) -> O
 
 /// The run at `run` as one line that opens to its steps; failures and active
 /// problems stay visibly exposed even while collapsed.
+/// A running sub-agent that has gone quiet (`agent_roster::is_stalled`):
+/// like a failure, its row stays in view while the group is collapsed.
+fn stalled_agent(c: &ToolCall, runs: &[crate::state::AgentRun]) -> bool {
+    let now = std::time::Instant::now();
+    c.status == ToolStatus::Running
+        && crate::state::is_agent_tool(&c.target)
+        && c.note.as_deref().is_some_and(|task| {
+            runs.iter()
+                .any(|r| r.task == task && super::agent_roster::is_stalled(r, now))
+        })
+}
+
 /// A step cut short: interrupted, or a sub-agent you stopped.
 fn cut_short(c: &ToolCall) -> bool {
     c.status == ToolStatus::Interrupted
@@ -452,7 +464,7 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
         }
     } else if failed > 0 {
         icon("icons/circle-x.svg", t.size.icon_xs, t.extra.danger).into_any_element()
-    } else if stopped > 0 {
+    } else if stopped > 0 || all.iter().any(|c| stalled_agent(c, &cx.agents)) {
         icon("icons/triangle-alert.svg", t.size.icon_xs, t.extra.warning).into_any_element()
     } else {
         icon("icons/circle-check.svg", t.size.icon_xs, t.extra.success).into_any_element()
@@ -568,7 +580,9 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
             .filter(|&i| {
                 matches!(
                     &blocks[i],
-                    Block::Tool(c) if c.status == ToolStatus::Failed || cut_short(c)
+                    Block::Tool(c) if c.status == ToolStatus::Failed
+                        || cut_short(c)
+                        || stalled_agent(c, &cx.agents)
                 )
             })
             .filter_map(|i| render_step_row(blocks, i, cx, t))

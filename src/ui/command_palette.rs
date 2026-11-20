@@ -410,6 +410,20 @@ impl CommandPalette {
                 Box::new(ToggleAgentJumper),
             ),
             act(
+                if s.panel_full {
+                    "Agents panel: back beside the chat"
+                } else {
+                    "Agents panel: full view"
+                },
+                if s.panel_full {
+                    "icons/minimize-2.svg"
+                } else {
+                    "icons/maximize-2.svg"
+                },
+                Some(crate::ui::shortcuts::keys("secondary-alt-f").join(" ").into()),
+                Box::new(TogglePanelFull),
+            ),
+            act(
                 "Side panel: Files",
                 "icons/folder.svg",
                 Some(shortcut("3")),
@@ -1033,6 +1047,31 @@ impl CommandPalette {
                         Box::new(StopAgents),
                     ),
                 );
+                chat.insert(
+                    1,
+                    act(
+                        "Stop the shown agent",
+                        "icons/square.svg",
+                        Some(
+                            crate::ui::shortcuts::keys("secondary-alt-x")
+                                .join(" ")
+                                .into(),
+                        ),
+                        Box::new(StopShownAgent),
+                    ),
+                );
+            }
+            if s.current.and_then(|c| s.agents.get(&c)).is_some_and(|r| !r.is_empty()) {
+                chat.push(act(
+                    "Copy the shown agent's output",
+                    "icons/copy.svg",
+                    Some(
+                        crate::ui::shortcuts::keys("secondary-alt-c")
+                            .join(" ")
+                            .into(),
+                    ),
+                    Box::new(CopyAgentOutput),
+                ));
             }
             // Messages sent while KodAct works, not yet with it.
             if s.current

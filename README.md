@@ -96,6 +96,8 @@ table in step.
 | Ctrl/⌘ 1 | Side panel: Plan |
 | Ctrl/⌘ 2 | Side panel: Agents |
 | Ctrl/⌘ Shift J | Jump to an agent |
+| Ctrl/⌘ Alt F | Agents panel: full view |
+| Ctrl/⌘ Alt C | Copy the shown agent's output |
 | Ctrl/⌘ 3 | Side panel: Files |
 | Ctrl/⌘ 4 | Side panel: Browser |
 | Alt F | Open file: full screen, or back |
@@ -114,6 +116,7 @@ table in step.
 | Shift Tab | Next permission mode |
 | Esc | Stop the reply, or close what's open |
 | Ctrl/⌘ Shift X | Stop every agent; the reply goes on |
+| Ctrl/⌘ Alt X | Stop the shown agent |
 | Ctrl/⌘ = | Zoom the page in |
 | Ctrl/⌘ - | Zoom the page out |
 | Ctrl/⌘ 0 | The page at its own size |
