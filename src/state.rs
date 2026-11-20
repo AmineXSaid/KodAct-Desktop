@@ -2631,6 +2631,18 @@ impl AppState {
                 break;
             }
         }));
+        // A sub-agent that goes quiet shows as stalled even when nothing
+        // else in its chat changes: every few seconds, a chat with a stalled
+        // agent is drawn again (its "No word for …" counting on).
+        cx.spawn(async move |this, cx| loop {
+            cx.background_executor()
+                .timer(Duration::from_secs(10))
+                .await;
+            if this.update(cx, |s, cx| s.redraw_stalled(cx)).is_err() {
+                break;
+            }
+        })
+        .detach();
         self.load_endpoints(false, cx);
         // A relay that couldn't start: the toast says why.
         let (relay_tx, relay_rx) = async_channel::unbounded::<String>();
@@ -10320,6 +10332,30 @@ fix everything under 8, render it again to check, then tell me the scores before
             Some(Err(e)) => self.show_toast(format!("Couldn't stop the agent: {e}"), cx),
             // No engine behind this chat (the demo): it stops here.
             None => self.mark_agents_stopped(chat, &ids),
+        }
+        cx.notify();
+    }
+
+    /// Draw again each chat that has a stalled sub-agent
+    /// (`agent_roster::is_stalled`).
+    fn redraw_stalled(&mut self, cx: &mut Context<Self>) {
+        let now = std::time::Instant::now();
+        let chats: Vec<usize> = self
+            .agents
+            .iter()
+            .filter(|(_, runs)| {
+                runs.iter()
+                    .any(|r| crate::ui::agent_roster::is_stalled(r, now))
+            })
+            .map(|(&c, _)| c)
+            .collect();
+        if chats.is_empty() {
+            return;
+        }
+        for chat in chats {
+            if let Some(c) = self.chat_mut(chat) {
+                c.version += 1;
+            }
         }
         cx.notify();
     }
