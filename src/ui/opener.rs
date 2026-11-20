@@ -14,7 +14,9 @@
 //! - [`Cut::Again`] (every launch after), 2.6 s: heat, lock, cool into the
 //!   wordmark, then an iris opens from the cube onto the app.
 //!
-//! Any key or click skips it. Reduced motion: no opener at all.
+//! It plays only with `KODACT_OPENER=1`; by default the app opens
+//! straight into its window. Any key or click skips it. Reduced motion: no
+//! opener at all.
 //!
 //! Every frame is a pure function of the time since it started (`scene`),
 //! on a 1920 x 1080 stage scaled to fit the window, over all of it. It is drawn in the dark
@@ -443,8 +445,11 @@ impl EventEmitter<OpenerEvent> for Opener {}
 
 impl Opener {
     /// Whether an opener plays at all: not under reduced motion.
+    /// Off unless asked for (`KODACT_OPENER=1`): the app opens straight
+    /// into its window, and the welcome's own rise is the one moment of
+    /// motion at start-up. Reduced motion: never.
     pub fn plays() -> bool {
-        !motion::reduced_motion()
+        std::env::var("KODACT_OPENER").is_ok_and(|v| v == "1") && !motion::reduced_motion()
     }
 
     pub fn new(cut: Cut, window: &mut Window, cx: &mut Context<Self>) -> Self {
