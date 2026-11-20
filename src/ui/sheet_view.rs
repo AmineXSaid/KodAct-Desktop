@@ -28,7 +28,7 @@ pub struct SheetEditor {
 impl SheetEditor {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("Pick a cell to edit value or =formula")
+            InputState::new(window, cx).placeholder("Pick a cell; double-click to edit, or type =formula")
         });
         let subs = vec![
             cx.observe(&state, |_, _, cx| cx.notify()),
@@ -133,111 +133,122 @@ impl Render for SheetEditor {
         let synced_val = cell_info.map(|(_, _, _, v)| v).unwrap_or_default();
         let input_dirty = has_pick && current_input_val != synced_val;
 
+        // One strip, as a spreadsheet's formula bar: the cell, its value or
+        // formula, then adding rows and columns; Save and Discard while
+        // there are edits.
+        let add = |id: &'static str, label: &'static str| {
+            theme::ghost_button(&t, "")
+                .id(id)
+                .h(t.size.control)
+                .px(t.space.sm)
+                .gap(px(4.))
+                .text_size(t.text.caption)
+                .child(icon("icons/plus.svg", t.size.icon_xs, t.colors.text_muted))
+                .child(label)
+        };
         div()
             .flex()
-            .flex_col()
+            .flex_wrap()
+            .items_center()
             .gap(t.space.xs)
             .child(
                 div()
+                    .flex_none()
+                    .min_w(px(44.))
+                    .h(t.size.control)
+                    .px(t.space.sm)
                     .flex()
-                    .flex_wrap()
+                    .items_center()
+                    .justify_center()
+                    .rounded(t.radius.button)
+                    .bg(t.extra.sunk)
+                    .border_1()
+                    .border_color(line)
+                    .font_family(t.font_mono.clone())
+                    .text_size(t.text.caption)
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(if has_pick {
+                        t.colors.text_strong
+                    } else {
+                        t.colors.text_subtle
+                    })
+                    .child(addr),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w(px(160.))
+                    .h(t.size.control)
+                    .pl(t.space.sm)
+                    .pr(px(2.))
+                    .flex()
                     .items_center()
                     .gap(t.space.xs)
+                    .rounded(t.radius.button)
+                    .border_1()
+                    .border_color(if input_dirty {
+                        t.colors.primary.opacity(0.6)
+                    } else {
+                        line
+                    })
+                    .bg(t.colors.surface)
                     .child(
                         div()
                             .flex_none()
-                            .px(t.space.xs + px(2.))
-                            .h(px(26.))
-                            .flex()
-                            .items_center()
-                            .rounded(t.radius.compact)
-                            .bg(t.extra.sunk)
-                            .border_1()
-                            .border_color(line)
                             .font_family(t.font_mono.clone())
                             .text_size(t.text.caption)
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(if has_pick {
-                                t.colors.text_strong
-                            } else {
-                                t.colors.text_subtle
-                            })
-                            .child(addr),
+                            .text_color(t.colors.text_subtle)
+                            .child("fx"),
                     )
                     .child(
                         div()
                             .flex_1()
-                            .min_w(px(140.))
-                            .h(px(28.))
-                            .px(t.space.sm)
-                            .flex()
-                            .items_center()
-                            .rounded(t.radius.button)
-                            .border_1()
-                            .border_color(if input_dirty {
-                                t.colors.primary.opacity(0.6)
-                            } else {
-                                line
-                            })
-                            .bg(t.colors.surface)
+                            .min_w_0()
                             .font_family(t.font_mono.clone())
                             .text_size(t.text.caption)
                             .child(Input::new(&self.input).appearance(false)),
                     )
-                    .when(has_pick, |d| {
+                    .when(input_dirty, |d| {
                         d.child(
-                            super::button::Button::icon("sheet-apply", "icons/check.svg", "Apply cell value (Enter)")
-                                .compact()
-                                .on_click(cx.listener(|this, _, _, cx| this.commit(false, cx))),
+                            super::button::Button::icon(
+                                "sheet-apply",
+                                "icons/check.svg",
+                                "Apply (Enter)",
+                            )
+                            .compact()
+                            .on_click(cx.listener(|this, _, _, cx| this.commit(false, cx))),
                         )
                     }),
             )
-            .child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .items_center()
-                    .gap(t.space.xs)
-                    .child(
-                        theme::ghost_button(&t, "+ Row")
-                            .id("sheet-add-row")
-                            .h(px(24.))
-                            .px(t.space.sm)
-                            .text_size(t.text.caption)
-                            .on_click(move |_, _, cx| {
-                                st_row.update(cx, |s, cx| s.add_sheet_row(sheet_idx, cx))
-                            }),
-                    )
-                    .child(
-                        theme::ghost_button(&t, "+ Col")
-                            .id("sheet-add-col")
-                            .h(px(24.))
-                            .px(t.space.sm)
-                            .text_size(t.text.caption)
-                            .on_click(move |_, _, cx| {
-                                st_col.update(cx, |s, cx| s.add_sheet_col(sheet_idx, cx))
-                            }),
-                    )
-                    .child(div().flex_1())
-                    .when(edit_count > 0, |d| {
-                        d.child(
+            .child(add("sheet-add-row", "Row").on_click(move |_, _, cx| {
+                st_row.update(cx, |s, cx| s.add_sheet_row(sheet_idx, cx))
+            }))
+            .child(add("sheet-add-col", "Column").on_click(move |_, _, cx| {
+                st_col.update(cx, |s, cx| s.add_sheet_col(sheet_idx, cx))
+            }))
+            .when(edit_count > 0, |d| {
+                d.child(
+                    div()
+                        .flex_none()
+                        .flex()
+                        .items_center()
+                        .gap(t.space.xs)
+                        .pl(t.space.xs)
+                        .child(
                             div()
-                                .flex()
-                                .items_center()
-                                .gap(px(4.))
-                                .px(t.space.sm)
-                                .h(px(22.))
-                                .rounded(t.radius.pill)
-                                .bg(t.extra.warning_tint)
                                 .text_size(t.text.caption)
                                 .font_weight(FontWeight::MEDIUM)
                                 .text_color(t.extra.warning)
-                                .child(format!("{edit_count} edited")),
+                                .child(if edit_count == 1 {
+                                    "1 edit".to_string()
+                                } else {
+                                    format!("{edit_count} edits")
+                                }),
                         )
                         .child(
                             theme::ghost_button(&t, "Discard")
                                 .id("sheet-discard")
-                                .h(px(24.))
+                                .h(t.size.control)
                                 .px(t.space.sm)
                                 .text_size(t.text.caption)
                                 .on_click(move |_, _, cx| {
@@ -247,27 +258,15 @@ impl Render for SheetEditor {
                         .child(
                             theme::primary_button(&t, "Save")
                                 .id("sheet-save")
-                                .h(px(24.))
-                                .px(t.space.sm)
+                                .h(t.size.control)
+                                .px(t.space.md)
                                 .text_size(t.text.caption)
                                 .on_click(move |_, _, cx| {
                                     st_save.update(cx, |s, cx| s.save_sheet_edits(cx))
                                 }),
-                        )
-                    })
-                    .when(edit_count == 0, |d| {
-                        d.child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(4.))
-                                .text_size(t.text.caption)
-                                .text_color(t.colors.text_subtle)
-                                .child(icon("icons/pencil.svg", px(11.), t.colors.text_subtle))
-                                .child("Double-click any cell to edit"),
-                        )
-                    }),
-            )
+                        ),
+                )
+            })
     }
 }
 

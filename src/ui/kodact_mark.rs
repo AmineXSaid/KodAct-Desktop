@@ -591,15 +591,6 @@ pub fn working(size: f32, id: impl Into<ElementId>, color: Option<Hsla>) -> AnyE
 
 /// The mark, then "KodAct" set at `height` px, matching `.`/`<` in electric lime.
 pub fn wordmark(height: f32, t: &Theme) -> AnyElement {
-    let letters = |s: &'static str, color: Hsla| {
-        div()
-            .font_family(t.font_sans.clone())
-            .font_weight(gpui::FontWeight::SEMIBOLD)
-            .text_size(px(height))
-            .line_height(px(height))
-            .text_color(color)
-            .child(s)
-    };
     div()
         .flex()
         .items_center()
@@ -612,6 +603,25 @@ pub fn wordmark(height: f32, t: &Theme) -> AnyElement {
                 .mr(px(height * WORD_GAP))
                 .child(mark(mark_box(height))),
         )
+        .child(name(height, t))
+        .into_any_element()
+}
+
+/// "KodAct" alone, as the wordmark sets it but without the mark: for the
+/// title bar, where the name is enough.
+pub fn name(height: f32, t: &Theme) -> AnyElement {
+    let letters = |s: &'static str, color: Hsla| {
+        div()
+            .font_family(t.font_sans.clone())
+            .font_weight(gpui::FontWeight::SEMIBOLD)
+            .text_size(px(height))
+            .line_height(px(height))
+            .text_color(color)
+            .child(s)
+    };
+    div()
+        .flex()
+        .items_center()
         .child(letters("Kod", t.colors.text_strong))
         .child(letters("Act", code_lime(t)))
         .into_any_element()

@@ -454,7 +454,7 @@ impl Workspace {
                     }));
                     if sidebar_open {
                         // Over the sidebar, its head: the toggle and KodAct's
-                        // name (Chat | Code heads the sidebar itself).
+                        // name, without the mark (the welcome carries it).
                         d.child(
                             // The title bar insets its row by the sidebar's
                             // own padding, so the switch ends where the
@@ -467,7 +467,7 @@ impl Workspace {
                                 .gap(t.space.sm)
                                 .pr(t.space.sm)
                                 .child(toggle)
-                                .child(super::kodact_mark::wordmark(15., &t)),
+                                .child(super::kodact_mark::name(15., &t)),
                         )
                     } else {
                         d.child(toggle)
@@ -653,6 +653,24 @@ impl Workspace {
     /// ground.
     fn welcome(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
+        // A binary artifact's card shows its opening, read once off the
+        // render path.
+        let unread: Vec<crate::state::FileRef> = {
+            let s = self.state.read(cx);
+            crate::ui::documents::all(s)
+                .into_iter()
+                .take(3)
+                .map(|(f, ..)| f)
+                .filter(|f| {
+                    f.bytes.is_some()
+                        && !s.artifact_snips.contains_key(&super::artifact_card::key(f))
+                })
+                .collect()
+        };
+        if !unread.is_empty() {
+            let st = self.state.clone();
+            cx.defer(move |cx| st.update(cx, |s, cx| s.want_artifact_snips(unread, cx)));
+        }
         let s = self.state.read(cx);
         let name = s.user_name.clone().unwrap_or_default();
         let name = name.trim();
@@ -668,129 +686,27 @@ impl Workspace {
         } else {
             format!("Working in {project}. Changes always wait for your review.")
         };
-        let recent = crate::ui::documents::all(s);
+        let recent: Vec<_> = crate::ui::documents::all(s).into_iter().take(3).collect();
         let recent_section = (!recent.is_empty()).then(|| {
+            let scale = window.scale_factor();
             let cards: Vec<gpui::AnyElement> = recent
                 .into_iter()
-                .take(3)
                 .enumerate()
-                .map(|(i, (f, _chat_id, chat_title))| {
-                    let hover = t.colors.hover;
+                .map(|(i, (f, _chat, _chat_title))| {
+                    let snip = s.artifact_snips.get(&super::artifact_card::key(&f)).cloned();
                     let open_state = self.state.clone();
                     let to_open = f.clone();
-                    let kind_label = f.kind();
-                    let title = f.title();
-                    let preview_mark: gpui::AnyElement = match f.office() {
-                        Some(kind) => super::file_mark::render(kind, 26., window.scale_factor()),
-                        None if crate::diagram::extract_svg(&f.content).is_some() => {
-                            icon("icons/network.svg", t.size.icon_lg, t.colors.sky).into_any_element()
-                        }
-                        None => gpui::img(super::file_icon::asset(
-                            &f.name,
-                            false,
-                            f.path.as_deref().unwrap_or(&f.name),
-                        ))
-                        .flex_none()
-                        .size(px(24.))
-                        .into_any_element(),
-                    };
-                    let snippet = f
-                        .content
-                        .lines()
-                        .map(str::trim)
-                        .find(|l| !l.is_empty() && !l.starts_with('<'))
-                        .map(|l| l.trim_start_matches('#').trim().to_string());
-
-                    div()
-                        .id(("welcome-artifact", i))
-                        .flex_1()
-                        .min_w_0()
-                        .rounded(t.radius.card)
-                        .border_1()
-                        .border_color(t.colors.border)
-                        .bg(t.colors.surface)
-                        .p(t.space.sm + px(2.))
-                        .flex()
-                        .flex_col()
-                        .gap(t.space.sm)
-                        .cursor_pointer()
-                        .hover(move |st| st.bg(hover))
-                        .on_click(move |_, _, cx| {
+                    super::artifact_card::render(
+                        &f,
+                        snip.as_deref().map(|v| v.as_slice()),
+                        i,
+                        &t,
+                        scale,
+                        move |cx| {
                             let file = to_open.clone();
                             open_state.update(cx, |s, cx| s.open_doc(file, cx));
-                        })
-                        .child(
-                            div()
-                                .relative()
-                                .h(px(62.))
-                                .w_full()
-                                .rounded(t.radius.compact)
-                                .border_1()
-                                .border_color(t.colors.border)
-                                .bg(t.extra.sunk)
-                                .p(t.space.xs + px(2.))
-                                .flex()
-                                .flex_col()
-                                .items_center()
-                                .justify_center()
-                                .gap(px(4.))
-                                .child(preview_mark)
-                                .when_some(snippet, |d, line| {
-                                    d.child(
-                                        div()
-                                            .w_full()
-                                            .overflow_hidden()
-                                            .whitespace_nowrap()
-                                            .text_ellipsis()
-                                            .text_center()
-                                            .text_size(px(10.))
-                                            .text_color(t.colors.text_subtle)
-                                            .child(line),
-                                    )
-                                })
-                                .child(
-                                    div()
-                                        .absolute()
-                                        .top(px(4.))
-                                        .right(px(5.))
-                                        .px(px(5.))
-                                        .py(px(1.))
-                                        .rounded(t.radius.pill)
-                                        .bg(t.colors.surface.opacity(0.9))
-                                        .border_1()
-                                        .border_color(t.colors.border)
-                                        .text_size(px(10.))
-                                        .text_color(t.colors.text_muted)
-                                        .child(kind_label),
-                                ),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .flex_col()
-                                .gap(px(1.))
-                                .min_w_0()
-                                .child(
-                                    div()
-                                        .overflow_hidden()
-                                        .whitespace_nowrap()
-                                        .text_ellipsis()
-                                        .text_size(t.text.body_sm)
-                                        .font_weight(FontWeight::MEDIUM)
-                                        .text_color(t.colors.text_strong)
-                                        .child(title),
-                                )
-                                .child(
-                                    div()
-                                        .overflow_hidden()
-                                        .whitespace_nowrap()
-                                        .text_ellipsis()
-                                        .text_size(t.text.caption)
-                                        .text_color(t.colors.text_subtle)
-                                        .child(format!("From {chat_title}")),
-                                ),
-                        )
-                        .into_any_element()
+                        },
+                    )
                 })
                 .collect();
 

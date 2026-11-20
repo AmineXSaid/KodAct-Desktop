@@ -221,22 +221,14 @@ pub fn render(
                             .child("Edited"),
                     )
                 }),
-        )
-        .child(
-            tool_button("doc-close", "icons/x.svg", "Close")
-                .on_click(move |_, _, cx| closer.update(cx, |s, cx| s.close_doc(cx))),
         );
-    // Under the name, as in Claude's panel: how to view it on the left,
-    // what to do with it on the right.
+    // Beside the name, in one bar: how to view it, what to do with it, and
+    // Close set apart by a hairline.
     let toolbar = div()
         .flex_none()
-        .h(px(40.))
         .flex()
         .items_center()
-        .gap(t.space.xs)
-        .px(t.space.md)
-        .border_b_1()
-        .border_color(t.colors.border)
+        .gap(px(2.))
         .when(two_views, |d| {
             let (to_preview, to_source) = (state.clone(), state.clone());
             d.child(
@@ -251,7 +243,7 @@ pub fn render(
                     ),
             )
         })
-        .child(div().flex_1())
+        .when(two_views, |d| d.child(div().w(t.space.xs)))
         .when(diagram && !source, |d| {
             d.child(
                 tool_button(
@@ -346,13 +338,19 @@ pub fn render(
                 .on_click(move |_, _, cx| saver.update(cx, |s, cx| s.download(&to_save, cx))),
         );
 
+    let header = header
+        .child(toolbar)
+        .child(div().flex_none().w(px(1.)).h(t.size.icon).bg(t.colors.border))
+        .child(
+            tool_button("doc-close", "icons/x.svg", "Close")
+                .on_click(move |_, _, cx| closer.update(cx, |s, cx| s.close_doc(cx))),
+        );
     // The find bar sits under the header.
     let header = div()
         .flex_none()
         .flex()
         .flex_col()
         .child(header)
-        .child(toolbar)
         .child(find);
     let body = div().id("doc-body").flex_1().min_h_0().overflow_y_scroll();
     // What this version changed, in words (a workbook's show in its grid).

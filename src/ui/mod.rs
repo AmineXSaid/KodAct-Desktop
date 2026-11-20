@@ -5,6 +5,7 @@ pub mod add_menu;
 pub mod agents_editor;
 pub mod agents_view;
 pub mod approvals;
+pub mod artifact_card;
 pub mod askpass;
 pub mod attachment_editor;
 pub mod attachments;

@@ -2011,6 +2011,10 @@ pub struct AppState {
     pub design_thumbs: std::collections::HashMap<std::path::PathBuf, Thumb>,
     design_thumb_queue: std::collections::VecDeque<std::path::PathBuf>,
     design_thumbs_running: bool,
+    /// The opening of each Word, PowerPoint, PDF or workbook artifact, for
+    /// its card's page (`ui::artifact_card`), by `artifact_card::key`; read
+    /// once each, off the render path. Empty while it's being read.
+    pub artifact_snips: std::collections::HashMap<String, std::sync::Arc<Vec<Vec<String>>>>,
     /// Chosen before the chat exists (on a new chat's screen): the chat
     /// your next message starts is a design chat set up with this.
     pub design_next: Option<crate::design::prompt::Setup>,
@@ -2434,6 +2438,7 @@ impl AppState {
             design_thumbs: Default::default(),
             design_thumb_queue: Default::default(),
             design_thumbs_running: false,
+            artifact_snips: Default::default(),
             design_next: None,
             design_anchors: Default::default(),
             design_anchors_sent: vec![],
@@ -6379,6 +6384,33 @@ fix everything under 8, render it again to check, then tell me the scores before
     pub fn set_gallery_tab(&mut self, tab: GalleryTab, cx: &mut Context<Self>) {
         self.gallery_tab = tab;
         cx.notify();
+    }
+
+    /// Cards show these artifacts: read the opening of each binary one not
+    /// read yet, in the background.
+    pub fn want_artifact_snips(&mut self, files: Vec<FileRef>, cx: &mut Context<Self>) {
+        for f in files {
+            let (Some(kind), Some(bytes)) = (f.office(), f.bytes.clone()) else {
+                continue;
+            };
+            let key = crate::ui::artifact_card::key(&f);
+            if self.artifact_snips.contains_key(&key) {
+                continue;
+            }
+            self.artifact_snips.insert(key.clone(), Default::default());
+            cx.spawn(async move |this, cx| {
+                let snip = cx
+                    .background_spawn(async move {
+                        crate::ui::artifact_card::office_snip(kind, &bytes)
+                    })
+                    .await;
+                let _ = this.update(cx, |s, cx| {
+                    s.artifact_snips.insert(key, std::sync::Arc::new(snip));
+                    cx.notify();
+                });
+            })
+            .detach();
+        }
     }
 
     /// The gallery shows these previews: picture each that has none yet,
