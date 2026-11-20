@@ -123,8 +123,9 @@ fn over(wash: Hsla, base: Hsla) -> Hsla {
 
 /// The focus handle a control keeps across frames, by its id.
 fn focus_handle(id: &ElementId, window: &mut Window, cx: &mut App) -> FocusHandle {
+    // A tab stop: Tab and Shift Tab reach every button and row in turn.
     window
-        .use_keyed_state(id.clone(), cx, |_, cx| cx.focus_handle())
+        .use_keyed_state(id.clone(), cx, |_, cx| cx.focus_handle().tab_stop(true))
         .read(cx)
         .clone()
 }

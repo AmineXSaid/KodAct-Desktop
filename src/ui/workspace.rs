@@ -1379,6 +1379,20 @@ impl Render for Workspace {
             .track_focus(&self.focus)
             // While a chat's menu shows, its letters run its rows, wherever
             // the focus is (Claude Code's session menu works the same).
+            // Tab and Shift Tab walk the controls (rows, pills, buttons) when
+            // the focused one doesn't take the key itself; Enter or Space
+            // presses it.
+            .on_key_down(cx.listener(|_, ev: &gpui::KeyDownEvent, window, cx| {
+                let m = &ev.keystroke.modifiers;
+                if ev.keystroke.key == "tab" && !m.control && !m.alt && !m.platform {
+                    cx.stop_propagation();
+                    if m.shift {
+                        window.focus_prev(cx);
+                    } else {
+                        window.focus_next(cx);
+                    }
+                }
+            }))
             .capture_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, _, cx| {
                 let k = &ev.keystroke;
                 if k.modifiers.modified() {

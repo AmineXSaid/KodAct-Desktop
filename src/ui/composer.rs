@@ -1152,6 +1152,12 @@ impl Render for Composer {
                 |this, _: &gpui::component::input::IndentInline, window, cx| {
                     if this.completion_nav("tab", window, cx) {
                         cx.stop_propagation();
+                    } else if this.input.read(cx).value().is_empty() {
+                        // Nothing typed: Tab leaves the box for the next
+                        // control, so rows, pills and buttons are reachable
+                        // from the keyboard (the workspace walks on from there).
+                        window.focus_next(cx);
+                        cx.stop_propagation();
                     }
                 },
             ))
