@@ -13618,7 +13618,7 @@ fn demo_ten_agents() -> Vec<Step> {
     let specs = [
         ("t1", "Explore", "Audit UI components", "src/ui"),
         ("t2", "Explore", "Check state reducers", "src/state"),
-        ("t3", "code-reviewer", "Review Office parser", "src/office.rs"),
+        ("t3", "code-reviewer", "Review the Office parser's XLSX formula checks", "src/office.rs"),
         ("t4", "Explore", "Inspect Git integration", "src/git_status.rs"),
         ("t5", "Explore", "Verify SVG icons bundle", "assets/icons"),
         ("t6", "general-purpose", "Check theme palette", "src/theme.rs"),

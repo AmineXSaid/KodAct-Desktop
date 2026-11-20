@@ -34,6 +34,7 @@ pub fn render(
         let selector = state.clone();
         let id = r.id.clone();
         let inner = div()
+            .min_w_0()
             .flex()
             .items_center()
             .gap(t.space.tight)
@@ -92,6 +93,9 @@ pub fn render(
         )
         .radius(t.radius.compact)
         .expanded(on)
+        // As wide as its slot, so a long name ends in an ellipsis inside the
+        // pill instead of running over the next one.
+        .w_full()
         .on_activate(move |_, cx| selector.update(cx, |s, cx| s.select_agent(&id, cx)));
         if equal {
             div().flex_1().min_w_0().child(pill).into_any_element()
@@ -100,6 +104,7 @@ pub fn render(
             // their pill, never at the panel's edge.
             div()
                 .flex_none()
+                .min_w_0()
                 .max_w(px(240.))
                 .child(pill)
                 .into_any_element()
