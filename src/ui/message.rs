@@ -1803,6 +1803,7 @@ fn agent_header(
             (0, Some(el)) => format!("Failed · {el}"),
             (1, Some(el)) => format!("Failed · 1 step · {el}"),
             (n, Some(el)) => format!("Failed · {n} steps · {el}"),
+            (0, None) => "Failed".to_string(),
             (1, None) => "Failed · 1 step".to_string(),
             (n, None) => format!("Failed · {n} steps"),
         }
@@ -1871,9 +1872,10 @@ fn agent_header(
         .flex()
         .flex_col()
         .gap(px(2.))
-        .px(t.space.xs + px(2.))
-        .py(px(3.))
-        .rounded(t.radius.compact)
+        .px(t.space.sm)
+        .py(t.space.xs + px(2.))
+        // Rows hold, so a card's corners: a pill's would eat the text.
+        .rounded(t.radius.card)
         .when(inspected, |d| d.bg(t.colors.primary_tint.opacity(0.65)))
         .when(failed && !inspected, |d| d.bg(t.extra.danger_tint.opacity(0.65)))
         .when((interrupted || stalled) && !failed && !inspected, |d| {
@@ -1891,8 +1893,8 @@ fn agent_header(
                 .child(div().flex_none().child(mark))
                 .child(
                     div()
+                        .flex_1()
                         .min_w_0()
-                        .max_w(px(240.))
                         .overflow_hidden()
                         .whitespace_nowrap()
                         .text_ellipsis()
@@ -1915,25 +1917,6 @@ fn agent_header(
                             .child(k),
                     )
                 })
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .overflow_hidden()
-                        .whitespace_nowrap()
-                        .text_ellipsis()
-                        .text_size(t.text.caption)
-                        .text_color(if stalled || interrupted {
-                            t.extra.warning
-                        } else if running {
-                            t.extra.live
-                        } else if failed {
-                            t.extra.danger
-                        } else {
-                            t.colors.text_subtle
-                        })
-                        .child(format!("· {status_summary}")),
-                )
                 .when_some(
                     stop_id.filter(|_| running && !stopping),
                     |d, id| {
@@ -2003,6 +1986,25 @@ fn agent_header(
                             },
                         )),
                 ),
+        )
+        // Under the title, aligned with it: how it went, then what went wrong.
+        .child(
+            div()
+                .pl(t.size.icon_xs + t.space.xs + px(2.))
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .text_size(t.text.caption)
+                .text_color(if stalled || interrupted {
+                    t.extra.warning
+                } else if running {
+                    t.extra.live
+                } else if failed {
+                    t.extra.danger
+                } else {
+                    t.colors.text_subtle
+                })
+                .child(status_summary.clone()),
         )
         .when_some(problem_note, |d, note| {
             d.child(

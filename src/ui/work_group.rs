@@ -557,13 +557,6 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
             .flex_col()
             .gap(t.space.xs)
             .mt(t.space.xs)
-            .pl(t.space.sm)
-            .border_l_2()
-            .border_color(if failed > 0 {
-                t.extra.danger.opacity(0.6)
-            } else {
-                t.extra.warning.opacity(0.6)
-            })
             .children(problem_rows)
     });
 
