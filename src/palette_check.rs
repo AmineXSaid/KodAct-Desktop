@@ -143,9 +143,8 @@ fn surfaces_stack_like_paper_on_paper() {
     }
 }
 
-/// Two colours with separate jobs: the accent and the mark share a hue
-/// (KodAct's turquoise); links and switches share another (peach); live
-/// work is ink.
+/// One colour: the accent, the mark, links and switches share KodAct's
+/// burgundy hue (links a step lighter); live work is ink.
 #[test]
 fn each_theme_has_one_colour() {
     let hue = |c: Hsla| {
@@ -179,13 +178,12 @@ fn each_theme_has_one_colour() {
             assert!(chroma > 0.04, "{mode}: the accent has no colour");
             let d = (hue(x.mark_top) - hue(x.accent) + 540.) % 360. - 180.;
             assert!(d.abs() <= 20., "{mode}: the mark is {d:.0}° off the accent");
-            // The second colour, peach, is the links' and the switches',
-            // one hue, well away from the accent's; work in progress has
-            // no colour of its own.
+            // One colour: links and switches are the accent's burgundy, a
+            // step lighter; work in progress has no colour of its own.
             let d = (hue(x.toggle_on) - hue(t.colors.primary) + 540.) % 360. - 180.;
             assert!(d.abs() <= 20., "{mode}: the switch is {d:.0}° off the link");
             let d = (hue(t.colors.primary) - hue(x.accent) + 540.) % 360. - 180.;
-            assert!(d.abs() >= 90., "{mode}: the link is {d:.0}° from the accent");
+            assert!(d.abs() <= 20., "{mode}: the link is {d:.0}° off the accent");
             let chroma = oklab(rgba(x.live)).1;
             assert!(chroma <= 0.02, "{mode}: live work has colour ({chroma:.3})");
         }
@@ -203,7 +201,7 @@ fn each_theme_has_one_colour() {
         );
     }
     let calm = Theme::light();
-    assert_eq!(rgba(calm.extra.accent), rgba(gpui::rgb(0x0e7568).into()));
+    assert_eq!(rgba(calm.extra.accent), rgba(gpui::rgb(0x8c1d40).into()));
 }
 
 #[test]

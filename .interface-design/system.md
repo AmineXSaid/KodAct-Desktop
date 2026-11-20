@@ -8,7 +8,7 @@
 
 **Personality:** calmly smooth: a warm editorial workspace, confident and unhurried, closer to a printed quarterly than a dashboard (after the Anchor style reference).
 
-**Foundation:** KodAct Signal. Warm paper by day: the window and sidebar #efedea, the session a sheet of #f8f7f5 on it, cards white on that. Warm ink at night: #0e0d0c, #171615, cards #201f1d. One ink carries the type and the buttons. Two colours with separate jobs: turquoise (#0e7568; #5fd8c4 at night) for the mark, Send, the one decisive action and a waiting dot; peach (#a4461c; #ffb98f at night) for links, focus, selection and a switch that is on. Work in progress and inline code are ink. Everything else is neutral; colour otherwise only for meaning (modes, status).
+**Foundation:** KodAct Signal. Warm paper by day: the window and sidebar #efedea, the session a sheet of #f8f7f5 on it, cards white on that. Warm ink at night: #0e0d0c, #171615, cards #201f1d. One ink carries the type and the buttons. One colour, burgundy: #8c1d40 (#e8809f at night) for the mark, Send, filled buttons, the one decisive action and a waiting dot; a step lighter, #9b2348 (#f0a3ba at night), for links, focus, selection and a switch that is on. Work in progress and inline code are ink. Everything else is neutral; colour otherwise only for meaning (modes, status).
 
 **Depth:** nearly flat. Hairlines inside cards; the session and the user's message lift on paper grain (three 1px shadows at 6/4/1% ink); popovers and the permission card a touch more.
 
@@ -87,7 +87,7 @@ One look, Calmly smooth, in light and dark (`window.json` keeps the mode). Every
 
 | | Light | Dark |
 |---|---|---|
-| Canvas / session / accent | `#efedea` / `#f8f7f5` / `#0e7568` | `#15181e` / `#0a0b0d` / `#5fd8c4` |
+| Canvas / session / accent | `#efedea` / `#f8f7f5` / `#8c1d40` | `#15181e` / `#0a0b0d` / `#e8809f` |
 
 Faces (UI / display / code / replies): Anthropic Sans Text / Anthropic Sans Display / Anthropic Sans Text / Anthropic Sans Text. Corners button · card · field · composer · pressed: 4 · 4 · 4 · 4 · pill. Row · title bar · chat: 30 · 36 · 14.
 
@@ -125,16 +125,16 @@ Contrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of w
 | `text_subtle` | `#7a756f` | 4.3:1 | `#7c8391` | 5.2:1 | placeholders and disabled only |
 | `border` | `#0e0d0c @ 13.0%` | 1.3:1 | `#e1e4ea @ 12.0%` | 1.3:1 | hairlines |
 | `border_strong` | `#cbc8c3` | 1.7:1 | `#363d4a` | 1.5:1 | outlined buttons, a switch at rest |
-| `primary` | `#a4461c` | 6.0:1 | `#ffb98f` | 9.7:1 | links, selected text, the focus edge |
-| `accent` | `#0e7568` | 5.6:1 | `#5fd8c4` | 11.4:1 | send, the new-chat mark, accent dots (white icon on it) |
-| `fill` | `#0e0d0c` | 17.7:1 | `#ebeef2` | 16.9:1 | filled buttons: ink on paper, paper on charcoal |
-| `toggle_on` | `#a4461c` | 6.0:1 | `#ffb98f` | 9.7:1 | a switch that is on |
-| `mark_top` | `#0e7568` | 5.2:1 | `#5fd8c4` | 11.4:1 | KodAct's mark, both strokes (`ui/kodact_mark.rs`) |
-| `page_ink` | `#0e7568` | 5.6:1 | `#0e7568` | 5.6:1 | marks drawn on a design page, on their halo (`ui/design_marks.rs`) |
-| `mark_heat_white` | `#f2fffc` | 1.0:1 | `#f2fffc` | 19.2:1 | the mark at its brightest as it arrives (onboarding); never at rest |
-| `mark_heat` | `#7df0dc` | 1.3:1 | `#7df0dc` | 14.4:1 | the mark's bright signal as it settles, and a push's flare |
-| `mark_heat_ember` | `#1f8f80` | 3.7:1 | `#1f8f80` | 5.0:1 | the mark's deep turquoise as it settles |
-| `mark_heat_iron` | `#16302d` | 13.1:1 | `#16302d` | 1.4:1 | the mark near dark, last before its own colour |
+| `primary` | `#9b2348` | 7.7:1 | `#f0a3ba` | 8.2:1 | links, selected text, the focus edge |
+| `accent` | `#8c1d40` | 8.9:1 | `#e8809f` | 7.4:1 | send, the new-chat mark, accent dots (white icon on it) |
+| `fill` | `#8c1d40` | 8.9:1 | `#e8809f` | 7.4:1 | filled buttons: ink on paper, paper on charcoal |
+| `toggle_on` | `#9b2348` | 7.7:1 | `#f0a3ba` | 8.2:1 | a switch that is on |
+| `mark_top` | `#8c1d40` | 8.3:1 | `#e8809f` | 7.5:1 | KodAct's mark, both strokes (`ui/kodact_mark.rs`) |
+| `page_ink` | `#8c1d40` | 8.9:1 | `#8c1d40` | 8.9:1 | marks drawn on a design page, on their halo (`ui/design_marks.rs`) |
+| `mark_heat_white` | `#fff5f8` | 1.0:1 | `#fff5f8` | 18.4:1 | the mark at its brightest as it arrives (onboarding); never at rest |
+| `mark_heat` | `#f7a8bf` | 1.7:1 | `#f7a8bf` | 10.6:1 | the mark's bright signal as it settles, and a push's flare |
+| `mark_heat_ember` | `#a8304f` | 6.1:1 | `#a8304f` | 3.0:1 | the mark's deep burgundy as it settles |
+| `mark_heat_iron` | `#3a0f1c` | 15.5:1 | `#3a0f1c` | 1.2:1 | the mark near dark, last before its own colour |
 | `fill_danger` | `#a3402c` | 6.3:1 | `#e98a72` | 7.8:1 | destructive confirms |
 | `success` | `#3f6b4b` | 6.1:1 | `#8fbf9b` | 7.8:1 | done, passed |
 | `danger` | `#a3402c` | 6.3:1 | `#e98a72` | 6.4:1 | failed, errors |
@@ -217,6 +217,7 @@ One family; every control takes keyboard focus (a `primary` edge shows for the k
 | One control per kind of choice | One of a few short options is a segmented control (`editor_kit::choice`); one of several options that each need a line of description is a radio list; chips are for picking several, or one from a long list. Where a setting is kept reads the same everywhere: This project, just me · This project, shared · All my projects. | 2026-11-02 |
 | KodAct Ember | Warm paper and warm graphite, the sidebar a step deeper than the session, and one copper heat for the action, the current state and links: the forge's own colour, as calm as Claude Code's. | 2026-10-23 |
 | KodAct Signal | The app takes KodAct's identity: its mark (a step, then a chevron) in place of the ingot, warm ink and paper, and two colours with separate jobs. Turquoise is rationed to the mark, Send, the one decisive action and a waiting dot; peach, the terminal's warm accent, is for links, focus, selection and switches; buttons and work in progress are ink. It replaces KodAct Ember, and an all-turquoise first pass that put the accent on every control. | 2026-11-11 |
+| KodAct burgundy | One colour replaces turquoise and peach: burgundy for the mark (`./<`), Send, filled buttons and the decision in front of you, and a lighter burgundy for links, focus, selection and switches. The Windows icon and the brand SVG carry the same burgundy; the startup film and the onboarding orbit are gone, and the working mark types, runs and clears `./<` like a line at a prompt. | 2026-11-20 |
 | A neutral wash for the open row | The accent stays for the action; the open chat and the open screen lift by a grey wash. | 2026-10-23 |
 | Composer at 620px | A comfortable measure for a prompt, the same in a chat and on the welcome page. | 2026-10-11 |
 | Composer on the reading column | In a chat the composer takes the 760px column the reply is read in, so the two line up; on the welcome page it keeps its own measure. | 2026-10-23 |
