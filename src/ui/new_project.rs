@@ -34,14 +34,17 @@ pub struct NewProject {
 impl NewProject {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let custom_host = cx.new(|cx| InputState::new(window, cx).placeholder("git.company.com"));
-        let url = cx.new(|cx| InputState::new(window, cx).placeholder("owner/repo or repository URL"));
+        let url = cx.new(|cx| InputState::new(window, cx).placeholder("owner/repo"));
         let pat = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("Optional Personal Access Token")
+                .placeholder("Personal access token")
                 .masked(true)
         });
         let name = cx.new(|cx| InputState::new(window, cx).placeholder("Project name"));
         let subs = vec![
+            // The address's prefix and where it clones follow what's typed.
+            cx.observe(&url, |_, _, cx| cx.notify()),
+            cx.observe(&custom_host, |_, _, cx| cx.notify()),
             cx.subscribe(&url, |this, _, ev: &InputEvent, cx| {
                 if matches!(ev, InputEvent::PressEnter { .. }) {
                     this.clone_it(cx);
@@ -103,16 +106,6 @@ impl NewProject {
         self.state
             .update(cx, |s, cx| s.create_project(name, template, cx));
     }
-}
-
-fn field(t: &Theme, input: &Entity<InputState>) -> gpui::Div {
-    div()
-        .px(t.space.sm)
-        .rounded(t.radius.field)
-        .border_1()
-        .border_color(t.colors.border)
-        .bg(t.colors.canvas)
-        .child(Input::new(input).appearance(false))
 }
 
 fn field_label(t: &Theme, label: &str) -> gpui::Div {
@@ -187,7 +180,7 @@ impl Render for NewProject {
             .child(
                 seg_tab(
                     "np-tab-local",
-                    "This Computer",
+                    "On this computer",
                     "icons/folder-open.svg",
                     self.tab == SourceTab::Local,
                 )
@@ -199,7 +192,7 @@ impl Render for NewProject {
             .child(
                 seg_tab(
                     "np-tab-remote",
-                    "Remote",
+                    "Clone from Git",
                     "icons/git-branch.svg",
                     self.tab == SourceTab::Remote,
                 )
@@ -237,10 +230,8 @@ impl Render for NewProject {
                         .flex()
                         .items_center()
                         .gap(t.space.md)
-                        .p(t.space.md)
-                        .rounded(t.radius.card)
-                        .bg(t.colors.surface)
-                        .border_1()
+                        .pb(t.space.lg)
+                        .border_b_1()
                         .border_color(t.colors.border)
                         .child(
                             div()
@@ -288,11 +279,6 @@ impl Render for NewProject {
                         .flex()
                         .flex_col()
                         .gap(t.space.sm)
-                        .p(t.space.md)
-                        .rounded(t.radius.card)
-                        .bg(t.colors.surface)
-                        .border_1()
-                        .border_color(t.colors.border)
                         .child(
                             div()
                                 .flex()
@@ -307,8 +293,8 @@ impl Render for NewProject {
                                         .child("Start a new project"),
                                 ),
                         )
-                        .child(field_label(&t, "Project name"))
-                        .child(field(&t, &self.name))
+                        .child(field_label(&t, "Name"))
+                        .child(kit::line(&t, &self.name, false))
                         .child(field_label(&t, "Template"))
                         .child(chips)
                         .child(
@@ -343,114 +329,195 @@ impl Render for NewProject {
         };
 
         let remote_body = {
-            let hosts = div()
-                .flex()
-                .flex_wrap()
-                .gap(t.space.xs)
-                .child(
-                    kit::chip(&t, "np-host-github", "GitHub", self.host_kind == ForgeKind::GitHub)
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.host_kind = ForgeKind::GitHub;
-                            cx.notify();
-                        })),
-                )
-                .child(
-                    kit::chip(&t, "np-host-gitlab", "GitLab", self.host_kind == ForgeKind::GitLab)
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.host_kind = ForgeKind::GitLab;
-                            cx.notify();
-                        })),
-                )
-                .child(
-                    kit::chip(
-                        &t,
-                        "np-host-custom",
-                        "Custom Git Host",
-                        self.host_kind == ForgeKind::Custom,
-                    )
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        this.host_kind = ForgeKind::Custom;
-                        this.custom_host.update(cx, |i, cx| i.focus(window, cx));
+            let (gh, gl, other) = (cx.entity(), cx.entity(), cx.entity());
+            let provider = super::button::Segmented::new("np-host", "Git host")
+                .option("GitHub", self.host_kind == ForgeKind::GitHub, move |_, _, cx| {
+                    gh.update(cx, |this, cx| {
+                        this.host_kind = ForgeKind::GitHub;
                         cx.notify();
-                    })),
+                    })
+                })
+                .option("GitLab", self.host_kind == ForgeKind::GitLab, move |_, _, cx| {
+                    gl.update(cx, |this, cx| {
+                        this.host_kind = ForgeKind::GitLab;
+                        cx.notify();
+                    })
+                })
+                .option(
+                    "Other server",
+                    self.host_kind == ForgeKind::Custom,
+                    move |_, window, cx| {
+                        other.update(cx, |this, cx| {
+                            this.host_kind = ForgeKind::Custom;
+                            this.custom_host.update(cx, |i, cx| i.focus(window, cx));
+                            cx.notify();
+                        })
+                    },
                 );
 
-            let example = match self.host_kind {
-                ForgeKind::GitHub => "e.g. owner/repo or https://github.com/owner/repo.git",
-                ForgeKind::GitLab => {
-                    "e.g. group/sub/repo, https://gitlab.com/group/repo, or self-hosted URL"
-                }
-                ForgeKind::Custom => {
-                    "e.g. org/repo (with host domain above) or ssh://git@git.company.com/org/repo.git"
-                }
+            let raw = self.url.read(cx).value().to_string();
+            let server = self.custom_host.read(cx).value().trim().to_string();
+            let pasted_url = raw.contains("://") || raw.trim_start().starts_with("git@");
+            // What to type after the host, shown before the field: the host
+            // itself, so "owner/repo" reads as the rest of the address.
+            let prefix = (!pasted_url).then(|| match self.host_kind {
+                ForgeKind::GitHub => "github.com/".to_string(),
+                ForgeKind::GitLab if server.is_empty() => "gitlab.com/".to_string(),
+                _ if server.is_empty() => "server/".to_string(),
+                _ => format!(
+                    "{}/",
+                    server
+                        .trim_start_matches("https://")
+                        .trim_start_matches("http://")
+                        .trim_end_matches('/')
+                ),
+            });
+            let target = crate::templates::normalize_git_clone_url(
+                self.host_kind,
+                Some(&server),
+                &raw,
+            )
+            .and_then(|u| {
+                crate::templates::projects_home()
+                    .and_then(|h| crate::templates::clone_target(&h, &u))
+            })
+            .map(|d| crate::rules::display_path(&d, crate::rules::home_dir().as_deref()));
+            let repo_box = div()
+                .h(t.size.field_h)
+                .pl(t.space.sm)
+                .pr(px(4.))
+                .flex()
+                .items_center()
+                .rounded(t.radius.field)
+                .bg(t.colors.surface)
+                .border_1()
+                .border_color(t.extra.border_strong)
+                .when_some(prefix, |d, p| {
+                    d.child(
+                        div()
+                            .flex_none()
+                            .text_size(t.text.body_sm)
+                            .text_color(t.colors.text_subtle)
+                            .child(p),
+                    )
+                })
+                .child(
+                    div().flex_1().min_w_0().child(
+                        Input::new(&self.url)
+                            .appearance(false)
+                            .text_size(t.text.body_sm),
+                    ),
+                );
+            let optional = |label: &str| {
+                div()
+                    .flex()
+                    .items_baseline()
+                    .justify_between()
+                    .child(
+                        div()
+                            .text_size(t.text.caption)
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(t.colors.text_muted)
+                            .child(label.to_string()),
+                    )
+                    .child(
+                        div()
+                            .text_size(t.text.caption)
+                            .text_color(t.colors.text_subtle)
+                            .child("Optional"),
+                    )
             };
 
             div()
                 .flex()
                 .flex_col()
-                .gap(t.space.md)
-                .p(t.space.md)
-                .rounded(t.radius.card)
-                .bg(t.colors.surface)
-                .border_1()
-                .border_color(t.colors.border)
-                .child(field_label(&t, "Git Provider"))
-                .child(hosts)
+                .gap(t.space.lg)
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap(t.space.md)
+                        .child(
+                            div()
+                                .text_size(t.text.body_sm)
+                                .text_color(t.colors.text_muted)
+                                .child("Where the repository lives"),
+                        )
+                        .child(provider),
+                )
                 .when(self.host_kind != ForgeKind::GitHub, |d| {
+                    let gitlab = self.host_kind == ForgeKind::GitLab;
                     d.child(
                         div()
                             .flex()
                             .flex_col()
-                            .gap(px(4.))
-                            .child(field_label(
-                                &t,
-                                if self.host_kind == ForgeKind::GitLab {
-                                    "Host domain (leave blank for gitlab.com)"
-                                } else {
-                                    "Custom host domain (company Git server)"
-                                },
-                            ))
-                            .child(field(&t, &self.custom_host)),
+                            .gap(px(5.))
+                            .child(if gitlab {
+                                optional("Server").into_any_element()
+                            } else {
+                                field_label(&t, "Server").into_any_element()
+                            })
+                            .child(kit::line(&t, &self.custom_host, false))
+                            .child(
+                                div()
+                                    .text_size(t.text.caption)
+                                    .text_color(t.colors.text_muted)
+                                    .child(if gitlab {
+                                        "Only for a self-hosted GitLab; gitlab.com otherwise."
+                                    } else {
+                                        "Your company's Git server, like git.company.com."
+                                    }),
+                            ),
                     )
                 })
+                .child(kit::field(
+                    &t,
+                    "Repository",
+                    Some(match self.host_kind {
+                        ForgeKind::GitLab => "group/project, or paste the full address.",
+                        _ => "owner/name, or paste the full address (HTTPS or SSH).",
+                    }),
+                    repo_box.into_any_element(),
+                ))
                 .child(
                     div()
                         .flex()
                         .flex_col()
-                        .gap(px(4.))
-                        .child(field_label(&t, "Repository URL or path"))
-                        .child(field(&t, &self.url))
+                        .gap(px(5.))
+                        .child(optional("Access token"))
+                        .child(kit::line(&t, &self.pat, false))
                         .child(
                             div()
                                 .text_size(t.text.caption)
-                                .text_color(t.colors.text_subtle)
-                                .child(example),
+                                .text_color(t.colors.text_muted)
+                                .child("Only for a private repository. Used for this clone, never saved."),
                         ),
                 )
                 .child(
                     div()
                         .flex()
-                        .flex_col()
-                        .gap(px(4.))
-                        .child(field_label(&t, "Access Token / PAT (optional, never saved)"))
-                        .child(field(&t, &self.pat)),
-                )
-                .child(
-                    div()
-                        .flex()
                         .items_center()
-                        .gap(t.space.sm)
-                        .pt(t.space.xs)
+                        .gap(t.space.md)
+                        .pt(t.space.md)
+                        .border_t_1()
+                        .border_color(t.colors.border)
                         .child(
                             div()
                                 .flex_1()
                                 .min_w_0()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
                                 .text_size(t.text.caption)
                                 .text_color(t.colors.text_subtle)
-                                .child(format!("Clones into {home}")),
+                                .child(match target {
+                                    Some(d) => format!("Clones into {d}"),
+                                    None => format!("Clones into {home}"),
+                                }),
                         )
                         .child(
-                            theme::primary_button(&t, "Clone & Open")
+                            theme::primary_button(&t, "Clone and open")
                                 .id("np-clone")
                                 .flex_none()
                                 .on_click(cx.listener(|this, _, _, cx| this.clone_it(cx))),
@@ -462,6 +529,8 @@ impl Render for NewProject {
             .id("new-project-modal")
             .occlude()
             .w(px(580.))
+            // The same height on both tabs, so switching doesn't jump.
+            .min_h(px(500.))
             .max_w(relative(0.92))
             .max_h(relative(0.88))
             .p(t.space.xl)
