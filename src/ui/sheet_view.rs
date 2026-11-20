@@ -78,9 +78,16 @@ impl SheetEditor {
         else {
             return;
         };
+        // Confirming a cell without changing it is not an edit: the box holds
+        // the cell as shown ("27,500", "€1,172.28"), and writing that back
+        // would turn a number into text.
+        let unchanged = Self::current_cell_value(self.state.read(cx))
+            .is_some_and(|(.., shown)| shown == val);
         self.last_cell = Some((si, r, c, val.clone()));
         self.state.update(cx, |s, cx| {
-            s.set_sheet_cell(si, r, c, val, cx);
+            if !unchanged {
+                s.set_sheet_cell(si, r, c, val, cx);
+            }
             if advance {
                 s.pick_cell((r + 1, c), false, cx);
             }

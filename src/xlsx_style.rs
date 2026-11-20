@@ -299,10 +299,15 @@ fn sheet(xml: &str, styles: &[Xf]) -> SheetLook {
     let mut look = SheetLook::default();
     let mut reader = Reader::from_str(xml);
     let mut current: Option<(usize, usize)> = None;
-    let mut in_formula = false;
+    // The text of the `<f>` being read (it comes in pieces around entities
+    // like `&quot;`), and the shared formula it starts, if any.
+    let mut formula: Option<String> = None;
+    let mut starts_shared: Option<String> = None;
     let mut shared: HashMap<String, String> = HashMap::new();
     loop {
-        match reader.read_event() {
+        let event = reader.read_event();
+        let empty = matches!(event, Ok(Event::Empty(_)));
+        match event {
             Ok(Event::Start(e)) | Ok(Event::Empty(e)) => match e.local_name().as_ref() {
                 b"col" => {
                     let (min, max, width) = (
@@ -341,46 +346,63 @@ fn sheet(xml: &str, styles: &[Xf]) -> SheetLook {
                     }
                 }
                 b"f" => {
-                    in_formula = true;
+                    let si = attr(&e, b"si");
+                    let starts = attr(&e, b"ref").is_some();
                     // A shared formula's later cells only point at it: show
                     // the first's text (its references shift in Excel).
-                    if let (Some(si), Some(at)) = (attr(&e, b"si"), current) {
-                        if attr(&e, b"ref").is_none() {
-                            if let Some(f) = shared.get(&si) {
-                                look.cells.entry(at).or_default().formula = Some(f.clone());
-                            }
-                        } else {
-                            shared.insert(si, String::new());
+                    if let (Some(si), Some(at), false) = (&si, current, starts) {
+                        if let Some(f) = shared.get(si) {
+                            look.cells.entry(at).or_default().formula = Some(f.clone());
                         }
+                    }
+                    // `<f .../>` has no text and no end tag.
+                    if !empty {
+                        formula = Some(String::new());
+                        starts_shared = si.filter(|_| starts);
                     }
                 }
                 _ => {}
             },
-            Ok(Event::Text(t)) if in_formula => {
-                if let Some(at) = current {
-                    let f = format!("={}", t.decode().unwrap_or_default());
-                    for v in shared.values_mut().filter(|v| v.is_empty()) {
-                        *v = f.clone();
-                    }
-                    look.cells.entry(at).or_default().formula = Some(f);
+            Ok(Event::Text(t)) => {
+                if let Some(f) = formula.as_mut() {
+                    f.push_str(&t.decode().unwrap_or_default());
                 }
             }
-            Ok(Event::GeneralRef(r)) if in_formula => {
-                if let Some(f) = current
-                    .and_then(|at| look.cells.get_mut(&at))
-                    .and_then(|l| l.formula.as_mut())
-                {
-                    f.push_str(match r.decode().unwrap_or_default().as_ref() {
-                        "amp" => "&",
-                        "lt" => "<",
-                        "gt" => ">",
-                        "quot" => "\"",
-                        _ => "'",
-                    });
+            Ok(Event::GeneralRef(r)) => {
+                if let Some(f) = formula.as_mut() {
+                    let name = r.decode().unwrap_or_default();
+                    match name.as_ref() {
+                        "amp" => f.push('&'),
+                        "lt" => f.push('<'),
+                        "gt" => f.push('>'),
+                        "quot" => f.push('"'),
+                        "apos" => f.push('\''),
+                        n => match n
+                            .strip_prefix("#x")
+                            .map(|h| u32::from_str_radix(h, 16))
+                            .or_else(|| n.strip_prefix('#').map(str::parse))
+                            .and_then(Result::ok)
+                            .and_then(char::from_u32)
+                        {
+                            Some(c) => f.push(c),
+                            None => f.push_str(&format!("&{n};")),
+                        },
+                    }
                 }
             }
             Ok(Event::End(e)) => match e.local_name().as_ref() {
-                b"f" => in_formula = false,
+                b"f" => {
+                    if let Some(text) = formula.take().filter(|t| !t.is_empty()) {
+                        let f = format!("={text}");
+                        if let Some(si) = starts_shared.take() {
+                            shared.insert(si, f.clone());
+                        }
+                        if let Some(at) = current {
+                            look.cells.entry(at).or_default().formula = Some(f);
+                        }
+                    }
+                    starts_shared = None;
+                }
                 b"c" => current = None,
                 _ => {}
             },
@@ -670,5 +692,32 @@ mod tests {
             budget.cells.get(&(0, 0)).is_some_and(|l| l.bold),
             "the header is bold"
         );
+    }
+
+    #[test]
+    fn formulas_with_quotes_and_comparisons_read_whole() {
+        let xlsx = include_bytes!("../tests/fixtures/office/hard.xlsx");
+        let looks = read(xlsx);
+        let f = |r, c| looks["Summary"].cells.get(&(r, c)).and_then(|l| l.formula.clone());
+        assert_eq!(
+            f(9, 1).as_deref(),
+            Some(r#"=COUNTIFS(Sales!B2:B201,"South",Sales!F2:F201,">500")"#)
+        );
+        assert_eq!(f(10, 1).as_deref(), Some(r#"=IF(B3>PlanTotal,"Ahead","Behind")"#));
+        assert_eq!(f(2, 1).as_deref(), Some("=SUM(SalesRevenue)"));
+    }
+
+    #[test]
+    fn shared_formulas_and_character_references() {
+        let xml = r#"<worksheet><sheetData>
+            <row r="1"><c r="A1"><f t="shared" ref="A1:A3" si="0">B1&amp;&#34;x&#x22;</f><v>1</v></c></row>
+            <row r="2"><c r="A2"><f t="shared" si="0"/><v>2</v></c></row>
+            <row r="3"><c r="A3"><v>3</v></c></row>
+        </sheetData></worksheet>"#;
+        let look = sheet(xml, &[]);
+        let f = |r| look.cells.get(&(r, 0)).and_then(|l| l.formula.clone());
+        assert_eq!(f(0).as_deref(), Some(r#"=B1&"x""#));
+        assert_eq!(f(1).as_deref(), Some(r#"=B1&"x""#), "the shared formula, not its value");
+        assert_eq!(f(2), None, "a plain value has no formula");
     }
 }
