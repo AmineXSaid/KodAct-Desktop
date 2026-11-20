@@ -929,8 +929,15 @@ impl Render for Workspace {
             && side_panel == Some(crate::state::PanelTab::Agents)
             && s.panel_full
             && !files_open;
-        // With Files open the side column stands beside the chat.
-        let below = s.doc_below && !files_open && !panel_full;
+        let doc_full_want = !loading && side_doc.is_some() && s.doc_full && !files_open;
+        let doc_full_t = self
+            .presence
+            .doc_full
+            .value(doc_full_want, 320, 260, window);
+        let doc_full_settled = doc_full_t >= 0.999;
+        let doc_full_active = doc_full_t > 0.001;
+        // With Files open or full-screen active, the side column stands beside the chat.
+        let below = s.doc_below && !files_open && !panel_full && !doc_full_active;
         // The terminal dock, kept while it slides back out.
         let dock_f =
             self.presence
@@ -999,11 +1006,18 @@ impl Render for Workspace {
         let pane = {
             let s = self.state.read(cx);
             let main_width = beside - if terminal_open { dock_w } else { 0. };
+            let effective_doc_w = if doc_full_active {
+                panel_w + (main_width - panel_w) * doc_full_t
+            } else {
+                panel_w
+            };
             let fit = super::doc_pane::Fit {
-                width: if below { main_width } else { panel_w },
+                width: if below { main_width } else { effective_doc_w },
                 scale: window.scale_factor(),
                 fit: s.doc_fit,
                 below,
+                full: doc_full_want,
+                full_t: doc_full_t,
                 from_panel: side_panel.is_some(),
                 text: s.doc_text,
                 source: s.source_view,
@@ -1112,7 +1126,7 @@ impl Render for Workspace {
                 (top, false) => top,
             }
             .map(|inner| {
-                if pane_below || panel_full || side_leaving {
+                if pane_below || panel_full || doc_full_active || side_leaving {
                     return inner;
                 }
                 let grip_state = self.state.clone();
@@ -1162,9 +1176,9 @@ impl Render for Workspace {
             });
             column.and_then(|p| match side_leaving {
                 // Leaving: back out to the edge (below the chat, gone at once).
-                true => (!pane_below && !panel_full)
+                true => (!pane_below && !panel_full && !doc_full_settled)
                     .then(|| super::motion::slide_out(p, pane_width, "side-panel", &t)),
-                false => Some(if panel_full {
+                false => Some(if panel_full || doc_full_settled {
                     div()
                         .flex_1()
                         .min_w_0()
@@ -1332,13 +1346,37 @@ impl Render for Workspace {
                         false => super::motion::slide_in(col, w, false, &t),
                     }
                 });
+            let chat_stage = if doc_full_active && !doc_full_settled {
+                let fade = (1.0 - doc_full_t).clamp(0.0, 1.0).powf(1.6);
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .min_h_0()
+                    .overflow_hidden()
+                    .flex()
+                    .opacity(fade)
+                    .relative()
+                    .left(px(-20.0 * doc_full_t))
+                    .child(conversation)
+                    .children(session)
+                    .into_any_element()
+            } else {
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .min_h_0()
+                    .flex()
+                    .child(conversation)
+                    .children(session)
+                    .into_any_element()
+            };
             main.child(
                 div()
                     .flex_1()
                     .min_h_0()
                     .flex()
                     .when(below, |d| d.flex_col())
-                    .when(!panel_full, |d| d.child(conversation).children(session))
+                    .when(!panel_full && !doc_full_settled, |d| d.child(chat_stage))
                     .children(pane),
             )
         };
@@ -1520,6 +1558,15 @@ impl Render for Workspace {
                     cx.notify();
                 })
             }))
+            .on_action(cx.listener(|this, _: &ToggleDocFull, _, cx| {
+                this.state.update(cx, |s, cx| {
+                    if s.doc.is_none() {
+                        s.show_toast("Open a file first to view it full screen.", cx);
+                    } else {
+                        s.toggle_doc_full(cx);
+                    }
+                })
+            }))
             .on_action(cx.listener(|this, _: &ToggleSidebar, _, cx| {
                 this.state.update(cx, |s, cx| {
                     s.sidebar_open = !s.sidebar_open;
@@ -1669,6 +1716,9 @@ impl Render for Workspace {
                         s.toggle_doc_find(cx);
                     } else if s.panel_full && s.panel == Some(crate::state::PanelTab::Agents) {
                         s.panel_full = false;
+                        cx.notify();
+                    } else if s.doc_full && s.doc.is_some() {
+                        s.doc_full = false;
                         cx.notify();
                     } else if s.doc.is_some() && !s.busy() {
                         s.close_doc(cx);
@@ -2129,6 +2179,7 @@ struct Presences {
         Option<crate::state::PanelTab>,
         bool,
     )>,
+    doc_full: super::motion::Tween,
 }
 
 /// The title bar's popovers: Some(leaving) while each shows or leaves.

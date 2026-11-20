@@ -148,6 +148,7 @@ gpui::actions!(
         OpenProfiles,
         OpenGuide,
         ToggleSplit,
+        ToggleDocFull,
         TogglePanel,
         ShowPlanView,
         ShowAgentsView,
