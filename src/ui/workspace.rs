@@ -1178,7 +1178,11 @@ impl Render for Workspace {
                 // Leaving: back out to the edge (below the chat, gone at once).
                 true => (!pane_below && !panel_full && !doc_full_settled)
                     .then(|| super::motion::slide_out(p, pane_width, "side-panel", &t)),
-                false => Some(if panel_full || doc_full_settled {
+                // Full-screen focus keeps the pane in the same slide-in
+                // wrapper, only wider (`pane_width` follows the tween): a
+                // different wrapper would remount it and replay its entrance
+                // from nothing, which blanked the pane as focus began or ended.
+                false => Some(if panel_full {
                     div()
                         .flex_1()
                         .min_w_0()
