@@ -1,5 +1,5 @@
 //! A sub-agent in the transcript, as one row: its status mark, its full
-//! title (never cut at a fixed width), its kind as a chip and "Inspect ›" on
+//! title (never cut: it wraps when the chat is narrow), its kind as a chip and "Inspect ›" on
 //! the right; under it how it went ("Failed · 1 step · 10s",
 //! `agent_roster::status_line`), and for a failed, stopped or stalled agent
 //! the failure note in its colour, on a tinted ground with 4px corners and
@@ -187,13 +187,12 @@ pub fn render(
                 .gap(t.space.xs + px(2.))
                 .min_h(t.size.quiet_line)
                 .child(div().flex_none().child(mark))
+                // The whole title, always: it wraps when the chat is narrow
+                // rather than being cut.
                 .child(
                     div()
                         .flex_1()
                         .min_w_0()
-                        .overflow_hidden()
-                        .whitespace_nowrap()
-                        .text_ellipsis()
                         .text_size(t.text.body_sm)
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(t.colors.text_strong)
