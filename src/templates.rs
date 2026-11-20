@@ -122,6 +122,43 @@ pub fn clone_target(home: &std::path::Path, url: &str) -> Option<std::path::Path
     folder_name(name).map(|n| home.join(n))
 }
 
+/// The credential helper a token clone hands git for that one command. Git
+/// runs a helper that starts with `!` through its own shell (Git for Windows
+/// ships one), passing `get`, `store` or `erase`; this one answers `get` from
+/// the environment and ignores the rest, so the token is never stored.
+const TOKEN_HELPER: &str = "!f() { test \"$1\" = get && printf 'username=%s\\npassword=%s\\n' \"${KODACT_GIT_USER:-oauth2}\" \"$KODACT_GIT_TOKEN\"; }; f";
+
+/// `git clone` of `url` into `dir`, with no prompts. With a `token`, the
+/// user's own credential helpers are switched off for this command (so a
+/// saved credential isn't tried first and the token isn't saved after) and
+/// `TOKEN_HELPER` reads the token from `KODACT_GIT_TOKEN`: it is never in the
+/// arguments, a file, or `.git/config`.
+pub fn clone_command(
+    url: &str,
+    dir: &std::path::Path,
+    token: Option<&str>,
+) -> std::process::Command {
+    let mut c = std::process::Command::new("git");
+    if let Some(token) = token {
+        c.args(["-c", "credential.helper=", "-c"])
+            .arg(format!("credential.helper={TOKEN_HELPER}"))
+            .env("KODACT_GIT_USER", "oauth2")
+            .env("KODACT_GIT_TOKEN", token);
+    }
+    c.args(["clone", "--", url])
+        .arg(dir)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        c.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    c
+}
+
 /// Normalize a repository address or shorthand (`owner/repo`, `group/sub/repo`)
 /// into a cloneable URL for GitHub, GitLab, or a custom self-hosted Git host.
 pub fn normalize_git_clone_url(
@@ -182,6 +219,69 @@ pub fn normalize_git_clone_url(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_token_clone_keeps_the_token_out_of_the_arguments() {
+        let dir = std::path::Path::new("/tmp/x");
+        let c = clone_command("https://gitlab.com/a/b.git", dir, Some("glpat-SECRET"));
+        let args: Vec<String> = c.get_args().map(|a| a.to_string_lossy().into()).collect();
+        assert_eq!(args[..3], ["-c", "credential.helper=", "-c"], "own helpers off first");
+        assert!(args[3].starts_with("credential.helper=!"));
+        assert_eq!(args[4..], ["clone", "--", "https://gitlab.com/a/b.git", "/tmp/x"]);
+        assert!(args.iter().all(|a| !a.contains("SECRET")), "{args:?}");
+        let env: Vec<_> = c.get_envs().collect();
+        assert!(env.contains(&("KODACT_GIT_TOKEN".as_ref(), Some("glpat-SECRET".as_ref()))));
+
+        let plain = clone_command("https://github.com/a/b", dir, None);
+        let args: Vec<String> = plain.get_args().map(|a| a.to_string_lossy().into()).collect();
+        assert_eq!(args, ["clone", "--", "https://github.com/a/b", "/tmp/x"]);
+        assert!(plain.get_envs().all(|(k, _)| k != "KODACT_GIT_TOKEN"));
+    }
+
+    /// Against a real server that wants `oauth2` and `KODACT_TEST_CLONE_TOKEN`
+    /// at `KODACT_TEST_CLONE_URL`: the clone succeeds with the token, fails
+    /// without it, and never asks or feeds the user's own credential helper
+    /// (point `GIT_CONFIG_GLOBAL` at a config whose helper logs to
+    /// `KODACT_TEST_HELPER_LOG`).
+    #[test]
+    #[ignore = "needs a git server; see the doc comment"]
+    fn real_token_clone() {
+        let url = std::env::var("KODACT_TEST_CLONE_URL").expect("KODACT_TEST_CLONE_URL");
+        let token = std::env::var("KODACT_TEST_CLONE_TOKEN").expect("KODACT_TEST_CLONE_TOKEN");
+        let log = std::env::var("KODACT_TEST_HELPER_LOG").ok();
+        let base = std::env::temp_dir().join(format!("kodact-clone-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let with = clone_command(&url, &base.join("with"), Some(&token)).output().unwrap();
+        assert!(with.status.success(), "{}", String::from_utf8_lossy(&with.stderr));
+        let config = std::fs::read_to_string(base.join("with/.git/config")).unwrap();
+        assert!(!config.contains(&token) && !config.contains("credential"), "{config}");
+        let wrong = clone_command(&url, &base.join("wrong"), Some("nope")).output().unwrap();
+        assert!(!wrong.status.success());
+        if let Some(log) = log {
+            let calls = std::fs::read_to_string(&log).unwrap_or_default();
+            assert!(calls.is_empty(), "the user's helper was used: {calls}");
+        }
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_token_helper_answers_get_and_stores_nothing() {
+        // Git runs `!helper` as `sh -c '<helper> "$@"' <helper> <action>`.
+        let body = TOKEN_HELPER.strip_prefix('!').unwrap();
+        let run = |action: &str| {
+            let out = std::process::Command::new("sh")
+                .args(["-c", &format!("{body} \"$@\""), "helper", action])
+                .env("KODACT_GIT_TOKEN", "tok&en|^x")
+                .env_remove("KODACT_GIT_USER")
+                .output()
+                .unwrap();
+            String::from_utf8(out.stdout).unwrap()
+        };
+        assert_eq!(run("get"), "username=oauth2\npassword=tok&en|^x\n");
+        assert_eq!(run("store"), "");
+        assert_eq!(run("erase"), "");
+    }
 
     #[test]
     fn a_project_starts_from_its_template() {

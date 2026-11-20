@@ -3633,56 +3633,16 @@ impl AppState {
     }
 
     /// Clone a repository (GitHub, GitLab, or custom self-hosted host) with an
-    /// optional Personal Access Token supplied strictly through a temporary
-    /// `0700` `GIT_ASKPASS` script that is removed when `git clone` finishes.
+    /// optional Personal Access Token. The token reaches git only through an
+    /// environment variable read by a credential helper given on this one
+    /// command (`clone_command`): never on the command line, in a file, in
+    /// `.git/config`, or in the user's own credential store.
     pub fn clone_project_with_auth(
         &mut self,
         url: String,
         token: Option<String>,
         cx: &mut Context<Self>,
     ) {
-        struct TempAskPass {
-            path: std::path::PathBuf,
-        }
-        impl TempAskPass {
-            fn create() -> std::io::Result<Self> {
-                let nanos = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_nanos())
-                    .unwrap_or(0);
-                #[cfg(unix)]
-                let path = std::env::temp_dir()
-                    .join(format!("kodact-askpass-{}-{nanos}.sh", std::process::id()));
-                #[cfg(not(unix))]
-                let path = std::env::temp_dir()
-                    .join(format!("kodact-askpass-{}-{nanos}.cmd", std::process::id()));
-
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::OpenOptionsExt;
-                    use std::io::Write;
-                    let mut f = std::fs::OpenOptions::new()
-                        .create_new(true)
-                        .write(true)
-                        .mode(0o700)
-                        .open(&path)?;
-                    f.write_all(
-                        b"#!/bin/sh\ncase \"$1\" in\n  *Username*|*username*) printf '%s\\n' \"${KODACT_GIT_USER:-oauth2}\" ;;\n  *) printf '%s\\n' \"$KODACT_GIT_TOKEN\" ;;\nesac\n",
-                    )?;
-                }
-                #[cfg(not(unix))]
-                {
-                    std::fs::write(&path, "@echo off\r\nif \"%~1\"==\"Username\" (echo %KODACT_GIT_USER%) else (echo %KODACT_GIT_TOKEN%)\r\n")?;
-                }
-                Ok(Self { path })
-            }
-        }
-        impl Drop for TempAskPass {
-            fn drop(&mut self) {
-                let _ = std::fs::remove_file(&self.path);
-            }
-        }
-
         let url = url.trim().to_string();
         let token = token.map(|t| t.trim().to_string()).filter(|t| !t.is_empty());
         let Some(dir) = crate::templates::projects_home()
@@ -3706,28 +3666,8 @@ impl AppState {
                     if let Some(parent) = d.parent() {
                         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
                     }
-                    let _ask = match &token {
-                        Some(_) => Some(TempAskPass::create().map_err(|e| e.to_string())?),
-                        None => None,
-                    };
-                    let mut c = std::process::Command::new("git");
-                    c.args(["clone", "--", &url])
-                        .arg(&d)
-                        .env("GIT_TERMINAL_PROMPT", "0")
-                        .stdin(std::process::Stdio::null())
-                        .stdout(std::process::Stdio::null())
-                        .stderr(std::process::Stdio::piped());
-                    if let (Some(ask), Some(tok)) = (&_ask, &token) {
-                        c.env("GIT_ASKPASS", &ask.path)
-                            .env("KODACT_GIT_USER", "oauth2")
-                            .env("KODACT_GIT_TOKEN", tok);
-                    }
-                    #[cfg(windows)]
-                    {
-                        use std::os::windows::process::CommandExt;
-                        c.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-                    }
-                    let out = c.output().map_err(|e| match e.kind() {
+                    let out = crate::templates::clone_command(&url, &d, token.as_deref())
+                        .output().map_err(|e| match e.kind() {
                         std::io::ErrorKind::NotFound => "git isn't installed".to_string(),
                         _ => e.to_string(),
                     })?;
