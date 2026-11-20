@@ -2,6 +2,10 @@
 
 pub mod activity;
 pub mod add_menu;
+pub mod agent_jumper;
+pub mod agent_row;
+pub mod agent_roster;
+pub mod agent_strip;
 pub mod agents_editor;
 pub mod agents_view;
 pub mod approvals;
@@ -93,6 +97,7 @@ pub mod tasks;
 pub mod terminal;
 pub mod terminal_dock;
 pub mod title_menus;
+pub mod todo_card;
 pub mod versions;
 pub mod work_group;
 pub mod workbench;
@@ -101,6 +106,9 @@ pub mod workspace;
 use gpui::{div, prelude::*, svg, App, Div, Hsla, Pixels, SharedString, Svg};
 
 use crate::theme::{ActiveTheme, Theme};
+
+/// The Agents panel's jumper is open (a `ui_toggles` key).
+pub const AGENT_JUMPER: &str = "agent-list-open";
 
 gpui::actions!(
     forge,
@@ -151,6 +159,7 @@ gpui::actions!(
         TogglePanel,
         ShowPlanView,
         ShowAgentsView,
+        ToggleAgentJumper,
         ShowFilesView,
         ShowBrowserView,
         ShowProjectMap,

@@ -348,11 +348,12 @@ fn headline(c: &Chat, about: Option<&str>) -> Option<String> {
     // The task in progress, from the reply's own list.
     let task = c.messages.iter().rev().find_map(|m| match m {
         Message::Assistant { blocks } => blocks.iter().rev().find_map(|b| match b {
-            // Its rows (`backend::tool_call`): `[~]` marks the one in progress.
-            Block::Tool(t) if t.target.as_ref() == "TodoWrite" => Some(
-                t.diff
-                    .iter()
-                    .find_map(|l| l.text.trim().strip_prefix("[~] ").map(str::to_string)),
+            Block::Tool(t) if super::todo_card::is_todo(t) => Some(
+                super::todo_card::TodoList::from_call(t)
+                    .items
+                    .into_iter()
+                    .find(|x| x.state == super::todo_card::TodoState::Active)
+                    .map(|x| x.text),
             ),
             _ => None,
         }),

@@ -155,9 +155,13 @@ pub fn render(
             .items_center()
             .gap(t.space.sm)
             .px(t.space.md)
-            .h(t.size.row)
+            .h(t.size.control)
+            // One ghost pill, as the starters above it: it is something to press.
             .rounded(t.radius.pill)
+            .border_1()
+            .border_color(t.colors.border)
             .cursor_pointer()
+            .text_size(t.text.body_sm)
             .text_color(t.colors.text_muted)
             .hover(move |d| d.bg(hover))
             .child(icon(
@@ -180,15 +184,9 @@ pub fn render(
             .child(
                 div()
                     .flex_none()
-                    .text_size(t.text.caption)
                     .text_color(t.colors.text_subtle)
-                    .child(super::sidebar::ago(c.minutes_ago)),
+                    .child(format!("· {}", super::sidebar::ago(c.minutes_ago))),
             )
-            .child(icon(
-                "icons/arrow-right.svg",
-                t.size.icon_xs,
-                t.colors.text_subtle,
-            ))
             .on_click(move |_, _, app| state.update(app, |s, cx| s.open_chat(id, cx)))
     });
 

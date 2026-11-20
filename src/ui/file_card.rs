@@ -102,31 +102,11 @@ pub fn download_button(
     state: Entity<AppState>,
     t: &Theme,
 ) -> gpui::Stateful<gpui::Div> {
-    let hover = t.colors.hover;
+    // The same ghost pill as the View beside it: two actions, one shape.
     let to_save = file.clone();
-    div()
+    crate::theme::ghost_button(t, "Download")
         .id(SharedString::from(format!("file-dl-{key}")))
         .flex_none()
-        .flex()
-        .items_center()
-        .gap(t.space.xs)
-        .h(t.size.control)
-        .px(t.space.sm)
-        .rounded(t.radius.button)
-        .border_1()
-        .border_color(t.colors.border)
-        .bg(t.colors.surface)
-        .text_size(t.text.caption)
-        .font_weight(FontWeight::MEDIUM)
-        .text_color(t.colors.text)
-        .cursor_pointer()
-        .hover(move |st| st.bg(hover))
-        .child(icon(
-            "icons/download.svg",
-            t.size.icon_sm,
-            t.colors.text_muted,
-        ))
-        .child("Download")
         .on_click(move |_, _, cx| {
             cx.stop_propagation();
             state.update(cx, |s, cx| s.download(&to_save, cx));

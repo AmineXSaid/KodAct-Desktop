@@ -119,89 +119,38 @@ fn field_label(t: &Theme, label: &str) -> gpui::Div {
 impl Render for NewProject {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
-        let hover = t.colors.hover;
-        let home = crate::templates::projects_home()
-            .map(|h| crate::rules::display_path(&h, crate::rules::home_dir().as_deref()))
-            .unwrap_or_else(|| "KodAct Projects".into());
         let picker = self.state.clone();
         let close_scrim = self.state.clone();
         let close_btn = self.state.clone();
 
-        let seg_tab = |id: &'static str, label: &'static str, glyph: &'static str, on: bool| {
-            div()
-                .id(id)
-                .flex_1()
-                .flex()
-                .items_center()
-                .justify_center()
-                .gap(t.space.xs)
-                .h(px(30.))
-                .px(t.space.md)
-                .rounded(t.radius.pill)
-                .cursor_pointer()
-                .text_size(t.text.body_sm)
-                .font_weight(if on {
-                    FontWeight::SEMIBOLD
-                } else {
-                    FontWeight::MEDIUM
-                })
-                .when(on, |d| {
-                    d.bg(t.colors.surface)
-                        .border_1()
-                        .border_color(t.colors.border)
-                })
-                .text_color(if on {
-                    t.colors.text_strong
-                } else {
-                    t.colors.text_muted
-                })
-                .when(!on, |d| d.hover(move |st| st.bg(hover)))
-                .child(icon(
-                    glyph,
-                    t.size.icon_xs,
-                    if on {
-                        t.colors.primary
-                    } else {
-                        t.colors.text_subtle
-                    },
-                ))
-                .child(label)
-        };
 
-        let switcher = div()
-            .flex()
-            .items_center()
-            .gap(px(4.))
-            .p(px(3.))
-            .rounded(t.radius.pill)
-            .bg(t.extra.inset)
-            .border_1()
-            .border_color(t.colors.border)
-            .child(
-                seg_tab(
-                    "np-tab-local",
+        // The two sources, as every single choice is: the app's segmented
+        // control (the provider below and Settings' Appearance use it too).
+        let (to_local, to_remote) = (cx.entity(), cx.entity());
+        let switcher = div().flex().child(
+            super::button::Segmented::new("np-source", "Where the project comes from")
+                .option(
                     "On this computer",
-                    "icons/folder-open.svg",
                     self.tab == SourceTab::Local,
+                    move |_, _, cx| {
+                        to_local.update(cx, |this, cx| {
+                            this.tab = SourceTab::Local;
+                            cx.notify();
+                        })
+                    },
                 )
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.tab = SourceTab::Local;
-                    cx.notify();
-                })),
-            )
-            .child(
-                seg_tab(
-                    "np-tab-remote",
+                .option(
                     "Clone from Git",
-                    "icons/git-branch.svg",
                     self.tab == SourceTab::Remote,
-                )
-                .on_click(cx.listener(|this, _, window, cx| {
-                    this.tab = SourceTab::Remote;
-                    this.url.update(cx, |i, cx| i.focus(window, cx));
-                    cx.notify();
-                })),
-            );
+                    move |_, window, cx| {
+                        to_remote.update(cx, |this, cx| {
+                            this.tab = SourceTab::Remote;
+                            this.url.update(cx, |i, cx| i.focus(window, cx));
+                            cx.notify();
+                        })
+                    },
+                ),
+        );
 
         let local_body = {
             let mut chips = div().flex().flex_wrap().gap(t.space.xs);
@@ -235,17 +184,6 @@ impl Render for NewProject {
                         .border_color(t.colors.border)
                         .child(
                             div()
-                                .size(px(34.))
-                                .flex_none()
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .rounded(t.radius.button)
-                                .bg(t.colors.primary_tint)
-                                .child(icon("icons/folder-open.svg", t.size.icon, t.colors.primary)),
-                        )
-                        .child(
-                            div()
                                 .flex_1()
                                 .min_w_0()
                                 .flex()
@@ -253,16 +191,28 @@ impl Render for NewProject {
                                 .gap(px(2.))
                                 .child(
                                     div()
-                                        .text_size(t.text.body_sm)
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                        .text_color(t.colors.text_strong)
-                                        .child("Open an existing folder"),
+                                        .flex()
+                                        .items_center()
+                                        .gap(t.space.sm)
+                                        .child(icon(
+                                            "icons/folder-open.svg",
+                                            t.size.icon_sm,
+                                            t.colors.primary,
+                                        ))
+                                        .child(
+                                            div()
+                                                .text_size(t.text.body_sm)
+                                                .font_weight(FontWeight::SEMIBOLD)
+                                                .text_color(t.colors.text_strong)
+                                                .child("Open an existing folder"),
+                                        ),
                                 )
                                 .child(
                                     div()
                                         .text_size(t.text.caption)
                                         .text_color(t.colors.text_muted)
-                                        .child("Keep existing files, git history, and add project instructions."),
+                                        .pl(t.size.icon_sm + t.space.sm)
+                                        .child("Keep its files and history; KodAct adds its instructions."),
                                 ),
                         )
                         .child(
@@ -310,10 +260,10 @@ impl Render for NewProject {
                                         .text_size(t.text.caption)
                                         .text_color(t.colors.text_subtle)
                                         .child(if chosen.instructions.is_empty() {
-                                            format!("Creates an empty folder in {home}.")
+                                            "An empty folder in KodAct Projects.".to_string()
                                         } else {
                                             format!(
-                                                "Creates folder in {home} with KODACT.md for {}.",
+                                                "Saved in KodAct Projects, set up for {}.",
                                                 chosen.label.to_lowercase()
                                             )
                                         }),
@@ -381,7 +331,7 @@ impl Render for NewProject {
                 crate::templates::projects_home()
                     .and_then(|h| crate::templates::clone_target(&h, &u))
             })
-            .map(|d| crate::rules::display_path(&d, crate::rules::home_dir().as_deref()));
+            .and_then(|d| d.file_name().map(|n| n.to_string_lossy().into_owned()));
             let repo_box = div()
                 .h(t.size.field_h)
                 .pl(t.space.sm)
@@ -392,12 +342,21 @@ impl Render for NewProject {
                 .bg(t.colors.surface)
                 .border_1()
                 .border_color(t.extra.border_strong)
+                // The host, fixed: an addon set off by a hairline, so it
+                // reads as part of the address and not as a hint.
                 .when_some(prefix, |d, p| {
                     d.child(
                         div()
                             .flex_none()
+                            .h_full()
+                            .flex()
+                            .items_center()
+                            .pr(t.space.sm)
+                            .mr(t.space.xs)
+                            .border_r_1()
+                            .border_color(t.colors.border)
                             .text_size(t.text.body_sm)
-                            .text_color(t.colors.text_subtle)
+                            .text_color(t.colors.text_muted)
                             .child(p),
                     )
                 })
@@ -512,8 +471,8 @@ impl Render for NewProject {
                                 .text_size(t.text.caption)
                                 .text_color(t.colors.text_subtle)
                                 .child(match target {
-                                    Some(d) => format!("Clones into {d}"),
-                                    None => format!("Clones into {home}"),
+                                    Some(d) => format!("Saved as {d} in KodAct Projects"),
+                                    None => "Saved in KodAct Projects".to_string(),
                                 }),
                         )
                         .child(
@@ -529,8 +488,6 @@ impl Render for NewProject {
             .id("new-project-modal")
             .occlude()
             .w(px(580.))
-            // The same height on both tabs, so switching doesn't jump.
-            .min_h(px(500.))
             .max_w(relative(0.92))
             .max_h(relative(0.88))
             .p(t.space.xl)
@@ -584,9 +541,12 @@ impl Render for NewProject {
                 .absolute()
                 .inset_0()
                 .flex()
-                .items_center()
+                // Sized to its content and hung from a fixed line near the
+                // top, so switching tabs grows it downward without a jump.
+                .items_start()
                 .justify_center()
                 .p(t.space.xl)
+                .pt(relative(0.14))
                 .bg(t.extra.scrim)
                 .on_mouse_down(gpui::MouseButton::Left, move |_, _, cx| {
                     close_scrim.update(cx, |s, cx| {

@@ -34,13 +34,7 @@ pub fn elapsed(d: Duration) -> String {
 }
 
 fn status_of(run: &AgentRun) -> ToolStatus {
-    match (run.ended, run.failed) {
-        (None, _) => ToolStatus::Running,
-        // You stopped it: not a failure, and not done.
-        (Some(_), _) if run.stopped => ToolStatus::Declined,
-        (Some(_), true) => ToolStatus::Failed,
-        (Some(_), false) => ToolStatus::Done,
-    }
+    super::agent_roster::status(run)
 }
 
 /// The small ghost Stop pill used in the header and footer.
@@ -83,6 +77,11 @@ fn spinner(size: gpui::Pixels, color: Hsla, key: String) -> AnyElement {
             |svg, d| svg.with_transformation(Transformation::rotate(percentage(d))),
         )
         .into_any_element()
+}
+
+/// An agent's status as an icon (the strip, the jumper, the footer).
+pub fn status_icon(status: ToolStatus, t: &Theme, size: gpui::Pixels, key: String) -> AnyElement {
+    run_status_icon(status, t, size, key)
 }
 
 fn run_status_icon(status: ToolStatus, t: &Theme, size: gpui::Pixels, key: String) -> AnyElement {
@@ -128,6 +127,9 @@ pub struct View<'a> {
     pub full: bool,
     pub copied: Option<SharedString>,
     pub scale: f32,
+    /// The pill strip's scroll, and the pill it last brought into view.
+    pub strip: &'a gpui::ScrollHandle,
+    pub strip_at: &'a std::cell::Cell<Option<usize>>,
 }
 
 /// Group consecutive `AgentEntry::Step` indices of the same `ToolKind` when `>= 2`
@@ -279,31 +281,6 @@ fn kind_group_label(kind: crate::state::ToolKind, n: usize) -> String {
     }
 }
 
-fn agent_filter(ui_toggles: &std::collections::HashSet<String>) -> Option<&'static str> {
-    if ui_toggles.contains("agent-filter:running") {
-        Some("agent-filter:running")
-    } else if ui_toggles.contains("agent-filter:failed") {
-        Some("agent-filter:failed")
-    } else {
-        None
-    }
-}
-
-fn filter_runs<'a>(
-    runs: &'a [AgentRun],
-    ui_toggles: &std::collections::HashSet<String>,
-) -> Vec<(usize, &'a AgentRun)> {
-    let filter = agent_filter(ui_toggles);
-    runs.iter()
-        .enumerate()
-        .filter(|(_, r)| match filter {
-            Some("agent-filter:running") => status_of(r) == ToolStatus::Running,
-            Some("agent-filter:failed") => status_of(r) == ToolStatus::Failed,
-            _ => true,
-        })
-        .collect()
-}
-
 pub fn render(
     v: View,
     state: Entity<AppState>,
@@ -345,11 +322,7 @@ pub fn render(
             .into_any_element();
     }
 
-    let active_idx = v
-        .selected
-        .and_then(|sel| v.runs.iter().position(|r| r.id == sel))
-        .or_else(|| v.runs.iter().position(|r| r.ended.is_none()))
-        .unwrap_or(0);
+    let active_idx = super::agent_roster::current(v.runs, v.selected);
     let run = &v.runs[active_idx];
     let status = status_of(run);
     let running = v.runs.iter().filter(|r| r.ended.is_none()).count();
@@ -365,358 +338,17 @@ pub fn render(
         .saturating_duration_since(run.started);
 
     // ---- 1. Top Agent Switcher Bar ----
-    let hover = t.colors.hover;
     let compact_split = !v.full && v.runs.len() > 1;
     let equal_row = compact_split && v.runs.len() <= 3;
-    let tabs = v.runs.iter().enumerate().map(|(i, r)| {
-        let is_active = i == active_idx;
-        let st = status_of(r);
-        let selector = state.clone();
-        let id = r.id.clone();
-        let tab_inner = div()
-            .flex()
-            .items_center()
-            .gap(px(6.))
-            .h(px(28.))
-            .px(t.space.sm + px(2.))
-            .rounded(t.radius.compact)
-            .border_1()
-            .border_color(if is_active {
-                t.extra.border_strong
-            } else {
-                gpui::transparent_black()
-            })
-            .bg(if is_active {
-                t.colors.surface
-            } else {
-                gpui::transparent_black()
-            })
-            .when(is_active, |d| d.shadow(t.elevation_grain()))
-            .hover(move |s| s.bg(hover))
-            .child(run_status_icon(
-                st,
-                t,
-                t.size.icon_xs,
-                format!("agent-tab-spin-{i}"),
-            ))
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .overflow_hidden()
-                    .whitespace_nowrap()
-                    .text_ellipsis()
-                    .text_size(t.text.caption)
-                    .font_weight(if is_active {
-                        FontWeight::SEMIBOLD
-                    } else {
-                        FontWeight::MEDIUM
-                    })
-                    .text_color(if is_active {
-                        t.colors.text_strong
-                    } else {
-                        t.colors.text_muted
-                    })
-                    .child(r.task.clone()),
-            );
-
-        let wrapped = super::button::KeyRow::new(
-            ("agent-tab", i),
-            SharedString::from(format!(
-                "Agent {} of {}: {}, {}",
-                i + 1,
-                v.runs.len(),
-                r.task,
-                match st {
-                    ToolStatus::Running => "running",
-                    ToolStatus::Failed => "failed",
-                    ToolStatus::Declined => "stopped",
-                    ToolStatus::Interrupted => "interrupted",
-                    ToolStatus::Done => "done",
-                }
-            )),
-            tab_inner,
-        )
-        .radius(t.radius.compact)
-        .expanded(is_active)
-        .on_activate(move |_, cx| selector.update(cx, |s, cx| s.select_agent(&id, cx)));
-
-        if equal_row {
-            div().flex_1().min_w_0().child(wrapped).into_any_element()
-        } else {
-            div()
-                .flex_none()
-                .min_w(px(110.))
-                .max_w(px(195.))
-                .child(wrapped)
-                .into_any_element()
-        }
-    });
 
     let prev_state = state.clone();
     let next_state = state.clone();
     let full_state = state.clone();
     let full_hover = t.colors.hover;
-    let jumper_open = ui_toggles.contains("agent-list-open");
-    let jumper_toggle = state.clone();
-    let failed_total = v
-        .runs
-        .iter()
-        .filter(|r| status_of(r) == ToolStatus::Failed)
-        .count();
-    let jumper_hover = hover;
-    let jumper_button = div()
-        .id("agent-jumper")
-        .role(gpui::accesskit::Role::Button)
-        .aria_label(SharedString::from(format!(
-            "Agent {} of {}, open list, {}",
-            active_idx + 1,
-            v.runs.len(),
-            if jumper_open { "expanded" } else { "collapsed" }
-        )))
-        .aria_toggled(if jumper_open {
-            gpui::accesskit::Toggled::True
-        } else {
-            gpui::accesskit::Toggled::False
-        })
-        .flex_none()
-        .flex()
-        .items_center()
-        .gap(px(4.))
-        .h(px(26.))
-        .px(t.space.xs + px(2.))
-        .rounded(t.radius.compact)
-        .border_1()
-        .border_color(if jumper_open {
-            t.extra.border_strong
-        } else {
-            gpui::transparent_black()
-        })
-        .bg(if jumper_open {
-            t.colors.surface
-        } else {
-            gpui::transparent_black()
-        })
-        .cursor_pointer()
-        .hover(move |s| s.bg(jumper_hover))
-        .text_size(t.text.caption)
-        .font_weight(FontWeight::MEDIUM)
-        .text_color(t.colors.text)
-        .child(format!("{}/{}", active_idx + 1, v.runs.len()))
-        .when(failed_total > 0, |d| {
-            d.child(
-                div()
-                    .size(px(6.))
-                    .rounded(t.radius.pill)
-                    .bg(t.extra.danger),
-            )
-        })
-        .child(icon(
-            if jumper_open {
-                "icons/chevron-up.svg"
-            } else {
-                "icons/chevron-down.svg"
-            },
-            t.size.icon_xs,
-            t.colors.text_subtle,
-        ))
-        .on_mouse_down(gpui::MouseButton::Left, |_, window, _| {
-            window.prevent_default()
-        })
-        .on_click(move |ev, _, cx| {
-            let pos = ev.mouse_position();
-            jumper_toggle.update(cx, |s, cx| {
-                s.toggle_ui_at("agent-list-open".into(), None, pos, cx)
-            });
-        });
-
+    let jumper_open = ui_toggles.contains(super::AGENT_JUMPER);
+    let jumper_button = super::agent_jumper::button(active_idx, v.runs, jumper_open, &state, t);
     let jumper_popover = jumper_open.then(|| {
-        let filtered = filter_runs(v.runs, ui_toggles);
-        let active_filter = agent_filter(ui_toggles);
-        let close_out = state.clone();
-        let make_filter_pill = |key: Option<&'static str>, label: String| {
-            let is_on = active_filter == key;
-            let f_state = state.clone();
-            let f_hover = t.colors.hover;
-            div()
-                .id(SharedString::from(format!(
-                    "agent-filter-{}",
-                    key.unwrap_or("all")
-                )))
-                .flex_none()
-                .px(t.space.sm)
-                .py(px(2.))
-                .rounded(t.radius.pill)
-                .border_1()
-                .border_color(if is_on {
-                    t.colors.primary.opacity(0.45)
-                } else {
-                    t.colors.border
-                })
-                .bg(if is_on {
-                    t.colors.primary_tint
-                } else {
-                    t.colors.surface
-                })
-                .text_size(t.text.caption)
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(if is_on {
-                    t.colors.primary
-                } else {
-                    t.colors.text_muted
-                })
-                .cursor_pointer()
-                .hover(move |s| s.bg(f_hover))
-                .child(label)
-                .on_click(move |_, _, cx| {
-                    f_state.update(cx, |s, cx| {
-                        s.ui_toggles.remove("agent-filter:running");
-                        s.ui_toggles.remove("agent-filter:failed");
-                        if let Some(k) = key {
-                            s.ui_toggles.insert(k.to_string());
-                        }
-                        cx.notify();
-                    });
-                })
-        };
-
-        let list_rows = filtered.into_iter().map(|(orig_idx, r)| {
-            let st = status_of(r);
-            let is_sel = orig_idx == active_idx;
-            let pick_state = state.clone();
-            let rid = r.id.clone();
-            let r_hover = t.colors.hover;
-            let elapsed_lbl = elapsed(r.ended.unwrap_or(now).saturating_duration_since(r.started));
-            div()
-                .id(("agent-jump-row", orig_idx))
-                .w_full()
-                .px(t.space.sm)
-                .py(t.space.xs + px(2.))
-                .rounded(t.radius.compact)
-                .bg(if is_sel {
-                    t.colors.primary_tint
-                } else {
-                    gpui::transparent_black()
-                })
-                .hover(move |s| s.bg(r_hover))
-                .cursor_pointer()
-                .flex()
-                .items_center()
-                .gap(t.space.sm)
-                .on_click(move |_, _, cx| {
-                    pick_state.update(cx, |s, cx| {
-                        s.ui_toggles.remove("agent-list-open");
-                        s.select_agent(&rid, cx);
-                    });
-                })
-                .child(run_status_icon(
-                    st,
-                    t,
-                    t.size.icon_xs,
-                    format!("agent-pop-spin-{orig_idx}"),
-                ))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .gap(px(1.))
-                        .child(
-                            div()
-                                .overflow_hidden()
-                                .whitespace_nowrap()
-                                .text_ellipsis()
-                                .text_size(t.text.body_sm)
-                                .font_weight(if is_sel {
-                                    FontWeight::SEMIBOLD
-                                } else {
-                                    FontWeight::MEDIUM
-                                })
-                                .text_color(t.colors.text_strong)
-                                .child(r.task.clone()),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(4.))
-                                .text_size(t.text.caption)
-                                .text_color(t.colors.text_subtle)
-                                .when(!r.kind.is_empty(), |d| d.child(r.kind.clone()).child("·"))
-                                .child(format!(
-                                    "{} step{}",
-                                    r.steps.len(),
-                                    if r.steps.len() == 1 { "" } else { "s" }
-                                ))
-                                .child("·")
-                                .child(elapsed_lbl),
-                        ),
-                )
-        });
-
-        let panel = crate::theme::popover(t)
-            .id("agent-jumper-popover")
-            .occlude()
-            .w(px(330.))
-            .p(t.space.xs + px(2.))
-            .flex()
-            .flex_col()
-            .gap(t.space.xs)
-            .on_mouse_down_out(move |ev, _, cx| {
-                close_out.update(cx, |s, cx| s.dismiss_ui("agent-list-open", ev.position, cx));
-            })
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(4.))
-                    .px(px(2.))
-                    .pb(px(2.))
-                    .child(make_filter_pill(None, format!("All ({})", v.runs.len())))
-                    .child(make_filter_pill(
-                        Some("agent-filter:running"),
-                        format!("Running ({running})"),
-                    ))
-                    .child(make_filter_pill(
-                        Some("agent-filter:failed"),
-                        format!("Failed ({failed_total})"),
-                    )),
-            )
-            .child(
-                div()
-                    .id("agent-jumper-list")
-                    .max_h(px(320.))
-                    .overflow_y_scroll()
-                    .flex()
-                    .flex_col()
-                    .gap(px(2.))
-                    .children(list_rows),
-            );
-
-        div()
-            .absolute()
-            .bottom_0()
-            .when(compact_split, |d| d.left_0())
-            .when(!compact_split, |d| d.right_0())
-            .child(
-                gpui::deferred(
-                    gpui::anchored()
-                        .anchor(if compact_split {
-                            gpui::Anchor::TopLeft
-                        } else {
-                            gpui::Anchor::TopRight
-                        })
-                        .snap_to_window_with_margin(t.size.viewport_margin)
-                        .child(div().pt(px(4.)).child(super::motion::drop_menu(
-                            panel,
-                            "agent-jumper-popover",
-                            false,
-                            t,
-                        ))),
-                )
-                .with_priority(2),
-            )
+        super::agent_jumper::popover(v.runs, active_idx, ui_toggles, compact_split, &state, t)
     });
 
     let nav_cluster = div()
@@ -794,15 +426,15 @@ pub fn render(
     .expanded(v.full)
     .on_activate(move |_, cx| full_state.update(cx, |s, cx| s.toggle_panel_full(cx)));
 
-    let tabs_strip = div()
-        .id("agent-tabs-scroll")
-        .w_full()
-        .min_w_0()
-        .flex()
-        .items_center()
-        .gap(px(4.))
-        .when(!equal_row, |d| d.overflow_x_scroll())
-        .children(tabs);
+    let tabs_strip = super::agent_strip::render(
+        v.runs,
+        active_idx,
+        equal_row,
+        v.strip,
+        v.strip_at,
+        &state,
+        t,
+    );
 
     let switcher_base = div()
         .flex_none()
@@ -939,7 +571,7 @@ pub fn render(
                         div()
                             .px(t.space.sm)
                             .py(px(1.))
-                            .rounded(t.radius.pill)
+                            .rounded(t.radius.small)
                             .bg(t.colors.hover)
                             .font_weight(FontWeight::MEDIUM)
                             .text_color(t.colors.text)
@@ -953,15 +585,10 @@ pub fn render(
                         .child(status_text),
                 )
                 .when(!run.steps.is_empty(), |d| {
-                    d.child("·").child(format!(
-                        "{} step{}{}",
+                    d.child("·").child(super::agent_roster::step_summary(
+                        done_count,
+                        fail_count,
                         run.steps.len(),
-                        if run.steps.len() == 1 { "" } else { "s" },
-                        if done_count > 0 && fail_count == 0 {
-                            format!(" ({done_count} passed)")
-                        } else {
-                            String::new()
-                        }
                     ))
                 })
                 .when(fail_count > 0, |d| {
@@ -969,7 +596,7 @@ pub fn render(
                         div()
                             .px(t.space.xs + px(2.))
                             .py(px(1.))
-                            .rounded(t.radius.pill)
+                            .rounded(t.radius.small)
                             .bg(t.extra.danger_tint)
                             .font_weight(FontWeight::MEDIUM)
                             .text_color(t.extra.danger)
@@ -1498,7 +1125,7 @@ pub fn render(
 
     let footer_summary = if running > 0 {
         if v.runs.len() > 1 {
-            format!("{} of {} agents running", running, v.runs.len())
+            super::agent_roster::Counts::of(v.runs).running_line()
         } else {
             format!(
                 "Running · {} step{}",
@@ -1507,14 +1134,7 @@ pub fn render(
             )
         }
     } else if v.runs.len() > 1 {
-        format!(
-            "Agent {} of {} · {} step{} · {}",
-            active_idx + 1,
-            v.runs.len(),
-            run.steps.len(),
-            if run.steps.len() == 1 { "" } else { "s" },
-            elapsed(took)
-        )
+        super::agent_roster::agent_line(active_idx, v.runs.len(), run.steps.len(), took)
     } else {
         format!(
             "Finished in {} · {} step{}",
@@ -2098,26 +1718,17 @@ mod tests {
             }
             runs.push(r);
         }
+        // The jumper's filter, kept in the panel's toggles, picks the list.
+        use super::super::agent_jumper::filter;
+        use super::super::agent_roster::listed;
         let mut toggles = std::collections::HashSet::new();
-        assert_eq!(filter_runs(&runs, &toggles).len(), 10);
+        assert_eq!(listed(&runs, filter(&toggles)).len(), 10);
 
         toggles.insert("agent-filter:running".into());
-        assert_eq!(
-            filter_runs(&runs, &toggles)
-                .into_iter()
-                .map(|(i, _)| i)
-                .collect::<Vec<_>>(),
-            vec![0, 1, 2]
-        );
+        assert_eq!(listed(&runs, filter(&toggles)), vec![0, 1, 2]);
 
         toggles.remove("agent-filter:running");
         toggles.insert("agent-filter:failed".into());
-        assert_eq!(
-            filter_runs(&runs, &toggles)
-                .into_iter()
-                .map(|(i, _)| i)
-                .collect::<Vec<_>>(),
-            vec![7, 9]
-        );
+        assert_eq!(listed(&runs, filter(&toggles)), vec![7, 9]);
     }
 }

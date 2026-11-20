@@ -31,7 +31,15 @@ enum Part {
 
 fn part(blocks: &[Block], b: usize, streaming: bool) -> Part {
     match &blocks[b] {
-        Block::Tool(t) if t.target.as_ref() == "TodoWrite" => Part::Breaks,
+        // The task list's card stands on its own; the reply's later lists
+        // only update it, so they don't break a run either.
+        Block::Tool(t) if super::todo_card::is_todo(t) => {
+            if super::todo_card::slot(blocks, b).is_some() {
+                Part::Breaks
+            } else {
+                Part::Hidden
+            }
+        }
         Block::Tool(_) if message::awaits_you(blocks, b) => Part::Breaks,
         Block::Tool(_) if message::denied_call(blocks, b) || message::asked_call(blocks, b) => {
             Part::Hidden
@@ -149,15 +157,21 @@ pub fn summary(calls: &[&ToolCall]) -> String {
             n => format!("used the web {n} times"),
         });
     }
-    // Sub-agents are named as agents, not as "a tool".
-    let agents = ok
+    // Sub-agents are named as agents, not as "a tool", and every agent
+    // counts (as the Agents panel counts them); its failures are added
+    // apart, beside the line.
+    let agents = calls
         .iter()
         .filter(|c| crate::state::is_agent_tool(&c.target))
         .count();
     if agents > 0 {
         parts.push(format!("ran {}", plural(agents, "an agent", "agents")));
     }
-    let other = count(&[ToolKind::Other]) - agents;
+    let ok_agents = ok
+        .iter()
+        .filter(|c| crate::state::is_agent_tool(&c.target))
+        .count();
+    let other = count(&[ToolKind::Other]) - ok_agents;
     if other > 0 {
         parts.push(format!("used {}", plural(other, "a tool", "tools")));
     }
@@ -404,11 +418,17 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
         t,
     );
 
+    // A run of sub-agents is counted as the Agents panel counts them
+    // (`agent_roster`): "3 agents working", then "Ran 10 agents" with its
+    // failures beside it, every agent included.
+    let roster = super::agent_roster::Counts::of_calls(&all);
+    let only_agents = roster.total > 0 && roster.total == all.len();
     let header_title = match live_step {
         Some(c) if crate::state::is_agent_tool(&c.target) && agents_running > 1 => {
-            format!("{agents_running} agents working")
+            super::agent_roster::Counts { running: agents_running, ..roster }.run_line()
         }
         Some(c) => step_label(c),
+        None if only_agents => roster.run_line(),
         None => words.clone(),
     };
     let header_icon: AnyElement = if let Some(c) = live_step {
@@ -750,6 +770,43 @@ mod tests {
         Block::Thinking {
             text: "hm".into(),
             open: false,
+        }
+    }
+
+    #[test]
+    fn the_task_list_is_never_a_tool_row() {
+        use serde_json::json;
+        let call = |name: &str, input: serde_json::Value| {
+            Block::Tool(crate::backend::tool_call(name, &input))
+        };
+        let todo = |status: &str| {
+            call(
+                "TodoWrite",
+                json!({"todos": [{"content": "Build it", "status": status}]}),
+            )
+        };
+        let blocks = vec![
+            call("Read", json!({"file_path": "a.rs"})),
+            call("Read", json!({"file_path": "b.rs"})),
+            todo("in_progress"),
+            call("Read", json!({"file_path": "c.rs"})),
+            todo("completed"),
+            call("Read", json!({"file_path": "d.rs"})),
+        ];
+        // No list is ever a step a run folds or counts as a tool.
+        for b in [2, 4] {
+            assert_ne!(part(&blocks, b, false), Part::Step, "block {b}");
+        }
+        // The first holds the card and stands on its own; the later one only
+        // updates it, so it neither shows nor splits the run around it.
+        assert_eq!(part(&blocks, 2, false), Part::Breaks);
+        assert_eq!(part(&blocks, 4, false), Part::Hidden);
+        let runs = runs(&blocks, false);
+        assert!(runs.iter().all(|r| !r.contains(&2)), "{runs:?}");
+        for r in &runs {
+            assert!(calls(&blocks, r, false)
+                .iter()
+                .all(|(_, c)| !super::super::todo_card::is_todo(c)));
         }
     }
 

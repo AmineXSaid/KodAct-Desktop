@@ -347,6 +347,8 @@ pub fn render(
             tool_button("doc-find", "icons/search.svg", "Find in this file")
                 .on_click(move |_, _, cx| finder.update(cx, |s, cx| s.toggle_doc_find(cx))),
         )
+        // How to view it, then what to do with it: two groups, a hairline apart.
+        .child(div().flex_none().mx(t.space.xs).w(px(1.)).h(t.size.icon).bg(t.colors.border))
         .when(exports, |d| {
             d.child(
                 tool_button("doc-export", "icons/file-down.svg", "Export to PDF").on_click(

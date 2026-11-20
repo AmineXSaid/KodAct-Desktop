@@ -122,6 +122,7 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("secondary-shift-e", TogglePanel, Some("Workspace")),
         KeyBinding::new("secondary-1", ShowPlanView, Some("Workspace")),
         KeyBinding::new("secondary-2", ShowAgentsView, Some("Workspace")),
+        KeyBinding::new("secondary-shift-j", ToggleAgentJumper, Some("Workspace")),
         KeyBinding::new("secondary-3", ShowFilesView, Some("Workspace")),
         KeyBinding::new("secondary-4", ShowBrowserView, Some("Workspace")),
         KeyBinding::new("secondary-alt-o", OpenRemoteMenu, None),

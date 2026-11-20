@@ -95,6 +95,7 @@ table in step.
 | Ctrl/⌘ Shift E | Side panel: plan, files, browser |
 | Ctrl/⌘ 1 | Side panel: Plan |
 | Ctrl/⌘ 2 | Side panel: Agents |
+| Ctrl/⌘ Shift J | Jump to an agent |
 | Ctrl/⌘ 3 | Side panel: Files |
 | Ctrl/⌘ 4 | Side panel: Browser |
 | Alt F | Open file: full screen, or back |

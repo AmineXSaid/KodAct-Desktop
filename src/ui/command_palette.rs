@@ -404,6 +404,12 @@ impl CommandPalette {
                 Box::new(ShowAgentsView),
             ),
             act(
+                "Jump to an agent",
+                "icons/boxes.svg",
+                Some("Ctrl Shift J".into()),
+                Box::new(ToggleAgentJumper),
+            ),
+            act(
                 "Side panel: Files",
                 "icons/folder.svg",
                 Some(shortcut("3")),
@@ -1702,12 +1708,16 @@ impl CommandPalette {
                 )
                 // Its keys on the row you are on (or point at), not on every row.
                 .children(cmd.hint.as_ref().map(|h| {
+                    // "current" is state, not a key: a check, as every menu
+                    // marks what is chosen, always shown.
+                    if h.as_ref() == "current" {
+                        return div()
+                            .flex_none()
+                            .child(icon("icons/check.svg", t.size.icon_sm, t.colors.text_muted));
+                    }
                     div()
                         .flex_none()
-                        // "current" is state, not a key: always shown.
-                        .when(!on && h.as_ref() != "current", |d| {
-                            d.invisible().group_hover("cmd-row", |st| st.visible())
-                        })
+                        .when(!on, |d| d.invisible().group_hover("cmd-row", |st| st.visible()))
                         .child(keys(&t, h))
                 }))
                 .on_mouse_move(cx.listener(move |this, _, _, cx| {

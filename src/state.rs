@@ -2015,6 +2015,10 @@ pub struct AppState {
     /// its card's page (`ui::artifact_card`), by `artifact_card::key`; read
     /// once each, off the render path. Empty while it's being read.
     pub artifact_snips: std::collections::HashMap<String, std::sync::Arc<Vec<Vec<String>>>>,
+    /// The Agents tab's pill strip: its scroll, and the pill it last
+    /// brought into view (`agent_strip.rs`).
+    pub agent_strip: gpui::ScrollHandle,
+    pub agent_strip_at: std::cell::Cell<Option<usize>>,
     /// Chosen before the chat exists (on a new chat's screen): the chat
     /// your next message starts is a design chat set up with this.
     pub design_next: Option<crate::design::prompt::Setup>,
@@ -2441,6 +2445,8 @@ impl AppState {
             design_thumb_queue: Default::default(),
             design_thumbs_running: false,
             artifact_snips: Default::default(),
+            agent_strip: Default::default(),
+            agent_strip_at: Default::default(),
             design_next: None,
             design_anchors: Default::default(),
             design_anchors_sent: vec![],
@@ -6971,6 +6977,20 @@ fix everything under 8, render it again to check, then tell me the scores before
             .map(|r| r.id.as_str())
     }
 
+    /// Pick an agent in the Agents panel's jumper: it becomes current and
+    /// the jumper closes (`agent_roster::jump`).
+    pub fn jump_to_agent(&mut self, id: &str, cx: &mut Context<Self>) {
+        let mut picked = None;
+        let mut open = self.ui_toggles.contains(crate::ui::AGENT_JUMPER);
+        crate::ui::agent_roster::jump(&mut picked, &mut open, id);
+        if !open {
+            self.ui_toggles.remove(crate::ui::AGENT_JUMPER);
+        }
+        if let Some(id) = picked {
+            self.select_agent(&id, cx);
+        }
+    }
+
     /// Focus a specific sub-agent in the right-side Agents inspector.
     pub fn select_agent(&mut self, id: &str, cx: &mut Context<Self>) {
         if let Some(chat) = self.current {
@@ -7325,6 +7345,18 @@ fix everything under 8, render it again to check, then tell me the scores before
     /// Show plan version `at` of `total` in the Plan tab; the last is live.
     pub fn show_plan_version(&mut self, at: usize, total: usize, cx: &mut Context<Self>) {
         self.plan_version = (at + 1 < total).then_some(at);
+        cx.notify();
+    }
+
+    /// Open or close the Agents panel's jumper (the list of every agent),
+    /// opening the panel on the Agents tab first if needed.
+    pub fn toggle_agent_jumper(&mut self, cx: &mut Context<Self>) {
+        if self.panel != Some(PanelTab::Agents) || self.doc.is_some() {
+            self.show_panel(PanelTab::Agents, cx);
+            self.ui_toggles.insert(crate::ui::AGENT_JUMPER.to_string());
+        } else if !self.ui_toggles.remove(crate::ui::AGENT_JUMPER) {
+            self.ui_toggles.insert(crate::ui::AGENT_JUMPER.to_string());
+        }
         cx.notify();
     }
 

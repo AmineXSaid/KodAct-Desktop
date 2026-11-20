@@ -154,6 +154,13 @@ impl Settings {
         let ep_model = input("Type the model id, such as qwen3-coder:30b", window, cx);
         let model_search = input("Search by name or id, or type any id", window, cx);
         let subs = vec![
+            // The name saves on Enter; its Save shows only while it differs.
+            cx.observe(&name, |_, _, cx| cx.notify()),
+            cx.subscribe(&name, |this, _, ev: &gpui::component::input::InputEvent, cx| {
+                if matches!(ev, gpui::component::input::InputEvent::PressEnter { .. }) {
+                    this.save_name(cx);
+                }
+            }),
             cx.observe_in(&state, window, |this, state, window, cx| {
                 let (open, add) = (state.read(cx).settings_open, state.read(cx).settings_add);
                 if add {
@@ -803,6 +810,17 @@ impl Settings {
             .when(!label.is_empty(), |d| d.child(label))
     }
 
+    fn save_name(&mut self, cx: &mut Context<Self>) {
+        let n = self.name.read(cx).value().to_string();
+        if n.trim().is_empty() {
+            return;
+        }
+        self.state.update(cx, |s, cx| match s.set_user_name(&n, cx) {
+            Ok(()) => s.show_toast("Saved your name.", cx),
+            Err(e) => s.show_toast(e, cx),
+        });
+    }
+
     fn general(&self, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
         let s = self.state.read(cx);
         let (dark, default_mode, bypass, browser) =
@@ -821,17 +839,18 @@ impl Settings {
                         .into_any_element(),
                 )),
             )
-            .child(
-                super::button::Button::secondary("save-name", "Save")
-                    .disabled(self.name.read(cx).value().trim().is_empty())
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        let n = this.name.read(cx).value().to_string();
-                        this.state
-                            .update(cx, |s, cx| match s.set_user_name(&n, cx) {
-                                Ok(()) => s.show_toast("Saved your name.", cx),
-                                Err(e) => s.show_toast(e, cx),
-                            });
-                    })),
+            .when(
+                {
+                    let typed = self.name.read(cx).value().trim().to_string();
+                    !typed.is_empty() && Some(typed.as_str()) != s.user_name.as_deref().map(str::trim)
+                },
+                |d| {
+                    d.child(
+                        super::button::Button::secondary("save-name", "Save").on_click(
+                            cx.listener(|this, _, _, cx| this.save_name(cx)),
+                        ),
+                    )
+                },
             );
         let appearance = super::button::Segmented::new("appearance", "Appearance")
             .option("Light", !dark, move |_, window, cx| {
@@ -844,36 +863,19 @@ impl Settings {
                     window.dispatch_action(Box::new(ToggleTheme), cx)
                 }
             });
-        let mut modes = div().flex().flex_wrap().gap(px(6.));
+        // One of a few: the segmented control, as Appearance above it.
+        let mut modes = super::button::Segmented::new("default-mode", "New chats start in");
         for m in crate::modes::ModeId::ALL {
             if m == crate::modes::ModeId::Bypass && !bypass {
                 continue;
             }
             let state = self.state.clone();
-            modes = modes.child(
-                Self::chip(
-                    t,
-                    SharedString::from(format!("mode-{}", m.label())),
-                    "",
-                    m == default_mode,
-                )
-                .child(icon(
-                    m.icon(),
-                    t.size.icon_xs,
-                    if m == default_mode {
-                        t.colors.primary
-                    } else {
-                        t.colors.text_muted
-                    },
-                ))
-                .child(m.label())
-                .on_click(move |_, _, cx| {
-                    state.update(cx, |s, cx| {
-                        s.default_mode = m;
-                        cx.notify();
-                    })
-                }),
-            );
+            modes = modes.option(m.label(), m == default_mode, move |_, _, cx| {
+                state.update(cx, |s, cx| {
+                    s.default_mode = m;
+                    cx.notify();
+                })
+            });
         }
         let state = self.state.clone();
         let bypass_row = super::button::Switch::new("bypass", bypass, "Bypass permissions")

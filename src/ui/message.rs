@@ -479,6 +479,24 @@ fn event_line(
                 ),
             )
         })
+        // A reply cut off when KodAct closed: one press picks it up.
+        .when(
+            words == crate::state::CLOSED_MID_REPLY && cx.last && !cx.busy,
+            |d| {
+                let (state, chat) = (cx.state.clone(), cx.chat);
+                d.child(
+                    link(format!("resume-{key}"), "Resume", "icons/play.svg").on_click(
+                        move |_, _, app| {
+                            state.update(app, |s, cx| {
+                                if s.current == Some(chat) {
+                                    s.send("Continue where you left off.".into(), cx);
+                                }
+                            })
+                        },
+                    ),
+                )
+            },
+        )
         .into_any_element()
 }
 
@@ -1509,7 +1527,7 @@ pub(super) fn tool_header(
     t: &Theme,
 ) -> AnyElement {
     if crate::state::is_agent_tool(&call.target) {
-        return agent_header(call, b, blocks, cx, t);
+        return super::agent_row::render(call, b, blocks, cx, t);
     }
     let strong = t.colors.text;
     let failed = call.status == ToolStatus::Failed;
@@ -1700,340 +1718,6 @@ pub(super) fn tool_header(
         });
     }
     row.into_any_element()
-}
-
-/// Quiet this long while it runs, an agent looks stuck and says so.
-const AGENT_STALLED: std::time::Duration = std::time::Duration::from_secs(120);
-
-/// A compact, single-line sub-agent row in the chat stream: status mark,
-/// task title, optional kind badge, single concise status/step readout, optional
-/// inline Stop button, and Inspect action. Failures & warnings render a compact
-/// error strip directly below so failures are never hidden.
-fn agent_header(
-    call: &ToolCall,
-    b: usize,
-    blocks: &[Block],
-    cx: &ItemContext,
-    t: &Theme,
-) -> AnyElement {
-    let nth = cx.agent_offset
-        + blocks[..b]
-            .iter()
-            .filter(|blk| matches!(blk, Block::Tool(tc) if crate::state::is_agent_tool(&tc.target)))
-            .count();
-    let fallback_task = call.note.clone().unwrap_or_else(|| "Sub-agent task".into());
-    let run = cx
-        .agents
-        .get(nth)
-        .or_else(|| cx.agents.iter().find(|r| r.task == fallback_task.as_ref()));
-
-    let key = format!("{}-{}-{b}", cx.chat, cx.index);
-    let title: String = run
-        .map(|r| r.task.clone())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| fallback_task.to_string());
-    let kind = run.map(|r| r.kind.clone()).filter(|s| !s.is_empty());
-
-    let running = run.is_some_and(|r| r.ended.is_none()) || call.status == ToolStatus::Running;
-    let stopping = run.is_some_and(|r| r.stopping);
-    let stopped = run.is_some_and(|r| r.stopped)
-        || call.status == ToolStatus::Declined
-        || call.output.starts_with(crate::state::AGENT_STOPPED);
-    let interrupted = !stopped && call.status == ToolStatus::Interrupted;
-    let failed =
-        !stopped && !interrupted && (run.is_some_and(|r| r.failed) || call.status == ToolStatus::Failed);
-    let inspected = run.is_some_and(|r| cx.inspected_agent.as_deref() == Some(r.id.as_str()));
-
-    let now = std::time::Instant::now();
-    let stalled = run.is_some_and(|r| {
-        r.ended.is_none()
-            && call.status == ToolStatus::Running
-            && now.duration_since(r.heard) >= AGENT_STALLED
-    });
-    let elapsed_str = run.map(|r| {
-        let secs = r
-            .ended
-            .unwrap_or(now)
-            .saturating_duration_since(r.started)
-            .as_secs();
-        super::chat_view::elapsed(secs)
-    });
-    let step_count = run.map_or(0, |r| r.steps.len());
-    let live_step = if running && !stopping && !stalled {
-        run.and_then(|r| r.steps.last().map(|s| s.label()))
-    } else {
-        None
-    };
-
-    let mark: AnyElement = if stalled {
-        icon("icons/triangle-alert.svg", t.size.icon_xs, t.extra.warning).into_any_element()
-    } else if running {
-        super::turning_logo_in(
-            f32::from(t.size.icon_xs),
-            SharedString::from(format!("agent-turn-{key}")),
-            t.extra.live,
-        )
-    } else if stopped {
-        icon("icons/square.svg", t.size.icon_xs, t.colors.text_subtle).into_any_element()
-    } else if interrupted {
-        icon("icons/triangle-alert.svg", t.size.icon_xs, t.extra.warning).into_any_element()
-    } else if failed {
-        icon("icons/circle-x.svg", t.size.icon_xs, t.extra.danger).into_any_element()
-    } else {
-        icon("icons/circle-check.svg", t.size.icon_xs, t.extra.success).into_any_element()
-    };
-
-    let status_summary = if stalled {
-        format!(
-            "No word for {}",
-            super::chat_view::elapsed(run.map_or(0, |r| now.duration_since(r.heard).as_secs()))
-        )
-    } else if stopped {
-        match elapsed_str {
-            Some(el) => format!("Stopped · {el}"),
-            None => "Stopped".to_string(),
-        }
-    } else if interrupted {
-        match elapsed_str {
-            Some(el) => format!("Interrupted · {el}"),
-            None => "Interrupted".to_string(),
-        }
-    } else if failed {
-        match (step_count, elapsed_str) {
-            (0, Some(el)) => format!("Failed · {el}"),
-            (1, Some(el)) => format!("Failed · 1 step · {el}"),
-            (n, Some(el)) => format!("Failed · {n} steps · {el}"),
-            (0, None) => "Failed".to_string(),
-            (1, None) => "Failed · 1 step".to_string(),
-            (n, None) => format!("Failed · {n} steps"),
-        }
-    } else if running {
-        let verb = if stopping { "Stopping" } else { "Running" };
-        match (live_step.as_deref(), elapsed_str) {
-            (Some(st), Some(el)) => format!("{st} · {el}"),
-            (Some(st), None) => st.to_string(),
-            (None, Some(el)) => format!("{verb} · {el}"),
-            (None, None) => verb.to_string(),
-        }
-    } else {
-        match (step_count, elapsed_str) {
-            (0, Some(el)) => format!("Done · {el}"),
-            (0, None) => "Done".to_string(),
-            (n, Some(el)) => format!("{n} step{} · {el}", if n == 1 { "" } else { "s" }),
-            (n, None) => format!("{n} step{}", if n == 1 { "" } else { "s" }),
-        }
-    };
-
-    // Never hide a sub-agent failure or warning behind collapse.
-    let problem_note: Option<String> = if failed || interrupted || stalled {
-        let from_step = run
-            .and_then(|r| {
-                r.steps
-                    .iter()
-                    .rev()
-                    .find(|s| matches!(s.status, ToolStatus::Failed | ToolStatus::Interrupted))
-                    .and_then(|s| {
-                        let first = s.output.lines().map(str::trim).find(|l| !l.is_empty());
-                        match first {
-                            Some(line) => Some(format!("{}: {line}", s.label())),
-                            None => Some(format!("{} failed", s.label())),
-                        }
-                    })
-            });
-        from_step
-            .or_else(|| {
-                failure_line(call).map(|l| l.to_string()).or_else(|| {
-                    run.and_then(|r| {
-                        r.said
-                            .lines()
-                            .map(str::trim)
-                            .find(|l| !l.is_empty())
-                            .map(|l| l.to_string())
-                    })
-                })
-            })
-            .or_else(|| {
-                stalled.then(|| "Agent appears stalled — no recent progress".to_string())
-            })
-    } else {
-        None
-    };
-
-    let hover_bg = t.colors.hover;
-    let opener = cx.state.clone();
-    let (chat, msg) = (cx.chat, cx.index);
-    let stop_id = run.map(|r| r.id.clone());
-    let stopper = cx.state.clone();
-    let stopper_key = cx.state.clone();
-
-    let row_inner = div()
-        .w_full()
-        .min_w_0()
-        .flex()
-        .flex_col()
-        .gap(px(2.))
-        .px(t.space.sm)
-        .py(t.space.xs + px(2.))
-        // Rows hold, so a card's corners: a pill's would eat the text.
-        .rounded(t.radius.card)
-        .when(inspected, |d| d.bg(t.colors.primary_tint.opacity(0.65)))
-        .when(failed && !inspected, |d| d.bg(t.extra.danger_tint.opacity(0.65)))
-        .when((interrupted || stalled) && !failed && !inspected, |d| {
-            d.bg(t.extra.warning_tint.opacity(0.65))
-        })
-        .hover(move |s| s.bg(hover_bg))
-        .child(
-            div()
-                .w_full()
-                .min_w_0()
-                .flex()
-                .items_center()
-                .gap(t.space.xs + px(2.))
-                .min_h(t.size.quiet_line)
-                .child(div().flex_none().child(mark))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .overflow_hidden()
-                        .whitespace_nowrap()
-                        .text_ellipsis()
-                        .text_size(t.text.body_sm)
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(t.colors.text_strong)
-                        .child(title.clone()),
-                )
-                .when_some(kind, |d, k| {
-                    d.child(
-                        div()
-                            .flex_none()
-                            .px(t.space.xs + px(2.))
-                            .py(px(1.))
-                            .rounded(t.radius.pill)
-                            .bg(t.colors.hover)
-                            .text_size(t.text.caption - px(0.5))
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(t.colors.text_muted)
-                            .child(k),
-                    )
-                })
-                .when_some(
-                    stop_id.filter(|_| running && !stopping),
-                    |d, id| {
-                        let btn_hover = t.colors.hover;
-                        let id_key = id.clone();
-                        d.child(
-                            div()
-                                .id(SharedString::from(format!("agent-row-stop-{key}")))
-                                .role(gpui::accesskit::Role::Button)
-                                .aria_label(SharedString::from(format!("Stop agent {title}")))
-                                .tab_index(0)
-                                .flex_none()
-                                .flex()
-                                .items_center()
-                                .gap(px(4.))
-                                .px(t.space.sm)
-                                .h(px(20.))
-                                .rounded(t.radius.compact)
-                                .border_1()
-                                .border_color(t.extra.border_strong)
-                                .bg(t.colors.surface)
-                                .text_size(t.text.caption)
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(t.colors.text_muted)
-                                .cursor_pointer()
-                                .hover(move |s| s.bg(btn_hover))
-                                .child(icon(
-                                    "icons/square.svg",
-                                    t.size.icon_xs,
-                                    t.colors.text_muted,
-                                ))
-                                .child("Stop")
-                                .on_click(move |_, _, app| {
-                                    app.stop_propagation();
-                                    stopper.update(app, |s, cx| s.stop_agent(&id, cx));
-                                })
-                                .on_key_down(move |ev, _, app| {
-                                    if matches!(ev.keystroke.key.as_str(), "enter" | "space") {
-                                        app.stop_propagation();
-                                        stopper_key.update(app, |s, cx| s.stop_agent(&id_key, cx));
-                                    }
-                                }),
-                        )
-                    },
-                )
-                .child(
-                    div()
-                        .flex_none()
-                        .flex()
-                        .items_center()
-                        .gap(px(2.))
-                        .text_size(t.text.caption)
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(if inspected {
-                            t.colors.primary
-                        } else {
-                            t.colors.text_muted
-                        })
-                        .child(if inspected { "Inspecting" } else { "Inspect" })
-                        .child(icon(
-                            "icons/chevron-right.svg",
-                            t.size.icon_xs,
-                            if inspected {
-                                t.colors.primary
-                            } else {
-                                t.colors.text_subtle
-                            },
-                        )),
-                ),
-        )
-        // Under the title, aligned with it: how it went, then what went wrong.
-        .child(
-            div()
-                .pl(t.size.icon_xs + t.space.xs + px(2.))
-                .overflow_hidden()
-                .whitespace_nowrap()
-                .text_ellipsis()
-                .text_size(t.text.caption)
-                .text_color(if stalled || interrupted {
-                    t.extra.warning
-                } else if running {
-                    t.extra.live
-                } else if failed {
-                    t.extra.danger
-                } else {
-                    t.colors.text_subtle
-                })
-                .child(status_summary.clone()),
-        )
-        .when_some(problem_note, |d, note| {
-            d.child(
-                div()
-                    .pl(t.size.icon_xs + t.space.xs + px(2.))
-                    .font_family(t.font_mono.clone())
-                    .text_size(t.text.caption)
-                    .line_height(relative(1.4))
-                    .text_color(if failed {
-                        t.extra.danger
-                    } else {
-                        t.extra.warning
-                    })
-                    .child(note),
-            )
-        });
-
-    super::button::KeyRow::new(
-        SharedString::from(format!("tool-{key}")),
-        SharedString::from(format!(
-            "Agent: {title}, {status_summary}. Press to inspect in Agents panel"
-        )),
-        row_inner,
-    )
-    .w_full()
-    .on_activate(move |_, app| {
-        opener.update(app, |s, cx| s.open_agent_for_block(chat, msg, b, cx));
-    })
-    .into_any_element()
 }
 
 /// What a tool call's line opens to, in one quiet frame: a file change
@@ -2272,163 +1956,26 @@ pub(super) fn flash(row: gpui::Div, b: usize, cx: &ItemContext, t: &Theme) -> An
         .into_any_element()
 }
 
-fn parse_todo_rows(call: &ToolCall) -> Vec<(ToolStatus, String)> {
-    call.diff
-        .iter()
-        .filter_map(|l| {
-            let trimmed = l.text.trim();
-            if let Some(rest) = trimmed.strip_prefix("[x]") {
-                Some((ToolStatus::Done, rest.trim().to_string()))
-            } else if let Some(rest) = trimmed.strip_prefix("[~]") {
-                Some((ToolStatus::Running, rest.trim().to_string()))
-            } else if let Some(rest) = trimmed.strip_prefix("[ ]") {
-                Some((ToolStatus::Declined, rest.trim().to_string()))
-            } else if !trimmed.is_empty() {
-                Some((ToolStatus::Declined, trimmed.to_string()))
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
-fn todo_card(call: &ToolCall, b: usize, cx: &ItemContext, t: &Theme) -> AnyElement {
-    let items = parse_todo_rows(call);
-    if items.is_empty() {
-        let mut row = div().flex().flex_col();
-        row = row.child(tool_header(call, b, &[], cx, t));
-        return flash(row, b, cx, t);
-    }
-    let total = items.len();
-    let done = items
-        .iter()
-        .filter(|(st, _)| *st == ToolStatus::Done)
-        .count();
-    let active = items
-        .iter()
-        .find(|(st, _)| *st == ToolStatus::Running)
-        .map(|(_, text)| text.clone())
-        .or_else(|| {
-            items
-                .iter()
-                .find(|(st, _)| *st != ToolStatus::Done)
-                .map(|(_, text)| text.clone())
-        });
-    let key = format!("{}-{}-{b}", cx.chat, cx.index);
-    let hover = t.colors.hover;
-    let plan_state = cx.state.clone();
-
-    let rows = items.into_iter().enumerate().map(|(i, (st, label))| {
-        let mark: AnyElement = match st {
-            ToolStatus::Done => {
-                icon("icons/circle-check.svg", t.size.icon_sm, t.colors.text_muted)
-                    .into_any_element()
-            }
-            ToolStatus::Running => super::turning_logo(
-                f32::from(t.size.icon_sm),
-                SharedString::from(format!("todo-run-{key}-{i}")),
-            ),
-            _ => icon("icons/circle-dashed.svg", t.size.icon_sm, t.colors.text_subtle)
-                .into_any_element(),
-        };
-        let fg = match st {
-            ToolStatus::Done => t.colors.text_muted,
-            ToolStatus::Running => t.colors.text_strong,
-            _ => t.colors.text,
-        };
-        div()
-            .flex()
-            .items_start()
-            .gap(t.space.sm)
-            .py(px(1.))
-            .child(div().pt(px(2.)).flex_none().child(mark))
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .text_size(t.text.body_sm)
-                    .line_height(relative(1.45))
-                    .font_weight(if st == ToolStatus::Running {
-                        FontWeight::MEDIUM
-                    } else {
-                        FontWeight::NORMAL
-                    })
-                    .text_color(fg)
-                    .child(label),
-            )
-    });
-
-    let summary_text = match active {
-        Some(task) => task,
-        None if done == total => format!("All {total} tasks completed"),
-        None => format!("{done} of {total} done"),
-    };
-
-    let card = div()
-        .rounded(t.radius.card)
-        .border_1()
-        .border_color(t.colors.border)
-        .bg(t.colors.surface)
-        .px(t.space.md)
-        .py(t.space.sm + px(2.))
-        .flex()
-        .flex_col()
-        .gap(t.space.xs + px(1.))
-        .children(rows);
-
-    let bar = div()
-        .id(SharedString::from(format!("todo-summary-{key}")))
-        .mt(px(4.))
-        .px(t.space.xs)
-        .py(px(4.))
-        .rounded(t.radius.compact)
-        .flex()
-        .items_center()
-        .gap(t.space.sm)
-        .cursor_pointer()
-        .hover(move |s| s.bg(hover))
-        .on_click(move |_, _, cx| {
-            plan_state.update(cx, |s, cx| s.show_panel(crate::state::PanelTab::Plan, cx));
-        })
-        .child(icon(
-            "icons/ellipsis.svg",
-            t.size.icon_sm,
-            if done == total {
-                t.extra.success
-            } else {
-                t.colors.primary
-            },
-        ))
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .overflow_hidden()
-                .whitespace_nowrap()
-                .text_ellipsis()
-                .text_size(t.text.body_sm)
-                .text_color(t.colors.text_muted)
-                .child(summary_text),
-        )
-        .child(
-            div()
-                .flex_none()
-                .text_size(t.text.caption)
-                .text_color(t.colors.text_subtle)
-                .child(format!("{done}/{total}")),
-        )
-        .child(icon(
-            "icons/chevron-right.svg",
-            t.size.icon_xs,
-            t.colors.text_subtle,
-        ));
-
-    flash(div().flex().flex_col().child(card).child(bar), b, cx, t)
-}
-
 fn tool(call: &ToolCall, b: usize, blocks: &[Block], cx: &ItemContext, t: &Theme) -> AnyElement {
-    if call.target.as_ref() == "TodoWrite" {
-        return todo_card(call, b, cx, t);
+    // The task list is a card, never a plain tool row: the reply's first
+    // `TodoWrite` holds it, showing the latest list; later ones add nothing.
+    if super::todo_card::is_todo(call) {
+        return match super::todo_card::slot(blocks, b) {
+            Some(latest) => {
+                let list = match &blocks[latest] {
+                    Block::Tool(c) => super::todo_card::TodoList::from_call(c),
+                    _ => super::todo_card::TodoList::from_call(call),
+                };
+                let key = format!("{}-{}", cx.chat, cx.index);
+                flash(
+                    div().child(super::todo_card::render(&list, &key, &cx.state, t)),
+                    b,
+                    cx,
+                    t,
+                )
+            }
+            None => div().into_any_element(),
+        };
     }
     let is_agent = crate::state::is_agent_tool(&call.target);
     // A lone call is a quiet line, as one in a run is; its body opens under it
@@ -3526,44 +3073,5 @@ mod tests {
         );
         bash_fail.status = crate::state::ToolStatus::Failed;
         assert_eq!(super::tool_outcome(&bash_fail).as_deref(), Some("failed"));
-    }
-
-    #[test]
-    fn parses_todo_write_rows() {
-        use crate::state::{DiffKind, DiffLine, Review, ToolCall, ToolKind, ToolStatus};
-        let call = ToolCall {
-            kind: ToolKind::Other,
-            target: "TodoWrite".into(),
-            note: None,
-            output: "".into(),
-            diff: vec![
-                DiffLine {
-                    kind: DiffKind::Same,
-                    text: "[x] Read the budget sheet".into(),
-                },
-                DiffLine {
-                    kind: DiffKind::Same,
-                    text: "[~] Update and recalculate".into(),
-                },
-                DiffLine {
-                    kind: DiffKind::Same,
-                    text: "[ ] Write the memo".into(),
-                },
-            ],
-            status: ToolStatus::Done,
-            open: false,
-            full: false,
-            review: Review::Open,
-            images: vec![],
-        };
-        let rows = super::parse_todo_rows(&call);
-        assert_eq!(
-            rows,
-            vec![
-                (ToolStatus::Done, "Read the budget sheet".to_string()),
-                (ToolStatus::Running, "Update and recalculate".to_string()),
-                (ToolStatus::Declined, "Write the memo".to_string()),
-            ]
-        );
     }
 }

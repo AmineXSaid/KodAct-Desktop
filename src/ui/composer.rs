@@ -28,7 +28,7 @@ fn placeholder(in_folder: bool, asking: Option<bool>, busy: bool, in_chat: bool)
     } else if busy {
         "Add to the task, or steer KodAct…"
     } else if in_chat {
-        "Reply to KodAct, or type / for commands"
+        "Reply, or type / for commands"
     } else if in_folder {
         "What should we build today?"
     } else {
@@ -88,6 +88,10 @@ pub struct Composer {
     ac_anchor: Option<(usize, gpui::Point<gpui::Pixels>, gpui::Pixels)>,
     /// The placeholder shown: (a project's, a question waits, a reply runs).
     placeholder_now: (bool, Option<bool>, bool, bool, Option<SharedString>),
+    /// The chat column is narrow (a panel open beside it): the tray's
+    /// folder and model show as icons, their names in tooltips. Set by the
+    /// workspace from the column's width each frame.
+    pub narrow: bool,
     _subs: Vec<Subscription>,
 }
 
@@ -236,6 +240,7 @@ impl Composer {
             ac_closed_for: None,
             ac_took_enter: false,
             ac_anchor: None,
+            narrow: false,
             placeholder_now: (in_folder, None, false, false, None),
             _subs: subs,
         }
@@ -873,18 +878,26 @@ impl Render for Composer {
         let model_button = quiet("model", picker_open)
             .min_w_0()
             .flex_shrink(1.)
-            .aria_label("Model")
+            .aria_label(SharedString::from(format!("Model: {model_name}")))
             .child(icon("icons/model.svg", t.size.icon_sm, t.colors.text_muted))
-            .child(
-                div()
-                    .min_w_0()
-                    .max_w(px(220.))
-                    .overflow_hidden()
-                    .whitespace_nowrap()
-                    .text_ellipsis()
-                    .text_color(t.colors.text)
-                    .child(model_name),
-            )
+            .when(!self.narrow, |d| {
+                d.child(
+                    div()
+                        .min_w_0()
+                        .max_w(px(220.))
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .text_color(t.colors.text)
+                        .child(model_name.clone()),
+                )
+            })
+            .when(self.narrow && !picker_open, |d| {
+                let tip = model_name.clone();
+                d.tooltip(move |window, cx| {
+                    gpui::component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
+                })
+            })
             .children(pill_effort.map(|(label, color)| {
                 div()
                     .text_color(if color == t.colors.text_subtle {
@@ -943,29 +956,34 @@ impl Render for Composer {
         let project_button = quiet("project", project_open)
             .min_w_0()
             .flex_shrink(1.)
-            .aria_label("Project")
+            .aria_label(SharedString::from(format!("Project: {project_name}")))
             .text_color(t.colors.text_muted)
             .child(icon(
                 "icons/folder.svg",
                 t.size.icon_sm,
                 t.colors.text_muted,
             ))
-            .child(
-                div()
-                    .min_w_0()
-                    .max_w(px(180.))
-                    .overflow_hidden()
-                    .whitespace_nowrap()
-                    .text_ellipsis()
-                    .child(project_name),
-            )
+            .when(!self.narrow, |d| {
+                d.child(
+                    div()
+                        .min_w_0()
+                        .max_w(px(180.))
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .child(project_name.clone()),
+                )
+            })
             .child(super::button::chevron(&t, project_open))
             // No tooltip over its own open menu.
             .when(!project_open, |d| {
+                let name = project_name.clone();
+                let narrow = self.narrow;
                 d.tooltip(move |window, cx| {
-                    gpui::component::tooltip::Tooltip::new(match &host {
-                        Some(h) => format!("Projects, or another folder on {h}"),
-                        None => "Choose the project".to_string(),
+                    gpui::component::tooltip::Tooltip::new(match (&host, narrow) {
+                        (_, true) => format!("{name}: choose the project"),
+                        (Some(h), false) => format!("Projects, or another folder on {h}"),
+                        (None, false) => "Choose the project".to_string(),
                     })
                     .build(window, cx)
                 })

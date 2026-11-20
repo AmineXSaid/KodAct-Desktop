@@ -642,11 +642,14 @@ impl Workspace {
         let sub = if !s.in_folder() {
             "Pick a folder below to code, or ask anything right away.".to_string()
         } else if project.is_empty() {
-            "Ask, plan or build. Changes always wait for your review.".to_string()
+            "Ask, plan or build. You review every change.".to_string()
         } else {
-            format!("Working in {project}. Changes always wait for your review.")
+            format!("Working in {project}. You review every change.")
         };
-        let recent: Vec<_> = crate::ui::documents::all(s).into_iter().take(3).collect();
+        // Three cards a row; two when a panel narrows the column, so each
+        // stays readable.
+        let per_row = if self.composer.read(cx).narrow { 2 } else { 3 };
+        let recent: Vec<_> = crate::ui::documents::all(s).into_iter().take(per_row).collect();
         let recent_section = (!recent.is_empty()).then(|| {
             let scale = window.scale_factor();
             let cards: Vec<gpui::AnyElement> = recent
@@ -937,6 +940,15 @@ impl Render for Workspace {
             },
         );
         let dock = self.dock(dock_w, dock_leaving, cx);
+        // The chat column's width: under `NARROW_CHAT`, the composer's tray
+        // shows its folder and model as icons, so nothing is cut mid-word.
+        let chat_w = beside
+            - if side_open && !below && !panel_full { panel_w } else { 0. }
+            - if terminal_open { dock_w } else { 0. };
+        let narrow = chat_w < NARROW_CHAT;
+        if self.composer.read(cx).narrow != narrow {
+            self.composer.update(cx, |c, _| c.narrow = narrow);
+        }
 
         // The session is a sheet on the cream: 4px corners, paper grain,
         // a gutter to its right and below.
@@ -1028,6 +1040,8 @@ impl Render for Workspace {
                         scale: fit.scale,
                         plan_version: s.plan_version,
                         source: s.source_view,
+                        agent_strip: &s.agent_strip,
+                        agent_strip_at: &s.agent_strip_at,
                     },
                     self.state.clone(),
                     &t,
@@ -1296,11 +1310,13 @@ impl Render for Workspace {
             // It shows only while the chat keeps its narrowest beside it: a
             // side panel and the dock come first, and the column steps aside
             // (it stays on, and returns when there is room again).
-            let session_fits = beside
-                - if side_open && !below { panel_w } else { 0. }
-                - if terminal_open { dock_w } else { 0. }
-                - f32::from(t.size.session_panel)
-                >= f32::from(t.size.chat_min);
+            let session_fits = session_fits(
+                beside,
+                if side_open && !below { panel_w } else { 0. },
+                if terminal_open { dock_w } else { 0. },
+                f32::from(t.size.session_panel),
+                f32::from(t.size.chat_min),
+            );
             let session_now = {
                 let s = self.state.read(cx);
                 s.session_open
@@ -1365,6 +1381,16 @@ impl Render for Workspace {
             .capture_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, _, cx| {
                 let k = &ev.keystroke;
                 if k.modifiers.modified() {
+                    return;
+                }
+                // Esc closes the agents' jumper before anything focused (the
+                // composer) can take the key.
+                if k.key == "escape" && this.state.read(cx).ui_toggles.contains(AGENT_JUMPER) {
+                    cx.stop_propagation();
+                    this.state.update(cx, |s, cx| {
+                        s.ui_toggles.remove(AGENT_JUMPER);
+                        cx.notify();
+                    });
                     return;
                 }
                 let Some(id) = this.state.read(cx).chat_menu else {
@@ -1509,6 +1535,9 @@ impl Render for Workspace {
                 this.state
                     .update(cx, |s, cx| s.show_panel(PanelTab::Agents, cx))
             }))
+            .on_action(cx.listener(|this, _: &ToggleAgentJumper, _, cx| {
+                this.state.update(cx, |s, cx| s.toggle_agent_jumper(cx))
+            }))
             .on_action(cx.listener(|this, _: &ShowFilesView, _, cx| {
                 this.state
                     .update(cx, |s, cx| s.show_panel(PanelTab::Files, cx))
@@ -1650,7 +1679,10 @@ impl Render for Workspace {
                 };
                 this.state.update(cx, |s, cx| {
                     // Esc closes what is open, the newest first, before it stops a reply.
-                    if s.presenting {
+                    if s.ui_toggles.contains(AGENT_JUMPER) {
+                        s.ui_toggles.remove(AGENT_JUMPER);
+                        cx.notify();
+                    } else if s.presenting {
                         s.set_presenting(false, cx);
                     } else if s.design_menu.is_some() {
                         s.design_menu_to(None, cx);
@@ -2017,6 +2049,18 @@ impl Render for Workspace {
                 if !term_drag && !panel_drag {
                     return;
                 }
+                // A drag lasts while the button is held: a release that went
+                // elsewhere (the screen changed under the press) ends it here,
+                // so the panel never follows a pointer that isn't dragging.
+                if ev.pressed_button != Some(gpui::MouseButton::Left) {
+                    this.state.update(cx, |s, cx| {
+                        s.terminal_resizing = false;
+                        s.panel_resizing = false;
+                        s.save_window();
+                        cx.notify();
+                    });
+                    return;
+                }
                 let vw = f32::from(window.viewport_size().width);
                 if term_drag {
                     let share = ((vw - f32::from(ev.position.x)) / vw).clamp(0.05, 0.6);
@@ -2285,6 +2329,18 @@ impl Workspace {
             .into_any_element(),
         )
     }
+}
+
+/// Under this width the chat column is narrow: the composer's tray goes to
+/// icons, the welcome's artifact cards to two a row.
+pub const NARROW_CHAT: f32 = 600.;
+
+/// Whether the optional Session column fits beside the chat, in `avail`
+/// beside the sidebar, after the side panel (`panel`) and the dock (`dock`)
+/// have their widths: only while the chat keeps `chat_min`. Otherwise the
+/// column steps aside; it never crushes the chat.
+fn session_fits(avail: f32, panel: f32, dock: f32, session: f32, chat_min: f32) -> bool {
+    avail - panel - dock - session >= chat_min
 }
 
 /// The widths of the side panel and the dock, each given as (wanted,
@@ -2576,6 +2632,30 @@ pub fn switcher_menu(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    #[test]
+    fn the_chat_keeps_its_minimum_width_when_the_panel_opens() {
+        let (chat_min, session) = (400., 300.);
+        // 1280 wide with the sidebar: 990 beside it.
+        let avail = 990.;
+        // The panel wants 560 and may shrink to 320: the chat keeps 400.
+        let (panel, dock) = share_out(avail, Some((560., 320.)), None, chat_min);
+        assert!(avail - panel - dock >= chat_min, "panel {panel}");
+        // With the panel open, the Session column doesn't fit: it steps aside.
+        assert!(!session_fits(avail, panel, dock, session, chat_min));
+        // With no panel, it fits beside the chat.
+        assert!(session_fits(avail, 0., 0., session, chat_min));
+        // A wide window keeps all three.
+        let wide = 1700.;
+        let (panel, dock) = share_out(wide, Some((560., 320.)), None, chat_min);
+        assert!(session_fits(wide, panel, dock, session, chat_min));
+        // The dock and the panel together never push the chat under its
+        // minimum while either can still give way.
+        let (panel, dock) = share_out(avail, Some((560., 320.)), Some((400., 260.)), chat_min);
+        assert!(avail - panel - dock >= chat_min - 0.5, "{panel} + {dock}");
+    }
+
     use super::share_out;
 
     #[test]

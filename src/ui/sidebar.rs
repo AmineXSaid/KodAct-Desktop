@@ -589,8 +589,10 @@ impl Render for Sidebar {
                                             .group_hover("row", |st| st.invisible())
                                             .when(menu_open, |d| d.invisible())
                                             .tooltip(move |w, cx| {
-                                                gpui::component::tooltip::Tooltip::new(name.clone())
-                                                    .build(w, cx)
+                                                gpui::component::tooltip::Tooltip::new(format!(
+                                                    "In project {name}"
+                                                ))
+                                                .build(w, cx)
                                             })
                                             .child(icon(
                                                 "icons/folder.svg",
@@ -914,21 +916,12 @@ impl Render for Sidebar {
                                     .flex_none()
                                     .flex()
                                     .justify_center()
-                                    .child(
-                                        div()
-                                            .size(t.size.icon_lg)
-                                            .flex()
-                                            .items_center()
-                                            .justify_center()
-                                            .rounded(t.radius.pill)
-                                            .border_1()
-                                            .border_color(t.extra.border_strong)
-                                            .child(icon(
-                                                "icons/plus.svg",
-                                                t.size.icon_xs,
-                                                t.colors.text_body,
-                                            )),
-                                    ),
+                                    // A plain line icon, as every row here.
+                                    .child(icon(
+                                        "icons/plus.svg",
+                                        t.size.icon_sm,
+                                        t.colors.text_body,
+                                    )),
                             )
                             .child(div().flex_1().min_w_0().child("New"))
                             .child(

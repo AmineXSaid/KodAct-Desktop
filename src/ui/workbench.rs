@@ -53,21 +53,20 @@ fn plan_title(md: &str) -> String {
         .unwrap_or_else(|| "Plan".into())
 }
 
-/// The chat's latest task list: (status, text).
+/// The chat's latest task list: (status, text), read as the transcript's
+/// card reads it (`todo_card::TodoList`).
 pub fn todos(messages: &[Message]) -> Vec<(ToolStatus, String)> {
-    let Some(list) = tools(messages).filter(|t| t.target == "TodoWrite").last() else {
-        return vec![];
-    };
-    list.diff
-        .iter()
-        .filter_map(|l| {
-            let (mark, text) = l.text.split_at_checked(3)?;
-            let status = match mark {
-                "[x]" => ToolStatus::Done,
-                "[~]" => ToolStatus::Running,
-                _ => ToolStatus::Declined,
+    use super::todo_card::{TodoList, TodoState};
+    TodoList::latest(messages)
+        .items
+        .into_iter()
+        .map(|t| {
+            let status = match t.state {
+                TodoState::Done => ToolStatus::Done,
+                TodoState::Active => ToolStatus::Running,
+                TodoState::Pending => ToolStatus::Declined,
             };
-            Some((status, text.trim().to_string()))
+            (status, t.text)
         })
         .collect()
 }
@@ -188,6 +187,9 @@ pub struct View<'a> {
     /// The plan version shown (None: the latest), and Preview or Source.
     pub plan_version: Option<usize>,
     pub source: bool,
+    /// The Agents tab's pill strip: its scroll, and the pill last shown.
+    pub agent_strip: &'a gpui::ScrollHandle,
+    pub agent_strip_at: &'a std::cell::Cell<Option<usize>>,
 }
 
 /// The bar over a plan, as over a document in Claude's panel: what it is,
@@ -457,13 +459,25 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
     // the crisp page ground without losing hierarchy against recessed blocks.
     let ground = t.colors.surface;
     let body: AnyElement = match v.tab {
-        PanelTab::Plan if plan.is_none() && todos.is_empty() => empty(
-            t,
-            "icons/route.svg",
-            "No plan yet",
-            "Switch the mode to Plan (Shift+Tab in the composer) and ask for something: the plan KodAct proposes, and its task list as it works, show here.",
-            None,
-        ),
+        PanelTab::Plan if plan.is_none() && todos.is_empty() => {
+            let planner = state.clone();
+            empty(
+                t,
+                "icons/route.svg",
+                "No plan yet",
+                "Plans and task lists show here. Switch to Plan mode and ask for something to start.",
+                Some(
+                    crate::theme::ghost_button(t, "Switch to Plan")
+                        .id("plan-empty-switch")
+                        .on_click(move |_, _, cx| {
+                            planner.update(cx, |s, cx| {
+                                s.set_mode(crate::modes::ModeId::Plan, cx)
+                            })
+                        })
+                        .into_any_element(),
+                ),
+            )
+        }
         PanelTab::Plan => pad(div())
             .when(!todos.is_empty(), |d| {
                 let done = todos.iter().filter(|(s, _)| *s == ToolStatus::Done).count();
@@ -536,6 +550,8 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
                 full: v.full,
                 copied: v.copied.clone(),
                 scale: v.scale,
+                strip: v.agent_strip,
+                strip_at: v.agent_strip_at,
             },
             state.clone(),
             v.agents_open,
