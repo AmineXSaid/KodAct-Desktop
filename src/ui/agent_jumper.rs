@@ -3,7 +3,8 @@
 //! The list filters by All (N), Running (N) and Failed (N); each row shows
 //! the agent's status icon, name, kind, steps and time, the current one
 //! highlighted. Picking a row selects that agent and closes the list;
-//! Escape closes it too (the workspace's Esc, `ui::AGENT_JUMPER`), as does
+//! Opening it puts the keyboard on the current row: ↑ ↓ move between
+//! rows, Enter or Space picks. Escape closes it too (the workspace's Esc, `ui::AGENT_JUMPER`), as does
 //! a click outside. Ctrl/⌘ Shift J opens it from anywhere.
 
 use std::time::Instant;
@@ -118,6 +119,7 @@ pub fn popover(
     active: usize,
     ui_toggles: &std::collections::HashSet<String>,
     left: bool,
+    focus_to: Option<usize>,
     state: &Entity<AppState>,
     t: &Theme,
 ) -> AnyElement {
@@ -170,7 +172,19 @@ pub fn popover(
                 })
             })
     };
-    let rows = agent_roster::listed(runs, on).into_iter().map(|i| {
+    let shown = agent_roster::listed(runs, on);
+    // The row that takes the focus: the one asked for (↑ ↓), else, as the
+    // list opens, the current agent, or the first when the filter hides it.
+    let focus_row = focus_to.and_then(|want| {
+        shown
+            .iter()
+            .copied()
+            .find(|&i| i == want)
+            .or_else(|| shown.iter().copied().find(|&i| i == active))
+            .or(shown.first().copied())
+    });
+    let shown_keys = std::rc::Rc::new(shown.clone());
+    let rows = shown.iter().copied().enumerate().map(|(pos, i)| {
         let r = &runs[i];
         let current = i == active;
         let picker = state.clone();
@@ -230,16 +244,37 @@ pub fn popover(
                             ),
                     ),
             );
-        super::button::KeyRow::new(
+        let row = super::button::KeyRow::new(
             ("agent-jump-row", i),
             SharedString::from(format!("Agent {} of {}: {}", i + 1, runs.len(), r.task)),
             inner,
         )
         .radius(t.radius.button)
         .expanded(current)
+        .focus_now(focus_row == Some(i))
         .on_activate(move |_, cx| {
             picker.update(cx, |s, cx| s.jump_to_agent(&id, cx))
-        })
+        });
+        // ↑ ↓ walk the rows, stopping at the ends; Enter or Space picks.
+        let mover = state.clone();
+        let order = shown_keys.clone();
+        div()
+            .w_full()
+            .on_key_down(move |ev, _, cx| {
+                let to = match ev.keystroke.key.as_str() {
+                    "down" => order.get(pos + 1),
+                    "up" => pos.checked_sub(1).and_then(|p| order.get(p)),
+                    _ => return,
+                };
+                cx.stop_propagation();
+                if let Some(&to) = to {
+                    mover.update(cx, |s, cx| {
+                        s.agent_jumper_focus.set(Some(to));
+                        cx.notify();
+                    });
+                }
+            })
+            .child(row)
     });
     let closer = state.clone();
     let panel = crate::theme::popover(t)

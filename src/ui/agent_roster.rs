@@ -196,14 +196,15 @@ pub fn step_summary(passed: usize, failed: usize, total: usize) -> String {
 }
 
 /// The panel's footer once nothing runs: "Agent 1 of 10 · 1 step · 9s".
+/// With no steps (stopped as it started) the count is left out: "Agent 1 of
+/// 10 · 0s".
 pub fn agent_line(index: usize, total: usize, step_count: usize, took: Duration) -> String {
-    format!(
-        "Agent {} of {} · {} · {}",
-        index + 1,
-        total,
-        steps(step_count),
-        super::agents_view::elapsed(took)
-    )
+    let mut parts = vec![format!("Agent {} of {}", index + 1, total)];
+    if step_count > 0 {
+        parts.push(steps(step_count));
+    }
+    parts.push(super::agents_view::elapsed(took));
+    parts.join(" · ")
 }
 
 #[cfg(test)]
@@ -326,6 +327,7 @@ mod tests {
             agent_line(0, 10, 1, Duration::from_secs(9)),
             "Agent 1 of 10 · 1 step · 9s"
         );
+        assert_eq!(agent_line(0, 10, 0, Duration::from_secs(0)), "Agent 1 of 10 · 0s");
         assert_eq!(Counts::of(&[run("a", false, false)]).run_line(), "1 agent working");
     }
 }

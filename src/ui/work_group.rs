@@ -373,6 +373,12 @@ fn render_step_row(blocks: &[Block], i: usize, cx: &ItemContext, t: &Theme) -> O
 
 /// The run at `run` as one line that opens to its steps; failures and active
 /// problems stay visibly exposed even while collapsed.
+/// A step cut short: interrupted, or a sub-agent you stopped.
+fn cut_short(c: &ToolCall) -> bool {
+    c.status == ToolStatus::Interrupted
+        || (c.status == ToolStatus::Declined && crate::state::is_agent_tool(&c.target))
+}
+
 pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) -> AnyElement {
     let streaming = cx.busy && cx.last;
     let calls = calls(blocks, &run, streaming);
@@ -383,10 +389,9 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
         .iter()
         .filter(|c| c.status == ToolStatus::Failed)
         .count();
-    let stopped = all
-        .iter()
-        .filter(|c| c.status == ToolStatus::Interrupted)
-        .count();
+    // Cut short: an interrupted step, or a sub-agent you stopped (as the
+    // Agents panel counts it, `agent_roster::Counts::of_calls`).
+    let stopped = all.iter().filter(|c| cut_short(c)).count();
     let (adds, dels) = all
         .iter()
         .filter(|c| c.status != ToolStatus::Failed)
@@ -563,7 +568,7 @@ pub fn render(blocks: &[Block], run: Range<usize>, cx: &ItemContext, t: &Theme) 
             .filter(|&i| {
                 matches!(
                     &blocks[i],
-                    Block::Tool(c) if matches!(c.status, ToolStatus::Failed | ToolStatus::Interrupted)
+                    Block::Tool(c) if c.status == ToolStatus::Failed || cut_short(c)
                 )
             })
             .filter_map(|i| render_step_row(blocks, i, cx, t))
@@ -771,6 +776,31 @@ mod tests {
             text: "hm".into(),
             open: false,
         }
+    }
+
+    #[test]
+    fn a_stopped_agent_is_cut_short_as_the_panel_counts_it() {
+        let task = |st: ToolStatus| {
+            let mut c = crate::backend::tool_call(
+                "Task",
+                &serde_json::json!({"description": "Audit", "subagent_type": "Explore"}),
+            );
+            c.status = st;
+            c
+        };
+        // A sub-agent you stopped is shown (and counted) as stopped.
+        assert!(cut_short(&task(ToolStatus::Declined)));
+        assert!(cut_short(&task(ToolStatus::Interrupted)));
+        assert!(!cut_short(&task(ToolStatus::Done)));
+        // A declined permission on an ordinary tool is not a stop.
+        let mut read = crate::backend::tool_call("Read", &serde_json::json!({"file_path": "a"}));
+        read.status = ToolStatus::Declined;
+        assert!(!cut_short(&read));
+        // The transcript's count and the panel's agree.
+        let calls = [task(ToolStatus::Declined), task(ToolStatus::Done), task(ToolStatus::Failed)];
+        let refs: Vec<&ToolCall> = calls.iter().collect();
+        let roster = super::super::agent_roster::Counts::of_calls(&refs);
+        assert_eq!(roster.stopped, refs.iter().filter(|c| cut_short(c)).count());
     }
 
     #[test]

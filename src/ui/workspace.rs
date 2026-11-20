@@ -1042,6 +1042,7 @@ impl Render for Workspace {
                         source: s.source_view,
                         agent_strip: &s.agent_strip,
                         agent_strip_at: &s.agent_strip_at,
+                        agent_jumper_focus: &s.agent_jumper_focus,
                     },
                     self.state.clone(),
                     &t,

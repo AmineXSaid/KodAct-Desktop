@@ -749,6 +749,7 @@ pub struct KeyRow {
     expanded: Option<bool>,
     radius: Option<gpui::Pixels>,
     full_w: bool,
+    focus_now: bool,
     on_activate: Option<std::rc::Rc<dyn Fn(&mut Window, &mut App) + 'static>>,
     inner: AnyElement,
 }
@@ -765,6 +766,7 @@ impl KeyRow {
             expanded: None,
             radius: None,
             full_w: false,
+            focus_now: false,
             on_activate: None,
             inner: inner.into_any_element(),
         }
@@ -782,6 +784,12 @@ impl KeyRow {
 
     pub fn w_full(mut self) -> Self {
         self.full_w = true;
+        self
+    }
+
+    /// Take the keyboard focus on this render (a list that just opened).
+    pub fn focus_now(mut self, now: bool) -> Self {
+        self.focus_now = now;
         self
     }
 
@@ -804,6 +812,9 @@ impl RenderOnce for KeyRow {
             return base.child(self.inner).into_any_element();
         };
         let focus = focus_handle(&self.id, window, cx);
+        if self.focus_now {
+            window.focus(&focus, cx);
+        }
         let on_click = on_activate.clone();
         let on_key = on_activate;
         let state_word = match self.expanded {

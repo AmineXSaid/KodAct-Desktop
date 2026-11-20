@@ -2019,6 +2019,10 @@ pub struct AppState {
     /// brought into view (`agent_strip.rs`).
     pub agent_strip: gpui::ScrollHandle,
     pub agent_strip_at: std::cell::Cell<Option<usize>>,
+    /// The jumper row to give the keyboard focus on the next frame: the
+    /// agent's index, or `usize::MAX` for the current one (as the list
+    /// opens), so ↑ ↓ Enter work at once (`agent_jumper.rs`).
+    pub agent_jumper_focus: std::cell::Cell<Option<usize>>,
     /// Chosen before the chat exists (on a new chat's screen): the chat
     /// your next message starts is a design chat set up with this.
     pub design_next: Option<crate::design::prompt::Setup>,
@@ -2447,6 +2451,7 @@ impl AppState {
             artifact_snips: Default::default(),
             agent_strip: Default::default(),
             agent_strip_at: Default::default(),
+            agent_jumper_focus: Default::default(),
             design_next: None,
             design_anchors: Default::default(),
             design_anchors_sent: vec![],
@@ -7354,8 +7359,10 @@ fix everything under 8, render it again to check, then tell me the scores before
         if self.panel != Some(PanelTab::Agents) || self.doc.is_some() {
             self.show_panel(PanelTab::Agents, cx);
             self.ui_toggles.insert(crate::ui::AGENT_JUMPER.to_string());
+            self.agent_jumper_focus.set(Some(usize::MAX));
         } else if !self.ui_toggles.remove(crate::ui::AGENT_JUMPER) {
             self.ui_toggles.insert(crate::ui::AGENT_JUMPER.to_string());
+            self.agent_jumper_focus.set(Some(usize::MAX));
         }
         cx.notify();
     }

@@ -190,6 +190,7 @@ pub struct View<'a> {
     /// The Agents tab's pill strip: its scroll, and the pill last shown.
     pub agent_strip: &'a gpui::ScrollHandle,
     pub agent_strip_at: &'a std::cell::Cell<Option<usize>>,
+    pub agent_jumper_focus: &'a std::cell::Cell<Option<usize>>,
 }
 
 /// The bar over a plan, as over a document in Claude's panel: what it is,
@@ -552,6 +553,7 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
                 scale: v.scale,
                 strip: v.agent_strip,
                 strip_at: v.agent_strip_at,
+                jumper_focus: v.agent_jumper_focus,
             },
             state.clone(),
             v.agents_open,

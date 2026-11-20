@@ -130,6 +130,8 @@ pub struct View<'a> {
     /// The pill strip's scroll, and the pill it last brought into view.
     pub strip: &'a gpui::ScrollHandle,
     pub strip_at: &'a std::cell::Cell<Option<usize>>,
+    /// The jumper row to focus next (`AppState::agent_jumper_focus`).
+    pub jumper_focus: &'a std::cell::Cell<Option<usize>>,
 }
 
 /// Group consecutive `AgentEntry::Step` indices of the same `ToolKind` when `>= 2`
@@ -348,7 +350,15 @@ pub fn render(
     let jumper_open = ui_toggles.contains(super::AGENT_JUMPER);
     let jumper_button = super::agent_jumper::button(active_idx, v.runs, jumper_open, &state, t);
     let jumper_popover = jumper_open.then(|| {
-        super::agent_jumper::popover(v.runs, active_idx, ui_toggles, compact_split, &state, t)
+        super::agent_jumper::popover(
+            v.runs,
+            active_idx,
+            ui_toggles,
+            compact_split,
+            v.jumper_focus.take(),
+            &state,
+            t,
+        )
     });
 
     let nav_cluster = div()
@@ -1127,21 +1137,12 @@ pub fn render(
         if v.runs.len() > 1 {
             super::agent_roster::Counts::of(v.runs).running_line()
         } else {
-            format!(
-                "Running · {} step{}",
-                run.steps.len(),
-                if run.steps.len() == 1 { "" } else { "s" }
-            )
+            super::agent_roster::status_line(ToolStatus::Running, run.steps.len(), Some(took))
         }
     } else if v.runs.len() > 1 {
         super::agent_roster::agent_line(active_idx, v.runs.len(), run.steps.len(), took)
     } else {
-        format!(
-            "Finished in {} · {} step{}",
-            elapsed(took),
-            run.steps.len(),
-            if run.steps.len() == 1 { "" } else { "s" }
-        )
+        super::agent_roster::status_line(super::agent_roster::status(run), run.steps.len(), Some(took))
     };
 
     let footer = div()
