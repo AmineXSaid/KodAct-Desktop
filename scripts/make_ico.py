@@ -6,9 +6,9 @@ slash and the angle that read as a K), with nothing behind it: a transparent
 ground, like the other icons on a Windows 11 taskbar. It has to stand out on
 any desktop (white, black, a photo), so:
 
-- the dot and the angle are the mark's electric lime and the slash is near
-  white, as the mark is in dark mode;
-- each stroke carries a dark keyline, so lime and white still read on a
+- the dot and the angle are KodAct's burgundy and the slash is near white,
+  as the mark is in dark mode;
+- each stroke carries a dark keyline, so burgundy and white still read on a
   white or pale wallpaper, and the angle stays apart where it meets the slash;
 - each stroke is shaded a little, top to bottom, and the mark sits on a soft
   shadow, which lifts it off a busy picture.
@@ -47,13 +47,13 @@ ANGLE = [(114.0, 130.0), (223.0, 22.0), (243.0, 42.0), (154.0, 130.0), (243.0, 2
 JOIN = 3.0  # the strokes' rounded join, in the mark's units
 
 # Colours: each stroke's shade top to bottom, and its keyline.
-LIME = ((0xD8, 0xFF, 0x63), (0x9B, 0xE0, 0x0A))  # the mark's #b7ff1a, lit and settled
-LIME_LINE = (0x16, 0x22, 0x00)
+BURGUNDY = ((0xB2, 0x3A, 0x5C), (0x6E, 0x15, 0x31))  # the brand's burgundy, lit to deep
+BURGUNDY_LINE = (0x22, 0x06, 0x0F)
 INK = ((0xFF, 0xFF, 0xFF), (0xD9, 0xDE, 0xE6))  # the slash: near white
 INK_LINE = (0x0B, 0x0D, 0x10)
-STROKES = [(DOT, LIME, LIME_LINE), (SLASH, INK, INK_LINE), (ANGLE, LIME, LIME_LINE)]
+STROKES = [(DOT, BURGUNDY, BURGUNDY_LINE), (SLASH, INK, INK_LINE), (ANGLE, BURGUNDY, BURGUNDY_LINE)]
 
-FILL = 0.84  # the mark's width, as a share of the icon (room for keyline and shadow)
+FILL = 0.92  # the mark's width, as a share of the icon: big, with just room for keyline and shadow
 KEYLINE = 0.032  # the keyline's width, as a share of the icon; at least 1 px
 SHADOW = 0.45  # the shadow's opacity; it falls 2.5% of the icon below the mark
 
