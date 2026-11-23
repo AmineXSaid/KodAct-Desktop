@@ -98,11 +98,10 @@ impl SheetEditor {
 impl Render for SheetEditor {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
-        let (cell_info, edit_count, focus_seq, pick, sheet_idx) = {
+        let (cell_info, focus_seq, pick, sheet_idx) = {
             let s = self.state.read(cx);
             (
                 Self::current_cell_value(s),
-                s.sheet_edits.len(),
                 s.sheet_focus_seq,
                 s.doc_pick,
                 s.doc_sheet,
@@ -127,15 +126,13 @@ impl Render for SheetEditor {
         let addr = pick.map(address).unwrap_or_else(|| "—".to_string());
         let st_row = self.state.clone();
         let st_col = self.state.clone();
-        let st_save = self.state.clone();
-        let st_discard = self.state.clone();
         let current_input_val = self.input.read(cx).value().to_string();
         let synced_val = cell_info.map(|(_, _, _, v)| v).unwrap_or_default();
         let input_dirty = has_pick && current_input_val != synced_val;
 
         // One strip, as a spreadsheet's formula bar: the cell, its value or
-        // formula, then adding rows and columns; Save and Discard while
-        // there are edits.
+        // formula, then adding rows and columns. Save and Discard are on the
+        // file view's toolbar.
         let add = |id: &'static str, label: &'static str| {
             theme::ghost_button(&t, "")
                 .id(id)
@@ -226,47 +223,6 @@ impl Render for SheetEditor {
             .child(add("sheet-add-col", "Column").on_click(move |_, _, cx| {
                 st_col.update(cx, |s, cx| s.add_sheet_col(sheet_idx, cx))
             }))
-            .when(edit_count > 0, |d| {
-                d.child(
-                    div()
-                        .flex_none()
-                        .flex()
-                        .items_center()
-                        .gap(t.space.xs)
-                        .pl(t.space.xs)
-                        .child(
-                            div()
-                                .text_size(t.text.caption)
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(t.extra.warning)
-                                .child(if edit_count == 1 {
-                                    "1 edit".to_string()
-                                } else {
-                                    format!("{edit_count} edits")
-                                }),
-                        )
-                        .child(
-                            theme::ghost_button(&t, "Discard")
-                                .id("sheet-discard")
-                                .h(t.size.control)
-                                .px(t.space.sm)
-                                .text_size(t.text.caption)
-                                .on_click(move |_, _, cx| {
-                                    st_discard.update(cx, |s, cx| s.discard_sheet_edits(cx))
-                                }),
-                        )
-                        .child(
-                            theme::primary_button(&t, "Save")
-                                .id("sheet-save")
-                                .h(t.size.control)
-                                .px(t.space.md)
-                                .text_size(t.text.caption)
-                                .on_click(move |_, _, cx| {
-                                    st_save.update(cx, |s, cx| s.save_sheet_edits(cx))
-                                }),
-                        ),
-                )
-            })
     }
 }
 
@@ -344,7 +300,7 @@ pub fn render(
     edits: &crate::office::CellEdits,
     extra_rows: usize,
     extra_cols: usize,
-    editor: AnyElement,
+    zoom: f32,
     state: Entity<AppState>,
     t: &Theme,
 ) -> AnyElement {
@@ -359,7 +315,8 @@ pub fn render(
     let line = t.colors.border;
     // The cells this version changed, and what they held before.
     let changed = changed.and_then(|c| c.get(&sheet.name));
-    let gutter = 44.;
+    let gutter = 44. * zoom;
+    let sized = |size: gpui::Pixels| px(f32::from(size) * zoom);
 
     let max_edit_r = edits
         .keys()
@@ -378,7 +335,7 @@ pub fn render(
     let col_count = (base_cols + extra_cols).max(max_edit_c);
 
     let widths: Vec<f32> = (0..col_count)
-        .map(|c| width(sheet, c, edits, selected))
+        .map(|c| width(sheet, c, edits, selected) * zoom)
         .collect();
     // A workbook with no styles of its own: its first row reads as a header
     // when it is all text over a row with numbers.
@@ -396,8 +353,8 @@ pub fn render(
         div()
             .flex_none()
             .w(px(w))
-            .h(px(28.))
-            .px(px(8.))
+            .h(px(28. * zoom))
+            .px(px(8. * zoom))
             .flex()
             .items_center()
             .border_r_1()
@@ -406,12 +363,12 @@ pub fn render(
             .overflow_hidden()
             .whitespace_nowrap()
     };
-    let mut grid = div().flex().flex_col().text_size(t.text.body_sm);
+    let mut grid = div().flex().flex_col().text_size(sized(t.text.body_sm));
     // Column letters.
     let mut letters = div()
         .flex()
         .bg(t.extra.inset)
-        .text_size(t.text.caption)
+        .text_size(sized(t.text.caption))
         .text_color(t.colors.text_muted)
         .child(cell(gutter));
     for (c, w) in widths.iter().enumerate() {
@@ -424,7 +381,7 @@ pub fn render(
             cell(gutter)
                 .justify_end()
                 .bg(t.extra.inset)
-                .text_size(t.text.caption)
+                .text_size(sized(t.text.caption))
                 .text_color(t.colors.text_muted)
                 .child((r + 1).to_string()),
         );
@@ -485,33 +442,33 @@ pub fn render(
         grid = grid.child(line_el);
     }
 
+    // The sheets, as tabs in the panel's own tokens: the open one on the
+    // neutral wash, the others quiet until hovered.
     let tabs = (sheets.len() > 1).then(|| {
         let mut row = div().flex().gap(px(2.)).pb(t.space.xs);
         for (i, s) in sheets.iter().enumerate() {
             let on = i == selected;
             let st = state.clone();
-            row = row.child(
-                div()
-                    .id(SharedString::from(format!("sheet-{i}")))
-                    .px(t.space.md)
-                    .h(t.size.control)
-                    .flex()
-                    .items_center()
-                    .rounded(t.radius.button)
-                    .cursor_pointer()
-                    .text_size(t.text.caption)
-                    .when(on, |d| {
-                        d.bg(t.colors.primary_tint)
-                            .text_color(t.colors.primary)
-                            .font_weight(FontWeight::SEMIBOLD)
-                    })
-                    .when(!on, |d| {
+            let tab = div()
+                .id(SharedString::from(format!("sheet-{i}")))
+                .px(t.space.md)
+                .h(t.size.tool_btn)
+                .flex()
+                .items_center()
+                .rounded(t.radius.button)
+                .cursor_pointer()
+                .text_size(t.text.body_sm)
+                .map(|d| {
+                    if on {
+                        theme::selected(t, d.text_color(t.colors.text_strong))
+                    } else {
                         d.text_color(t.colors.text_muted)
                             .hover(move |st| st.bg(hover))
-                    })
-                    .child(s.name.clone())
-                    .on_click(move |_, _, cx| st.update(cx, |s, cx| s.select_sheet(i, cx))),
-            );
+                    }
+                })
+                .child(s.name.clone())
+                .on_click(move |_, _, cx| st.update(cx, |s, cx| s.select_sheet(i, cx)));
+            row = row.child(tab);
         }
         row
     });
@@ -531,7 +488,6 @@ pub fn render(
         .flex_col()
         .gap(t.space.sm)
         .children(tabs)
-        .child(editor)
         .child(
             div()
                 .id(SharedString::from(format!("sheet-grid-{selected}")))

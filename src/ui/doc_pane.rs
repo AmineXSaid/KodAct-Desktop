@@ -158,6 +158,21 @@ pub fn render(
         _ => None,
     };
     let has_pages = pages.is_some();
+    // A workbook: its sheets, scaled by the zoom (a fit is 100%).
+    let sheets_read = match read {
+        Some(Ok(p)) => match p.as_ref() {
+            crate::office::Preview::Sheets(s) => Some(s),
+            _ => None,
+        },
+        _ => None,
+    };
+    let sheet_zoom = match fit.zoom {
+        crate::doc_zoom::Zoom::Percent(p) => f32::from(p) / 100.,
+        _ => 1.,
+    };
+    if sheets_read.is_some() {
+        fit.fitted.store(100, std::sync::atomic::Ordering::Relaxed);
+    }
     // A Word file or deck's words can be edited; a PDF's only read.
     let words_editable = matches!(
         office,
@@ -165,6 +180,7 @@ pub fn render(
     );
     let image = file.is_image() && !showing_changes;
     let paged = (has_pages && !text_view && !showing_changes) || image;
+    let zoomable = paged || sheets_read.is_some();
     let viewer = state.clone();
     let back = state.clone();
     let (finder, exporter, to_export) = (state.clone(), state.clone(), file.clone());
@@ -188,6 +204,22 @@ pub fn render(
             let d = fit.device;
             d.width().map_or(d.label().to_string(), |w| format!("{} · {w} px", d.label()))
         }
+        _ if sheets_read.is_some() => sheets_read
+            .and_then(|sh| sh.get(sheet))
+            .map(|sh| {
+                format!(
+                    "{} · {} rows × {} columns{}",
+                    sh.name,
+                    sh.total_rows,
+                    sh.total_cols,
+                    if sheet_edits.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" · {} edit{}", sheet_edits.len(), if sheet_edits.len() == 1 { "" } else { "s" })
+                    }
+                )
+            })
+            .unwrap_or_default(),
         _ if words_editable && text_view => {
             format!("Editing text{}", if fit.dirty { " · not saved" } else { "" })
         }
@@ -205,7 +237,11 @@ pub fn render(
         ),
         _ => String::new(),
     };
-    let zoom_now = fit.zoom;
+    let zoom_text = match (fit.zoom, sheets_read.is_some()) {
+        (crate::doc_zoom::Zoom::Percent(p), _) => format!("{p}%"),
+        (_, true) => "100%".to_string(),
+        (z, false) => z.label(),
+    };
     let bar_state = state.clone();
     let footer = move || {
         let right = div()
@@ -223,7 +259,7 @@ pub fn render(
                     summary.clone(),
                 ))
             })
-            .when(paged, |d| d.child(zoom_now.label()));
+            .when(zoomable, |d| d.child(zoom_text));
         Some(
             div()
                 .flex_none()
@@ -482,13 +518,18 @@ pub fn render(
     }
     // Zoom: out, the scale (a menu of steps and fits), in.
     let zoom_group_at = groups.iter().map(|g| g.width + 9.).sum::<f32>();
-    if paged {
+    if zoomable {
         let (zout, zin, zmenu) = (state.clone(), state.clone(), state.clone());
+        let zoom_text_btn = match (fit.zoom, sheets_read.is_some()) {
+            (crate::doc_zoom::Zoom::Percent(p), _) => format!("{p}%"),
+            (_, true) => "100%".to_string(),
+            (z, false) => z.label(),
+        };
         let g = vec![
             tool_button("doc-zoom-out", "icons/zoom-out.svg", "Zoom out (Ctrl+-)")
                 .on_click(move |_, _, cx| zout.update(cx, |s, cx| s.zoom_doc(false, cx)))
                 .into_any_element(),
-            super::button::Button::ghost("doc-zoom-menu", fit.zoom.label())
+            super::button::Button::ghost("doc-zoom-menu", zoom_text_btn)
                 .compact()
                 .selected(fit.menu == Some(crate::state::DocMenu::Zoom))
                 .on_click(move |_, _, cx| {
@@ -505,7 +546,7 @@ pub fn render(
         });
     }
     // Edit: undo, redo, and the one accent action while something is unsaved.
-    if editing || (words_editable && fit.dirty) {
+    if editing || ((words_editable || sheets_read.is_some()) && fit.dirty) {
         let (save, discard) = (state.clone(), state.clone());
         let mut g: Vec<AnyElement> = if !editing {
             vec![]
@@ -625,7 +666,7 @@ pub fn render(
         },
     );
     // The zoom menu hangs under the scale button.
-    let zoom_menu = (paged && fit.menu == Some(crate::state::DocMenu::Zoom)).then(|| {
+    let zoom_menu = (zoomable && fit.menu == Some(crate::state::DocMenu::Zoom)).then(|| {
         let item = |id: SharedString, label: String, on: bool, z: crate::doc_zoom::Zoom| {
             let st = state.clone();
             div()
@@ -699,7 +740,7 @@ pub fn render(
         .overflow_y_scroll()
         // Ctrl + the wheel zooms the pages, as the toolbar's buttons do.
         .on_scroll_wheel(move |ev, _, cx| {
-            if ev.modifiers.control && paged {
+            if ev.modifiers.control && zoomable {
                 let up = match ev.delta {
                     gpui::ScrollDelta::Pixels(p) => p.y > px(0.),
                     gpui::ScrollDelta::Lines(l) => l.y > 0.,
@@ -834,11 +875,24 @@ pub fn render(
             )),
             Some(Ok(p)) => match p.as_ref() {
                 crate::office::Preview::Sheets(sheets) => {
+                    // The formula bar stays under the toolbar; the sheets
+                    // scroll under it.
+                    let formula = div()
+                        .flex_none()
+                        .px(t.space.md)
+                        .py(t.space.xs)
+                        .min_h(t.size.panel_toolbar)
+                        .flex()
+                        .items_center()
+                        .bg(t.extra.panel)
+                        .border_b_1()
+                        .border_color(t.colors.border)
+                        .child(div().w_full().child(sheet_editor));
                     return finish_at(
                         &fit,
                         full_t,
                         file,
-                        header,
+                        header.child(formula),
                         body.child(div().p(t.space.lg).child(super::sheet_view::render(
                             sheets,
                             sheet,
@@ -847,14 +901,14 @@ pub fn render(
                             sheet_edits,
                             sheet_extra.0,
                             sheet_extra.1,
-                            sheet_editor,
+                            sheet_zoom,
                             state,
                             t,
                         ))),
                         footer(),
                         fit.width,
                         t,
-                    )
+                    );
                 }
                 crate::office::Preview::Doc(d) => {
                     let text_view = text_view || d.pages.is_empty();

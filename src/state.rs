@@ -5731,11 +5731,7 @@ impl AppState {
     pub fn discard_doc_edits(&mut self, cx: &mut Context<Self>) {
         self.doc_edit = None;
         self.doc_words.clear();
-        if !self.sheet_edits.is_empty() {
-            self.sheet_edits.clear();
-            self.sheet_extra_rows.clear();
-            self.sheet_extra_cols.clear();
-        }
+        self.discard_sheet_edits(cx);
         cx.notify();
     }
 
