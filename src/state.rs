@@ -4906,6 +4906,18 @@ impl AppState {
     /// Open a file in the side panel (the same file again closes it). An
     /// Office file or PDF is read off the UI thread; the panel says so meanwhile.
     pub fn open_doc(&mut self, file: FileRef, cx: &mut Context<Self>) {
+        // A file KodAct is still writing: open it live, following its draft.
+        if let (Some(path), Some(chat)) = (self.drafting(&file), self.current) {
+            if self
+                .doc
+                .as_ref()
+                .is_some_and(|d| crate::doc_versions::same_file(d, &file))
+            {
+                self.close_doc(cx);
+                return;
+            }
+            return self.watch_draft(chat, &path, cx);
+        }
         if self.doc.as_ref() == Some(&file) {
             self.doc = None;
             cx.notify();
@@ -5868,7 +5880,26 @@ impl AppState {
     /// the side panel when it is the file you are watching.
     fn text_draft(&mut self, chat: usize, path: &str, content: &str, cx: &mut Context<Self>) {
         let content: SharedString = content.to_string().into();
+        let first = !self.drafts.contains_key(&(chat, path.to_string()));
         self.drafts.insert((chat, path.to_string()), content.clone());
+        // The file's card, as soon as its writing starts, as if it were
+        // done: a click opens it beside the chat, filling in live. The
+        // finished file then takes the same card's place (`update_card`).
+        if first && Self::gets_card(path) {
+            let file = FileRef {
+                name: std::path::Path::new(path)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| path.to_string())
+                    .into(),
+                path: Some(self.chat_path(chat, path).into()),
+                content: content.clone(),
+                bytes: None,
+            };
+            if let Some(file) = self.chat_mut(chat).and_then(|c| c.update_card(file, false)) {
+                self.push_block(chat, Block::File(file));
+            }
+        }
         if self.doc_live.as_ref() == Some(&(chat, path.to_string())) {
             if let Some(doc) = self.doc.as_mut() {
                 doc.content = content;
@@ -5877,6 +5908,26 @@ impl AppState {
             }
         }
         cx.notify();
+    }
+
+    /// Text files that get a card in the reply when written (`written_file`).
+    fn gets_card(path: &str) -> bool {
+        let ext = path
+            .rsplit_once('.')
+            .map(|(_, e)| e.to_ascii_lowercase())
+            .unwrap_or_default();
+        matches!(ext.as_str(), "md" | "markdown" | "svg")
+    }
+
+    /// The path, as its Write named it, of a file the current chat is
+    /// writing now that is `file`, if it is one.
+    fn drafting(&self, file: &FileRef) -> Option<String> {
+        let chat = self.current?;
+        let want = file.path.as_deref()?;
+        self.drafts
+            .keys()
+            .find(|(c, p)| *c == chat && self.chat_path(chat, p) == want)
+            .map(|(_, p)| p.clone())
     }
 
     /// Open the file a reply is writing in the side panel and follow it:
@@ -5894,7 +5945,7 @@ impl AppState {
         self.show_doc(
             FileRef {
                 name: name.into(),
-                path: Some(path.to_string().into()),
+                path: Some(self.chat_path(chat, path).into()),
                 content,
                 bytes: None,
             },
@@ -12054,6 +12105,23 @@ fix everything under 8, render it again to check, then tell me the scores before
         file_card(name, ext, full.display().to_string(), bytes)
     }
 
+    /// Where `path` (as a Write names it) is on disk for `chat`: itself
+    /// when absolute, else under the chat's project.
+    fn chat_path(&self, chat: usize, path: &str) -> String {
+        let p = std::path::Path::new(path);
+        if p.is_absolute() {
+            return path.to_string();
+        }
+        let project = self
+            .chats
+            .iter()
+            .find(|c| c.id == chat)
+            .and_then(|c| self.project(c.project))
+            .map(|p| p.path.clone())
+            .unwrap_or_else(|| self.project_dir.clone());
+        project.join(p).display().to_string()
+    }
+
     /// Documents a command may have made: the `.docx`, `.xlsx`, `.pptx` and
     /// `.pdf` paths in its command line and what it printed, and the `.html` and
     /// `.svg` ones (a diagram copied from its template; at most eight).
@@ -13404,8 +13472,11 @@ impl AppState {
             }
             self.design_done(chat, path, cx);
             self.end_draft(chat, path, cx);
+            // The card dropped when the writing started takes the file.
             if let Some(file) = self.written_file(chat, path) {
-                self.push_block(chat, Block::File(file));
+                if let Some(file) = self.chat_mut(chat).and_then(|c| c.update_card(file, false)) {
+                    self.push_block(chat, Block::File(file));
+                }
             }
             cx.notify();
             return;

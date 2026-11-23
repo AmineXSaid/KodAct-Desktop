@@ -1726,51 +1726,8 @@ pub(super) fn tool_header(
             ", collapsed"
         }
     );
-    // A text file KodAct is writing right now: the row opens it in the side
-    // panel, filling in live as it is written (`AppState::watch_draft`).
-    let live = call.kind == ToolKind::Write
-        && call.status == ToolStatus::Running
-        && crate::design::live::is_live_text(&call.target);
-    let inner = if live {
-        inner.child(div().flex_1()).child(
-            div()
-                .flex_none()
-                .flex()
-                .items_center()
-                .gap(px(5.))
-                .px(t.space.sm)
-                .h(t.size.control - px(4.))
-                .rounded(t.radius.pill)
-                .border_1()
-                .border_color(t.colors.border)
-                .text_size(t.text.caption)
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(t.colors.text)
-                .child(icon("icons/eye.svg", t.size.icon_xs, t.colors.text_muted))
-                .child("Watch live"),
-        )
-    } else {
-        inner
-    };
     let mut row =
         super::button::KeyRow::new(SharedString::from(format!("tool-{key}")), aria, inner).w_full();
-    if live {
-        // On the press, not the click: while a reply streams the chat
-        // redraws this row between a press and its release, and a click
-        // needs both on the same element. Enter on the row works too.
-        let (st, chat, path) = (cx.state.clone(), cx.chat, call.target.to_string());
-        let (st2, path2) = (st.clone(), path.clone());
-        return div()
-            .w_full()
-            .cursor_pointer()
-            .on_mouse_down(gpui::MouseButton::Left, move |_, _, app| {
-                st.update(app, |s, cx| s.watch_draft(chat, &path, cx))
-            })
-            .child(row.on_activate(move |_, app| {
-                st2.update(app, |s, cx| s.watch_draft(chat, &path2, cx))
-            }))
-            .into_any_element();
-    }
     if has_body {
         let (st, chat, msg) = (cx.state.clone(), cx.chat, cx.index);
         let problem = is_problem(call.status);
