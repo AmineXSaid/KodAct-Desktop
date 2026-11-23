@@ -484,55 +484,35 @@ impl Render for NewProject {
                 )
         };
 
-        let modal = theme::popover(&t)
-            .id("new-project-modal")
-            .occlude()
-            .w(px(580.))
-            .max_w(relative(0.92))
-            .max_h(relative(0.88))
-            .p(t.space.xl)
-            .flex()
-            .flex_col()
-            .gap(t.space.lg)
-            .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(t.space.sm)
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .font_family(t.font_display.clone())
-                            .font_weight(t.display_weight)
-                            .text_size(t.text.heading_sm)
-                            .text_color(t.colors.text_strong)
-                            .child("Create project"),
-                    )
-                    .child(
-                        super::button::Button::icon("np-close", "icons/x.svg", "Close")
-                            .compact()
-                            .on_click(move |_, _, cx| {
-                                close_btn.update(cx, |s, cx| {
-                                    s.new_project_open = false;
-                                    cx.notify();
-                                })
-                            }),
-                    ),
-            )
-            .child(switcher)
-            .child(
-                div()
-                    .id("np-body")
-                    .flex_1()
-                    .min_h_0()
-                    .overflow_y_scroll()
-                    .child(match self.tab {
-                        SourceTab::Local => local_body,
-                        SourceTab::Remote => remote_body,
-                    }),
-            );
+        let modal = super::panel_chrome::window(
+            &t,
+            theme::popover(&t)
+                .id("new-project-modal")
+                .occlude()
+                .w(px(580.))
+                .max_w(relative(0.92))
+                .max_h(relative(0.88))
+                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation()),
+            "np",
+            "Create project",
+            None,
+            move |_, _, cx| {
+                close_btn.update(cx, |s, cx| {
+                    s.new_project_open = false;
+                    cx.notify();
+                })
+            },
+            div()
+                .flex()
+                .flex_col()
+                .gap(t.space.lg)
+                .child(switcher)
+                .child(match self.tab {
+                    SourceTab::Local => local_body,
+                    SourceTab::Remote => remote_body,
+                }),
+            vec![],
+        );
 
         super::motion::backdrop(
             div()

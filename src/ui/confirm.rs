@@ -198,60 +198,54 @@ impl Render for ConfirmWindow {
                     cx.listener(|this, _, window, cx| this.cancel(window, cx)),
                 )
                 .child(super::motion::alert(
-                    theme::popover(&t)
-                        .id("confirm")
-                        .relative()
-                        .occlude()
-                        .w(px(440.))
-                        .p(t.space.xl)
-                        .flex()
-                        .flex_col()
-                        .gap(t.space.md)
-                        .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                        .child(
-                            div()
-                                .text_size(t.text.subheading)
-                                .font_family(t.font_display.clone())
-                                .font_weight(t.display_weight)
-                                .text_color(t.colors.text_strong)
-                                .child(title),
-                        )
-                        .child(
-                            div()
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(t.colors.text)
-                                .overflow_hidden()
-                                .whitespace_nowrap()
-                                .text_ellipsis()
-                                .child(subject),
-                        )
-                        .when(!files.is_empty(), |d| d.child(list))
-                        .child(
-                            div()
-                                .text_color(t.colors.text_muted)
-                                .line_height(gpui::relative(1.45))
-                                .child(body),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .justify_end()
-                                .gap(t.space.sm)
-                                .pt(t.space.sm)
-                                .child(
-                                    super::button::Button::secondary("confirm-cancel", "Cancel")
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.cancel(window, cx)
-                                        })),
-                                )
-                                .child(
-                                    super::button::Button::danger("confirm-delete", action)
-                                        .with_icon(action_icon)
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.confirm(window, cx)
-                                        })),
-                                ),
-                        ),
+                    super::panel_chrome::window(
+                        &t,
+                        theme::popover(&t)
+                            .id("confirm")
+                            .relative()
+                            .occlude()
+                            .w(px(440.))
+                            .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| {
+                                cx.stop_propagation()
+                            }),
+                        "confirm",
+                        title,
+                        None,
+                        cx.listener(|this, _, window, cx| this.cancel(window, cx)),
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(t.space.md)
+                            .child(
+                                div()
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(t.colors.text)
+                                    .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .text_ellipsis()
+                                    .child(subject),
+                            )
+                            .when(!files.is_empty(), |d| d.child(list))
+                            .child(
+                                div()
+                                    .text_color(t.colors.text_muted)
+                                    .line_height(gpui::relative(1.45))
+                                    .child(body),
+                            ),
+                        vec![
+                            super::button::Button::ghost("confirm-cancel", "Cancel")
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.cancel(window, cx)
+                                }))
+                                .into_any_element(),
+                            super::button::Button::danger("confirm-delete", action)
+                                .with_icon(action_icon)
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.confirm(window, cx)
+                                }))
+                                .into_any_element(),
+                        ],
+                    ),
                     "confirm",
                     t.extra.danger,
                     leaving,

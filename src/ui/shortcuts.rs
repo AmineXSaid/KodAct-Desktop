@@ -5,7 +5,6 @@
 
 use gpui::{div, prelude::*, px, Entity, FontWeight, IntoElement, SharedString};
 
-use super::icon;
 use crate::state::AppState;
 use crate::theme::{self, Theme};
 
@@ -184,7 +183,6 @@ pub fn render(t: &Theme, state: &Entity<AppState>, leaving: bool) -> impl IntoEl
         );
     }
     let (close, close_btn) = (state.clone(), state.clone());
-    let hover = t.colors.hover;
     let title: SharedString = "Keyboard shortcuts".into();
     super::motion::backdrop(
         div()
@@ -202,67 +200,46 @@ pub fn render(t: &Theme, state: &Entity<AppState>, leaving: bool) -> impl IntoEl
                 })
             })
             .child(super::motion::dialog(
-                theme::popover(t)
-                    .id("shortcuts")
-                    .occlude()
-                    .w(px(460.))
-                    .max_h(gpui::relative(0.85))
-                    .p(t.space.xl)
-                    .flex()
-                    .flex_col()
-                    .gap(t.space.lg)
-                    .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(t.space.sm)
-                            .child(icon("icons/keyboard.svg", t.size.icon, t.colors.primary))
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .text_size(t.text.subheading)
-                                    .font_family(t.font_display.clone())
-                                    .font_weight(t.display_weight)
-                                    .text_color(t.colors.text_strong)
-                                    .child(title),
-                            )
-                            .child(
-                                div()
-                                    .id("shortcuts-close")
-                                    .size(t.size.control)
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .rounded(t.radius.pill)
-                                    .cursor_pointer()
-                                    .hover(move |d| d.bg(hover))
-                                    .child(icon("icons/x.svg", t.size.icon_sm, t.colors.text_muted))
-                                    .on_click(move |_, _, cx| {
-                                        close_btn.update(cx, |s, cx| {
-                                            s.shortcuts_open = false;
-                                            cx.notify();
-                                        })
-                                    }),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .id("shortcuts-list")
-                            .flex_1()
-                            .min_h_0()
-                            .overflow_y_scroll()
-                            .child(groups),
-                    )
-                    .child(
-                        div()
-                            .text_size(t.text.caption)
-                            .text_color(t.colors.text_subtle)
-                            .child(
-                                "Every command is also in the palette, with or without a shortcut.",
-                            ),
-                    ),
+                super::panel_chrome::window(
+                    t,
+                    theme::popover(t)
+                        .id("shortcuts")
+                        .occlude()
+                        .w(px(460.))
+                        .max_h(gpui::relative(0.85))
+                        .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation()),
+                    "shortcuts",
+                    title,
+                    Some("icons/keyboard.svg"),
+                    move |_, _, cx| {
+                        close_btn.update(cx, |s, cx| {
+                            s.shortcuts_open = false;
+                            cx.notify();
+                        })
+                    },
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(t.space.lg)
+                        .min_h_0()
+                        .child(
+                            div()
+                                .id("shortcuts-list")
+                                .flex_1()
+                                .min_h_0()
+                                .overflow_y_scroll()
+                                .child(groups),
+                        )
+                        .child(
+                            div()
+                                .text_size(t.text.caption)
+                                .text_color(t.colors.text_subtle)
+                                .child(
+                                    "Every command is also in the palette, with or without a shortcut.",
+                                ),
+                        ),
+                    vec![],
+                ),
                 "shortcuts",
                 leaving,
                 t,

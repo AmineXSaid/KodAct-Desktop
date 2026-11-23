@@ -2145,16 +2145,16 @@ impl Render for Settings {
             .bg(t.extra.pane)
             .border_r_1()
             .border_color(t.colors.border)
+            // The window's title row, as every sheet's: `panel_header` tall,
+            // the title 14 semibold.
             .child(
                 div()
+                    .flex_none()
+                    .h(t.size.panel_header - px(12.))
                     .px(px(10.))
-                    .pt(px(4.))
-                    .pb(px(8.))
-                    .text_size(t.text.subheading)
-                    .font_family(t.font_display.clone())
-                    .font_weight(t.display_weight)
-                    .text_color(t.colors.text_strong)
-                    .child("Settings"),
+                    .flex()
+                    .items_center()
+                    .child(super::panel_chrome::title(&t, "Settings")),
             );
         for (group, items) in SECTIONS {
             side = side.child(
@@ -2236,7 +2236,7 @@ impl Render for Settings {
                 SettingsTab::About => self.about(&t),
             };
         let actions = (tab == SettingsTab::Models && self.form).then(|| self.form_actions(&t, cx));
-        let close = div().absolute().top(px(12.)).right(px(12.)).child(
+        let close = div().absolute().top(px(8.)).right(px(8.)).child(
             super::button::Button::icon("settings-close", "icons/x.svg", "Close settings (Esc)")
                 .compact()
                 .on_click(cx.listener(|this, _, _, cx| this.close(cx))),

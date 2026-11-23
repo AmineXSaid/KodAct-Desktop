@@ -8,7 +8,6 @@ use gpui::{
     div, prelude::*, px, Context, Entity, IntoElement, KeyDownEvent, Render, Subscription, Window,
 };
 
-use super::icon;
 use crate::state::AppState;
 use crate::theme::{self, ActiveTheme};
 
@@ -99,68 +98,49 @@ impl Render for AskpassDialog {
         let Some((prompt, leaving)) = self.presence.frame(now, t.size.window_out_ms, window) else {
             return div().into_any_element();
         };
-        let card = theme::fit_window(
-            theme::popover(&t).id("askpass"),
-            window,
+        let card = super::panel_chrome::window(
             &t,
-            t.size.viewport_margin,
-            None,
-        )
-        .relative()
-        .occlude()
-        .w(px(420.))
-        .p(t.space.xl)
-        .flex()
-        .flex_col()
-        .gap(t.space.md)
-        .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-        .child(
+            theme::fit_window(
+                theme::popover(&t).id("askpass"),
+                window,
+                &t,
+                t.size.viewport_margin,
+                None,
+            )
+            .relative()
+            .occlude()
+            .w(px(420.))
+            .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation()),
+            "askpass",
+            title(&prompt),
+            Some("icons/key-round.svg"),
+            cx.listener(|this, _, window, cx| this.answer(false, window, cx)),
             div()
                 .flex()
-                .items_center()
-                .gap(t.space.sm)
-                .child(icon("icons/key-round.svg", t.size.icon, t.colors.primary))
+                .flex_col()
+                .gap(t.space.md)
                 .child(
                     div()
-                        .text_size(t.text.subheading)
-                        .font_family(t.font_display.clone())
-                        .font_weight(t.display_weight)
-                        .text_color(t.colors.text_strong)
-                        .child(title(&prompt)),
-                ),
-        )
-        .child(
-            div()
-                .font_family(t.font_mono.clone())
-                .text_size(t.text.caption)
-                .text_color(t.colors.text_body)
-                .child(prompt.clone()),
-        )
-        .child(Input::new(&self.input).mask_toggle())
-        .child(
-            div()
-                .text_size(t.text.caption)
-                .text_color(t.colors.text_muted)
-                .child("Kept in memory until KodAct closes, never saved."),
-        )
-        .child(
-            div()
-                .flex()
-                .justify_end()
-                .gap(t.space.sm)
-                .pt(t.space.sm)
-                .child(
-                    theme::text_button(&t, "Cancel")
-                        .id("askpass-cancel")
-                        .on_click(
-                            cx.listener(|this, _, window, cx| this.answer(false, window, cx)),
-                        ),
+                        .font_family(t.font_mono.clone())
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_body)
+                        .child(prompt.clone()),
                 )
+                .child(Input::new(&self.input).mask_toggle())
                 .child(
-                    theme::primary_button(&t, "Continue")
-                        .id("askpass-ok")
-                        .on_click(cx.listener(|this, _, window, cx| this.answer(true, window, cx))),
+                    div()
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_muted)
+                        .child("Kept in memory until KodAct closes, never saved."),
                 ),
+            vec![
+                super::button::Button::ghost("askpass-cancel", "Cancel")
+                    .on_click(cx.listener(|this, _, window, cx| this.answer(false, window, cx)))
+                    .into_any_element(),
+                super::button::Button::accent("askpass-ok", "Continue")
+                    .on_click(cx.listener(|this, _, window, cx| this.answer(true, window, cx)))
+                    .into_any_element(),
+            ],
         );
         super::motion::backdrop(
             div()

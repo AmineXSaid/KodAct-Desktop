@@ -12,7 +12,7 @@
 
 use gpui::{
     deferred, div, prelude::*, px, AnyElement, App, ClickEvent, ElementId, FontWeight, IntoElement,
-    SharedString, Window,
+    SharedString, Stateful, Window,
 };
 
 use super::button::Button;
@@ -220,6 +220,68 @@ pub fn footer(t: &Theme, left: impl IntoElement, right: impl IntoElement) -> gpu
         .text_color(t.colors.text_muted)
         .child(left)
         .child(right)
+}
+
+/// The frame every dialog and sheet shares, set on `base` (a `theme::popover`
+/// the caller has sized and given an id): a `panel_header` (44px) with the
+/// title (and its icon) and a close button, the body padded with `space.xl`,
+/// and an action row under it, the main action on the right and Cancel a
+/// ghost button (`footer`, in order; empty for none).
+pub fn window(
+    t: &Theme,
+    base: Stateful<gpui::Div>,
+    id: &'static str,
+    title_text: impl Into<SharedString>,
+    leading_icon: Option<&'static str>,
+    on_close: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    body: impl IntoElement,
+    footer: Vec<AnyElement>,
+) -> Stateful<gpui::Div> {
+    let head = header(
+        t,
+        title(t, title_text),
+        leading_icon
+            .map(|p| {
+                super::icon(p, t.size.icon, t.colors.primary).into_any_element()
+            })
+            .into_iter()
+            .collect(),
+        vec![close_button(
+            SharedString::from(format!("{id}-close")),
+            "Close",
+            on_close,
+        )],
+    )
+    .bg(t.colors.surface)
+    .pl(t.space.xl)
+    .pr(t.space.sm);
+    base.flex()
+        .flex_col()
+        .child(head)
+        .child(
+            div()
+                .id(SharedString::from(format!("{id}-body")))
+                .flex_1()
+                .min_h_0()
+                .overflow_y_scroll()
+                .p(t.space.xl)
+                .flex()
+                .flex_col()
+                .gap(t.space.md)
+                .child(body),
+        )
+        .when(!footer.is_empty(), |d| {
+            d.child(
+                div()
+                    .flex_none()
+                    .flex()
+                    .justify_end()
+                    .gap(t.space.sm)
+                    .px(t.space.xl)
+                    .pb(t.space.xl)
+                    .children(footer),
+            )
+        })
 }
 
 #[cfg(test)]

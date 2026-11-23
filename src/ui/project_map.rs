@@ -239,7 +239,7 @@ pub fn render(
         );
     }
 
-    let close = state.clone();
+    let (close, close_btn) = (state.clone(), state.clone());
     super::motion::backdrop(
         div()
             .id("map-scrim")
@@ -253,69 +253,56 @@ pub fn render(
                 close.update(cx, |s, cx| s.toggle_map(cx))
             })
             .child(super::motion::dialog(
-                theme::popover(t)
-                    .id("project-map")
-                    .occlude()
-                    .w(px(720.))
-                    .max_w(relative(0.94))
-                    .max_h(relative(0.85))
-                    .overflow_y_scroll()
-                    .p(t.space.xl)
-                    .flex()
-                    .flex_col()
-                    .gap(t.space.lg)
-                    .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(t.space.sm)
-                            .child(icon("icons/map.svg", t.size.icon_lg, t.colors.primary))
-                            .child(
-                                div()
-                                    .flex()
-                                    .flex_col()
-                                    .child(
-                                        div()
-                                            .text_size(t.text.subheading)
-                                            .font_family(t.font_display.clone())
-                                            .font_weight(t.display_weight)
-                                            .text_color(t.colors.text_strong)
-                                            .child(project),
-                                    )
-                                    .children(summary.map(|s| {
-                                        div()
-                                            .text_size(t.text.caption)
-                                            .text_color(t.colors.text_subtle)
-                                            .child(s)
-                                    })),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .gap(t.space.xl)
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .flex()
-                                    .flex_col()
-                                    .gap(t.space.sm)
-                                    .child(heading(t, "Folders, by files"))
-                                    .child(tree),
-                            )
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .flex()
-                                    .flex_col()
-                                    .gap(t.space.sm)
-                                    .child(heading(t, "Changed in this chat"))
-                                    .child(changed),
-                            ),
-                    ),
+                super::panel_chrome::window(
+                    t,
+                    theme::popover(t)
+                        .id("project-map")
+                        .occlude()
+                        .w(px(720.))
+                        .max_w(relative(0.94))
+                        .max_h(relative(0.85))
+                        .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation()),
+                    "project-map",
+                    project,
+                    Some("icons/map.svg"),
+                    move |_, _, cx| close_btn.update(cx, |s, cx| s.toggle_map(cx)),
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(t.space.lg)
+                        .children(summary.map(|s| {
+                            div()
+                                .text_size(t.text.caption)
+                                .text_color(t.colors.text_subtle)
+                                .child(s)
+                        }))
+                        .child(
+                            div()
+                                .flex()
+                                .gap(t.space.xl)
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .min_w_0()
+                                        .flex()
+                                        .flex_col()
+                                        .gap(t.space.sm)
+                                        .child(heading(t, "Folders, by files"))
+                                        .child(tree),
+                                )
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .min_w_0()
+                                        .flex()
+                                        .flex_col()
+                                        .gap(t.space.sm)
+                                        .child(heading(t, "Changed in this chat"))
+                                        .child(changed),
+                                ),
+                        ),
+                    vec![],
+                ),
                 "project-map",
                 leaving,
                 t,

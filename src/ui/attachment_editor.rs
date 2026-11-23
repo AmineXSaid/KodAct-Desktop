@@ -261,37 +261,6 @@ impl Render for AttachmentEditor {
             Open::Text { name, .. } => ("Edit the pasted text", name.clone(), false),
             Open::Picture(p) => ("Draw on the picture", p.name.clone(), true),
         };
-        let header = div()
-            .flex()
-            .items_center()
-            .gap(t.space.sm)
-            .child(
-                div()
-                    .text_size(t.text.subheading)
-                    .font_family(t.font_display.clone())
-                    .font_weight(t.display_weight)
-                    .text_color(t.colors.text_strong)
-                    .child(title),
-            )
-            .child(
-                div()
-                    .min_w_0()
-                    .overflow_hidden()
-                    .whitespace_nowrap()
-                    .text_ellipsis()
-                    .text_color(t.colors.text_muted)
-                    .child(name),
-            )
-            .child(div().flex_1())
-            .child(
-                Button::icon(
-                    "attachment-editor-close",
-                    "icons/x.svg",
-                    "Close without saving (Esc)",
-                )
-                .tooltip(true)
-                .on_click(cx.listener(|this, _, window, cx| this.close(window, cx))),
-            );
         let body: gpui::AnyElement = match open {
             Open::Text { .. } => {
                 let lines = self.text.read(cx).value().lines().count();
@@ -502,33 +471,28 @@ impl Render for AttachmentEditor {
                     .into_any_element()
             }
         };
-        let footer = div()
-            .flex()
-            .items_center()
-            .gap(t.space.sm)
-            .children(self.error.clone().map(|e| {
-                div()
-                    .text_size(t.text.caption)
-                    .text_color(t.extra.danger)
-                    .child(e)
-            }))
-            .child(div().flex_1())
-            .child(
-                Button::ghost("attachment-editor-cancel", "Cancel")
-                    .on_click(cx.listener(|this, _, window, cx| this.close(window, cx))),
+        let error = self.error.clone().map(|e| {
+            div()
+                .text_size(t.text.caption)
+                .text_color(t.extra.danger)
+                .child(e)
+        });
+        let footer = vec![
+            Button::ghost("attachment-editor-cancel", "Cancel")
+                .on_click(cx.listener(|this, _, window, cx| this.close(window, cx)))
+                .into_any_element(),
+            Button::accent(
+                "attachment-editor-save",
+                if is_picture {
+                    "Save the drawing"
+                } else {
+                    "Save"
+                },
             )
-            .child(
-                Button::primary(
-                    "attachment-editor-save",
-                    if is_picture {
-                        "Save the drawing"
-                    } else {
-                        "Save"
-                    },
-                )
-                .loading(self.saving)
-                .on_click(cx.listener(|this, _, window, cx| this.save(window, cx))),
-            );
+            .loading(self.saving)
+            .on_click(cx.listener(|this, _, window, cx| this.save(window, cx)))
+            .into_any_element(),
+        ];
         super::motion::backdrop(
             div()
                 .id("attachment-editor-scrim")
@@ -568,18 +532,34 @@ impl Render for AttachmentEditor {
                     cx.stop_propagation();
                 }))
                 .child(super::motion::alert(
-                    theme::popover(&t)
-                        .id("attachment-editor")
-                        .occlude()
-                        .w(px(PAD_W + 48.))
-                        .p(t.space.xl)
-                        .flex()
-                        .flex_col()
-                        .gap(t.space.md)
-                        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                        .child(header)
-                        .child(body)
-                        .child(footer),
+                    super::panel_chrome::window(
+                        &t,
+                        theme::popover(&t)
+                            .id("attachment-editor")
+                            .occlude()
+                            .w(px(PAD_W + 48.))
+                            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()),
+                        "attachment-editor",
+                        title,
+                        None,
+                        cx.listener(|this, _, window, cx| this.close(window, cx)),
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(t.space.md)
+                            .child(
+                                div()
+                                    .min_w_0()
+                                    .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .text_ellipsis()
+                                    .text_color(t.colors.text_muted)
+                                    .child(name),
+                            )
+                            .child(body)
+                            .children(error),
+                        footer,
+                    ),
                     "attachment-editor",
                     t.colors.primary,
                     self.leaving,
