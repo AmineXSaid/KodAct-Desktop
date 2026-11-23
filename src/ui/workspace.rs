@@ -53,6 +53,8 @@ pub struct Workspace {
     doc_comments: Entity<super::doc_comments::DocComments>,
     /// Find in the file in the side panel (`doc_find.rs`).
     doc_find: Entity<super::doc_find::DocFind>,
+    /// The file view's page field (`page_field.rs`).
+    page_field: Entity<super::page_field::PageField>,
     /// Interactive spreadsheet editor bar (`sheet_view.rs`).
     sheet_editor: Entity<super::sheet_view::SheetEditor>,
     /// The project's tree and a viewer, under the side panel (`files_pane.rs`).
@@ -111,6 +113,8 @@ impl Workspace {
         let doc_comments =
             cx.new(|cx| super::doc_comments::DocComments::new(state.clone(), window, cx));
         let doc_find = cx.new(|cx| super::doc_find::DocFind::new(state.clone(), window, cx));
+        let page_field =
+            cx.new(|cx| super::page_field::PageField::new(state.clone(), window, cx));
         let sheet_editor =
             cx.new(|cx| super::sheet_view::SheetEditor::new(state.clone(), window, cx));
         let files = cx.new(|cx| super::files_pane::FilesPane::new(state.clone(), window, cx));
@@ -137,6 +141,7 @@ impl Workspace {
             askpass,
             doc_comments,
             doc_find,
+            page_field,
             sheet_editor,
             files,
             presence: Presences::default(),
@@ -1010,6 +1015,17 @@ impl Render for Workspace {
                 show_changes: s.doc_show_changes,
                 page_pick: s.doc_page_pick,
                 scroll: s.doc_scroll.clone(),
+                height: {
+                    let stage = f32::from(window.viewport_size().height)
+                        - f32::from(t.size.titlebar)
+                        - f32::from(t.size.statusbar);
+                    (if below { stage * super::doc_pane::BELOW_SHARE } else { stage })
+                        - f32::from(t.size.panel_header + t.size.panel_toolbar + t.size.panel_footer)
+                },
+                zoom: s.doc_zoom_here(),
+                fitted: s.doc_fitted.clone(),
+                thumbs: s.doc_thumbs_here(),
+                menu: s.doc_menu,
             };
             let doc_changes = s
                 .doc_changes
@@ -1065,8 +1081,9 @@ impl Render for Workspace {
             let leaving_fit = fit.clone();
             let doc_view = |f: &crate::state::FileRef, fit: super::doc_pane::Fit, leaving: bool| {
                 // A file leaving has nothing to edit or comment on any more.
-                let (editor, comments, find) = if leaving {
+                let (editor, comments, find, page_field) = if leaving {
                     (
+                        div().into_any_element(),
                         div().into_any_element(),
                         div().into_any_element(),
                         div().into_any_element(),
@@ -1076,6 +1093,7 @@ impl Render for Workspace {
                         self.sheet_editor.clone().into_any_element(),
                         self.doc_comments.clone().into_any_element(),
                         self.doc_find.clone().into_any_element(),
+                        self.page_field.clone().into_any_element(),
                     )
                 };
                 super::doc_pane::render(
@@ -1092,6 +1110,7 @@ impl Render for Workspace {
                     doc_changes,
                     comments,
                     find,
+                    page_field,
                     &t,
                 )
             };
@@ -1496,6 +1515,22 @@ impl Render for Workspace {
             }))
             .on_action(cx.listener(|this, _: &PreviousPage, _, cx| {
                 this.state.update(cx, |s, cx| s.step_doc_page(-1, cx))
+            }))
+            .on_action(cx.listener(|this, _: &DocZoomIn, _, cx| {
+                this.state.update(cx, |s, cx| s.zoom_doc(true, cx))
+            }))
+            .on_action(cx.listener(|this, _: &DocZoomOut, _, cx| {
+                this.state.update(cx, |s, cx| s.zoom_doc(false, cx))
+            }))
+            .on_action(cx.listener(|this, _: &DocZoomFit, _, cx| {
+                this.state
+                    .update(cx, |s, cx| s.set_doc_zoom(crate::doc_zoom::Zoom::FitWidth, cx))
+            }))
+            .on_action(cx.listener(|this, _: &ToggleThumbnails, _, cx| {
+                this.state.update(cx, |s, cx| s.toggle_doc_thumbs(cx))
+            }))
+            .on_action(cx.listener(|this, _: &GoToPage, window, cx| {
+                this.page_field.update(cx, |f, cx| f.focus(window, cx))
             }))
             .on_action(cx.listener(|this, _: &ExportPdf, _, cx| {
                 this.state.update(cx, |s, cx| match s.doc.clone() {

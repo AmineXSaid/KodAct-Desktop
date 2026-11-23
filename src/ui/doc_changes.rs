@@ -10,9 +10,10 @@ use crate::state::AppState;
 use crate::text_diff::{Para, Run};
 use crate::theme::Theme;
 
-/// The bar: back and forward through the versions, which one this is, and
-/// the Changes switch (from the second version on).
-pub fn version_bar(
+/// The version controls, set in the file view's footer: back and forward
+/// through the versions, which one this is, and the Changes switch (from
+/// the second version on).
+pub fn version_controls(
     t: &Theme,
     state: Entity<AppState>,
     at: usize,
@@ -31,13 +32,9 @@ pub fn version_bar(
     let hover = t.colors.hover;
     div()
         .flex_none()
-        .h(px(40.))
         .flex()
         .items_center()
         .gap(t.space.xs)
-        .px(t.space.sm)
-        .border_t_1()
-        .border_color(t.colors.border)
         .text_size(t.text.caption)
         .child(step(
             "version-back",
@@ -59,7 +56,6 @@ pub fn version_bar(
             1,
             at + 1 < total,
         ))
-        .child(div().flex_1())
         .children(summary.map(|s| div().text_color(t.colors.text_muted).child(s)))
         .when(at > 0, |d| {
             d.child(

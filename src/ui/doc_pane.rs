@@ -55,6 +55,16 @@ pub struct Fit {
     pub page_pick: Option<usize>,
     /// The body's scroll, whose items are the pages.
     pub scroll: gpui::ScrollHandle,
+    /// The room for a whole page: the body's height.
+    pub height: f32,
+    /// How this file is scaled, and the percentage fitted pages draw at
+    /// (written back as they are drawn).
+    pub zoom: crate::doc_zoom::Zoom,
+    pub fitted: std::sync::Arc<std::sync::atomic::AtomicU16>,
+    /// The thumbnail rail is shown.
+    pub thumbs: bool,
+    /// The toolbar's open menu.
+    pub menu: Option<crate::state::DocMenu>,
 }
 
 /// What this version changed: None while it is worked out, `Some(None)`
@@ -85,6 +95,7 @@ pub fn render(
     changes: ChangesRead,
     comments: AnyElement,
     find: AnyElement,
+    page_field: AnyElement,
     t: &Theme,
 ) -> AnyElement {
     // The version bar at the foot, when the chat has more than one version.
@@ -99,27 +110,6 @@ pub fn render(
             Some(format!("{n} cell{} changed", if n == 1 { "" } else { "s" }))
         }
         _ => None,
-    };
-    let bar_state = state.clone();
-    // The foot: comments on the file, then the version bar.
-    let footer = move || {
-        Some(
-            div()
-                .flex_none()
-                .flex()
-                .flex_col()
-                .child(comments)
-                .children((total > 1).then(|| {
-                    super::doc_changes::version_bar(
-                        t,
-                        bar_state.clone(),
-                        at,
-                        total,
-                        showing_changes,
-                        summary.clone(),
-                    )
-                })),
-        )
     };
     let changed_cells = match changes {
         Some(Some(crate::doc_versions::Changes::Cells(c))) if showing_changes => Some(c),
@@ -146,7 +136,18 @@ pub fn render(
     let source = two_views && fit.source;
     let text_view = fit.text;
     let page_pick = fit.page_pick;
-    let has_pages = matches!(read, Some(Ok(p)) if matches!(p.as_ref(), crate::office::Preview::Doc(d) if !d.pages.is_empty()));
+    // The pages as drawn: how many, and whether they are slides.
+    let pages: Option<(usize, bool)> = match read {
+        Some(Ok(p)) => match p.as_ref() {
+            crate::office::Preview::Doc(d) if !d.pages.is_empty() => {
+                Some((d.pages.len(), d.slides))
+            }
+            _ => None,
+        },
+        _ => None,
+    };
+    let has_pages = pages.is_some();
+    let paged = has_pages && !text_view && !showing_changes;
     let viewer = state.clone();
     let back = state.clone();
     let (finder, exporter, to_export) = (state.clone(), state.clone(), file.clone());
@@ -158,7 +159,135 @@ pub fn render(
     let full = fit.full;
     let full_t = fit.full_t;
     let fuller = state.clone();
-    // A plain ghost icon button, as the other tools: no tint.
+
+    // The status line: where you are, the versions, the scale.
+    let top = fit.scroll.top_item();
+    let position = match pages {
+        Some((n, slides)) if paged => format!(
+            "{} {} of {n}",
+            if slides { "Slide" } else { "Page" },
+            super::page_field::label(top, n)
+        ),
+        _ => String::new(),
+    };
+    let (fitted, zoom_now) = (fit.fitted.clone(), fit.zoom);
+    let bar_state = state.clone();
+    let footer = move || {
+        let pct = match zoom_now {
+            crate::doc_zoom::Zoom::Percent(p) => p,
+            _ => fitted.load(std::sync::atomic::Ordering::Relaxed),
+        };
+        let right = div()
+            .flex_none()
+            .flex()
+            .items_center()
+            .gap(t.space.md)
+            .when(total > 1, |d| {
+                d.child(super::doc_changes::version_controls(
+                    t,
+                    bar_state.clone(),
+                    at,
+                    total,
+                    showing_changes,
+                    summary.clone(),
+                ))
+            })
+            .when(paged, |d| d.child(format!("{pct}%")));
+        Some(
+            div()
+                .flex_none()
+                .flex()
+                .flex_col()
+                .child(comments)
+                .child(super::panel_chrome::footer(t, position, right)),
+        )
+    };
+
+    // Row 1: back, the file, its version and edits; then full screen,
+    // split, close. The name always shows; the tools are on row 2.
+    let mark = match office {
+        Some(kind) => super::file_mark::render(kind, f32::from(t.size.icon_lg), fit.scale),
+        None if diagram => icon("icons/network.svg", t.size.icon_sm, t.colors.sky).into_any_element(),
+        None => gpui::img(super::file_icon::asset(
+            &file.name,
+            false,
+            file.path.as_deref().unwrap_or(&file.name),
+        ))
+        .flex_none()
+        .size(t.size.icon)
+        .into_any_element(),
+    };
+    let chip_state = state.clone();
+    let title_block = div()
+        .flex_1()
+        .min_w_0()
+        .flex()
+        .items_center()
+        .gap(t.space.sm)
+        .child(mark)
+        .child(
+            div()
+                .min_w(px(120.))
+                .flex_shrink(1.)
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .text_size(t.text.body)
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(t.colors.text_strong)
+                .child(file.title()),
+        )
+        .child(
+            div()
+                .flex_none()
+                .text_size(t.text.caption)
+                .text_color(t.colors.text_muted)
+                .child(file.kind()),
+        )
+        .when(total > 1, |d| {
+            d.child(
+                div()
+                    .id("doc-version-chip")
+                    .flex_none()
+                    .px(t.space.sm)
+                    .h(px(20.))
+                    .flex()
+                    .items_center()
+                    .rounded(t.radius.pill)
+                    .border_1()
+                    .border_color(t.colors.border)
+                    .cursor_pointer()
+                    .text_size(t.text.caption)
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(t.colors.text)
+                    .when(showing_changes, |d| d.bg(t.colors.primary_tint))
+                    .tooltip(|w, cx| {
+                        gpui::component::tooltip::Tooltip::new("What this version changed")
+                            .build(w, cx)
+                    })
+                    .child(format!("v{} of {total}", at + 1))
+                    .on_click(move |_, _, cx| {
+                        chip_state.update(cx, |s, cx| {
+                            if s.doc_versions().1 > 0 {
+                                s.toggle_doc_changes(cx)
+                            }
+                        })
+                    }),
+            )
+        })
+        .when(dirty_sheet, |d| {
+            d.child(
+                div()
+                    .id("doc-edited")
+                    .flex_none()
+                    .size(px(8.))
+                    .rounded(t.radius.pill)
+                    .bg(t.extra.warning)
+                    .tooltip(|w, cx| {
+                        gpui::component::tooltip::Tooltip::new("Edited, not saved").build(w, cx)
+                    }),
+            )
+        });
     let full_btn: AnyElement = tool_button(
         "doc-full",
         if full {
@@ -174,91 +303,48 @@ pub fn render(
     )
     .on_click(move |_, _, cx| fuller.update(cx, |s, cx| s.toggle_doc_full(cx)))
     .into_any_element();
-    let header = div()
-        .relative()
-        .flex_none()
-        .h(t.size.panel_header)
-        .flex()
-        .items_center()
-        .gap(t.space.sm)
-        .bg(t.extra.panel)
-        .pl(if from_panel { t.space.sm } else { t.space.lg })
-        .pr(t.space.sm)
-        .border_b_1()
-        .border_color(t.colors.border)
-        .when(from_panel, |d| {
-            d.child(
-                tool_button("doc-back", "icons/arrow-left.svg", "All files").on_click(
-                    move |_, _, cx| {
-                        back.update(cx, |s, cx| s.show_panel(crate::state::PanelTab::Files, cx))
-                    },
-                ),
+    let leading: Vec<AnyElement> = from_panel
+        .then(|| {
+            tool_button("doc-back", "icons/arrow-left.svg", "All files")
+                .on_click(move |_, _, cx| {
+                    back.update(cx, |s, cx| s.show_panel(crate::state::PanelTab::Files, cx))
+                })
+                .into_any_element()
+        })
+        .into_iter()
+        .collect();
+    let mut trailing = vec![full_btn];
+    if !full {
+        trailing.push(
+            tool_button(
+                "doc-split",
+                "icons/split.svg",
+                if fit.below {
+                    "Put it beside the chat"
+                } else {
+                    "Put it below the chat"
+                },
             )
-        })
-        .child(match office {
-            Some(kind) => super::file_mark::render(kind, f32::from(t.size.icon_lg), fit.scale),
-            None if diagram => {
-                icon("icons/network.svg", t.size.icon_sm, t.colors.sky).into_any_element()
-            }
-            None => gpui::img(super::file_icon::asset(
-                &file.name,
-                false,
-                file.path.as_deref().unwrap_or(&file.name),
-            ))
-            .flex_none()
-            .size(t.size.icon)
+            .on_click(|_, window, cx| window.dispatch_action(Box::new(super::ToggleSplit), cx))
             .into_any_element(),
-        })
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .flex()
-                .items_baseline()
-                .gap(t.space.sm)
-                .child(
-                    div()
-                        .min_w_0()
-                        .overflow_hidden()
-                        .whitespace_nowrap()
-                        .text_ellipsis()
-                        .text_size(t.text.body)
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(t.colors.text_strong)
-                        .child(file.title()),
-                )
-                .child(
-                    div()
-                        .flex_none()
-                        .text_size(t.text.caption)
-                        .text_color(t.colors.text_muted)
-                        .child(file.kind()),
-                )
-                .when(dirty_sheet, |d| {
-                    d.child(
-                        div()
-                            .flex_none()
-                            .px(px(6.))
-                            .py(px(1.))
-                            .rounded(t.radius.pill)
-                            .bg(t.extra.warning_tint)
-                            .text_size(t.text.caption)
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(t.extra.warning)
-                            .child("Edited"),
-                    )
-                }),
         );
-    // Beside the name, in one bar: how to view it, what to do with it, and
-    // Close set apart by a hairline.
-    let toolbar = div()
-        .flex_none()
-        .flex()
-        .items_center()
-        .gap(px(2.))
-        .when(two_views, |d| {
+    }
+    trailing.push(super::panel_chrome::close_button(
+        "doc-close",
+        "Close",
+        move |_, _, cx| closer.update(cx, |s, cx| s.close_doc(cx)),
+    ));
+    let row1 = super::panel_chrome::header(t, title_block, leading, trailing);
+
+    // Row 2: the tools, in groups.
+    let btn = |g: &mut Vec<AnyElement>, b: super::button::Button| g.push(b.into_any_element());
+    let mut groups: Vec<super::panel_chrome::Group> = Vec::new();
+    // View.
+    {
+        let mut g: Vec<AnyElement> = Vec::new();
+        if two_views {
             let (to_preview, to_source) = (state.clone(), state.clone());
-            d.child(
+            g.push(
                 super::button::Segmented::new("doc-views", "View")
                     .option("Preview", !source, move |_, _, cx| {
                         to_preview.update(cx, |s, cx| s.set_source_view(false, cx))
@@ -267,62 +353,128 @@ pub fn render(
                         if diagram { "Code" } else { "Markdown" },
                         source,
                         move |_, _, cx| to_source.update(cx, |s, cx| s.set_source_view(true, cx)),
-                    ),
-            )
-        })
-        .when(two_views, |d| d.child(div().w(t.space.xs)))
-        .when(diagram && !source, |d| {
-            d.child(
+                    )
+                    .into_any_element(),
+            );
+        }
+        if has_pages {
+            let (to_pages, to_text) = (viewer.clone(), viewer.clone());
+            g.push(
+                super::button::Segmented::new("doc-pages-text", "View")
+                    .option("Pages", !text_view, move |_, _, cx| {
+                        to_pages.update(cx, |s, cx| {
+                            if s.doc_text {
+                                s.toggle_doc_text(cx)
+                            }
+                        })
+                    })
+                    .option("Text", text_view, move |_, _, cx| {
+                        to_text.update(cx, |s, cx| {
+                            if !s.doc_text {
+                                s.toggle_doc_text(cx)
+                            }
+                        })
+                    })
+                    .into_any_element(),
+            );
+        }
+        if diagram && !source {
+            btn(
+                &mut g,
                 tool_button(
                     "doc-fit",
                     "icons/maximize-2.svg",
-                    if fit.fit {
-                        "Actual size"
-                    } else {
-                        "Fit to panel"
-                    },
+                    if fit.fit { "Actual size" } else { "Fit to panel" },
                 )
                 .on_click(move |_, _, cx| fitter.update(cx, |s, cx| s.toggle_doc_fit(cx))),
-            )
-            .child(
+            );
+            btn(
+                &mut g,
                 tool_button("doc-browser", "icons/globe.svg", "Open in browser").on_click(
                     move |_, _, cx| opener.update(cx, |s, cx| s.open_externally(&to_open, cx)),
                 ),
-            )
-        })
-        .when(has_pages, |d| {
-            d.child(
-                tool_button(
-                    "doc-view",
-                    if text_view {
-                        "icons/layers.svg"
-                    } else {
-                        "icons/file-text.svg"
-                    },
-                    if text_view {
-                        "Show the pages"
-                    } else {
-                        "Show the text"
-                    },
-                )
-                .on_click(move |_, _, cx| viewer.update(cx, |s, cx| s.toggle_doc_text(cx))),
-            )
-        })
-        .child(
-            tool_button("doc-find", "icons/search.svg", "Find in this file")
-                .on_click(move |_, _, cx| finder.update(cx, |s, cx| s.toggle_doc_find(cx))),
-        )
-        // How to view it, then what to do with it: two groups, a hairline apart.
-        .child(div().flex_none().mx(t.space.xs).w(px(1.)).h(t.size.icon).bg(t.colors.border))
-        .when(exports, |d| {
-            d.child(
+            );
+        }
+        if !g.is_empty() {
+            let w = (two_views as u8 as f32) * 170.
+                + (has_pages as u8 as f32) * 130.
+                + (diagram && !source) as u8 as f32 * 58.;
+            groups.push(super::panel_chrome::Group { tools: g, width: w });
+        }
+    }
+    // Navigate: previous, the page field, next, thumbnails.
+    if let (Some((n, _)), true) = (pages, paged) {
+        let (prev, next, thumbs) = (state.clone(), state.clone(), state.clone());
+        let on = fit.thumbs;
+        let g = vec![
+            tool_button("doc-prev", "icons/chevron-up.svg", "Previous page (Alt+Up)")
+                .disabled(top == 0)
+                .on_click(move |_, _, cx| prev.update(cx, |s, cx| s.step_doc_page(-1, cx)))
+                .into_any_element(),
+            page_field,
+            tool_button("doc-next", "icons/chevron-down.svg", "Next page (Alt+Down)")
+                .disabled(top + 1 >= n)
+                .on_click(move |_, _, cx| next.update(cx, |s, cx| s.step_doc_page(1, cx)))
+                .into_any_element(),
+            tool_button("doc-thumbs", "icons/panel-left.svg", "Thumbnails (Ctrl+Alt+T)")
+                .selected(on)
+                .on_click(move |_, _, cx| thumbs.update(cx, |s, cx| s.toggle_doc_thumbs(cx)))
+                .into_any_element(),
+        ];
+        groups.push(super::panel_chrome::Group {
+            tools: g,
+            width: 28. * 3. + 82. + 6.,
+        });
+    }
+    // Zoom: out, the scale (a menu of steps and fits), in.
+    let zoom_group_at = groups.iter().map(|g| g.width + 9.).sum::<f32>();
+    if paged {
+        let (zout, zin, zmenu) = (state.clone(), state.clone(), state.clone());
+        let pct = match fit.zoom {
+            crate::doc_zoom::Zoom::Percent(p) => p,
+            _ => fit.fitted.load(std::sync::atomic::Ordering::Relaxed),
+        };
+        let g = vec![
+            tool_button("doc-zoom-out", "icons/zoom-out.svg", "Zoom out (Ctrl+-)")
+                .on_click(move |_, _, cx| zout.update(cx, |s, cx| s.zoom_doc(false, cx)))
+                .into_any_element(),
+            super::button::Button::ghost("doc-zoom-menu", format!("{pct}%"))
+                .compact()
+                .selected(fit.menu == Some(crate::state::DocMenu::Zoom))
+                .on_click(move |_, _, cx| {
+                    zmenu.update(cx, |s, cx| s.toggle_doc_menu(crate::state::DocMenu::Zoom, cx))
+                })
+                .into_any_element(),
+            tool_button("doc-zoom-in", "icons/zoom-in.svg", "Zoom in (Ctrl+=)")
+                .on_click(move |_, _, cx| zin.update(cx, |s, cx| s.zoom_doc(true, cx)))
+                .into_any_element(),
+        ];
+        groups.push(super::panel_chrome::Group {
+            tools: g,
+            width: 28. + 62. + 28. + 4.,
+        });
+    }
+    // Review: find.
+    groups.push(super::panel_chrome::Group::of(
+        t,
+        vec![tool_button("doc-find", "icons/search.svg", "Find in this file (Ctrl+Shift+F)")
+            .on_click(move |_, _, cx| finder.update(cx, |s, cx| s.toggle_doc_find(cx)))
+            .into_any_element()],
+    ));
+    // Share: export, open in its app, copy, download. Collapses first.
+    {
+        let mut g: Vec<AnyElement> = Vec::new();
+        if exports {
+            btn(
+                &mut g,
                 tool_button("doc-export", "icons/file-down.svg", "Export to PDF").on_click(
                     move |_, _, cx| exporter.update(cx, |s, cx| s.export_pdf(&to_export, cx)),
                 ),
-            )
-        })
-        .when(office.is_some(), |d| {
-            d.child(
+            );
+        }
+        if office.is_some() {
+            btn(
+                &mut g,
                 tool_button(
                     "doc-external",
                     "icons/external-link.svg",
@@ -331,10 +483,11 @@ pub fn render(
                 .on_click(move |_, _, cx| {
                     launcher.update(cx, |s, cx| s.open_externally(&external, cx))
                 }),
-            )
-        })
-        .when(!binary, |d| {
-            d.child(
+            );
+        }
+        if !binary {
+            btn(
+                &mut g,
                 tool_button(
                     "doc-copy",
                     if did_copy {
@@ -348,43 +501,109 @@ pub fn render(
                     cx.write_to_clipboard(ClipboardItem::new_string(text.to_string()));
                     copier.update(cx, |s, cx| s.mark_copied(COPY_KEY.into(), cx));
                 }),
-            )
-        })
-        .when(!full, |d| {
-            d.child(
-                tool_button(
-                    "doc-split",
-                    "icons/split.svg",
-                    if fit.below {
-                        "Put it beside the chat"
-                    } else {
-                        "Put it below the chat"
-                    },
-                )
-                .on_click(|_, window, cx| window.dispatch_action(Box::new(super::ToggleSplit), cx)),
-            )
-        })
-        .child(
+            );
+        }
+        btn(
+            &mut g,
             tool_button("doc-download", "icons/download.svg", "Download")
                 .on_click(move |_, _, cx| saver.update(cx, |s, cx| s.download(&to_save, cx))),
         );
-
-    let header = header
-        .child(toolbar)
-        .child(div().flex_none().w(px(1.)).h(t.size.icon).bg(t.colors.border))
-        .child(full_btn)
-        .child(
-            tool_button("doc-close", "icons/x.svg", "Close")
-                .on_click(move |_, _, cx| closer.update(cx, |s, cx| s.close_doc(cx))),
-        );
-    // The find bar sits under the header.
+        groups.push(super::panel_chrome::Group::of(t, g));
+    }
+    let more_state = state.clone();
+    let row2 = super::panel_chrome::toolbar(
+        t,
+        fit.width,
+        groups,
+        fit.menu == Some(crate::state::DocMenu::More),
+        move |_, _, cx| {
+            more_state.update(cx, |s, cx| s.toggle_doc_menu(crate::state::DocMenu::More, cx))
+        },
+    );
+    // The zoom menu hangs under the scale button.
+    let zoom_menu = (paged && fit.menu == Some(crate::state::DocMenu::Zoom)).then(|| {
+        let item = |id: SharedString, label: String, on: bool, z: crate::doc_zoom::Zoom| {
+            let st = state.clone();
+            div()
+                .id(id)
+                .h(t.size.menu_row)
+                .px(t.space.sm)
+                .flex()
+                .items_center()
+                .rounded(t.radius.small)
+                .cursor_pointer()
+                .text_size(t.text.body_sm)
+                .text_color(t.colors.text)
+                .when(on, |d| crate::theme::selected(t, d))
+                .when(!on, |d| d.hover(|s| s.bg(t.colors.hover)))
+                .child(label)
+                .on_click(move |_, _, cx| st.update(cx, |s, cx| s.set_doc_zoom(z, cx)))
+        };
+        let mut menu = div()
+            .absolute()
+            .top(t.size.panel_header + t.size.panel_toolbar)
+            .left(t.space.md + px(zoom_group_at + 4.))
+            .w(px(140.))
+            .flex()
+            .flex_col()
+            .p(t.space.xs)
+            .bg(t.colors.surface)
+            .border_1()
+            .border_color(t.colors.border)
+            .rounded(t.radius.card)
+            .shadow(t.elevation_popover());
+        for p in crate::doc_zoom::STEPS {
+            menu = menu.child(item(
+                format!("doc-zoom-{p}").into(),
+                format!("{p}%"),
+                fit.zoom == crate::doc_zoom::Zoom::Percent(p),
+                crate::doc_zoom::Zoom::Percent(p),
+            ));
+        }
+        menu = menu
+            .child(item(
+                "doc-zoom-width".into(),
+                "Fit width".into(),
+                fit.zoom == crate::doc_zoom::Zoom::FitWidth,
+                crate::doc_zoom::Zoom::FitWidth,
+            ))
+            .child(item(
+                "doc-zoom-page".into(),
+                "Fit page".into(),
+                fit.zoom == crate::doc_zoom::Zoom::FitPage,
+                crate::doc_zoom::Zoom::FitPage,
+            ));
+        gpui::deferred(super::motion::unfold(menu, "doc-zoom-menu", false, false, t))
+            .with_priority(3)
+    });
+    // The find bar sits under the toolbar.
     let header = div()
+        .relative()
         .flex_none()
         .flex()
         .flex_col()
-        .child(header)
-        .child(find);
-    let body = div().id("doc-body").flex_1().min_h_0().overflow_y_scroll();
+        .child(row1)
+        .child(row2)
+        .child(find)
+        .children(zoom_menu);
+    let wheel = state.clone();
+    let body = div()
+        .id("doc-body")
+        .flex_1()
+        .min_w_0()
+        .min_h_0()
+        .overflow_y_scroll()
+        // Ctrl + the wheel zooms the pages, as the toolbar's buttons do.
+        .on_scroll_wheel(move |ev, _, cx| {
+            if ev.modifiers.control && paged {
+                let up = match ev.delta {
+                    gpui::ScrollDelta::Pixels(p) => p.y > px(0.),
+                    gpui::ScrollDelta::Lines(l) => l.y > 0.,
+                };
+                wheel.update(cx, |s, cx| s.zoom_doc(up, cx));
+                cx.stop_propagation();
+            }
+        });
     // What this version changed, in words (a workbook's show in its grid).
     if showing_changes && changed_cells.is_none() {
         let content: AnyElement = match changes {
@@ -512,7 +731,19 @@ pub fn render(
                             full_t,
                             file,
                             header,
-                            pages_view(body.bg(t.extra.inset), d, &fit, page_pick, state, t),
+                            div()
+                                .flex_1()
+                                .min_h_0()
+                                .flex()
+                                .children(fit.thumbs.then(|| thumb_rail(d, &fit, state.clone(), t)))
+                                .child(pages_view(
+                                    body.bg(t.extra.inset),
+                                    d,
+                                    &fit,
+                                    page_pick,
+                                    state,
+                                    t,
+                                )),
                             footer(),
                             fit.width,
                             t,
@@ -596,6 +827,66 @@ fn selectable(name: &str, text: &str, t: &Theme) -> AnyElement {
         .into_any_element()
 }
 
+/// The thumbnail rail: each page small, the one at the top marked; a click
+/// brings that page to the top.
+fn thumb_rail(
+    d: &crate::office::Doc,
+    fit: &Fit,
+    state: Entity<AppState>,
+    t: &Theme,
+) -> AnyElement {
+    let now = fit.scroll.top_item().min(d.pages.len().saturating_sub(1));
+    let w = f32::from(t.size.thumb_rail) - 2. * f32::from(t.space.md) - 2.;
+    div()
+        .id("doc-thumbs")
+        .flex_none()
+        .w(t.size.thumb_rail)
+        .h_full()
+        .overflow_y_scroll()
+        .flex()
+        .flex_col()
+        .items_center()
+        .gap(t.space.md)
+        .py(t.space.md)
+        .bg(t.extra.panel)
+        .border_r_1()
+        .border_color(t.colors.border)
+        .children(d.pages.iter().enumerate().map(|(i, page)| {
+            let st = state.clone();
+            let on = i == now;
+            div()
+                .id(("doc-thumb", i))
+                .flex()
+                .flex_col()
+                .items_center()
+                .gap(t.space.xs)
+                .cursor_pointer()
+                .child(
+                    div()
+                        .w(px(w))
+                        .h(px(w * page.height as f32 / page.width.max(1) as f32))
+                        .rounded(t.radius.small)
+                        .overflow_hidden()
+                        .border_1()
+                        .border_color(if on { t.colors.primary } else { t.colors.border })
+                        .child(
+                            gpui::img(page.image.clone())
+                                .size_full()
+                                .object_fit(gpui::ObjectFit::Contain),
+                        ),
+                )
+                .child(
+                    div()
+                        .text_size(t.text.caption)
+                        .font_weight(if on { FontWeight::MEDIUM } else { FontWeight::NORMAL })
+                        .text_color(if on { t.colors.text_strong } else { t.colors.text_muted })
+                        .child((i + 1).to_string()),
+                )
+                .on_click(move |_, _, cx| st.update(cx, |s, cx| s.show_doc_page(i, cx)))
+        }))
+        .into_any_element()
+}
+
 /// A document's pages as they print, each as wide as the panel allows on
 /// the quiet inset with a hairline round it; a deck's slides with their
 /// speaker notes under each.
@@ -608,22 +899,41 @@ fn pages_view(
     picked: Option<usize>,
     state: Entity<AppState>,
     t: &Theme,
+
 ) -> gpui::Stateful<gpui::Div> {
-    let room = fit.width - 2. * f32::from(t.space.xl) - 2.;
+    let room = fit.width
+        - 2. * f32::from(t.space.xl)
+        - 2.
+        - if fit.thumbs { f32::from(t.size.thumb_rail) } else { 0. };
+    let room_h = (fit.height - 2. * f32::from(t.space.xl)).max(120.);
     let shown = d.pages.len();
     let noun = if d.slides { "Slide" } else { "Page" };
+    // 100% is a page's own size; fitted views report what they draw at.
+    let width_of = |page: &crate::office::Page| {
+        // 100% is the page at 96 dpi: a letter or A4 sheet, a 13.3in slide.
+        let natural = if d.slides { 1280. } else { 794. };
+        let aspect = page.height as f32 / page.width.max(1) as f32;
+        let w = fit.zoom.width(natural, aspect, room, room_h, !d.slides);
+        (w, natural)
+    };
+    if let Some(first) = d.pages.first() {
+        let (w, natural) = width_of(first);
+        fit.fitted.store(
+            crate::doc_zoom::percent_of(w, natural),
+            std::sync::atomic::Ordering::Relaxed,
+        );
+    }
+    let wide = d.pages.first().is_some_and(|p| width_of(p).0 > room);
     body.track_scroll(&fit.scroll)
+        .when(wide, |d| d.overflow_x_scroll())
         .flex()
         .flex_col()
-        .items_center()
+        .when(!wide, |d| d.items_center())
+        .when(wide, |d| d.items_start())
         .gap(t.space.lg)
         .p(t.space.xl)
         .children(d.pages.iter().enumerate().map(|(i, page)| {
-            let w = if d.slides {
-                room
-            } else {
-                room.min(page.width as f32 / fit.scale.max(1.) * 1.2)
-            };
+            let w = width_of(page).0;
             let note = d.notes.get(i).filter(|n| !n.trim().is_empty()).cloned();
             let on = picked == Some(i);
             let st = state.clone();
@@ -714,7 +1024,7 @@ fn finish_at(
     full_t: f32,
     file: &FileRef,
     header: gpui::Div,
-    body: gpui::Stateful<gpui::Div>,
+    body: impl IntoElement,
     footer: Option<gpui::Div>,
     width: f32,
     t: &Theme,

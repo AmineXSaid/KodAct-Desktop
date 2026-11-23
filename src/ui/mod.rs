@@ -62,6 +62,7 @@ pub mod model_menu;
 pub mod motion;
 pub mod new_project;
 pub mod onboarding;
+pub mod page_field;
 pub mod panel_chrome;
 pub mod permissions_editor;
 pub mod planned;
@@ -183,6 +184,11 @@ gpui::actions!(
         ChangeRemoteFolder,
         NextPage,
         PreviousPage,
+        DocZoomIn,
+        DocZoomOut,
+        DocZoomFit,
+        ToggleThumbnails,
+        GoToPage,
         ExportPdf,
         AttachFiles,
         ExportChatJson,

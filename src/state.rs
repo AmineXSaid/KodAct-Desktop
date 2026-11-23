@@ -999,6 +999,13 @@ pub struct Chat {
     pub detailed: bool,
 }
 
+/// A menu open in the file view's toolbar.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DocMenu {
+    Zoom,
+    More,
+}
+
 /// The title bar's menus, and the sidebar's (its More row, your name).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TitleMenu {
@@ -2120,6 +2127,15 @@ pub struct AppState {
     next_comment: usize,
     /// A page (or slide) of the panel's document picked to comment on, from 0.
     pub doc_page_pick: Option<usize>,
+    /// How each file in the panel is scaled, by file (`doc_versions::file_id`).
+    pub doc_zoom: std::collections::HashMap<String, crate::doc_zoom::Zoom>,
+    /// Which files show their thumbnail rail (a deck or PDF does by default).
+    pub doc_thumbs: std::collections::HashMap<String, bool>,
+    /// The file view's open menu: the zoom list, or the tools that did not fit.
+    pub doc_menu: Option<DocMenu>,
+    /// The percentage the open file's pages are drawn at when fitted, for
+    /// the toolbar and for stepping from (set by the view as it draws).
+    pub doc_fitted: std::sync::Arc<std::sync::atomic::AtomicU16>,
     /// Sent comments on a Word file are also written into it as Word comments.
     pub doc_word_comments: bool,
     /// Those changes, for the version they belong to (`doc_version_key`);
@@ -2493,6 +2509,10 @@ impl AppState {
             doc_scroll: gpui::ScrollHandle::new(),
             next_comment: 1,
             doc_page_pick: None,
+            doc_zoom: Default::default(),
+            doc_thumbs: Default::default(),
+            doc_menu: None,
+            doc_fitted: std::sync::Arc::new(std::sync::atomic::AtomicU16::new(100)),
             doc_word_comments: true,
             doc_changes: None,
             doc_sheet: 0,
@@ -5186,6 +5206,61 @@ impl AppState {
         self.doc_text = false;
         self.doc_show_changes = false;
         self.doc_scroll.scroll_to_top_of_item(i.min(n - 1));
+        cx.notify();
+    }
+
+    /// The zoom of the panel's file.
+    pub fn doc_zoom_here(&self) -> crate::doc_zoom::Zoom {
+        self.doc
+            .as_ref()
+            .and_then(|f| self.doc_zoom.get(&crate::doc_versions::file_id(f)))
+            .copied()
+            .unwrap_or_default()
+    }
+
+    pub fn set_doc_zoom(&mut self, z: crate::doc_zoom::Zoom, cx: &mut Context<Self>) {
+        if let Some(f) = &self.doc {
+            self.doc_zoom.insert(crate::doc_versions::file_id(f), z);
+        }
+        self.doc_menu = None;
+        cx.notify();
+    }
+
+    /// One step in or out, from the scale the pages are drawn at now.
+    pub fn zoom_doc(&mut self, up: bool, cx: &mut Context<Self>) {
+        let now = match self.doc_zoom_here() {
+            crate::doc_zoom::Zoom::Percent(p) => p,
+            _ => self
+                .doc_fitted
+                .load(std::sync::atomic::Ordering::Relaxed),
+        };
+        self.set_doc_zoom(crate::doc_zoom::Zoom::step(now, up), cx);
+    }
+
+    /// Whether the panel's file shows its thumbnail rail.
+    pub fn doc_thumbs_here(&self) -> bool {
+        let Some(f) = &self.doc else { return false };
+        let default = matches!(
+            f.office(),
+            Some(crate::office::Kind::Pptx | crate::office::Kind::Pdf)
+        );
+        self.doc_thumbs
+            .get(&crate::doc_versions::file_id(f))
+            .copied()
+            .unwrap_or(default)
+    }
+
+    pub fn toggle_doc_thumbs(&mut self, cx: &mut Context<Self>) {
+        if let Some(f) = &self.doc {
+            let on = !self.doc_thumbs_here();
+            self.doc_thumbs.insert(crate::doc_versions::file_id(f), on);
+        }
+        cx.notify();
+    }
+
+    /// Open `menu`, or close it when it is the one open.
+    pub fn toggle_doc_menu(&mut self, menu: DocMenu, cx: &mut Context<Self>) {
+        self.doc_menu = (self.doc_menu != Some(menu)).then_some(menu);
         cx.notify();
     }
 

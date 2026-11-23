@@ -101,6 +101,11 @@ table in step.
 | Ctrl/⌘ 3 | Side panel: Files |
 | Ctrl/⌘ 4 | Side panel: Browser |
 | Alt F | Open file: full screen, or back |
+| Ctrl/⌘ = (or +) | Open file: zoom in |
+| Ctrl/⌘ - | Open file: zoom out |
+| Ctrl/⌘ 0 | Open file: fit to the panel's width |
+| Ctrl/⌘ Alt T | Open file: thumbnails |
+| Ctrl/⌘ G | Open file: go to a page |
 | Ctrl/⌘ \ | Side panel beside or below the chat |
 | Ctrl/⌘ F | Find in the conversation |
 | Ctrl/⌘ Shift F | Find in the file beside the chat |

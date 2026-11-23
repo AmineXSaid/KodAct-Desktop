@@ -25,6 +25,7 @@ mod diagnose;
 mod doc_tools;
 mod diagram;
 mod doc_versions;
+mod doc_zoom;
 mod downloads;
 mod draw;
 mod endpoints;
@@ -113,6 +114,12 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("secondary-shift-f", FindInFile, Some("Workspace")),
         KeyBinding::new("alt-down", NextPage, Some("Workspace")),
         KeyBinding::new("alt-up", PreviousPage, Some("Workspace")),
+        KeyBinding::new("secondary-=", DocZoomIn, Some("Workspace")),
+        KeyBinding::new("secondary-+", DocZoomIn, Some("Workspace")),
+        KeyBinding::new("secondary--", DocZoomOut, Some("Workspace")),
+        KeyBinding::new("secondary-0", DocZoomFit, Some("Workspace")),
+        KeyBinding::new("secondary-alt-t", ToggleThumbnails, Some("Workspace")),
+        KeyBinding::new("secondary-g", GoToPage, Some("Workspace")),
         KeyBinding::new("secondary-j", JumpToLatest, Some("Workspace")),
         KeyBinding::new("secondary-u", AttachFiles, Some("Workspace")),
         KeyBinding::new("secondary-shift-t", ToggleTasks, Some("Workspace")),
