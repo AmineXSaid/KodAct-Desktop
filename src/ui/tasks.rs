@@ -131,10 +131,16 @@ pub fn render(
     if list.is_empty() {
         return None;
     }
-    let running = list
-        .iter()
-        .filter(|t| t.status == ToolStatus::Running)
-        .count();
+    // Running only while the chat is working: a step its turn left marked
+    // running (stopped, the app closed) reads as stopped, not running.
+    let working = s.busy();
+    let running = if working {
+        list.iter()
+            .filter(|t| t.status == ToolStatus::Running)
+            .count()
+    } else {
+        0
+    };
     let failed = list
         .iter()
         .filter(|t| t.status == ToolStatus::Failed)
@@ -145,7 +151,11 @@ pub fn render(
     // Declined is not done: you said no, or you stopped the agent.
     let stopped = list
         .iter()
-        .filter(|t| t.stopped || t.status == ToolStatus::Interrupted)
+        .filter(|t| {
+            t.stopped
+                || t.status == ToolStatus::Interrupted
+                || (!working && t.status == ToolStatus::Running)
+        })
         .count();
     let denied = list
         .iter()

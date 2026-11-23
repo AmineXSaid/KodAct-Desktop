@@ -60,8 +60,7 @@ pub struct ItemContext {
     pub sources: std::sync::Arc<std::collections::HashSet<SharedString>>,
     pub zooms: std::sync::Arc<std::collections::HashMap<SharedString, f32>>,
     /// Each file card's first page, by its bytes' key (`AppState::card_thumbs`).
-    pub thumbs:
-        std::sync::Arc<std::collections::HashMap<u64, Option<std::sync::Arc<gpui::Image>>>>,
+    pub thumbs: std::sync::Arc<std::collections::HashMap<u64, Option<std::sync::Arc<gpui::Image>>>>,
     /// What the newest turn changed in the project's memory, under its reply.
     pub memory: Option<crate::state::MemoryChange>,
     /// The runs of calls opened to their steps, by their first block (in
@@ -340,7 +339,11 @@ fn memory_line(
         .gap(t.space.xs)
         .text_size(t.text.caption)
         .text_color(t.colors.text_muted)
-        .child(icon("icons/notebook-pen.svg", t.size.icon_xs, t.colors.coral))
+        .child(icon(
+            "icons/notebook-pen.svg",
+            t.size.icon_xs,
+            t.colors.coral,
+        ))
         .child(
             div()
                 .min_w_0()
@@ -831,6 +834,36 @@ fn assistant_row(
         *b = w.end;
         rows.push(super::work_group::render(blocks, w, cx, t));
         return true;
+    }
+    // Two or more files in a row show as a gallery of large tiles.
+    let files = blocks[at..]
+        .iter()
+        .take_while(|blk| matches!(blk, Block::File(f) if !f.is_diagram()))
+        .count();
+    if files > 1 {
+        let tiles = (at..at + files)
+            .filter_map(|i| match &blocks[i] {
+                Block::File(f) => Some(super::file_card::Tile {
+                    file: f.clone(),
+                    key: format!("{}-{}-{i}", cx.chat, cx.index),
+                    thumb: f
+                        .bytes
+                        .as_ref()
+                        .and_then(|b| cx.thumbs.get(&crate::office_render::key(b)).cloned())
+                        .flatten(),
+                }),
+                _ => None,
+            })
+            .collect();
+        rows.push(super::file_card::gallery(
+            tiles,
+            cx.state.clone(),
+            cx.open_doc.as_ref(),
+            cx.scale,
+            t,
+        ));
+        *b += files;
+        return false;
     }
     if denied_call(blocks, at) || folded_answer(blocks, at) || asked_call(blocks, at) {
         // A denied call never ran: its denial says all there is. An
@@ -1438,10 +1471,9 @@ pub(super) fn tool_outcome(call: &ToolCall) -> Option<String> {
                 trimmed.lines().count()
             };
             match call.kind {
-                ToolKind::Read if lines > 0 => Some(format!(
-                    "{lines} line{}",
-                    if lines == 1 { "" } else { "s" }
-                )),
+                ToolKind::Read if lines > 0 => {
+                    Some(format!("{lines} line{}", if lines == 1 { "" } else { "s" }))
+                }
                 ToolKind::Bash if lines > 0 => Some(format!(
                     "exit 0 · {lines} line{}",
                     if lines == 1 { "" } else { "s" }
@@ -1457,10 +1489,9 @@ pub(super) fn tool_outcome(call: &ToolCall) -> Option<String> {
                 }
                 ToolKind::Edit | ToolKind::Write if call.diff.is_empty() => Some("saved".into()),
                 ToolKind::Edit | ToolKind::Write => None,
-                _ if lines > 0 => Some(format!(
-                    "{lines} line{}",
-                    if lines == 1 { "" } else { "s" }
-                )),
+                _ if lines > 0 => {
+                    Some(format!("{lines} line{}", if lines == 1 { "" } else { "s" }))
+                }
                 _ => None,
             }
         }
@@ -1586,8 +1617,9 @@ pub(super) fn tool_header(
             _ if waiting => {
                 icon("icons/hand.svg", t.size.icon_xs, t.extra.accent).into_any_element()
             }
-            ToolStatus::Done => icon(call.kind.icon(), t.size.icon_xs, t.colors.text_muted)
-                .into_any_element(),
+            ToolStatus::Done => {
+                icon(call.kind.icon(), t.size.icon_xs, t.colors.text_muted).into_any_element()
+            }
             ToolStatus::Failed => {
                 let full = SharedString::from(call.output.trim().to_string());
                 div()
@@ -1708,8 +1740,8 @@ pub(super) fn tool_header(
             ", collapsed"
         }
     );
-    let mut row = super::button::KeyRow::new(SharedString::from(format!("tool-{key}")), aria, inner)
-        .w_full();
+    let mut row =
+        super::button::KeyRow::new(SharedString::from(format!("tool-{key}")), aria, inner).w_full();
     if has_body {
         let (st, chat, msg) = (cx.state.clone(), cx.chat, cx.index);
         let problem = is_problem(call.status);
@@ -1916,7 +1948,11 @@ pub(super) fn tool_body(
         } else {
             call.output.clone()
         };
-        let out_lang = if call.kind == ToolKind::Read { lang } else { "" };
+        let out_lang = if call.kind == ToolKind::Read {
+            lang
+        } else {
+            ""
+        };
         frame()
             .children(path_bar)
             .child(io_row("IN", call.target.clone(), "", t))
@@ -3074,10 +3110,8 @@ mod tests {
         assert_eq!(super::tool_outcome(&read).as_deref(), Some("3 lines"));
         assert_eq!(super::target_label(&read).as_ref(), "…/src/app.ts");
 
-        let mut bash_fail = crate::backend::tool_call(
-            "Bash",
-            &serde_json::json!({ "command": "npm test" }),
-        );
+        let mut bash_fail =
+            crate::backend::tool_call("Bash", &serde_json::json!({ "command": "npm test" }));
         bash_fail.status = crate::state::ToolStatus::Failed;
         assert_eq!(super::tool_outcome(&bash_fail).as_deref(), Some("failed"));
     }

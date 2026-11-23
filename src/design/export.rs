@@ -768,7 +768,9 @@ impl Chrome {
                     )?;
                 }
                 let lib = crate::design::root().ok_or_else(|| {
-                    Failure::Page("Figma export needs KodAct's design library (its clipper).".into())
+                    Failure::Page(
+                        "Figma export needs KodAct's design library (its clipper).".into(),
+                    )
                 })?;
                 let clipper =
                     std::fs::read_to_string(lib.join("clipper/capture.js")).map_err(|e| {

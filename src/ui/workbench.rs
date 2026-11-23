@@ -89,10 +89,25 @@ pub fn files(messages: &[Message]) -> Vec<FileRef> {
 }
 
 /// KodAct is driving the browser: a browser tool runs in the chat now.
-pub fn agent_browsing(messages: &[Message]) -> bool {
-    tools(messages).any(|t| {
-        t.status == ToolStatus::Running && t.target.starts_with(crate::browser::TOOL_PREFIX)
-    })
+/// Whether KodAct is driving the browser right now: the chat is working
+/// (`working`, a reply in progress) and a browser tool of this turn, after
+/// your last message, is still running. A browser call an earlier turn left
+/// marked running (stopped, the app closed, a reply that ended without its
+/// result) never counts.
+pub fn agent_browsing(messages: &[Message], working: bool) -> bool {
+    working
+        && tools(current_turn(messages)).any(|t| {
+            t.status == ToolStatus::Running && t.target.starts_with(crate::browser::TOOL_PREFIX)
+        })
+}
+
+/// The messages since your last one: the turn in progress, or the last.
+pub fn current_turn(messages: &[Message]) -> &[Message] {
+    let start = messages
+        .iter()
+        .rposition(|m| matches!(m, Message::User { .. }))
+        .map_or(0, |i| i + 1);
+    &messages[start..]
 }
 
 fn tools(messages: &[Message]) -> impl Iterator<Item = &crate::state::ToolCall> {
@@ -164,6 +179,8 @@ fn section_title(t: &Theme, text: &str) -> gpui::Div {
 pub struct View<'a> {
     pub tab: PanelTab,
     pub messages: &'a [Message],
+    /// The chat is working: a reply is in progress.
+    pub working: bool,
     /// The Browser tab's live view (`browser_view.rs`).
     pub browser: gpui::AnyView,
     /// The chat's sub-agents, open prompt disclosures, and focused agent.
@@ -333,8 +350,11 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
     let plan = all_plans.get(plan_at).cloned();
     let todos = todos(v.messages);
     let closer = state.clone();
-    let running_now = v.agents.iter().any(|r| r.ended.is_none())
-        || todos.iter().any(|(s, _)| *s == ToolStatus::Running);
+    // Live only while the chat is working: a task list or a sub-agent an
+    // earlier turn left unfinished is history, not work going on.
+    let running_now = v.working
+        && (v.agents.iter().any(|r| r.ended.is_none())
+            || todos.iter().any(|(s, _)| *s == ToolStatus::Running));
     let mut trailing: Vec<AnyElement> = Vec::new();
     if running_now {
         // Work is going on: neutral ink with a live dot, never a colour.
@@ -661,7 +681,13 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
                 .bg(ground)
                 // The browser and the Agents inspector manage their own internal scroll
                 // and pinned chrome; the other views scroll here.
-                .map(|d| if fills { d.flex().flex_col() } else { d.overflow_y_scroll() })
+                .map(|d| {
+                    if fills {
+                        d.flex().flex_col()
+                    } else {
+                        d.overflow_y_scroll()
+                    }
+                })
                 // Each non-Agents view arrives as the capsule lands on it; the Agents
                 // inspector skips the opacity fade so Split <-> Full toggles never flash.
                 .child(if v.tab == PanelTab::Agents {
@@ -730,13 +756,30 @@ mod tests {
             "mcp__kodact-browser__navigate",
             json!({"url": "https://a.example"}),
         )]);
-        assert!(agent_browsing(&m));
+        assert!(agent_browsing(&m, true));
+        // The same call, its turn over without a result: not browsing.
+        assert!(!agent_browsing(&m, false));
         if let Message::Assistant { blocks } = &mut m[0] {
             if let Block::Tool(t) = &mut blocks[0] {
                 t.status = ToolStatus::Done;
             }
         }
-        assert!(!agent_browsing(&m));
+        assert!(!agent_browsing(&m, true));
+    }
+
+    #[test]
+    fn a_browser_call_from_an_earlier_turn_is_not_browsing() {
+        // An earlier turn's call left running, then you asked something new
+        // and KodAct is working on that without the browser.
+        let mut m = reply(&[(
+            "mcp__kodact-browser__navigate",
+            json!({"url": "https://a.example"}),
+        )]);
+        m.push(Message::user(
+            "now something else".into(),
+            std::time::SystemTime::now(),
+        ));
+        assert!(!agent_browsing(&m, true));
     }
 
     #[test]

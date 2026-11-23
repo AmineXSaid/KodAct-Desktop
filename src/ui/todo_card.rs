@@ -136,18 +136,22 @@ pub fn slot(blocks: &[Block], b: usize) -> Option<usize> {
 pub fn render(list: &TodoList, key: &str, state: &Entity<AppState>, t: &Theme) -> AnyElement {
     let rows = list.items.iter().enumerate().map(|(i, todo)| {
         let mark: AnyElement = match todo.state {
-            TodoState::Done => {
-                icon("icons/circle-check.svg", t.size.icon_sm, t.colors.text_muted)
-                    .into_any_element()
-            }
+            TodoState::Done => icon(
+                "icons/circle-check.svg",
+                t.size.icon_sm,
+                t.colors.text_muted,
+            )
+            .into_any_element(),
             TodoState::Active => super::turning_logo(
                 f32::from(t.size.icon_sm),
                 SharedString::from(format!("todo-run-{key}-{i}")),
             ),
-            TodoState::Pending => {
-                icon("icons/circle-dashed.svg", t.size.icon_sm, t.colors.text_subtle)
-                    .into_any_element()
-            }
+            TodoState::Pending => icon(
+                "icons/circle-dashed.svg",
+                t.size.icon_sm,
+                t.colors.text_subtle,
+            )
+            .into_any_element(),
         };
         let (fg, weight) = match todo.state {
             TodoState::Done => (t.colors.text_muted, FontWeight::NORMAL),
@@ -273,9 +277,18 @@ mod tests {
         assert_eq!(
             list.items,
             vec![
-                Todo { state: TodoState::Done, text: "Read the budget sheet".into() },
-                Todo { state: TodoState::Active, text: "Update and recalculate".into() },
-                Todo { state: TodoState::Pending, text: "Write the memo".into() },
+                Todo {
+                    state: TodoState::Done,
+                    text: "Read the budget sheet".into()
+                },
+                Todo {
+                    state: TodoState::Active,
+                    text: "Update and recalculate".into()
+                },
+                Todo {
+                    state: TodoState::Pending,
+                    text: "Write the memo".into()
+                },
             ]
         );
     }
@@ -314,11 +327,7 @@ mod tests {
         let first = call(json!([{"content": "A", "status": "in_progress"}]));
         let read = crate::backend::tool_call("Read", &json!({"file_path": "a.rs"}));
         let second = call(json!([{"content": "A", "status": "completed"}]));
-        let blocks = vec![
-            Block::Tool(first),
-            Block::Tool(read),
-            Block::Tool(second),
-        ];
+        let blocks = vec![Block::Tool(first), Block::Tool(read), Block::Tool(second)];
         // The first call holds the card, showing the latest list (block 2).
         assert_eq!(slot(&blocks, 0), Some(2));
         // The later call adds nothing; non-todo blocks have no slot.
@@ -330,7 +339,9 @@ mod tests {
     fn the_plan_tab_reads_the_chats_latest_list() {
         let messages = vec![
             Message::Assistant {
-                blocks: vec![Block::Tool(call(json!([{"content": "Old", "status": "pending"}])))],
+                blocks: vec![Block::Tool(call(
+                    json!([{"content": "Old", "status": "pending"}]),
+                ))],
             },
             Message::Assistant {
                 blocks: vec![Block::Tool(call(json!([

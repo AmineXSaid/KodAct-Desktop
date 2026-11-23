@@ -3,13 +3,12 @@
 pub mod activity;
 pub mod add_menu;
 pub mod agent_jumper;
-pub mod agent_row;
 pub mod agent_roster;
+pub mod agent_row;
 pub mod agent_strip;
 pub mod agents_editor;
 pub mod agents_view;
 pub mod approvals;
-pub mod artifact_card;
 pub mod askpass;
 pub mod attachment_editor;
 pub mod attachments;
@@ -23,13 +22,13 @@ pub mod command_palette;
 pub mod compose_style;
 pub mod composer;
 pub mod confirm;
+pub mod context_menu;
+pub mod context_ring;
 pub mod design_bar;
 pub mod design_chips;
 pub mod design_comment;
 pub mod design_home;
 pub mod design_marks;
-pub mod context_menu;
-pub mod context_ring;
 pub mod diagnostics;
 pub mod diagram_view;
 pub mod doc_changes;
@@ -47,7 +46,9 @@ pub mod files_pane;
 pub mod find_bar;
 pub mod goal_bar;
 pub mod guide;
+pub mod heat_rail;
 pub mod hooks_editor;
+pub mod image_view;
 pub mod kodact_mark;
 mod lens;
 pub mod markdown;
@@ -56,17 +57,15 @@ pub mod mcp_editor;
 pub mod memory_view;
 pub mod message;
 pub mod mode_menu;
-pub mod heat_rail;
-pub mod pet;
 pub mod model_menu;
 pub mod motion;
 pub mod new_project;
 pub mod office_editor;
 pub mod onboarding;
-pub mod image_view;
 pub mod page_field;
 pub mod panel_chrome;
 pub mod permissions_editor;
+pub mod pet;
 pub mod planned;
 pub mod plugins_editor;
 pub mod profiles_editor;
@@ -99,8 +98,8 @@ pub mod starters;
 pub mod status_bar;
 pub mod tasks;
 pub mod terminal;
-pub mod text_editor;
 pub mod terminal_dock;
+pub mod text_editor;
 pub mod title_menus;
 pub mod todo_card;
 pub mod versions;
@@ -319,7 +318,11 @@ pub fn search_field(t: &Theme, input: &gpui::Entity<gpui::component::input::Inpu
         .border_color(t.colors.border)
         .bg(t.extra.sunk)
         .hover(move |d| d.border_color(edge))
-        .child(icon("icons/search.svg", t.size.icon_sm, t.colors.text_muted))
+        .child(icon(
+            "icons/search.svg",
+            t.size.icon_sm,
+            t.colors.text_muted,
+        ))
         .child(
             div().flex_1().min_w_0().child(
                 gpui::component::input::Input::new(input)
@@ -520,4 +523,3 @@ mod ui_helper_tests {
         assert_eq!(t.shown.len(), 800);
     }
 }
-

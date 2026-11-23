@@ -241,9 +241,7 @@ pub fn window(
         t,
         title(t, title_text),
         leading_icon
-            .map(|p| {
-                super::icon(p, t.size.icon, t.colors.primary).into_any_element()
-            })
+            .map(|p| super::icon(p, t.size.icon, t.colors.primary).into_any_element())
             .into_iter()
             .collect(),
         vec![close_button(

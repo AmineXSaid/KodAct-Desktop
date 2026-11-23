@@ -814,7 +814,12 @@ pub struct SystemCard {
 }
 
 /// The artboards the Insert menu offers: a name and a width.
-pub const ARTBOARDS: [(&str, u32); 4] = [("Desktop", 1440), ("Laptop", 1280), ("Tablet", 834), ("Phone", 390)];
+pub const ARTBOARDS: [(&str, u32); 4] = [
+    ("Desktop", 1440),
+    ("Laptop", 1280),
+    ("Tablet", 834),
+    ("Phone", 390),
+];
 
 /// A theme colour as CSS, for what KodAct draws on a page.
 fn css(c: gpui::Hsla) -> String {
@@ -1836,10 +1841,7 @@ pub enum Request {
         edit: bool,
     },
     /// Cancel queueing in CLI and send that queued message right away.
-    SendQueuedNow {
-        chat: usize,
-        uuid: String,
-    },
+    SendQueuedNow { chat: usize, uuid: String },
     /// What fills the chat's context, for the Session column.
     ContextUsage { chat: usize },
 }
@@ -2024,7 +2026,8 @@ pub struct AppState {
     pub design_pins: bool,
     pub design_resolved: bool,
     /// Comments waiting for a chat's reply to end, by chat.
-    pub design_held: std::collections::HashMap<usize, Vec<(String, Vec<crate::attach::Attachment>)>>,
+    pub design_held:
+        std::collections::HashMap<usize, Vec<(String, Vec<crate::attach::Attachment>)>>,
     /// The Insert tool in hand: drawing marks, or moving the page.
     pub design_tool: Option<InsertTool>,
     /// Marks drawn on the chats' design pages: (chat, page, mark).
@@ -2057,10 +2060,6 @@ pub struct AppState {
     pub design_thumbs: std::collections::HashMap<std::path::PathBuf, Thumb>,
     design_thumb_queue: std::collections::VecDeque<std::path::PathBuf>,
     design_thumbs_running: bool,
-    /// The opening of each Word, PowerPoint, PDF or workbook artifact, for
-    /// its card's page (`ui::artifact_card`), by `artifact_card::key`; read
-    /// once each, off the render path. Empty while it's being read.
-    pub artifact_snips: std::collections::HashMap<String, std::sync::Arc<Vec<Vec<String>>>>,
     /// The Agents tab's pill strip: its scroll, and the pill it last
     /// brought into view (`agent_strip.rs`).
     pub agent_strip: gpui::ScrollHandle,
@@ -2093,7 +2092,8 @@ pub struct AppState {
         std::collections::HashMap<std::path::PathBuf, (Vec<std::sync::Arc<str>>, usize)>,
     /// A deck's slide pictures for the panel's rail, by page and version
     /// (`design::export::slide_thumbs`); asked once each.
-    pub design_slides: std::collections::HashMap<(std::path::PathBuf, usize), Vec<std::path::PathBuf>>,
+    pub design_slides:
+        std::collections::HashMap<(std::path::PathBuf, usize), Vec<std::path::PathBuf>>,
     design_slides_asked: std::collections::HashSet<(std::path::PathBuf, usize)>,
     /// Pages made beside a chat's own (duplicates), by chat.
     pub design_extra: Vec<(usize, std::path::PathBuf)>,
@@ -2117,7 +2117,8 @@ pub struct AppState {
     /// Each file card's first page, by its bytes' key (`office_render::key`):
     /// `None` while it is drawn, or when it cannot be (no LibreOffice, a
     /// file it cannot read); the card then shows the app's mark.
-    pub card_thumbs: std::sync::Arc<std::collections::HashMap<u64, Option<std::sync::Arc<gpui::Image>>>>,
+    pub card_thumbs:
+        std::sync::Arc<std::collections::HashMap<u64, Option<std::sync::Arc<gpui::Image>>>>,
     pub doc_preview: Option<(
         SharedString,
         Result<std::sync::Arc<crate::office::Preview>, String>,
@@ -2519,7 +2520,6 @@ impl AppState {
             design_thumbs: Default::default(),
             design_thumb_queue: Default::default(),
             design_thumbs_running: false,
-            artifact_snips: Default::default(),
             agent_strip: Default::default(),
             agent_strip_at: Default::default(),
             agent_jumper_focus: Default::default(),
@@ -3290,15 +3290,21 @@ impl AppState {
                 page: c.page,
                 part: c.part,
                 text: c.text,
-                sent: if c.sent == "sent" { CommentSent::Sent } else { CommentSent::Note },
+                sent: if c.sent == "sent" {
+                    CommentSent::Sent
+                } else {
+                    CommentSent::Note
+                },
                 resolved: c.resolved,
             });
         }
-        self.design_marks.extend(d.marks.into_iter().map(|(p, m)| (chat, p, m)));
+        self.design_marks
+            .extend(d.marks.into_iter().map(|(p, m)| (chat, p, m)));
         if !d.order.is_empty() {
             self.design_order.insert(chat, d.order);
         }
-        self.design_extra.extend(d.extra.into_iter().map(|p| (chat, p)));
+        self.design_extra
+            .extend(d.extra.into_iter().map(|p| (chat, p)));
     }
 
     /// Write what's pending now (the app is closing).
@@ -3756,7 +3762,9 @@ impl AppState {
         cx: &mut Context<Self>,
     ) {
         let url = url.trim().to_string();
-        let token = token.map(|t| t.trim().to_string()).filter(|t| !t.is_empty());
+        let token = token
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty());
         let Some(dir) = crate::templates::projects_home()
             .and_then(|h| crate::templates::clone_target(&h, &url))
         else {
@@ -3779,10 +3787,11 @@ impl AppState {
                         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
                     }
                     let out = crate::templates::clone_command(&url, &d, token.as_deref())
-                        .output().map_err(|e| match e.kind() {
-                        std::io::ErrorKind::NotFound => "git isn't installed".to_string(),
-                        _ => e.to_string(),
-                    })?;
+                        .output()
+                        .map_err(|e| match e.kind() {
+                            std::io::ErrorKind::NotFound => "git isn't installed".to_string(),
+                            _ => e.to_string(),
+                        })?;
                     if out.status.success() {
                         Ok(())
                     } else {
@@ -5337,9 +5346,7 @@ impl AppState {
     pub fn zoom_doc(&mut self, up: bool, cx: &mut Context<Self>) {
         let now = match self.doc_zoom_here() {
             crate::doc_zoom::Zoom::Percent(p) => p,
-            _ => self
-                .doc_fitted
-                .load(std::sync::atomic::Ordering::Relaxed),
+            _ => self.doc_fitted.load(std::sync::atomic::Ordering::Relaxed),
         };
         self.set_doc_zoom(crate::doc_zoom::Zoom::step(now, up), cx);
     }
@@ -5560,12 +5567,8 @@ impl AppState {
             let _ = this.update(cx, |s, cx| match result {
                 Ok((updated, preview)) => {
                     let bytes_arc: std::sync::Arc<[u8]> = std::sync::Arc::from(updated);
-                    let key: SharedString = format!(
-                        "{}#{:x}",
-                        name,
-                        crate::office_render::key(&bytes_arc)
-                    )
-                    .into();
+                    let key: SharedString =
+                        format!("{}#{:x}", name, crate::office_render::key(&bytes_arc)).into();
                     if let Some(d) = s.doc.as_mut() {
                         if d.name == name {
                             d.bytes = Some(bytes_arc);
@@ -5622,7 +5625,11 @@ impl AppState {
             return None;
         }
         let p = std::path::PathBuf::from(f.path.as_ref()?.as_ref());
-        Some(if p.is_absolute() { p } else { self.project_dir.join(p) })
+        Some(if p.is_absolute() {
+            p
+        } else {
+            self.project_dir.join(p)
+        })
     }
 
     /// Save what is edited in the panel: cells of a workbook, or the text of
@@ -5680,7 +5687,10 @@ impl AppState {
     /// (`office_edit.rs`), to its project path, kept as a new version; the
     /// pages are drawn again.
     fn save_office_text(&mut self, cx: &mut Context<Self>) {
-        let (Some(file), Some(bytes)) = (self.doc.clone(), self.doc.as_ref().and_then(|f| f.bytes.clone())) else {
+        let (Some(file), Some(bytes)) = (
+            self.doc.clone(),
+            self.doc.as_ref().and_then(|f| f.bytes.clone()),
+        ) else {
             return;
         };
         let words = self.doc_words.clone();
@@ -5833,7 +5843,9 @@ impl AppState {
     /// Whether the live view acts for this chat now: it is on screen, and
     /// you haven't taken the browser.
     fn design_shown(&self, chat: usize) -> bool {
-        self.design_follow && self.current == Some(chat) && self.design_live.as_ref().is_some_and(|l| l.chat == chat)
+        self.design_follow
+            && self.current == Some(chat)
+            && self.design_live.as_ref().is_some_and(|l| l.chat == chat)
     }
 
     /// The browser comes to the panel, unless a document you opened is there.
@@ -5864,7 +5876,13 @@ impl AppState {
 
     /// A tool call on a page: a Write's whole content is its last draft; an
     /// edit shows the page it changes.
-    fn design_call(&mut self, chat: usize, name: &str, input: &serde_json::Value, cx: &mut Context<Self>) {
+    fn design_call(
+        &mut self,
+        chat: usize,
+        name: &str,
+        input: &serde_json::Value,
+        cx: &mut Context<Self>,
+    ) {
         let path = input["file_path"].as_str().unwrap_or_default();
         match name {
             "Write" => {
@@ -5890,7 +5908,11 @@ impl AppState {
             return;
         };
         let unseen = !self.design_follow;
-        if let Some(l) = self.design_live.as_mut().filter(|l| l.chat == chat && l.path == full) {
+        if let Some(l) = self
+            .design_live
+            .as_mut()
+            .filter(|l| l.chat == chat && l.path == full)
+        {
             l.writing = false;
             l.unseen = unseen;
         }
@@ -5950,9 +5972,9 @@ impl AppState {
     /// The design the badge tells of: the chat on screen's, while it
     /// replies and KodAct writes it.
     pub fn designing(&self) -> Option<&LiveDesign> {
-        self.design_live
-            .as_ref()
-            .filter(|l| l.writing && self.current == Some(l.chat) && self.replies.contains_key(&l.chat))
+        self.design_live.as_ref().filter(|l| {
+            l.writing && self.current == Some(l.chat) && self.replies.contains_key(&l.chat)
+        })
     }
 
     /// The pages this chat has written or changed, in the order it first
@@ -6077,7 +6099,9 @@ fix everything under 8, render it again to check, then tell me the scores before
             return;
         };
         let stem = stem
-            .or_else(|| (!self.web_page.title.trim().is_empty()).then(|| self.web_page.title.clone()))
+            .or_else(|| {
+                (!self.web_page.title.trim().is_empty()).then(|| self.web_page.title.clone())
+            })
             .unwrap_or_else(|| "page".to_string());
         let name = crate::downloads::clean_name(&format!("{stem}.pdf"));
         let to = crate::downloads::free_path(&dir, &name);
@@ -6262,7 +6286,8 @@ fix everything under 8, render it again to check, then tell me the scores before
         let ext = page
             .extension()
             .map_or("html".to_string(), |e| e.to_string_lossy().into_owned());
-        let to = crate::downloads::free_path(dir, &format!("{} copy.{ext}", stem.to_string_lossy()));
+        let to =
+            crate::downloads::free_path(dir, &format!("{} copy.{ext}", stem.to_string_lossy()));
         if let Err(e) = std::fs::copy(&page, &to) {
             return self.show_toast(format!("Couldn't copy the page: {e}"), cx);
         }
@@ -6339,7 +6364,11 @@ fix everything under 8, render it again to check, then tell me the scores before
             .iter()
             .filter(|(_, p, _)| *p == page)
             .map(|(_, _, m)| {
-                let now = m.anchor.as_ref().and_then(|a| self.design_anchors.get(&a.selector)).copied();
+                let now = m
+                    .anchor
+                    .as_ref()
+                    .and_then(|a| self.design_anchors.get(&a.selector))
+                    .copied();
                 m.followed(now)
             })
             .collect()
@@ -6349,7 +6378,13 @@ fix everything under 8, render it again to check, then tell me the scores before
     /// say otherwise).
     pub fn design_part_now(&self, part: &crate::web_view::PagePart) -> crate::web_view::PagePart {
         match self.design_anchors.get(&part.selector) {
-            Some(&(x, y, w, h)) => crate::web_view::PagePart { x, y, w, h, ..part.clone() },
+            Some(&(x, y, w, h)) => crate::web_view::PagePart {
+                x,
+                y,
+                w,
+                h,
+                ..part.clone()
+            },
             None => part.clone(),
         }
     }
@@ -6407,7 +6442,8 @@ fix everything under 8, render it again to check, then tell me the scores before
             if let Some((x, y)) = mark.anchor_point() {
                 self.design_anchor_next += 1;
                 let id = self.design_anchor_next;
-                self.design_anchor_wait.insert(id, (page.clone(), mark.points.clone()));
+                self.design_anchor_wait
+                    .insert(id, (page.clone(), mark.points.clone()));
                 self.web_send(crate::web_view::Cmd::AnchorAt { id, x, y }, cx);
             }
             self.design_marks.push((chat, page, mark));
@@ -6474,7 +6510,12 @@ fix everything under 8, render it again to check, then tell me the scores before
         let name = page
             .file_name()
             .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-        let n = self.design_comments.iter().filter(|c| c.page == page).count() + 1;
+        let n = self
+            .design_comments
+            .iter()
+            .filter(|c| c.page == page)
+            .count()
+            + 1;
         let said = if text.is_empty() {
             format!("{} on the page", part.text)
         } else {
@@ -6535,7 +6576,10 @@ fix everything under 8, render it again to check, then tell me the scores before
                     attachments.push(a);
                 }
             }
-            Err(e) => self.show_toast(format!("The marks' picture didn't work ({e}); they go as words."), cx),
+            Err(e) => self.show_toast(
+                format!("The marks' picture didn't work ({e}); they go as words."),
+                cx,
+            ),
         }
         self.design_marks_off(&out.page.clone(), cx);
         let sent = if self.replies.contains_key(&out.chat) {
@@ -6561,7 +6605,11 @@ fix everything under 8, render it again to check, then tell me the scores before
 
     /// Show the page in an artboard of this width (None: the panel's own),
     /// zoomed to keep all of it in view as the panel changes.
-    pub fn design_set_artboard(&mut self, board: Option<(&'static str, u32)>, cx: &mut Context<Self>) {
+    pub fn design_set_artboard(
+        &mut self,
+        board: Option<(&'static str, u32)>,
+        cx: &mut Context<Self>,
+    ) {
         self.design_artboard = board;
         self.design_fit_artboard(cx);
         if board.is_none() {
@@ -6637,7 +6685,11 @@ fix everything under 8, render it again to check, then tell me the scores before
     /// Make the open chat a design chat set up with `setup`, or an
     /// ordinary chat again (None). Its next message starts KodAct CLI again
     /// (resuming the conversation) with the design prompt and tools.
-    pub fn set_design(&mut self, setup: Option<crate::design::prompt::Setup>, cx: &mut Context<Self>) {
+    pub fn set_design(
+        &mut self,
+        setup: Option<crate::design::prompt::Setup>,
+        cx: &mut Context<Self>,
+    ) {
         if setup.is_some() && crate::design::root().is_none() {
             return self.show_toast(
                 "KodAct's design library isn't installed: put design-library beside KodAct, or set KODACT_DESIGN_LIB.",
@@ -6657,7 +6709,9 @@ fix everything under 8, render it again to check, then tell me the scores before
             self.show_toast(toast, cx);
             return cx.notify();
         };
-        let Some(chat) = self.chat_mut(id) else { return };
+        let Some(chat) = self.chat_mut(id) else {
+            return;
+        };
         if chat.design == setup {
             return;
         }
@@ -6668,7 +6722,9 @@ fix everything under 8, render it again to check, then tell me the scores before
                 s.surface.label()
             ),
             (Some(s), Some(_)) => format!("Design chat: {}.", s.surface.label()),
-            (None, _) => "An ordinary chat again: no design prompt or tools from the next message.".into(),
+            (None, _) => {
+                "An ordinary chat again: no design prompt or tools from the next message.".into()
+            }
         };
         // Its KodAct CLI starts again on the next message, unless a reply is
         // running (that one keeps what it started with).
@@ -6690,7 +6746,11 @@ fix everything under 8, render it again to check, then tell me the scores before
 
     /// Make the open chat a design chat for `surface`, keeping the design
     /// system, template and skill it already has.
-    pub fn design_surface(&mut self, surface: crate::design::prompt::Surface, cx: &mut Context<Self>) {
+    pub fn design_surface(
+        &mut self,
+        surface: crate::design::prompt::Surface,
+        cx: &mut Context<Self>,
+    ) {
         let mut setup = self.design_setup().cloned().unwrap_or_default();
         setup.surface = surface;
         self.set_design(Some(setup), cx);
@@ -6748,33 +6808,6 @@ fix everything under 8, render it again to check, then tell me the scores before
     pub fn set_gallery_tab(&mut self, tab: GalleryTab, cx: &mut Context<Self>) {
         self.gallery_tab = tab;
         cx.notify();
-    }
-
-    /// Cards show these artifacts: read the opening of each binary one not
-    /// read yet, in the background.
-    pub fn want_artifact_snips(&mut self, files: Vec<FileRef>, cx: &mut Context<Self>) {
-        for f in files {
-            let (Some(kind), Some(bytes)) = (f.office(), f.bytes.clone()) else {
-                continue;
-            };
-            let key = crate::ui::artifact_card::key(&f);
-            if self.artifact_snips.contains_key(&key) {
-                continue;
-            }
-            self.artifact_snips.insert(key.clone(), Default::default());
-            cx.spawn(async move |this, cx| {
-                let snip = cx
-                    .background_spawn(async move {
-                        crate::ui::artifact_card::office_snip(kind, &bytes)
-                    })
-                    .await;
-                let _ = this.update(cx, |s, cx| {
-                    s.artifact_snips.insert(key, std::sync::Arc::new(snip));
-                    cx.notify();
-                });
-            })
-            .detach();
-        }
     }
 
     /// The gallery shows these previews: picture each that has none yet,
@@ -6845,7 +6878,9 @@ fix everything under 8, render it again to check, then tell me the scores before
     ) {
         use crate::design::library::Kind;
         use crate::design::prompt::{Setup, Surface};
-        let Some(ix) = self.design_index.clone() else { return };
+        let Some(ix) = self.design_index.clone() else {
+            return;
+        };
         let Some(e) = ix.get(kind, id) else { return };
         let surface = match e.mode.as_deref() {
             Some("deck") => Surface::Deck,
@@ -6871,10 +6906,9 @@ fix everything under 8, render it again to check, then tell me the scores before
             _ => {}
         }
         let ask = match (&e.query, e.kind) {
-            (_, Some(Kind::DesignSystem)) => format!(
-                "Make a landing page in the {} design system.",
-                e.title
-            ),
+            (_, Some(Kind::DesignSystem)) => {
+                format!("Make a landing page in the {} design system.", e.title)
+            }
             (Some(q), _) => q.clone(),
             _ if !e.example_prompt.trim().is_empty() => e.example_prompt.clone(),
             _ => format!("Make something like {}.", e.title),
@@ -6913,7 +6947,13 @@ fix everything under 8, render it again to check, then tell me the scores before
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_else(|| "figma".into())
             .chars()
-            .map(|c| if c.is_ascii_alphanumeric() || c == '-' { c.to_ascii_lowercase() } else { '-' })
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '-' {
+                    c.to_ascii_lowercase()
+                } else {
+                    '-'
+                }
+            })
             .collect();
         let to = project.join("designs").join(&stem).join("index.html");
         self.show_toast("Opening the Figma file…", cx);
@@ -6950,7 +6990,9 @@ fix everything under 8, render it again to check, then tell me the scores before
     /// The page's version, for its slide pictures: it changes with each of
     /// KodAct's edits.
     pub fn design_version_of(&self, page: &std::path::Path) -> usize {
-        self.design_versions.get(page).map_or(0, |(list, at)| list.len() * 1000 + at)
+        self.design_versions
+            .get(page)
+            .map_or(0, |(list, at)| list.len() * 1000 + at)
     }
 
     /// The rail's pictures of the deck on screen, taken in the background
@@ -6987,7 +7029,11 @@ fix everything under 8, render it again to check, then tell me the scores before
         let next = &all[at.map_or(0, |i| (i + 1) % all.len())];
         self.pet = Some(next.id.clone());
         let _ = crate::design::pets::choose(Some(&next.id));
-        let about = if next.description.is_empty() { String::new() } else { format!(": {}", next.description) };
+        let about = if next.description.is_empty() {
+            String::new()
+        } else {
+            format!(": {}", next.description)
+        };
         self.show_toast(format!("{}{about}", next.name), cx);
         cx.notify();
     }
@@ -7048,13 +7094,21 @@ fix everything under 8, render it again to check, then tell me the scores before
         };
         self.routines.push(r);
         let _ = crate::design::routines::save(&self.routines);
-        self.show_toast(format!("Routine made: it runs {}, while KodAct is open. Manage it in Design › Routines.", when.say()), cx);
+        self.show_toast(
+            format!(
+                "Routine made: it runs {}, while KodAct is open. Manage it in Design › Routines.",
+                when.say()
+            ),
+            cx,
+        );
         cx.notify();
     }
 
     /// Run a routine now: a new chat in its project, set up as it was.
     pub fn run_routine(&mut self, id: &str, cx: &mut Context<Self>) {
-        let Some(i) = self.routines.iter().position(|r| r.id == id) else { return };
+        let Some(i) = self.routines.iter().position(|r| r.id == id) else {
+            return;
+        };
         let r = self.routines[i].clone();
         self.routines[i].last_run = Some(chrono::Local::now().timestamp());
         let _ = crate::design::routines::save(&self.routines);
@@ -7105,7 +7159,9 @@ fix everything under 8, render it again to check, then tell me the scores before
             if alive.is_err() {
                 break;
             }
-            cx.background_executor().timer(std::time::Duration::from_secs(30)).await;
+            cx.background_executor()
+                .timer(std::time::Duration::from_secs(30))
+                .await;
         })
         .detach();
     }
@@ -7113,8 +7169,13 @@ fix everything under 8, render it again to check, then tell me the scores before
     /// A chat's latest reply, as Langfuse traces it (`design::trace`).
     fn trace_turn(&self, chat: usize) -> Option<crate::design::trace::Turn> {
         let c = self.chats.iter().find(|c| c.id == chat)?;
-        let start = c.messages.iter().rposition(|m| matches!(m, Message::User { .. }))?;
-        let Message::User { text, .. } = &c.messages[start] else { return None };
+        let start = c
+            .messages
+            .iter()
+            .rposition(|m| matches!(m, Message::User { .. }))?;
+        let Message::User { text, .. } = &c.messages[start] else {
+            return None;
+        };
         let mut t = crate::design::trace::Turn {
             chat: c.title.to_string(),
             session: c.session.clone(),
@@ -7129,14 +7190,18 @@ fix everything under 8, render it again to check, then tell me the scores before
                     for b in blocks {
                         match b {
                             Block::Text(x) => t.output.push_str(x),
-                            Block::Tool(call) => t.tools.push(format!("{:?} {}", call.kind, call.target)),
+                            Block::Tool(call) => {
+                                t.tools.push(format!("{:?} {}", call.kind, call.target))
+                            }
                             _ => {}
                         }
                     }
                 }
                 Message::TurnEnd { seconds, usage } => {
                     t.seconds = Some(*seconds);
-                    t.tokens = usage.as_ref().map(|u| (u.input + u.cache_read + u.cache_creation, u.output));
+                    t.tokens = usage
+                        .as_ref()
+                        .map(|u| (u.input + u.cache_read + u.cache_creation, u.output));
                 }
                 Message::Notice { error: true, .. } => t.failed = true,
                 _ => {}
@@ -7158,7 +7223,8 @@ fix everything under 8, render it again to check, then tell me the scores before
         cx.spawn(async move |this, cx| {
             let ix = cx
                 .background_spawn(async move {
-                    crate::design::root().map(|r| std::sync::Arc::new(crate::design::library::Index::load(&r)))
+                    crate::design::root()
+                        .map(|r| std::sync::Arc::new(crate::design::library::Index::load(&r)))
                 })
                 .await;
             let _ = this.update(cx, |s, cx| {
@@ -7174,12 +7240,22 @@ fix everything under 8, render it again to check, then tell me the scores before
 
     /// Put a page of the chat's before another in its list (dragged in
     /// the Pages menu).
-    pub fn design_move_page(&mut self, from: &std::path::Path, before: &std::path::Path, cx: &mut Context<Self>) {
+    pub fn design_move_page(
+        &mut self,
+        from: &std::path::Path,
+        before: &std::path::Path,
+        cx: &mut Context<Self>,
+    ) {
         let Some(chat) = self.current else { return };
         let mut order = self.design_pages();
-        let Some(at) = order.iter().position(|p| p == from) else { return };
+        let Some(at) = order.iter().position(|p| p == from) else {
+            return;
+        };
         let moved = order.remove(at);
-        let to = order.iter().position(|p| p == before).unwrap_or(order.len());
+        let to = order
+            .iter()
+            .position(|p| p == before)
+            .unwrap_or(order.len());
         order.insert(to, moved);
         self.design_order.insert(chat, order);
         self.mark_dirty(chat, cx);
@@ -7198,18 +7274,31 @@ fix everything under 8, render it again to check, then tell me the scores before
         let Some(page) = self.design_on_screen() else {
             return Vec::new();
         };
-        self.design_comments.iter().filter(|c| c.page == page).collect()
+        self.design_comments
+            .iter()
+            .filter(|c| c.page == page)
+            .collect()
     }
 
     /// Comment on the part picked: a note for yourself, or (`to_forge`) a
     /// request KodAct acts on; while KodAct replies it waits for the reply to
     /// end (`queue`), or reaches KodAct at its next step.
-    pub fn design_comment(&mut self, text: String, to_forge: bool, queue: bool, cx: &mut Context<Self>) {
+    pub fn design_comment(
+        &mut self,
+        text: String,
+        to_forge: bool,
+        queue: bool,
+        cx: &mut Context<Self>,
+    ) {
         let text = text.trim().to_string();
         let (Some(page), Some(chat)) = (self.design_on_screen(), self.current) else {
             return;
         };
-        let Some(part) = self.design_pick.take().filter(|_| !text.is_empty() || self.design_pick_marks) else {
+        let Some(part) = self
+            .design_pick
+            .take()
+            .filter(|_| !text.is_empty() || self.design_pick_marks)
+        else {
             return;
         };
         if std::mem::take(&mut self.design_pick_marks) {
@@ -7225,13 +7314,21 @@ fix everything under 8, render it again to check, then tell me the scores before
             self.send_in(chat, message, Vec::new(), cx);
             CommentSent::Sent
         } else if queue {
-            self.design_held.entry(chat).or_default().push((message, Vec::new()));
+            self.design_held
+                .entry(chat)
+                .or_default()
+                .push((message, Vec::new()));
             CommentSent::Waiting
         } else {
             self.queue_message(message, cx);
             CommentSent::Sent
         };
-        let n = self.design_comments.iter().filter(|c| c.page == page).count() + 1;
+        let n = self
+            .design_comments
+            .iter()
+            .filter(|c| c.page == page)
+            .count()
+            + 1;
         self.design_comments.push(DesignComment {
             n,
             chat,
@@ -7249,7 +7346,11 @@ fix everything under 8, render it again to check, then tell me the scores before
     /// Mark a comment done, or open it again.
     pub fn design_resolve(&mut self, page: &std::path::Path, n: usize, cx: &mut Context<Self>) {
         let mut chat = None;
-        if let Some(c) = self.design_comments.iter_mut().find(|c| c.page == page && c.n == n) {
+        if let Some(c) = self
+            .design_comments
+            .iter_mut()
+            .find(|c| c.page == page && c.n == n)
+        {
             c.resolved = !c.resolved;
             chat = Some(c.chat);
         }
@@ -7837,7 +7938,9 @@ fix everything under 8, render it again to check, then tell me the scores before
                 self.design_anchors = now.into_iter().collect();
             }
             Update::AnchoredAt(id, part) => {
-                let (Some((page, points)), Some(part)) = (self.design_anchor_wait.remove(&id), part) else {
+                let (Some((page, points)), Some(part)) =
+                    (self.design_anchor_wait.remove(&id), part)
+                else {
                     return;
                 };
                 let found = self
@@ -8780,7 +8883,9 @@ fix everything under 8, render it again to check, then tell me the scores before
                 s.libreoffice = office;
                 cx.notify();
             });
-            let now = cx.background_spawn(async { crate::doc_tools::prepare() }).await;
+            let now = cx
+                .background_spawn(async { crate::doc_tools::prepare() })
+                .await;
             let _ = this.update(cx, |s, cx| {
                 // Only an install is worth a word: finding one says nothing.
                 if before != now {
@@ -9070,10 +9175,7 @@ fix everything under 8, render it again to check, then tell me the scores before
         if let Request::SendQueuedNow { chat, uuid } = req {
             match result {
                 Ok(v) if v["cancelled"] == true => self.dispatch_queued_now(chat, &uuid, cx),
-                Ok(_) => self.show_toast(
-                    "Already with KodAct: it is already being processed.",
-                    cx,
-                ),
+                Ok(_) => self.show_toast("Already with KodAct: it is already being processed.", cx),
                 Err(e) => self.show_toast(format!("Couldn't send now: {e}"), cx),
             }
             return;
@@ -9420,12 +9522,7 @@ fix everything under 8, render it again to check, then tell me the scores before
 
     /// Dismiss a transient UI key from an outside click, remembering `at` so
     /// clicking the trigger button itself does not immediately reopen it.
-    pub fn dismiss_ui(
-        &mut self,
-        key: &str,
-        at: gpui::Point<gpui::Pixels>,
-        cx: &mut Context<Self>,
-    ) {
+    pub fn dismiss_ui(&mut self, key: &str, at: gpui::Point<gpui::Pixels>, cx: &mut Context<Self>) {
         if self.ui_toggles.remove(key) {
             self.ui_dismissed.insert(key.to_string(), at);
             cx.notify();
@@ -9445,7 +9542,9 @@ fix everything under 8, render it again to check, then tell me the scores before
             .ui_dismissed
             .remove(&key)
             .zip(at)
-            .is_some_and(|(d, p)| (d.x - p.x).abs() <= gpui::px(2.) && (d.y - p.y).abs() <= gpui::px(2.));
+            .is_some_and(|(d, p)| {
+                (d.x - p.x).abs() <= gpui::px(2.) && (d.y - p.y).abs() <= gpui::px(2.)
+            });
         if just_dismissed {
             cx.notify();
             return;
@@ -10302,9 +10401,11 @@ fix everything under 8, render it again to check, then tell me the scores before
     }
 
     fn pop_queued(&mut self, chat: usize, uuid: &str) -> Option<Queued> {
-        self.queued
-            .get_mut(&chat)
-            .and_then(|list| list.iter().position(|q| q.uuid == uuid).map(|i| list.remove(i)))
+        self.queued.get_mut(&chat).and_then(|list| {
+            list.iter()
+                .position(|q| q.uuid == uuid)
+                .map(|i| list.remove(i))
+        })
     }
 
     fn dispatch_queued_now(&mut self, chat: usize, uuid: &str, cx: &mut Context<Self>) {
@@ -10708,7 +10809,11 @@ fix everything under 8, render it again to check, then tell me the scores before
                 r.ended = Some(now);
                 r.stopping = false;
                 r.stopped = true;
-                for s in r.steps.iter_mut().filter(|s| s.status == ToolStatus::Running) {
+                for s in r
+                    .steps
+                    .iter_mut()
+                    .filter(|s| s.status == ToolStatus::Running)
+                {
                     s.status = ToolStatus::Interrupted;
                     s.ended = Some(now);
                 }
@@ -11065,7 +11170,11 @@ fix everything under 8, render it again to check, then tell me the scores before
         // (changed, perhaps, while a reply ran): a change restarts the
         // chat's KodAct CLI, resuming the conversation.
         let resumable = self.chats.iter().any(|c| c.id == id && c.resumable);
-        let design = self.chats.iter().find(|c| c.id == id).and_then(|c| c.design.clone());
+        let design = self
+            .chats
+            .iter()
+            .find(|c| c.id == id)
+            .and_then(|c| c.design.clone());
         if resumable && self.sessions.get(&id).is_some_and(|l| l.design != design) {
             self.sessions.remove(&id);
         }
@@ -11202,9 +11311,10 @@ fix everything under 8, render it again to check, then tell me the scores before
         if let (Some(setup), Some(root)) = (design, crate::design::root()) {
             // Read in the background when the chat became a design chat;
             // if that hasn't finished, read now.
-            let ix = self.design_index.clone().unwrap_or_else(|| {
-                std::sync::Arc::new(crate::design::library::Index::load(&root))
-            });
+            let ix = self
+                .design_index
+                .clone()
+                .unwrap_or_else(|| std::sync::Arc::new(crate::design::library::Index::load(&root)));
             let text = crate::design::prompt::compose(&ix, &setup);
             self.design_index = Some(ix);
             let cdp = self.ensure_web(cx).unwrap_or_default();
@@ -11227,7 +11337,11 @@ fix everything under 8, render it again to check, then tell me the scores before
                     if let Ok(exe) = std::env::current_exe() {
                         launch.args.extend([
                             "--mcp-config".to_string(),
-                            crate::design_mcp::mcp_config(&exe, &cdp, &crate::browser::focus_file()),
+                            crate::design_mcp::mcp_config(
+                                &exe,
+                                &cdp,
+                                &crate::browser::focus_file(),
+                            ),
                         ]);
                     }
                 }
@@ -11237,11 +11351,16 @@ fix everything under 8, render it again to check, then tell me the scores before
                         "{}/design-prompts/{session_id}.md",
                         base.trim().trim_end_matches('/')
                     );
-                    launch.env.push((crate::remote::HOST_FILE.into(), file.clone()));
+                    launch
+                        .env
+                        .push((crate::remote::HOST_FILE.into(), file.clone()));
                     launch.env.push((crate::remote::HOST_TEXT.into(), text));
-                    launch.args.extend(["--append-system-prompt-file".to_string(), file]);
+                    launch
+                        .args
+                        .extend(["--append-system-prompt-file".to_string(), file]);
                     if let Some((port, token)) = self.ensure_design_http(remote, &cdp) {
-                        let there = crate::remote::forward_port(&format!("{session_id}-design"), port);
+                        let there =
+                            crate::remote::forward_port(&format!("{session_id}-design"), port);
                         launch.args.extend([
                             "--mcp-config".to_string(),
                             crate::design_mcp::http_mcp_config(there, &token),
@@ -11364,7 +11483,11 @@ fix everything under 8, render it again to check, then tell me the scores before
                 _pump: pump,
                 profile,
                 generation,
-                design: self.chats.iter().find(|c| c.id == id).and_then(|c| c.design.clone()),
+                design: self
+                    .chats
+                    .iter()
+                    .find(|c| c.id == id)
+                    .and_then(|c| c.design.clone()),
                 _relays: relays,
             },
         );
@@ -12133,7 +12256,11 @@ impl AppState {
 
     /// Record that the remote menu closed on mouse-down outside at `at`.
     pub fn dismiss_remote_menu(&mut self, at: gpui::Point<gpui::Pixels>, cx: &mut Context<Self>) {
-        if self.remote_menu.as_ref().is_some_and(|m| m.host_key.is_none()) {
+        if self
+            .remote_menu
+            .as_ref()
+            .is_some_and(|m| m.host_key.is_none())
+        {
             self.remote_dismissed_at = Some(at);
             self.remote_menu = None;
             cx.notify();
@@ -12611,7 +12738,11 @@ impl AppState {
     /// The browser's tool server over HTTP, started on first use: (port, token).
     /// The design tools' HTTP server for a remote project's chats, started
     /// once per project: (port, token).
-    fn ensure_design_http(&mut self, remote: &crate::remote::Remote, cdp: &str) -> Option<(u16, String)> {
+    fn ensure_design_http(
+        &mut self,
+        remote: &crate::remote::Remote,
+        cdp: &str,
+    ) -> Option<(u16, String)> {
         // Per browser too: one started before the browser was, or on a
         // browser since closed, would render nothing.
         let key = format!("{}\u{0}{}\u{0}{cdp}", remote.target.label(), remote.path);
@@ -12619,7 +12750,13 @@ impl AppState {
             return Some(h.clone());
         }
         let token = crate::history::new_id().replace('-', "");
-        let port = crate::design_mcp::serve_http(cdp, &crate::browser::focus_file(), &token, remote.clone()).ok()?;
+        let port = crate::design_mcp::serve_http(
+            cdp,
+            &crate::browser::focus_file(),
+            &token,
+            remote.clone(),
+        )
+        .ok()?;
         self.design_http.insert(key, (port, token.clone()));
         Some((port, token))
     }
@@ -13005,7 +13142,9 @@ impl AppState {
                                 bytes.to_vec(),
                             )));
                         }
-                        crate::office::first_page(&name, &bytes).ok().map(|p| p.image)
+                        crate::office::first_page(&name, &bytes)
+                            .ok()
+                            .map(|p| p.image)
                     })
                     .await;
                 let _ = this.update(cx, |s, cx| {
@@ -13167,9 +13306,19 @@ impl AppState {
                 .map(std::fs::create_dir_all)
                 .is_some_and(|r| r.is_ok())
                 && std::fs::write(path, content).is_ok();
-            if let Some(Message::Assistant { blocks }) = self.chat_mut(chat).and_then(|c| c.messages.last_mut()) {
-                if let Some(Block::Tool(t)) = blocks.iter_mut().rev().find(|b| matches!(b, Block::Tool(_))) {
-                    t.status = if made { ToolStatus::Done } else { ToolStatus::Failed };
+            if let Some(Message::Assistant { blocks }) =
+                self.chat_mut(chat).and_then(|c| c.messages.last_mut())
+            {
+                if let Some(Block::Tool(t)) = blocks
+                    .iter_mut()
+                    .rev()
+                    .find(|b| matches!(b, Block::Tool(_)))
+                {
+                    t.status = if made {
+                        ToolStatus::Done
+                    } else {
+                        ToolStatus::Failed
+                    };
                 }
             }
             self.design_done(chat, path, cx);
@@ -13195,7 +13344,12 @@ impl AppState {
                         cx,
                     );
                 }
-                crate::backend::Event::ToolResult { id, output, is_error, .. } => {
+                crate::backend::Event::ToolResult {
+                    id,
+                    output,
+                    is_error,
+                    ..
+                } => {
                     // A run you stopped already shows so.
                     let agent_pos = self
                         .agents
@@ -13965,7 +14119,10 @@ fn demo_stalled_agent() -> Vec<Step> {
     use crate::backend::Event;
     use serde_json::json;
     let mut s = words("Sending two sub-agents to look around.", Step::Say);
-    for (id, task) in [("s1", "Map the settings code"), ("s2", "Trace the sync worker")] {
+    for (id, task) in [
+        ("s1", "Map the settings code"),
+        ("s2", "Trace the sync worker"),
+    ] {
         s.push(Step::Agent(Event::ToolUse {
             id: id.into(),
             name: "Task".into(),
@@ -13985,7 +14142,10 @@ fn demo_stalled_agent() -> Vec<Step> {
         images: vec![],
     }));
     // s2 never answers.
-    s.extend(words("One agent is still reading the sync worker.", Step::Say));
+    s.extend(words(
+        "One agent is still reading the sync worker.",
+        Step::Say,
+    ));
     s
 }
 
@@ -14032,13 +14192,33 @@ fn demo_ten_agents() -> Vec<Step> {
     let specs = [
         ("t1", "Explore", "Audit UI components", "src/ui"),
         ("t2", "Explore", "Check state reducers", "src/state"),
-        ("t3", "code-reviewer", "Review the Office parser's XLSX formula checks", "src/office.rs"),
-        ("t4", "Explore", "Inspect Git integration", "src/git_status.rs"),
+        (
+            "t3",
+            "code-reviewer",
+            "Review the Office parser's XLSX formula checks",
+            "src/office.rs",
+        ),
+        (
+            "t4",
+            "Explore",
+            "Inspect Git integration",
+            "src/git_status.rs",
+        ),
         ("t5", "Explore", "Verify SVG icons bundle", "assets/icons"),
-        ("t6", "general-purpose", "Check theme palette", "src/theme.rs"),
+        (
+            "t6",
+            "general-purpose",
+            "Check theme palette",
+            "src/theme.rs",
+        ),
         ("t7", "code-reviewer", "Scan IPC backend", "src/backend.rs"),
         ("t8", "Explore", "Check i18n coverage", "src/i18n.rs"),
-        ("t9", "general-purpose", "Validate project config", "src/projects"),
+        (
+            "t9",
+            "general-purpose",
+            "Validate project config",
+            "src/projects",
+        ),
         ("t10", "Explore", "Profile startup path", "src/main.rs"),
     ];
     for (id, kind, task, _) in specs {
@@ -14046,18 +14226,17 @@ fn demo_ten_agents() -> Vec<Step> {
     }
     for (id, _, _, path) in specs {
         let tid = format!("{id}a");
-        s.push(tool(
-            id,
-            &tid,
-            "Read",
-            json!({ "file_path": path }),
-        ));
+        s.push(tool(id, &tid, "Read", json!({ "file_path": path })));
     }
     for (i, (id, _, task, _)) in specs.iter().enumerate() {
         let tid = format!("{id}a");
         s.push(done(id, &tid));
         if i == 2 {
-            s.push(end(id, "Office XLSX formula validation found a schema warning.", true));
+            s.push(end(
+                id,
+                "Office XLSX formula validation found a schema warning.",
+                true,
+            ));
         } else {
             s.push(end(id, &format!("{task} completed cleanly."), false));
         }
@@ -14247,7 +14426,10 @@ fn script(prompt: &str) -> Vec<Step> {
     }
     // Open Design's discovery form, before a design: a few questions.
     if lower.contains("ask me") {
-        s.extend(words("Before I design it, three quick questions.", Step::Say));
+        s.extend(words(
+            "Before I design it, three quick questions.",
+            Step::Say,
+        ));
         s.push(Step::Question(serde_json::json!({ "questions": [
             { "header": "Audience", "question": "Who is it for?", "multiSelect": false, "options": [
                 { "label": "Designers", "description": "People who make interfaces" },
@@ -14261,11 +14443,17 @@ fn script(prompt: &str) -> Vec<Step> {
             { "header": "Length", "question": "How many slides?", "multiSelect": false, "options": [
                 { "label": "Six", "description": "A short introduction" },
                 { "label": "Twelve", "description": "A full session" } ] } ] })));
-        s.extend(words("Thanks, that's what I needed. I'll start on it now.", Step::Say));
+        s.extend(words(
+            "Thanks, that's what I needed. I'll start on it now.",
+            Step::Say,
+        ));
         s.push(Step::End { seconds: 3.1 });
         return s;
     }
-    if ["design", "deck", "slides", "course"].iter().any(|w| lower.contains(w)) {
+    if ["design", "deck", "slides", "course"]
+        .iter()
+        .any(|w| lower.contains(w))
+    {
         s.extend(demo_design());
         s.push(Step::End { seconds: 21.4 });
         return s;
@@ -15294,7 +15482,10 @@ mod tests {
                 }),
             },
         );
-        assert_eq!(s.selected_agent.get(&chat).map(String::as_str), Some("ag-1"));
+        assert_eq!(
+            s.selected_agent.get(&chat).map(String::as_str),
+            Some("ag-1")
+        );
 
         s.on_agent_event(
             chat,

@@ -552,3 +552,365 @@ fn diagram_card(
         .on_click(move |_, _, cx| opener.update(cx, |s, cx| s.open_doc(to_open.clone(), cx)))
         .into_any_element()
 }
+
+/// One file in a gallery: the file, the key its card state lives under,
+/// and its first page once drawn.
+pub struct Tile {
+    pub file: FileRef,
+    pub key: String,
+    pub thumb: Option<std::sync::Arc<gpui::Image>>,
+}
+
+/// How wide a gallery tile is: three to the reading column.
+pub const TILE_W: f32 = 236.;
+/// The preview's height inside a tile: a landscape window onto the page's top.
+const TILE_PREVIEW_H: f32 = 148.;
+
+/// Several files a reply made, as a gallery of large tiles that show what is
+/// in each (its first page as it prints, the picture, or the text's first
+/// lines), three to a row, rather than a stack of rows. A tile opens the file
+/// beside the chat; its corner downloads it. The home page's Recent files
+/// use the same tiles.
+pub fn gallery(
+    tiles: Vec<Tile>,
+    state: Entity<AppState>,
+    open: Option<&FileRef>,
+    scale: f32,
+    t: &Theme,
+) -> AnyElement {
+    div()
+        .w_full()
+        .flex()
+        .flex_wrap()
+        .gap(t.space.md)
+        .children(tiles.into_iter().map(|tile| {
+            let is_open = open == Some(&tile.file);
+            self::tile(tile, state.clone(), is_open, Some(TILE_W), scale, t)
+        }))
+        .into_any_element()
+}
+
+/// A gallery tile: the preview on top, the name and type under it; `width`
+/// fixed, or None to share its row's width with the tiles beside it.
+pub fn tile(
+    tile: Tile,
+    state: Entity<AppState>,
+    open: bool,
+    width: Option<f32>,
+    scale: f32,
+    t: &Theme,
+) -> AnyElement {
+    let Tile { file, key, thumb } = tile;
+    let opener = state.clone();
+    let to_open = file.clone();
+    let edge = t.colors.text_subtle.opacity(0.5);
+    let group = SharedString::from(format!("tile-{key}"));
+    let preview: AnyElement = match (&thumb, file.office()) {
+        (Some(img), _) => gpui::img(img.clone())
+            .size_full()
+            .object_fit(gpui::ObjectFit::Cover)
+            .into_any_element(),
+        (None, Some(kind)) => div()
+            .size_full()
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(super::file_mark::render(kind, MARK, scale))
+            .into_any_element(),
+        // A diagram drawn, as it opens; a web page as its words read.
+        (None, None) if file.is_diagram() => crate::diagram::extract_svg(&file.content)
+            .and_then(|svg| {
+                super::diagram_view::fluid(
+                    &super::diagram_view::themed(svg, t.is_dark),
+                    width.unwrap_or(TILE_W) - 2.,
+                    scale,
+                )
+            })
+            .map(|d| {
+                div()
+                    .size_full()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .overflow_hidden()
+                    .child(d)
+                    .into_any_element()
+            })
+            .unwrap_or_else(|| text_preview(&file, t)),
+        (None, None) if file.is_html() => page_preview(&file.content, t),
+        (None, None) => text_preview(&file, t),
+    };
+    div()
+        .id(SharedString::from(format!("tile-{key}")))
+        .group(group.clone())
+        .map(|d| match width {
+            Some(w) => d.flex_none().w(px(w)),
+            None => d.flex_1().min_w_0(),
+        })
+        .flex()
+        .flex_col()
+        .bg(t.colors.surface)
+        .border_1()
+        .border_color(if open {
+            t.colors.primary.opacity(0.6)
+        } else {
+            t.colors.border
+        })
+        .rounded(t.radius.card)
+        .overflow_hidden()
+        .shadow(t.elevation_grain())
+        .cursor_pointer()
+        .hover(move |st| st.border_color(edge))
+        .child(
+            div()
+                .relative()
+                .w_full()
+                .h(px(TILE_PREVIEW_H))
+                .overflow_hidden()
+                .bg(if thumb.is_some() {
+                    gpui::white()
+                } else {
+                    t.extra.stage
+                })
+                .border_b_1()
+                .border_color(t.colors.border)
+                .child(preview)
+                // Download, in the corner, while the tile is hovered.
+                .child(
+                    div()
+                        .absolute()
+                        .top(t.space.xs)
+                        .right(t.space.xs)
+                        .invisible()
+                        .group_hover(group, |st| st.visible())
+                        .child(
+                            super::button::Button::icon(
+                                SharedString::from(format!("tile-dl-{key}")),
+                                "icons/download.svg",
+                                "Download",
+                            )
+                            .compact()
+                            .on_click({
+                                let (state, file) = (state.clone(), file.clone());
+                                move |_, _, cx| {
+                                    cx.stop_propagation();
+                                    state.update(cx, |s, cx| s.download(&file, cx));
+                                }
+                            }),
+                        ),
+                ),
+        )
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(t.space.sm)
+                .px(t.space.md)
+                .py(t.space.sm)
+                .child(match file.office() {
+                    Some(kind) => super::file_mark::render(kind, 20., scale),
+                    None => gpui::img(super::file_icon::asset(
+                        &file.name,
+                        false,
+                        file.path.as_deref().unwrap_or(&file.name),
+                    ))
+                    .flex_none()
+                    .size(t.size.icon)
+                    .into_any_element(),
+                })
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .child(
+                            div()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .text_size(t.text.body_sm)
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(t.colors.text_strong)
+                                .child(file.title()),
+                        )
+                        .child(
+                            div()
+                                .text_size(t.text.caption)
+                                .text_color(t.colors.text_muted)
+                                .child(format!("{} · {}", file.label(), file.kind())),
+                        ),
+                ),
+        )
+        .on_click(move |_, _, cx| opener.update(cx, |s, cx| s.open_doc(to_open.clone(), cx)))
+        .into_any_element()
+}
+
+/// A text file's top in a tile: its first lines at a size that reads, a
+/// Markdown file's first heading set larger.
+fn text_preview(file: &FileRef, t: &Theme) -> AnyElement {
+    let markdown = file.is_markdown();
+    let lines: Vec<String> = file
+        .content
+        .lines()
+        .map(str::trim_end)
+        .filter(|l| !l.trim().is_empty())
+        .take(12)
+        .map(|l| l.chars().take(80).collect())
+        .collect();
+    div()
+        .size_full()
+        .px(t.space.md)
+        .pt(t.space.md)
+        .flex()
+        .flex_col()
+        .gap(px(2.))
+        .children(lines.into_iter().enumerate().map(|(i, l)| {
+            let heading = markdown && (i == 0 || l.starts_with('#'));
+            div()
+                .whitespace_nowrap()
+                .overflow_hidden()
+                .text_size(px(if heading && i == 0 { 12. } else { 9. }))
+                .line_height(relative(1.3))
+                .font_family(if markdown {
+                    t.font_reading.clone()
+                } else {
+                    t.font_mono.clone()
+                })
+                .when(heading, |d| d.font_weight(FontWeight::SEMIBOLD))
+                .text_color(if heading {
+                    t.colors.text_strong
+                } else {
+                    t.colors.text_muted
+                })
+                .child(if markdown {
+                    l.trim_start_matches('#').trim().to_string()
+                } else {
+                    l
+                })
+        }))
+        .into_any_element()
+}
+
+/// A web page in a tile as it reads, not as it is written: its title as a
+/// heading, then its visible words (scripts, styles and tags left out).
+fn page_preview(html: &str, t: &Theme) -> AnyElement {
+    let (title, words) = page_words(html);
+    div()
+        .size_full()
+        .px(t.space.md)
+        .pt(t.space.md)
+        .flex()
+        .flex_col()
+        .gap(px(4.))
+        .children(title.map(|title| {
+            div()
+                .text_size(px(13.))
+                .line_height(relative(1.25))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(t.colors.text_strong)
+                .child(title)
+        }))
+        .child(
+            div()
+                .text_size(px(10.))
+                .line_height(relative(1.45))
+                .text_color(t.colors.text_muted)
+                .child(words.chars().take(400).collect::<String>()),
+        )
+        .into_any_element()
+}
+
+/// A page's `<title>` (or first heading) and its visible text, collapsed.
+pub fn page_words(html: &str) -> (Option<String>, String) {
+    let lower = html.to_ascii_lowercase();
+    let between = |open: &str, close: &str| -> Option<String> {
+        let a = lower.find(open)?;
+        let a = a + lower[a..].find('>')? + 1;
+        let b = a + lower[a..].find(close)?;
+        Some(html[a..b].trim().to_string())
+    };
+    let title = between("<title", "</title>")
+        .or_else(|| between("<h1", "</h1>"))
+        .map(|t| strip_tags(&t))
+        .filter(|t| !t.is_empty());
+    let body_at = lower.find("<body").unwrap_or(0);
+    let mut out = String::new();
+    let (mut rest, mut lrest) = (&html[body_at..], &lower[body_at..]);
+    // Drop what never shows: scripts, styles, the head.
+    loop {
+        let next = ["<script", "<style", "<head"]
+            .iter()
+            .filter_map(|tag| lrest.find(tag).map(|i| (i, *tag)))
+            .min();
+        match next {
+            Some((i, tag)) => {
+                out.push_str(&rest[..i]);
+                let close = format!("</{}", &tag[1..]);
+                match lrest[i..].find(&close) {
+                    Some(j) => {
+                        let end = i + j + close.len();
+                        let end = end + lrest[end..].find('>').map_or(0, |k| k + 1);
+                        rest = &rest[end..];
+                        lrest = &lrest[end..];
+                    }
+                    None => break,
+                }
+            }
+            None => {
+                out.push_str(rest);
+                break;
+            }
+        }
+    }
+    let words = strip_tags(&out);
+    let words = match &title {
+        Some(t) => words
+            .strip_prefix(t.as_str())
+            .unwrap_or(&words)
+            .trim()
+            .to_string(),
+        None => words,
+    };
+    (title, words)
+}
+
+/// Text with its tags dropped, its common entities read and its spaces collapsed.
+fn strip_tags(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut in_tag = false;
+    for c in s.chars() {
+        match c {
+            '<' => {
+                in_tag = true;
+                out.push(' ');
+            }
+            '>' => in_tag = false,
+            c if !in_tag => out.push(c),
+            _ => {}
+        }
+    }
+    let out = out
+        .replace("&nbsp;", " ")
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'");
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+#[cfg(test)]
+mod page_tests {
+    use super::page_words;
+
+    #[test]
+    fn a_page_reads_as_its_title_and_visible_words() {
+        let html = "<!doctype html><html><head><title>Release notes</title>\
+            <style>body{color:red}</style></head><body><h1>Release notes</h1>\
+            <script>let x = 1;</script><p>Files open &amp; edit.</p></body></html>";
+        let (title, words) = page_words(html);
+        assert_eq!(title.as_deref(), Some("Release notes"));
+        assert_eq!(words, "Files open & edit.");
+    }
+}

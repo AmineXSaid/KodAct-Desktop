@@ -154,11 +154,15 @@ impl BrowserView {
                 cx.notify();
             }
         }));
-        subs.push(cx.subscribe_in(&mark_input, window, |this, _, ev: &InputEvent, window, cx| {
-            if let InputEvent::PressEnter { .. } = ev {
-                this.place_words(window, cx);
-            }
-        }));
+        subs.push(cx.subscribe_in(
+            &mark_input,
+            window,
+            |this, _, ev: &InputEvent, window, cx| {
+                if let InputEvent::PressEnter { .. } = ev {
+                    this.place_words(window, cx);
+                }
+            },
+        ));
         Self {
             state,
             address,
@@ -217,12 +221,15 @@ impl BrowserView {
         cx: &mut Context<Self>,
     ) {
         use crate::design::marks::{Mark, Shape};
-        let Some(p) = self.page_point(ev.position, cx) else { return };
+        let Some(p) = self.page_point(ev.position, cx) else {
+            return;
+        };
         match tool {
             crate::state::InsertTool::Hand => self.hand_at = Some(ev.position),
             crate::state::InsertTool::Mark(shape) if shape.typed() => {
                 self.typing = Some((shape, p));
-                self.mark_input.update(cx, |i, cx| i.set_value("", window, cx));
+                self.mark_input
+                    .update(cx, |i, cx| i.set_value("", window, cx));
                 cx.on_next_frame(window, |this, window, cx| {
                     this.mark_input.update(cx, |i, cx| i.focus(window, cx));
                 });
@@ -248,7 +255,11 @@ impl BrowserView {
                 self.drawing = Some(Mark {
                     anchor: None,
                     shape,
-                    points: if shape == Shape::Pencil { vec![p] } else { vec![p, p] },
+                    points: if shape == Shape::Pencil {
+                        vec![p]
+                    } else {
+                        vec![p, p]
+                    },
                     text: String::new(),
                 })
             }
@@ -270,9 +281,12 @@ impl BrowserView {
 
     /// The label or note typed goes on the page.
     fn place_words(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some((shape, at)) = self.typing.take() else { return };
+        let Some((shape, at)) = self.typing.take() else {
+            return;
+        };
         let text = self.mark_input.read(cx).value().trim().to_string();
-        self.mark_input.update(cx, |i, cx| i.set_value("", window, cx));
+        self.mark_input
+            .update(cx, |i, cx| i.set_value("", window, cx));
         if !text.is_empty() {
             let mark = crate::design::marks::Mark {
                 anchor: None,
@@ -305,7 +319,12 @@ impl BrowserView {
         // Taking the browser somewhere yourself stops it following KodAct's design.
         let yours = matches!(
             cmd,
-            Cmd::Show(_) | Cmd::NewTab(_) | Cmd::Navigate(_) | Cmd::Back | Cmd::Forward | Cmd::Close(_)
+            Cmd::Show(_)
+                | Cmd::NewTab(_)
+                | Cmd::Navigate(_)
+                | Cmd::Back
+                | Cmd::Forward
+                | Cmd::Close(_)
         );
         self.state.update(cx, |s, cx| {
             if yours && s.design_follow && s.designing().is_some() {
@@ -354,7 +373,11 @@ impl BrowserView {
                 return;
             }
             // A Pen path ends; else the Insert tool goes down.
-            if self.drawing.as_ref().is_some_and(|m| m.shape == crate::design::marks::Shape::Pen) {
+            if self
+                .drawing
+                .as_ref()
+                .is_some_and(|m| m.shape == crate::design::marks::Shape::Pen)
+            {
                 self.finish_pen(cx);
                 cx.stop_propagation();
                 return;
@@ -366,7 +389,8 @@ impl BrowserView {
                 return;
             }
             if self.selecting(cx) {
-                self.state.update(cx, |s, cx| s.design_set_select(false, cx));
+                self.state
+                    .update(cx, |s, cx| s.design_set_select(false, cx));
                 cx.stop_propagation();
                 return;
             }
@@ -389,7 +413,12 @@ impl BrowserView {
             cx.stop_propagation();
             return;
         }
-        if k.key == "enter" && self.drawing.as_ref().is_some_and(|m| m.shape == crate::design::marks::Shape::Pen) {
+        if k.key == "enter"
+            && self
+                .drawing
+                .as_ref()
+                .is_some_and(|m| m.shape == crate::design::marks::Shape::Pen)
+        {
             self.finish_pen(cx);
             cx.stop_propagation();
             return;
@@ -460,7 +489,7 @@ impl Render for BrowserView {
         let running = s.web.is_some();
         let agent = s
             .chat()
-            .is_some_and(|c| super::workbench::agent_browsing(&c.messages));
+            .is_some_and(|c| super::workbench::agent_browsing(&c.messages, s.busy()));
         // The page KodAct is writing (true), or wrote while you weren't
         // following (false), and whether the panel follows it.
         let design = s
@@ -482,38 +511,39 @@ impl Render for BrowserView {
         let out_ms = cx.theme().size.menu_out_ms;
         // A page this chat designed gets the design bar, and its comments.
         let here = s.design_comments_here();
-        let design_bar = s.design_on_screen().filter(|_| !presenting).map(|page| {
-            super::design_bar::Bar {
-                page,
-                pages: s.design_pages(),
-                zoom,
-                menu: self.design_menu,
-                select: s.design_select,
-                comments: here
-                    .iter()
-                    .map(|c| super::design_bar::Note {
-                        n: c.n,
-                        label: c.part.label(),
-                        text: c.text.clone(),
-                        sent: c.sent,
-                        resolved: c.resolved,
-                    })
-                    .collect(),
-                pins: s.design_pins,
-                resolved: s.design_resolved,
-                outline: s.design_outline,
-                guides: s.design_guides,
-                deck: s.web_page.deck,
-                undo: s.design_can_step(-1),
-                redo: s.design_can_step(1),
-                tool: s.design_tool,
-                artboard: s.design_artboard.map(|(name, _)| name),
-                systems: s.design_systems.clone(),
-                filter: self.library_filter.clone(),
-                filter_text: self.library_filter.read(cx).value().to_string(),
-                hung: self.menu_presence.frame(self.design_menu, out_ms, window),
-            }
-        });
+        let design_bar =
+            s.design_on_screen()
+                .filter(|_| !presenting)
+                .map(|page| super::design_bar::Bar {
+                    page,
+                    pages: s.design_pages(),
+                    zoom,
+                    menu: self.design_menu,
+                    select: s.design_select,
+                    comments: here
+                        .iter()
+                        .map(|c| super::design_bar::Note {
+                            n: c.n,
+                            label: c.part.label(),
+                            text: c.text.clone(),
+                            sent: c.sent,
+                            resolved: c.resolved,
+                        })
+                        .collect(),
+                    pins: s.design_pins,
+                    resolved: s.design_resolved,
+                    outline: s.design_outline,
+                    guides: s.design_guides,
+                    deck: s.web_page.deck,
+                    undo: s.design_can_step(-1),
+                    redo: s.design_can_step(1),
+                    tool: s.design_tool,
+                    artboard: s.design_artboard.map(|(name, _)| name),
+                    systems: s.design_systems.clone(),
+                    filter: self.library_filter.clone(),
+                    filter_text: self.library_filter.read(cx).value().to_string(),
+                    hung: self.menu_presence.frame(self.design_menu, out_ms, window),
+                });
         let tool_now = s.design_tool.filter(|_| design_bar.is_some());
         // The page's marks, and the one being drawn.
         let mut marks: Vec<crate::design::marks::Mark> = if design_bar.is_some() {
@@ -534,8 +564,10 @@ impl Render for BrowserView {
         let out_ms = t.size.menu_out_ms;
         let typing_f = self.typing_presence.frame(typing_at, out_ms, window);
         let marks_f = self.marks_presence.frame(
-            (marks_count > 0 && s.design_pick.is_none() && !(s.design_select && design_bar.is_some()))
-                .then_some(marks_count),
+            (marks_count > 0
+                && s.design_pick.is_none()
+                && !(s.design_select && design_bar.is_some()))
+            .then_some(marks_count),
             out_ms,
             window,
         );
@@ -588,7 +620,14 @@ impl Render for BrowserView {
         let pins: Vec<_> = here
             .iter()
             .filter(|c| design_bar.is_some() && s.design_pins && (s.design_resolved || !c.resolved))
-            .map(|c| (c.n, c.sent, c.text.clone(), place(&s.design_part_now(&c.part))))
+            .map(|c| {
+                (
+                    c.n,
+                    c.sent,
+                    c.text.clone(),
+                    place(&s.design_part_now(&c.part)),
+                )
+            })
             .collect();
         let room = self.page_bounds.get().size;
         let last_download = page.last_download.clone();
@@ -752,9 +791,12 @@ impl Render for BrowserView {
                         .id("web-guides-off")
                         .flex_none()
                         .tooltip(|window, cx| {
-                            gpui::component::tooltip::Tooltip::new("Take the layout guides off").build(window, cx)
+                            gpui::component::tooltip::Tooltip::new("Take the layout guides off")
+                                .build(window, cx)
                         })
-                        .on_click(|_, window, cx| window.dispatch_action(Box::new(super::LayoutGuides), cx)),
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(Box::new(super::LayoutGuides), cx)
+                        }),
                 )
             })
             // The zoom, when it isn't 100%: a click puts it back.
@@ -766,7 +808,9 @@ impl Render for BrowserView {
                         .tooltip(|window, cx| {
                             gpui::component::tooltip::Tooltip::new("Back to 100%").build(window, cx)
                         })
-                        .on_click(|_, window, cx| window.dispatch_action(Box::new(super::ZoomReset), cx)),
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(Box::new(super::ZoomReset), cx)
+                        }),
                 )
             })
             .child(
@@ -1376,7 +1420,11 @@ impl Render for BrowserView {
                                 .w(px(16.))
                                 .flex_none()
                                 .text_size(t.text.caption)
-                                .text_color(if on { t.colors.primary } else { t.colors.text_subtle })
+                                .text_color(if on {
+                                    t.colors.primary
+                                } else {
+                                    t.colors.text_subtle
+                                })
                                 .child(n.to_string()),
                         )
                         .child(
@@ -1387,10 +1435,16 @@ impl Render for BrowserView {
                                 .overflow_hidden()
                                 .bg(t.colors.hover)
                                 .border_2()
-                                .border_color(if on { t.colors.primary } else { t.colors.border })
+                                .border_color(if on {
+                                    t.colors.primary
+                                } else {
+                                    t.colors.border
+                                })
                                 .when(!on, |d| d.hover(move |s| s.border_color(hover)))
                                 .children(pics.get(n - 1).map(|p| {
-                                    gpui::img(p.clone()).size_full().object_fit(ObjectFit::Cover)
+                                    gpui::img(p.clone())
+                                        .size_full()
+                                        .object_fit(ObjectFit::Cover)
                                 })),
                         )
                         .on_click(move |_, _, cx| {
@@ -1416,7 +1470,11 @@ impl Render for BrowserView {
                 .bg(t.colors.surface)
                 .border_r_1()
                 .border_color(t.colors.border)
-                .child(crate::theme::section_label(&t, "Outline").px(t.space.sm).pb(t.space.xs))
+                .child(
+                    crate::theme::section_label(&t, "Outline")
+                        .px(t.space.sm)
+                        .pb(t.space.xs),
+                )
                 .when(empty, |d| {
                     d.child(
                         div()
@@ -1440,8 +1498,18 @@ impl Render for BrowserView {
                         .rounded(t.radius.button)
                         .cursor_pointer()
                         .text_size(t.text.body_sm)
-                        .text_color(if h.level == 1 { t.colors.text_strong } else { t.colors.text })
-                        .map(|d| if at == Some(i) { crate::theme::selected(&t, d) } else { d.hover(move |s| s.bg(hover)) })
+                        .text_color(if h.level == 1 {
+                            t.colors.text_strong
+                        } else {
+                            t.colors.text
+                        })
+                        .map(|d| {
+                            if at == Some(i) {
+                                crate::theme::selected(&t, d)
+                            } else {
+                                d.hover(move |s| s.bg(hover))
+                            }
+                        })
                         .child(
                             div()
                                 .min_w_0()
@@ -1461,7 +1529,9 @@ impl Render for BrowserView {
             .size_full()
             .flex()
             .flex_col()
-            .when(!presenting && !bare, |d| d.child(tab_strip).child(bar).child(progress))
+            .when(!presenting && !bare, |d| {
+                d.child(tab_strip).child(bar).child(progress)
+            })
             .child(
                 div()
                     .flex_1()
@@ -1471,73 +1541,79 @@ impl Render for BrowserView {
                     .children(outline_rail)
                     .child(viewport.min_w_0().children(present_controls)),
             )
-            .when(!presenting && !bare, |d| d.child(
-                // The agent's access, said once at the foot.
-                div()
-                    .flex_none()
-                    .flex()
-                    .items_center()
-                    .gap(t.space.sm)
-                    .px(t.space.md)
-                    .py(t.space.xs)
-                    .border_t_1()
-                    .border_color(t.colors.border)
-                    .text_size(t.text.caption)
-                    .text_color(t.colors.text_muted)
-                    .children(last_download.map(|path| {
-                        // The last download, named, and its folder a click away.
-                        let name = path
-                            .file_name()
-                            .map(|n| n.to_string_lossy().into_owned())
-                            .unwrap_or_default();
-                        let folder = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
-                        div()
-                            .id("web-download")
-                            .flex()
-                            .items_center()
-                            .gap(t.space.xs)
-                            .max_w(px(220.))
-                            .cursor_pointer()
-                            .text_color(t.colors.text_muted)
-                            .child(icon(
-                                "icons/download.svg",
-                                t.size.icon_xs,
-                                t.colors.text_subtle,
-                            ))
-                            .child(
-                                div()
-                                    .min_w_0()
-                                    .overflow_hidden()
-                                    .whitespace_nowrap()
-                                    .text_ellipsis()
-                                    .child(format!("Downloaded {name}")),
-                            )
-                            .tooltip(move |window, cx| {
-                                gpui::component::tooltip::Tooltip::new("Show in folder")
-                                    .build(window, cx)
-                            })
-                            .on_click(move |_, _, cx| cx.open_with_system(&folder))
-                    }))
-                    .child(icon("icons/boxes.svg", t.size.icon_xs, t.colors.text_subtle))
-                    .child(div().flex_1().min_w_0().child(if browser_on {
-                        "KodAct can use this browser. Each step asks first."
-                    } else {
-                        "Only you use this browser. Turn it on for KodAct in Settings."
-                    }))
-                    .when(!browser_on, |d| {
-                        d.child(
+            .when(!presenting && !bare, |d| {
+                d.child(
+                    // The agent's access, said once at the foot.
+                    div()
+                        .flex_none()
+                        .flex()
+                        .items_center()
+                        .gap(t.space.sm)
+                        .px(t.space.md)
+                        .py(t.space.xs)
+                        .border_t_1()
+                        .border_color(t.colors.border)
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_muted)
+                        .children(last_download.map(|path| {
+                            // The last download, named, and its folder a click away.
+                            let name = path
+                                .file_name()
+                                .map(|n| n.to_string_lossy().into_owned())
+                                .unwrap_or_default();
+                            let folder = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
                             div()
-                                .id("web-agent-on")
+                                .id("web-download")
+                                .flex()
+                                .items_center()
+                                .gap(t.space.xs)
+                                .max_w(px(220.))
                                 .cursor_pointer()
-                                .text_color(t.colors.primary)
-                                .font_weight(FontWeight::MEDIUM)
-                                .child("Turn on")
-                                .on_click(|_, window, cx| {
-                                    window.dispatch_action(Box::new(super::ToggleBrowser), cx)
-                                }),
-                        )
-                    }),
-            ))
+                                .text_color(t.colors.text_muted)
+                                .child(icon(
+                                    "icons/download.svg",
+                                    t.size.icon_xs,
+                                    t.colors.text_subtle,
+                                ))
+                                .child(
+                                    div()
+                                        .min_w_0()
+                                        .overflow_hidden()
+                                        .whitespace_nowrap()
+                                        .text_ellipsis()
+                                        .child(format!("Downloaded {name}")),
+                                )
+                                .tooltip(move |window, cx| {
+                                    gpui::component::tooltip::Tooltip::new("Show in folder")
+                                        .build(window, cx)
+                                })
+                                .on_click(move |_, _, cx| cx.open_with_system(&folder))
+                        }))
+                        .child(icon(
+                            "icons/boxes.svg",
+                            t.size.icon_xs,
+                            t.colors.text_subtle,
+                        ))
+                        .child(div().flex_1().min_w_0().child(if browser_on {
+                            "KodAct can use this browser. Each step asks first."
+                        } else {
+                            "Only you use this browser. Turn it on for KodAct in Settings."
+                        }))
+                        .when(!browser_on, |d| {
+                            d.child(
+                                div()
+                                    .id("web-agent-on")
+                                    .cursor_pointer()
+                                    .text_color(t.colors.primary)
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .child("Turn on")
+                                    .on_click(|_, window, cx| {
+                                        window.dispatch_action(Box::new(super::ToggleBrowser), cx)
+                                    }),
+                            )
+                        }),
+                )
+            })
             .into_any_element()
     }
 }
@@ -1580,12 +1656,24 @@ fn present_controls(t: &Theme, cx: &Context<BrowserView>) -> impl IntoElement {
                 .flex()
                 .items_center()
                 .gap(t.space.xs)
-                .child(step("present-back", "icons/arrow-left.svg", "Back a screen (Page Up)", "pageup"))
-                .child(step("present-on", "icons/arrow-right.svg", "On a screen (Page Down)", "pagedown"))
+                .child(step(
+                    "present-back",
+                    "icons/arrow-left.svg",
+                    "Back a screen (Page Up)",
+                    "pageup",
+                ))
+                .child(step(
+                    "present-on",
+                    "icons/arrow-right.svg",
+                    "On a screen (Page Down)",
+                    "pagedown",
+                ))
                 .child(
                     crate::theme::text_button(t, "Exit · Esc")
                         .id("present-exit")
-                        .on_click(|_, window, cx| window.dispatch_action(Box::new(super::Present), cx)),
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(Box::new(super::Present), cx)
+                        }),
                 ),
             "present-controls",
             6.,

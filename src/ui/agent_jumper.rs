@@ -98,7 +98,9 @@ pub fn button(
             t.size.icon_xs,
             t.colors.text_subtle,
         ))
-        .on_mouse_down(gpui::MouseButton::Left, |_, window, _| window.prevent_default())
+        .on_mouse_down(gpui::MouseButton::Left, |_, window, _| {
+            window.prevent_default()
+        })
         .on_click({
             let toggle = toggle.clone();
             move |_, _, cx| toggle.update(cx, |s, cx| s.toggle_agent_jumper(cx))
@@ -252,9 +254,7 @@ pub fn popover(
         .radius(t.radius.button)
         .expanded(current)
         .focus_now(focus_row == Some(i))
-        .on_activate(move |_, cx| {
-            picker.update(cx, |s, cx| s.jump_to_agent(&id, cx))
-        });
+        .on_activate(move |_, cx| picker.update(cx, |s, cx| s.jump_to_agent(&id, cx)));
         // ↑ ↓ walk the rows, stopping at the ends; Enter or Space picks.
         let mover = state.clone();
         let order = shown_keys.clone();

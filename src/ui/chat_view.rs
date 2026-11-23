@@ -102,11 +102,7 @@ impl ChatView {
         let busy = s.busy();
         let tail = busy;
         let (id, count, version) = match s.chat() {
-            Some(c) => (
-                Some(c.id),
-                c.messages.len() + tail as usize,
-                (c.version, 0),
-            ),
+            Some(c) => (Some(c.id), c.messages.len() + tail as usize, (c.version, 0)),
             None => (None, 0, (0, 0)),
         };
         if id != self.shown_chat {

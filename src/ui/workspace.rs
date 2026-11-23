@@ -103,7 +103,8 @@ impl Workspace {
             cx.new(|cx| super::terminal_dock::TerminalDock::new(state.clone(), window, cx));
         let onboarding = cx.new(|cx| Onboarding::new(state.clone(), window, cx));
         let rules = cx.new(|cx| RulesView::new(state.clone(), window, cx));
-        let design_home = cx.new(|cx| super::design_home::DesignHome::new(state.clone(), window, cx));
+        let design_home =
+            cx.new(|cx| super::design_home::DesignHome::new(state.clone(), window, cx));
         let pet = cx.new(|cx| super::pet::PetView::new(state.clone(), cx));
         let projects = cx.new(|cx| ProjectsView::new(state.clone(), composer.clone(), window, cx));
         let side = cx.new(|cx| SideChat::new(state.clone(), window, cx));
@@ -117,8 +118,7 @@ impl Workspace {
         let doc_comments =
             cx.new(|cx| super::doc_comments::DocComments::new(state.clone(), window, cx));
         let doc_find = cx.new(|cx| super::doc_find::DocFind::new(state.clone(), window, cx));
-        let page_field =
-            cx.new(|cx| super::page_field::PageField::new(state.clone(), window, cx));
+        let page_field = cx.new(|cx| super::page_field::PageField::new(state.clone(), window, cx));
         let text_editor =
             cx.new(|cx| super::text_editor::TextEditor::new(state.clone(), window, cx));
         let office_editor =
@@ -628,23 +628,23 @@ impl Workspace {
     /// ground.
     fn welcome(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = cx.theme().clone();
-        // A binary artifact's card shows its opening, read once off the
-        // render path.
-        let unread: Vec<crate::state::FileRef> = {
+        // Their first pages as they print, for the tiles.
+        let unthumbed: Vec<crate::state::FileRef> = {
             let s = self.state.read(cx);
             crate::ui::documents::all(s)
                 .into_iter()
                 .take(3)
                 .map(|(f, ..)| f)
                 .filter(|f| {
-                    f.bytes.is_some()
-                        && !s.artifact_snips.contains_key(&super::artifact_card::key(f))
+                    f.bytes
+                        .as_ref()
+                        .is_some_and(|b| !s.card_thumbs.contains_key(&crate::office_render::key(b)))
                 })
                 .collect()
         };
-        if !unread.is_empty() {
+        if !unthumbed.is_empty() {
             let st = self.state.clone();
-            cx.defer(move |cx| st.update(cx, |s, cx| s.want_artifact_snips(unread, cx)));
+            cx.defer(move |cx| st.update(cx, |s, cx| s.want_thumbs(unthumbed, cx)));
         }
         let s = self.state.read(cx);
         let name = s.user_name.clone().unwrap_or_default();
@@ -653,26 +653,34 @@ impl Workspace {
         // Three cards a row; two when a panel narrows the column, so each
         // stays readable.
         let per_row = if self.composer.read(cx).narrow { 2 } else { 3 };
-        let recent: Vec<_> = crate::ui::documents::all(s).into_iter().take(per_row).collect();
+        let recent: Vec<_> = crate::ui::documents::all(s)
+            .into_iter()
+            .take(per_row)
+            .collect();
         let recent_section = (!recent.is_empty()).then(|| {
             let scale = window.scale_factor();
+            // Each as it opens: its first page as it prints, the picture,
+            // or the text's first lines (`file_card::tile`).
             let cards: Vec<gpui::AnyElement> = recent
                 .into_iter()
                 .enumerate()
                 .map(|(i, (f, _chat, _chat_title))| {
-                    let snip = s.artifact_snips.get(&super::artifact_card::key(&f)).cloned();
-                    let open_state = self.state.clone();
-                    let to_open = f.clone();
-                    super::artifact_card::render(
-                        &f,
-                        snip.as_deref().map(|v| v.as_slice()),
-                        i,
-                        &t,
-                        scale,
-                        move |cx| {
-                            let file = to_open.clone();
-                            open_state.update(cx, |s, cx| s.open_doc(file, cx));
+                    let thumb = f
+                        .bytes
+                        .as_ref()
+                        .and_then(|b| s.card_thumbs.get(&crate::office_render::key(b)).cloned())
+                        .flatten();
+                    super::file_card::tile(
+                        super::file_card::Tile {
+                            file: f,
+                            key: format!("welcome-{i}"),
+                            thumb,
                         },
+                        self.state.clone(),
+                        false,
+                        None,
+                        scale,
+                        &t,
                     )
                 })
                 .collect();
@@ -771,12 +779,7 @@ impl Workspace {
                                     &t,
                                 ))
                                 .child(self.composer.clone())
-                                .child(super::starters::render(
-                                    &t,
-                                    &self.state,
-                                    &self.composer,
-                                    cx,
-                                ))
+                                .child(super::starters::render(&t, &self.state, &self.composer, cx))
                                 .children(recent_section),
                         ),
                 ),
@@ -940,7 +943,11 @@ impl Render for Workspace {
         // The chat column's width: under `NARROW_CHAT`, the composer's tray
         // shows its folder and model as icons, so nothing is cut mid-word.
         let chat_w = beside
-            - if side_open && !below && !panel_full { panel_w } else { 0. }
+            - if side_open && !below && !panel_full {
+                panel_w
+            } else {
+                0.
+            }
             - if terminal_open { dock_w } else { 0. };
         let narrow = chat_w < NARROW_CHAT;
         if self.composer.read(cx).narrow != narrow {
@@ -1010,8 +1017,11 @@ impl Render for Workspace {
                     let stage = f32::from(window.viewport_size().height)
                         - f32::from(t.size.titlebar)
                         - f32::from(t.size.statusbar);
-                    (if below { stage * super::doc_pane::BELOW_SHARE } else { stage })
-                        - f32::from(t.size.panel_header + t.size.panel_toolbar + t.size.panel_footer)
+                    (if below {
+                        stage * super::doc_pane::BELOW_SHARE
+                    } else {
+                        stage
+                    }) - f32::from(t.size.panel_header + t.size.panel_toolbar + t.size.panel_footer)
                 },
                 zoom: s.doc_zoom_here(),
                 fitted: s.doc_fitted.clone(),
@@ -1046,6 +1056,7 @@ impl Render for Workspace {
                     super::workbench::View {
                         tab,
                         messages: s.chat().map_or(&[][..], |c| c.messages.as_slice()),
+                        working: s.busy(),
                         browser: self.browser.clone().into(),
                         agents: s
                             .current
@@ -1076,27 +1087,28 @@ impl Render for Workspace {
             let leaving_fit = fit.clone();
             let doc_view = |f: &crate::state::FileRef, fit: super::doc_pane::Fit, leaving: bool| {
                 // A file leaving has nothing to edit or comment on any more.
-                let (editor, comments, find, page_field, text_editor, browser, office_editor) = if leaving {
-                    (
-                        div().into_any_element(),
-                        div().into_any_element(),
-                        div().into_any_element(),
-                        div().into_any_element(),
-                        div().into_any_element(),
-                        div().into_any_element(),
-                        div().into_any_element(),
-                    )
-                } else {
-                    (
-                        self.sheet_editor.clone().into_any_element(),
-                        self.doc_comments.clone().into_any_element(),
-                        self.doc_find.clone().into_any_element(),
-                        self.page_field.clone().into_any_element(),
-                        self.text_editor.clone().into_any_element(),
-                        self.browser.clone().into_any_element(),
-                        self.office_editor.clone().into_any_element(),
-                    )
-                };
+                let (editor, comments, find, page_field, text_editor, browser, office_editor) =
+                    if leaving {
+                        (
+                            div().into_any_element(),
+                            div().into_any_element(),
+                            div().into_any_element(),
+                            div().into_any_element(),
+                            div().into_any_element(),
+                            div().into_any_element(),
+                            div().into_any_element(),
+                        )
+                    } else {
+                        (
+                            self.sheet_editor.clone().into_any_element(),
+                            self.doc_comments.clone().into_any_element(),
+                            self.doc_find.clone().into_any_element(),
+                            self.page_field.clone().into_any_element(),
+                            self.text_editor.clone().into_any_element(),
+                            self.browser.clone().into_any_element(),
+                            self.office_editor.clone().into_any_element(),
+                        )
+                    };
                 super::doc_pane::render(
                     f,
                     self.state.clone(),
@@ -1246,7 +1258,14 @@ impl Render for Workspace {
                     .min_h_0()
                     .flex()
                     .when(below, |d| d.flex_col())
-                    .child(div().flex_1().min_w_0().min_h_0().flex().child(self.design_home.clone()))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .min_h_0()
+                            .flex()
+                            .child(self.design_home.clone()),
+                    )
                     .children(pane),
             )
         } else if screen == Screen::Documents {
@@ -1527,10 +1546,12 @@ impl Render for Workspace {
                 this.state.update(cx, |s, cx| s.discard_doc_edits(cx))
             }))
             .on_action(cx.listener(|this, _: &UndoDocEdit, window, cx| {
-                this.text_editor.update(cx, |e, cx| e.step(true, window, cx))
+                this.text_editor
+                    .update(cx, |e, cx| e.step(true, window, cx))
             }))
             .on_action(cx.listener(|this, _: &RedoDocEdit, window, cx| {
-                this.text_editor.update(cx, |e, cx| e.step(false, window, cx))
+                this.text_editor
+                    .update(cx, |e, cx| e.step(false, window, cx))
             }))
             .on_action(cx.listener(|this, _: &DocZoomIn, _, cx| {
                 this.state.update(cx, |s, cx| s.zoom_doc(true, cx))
@@ -1539,8 +1560,9 @@ impl Render for Workspace {
                 this.state.update(cx, |s, cx| s.zoom_doc(false, cx))
             }))
             .on_action(cx.listener(|this, _: &DocZoomFit, _, cx| {
-                this.state
-                    .update(cx, |s, cx| s.set_doc_zoom(crate::doc_zoom::Zoom::FitWidth, cx))
+                this.state.update(cx, |s, cx| {
+                    s.set_doc_zoom(crate::doc_zoom::Zoom::FitWidth, cx)
+                })
             }))
             .on_action(cx.listener(|this, _: &ToggleThumbnails, _, cx| {
                 this.state.update(cx, |s, cx| s.toggle_doc_thumbs(cx))
@@ -1573,46 +1595,67 @@ impl Render for Workspace {
                 this.state.update(cx, |s, cx| s.design_critique(cx))
             }))
             .on_action(cx.listener(|this, _: &DesignChat, _, cx| {
-                this.state.update(cx, |s, cx| s.design_surface(crate::design::prompt::Surface::Any, cx))
+                this.state.update(cx, |s, cx| {
+                    s.design_surface(crate::design::prompt::Surface::Any, cx)
+                })
             }))
             .on_action(cx.listener(|this, _: &DesignDeck, _, cx| {
-                this.state.update(cx, |s, cx| s.design_surface(crate::design::prompt::Surface::Deck, cx))
+                this.state.update(cx, |s, cx| {
+                    s.design_surface(crate::design::prompt::Surface::Deck, cx)
+                })
             }))
             .on_action(cx.listener(|this, _: &DesignPrototype, _, cx| {
-                this.state.update(cx, |s, cx| s.design_surface(crate::design::prompt::Surface::Prototype, cx))
+                this.state.update(cx, |s, cx| {
+                    s.design_surface(crate::design::prompt::Surface::Prototype, cx)
+                })
             }))
             .on_action(cx.listener(|this, _: &DesignDocument, _, cx| {
-                this.state.update(cx, |s, cx| s.design_surface(crate::design::prompt::Surface::Document, cx))
+                this.state.update(cx, |s, cx| {
+                    s.design_surface(crate::design::prompt::Surface::Document, cx)
+                })
             }))
             .on_action(cx.listener(|this, _: &EndDesignChat, _, cx| {
                 this.state.update(cx, |s, cx| s.set_design(None, cx))
             }))
             .on_action(cx.listener(|this, _: &Present, _, cx| {
-                this.state.update(cx, |s, cx| s.set_presenting(!s.presenting, cx))
+                this.state
+                    .update(cx, |s, cx| s.set_presenting(!s.presenting, cx))
             }))
             .on_action(cx.listener(|this, _: &SavePagePng, _, cx| {
-                this.state.update(cx, |s, cx| s.design_export(crate::design::export::Format::Png, cx))
+                this.state.update(cx, |s, cx| {
+                    s.design_export(crate::design::export::Format::Png, cx)
+                })
             }))
             .on_action(cx.listener(|this, _: &SavePagePptx, _, cx| {
-                this.state.update(cx, |s, cx| s.design_export(crate::design::export::Format::Pptx, cx))
+                this.state.update(cx, |s, cx| {
+                    s.design_export(crate::design::export::Format::Pptx, cx)
+                })
             }))
             .on_action(cx.listener(|this, _: &SavePagePptxEditable, _, cx| {
-                this.state.update(cx, |s, cx| s.design_export(crate::design::export::Format::PptxEditable, cx))
+                this.state.update(cx, |s, cx| {
+                    s.design_export(crate::design::export::Format::PptxEditable, cx)
+                })
             }))
             .on_action(cx.listener(|this, _: &SavePageFigma, _, cx| {
-                this.state.update(cx, |s, cx| s.design_export(crate::design::export::Format::Figma, cx))
+                this.state.update(cx, |s, cx| {
+                    s.design_export(crate::design::export::Format::Figma, cx)
+                })
             }))
             .on_action(cx.listener(|this, _: &SavePageHtml, _, cx| {
-                this.state.update(cx, |s, cx| s.design_export(crate::design::export::Format::Html, cx))
+                this.state.update(cx, |s, cx| {
+                    s.design_export(crate::design::export::Format::Html, cx)
+                })
             }))
             .on_action(cx.listener(|this, _: &SavePagePdf, _, cx| {
                 this.state.update(cx, |s, cx| s.design_export_pdf(cx))
             }))
             .on_action(cx.listener(|this, _: &LayoutGuides, _, cx| {
-                this.state.update(cx, |s, cx| s.design_set_guides(!s.design_guides, cx))
+                this.state
+                    .update(cx, |s, cx| s.design_set_guides(!s.design_guides, cx))
             }))
             .on_action(cx.listener(|this, _: &PageOutline, _, cx| {
-                this.state.update(cx, |s, cx| s.design_set_outline(!s.design_outline, cx))
+                this.state
+                    .update(cx, |s, cx| s.design_set_outline(!s.design_outline, cx))
             }))
             .on_action(cx.listener(|this, _: &UndoPage, _, cx| {
                 this.state.update(cx, |s, cx| s.design_step(-1, cx))
@@ -1977,12 +2020,16 @@ impl Render for Workspace {
                     s.show_toast(format!("{}: {}", crate::i18n::tr("Language"), l.name()), cx)
                 })
             }))
-            .on_action(cx.listener(|this, _: &NextPet, _, cx| {
-                this.state.update(cx, |s, cx| s.next_pet(cx))
-            }))
-            .on_action(cx.listener(|this, _: &HidePet, _, cx| {
-                this.state.update(cx, |s, cx| s.hide_pet(cx))
-            }))
+            .on_action(
+                cx.listener(|this, _: &NextPet, _, cx| {
+                    this.state.update(cx, |s, cx| s.next_pet(cx))
+                }),
+            )
+            .on_action(
+                cx.listener(|this, _: &HidePet, _, cx| {
+                    this.state.update(cx, |s, cx| s.hide_pet(cx))
+                }),
+            )
             .on_action(cx.listener(|this, _: &OpenDesign, _, cx| {
                 this.state.update(cx, |s, cx| s.open_design_home(cx))
             }))
@@ -2534,12 +2581,7 @@ fn greeting_line(line: &str, split: bool, t: &crate::theme::Theme) -> impl IntoE
         .gap(if split { t.space.sm } else { t.space.md })
         // Centred on the capitals rather than the line box, whose descender
         // room would otherwise leave the mark sitting high.
-        .child(
-            div()
-                .flex_none()
-                .mt(px(3.))
-                .child(super::logo(mark_size)),
-        )
+        .child(div().flex_none().mt(px(3.)).child(super::logo(mark_size)))
         .child(
             div()
                 .min_w_0()

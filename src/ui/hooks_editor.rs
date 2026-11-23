@@ -36,9 +36,11 @@ impl HooksEditor {
         Self {
             _sub: cx.observe(&state, |_, _, cx| cx.notify()),
             matcher: cx.new(|cx| {
-                InputState::new(window, cx).placeholder("e.g. Bash  or  Edit|Write  (empty: every tool)")
+                InputState::new(window, cx)
+                    .placeholder("e.g. Bash  or  Edit|Write  (empty: every tool)")
             }),
-            command: cx.new(|cx| InputState::new(window, cx).placeholder("e.g. ./scripts/check.sh")),
+            command: cx
+                .new(|cx| InputState::new(window, cx).placeholder("e.g. ./scripts/check.sh")),
             timeout: cx.new(|cx| InputState::new(window, cx).placeholder("60 if empty")),
             state,
             form: None,
