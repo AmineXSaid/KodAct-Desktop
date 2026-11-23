@@ -59,8 +59,6 @@ pub struct ItemContext {
     /// Diagrams showing their source (`AppState::diagram_code`).
     pub sources: std::sync::Arc<std::collections::HashSet<SharedString>>,
     pub zooms: std::sync::Arc<std::collections::HashMap<SharedString, f32>>,
-    /// Each file card's first page, by its bytes' key (`AppState::card_thumbs`).
-    pub thumbs: std::sync::Arc<std::collections::HashMap<u64, Option<std::sync::Arc<gpui::Image>>>>,
     /// What the newest turn changed in the project's memory, under its reply.
     pub memory: Option<crate::state::MemoryChange>,
     /// The runs of calls opened to their steps, by their first block (in
@@ -835,36 +833,6 @@ fn assistant_row(
         rows.push(super::work_group::render(blocks, w, cx, t));
         return true;
     }
-    // Two or more files in a row show as a gallery of large tiles.
-    let files = blocks[at..]
-        .iter()
-        .take_while(|blk| matches!(blk, Block::File(f) if !f.is_diagram()))
-        .count();
-    if files > 1 {
-        let tiles = (at..at + files)
-            .filter_map(|i| match &blocks[i] {
-                Block::File(f) => Some(super::file_card::Tile {
-                    file: f.clone(),
-                    key: format!("{}-{}-{i}", cx.chat, cx.index),
-                    thumb: f
-                        .bytes
-                        .as_ref()
-                        .and_then(|b| cx.thumbs.get(&crate::office_render::key(b)).cloned())
-                        .flatten(),
-                }),
-                _ => None,
-            })
-            .collect();
-        rows.push(super::file_card::gallery(
-            tiles,
-            cx.state.clone(),
-            cx.open_doc.as_ref(),
-            cx.scale,
-            t,
-        ));
-        *b += files;
-        return false;
-    }
     if denied_call(blocks, at) || folded_answer(blocks, at) || asked_call(blocks, at) {
         // A denied call never ran: its denial says all there is. An
         // allowed one shows once, its row carrying the answer.
@@ -1048,10 +1016,6 @@ pub(super) fn block(blocks: &[Block], b: usize, cx: &ItemContext, t: &Theme) -> 
                 cx.open_doc.as_ref() == Some(file),
                 cx.scale,
                 Some(view),
-                file.bytes
-                    .as_ref()
-                    .and_then(|b| cx.thumbs.get(&crate::office_render::key(b)).cloned())
-                    .flatten(),
                 t,
             )
         }

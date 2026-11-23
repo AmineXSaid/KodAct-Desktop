@@ -576,38 +576,6 @@ impl Render for ChatView {
             );
             self.versions_presence.frame(now, out, window)
         };
-        // The first page of every file card in this chat, drawn once in the
-        // background; the cards show their app's mark until it is ready.
-        {
-            let s = self.state.read(cx);
-            let wanted: Vec<crate::state::FileRef> = s
-                .chat()
-                .map(|chat| {
-                    chat.messages
-                        .iter()
-                        .filter_map(|m| match m {
-                            Message::Assistant { blocks } => Some(blocks.as_slice()),
-                            _ => None,
-                        })
-                        .flatten()
-                        .filter_map(|b| match b {
-                            Block::File(f) => Some(f),
-                            _ => None,
-                        })
-                        .filter(|f| {
-                            f.bytes.as_ref().is_some_and(|b| {
-                                !s.card_thumbs.contains_key(&crate::office_render::key(b))
-                            })
-                        })
-                        .cloned()
-                        .collect()
-                })
-                .unwrap_or_default();
-            if !wanted.is_empty() {
-                let state = self.state.clone();
-                cx.defer(move |cx| state.update(cx, |s, cx| s.want_thumbs(wanted, cx)));
-            }
-        }
         let reveal = self.reveal.clone();
         let state = self.state.clone();
         let step = self.step.clone();
@@ -700,7 +668,6 @@ impl Render for ChatView {
                         inspected_agent,
                         sources: s.diagram_code.clone(),
                         zooms: s.diagram_zoom.clone(),
-                        thumbs: s.card_thumbs.clone(),
                         detailed: chat.detailed,
                         open_groups: s
                             .open_groups
