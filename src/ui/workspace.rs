@@ -650,17 +650,6 @@ impl Workspace {
         let name = s.user_name.clone().unwrap_or_default();
         let name = name.trim();
         let line = crate::greeting::pick(name, crate::greeting::hour_now(), s.greeting_seed);
-        let project = s
-            .project(s.current_project)
-            .map(|p| p.name.to_string())
-            .unwrap_or_default();
-        let sub = if !s.in_folder() {
-            "Pick a folder below to code, or ask anything right away.".to_string()
-        } else if project.is_empty() {
-            "Ask, plan or build. You review every change.".to_string()
-        } else {
-            format!("Working in {project}. You review every change.")
-        };
         // Three cards a row; two when a panel narrows the column, so each
         // stays readable.
         let per_row = if self.composer.read(cx).narrow { 2 } else { 3 };
@@ -776,15 +765,7 @@ impl Workspace {
                                             &line,
                                             s.panel.is_some() || s.doc.is_some(),
                                             &t,
-                                        ))
-                                        .child(
-                                            div()
-                                                .max_w(t.size.composer_width)
-                                                .text_size(t.text.body_sm)
-                                                .text_color(t.colors.text_muted)
-                                                .text_center()
-                                                .child(sub),
-                                        ),
+                                        )),
                                     "welcome-greeting",
                                     0,
                                     &t,
@@ -2529,7 +2510,10 @@ fn share_out(
 /// The greeting, in the display serif, after KodAct's mark: an editorial
 /// line, not a banner.
 fn greeting_line(line: &str, split: bool, t: &crate::theme::Theme) -> impl IntoElement {
-    let long = line.chars().count() > 26;
+    // A greeting past 22 letters steps down a size, so it stays on one
+    // line beside the mark (at the large size a 26-letter line left its
+    // '?' alone on a second line).
+    let long = line.chars().count() > 22;
     let mark_size = if split {
         (f32::from(t.size.mark_home) * 0.78).round()
     } else {
@@ -2565,6 +2549,7 @@ fn greeting_line(line: &str, split: bool, t: &crate::theme::Theme) -> impl IntoE
                 .text_color(t.colors.text_strong)
                 .line_height(gpui::relative(1.15))
                 .text_center()
+                .whitespace_nowrap()
                 .child(line.to_string()),
         )
 }
