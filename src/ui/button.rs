@@ -98,8 +98,8 @@ impl Variant {
                 border: None,
             },
             Variant::Accent => Paint {
-                bg: t.extra.accent,
-                hover_bg: t.extra.accent.opacity(0.9),
+                bg: t.extra.accent_fill,
+                hover_bg: t.extra.accent_fill.opacity(0.9),
                 fg: t.extra.accent_fg,
                 border: None,
             },

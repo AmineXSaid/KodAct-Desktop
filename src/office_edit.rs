@@ -53,6 +53,8 @@ pub struct Para {
     pub heading: Option<u8>,
     /// A bullet or numbered item.
     pub list: bool,
+    /// In a table: (the table's place among the document's, row, column).
+    pub table: Option<(usize, usize, usize)>,
 }
 
 /// A slide's paragraphs and its speaker notes'.
@@ -103,6 +105,8 @@ fn paragraphs(xml: &str, spec: &Spec) -> Vec<Para> {
     let mut out: Vec<Para> = vec![];
     let mut stack: Vec<usize> = vec![];
     let (mut in_text, mut in_field) = (false, false);
+    // The cell being read: tables nest, the outermost one names the place.
+    let (mut tables, mut depth, mut row, mut col) = (0usize, 0usize, 0usize, 0usize);
     loop {
         match reader.read_event() {
             Ok(ref ev @ (Event::Start(_) | Event::Empty(_))) => {
@@ -110,12 +114,21 @@ fn paragraphs(xml: &str, spec: &Spec) -> Vec<Para> {
                     continue;
                 };
                 let name = local(e);
-                if name == spec.para {
+                if spec.para == WORD.para && name == b"w:tbl" {
+                    if matches!(ev, Event::Start(_)) {
+                        if depth == 0 {
+                            tables += 1;
+                            (row, col) = (0, 0);
+                        }
+                        depth += 1;
+                    }
+                } else if name == spec.para {
                     out.push(Para {
                         index: out.len(),
                         text: String::new(),
                         heading: None,
                         list: false,
+                        table: (depth > 0).then(|| (tables - 1, row, col)),
                     });
                     if matches!(ev, Event::Start(_)) {
                         stack.push(out.len() - 1);
@@ -148,7 +161,13 @@ fn paragraphs(xml: &str, spec: &Spec) -> Vec<Para> {
             }
             Ok(Event::End(e)) => {
                 let name = e.name().as_ref().to_vec();
-                if name == spec.text {
+                if spec.para == WORD.para && name == b"w:tbl" {
+                    depth = depth.saturating_sub(1);
+                } else if spec.para == WORD.para && depth == 1 && name == b"w:tc" {
+                    col += 1;
+                } else if spec.para == WORD.para && depth == 1 && name == b"w:tr" {
+                    (row, col) = (row + 1, 0);
+                } else if name == spec.text {
                     in_text = false;
                 } else if spec.field.is_some_and(|f| f == name.as_slice()) {
                     in_field = false;
@@ -580,6 +599,27 @@ mod tests {
         let p = read_docx(&after).unwrap();
         assert_eq!(p[2].text, "Added");
         assert_eq!((p[0].text.as_str(), p[0].heading), ("Budget", Some(1)));
+    }
+
+    #[test]
+    fn a_tables_cells_are_placed_by_row_and_column() {
+        let doc = r#"<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>Before</w:t></w:r></w:p>
+<w:tbl><w:tr><w:tc><w:p><w:r><w:t>A1</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>B1</w:t></w:r></w:p></w:tc></w:tr>
+<w:tr><w:tc><w:p><w:r><w:t>A2</w:t></w:r></w:p><w:p><w:r><w:t>A2b</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>B2</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
+<w:p><w:r><w:t>After</w:t></w:r></w:p></w:body></w:document>"#;
+        let bytes = zip_of(&[
+            ("[Content_Types].xml", "<Types/>"),
+            ("word/document.xml", doc),
+        ]);
+        let p = read_docx(&bytes).unwrap();
+        let at = |t: &str| p.iter().find(|x| x.text == t).unwrap().table;
+        assert_eq!(at("Before"), None);
+        assert_eq!(at("A1"), Some((0, 0, 0)));
+        assert_eq!(at("B1"), Some((0, 0, 1)));
+        assert_eq!(at("A2"), Some((0, 1, 0)));
+        assert_eq!(at("A2b"), Some((0, 1, 0)));
+        assert_eq!(at("B2"), Some((0, 1, 1)));
+        assert_eq!(at("After"), None);
     }
 
     #[test]

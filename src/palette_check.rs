@@ -205,7 +205,7 @@ fn each_theme_has_one_colour() {
             );
         }
         assert!(
-            contrast(x.accent_fg, x.accent) >= AA_TEXT,
+            contrast(x.accent_fg, x.accent_fill) >= AA_TEXT,
             "{mode}: the accent's label"
         );
     }
@@ -347,7 +347,7 @@ fn coloured_text_reads_on_its_tint() {
         for (name, c, arrow_fg) in [
             ("plan", x.mode_plan, t.colors.primary_fg),
             ("bypass", x.mode_bypass, t.colors.primary_fg),
-            ("default", x.accent, x.accent_fg),
+            ("default", x.accent_fill, x.accent_fg),
         ] {
             let arrow = contrast(arrow_fg, c);
             assert!(

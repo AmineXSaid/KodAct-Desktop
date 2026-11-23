@@ -8,7 +8,7 @@
 
 **Personality:** calmly smooth: a warm editorial workspace, confident and unhurried, closer to a printed quarterly than a dashboard (after the Anchor style reference).
 
-**Foundation:** KodAct burgundy on neutral greys (after Postman's, for easy reading). By day: the window and sidebar #efefef, the session #f7f7f7, cards white; type #212121, secondary #616161. At night: the session charcoal #212121, the sidebar and title bar #282828, cards #303030; type white, secondary #b0b0b0. One colour, burgundy: #7a1f3d (#e0889f at night) for the mark, Send and the other main actions (Save, Allow), a waiting dot and the Act of the wordmark; its wash is #f3dde3 (#3a1a24 at night). Links (underlined), focus, selection, switches that are on, all other buttons and work in progress are ink: #1a1816 (#edeae6 at night). Errors are a brick red, #b82a1a (#ff8a7a at night), held apart from the burgundy. Everything else is neutral; colour otherwise only for meaning (modes, status).
+**Foundation:** KodAct burgundy on neutral greys (after Postman's, for easy reading). By day: the window and sidebar #efefef, the session #f7f7f7, cards white; type #212121, secondary #616161. At night: the session charcoal #212121, the sidebar and title bar #282828, cards #303030; type white, secondary #b0b0b0. One colour, burgundy: #7a1f3d (#e0889f at night, where it is a line, a dot, the mark or text) for the mark and a waiting dot; as a fill (Send, Save, Allow) it is #7a1f3d, deeper at night (#a8324f) under a white label, and the Act of the wordmark; its wash is #f3dde3 (#3a1a24 at night). Links (underlined), focus, selection, switches that are on, all other buttons and work in progress are ink: #1a1816 (#edeae6 at night). Errors are a brick red, #b82a1a (#ff8a7a at night), held apart from the burgundy. Everything else is neutral; colour otherwise only for meaning (modes, status).
 
 **Depth:** nearly flat. Hairlines inside cards; the session and the user's message lift on paper grain (three 1px shadows at 6/4/1% ink); popovers and the permission card a touch more.
 
@@ -132,8 +132,9 @@ Contrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of w
 | `border` | `#000000 @ 12.0%` | 1.3:1 | `#ffffff @ 10.0%` | 1.4:1 | hairlines |
 | `border_strong` | `#d4d4d4` | 1.5:1 | `#4a4a4a` | 1.5:1 | outlined buttons, a switch at rest |
 | `primary` | `#1a1816` | 17.7:1 | `#edeae6` | 11.0:1 | links, selected text, the focus edge |
-| `accent` | `#7a1f3d` | 10.0:1 | `#e0889f` | 7.6:1 | send, the new-chat mark, accent dots (white icon on it) |
-| `fill` | `#7a1f3d` | 10.0:1 | `#e0889f` | 7.6:1 | filled buttons: ink on paper, paper on charcoal |
+| `accent` | `#7a1f3d` | 10.0:1 | `#e0889f` | 5.1:1 | the mark, accent dots and lines (lifted at night) |
+| `accent_fill` | `#7a1f3d` | 10.0:1 | `#a8324f` | 6.5:1 | send, Save, the new-chat mark: the burgundy as a fill (deeper at night, white label) |
+| `fill` | `#7a1f3d` | 10.0:1 | `#a8324f` | 6.5:1 | filled buttons: ink on paper, paper on charcoal |
 | `toggle_on` | `#1a1816` | 17.7:1 | `#edeae6` | 11.0:1 | a switch that is on |
 | `mark_top` | `#7a1f3d` | 9.4:1 | `#e0889f` | 6.3:1 | KodAct's mark, both strokes (`ui/kodact_mark.rs`) |
 | `page_ink` | `#7a1f3d` | 10.0:1 | `#7a1f3d` | 10.0:1 | marks drawn on a design page, on their halo (`ui/design_marks.rs`) |
@@ -165,7 +166,7 @@ One family; every control takes keyboard focus (a `primary` edge shows for the k
 - Secondary and Outlined: `surface`, 1px `border_strong`, `hover` wash.
 - Ghost: clear until hovered. Danger: `fill_danger`, white.
 - Icon: 34px square, radius 4px, a 16px icon in `text_muted`; outlined squares 38px at 9999px radius.
-- Send: 38px, radius 9999px, `accent` with a white arrow; `accent_soft` with nothing to send; Stop is an ink ring round a square.
+- Send: 38px, radius 9999px, `accent_fill` with a white arrow; `accent_soft` with nothing to send; Stop is an ink ring round a square.
 - Switch: 36x20px pill, 14px thumb sliding over 120ms; `toggle_on` when on, `border_strong` when off.
 - Segmented: a `sunk` track, radius 4px; the chosen segment raised onto `surface` at 9999px.
 

@@ -476,6 +476,9 @@ impl Render for BrowserView {
         let zoom = s.web_zoom;
         self.zoom = zoom;
         let presenting = s.presenting;
+        // A web page previewed in the file view: the file's toolbar is the
+        // only chrome (no tabs, address bar or access note).
+        let bare = s.doc.as_ref().is_some_and(|f| f.is_html()) && !s.source_view;
         let out_ms = cx.theme().size.menu_out_ms;
         // A page this chat designed gets the design bar, and its comments.
         let here = s.design_comments_here();
@@ -1458,7 +1461,7 @@ impl Render for BrowserView {
             .size_full()
             .flex()
             .flex_col()
-            .when(!presenting, |d| d.child(tab_strip).child(bar).child(progress))
+            .when(!presenting && !bare, |d| d.child(tab_strip).child(bar).child(progress))
             .child(
                 div()
                     .flex_1()
@@ -1468,7 +1471,7 @@ impl Render for BrowserView {
                     .children(outline_rail)
                     .child(viewport.min_w_0().children(present_controls)),
             )
-            .when(!presenting, |d| d.child(
+            .when(!presenting && !bare, |d| d.child(
                 // The agent's access, said once at the foot.
                 div()
                     .flex_none()

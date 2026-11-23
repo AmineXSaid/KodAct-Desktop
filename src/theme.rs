@@ -150,7 +150,7 @@ impl Look {
         // `#edeae6` at night), as are all other buttons and work in progress.
         if dark {
             t(
-                0x282828, 0x212121, 0x303030, 0x1c1c1c, 0xe0889f, 0x1a0710, 0x3a1a24, 0xedeae6,
+                0x282828, 0x212121, 0x303030, 0x1c1c1c, 0xe0889f, 0xffffff, 0x3a1a24, 0xedeae6,
                 0xffffff, 0xe0889f,
             )
         } else {
@@ -498,7 +498,8 @@ pub struct ExtraColors {
     // ink), kept for the few places it earns: the send button, the mark.
     pub accent: Hsla,
     pub accent_soft: Hsla, // the send button with nothing to send; a soft wash
-    pub accent_fg: Hsla,
+    pub accent_fg: Hsla,   // the label on `accent_fill`: white in both modes
+    pub accent_fill: Hsla, // the burgundy as a fill (Send, Save): deeper at night
     // KodAct's mark (`ui/kodact_mark.rs`): its dot and angle, in the accent's hue.
     pub mark_top: Hsla,
     // Marks drawn on a design page (`ui/design_marks.rs`): the page is
@@ -579,14 +580,15 @@ impl ExtraColors {
                 // The filled action is paper on ink, as ink on paper in light.
                 // The filled action is the burgundy, lifted for the night,
                 // under a dark label.
-                fill: rgb(0xe0889f).into(),
-                fill_hover: rgb(0xeba3b5).into(),
+                fill: rgb(0xa8324f).into(),
+                fill_hover: rgb(0xb94563).into(),
                 // Brick, lifted for the night, under the dark label.
                 fill_danger: rgb(0xff8a7a).into(),
-                fill_fg: rgb(0x1a0710).into(),
+                fill_fg: rgb(0xffffff).into(),
                 accent: rgb(0xe0889f).into(),
                 accent_soft: rgb(0x3a1a24).into(),
-                accent_fg: rgb(0x1a0710).into(),
+                accent_fg: rgb(0xffffff).into(),
+                accent_fill: rgb(0xa8324f).into(),
                 mark_top: rgb(0xe0889f).into(),
                 page_ink: rgb(0x7a1f3d).into(),
                 page_halo: rgb(0xffffff).into(),
@@ -660,6 +662,7 @@ impl ExtraColors {
                 accent: rgb(0x7a1f3d).into(),
                 accent_soft: rgb(0xf3dde3).into(),
                 accent_fg: rgb(0xffffff).into(),
+                accent_fill: rgb(0x7a1f3d).into(),
                 mark_top: rgb(0x7a1f3d).into(),
                 page_ink: rgb(0x7a1f3d).into(),
                 page_halo: rgb(0xffffff).into(),

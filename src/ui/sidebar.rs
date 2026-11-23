@@ -1148,7 +1148,7 @@ pub fn rail(
                         .items_center()
                         .justify_center()
                         .rounded_full()
-                        .bg(t.extra.accent)
+                        .bg(t.extra.accent_fill)
                         .child(icon("icons/plus.svg", t.size.icon_sm, t.extra.accent_fg)),
                 )
                 .tooltip(|window, cx| {

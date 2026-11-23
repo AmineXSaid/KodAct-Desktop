@@ -729,6 +729,20 @@ pub fn render(
         .flex_col()
         .child(row1)
         .child(row2)
+        .when(words_editable && (text_view || !has_pages), |d| {
+            d.child(
+                div()
+                    .flex_none()
+                    .px(t.space.md)
+                    .py(t.space.xs)
+                    .bg(t.extra.panel)
+                    .border_b_1()
+                    .border_color(t.colors.border)
+                    .text_size(t.text.caption)
+                    .text_color(t.colors.text_muted)
+                    .child("Edit any paragraph, then Save. Formatting of each paragraph is kept."),
+            )
+        })
         .child(find)
         .children(zoom_menu);
     let wheel = state.clone();

@@ -9,8 +9,8 @@ use std::collections::BTreeMap;
 
 use gpui::component::input::{InputEvent, Textarea, TextareaState};
 use gpui::{
-    div, prelude::*, px, Context, Entity, FontWeight, IntoElement, Render, SharedString,
-    Subscription, Window,
+    div, prelude::*, px, relative, AnyElement, Context, Entity, FontWeight, IntoElement, Render,
+    SharedString, Subscription, Window,
 };
 
 use crate::office::Kind;
@@ -26,6 +26,8 @@ enum Item {
         field: Entity<TextareaState>,
         heading: Option<u8>,
         list: bool,
+        /// In a table: (table, row, column).
+        cell: Option<(usize, usize, usize)>,
     },
 }
 
@@ -76,11 +78,18 @@ impl OfficeEditor {
                 }
             }),
         );
+        // Focus moves redraw the field's frame.
+        let handle = gpui::Focusable::focus_handle(field.read(cx), cx);
+        self.field_subs
+            .push(cx.on_focus_in(&handle, window, |_, _, cx| cx.notify()));
+        self.field_subs
+            .push(cx.on_focus_out(&handle, window, |_, _, _, cx| cx.notify()));
         Item::Field {
             original,
             field,
             heading: p.heading,
             list: p.list,
+            cell: p.table,
         }
     }
 
@@ -194,61 +203,155 @@ impl Render for OfficeEditor {
             .flex()
             .flex_col()
             .gap(t.space.xs);
-        for item in &self.items {
-            col = match item {
-                Item::Label(text) => col.child(
+        // One field: set in the reading face at the document's size, framed
+        // on hover and ringed while it is typed in.
+        let field_view = |field: &Entity<TextareaState>,
+                          heading: Option<u8>,
+                          list: bool,
+                          window: &mut Window,
+                          cx: &mut Context<Self>| {
+            let size = match heading {
+                Some(1) => t.text.subheading,
+                Some(2) => t.text.body + px(2.),
+                _ => t.size.doc_text - px(1.),
+            };
+            let focused = gpui::Focusable::focus_handle(field.read(cx), cx).is_focused(window);
+            let hover = t.colors.border;
+            div()
+                .flex()
+                .items_start()
+                .gap(t.space.xs)
+                .pt(if heading.is_some() {
+                    t.space.md
+                } else {
+                    px(0.)
+                })
+                .children(list.then(|| {
                     div()
-                        .pt(t.space.lg)
-                        .text_size(t.text.caption)
-                        .font_weight(FontWeight::MEDIUM)
+                        .flex_none()
+                        .pt(px(7.))
+                        .w(t.space.md)
                         .text_color(t.colors.text_muted)
-                        .child(text.clone()),
-                ),
+                        .child("•")
+                }))
+                .child(
+                    div()
+                        .id(SharedString::from(format!(
+                            "office-field-{}",
+                            field.entity_id()
+                        )))
+                        .flex_1()
+                        .min_w_0()
+                        .px(t.space.xs)
+                        .rounded(t.radius.small)
+                        .border_1()
+                        .border_color(if focused {
+                            t.colors.primary
+                        } else {
+                            gpui::transparent_black()
+                        })
+                        .when(!focused, |d| d.hover(move |s| s.border_color(hover)))
+                        .font_family(t.font_reading.clone())
+                        .text_size(size)
+                        .line_height(relative(t.size.line_height_doc))
+                        .text_color(t.colors.text_body)
+                        .font_weight(if heading.is_some() {
+                            FontWeight::SEMIBOLD
+                        } else {
+                            FontWeight::NORMAL
+                        })
+                        .child(
+                            Textarea::new(field)
+                                .appearance(false)
+                                .font_family(t.font_reading.clone())
+                                .text_size(size)
+                                .line_height(relative(t.size.line_height_doc)),
+                        ),
+                )
+                .into_any_element()
+        };
+        let items: Vec<(usize, &Item)> = self.items.iter().enumerate().collect();
+        let mut i = 0;
+        while i < items.len() {
+            match items[i].1 {
+                Item::Label(text) => {
+                    col = col.child(
+                        div()
+                            .pt(t.space.lg)
+                            .text_size(t.text.caption)
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(t.colors.text_muted)
+                            .child(text.clone()),
+                    );
+                    i += 1;
+                }
+                Item::Field {
+                    cell: Some((tbl, ..)),
+                    ..
+                } => {
+                    // A table: its cells as a grid of fields, row by row.
+                    let tbl = *tbl;
+                    let mut cells: BTreeMap<(usize, usize), Vec<AnyElement>> = BTreeMap::new();
+                    while let Some(Item::Field {
+                        cell: Some((t2, r, c)),
+                        field,
+                        heading,
+                        list,
+                        ..
+                    }) = items.get(i).map(|x| x.1)
+                    {
+                        if *t2 != tbl {
+                            break;
+                        }
+                        cells
+                            .entry((*r, *c))
+                            .or_default()
+                            .push(field_view(field, *heading, *list, window, cx));
+                        i += 1;
+                    }
+                    let rows = cells.keys().map(|k| k.0).max().map_or(0, |m| m + 1);
+                    let mut grid = div()
+                        .flex()
+                        .flex_col()
+                        .my(t.space.sm)
+                        .border_1()
+                        .border_color(t.colors.border)
+                        .rounded(t.radius.small);
+                    for r in 0..rows {
+                        let mut row = div().flex().border_t_1().border_color(t.colors.border);
+                        if r == 0 {
+                            row = row.border_t_0();
+                        }
+                        let in_row: Vec<_> =
+                            cells.keys().filter(|k| k.0 == r).map(|k| k.1).collect();
+                        for c in in_row {
+                            let content = cells.remove(&(r, c)).unwrap_or_default();
+                            row = row.child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .p(t.space.xs)
+                                    .border_l_1()
+                                    .border_color(t.colors.border)
+                                    .flex()
+                                    .flex_col()
+                                    .children(content),
+                            );
+                        }
+                        grid = grid.child(row);
+                    }
+                    col = col.child(grid);
+                }
                 Item::Field {
                     field,
                     heading,
                     list,
                     ..
                 } => {
-                    let size = match heading {
-                        Some(1) => t.text.subheading,
-                        Some(2) => t.text.body + px(2.),
-                        Some(_) => t.text.body,
-                        None => t.text.body_sm,
-                    };
-                    col.child(
-                        div()
-                            .flex()
-                            .items_start()
-                            .gap(t.space.xs)
-                            .pt(if heading.is_some() {
-                                t.space.md
-                            } else {
-                                px(0.)
-                            })
-                            .children(list.then(|| {
-                                div()
-                                    .flex_none()
-                                    .pt(px(6.))
-                                    .w(t.space.md)
-                                    .text_color(t.colors.text_muted)
-                                    .child("•")
-                            }))
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .text_size(size)
-                                    .font_weight(if heading.is_some() {
-                                        FontWeight::SEMIBOLD
-                                    } else {
-                                        FontWeight::NORMAL
-                                    })
-                                    .child(Textarea::new(field).appearance(false)),
-                            ),
-                    )
+                    col = col.child(field_view(field, *heading, *list, window, cx));
+                    i += 1;
                 }
-            };
+            }
         }
         div()
             .flex()
