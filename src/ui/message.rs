@@ -833,6 +833,28 @@ fn assistant_row(
         rows.push(super::work_group::render(blocks, w, cx, t));
         return true;
     }
+    // Two or more files in a row: one framed list, not a stack of cards.
+    let files = blocks[at..]
+        .iter()
+        .take_while(|blk| matches!(blk, Block::File(f) if !f.is_diagram()))
+        .count();
+    if files > 1 {
+        let list = (at..at + files)
+            .filter_map(|i| match &blocks[i] {
+                Block::File(f) => Some((f.clone(), format!("{}-{}-{i}", cx.chat, cx.index))),
+                _ => None,
+            })
+            .collect();
+        rows.push(super::file_card::list(
+            list,
+            cx.state.clone(),
+            cx.open_doc.as_ref(),
+            cx.scale,
+            t,
+        ));
+        *b += files;
+        return false;
+    }
     if denied_call(blocks, at) || folded_answer(blocks, at) || asked_call(blocks, at) {
         // A denied call never ran: its denial says all there is. An
         // allowed one shows once, its row carrying the answer.

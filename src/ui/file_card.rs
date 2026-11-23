@@ -803,3 +803,126 @@ mod page_tests {
         assert_eq!(words, "Files open & edit.");
     }
 }
+
+/// Several files a reply made, framed as one list rather than a stack of
+/// cards: a quiet count over rows a hairline apart, each its app's mark (or
+/// its type's icon), its name and type, and Download, a quiet icon. A row
+/// opens its file beside the chat; the open one carries the selected wash.
+pub fn list(
+    files: Vec<(FileRef, String)>,
+    state: Entity<AppState>,
+    open: Option<&FileRef>,
+    scale: f32,
+    t: &Theme,
+) -> AnyElement {
+    let n = files.len();
+    let rows = files.into_iter().enumerate().map(|(i, (file, key))| {
+        let is_open = open == Some(&file);
+        let (opener, to_open) = (state.clone(), file.clone());
+        let (saver, to_save) = (state.clone(), file.clone());
+        let hover = t.colors.hover;
+        let mark: AnyElement = match file.office() {
+            Some(kind) => super::file_mark::render(kind, 28., scale),
+            None => div()
+                .flex_none()
+                .size(px(28.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(t.radius.small)
+                .bg(t.extra.sunk)
+                .child(
+                    gpui::img(super::file_icon::asset(
+                        &file.name,
+                        false,
+                        file.path.as_deref().unwrap_or(&file.name),
+                    ))
+                    .flex_none()
+                    .size(t.size.icon),
+                )
+                .into_any_element(),
+        };
+        let row = div()
+            .id(SharedString::from(format!("file-row-{key}")))
+            .flex()
+            .items_center()
+            .gap(t.space.md)
+            .px(t.space.md)
+            .py(t.space.sm)
+            .cursor_pointer()
+            .when(i > 0, |d| d.border_t_1().border_color(t.colors.border))
+            .hover(move |st| st.bg(hover))
+            .child(mark)
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .items_baseline()
+                    .gap(t.space.sm)
+                    .child(
+                        div()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .text_size(t.text.body_sm)
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(t.colors.text_strong)
+                            .child(file.title()),
+                    )
+                    .child(
+                        div()
+                            .flex_none()
+                            .text_size(t.text.caption)
+                            .text_color(t.colors.text_subtle)
+                            .child(format!("{} · {}", file.label(), file.kind())),
+                    ),
+            )
+            .child(
+                super::button::Button::icon(
+                    SharedString::from(format!("file-row-dl-{key}")),
+                    "icons/download.svg",
+                    "Download",
+                )
+                .compact()
+                .on_click(move |_, _, cx| {
+                    cx.stop_propagation();
+                    saver.update(cx, |s, cx| s.download(&to_save, cx));
+                }),
+            )
+            .on_click(move |_, _, cx| opener.update(cx, |s, cx| s.open_doc(to_open.clone(), cx)));
+        if is_open {
+            crate::theme::selected(t, row).into_any_element()
+        } else {
+            row.into_any_element()
+        }
+    });
+    div()
+        .w_full()
+        .max_w(px(CARD))
+        .flex()
+        .flex_col()
+        .bg(t.colors.surface)
+        .border_1()
+        .border_color(t.colors.border)
+        .rounded(t.radius.card)
+        .overflow_hidden()
+        .shadow(t.elevation_grain())
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(t.space.xs)
+                .px(t.space.md)
+                .pt(t.space.sm)
+                .pb(t.space.xs)
+                .text_size(t.text.caption)
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(t.colors.text_muted)
+                .child(icon("icons/folder.svg", t.size.icon_xs, t.colors.text_muted))
+                .child(format!("{n} files")),
+        )
+        .child(div().border_t_1().border_color(t.colors.border).children(rows))
+        .into_any_element()
+}
