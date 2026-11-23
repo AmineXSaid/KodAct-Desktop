@@ -497,11 +497,16 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
                                 .flex()
                                 .items_start()
                                 .gap(t.space.sm)
-                                .child(div().pt(px(2.)).child(match status {
-                                    ToolStatus::Declined => icon("icons/circle-dashed.svg", t.size.icon_sm, t.colors.text_subtle)
-                                        .into_any_element(),
-                                    s => super::tasks::status_icon(*s, t, format!("todo-{i}").into()),
-                                }))
+                                // The reply's card's marks, so the two read alike.
+                                .child(div().pt(px(2.)).child(super::todo_card::mark(
+                                    match status {
+                                        ToolStatus::Done => super::todo_card::TodoState::Done,
+                                        ToolStatus::Running => super::todo_card::TodoState::Active,
+                                        _ => super::todo_card::TodoState::Pending,
+                                    },
+                                    format!("todo-{i}").into(),
+                                    t,
+                                )))
                                 .child(
                                     div()
                                         .text_size(t.text.body_sm)
@@ -511,7 +516,6 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
                                         } else {
                                             t.colors.text
                                         })
-                                        .when(*status == ToolStatus::Done, |d| d.line_through())
                                         .child(text.clone()),
                                 )
                         },

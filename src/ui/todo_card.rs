@@ -132,23 +132,37 @@ pub fn slot(blocks: &[Block], b: usize) -> Option<usize> {
     (calls.first() == Some(&b)).then(|| *calls.last().unwrap_or(&b))
 }
 
+/// A task's mark, the same in the reply's card and the side panel's Plan:
+/// done, a small solid disc with a check reversed out of it (quiet ink, not
+/// a colour); in progress, KodAct's working mark; to do, a thin ring.
+pub fn mark(state: TodoState, key: SharedString, t: &Theme) -> AnyElement {
+    let size = t.size.icon_sm;
+    match state {
+        TodoState::Done => div()
+            .flex_none()
+            .size(size)
+            .rounded(t.radius.pill)
+            .bg(t.colors.text_muted)
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(icon("icons/check.svg", px(9.), t.colors.surface))
+            .into_any_element(),
+        TodoState::Active => super::turning_logo(f32::from(size), key),
+        TodoState::Pending => div()
+            .flex_none()
+            .size(size)
+            .rounded(t.radius.pill)
+            .border_1()
+            .border_color(t.colors.text_subtle)
+            .into_any_element(),
+    }
+}
+
 /// The card and its live bar for `list`; `key` names its animations.
 pub fn render(list: &TodoList, key: &str, state: &Entity<AppState>, t: &Theme) -> AnyElement {
     let rows = list.items.iter().enumerate().map(|(i, todo)| {
-        let mark: AnyElement = match todo.state {
-            TodoState::Done => {
-                icon("icons/circle-check.svg", t.size.icon_sm, t.colors.text_muted)
-                    .into_any_element()
-            }
-            TodoState::Active => super::turning_logo(
-                f32::from(t.size.icon_sm),
-                SharedString::from(format!("todo-run-{key}-{i}")),
-            ),
-            TodoState::Pending => {
-                icon("icons/circle-dashed.svg", t.size.icon_sm, t.colors.text_subtle)
-                    .into_any_element()
-            }
-        };
+        let mark = mark(todo.state, SharedString::from(format!("todo-run-{key}-{i}")), t);
         let (fg, weight) = match todo.state {
             TodoState::Done => (t.colors.text_muted, FontWeight::NORMAL),
             TodoState::Active => (t.colors.text_strong, FontWeight::MEDIUM),
