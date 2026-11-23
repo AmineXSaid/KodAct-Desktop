@@ -129,6 +129,21 @@ Section "Add kodact to PATH" SecPath
   Call AddToPath
 SectionEnd
 
+Section "Turn on all KodAct nudges" SecNudges
+  ; KODACT_NUDGES=all in the user's environment: every nudge KodAct CLI has
+  ; (shellEdit, constraints, namedChecks, passingSnapshots, limitVerdicts,
+  ; staleDeliverables, adaptiveEffort, thinkingTimeBox, todoTracking, clock)
+  ; is on, in the app's chats and in a terminal. A value already set is kept.
+  ReadRegStr $0 HKCU "${ENV_KEY}" "KODACT_NUDGES"
+  ${If} $0 == ""
+    WriteRegStr HKCU "${ENV_KEY}" "KODACT_NUDGES" "all"
+    WriteRegStr HKCU "Software\KodAct" "SetNudges" "1"
+    SendMessage ${HWND_BROADCAST} ${WM_SETTINGCHANGE} 0 "STR:Environment" /TIMEOUT=2000
+  ${Else}
+    DetailPrint "KODACT_NUDGES is already set to $0; left as it is."
+  ${EndIf}
+SectionEnd
+
 Section "Desktop shortcut" SecDesktop
   SetShellVarContext current
   CreateShortcut "$DESKTOP\KodAct.lnk" "$INSTDIR\KodAct.exe" "" "$INSTDIR\KodAct.exe" 0
@@ -139,6 +154,7 @@ SectionEnd
   !insertmacro MUI_DESCRIPTION_TEXT ${SecPython} "Python with the libraries KodAct edits Word, Excel, PowerPoint and PDF files with."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecDesign} "Skills, templates and design systems for design chats."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecCli} "KodAct CLI, the engine behind every chat. The app needs it."
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecNudges} "Every KodAct CLI nudge on (KODACT_NUDGES=all in your user's environment)."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecPath} "Run kodact from any terminal (your user's PATH)."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} "A KodAct icon on the desktop."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
@@ -282,6 +298,12 @@ Section "Uninstall"
   ${If} $0 != ""
     Push $0
     Call un.RemoveFromPath
+  ${EndIf}
+
+  ReadRegStr $0 HKCU "Software\KodAct" "SetNudges"
+  ${If} $0 == "1"
+    DeleteRegValue HKCU "${ENV_KEY}" "KODACT_NUDGES"
+    SendMessage ${HWND_BROADCAST} ${WM_SETTINGCHANGE} 0 "STR:Environment" /TIMEOUT=2000
   ${EndIf}
 
   SetShellVarContext current
