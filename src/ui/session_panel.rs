@@ -103,13 +103,12 @@ fn card(
 ) -> AnyElement {
     let hover = t.colors.hover;
     let st = state.clone();
-    div()
+    // The shared card (`theme::card`): its fill, hairline and radius; the
+    // header row and the body carry the padding.
+    crate::theme::card(t)
+        .p(px(0.))
         .flex()
         .flex_col()
-        .bg(t.colors.surface)
-        .border_1()
-        .border_color(t.colors.border)
-        .rounded(t.radius.card)
         .child(
             div()
                 .id(SharedString::from(format!("session-{name}")))
@@ -547,17 +546,15 @@ pub fn render(t: &Theme, state: &Entity<AppState>, s: &AppState, chat: usize) ->
     let files = changes(&c.messages);
     let in_folder = s.project(c.project).is_some_and(|p| !p.scratch);
     let usage = s.context_usage.get(&chat);
-    div()
-        .id("session-column")
-        .flex_none()
-        .w(t.size.session_panel)
-        .h_full()
+    let body = div()
+        .id("session-body")
+        .flex_1()
+        .min_h_0()
         .overflow_y_scroll()
         .flex()
         .flex_col()
         .gap(t.space.md)
         .p(t.space.md)
-        .pl(px(0.))
         .child(card(
             t,
             state,
@@ -585,6 +582,23 @@ pub fn render(t: &Theme, state: &Entity<AppState>, s: &AppState, chat: usize) ->
             "Changes",
             folded("Changes"),
             changed(t, state, &files, in_folder && !s.busy()),
+        ));
+    div()
+        .id("session-column")
+        .flex_none()
+        .w(t.size.session_panel)
+        .h_full()
+        .flex()
+        .flex_col()
+        .bg(t.extra.panel)
+        .border_l_1()
+        .border_color(t.colors.border)
+        .child(super::panel_chrome::header(
+            t,
+            super::panel_chrome::title(t, "Session"),
+            vec![],
+            vec![],
         ))
+        .child(body)
         .into_any_element()
 }

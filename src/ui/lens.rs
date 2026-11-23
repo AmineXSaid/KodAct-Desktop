@@ -1,8 +1,8 @@
 //! The side panel's view switcher, "Lens": Plan, Agents, Files and Browser
-//! in one flat track. The open view is a raised capsule of one fixed width
-//! with its icon, its name and one readout ("2/6"); the others are icons,
-//! named in their tooltip with their shortcut. A blue dot marks agents at
-//! work wherever you are. Switching slides the capsule across.
+//! as tabs in the panel's title row. The open view is wider, with its icon,
+//! its name and one readout ("2/6"); the others are icons, named in their
+//! tooltip with their shortcut. A dot marks agents at work wherever you are.
+//! An ink underline, resting on the row's hairline, slides to the open tab.
 
 use std::cell::Cell;
 use std::time::Duration;
@@ -16,11 +16,13 @@ use super::icon;
 use crate::state::{AppState, PanelTab};
 use crate::theme::{ActiveTheme, Theme};
 
-/// The open view's capsule and a closed view's square, and the gap.
+/// The open view's tab and a closed view's square, and the gap.
 const OPEN_W: f32 = 132.;
 const CLOSED_W: f32 = 32.;
 const GAP: f32 = 2.;
 const H: f32 = 28.;
+/// The underline's thickness.
+const LINE: f32 = 2.;
 
 pub struct Item {
     pub which: PanelTab,
@@ -28,7 +30,7 @@ pub struct Item {
     pub icon: &'static str,
     /// Its one figure ("2/4", "3"), shown while it is open.
     pub readout: Option<String>,
-    /// Work going on in it now (agents running): a blue dot.
+    /// Work going on in it now (agents running): a live dot.
     pub live: bool,
     /// The digit of its shortcut (Ctrl+1 for the first).
     pub key: &'static str,
@@ -49,7 +51,7 @@ impl Lens {
 }
 
 thread_local! {
-    /// The capsule's last two places (from, to): the slide runs between them.
+    /// The underline's last two places (from, to): the slide runs between them.
     static SLIDE: Cell<(usize, usize)> = const { Cell::new((usize::MAX, usize::MAX)) };
 }
 
@@ -78,24 +80,22 @@ impl RenderOnce for Lens {
         } else {
             t.size.pop_in_ms.max(180)
         };
-        // The capsule itself, under the tabs: it slides from the last open
-        // view to this one.
-        let capsule = div()
+        // The underline, on the row's hairline: it slides from the last open
+        // view to this one (on the first frame it rests, so it never
+        // arrives from nowhere).
+        let underline = div()
             .absolute()
-            .top(px(GAP))
+            .bottom_0()
+            .h(px(LINE))
             .w(px(OPEN_W))
-            .h(px(H))
-            .rounded(t.radius.button)
-            .bg(t.colors.surface)
-            .border_1()
-            .border_color(t.colors.border)
-            .shadow(t.elevation_grain())
+            .rounded(t.radius.line)
+            .bg(t.colors.primary)
             .with_animation(
                 SharedString::from(format!("lens-{from}-{to}")),
                 Animation::new(Duration::from_millis(ms)).with_easing(gpui::ease_out_quint()),
                 move |d, k| d.left(px(x0 + (x1 - x0) * k)),
             );
-        let hover = t.colors.surface;
+        let hover = t.colors.hover;
         let edge = t.colors.primary;
         let tabs = self.items.into_iter().enumerate().map(|(i, item)| {
             let on = i == open;
@@ -124,7 +124,7 @@ impl RenderOnce for Lens {
                 .cursor_pointer()
                 .map(|d| {
                     if on {
-                        // The name and readout fade in behind the sliding capsule.
+                        // The name and readout fade in as the underline arrives.
                         d.px(t.space.sm + px(2.)).child(
                             div()
                                 .w_full()
@@ -183,15 +183,12 @@ impl RenderOnce for Lens {
         });
         div()
             .relative()
+            .h_full()
             .flex()
             .items_center()
             .gap(px(GAP))
-            .p(px(GAP))
-            .rounded(t.radius.button + px(2.))
-            .bg(t.extra.sunk)
-            .border_1()
-            .border_color(t.colors.border)
-            .child(capsule)
+            .px(px(GAP))
+            .child(underline)
             .children(tabs)
     }
 }

@@ -130,22 +130,15 @@ fn icon_button(
 }
 
 /// A quiet note in the middle of an empty tab, with an optional action.
-fn empty(
-    t: &Theme,
-    path: &'static str,
-    title: &str,
-    body: &str,
-    action: Option<AnyElement>,
-) -> AnyElement {
+fn empty(t: &Theme, title: &str, body: &str, action: Option<AnyElement>) -> AnyElement {
     div()
         .flex()
         .flex_col()
         .items_center()
         .gap(t.space.sm)
         .px(t.space.xxl)
-        .pt(t.space.xxl * 2.)
+        .pt(t.space.xxl)
         .text_center()
-        .child(icon(path, t.size.icon_lg, t.colors.text_subtle))
         .child(
             div()
                 .font_weight(FontWeight::SEMIBOLD)
@@ -335,17 +328,56 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
     let plan = all_plans.get(plan_at).cloned();
     let todos = todos(v.messages);
     let closer = state.clone();
-    let header = div()
-        .flex_none()
-        .h(px(48.))
-        .flex()
-        .items_center()
-        .gap(t.space.xs)
-        .pl(t.space.md)
-        .pr(t.space.sm)
-        .border_b_1()
-        .border_color(t.colors.border)
-        .child({
+    let running_now = v.agents.iter().any(|r| r.ended.is_none())
+        || todos.iter().any(|(s, _)| *s == ToolStatus::Running);
+    let mut trailing: Vec<AnyElement> = Vec::new();
+    if running_now {
+        // Work is going on: neutral ink with a live dot, never a colour.
+        trailing.push(
+            div()
+                .flex_none()
+                .flex()
+                .items_center()
+                .gap(px(5.))
+                .px(t.space.sm)
+                .h(px(22.))
+                .rounded(t.radius.pill)
+                .bg(t.extra.sunk)
+                .border_1()
+                .border_color(t.colors.border)
+                .child(div().size(px(6.)).rounded(t.radius.pill).bg(t.extra.live))
+                .child(
+                    div()
+                        .text_size(t.text.caption)
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(t.colors.text)
+                        .child("Live"),
+                )
+                .into_any_element(),
+        );
+    }
+    trailing.push(
+        super::button::Button::icon(
+            "panel-split",
+            "icons/split.svg",
+            if v.below {
+                "Put it beside the chat"
+            } else {
+                "Put it below the chat"
+            },
+        )
+        .compact()
+        .on_click(|_, window, cx| window.dispatch_action(Box::new(super::ToggleSplit), cx))
+        .into_any_element(),
+    );
+    trailing.push(super::panel_chrome::close_button(
+        "panel-close",
+        "Close",
+        move |_, _, cx| closer.update(cx, |s, cx| s.close_panel(cx)),
+    ));
+    let header = super::panel_chrome::header(
+        t,
+        {
             // Each view's one figure: tasks done, agents finished, files made.
             let done = todos.iter().filter(|(s, _)| *s == ToolStatus::Done).count();
             let running = v.agents.iter().filter(|r| r.ended.is_none()).count();
@@ -396,57 +428,10 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
                 v.tab,
                 state.clone(),
             )
-        })
-        .child(div().flex_1())
-        .when(
-            v.agents.iter().any(|r| r.ended.is_none())
-                || todos.iter().any(|(s, _)| *s == ToolStatus::Running),
-            |d| {
-                d.child(
-                    div()
-                        .flex_none()
-                        .flex()
-                        .items_center()
-                        .gap(px(5.))
-                        .px(t.space.sm)
-                        .h(px(22.))
-                        .rounded(t.radius.pill)
-                        .bg(t.extra.success_tint)
-                        .border_1()
-                        .border_color(t.extra.success.opacity(0.35))
-                        .child(
-                            div()
-                                .size(px(6.))
-                                .rounded(t.radius.pill)
-                                .bg(t.extra.success),
-                        )
-                        .child(
-                            div()
-                                .text_size(t.text.caption)
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(t.extra.success)
-                                .child("Live"),
-                        ),
-                )
-            },
-        )
-        .child(
-            icon_button(
-                t,
-                "panel-split",
-                "icons/split.svg",
-                if v.below {
-                    "Put it beside the chat"
-                } else {
-                    "Put it below the chat"
-                },
-            )
-            .on_click(|_, window, cx| window.dispatch_action(Box::new(super::ToggleSplit), cx)),
-        )
-        .child(
-            icon_button(t, "panel-close", "icons/x.svg", "Close")
-                .on_click(move |_, _, cx| closer.update(cx, |s, cx| s.close_panel(cx))),
-        );
+        },
+        vec![],
+        trailing,
+    );
 
     let pad = |d: gpui::Div| {
         d.flex()
@@ -456,15 +441,13 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
             .pt(t.space.xl)
             .pb(t.space.xxl * 2.)
     };
-    // Every tab sits on the clean card surface so the Agents inspector shares
-    // the crisp page ground without losing hierarchy against recessed blocks.
-    let ground = t.colors.surface;
+    // Every tab sits on the panel's one background, as the header does.
+    let ground = t.extra.panel;
     let body: AnyElement = match v.tab {
         PanelTab::Plan if plan.is_none() && todos.is_empty() => {
             let planner = state.clone();
             empty(
                 t,
-                "icons/route.svg",
                 "No plan yet",
                 "Plans and task lists show here. Switch to Plan mode and ask for something to start.",
                 Some(
@@ -562,14 +545,13 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
         ),
         PanelTab::Files if files.is_empty() => empty(
             t,
-            "icons/folder-open.svg",
             "No files yet",
             "Documents, spreadsheets, PDFs, decks and diagrams KodAct makes in this chat are listed here. Click one to read it in this panel.",
             None,
         ),
         PanelTab::Files => pad(div()).gap(t.space.xs).children(files.into_iter().enumerate().map(|(i, f)| {
             let opener = state.clone();
-            let hover = t.colors.hover;
+            let hover = t.colors.border.opacity(0.7);
             let mark: AnyElement = match f.office() {
                 Some(kind) => super::file_mark::render(kind, f32::from(t.size.icon_lg), v.scale),
                 None if f.is_diagram() => {
@@ -589,8 +571,8 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
                 .flex()
                 .items_center()
                 .gap(t.space.md)
+                .h(t.size.row)
                 .px(t.space.md)
-                .py(t.space.sm)
                 .rounded(t.radius.button)
                 .cursor_pointer()
                 .hover(move |s| s.bg(hover))
@@ -599,33 +581,21 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
                     div()
                         .flex_1()
                         .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .child(
-                            div()
-                                .overflow_hidden()
-                                .whitespace_nowrap()
-                                .text_ellipsis()
-                                .text_size(t.text.body_sm)
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(t.colors.text_strong)
-                                .child(f.title()),
-                        )
-                        .child(
-                            div()
-                                .overflow_hidden()
-                                .whitespace_nowrap()
-                                .text_ellipsis()
-                                .text_size(t.text.caption)
-                                .text_color(t.colors.text_muted)
-                                .child(format!(
-                                    "{} · {}",
-                                    f.kind(),
-                                    f.path.clone().unwrap_or_else(|| f.name.clone())
-                                )),
-                        ),
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .text_size(t.text.body_sm)
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(t.colors.text_strong)
+                        .child(f.title()),
                 )
-                .child(icon("icons/chevron-right.svg", t.size.icon_sm, t.colors.text_subtle))
+                .child(
+                    div()
+                        .flex_none()
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_muted)
+                        .child(f.kind()),
+                )
                 .on_click(move |_, _, cx| opener.update(cx, |s, cx| s.open_doc(f.clone(), cx)))
         }))
         .into_any_element(),
@@ -643,7 +613,7 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
         })
         .flex()
         .flex_col()
-        .bg(if t.is_dark { t.extra.pane } else { t.colors.surface })
+        .bg(t.extra.panel)
         .border_color(t.colors.border)
         .child(header)
         .children(plan.as_ref().filter(|_| v.tab == PanelTab::Plan).map(|md| {

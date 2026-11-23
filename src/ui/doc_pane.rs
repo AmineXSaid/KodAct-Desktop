@@ -157,71 +157,34 @@ pub fn render(
     let full = fit.full;
     let full_t = fit.full_t;
     let fuller = state.clone();
-    let shimmer_alpha = if full_t > 0.005 && full_t < 0.995 {
-        (full_t * std::f32::consts::PI).sin() * 0.72
-    } else {
-        0.0
-    };
-    let full_btn: AnyElement = if full {
-        div()
-            .id("doc-full")
-            .flex_none()
-            .h(px(28.))
-            .px(t.space.sm)
-            .rounded(t.radius.pill)
-            .bg(t.colors.primary_tint)
-            .border_1()
-            .border_color(gpui::Hsla {
-                a: 0.28,
-                ..t.colors.primary
-            })
-            .flex()
-            .items_center()
-            .gap(px(5.))
-            .cursor_pointer()
-            .text_size(t.text.caption)
-            .font_weight(FontWeight::MEDIUM)
-            .text_color(t.colors.primary)
-            .hover(|s| {
-                s.bg(gpui::Hsla {
-                    a: (t.colors.primary_tint.a + 0.08).min(1.0),
-                    ..t.colors.primary_tint
-                })
-            })
-            .child(icon("icons/minimize-2.svg", t.size.icon_xs, t.colors.primary))
-            .child("Exit full screen")
-            .on_click(move |_, _, cx| fuller.update(cx, |s, cx| s.toggle_doc_full(cx)))
-            .into_any_element()
-    } else {
-        tool_button("doc-full", "icons/maximize-2.svg", "Full screen (Alt+F)")
-            .on_click(move |_, _, cx| fuller.update(cx, |s, cx| s.toggle_doc_full(cx)))
-            .into_any_element()
-    };
+    // A plain ghost icon button, as the other tools: no tint.
+    let full_btn: AnyElement = tool_button(
+        "doc-full",
+        if full {
+            "icons/minimize-2.svg"
+        } else {
+            "icons/maximize-2.svg"
+        },
+        if full {
+            "Exit full screen (Alt+F)"
+        } else {
+            "Full screen (Alt+F)"
+        },
+    )
+    .on_click(move |_, _, cx| fuller.update(cx, |s, cx| s.toggle_doc_full(cx)))
+    .into_any_element();
     let header = div()
         .relative()
         .flex_none()
-        .h(px(48.))
+        .h(t.size.panel_header)
         .flex()
         .items_center()
         .gap(t.space.sm)
+        .bg(t.extra.panel)
         .pl(if from_panel { t.space.sm } else { t.space.lg })
         .pr(t.space.sm)
         .border_b_1()
         .border_color(t.colors.border)
-        .when(shimmer_alpha > 0.001, |d| {
-            d.child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .h(px(2.))
-                    .w(relative(full_t.clamp(0.0, 1.0)))
-                    .bg(gpui::Hsla {
-                        a: shimmer_alpha,
-                        ..t.colors.primary
-                    }),
-            )
-        })
         .when(from_panel, |d| {
             d.child(
                 tool_button("doc-back", "icons/arrow-left.svg", "All files").on_click(
@@ -258,6 +221,7 @@ pub fn render(
                         .overflow_hidden()
                         .whitespace_nowrap()
                         .text_ellipsis()
+                        .text_size(t.text.body)
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(t.colors.text_strong)
                         .child(file.title()),
@@ -770,7 +734,7 @@ fn finish_at(
         })
         .flex()
         .flex_col()
-        .bg(if t.is_dark { t.extra.pane } else { t.colors.surface })
+        .bg(t.extra.panel)
         .border_color(border_color)
         .child(header)
         .child(body)

@@ -190,7 +190,7 @@ impl FilesPane {
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
         let t = cx.theme().clone();
-        let hover = t.colors.hover;
+        let hover = t.colors.border.opacity(0.7);
         rows.into_iter()
             .enumerate()
             .map(|(i, r)| {
@@ -208,7 +208,7 @@ impl FilesPane {
                     .flex_none()
                     .items_center()
                     .gap(t.space.xs)
-                    .h(t.size.menu_row - px(2.))
+                    .h(t.size.row)
                     .pl(px(4. + INDENT * r.depth as f32))
                     .pr(t.space.sm)
                     .rounded(t.radius.small)
@@ -293,7 +293,7 @@ fn viewer(
         .flex()
         .items_center()
         .gap(t.space.sm)
-        .h(t.size.hit_sm + px(4.))
+        .h(t.size.panel_toolbar)
         .pl(t.space.md)
         .pr(t.space.xs)
         .border_b_1()
@@ -406,31 +406,15 @@ impl Render for FilesPane {
         let rows = self.tree_rows(rows, open.as_deref(), cx);
         let (closer, refresher) = (self.state.clone(), self.state.clone());
         let filter = self.filter.clone();
-        let header = div()
-            .flex_none()
-            .flex()
-            .items_center()
-            .gap(t.space.xs)
-            .h(px(40.))
-            .pl(t.space.md)
-            .pr(t.space.sm)
-            .border_b_1()
-            .border_color(t.colors.border)
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_size(t.text.body_sm)
-                    .text_color(t.colors.text_strong)
-                    .child("Files"),
-            )
-            .child(
+        let header = super::panel_chrome::header(
+            &t,
+            super::panel_chrome::title(&t, "Files"),
+            vec![],
+            vec![
                 super::button::Button::icon("files-find", "icons/search.svg", "Filter files")
                     .compact()
-                    .on_click(move |_, window, cx| filter.update(cx, |f, cx| f.focus(window, cx))),
-            )
-            .child(
+                    .on_click(move |_, window, cx| filter.update(cx, |f, cx| f.focus(window, cx)))
+                    .into_any_element(),
                 super::button::Button::icon(
                     "files-fold",
                     "icons/list-tree.svg",
@@ -440,22 +424,21 @@ impl Render for FilesPane {
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.expanded.clear();
                     cx.notify();
-                })),
-            )
-            .child(
+                }))
+                .into_any_element(),
                 super::button::Button::icon(
                     "files-refresh",
                     "icons/refresh-cw.svg",
                     "Read the files again",
                 )
                 .compact()
-                .on_click(move |_, _, cx| refresher.update(cx, |s, cx| s.refresh_files(cx))),
-            )
-            .child(
-                super::button::Button::icon("files-close", "icons/x.svg", "Close Files")
-                    .compact()
-                    .on_click(move |_, _, cx| closer.update(cx, |s, cx| s.toggle_files(cx))),
-            );
+                .on_click(move |_, _, cx| refresher.update(cx, |s, cx| s.refresh_files(cx)))
+                .into_any_element(),
+                super::panel_chrome::close_button("files-close", "Close Files", move |_, _, cx| {
+                    closer.update(cx, |s, cx| s.toggle_files(cx))
+                }),
+            ],
+        );
         let tree = div()
             .flex_none()
             .w(px(TREE_W))
@@ -501,7 +484,7 @@ impl Render for FilesPane {
             .size_full()
             .flex()
             .flex_col()
-            .bg(if t.is_dark { t.extra.pane } else { t.colors.surface })
+            .bg(t.extra.panel)
             .child(header)
             .child(
                 div()
