@@ -858,8 +858,8 @@ pub struct Sizes {
     pub icon_lg: Pixels,            // 20: the composer's +
     pub composer_max: Pixels,       // the composer's tallest input
     pub composer_radius: Pixels,    // 16: the composer box's corners
-    pub composer_line: Pixels,      // 46: the composer box with one line in it
-    pub composer_width: Pixels,     // 560: the composer's widest, wherever it sits
+    pub composer_line: Pixels,      // 46: the text area in the composer, at its least
+    pub composer_width: Pixels,     // 640: the composer's widest on the home page; its chips and the starters fit one row
     pub palette: Pixels,            // command palette width
     pub hairline: Pixels,           // 1
     pub line_height_chat: f32,      // 23px lines at 15px: whole pixels, crisp
@@ -953,7 +953,7 @@ impl Default for Sizes {
             icon_lg: px(20.),
             composer_max: px(240.),
             composer_radius: px(4.),
-            composer_width: px(560.),
+            composer_width: px(640.),
             composer_line: px(46.),
             palette: px(560.),
             hairline: px(1.),

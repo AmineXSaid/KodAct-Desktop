@@ -592,8 +592,16 @@ impl Render for Composer {
             } else {
                 text.split('\n').count()
             };
+            // Two lines at rest on the home page, room to start writing;
+            // one in a chat, where the reply is the page.
+            let home = !self
+                .state
+                .read(cx)
+                .chat()
+                .is_some_and(|c| !c.messages.is_empty());
+            let least = if home { 2 } else { 1 };
             // The editor's own inset above and below its lines.
-            t.text.body * 1.5 * rows.clamp(1, self.max_rows) as f32 + t.space.sm
+            t.text.body * 1.5 * rows.clamp(least, self.max_rows.max(least)) as f32 + t.space.sm
         };
         let t = cx.theme().clone();
         let state = self.state.clone();
@@ -1249,61 +1257,24 @@ impl Render for Composer {
                                     .update(cx, |s, cx| s.add_attachment_paths(paths, cx));
                             }))
                             .children(pending)
-                            // One line, as Claude Code's box: +, what you
-                            // write, send. They keep to the bottom as it grows.
+                            // One card, as Claude's box: what you write, the
+                            // full width; under it, inside the card, one row
+                            // with everything about it: + and the mode, the
+                            // folder and the design on the left; the model,
+                            // the context and send on the right.
                             .child(
                                 div()
                                     .flex()
-                                    .items_end()
-                                    .gap(t.space.xs)
-                                    .min_h(t.size.composer_line)
+                                    .flex_col()
                                     .p(t.space.xs)
-                                    // "+": what to add, and the tools a reply may use.
-                                    .child(
-                                        div()
-                                            .relative()
-                                            .mb(px(2.))
-                                            .child(
-                                                super::button::Button::icon(
-                                                    "attach",
-                                                    "icons/plus.svg",
-                                                    "Add files, connectors and more",
-                                                )
-                                                // Its name, not over its own open menu.
-                                                .tooltip(!self.add_open)
-                                                .on_click(cx.listener(|this, ev, _, cx| {
-                                                    if this.just_dismissed(Menu::Add, ev) {
-                                                        return;
-                                                    }
-                                                    this.add_open = !this.add_open;
-                                                    if this.add_open {
-                                                        this.state.update(cx, |s, cx| {
-                                                            s.picker_open = false;
-                                                            s.modes_open = false;
-                                                            s.bypass_warning = false;
-                                                            s.design_menu = None;
-                                                            s.project_menu = false;
-                                                            s.context_open = false;
-                                                            s.title_menu = None;
-                                                            s.title_menu_dismissed = None;
-                                                            cx.notify();
-                                                        });
-                                                    }
-                                                    cx.notify();
-                                                })),
-                                            )
-                                            .children(add_menu),
-                                    )
                                     .child(
                                         div()
                                             .flex_1()
                                             .min_w_0()
-                                            // One line sits level with + and send;
-                                            // the textarea's own inset is the gap
-                                            // after the +.
-                                            .pt(px(0.))
-                                            .pb(px(8.))
-                                            .ml(-t.space.xs)
+                                            // What you write, the full width of the card.
+                                            .pt(t.space.sm)
+                                            .px(t.space.sm)
+                                            .min_h(t.size.composer_line)
                                             .text_size(t.text.body)
                                             .line_height(relative(1.5))
                                             .child(
@@ -1315,62 +1286,94 @@ impl Render for Composer {
                                                     .h(box_height),
                                             ),
                                     )
-                                    .child(send),
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .items_center()
+                                            .gap(t.space.xs)
+                                            .min_w_0()
+                                            // "+": what to add, and the tools a reply may use.
+                                            .child(
+                                                div()
+                                                    .relative()
+                                                    .mb(px(2.))
+                                                    .child(
+                                                        super::button::Button::icon(
+                                                            "attach",
+                                                            "icons/plus.svg",
+                                                            "Add files, connectors and more",
+                                                        )
+                                                        // Its name, not over its own open menu.
+                                                        .tooltip(!self.add_open)
+                                                        .on_click(cx.listener(|this, ev, _, cx| {
+                                                            if this.just_dismissed(Menu::Add, ev) {
+                                                                return;
+                                                            }
+                                                            this.add_open = !this.add_open;
+                                                            if this.add_open {
+                                                                this.state.update(cx, |s, cx| {
+                                                                    s.picker_open = false;
+                                                                    s.modes_open = false;
+                                                                    s.bypass_warning = false;
+                                                                    s.design_menu = None;
+                                                                    s.project_menu = false;
+                                                                    s.context_open = false;
+                                                                    s.title_menu = None;
+                                                                    s.title_menu_dismissed = None;
+                                                                    cx.notify();
+                                                                });
+                                                            }
+                                                            cx.notify();
+                                                        })),
+                                                    )
+                                                    .children(add_menu),
+                                            )
+                                            .child(
+                                                div()
+                                                    .flex_none()
+                                                    .relative()
+                                                    .child(mode_trigger)
+                                                    .children(modes_menu),
+                                            )
+                                            .child(
+                                                div()
+                                                    .relative()
+                                                    .min_w_0()
+                                                    .flex_shrink(1.)
+                                                    .child(project_button)
+                                                    .children(project_menu),
+                                            )
+                                            // A design chat: the chip and its menu above it.
+                                            .children(design_trigger.map(|d| {
+                                                let top = self.design_chip_top.clone();
+                                                div()
+                                                    .relative()
+                                                    .flex_none()
+                                                    .child(d)
+                                                    // Its top in the window, for the menu's room.
+                                                    .child(
+                                                        gpui::canvas(
+                                                            move |bounds, _, _| top.set(f32::from(bounds.origin.y)),
+                                                            |_, _, _, _| {},
+                                                        )
+                                                        .absolute()
+                                                        .size_full(),
+                                                    )
+                                                    .children(design_menu)
+                                            }))
+                                            .child(
+                                                div()
+                                                    .flex_1()
+                                                    .min_w(t.space.xs)
+                                                    .relative()
+                                                    .children(context_popover),
+                                            )
+                                            .child(model_button)
+                                            .children(meter)
+                                            .child(send),
+                                    ),
                             ),
                     )
-                    // Under the box, quiet: the mode and the folder on the
-                    // left; the model, its effort and the context ring on the
-                    // right.
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(t.space.xs)
-                            .pt(t.space.xs)
-                            .min_w_0()
-                            .child(
-                                div()
-                                    .flex_none()
-                                    .relative()
-                                    .child(mode_trigger)
-                                    .children(modes_menu),
-                            )
-                            .child(
-                                div()
-                                    .relative()
-                                    .min_w_0()
-                                    .flex_shrink(1.)
-                                    .child(project_button)
-                                    .children(project_menu),
-                            )
-                            // A design chat: the chip and its menu above it.
-                            .children(design_trigger.map(|d| {
-                                let top = self.design_chip_top.clone();
-                                div()
-                                    .relative()
-                                    .flex_none()
-                                    .child(d)
-                                    // Its top in the window, for the menu's room.
-                                    .child(
-                                        gpui::canvas(
-                                            move |bounds, _, _| top.set(f32::from(bounds.origin.y)),
-                                            |_, _, _, _| {},
-                                        )
-                                        .absolute()
-                                        .size_full(),
-                                    )
-                                    .children(design_menu)
-                            }))
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w(t.space.xs)
-                                    .relative()
-                                    .children(context_popover),
-                            )
-                            .child(model_button)
-                            .children(meter),
-                    ),
             );
         // Never wider than its own measure, centred wherever it sits.
         div().w_full().flex().justify_center().child(composer)

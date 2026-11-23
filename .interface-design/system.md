@@ -48,7 +48,7 @@ Lucide, 2px stroke as drawn. Sizes: 12 / 14 / 16 / 20 only.
 - `thumb_w`: 34px, a picture a call returned, as a thumbnail at the end of its line
 - `thumb_h`: 22px, that thumbnail's height, inside the quiet line
 - `tool_image`: 360px, that picture's widest, in the call's opened body
-- `composer_width`: 560px, the composer's widest
+- `composer_width`: 640px, the composer's widest
 - `row`: 30px, sidebar rows, menu items
 - `control`: 26px, small buttons, pills, title-bar controls
 - `palette`: 560px, the command palette's width
@@ -171,7 +171,7 @@ One family; every control takes keyboard focus (a `primary` edge shows for the k
 - Segmented: a `sunk` track, radius 8px; the chosen segment raised onto `surface` at 9999px.
 
 ### Composer
-- Width: up to 560px, centred
+- Width: up to 640px, centred
 - One unit: a white box (radius 16px, 1px `border`, `border_strong` while focused, tinted by the mode when one is set) resting in a `sunk` tray
 - Text: 14px; the outlined + bottom left and Send bottom right, 10px from the box's edges
 - The tray: the project, the context ring, the model and the mode as quiet 28px selectors: a 14px icon, the label, a chevron that flips while open; washed on hover, raised onto `surface` with a hairline while open
