@@ -129,11 +129,13 @@ pub fn menu(
     let (current, allowed, warning) = (s.mode, s.bypass_allowed, s.bypass_warning);
     let active_bg = t.colors.hover;
     let mut rows = div().flex().flex_col().gap(px(2.));
+    // One by one as the menu opens (`motion::cascade`).
+    let mut n = 0;
     for mode in ModeId::ALL {
         let picked = mode == current;
         let st = state.clone();
         let row_fg = tint(t, mode).unwrap_or(t.colors.text);
-        rows = rows.child(
+        rows = super::motion::cascade(rows, &mut n, "mode-in", t, 
             div()
                 .id(SharedString::from(format!("mode-{}", mode.label())))
                 .mx(px(4.))
@@ -253,10 +255,12 @@ pub fn menu(
     )
     .child(rows)
     .children(warning_card);
-    div().absolute().top_0().right_0().child(
+    // Above its chip, opening from the chip's left edge as the composer's
+    // other menus do, so it never spills over the sidebar.
+    div().absolute().top_0().left_0().child(
         gpui::deferred(
             gpui::anchored()
-                .anchor(gpui::Anchor::BottomRight)
+                .anchor(gpui::Anchor::BottomLeft)
                 .snap_to_window_with_margin(t.size.viewport_margin)
                 .child(
                     div()

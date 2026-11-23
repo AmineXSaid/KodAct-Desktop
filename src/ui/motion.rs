@@ -1023,3 +1023,24 @@ mod tests {
         );
     }
 }
+
+/// Add `row` to a menu's `list`, rising into place a beat after the row
+/// above it (`row_in_full`): a menu's rows arrive one by one, fast, each
+/// time it opens. `n` counts the rows added so far; `id` names the menu.
+pub fn cascade(
+    list: gpui::Div,
+    n: &mut usize,
+    id: &str,
+    t: &crate::theme::Theme,
+    row: impl gpui::IntoElement + 'static,
+) -> gpui::Div {
+    use gpui::prelude::*;
+    let i = *n;
+    *n += 1;
+    list.child(row_in_full(
+        row,
+        gpui::ElementId::NamedInteger(id.to_string().into(), i as u64),
+        i,
+        t,
+    ))
+}

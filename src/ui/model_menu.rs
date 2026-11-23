@@ -349,8 +349,10 @@ pub fn render(
         .child(refresh);
 
     let mut list = div().flex().flex_col().gap(px(2.)).pb(px(8.));
+    // Its rows arrive one by one as it opens (`motion::cascade`).
+    let mut n = 0;
     if loading {
-        list = list.child(
+        list = super::motion::cascade(list, &mut n, "model-in", t, 
             div()
                 .pt(px(8.))
                 .px(px(8.))
@@ -360,7 +362,7 @@ pub fn render(
                 .child("Loading models…"),
         );
     } else {
-        list = list.child(heading);
+        list = super::motion::cascade(list, &mut n, "model-in", t, heading);
         for row in rows {
             if let Some(g) = &row.group {
                 let toggle = (g.failed > 0).then(|| {
@@ -380,7 +382,7 @@ pub fn render(
                         })
                         .on_click(move |_, _, cx| st.update(cx, |s, cx| s.toggle_failed_models(cx)))
                 });
-                list = list.child(
+                list = super::motion::cascade(list, &mut n, "model-in", t, 
                     div()
                         .px(px(12.))
                         .pt(px(8.))
@@ -419,7 +421,7 @@ pub fn render(
                         gpui::component::tooltip::Tooltip::new(title.clone()).build(window, cx)
                     })
             });
-            list = list.child(
+            list = super::motion::cascade(list, &mut n, "model-in", t, 
                 div()
                     .id(SharedString::from(format!("model-{key}")))
                     .mx(px(4.))

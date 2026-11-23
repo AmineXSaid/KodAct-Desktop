@@ -168,12 +168,14 @@ pub fn menu(
 
     // No gaps between rows: every point in the list picks something.
     let mut rows = div().flex().flex_col();
+    // One by one as the menu opens (`motion::cascade`).
+    let mut n = 0;
     let mut needs_search = false;
     match tab {
         DesignTab::Work => {
             for sf in Surface::ALL {
                 let st = state.clone();
-                rows = rows.child(
+                rows = super::motion::cascade(rows, &mut n, "design-in", t,
                     row(
                         format!("design-work-{}", sf.name()).into(),
                         sf.name().into(),
@@ -204,7 +206,7 @@ pub fn menu(
                 ),
             };
             let st = state.clone();
-            rows = rows.child(
+            rows = super::motion::cascade(rows, &mut n, "design-in", t,
                 row(
                     format!("design-none-{kind:?}").into(),
                     none.into(),
@@ -215,7 +217,7 @@ pub fn menu(
             );
             match s.design_index.as_deref() {
                 None => {
-                    rows = rows.child(
+                    rows = super::motion::cascade(rows, &mut n, "design-in", t,
                         div()
                             .px(t.space.md)
                             .py(t.space.tight)
@@ -237,7 +239,7 @@ pub fn menu(
                                 .join(" ")
                                 .into()
                         });
-                        rows = rows.child(
+                        rows = super::motion::cascade(rows, &mut n, "design-in", t,
                             row(
                                 format!("design-{kind:?}-{}", e.id).into(),
                                 e.title.clone().into(),

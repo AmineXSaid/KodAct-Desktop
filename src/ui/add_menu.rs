@@ -215,7 +215,13 @@ fn list(
                     .child(item.label),
             )
             .child(trailing(t, i, browser, state));
-        card = card.child(on_run(row, i, hooks, state));
+        // One by one as the menu opens.
+        card = card.child(super::motion::row_in_full(
+            on_run(row, i, hooks, state),
+            ("add-in", i),
+            i,
+            t,
+        ));
     }
     card
 }
