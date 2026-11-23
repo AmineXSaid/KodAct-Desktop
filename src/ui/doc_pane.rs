@@ -65,6 +65,8 @@ pub struct Fit {
     pub thumbs: bool,
     /// The toolbar's open menu.
     pub menu: Option<crate::state::DocMenu>,
+    /// Where a drag to pan a picture last was.
+    pub drag: std::rc::Rc<std::cell::Cell<Option<gpui::Point<gpui::Pixels>>>>,
 }
 
 /// What this version changed: None while it is worked out, `Some(None)`
@@ -147,7 +149,8 @@ pub fn render(
         _ => None,
     };
     let has_pages = pages.is_some();
-    let paged = has_pages && !text_view && !showing_changes;
+    let image = file.is_image() && !showing_changes;
+    let paged = (has_pages && !text_view && !showing_changes) || image;
     let viewer = state.clone();
     let back = state.clone();
     let (finder, exporter, to_export) = (state.clone(), state.clone(), file.clone());
@@ -163,6 +166,12 @@ pub fn render(
     // The status line: where you are, the versions, the scale.
     let top = fit.scroll.top_item();
     let position = match pages {
+        _ if image => file
+            .bytes
+            .as_ref()
+            .and_then(|b| super::image_view::info(&file.name, b))
+            .map(|i| super::image_view::describe(&i))
+            .unwrap_or_default(),
         Some((n, slides)) if paged => format!(
             "{} {} of {n}",
             if slides { "Slide" } else { "Page" },
@@ -403,7 +412,7 @@ pub fn render(
         }
     }
     // Navigate: previous, the page field, next, thumbnails.
-    if let (Some((n, _)), true) = (pages, paged) {
+    if let (Some((n, _)), true) = (pages, paged && !image) {
         let (prev, next, thumbs) = (state.clone(), state.clone(), state.clone());
         let on = fit.thumbs;
         let g = vec![
@@ -483,6 +492,25 @@ pub fn render(
                 .on_click(move |_, _, cx| {
                     launcher.update(cx, |s, cx| s.open_externally(&external, cx))
                 }),
+            );
+        }
+        if image {
+            let (copy_image, bytes) = (state.clone(), file.clone());
+            btn(
+                &mut g,
+                tool_button("doc-copy", "icons/copy.svg", "Copy the picture").on_click(
+                    move |_, _, cx| {
+                        if let Some(img) = bytes
+                            .bytes
+                            .as_ref()
+                            .zip(super::image_view::format_of(&bytes.name))
+                            .map(|(b, f)| gpui::Image::from_bytes(f, b.to_vec()))
+                        {
+                            cx.write_to_clipboard(ClipboardItem::new_image(&img));
+                        }
+                        copy_image.update(cx, |s, cx| s.show_toast("Picture copied.", cx));
+                    },
+                ),
             );
         }
         if !binary {
@@ -632,7 +660,30 @@ pub fn render(
         );
         return finish_at(&fit, full_t, file, header, body, footer(), fit.width, t);
     }
-    let body = if source || (office.is_none() && !binary && !file.is_markdown() && !diagram) {
+    let body = if image {
+        // The picture, panned by dragging.
+        let (down, moved, up) = (fit.drag.clone(), fit.drag.clone(), fit.drag.clone());
+        let scroll = fit.scroll.clone();
+        body.track_scroll(&fit.scroll)
+            .overflow_x_scroll()
+            .on_mouse_down(gpui::MouseButton::Left, move |ev, _, _| {
+                down.set(Some(ev.position))
+            })
+            .on_mouse_move(move |ev, window, _| {
+                if ev.pressed_button != Some(gpui::MouseButton::Left) {
+                    moved.set(None);
+                    return;
+                }
+                if let Some(last) = moved.get() {
+                    let (o, d) = (scroll.offset(), ev.position - last);
+                    scroll.set_offset(gpui::point(o.x + d.x, o.y + d.y));
+                    moved.set(Some(ev.position));
+                    window.refresh();
+                }
+            })
+            .on_mouse_up(gpui::MouseButton::Left, move |_, _, _| up.set(None))
+            .child(super::image_view::render(file, &fit, t))
+    } else if source || (office.is_none() && !binary && !file.is_markdown() && !diagram) {
         // The source, as an editor shows it: a file that is only text, or
         // a page or Markdown file switched to its source.
         body.child(

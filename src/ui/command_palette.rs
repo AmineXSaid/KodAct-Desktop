@@ -766,11 +766,15 @@ impl CommandPalette {
                     Box::new(PreviousPage),
                 ));
             }
-            if s.doc_page_count() > 0 {
+            if s.doc_page_count() > 0 || f.is_image() {
                 out.extend([
                     act("Zoom the file in", "icons/zoom-in.svg", Some(shortcut("=")), Box::new(DocZoomIn)),
                     act("Zoom the file out", "icons/zoom-out.svg", Some(shortcut("-")), Box::new(DocZoomOut)),
                     act("Fit the file to the panel's width", "icons/maximize-2.svg", Some(shortcut("0")), Box::new(DocZoomFit)),
+                ]);
+            }
+            if s.doc_page_count() > 0 {
+                out.extend([
                     act("Thumbnails of the file's pages", "icons/panel-left.svg", Some(shortcut("Alt T")), Box::new(ToggleThumbnails)),
                     act("Go to a page", "icons/hash.svg", Some(shortcut("G")), Box::new(GoToPage)),
                 ]);

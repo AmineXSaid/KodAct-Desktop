@@ -919,6 +919,11 @@ impl FileRef {
             .unwrap_or_else(|| self.content.as_bytes().to_vec())
     }
 
+    /// A picture the panel shows (`ui/image_view.rs`).
+    pub fn is_image(&self) -> bool {
+        self.bytes.is_some() && crate::ui::image_view::format_of(&self.name).is_some()
+    }
+
     pub fn is_markdown(&self) -> bool {
         matches!(self.kind().as_ref(), "MD" | "MARKDOWN")
     }
@@ -2133,6 +2138,8 @@ pub struct AppState {
     pub doc_thumbs: std::collections::HashMap<String, bool>,
     /// The file view's open menu: the zoom list, or the tools that did not fit.
     pub doc_menu: Option<DocMenu>,
+    /// Where the last mouse move of a drag to pan a picture was.
+    pub doc_drag: std::rc::Rc<std::cell::Cell<Option<gpui::Point<gpui::Pixels>>>>,
     /// The percentage the open file's pages are drawn at when fitted, for
     /// the toolbar and for stepping from (set by the view as it draws).
     pub doc_fitted: std::sync::Arc<std::sync::atomic::AtomicU16>,
@@ -2512,6 +2519,7 @@ impl AppState {
             doc_zoom: Default::default(),
             doc_thumbs: Default::default(),
             doc_menu: None,
+            doc_drag: Default::default(),
             doc_fitted: std::sync::Arc::new(std::sync::atomic::AtomicU16::new(100)),
             doc_word_comments: true,
             doc_changes: None,
@@ -13859,6 +13867,18 @@ fn demo_plan() -> Vec<Step> {
             "finance/q3-budget.pptx",
             "",
             Some(include_bytes!("../assets/docs/samples/q3-budget.pptx")),
+        ),
+        file(
+            "badge.png",
+            "docs/badge.png",
+            "",
+            Some(include_bytes!("../assets/docs/samples/mark-transparent.png")),
+        ),
+        file(
+            "forge-home.jpg",
+            "docs/forge-home.jpg",
+            "",
+            Some(include_bytes!("../assets/docs/samples/forge-light.jpg")),
         ),
         file(
             "forge-chat-path.html",

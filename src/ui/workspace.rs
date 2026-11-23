@@ -1026,6 +1026,7 @@ impl Render for Workspace {
                 fitted: s.doc_fitted.clone(),
                 thumbs: s.doc_thumbs_here(),
                 menu: s.doc_menu,
+                drag: s.doc_drag.clone(),
             };
             let doc_changes = s
                 .doc_changes

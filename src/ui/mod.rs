@@ -62,6 +62,7 @@ pub mod model_menu;
 pub mod motion;
 pub mod new_project;
 pub mod onboarding;
+pub mod image_view;
 pub mod page_field;
 pub mod panel_chrome;
 pub mod permissions_editor;
