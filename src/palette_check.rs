@@ -134,11 +134,7 @@ fn surfaces_stack_like_paper_on_paper() {
             oklab(rgba(t.extra.selected)).0,
             oklab(rgba(t.extra.stage)).0,
         );
-        let floor = if t.is_dark {
-            0.02
-        } else {
-            (stage - pane) * 0.9
-        };
+        let floor = if t.is_dark { 0.02 } else { (stage - pane) * 0.9 };
         assert!(
             sel - pane >= floor,
             "{mode}: the selected row sits {:.4} above the sidebar",

@@ -263,7 +263,8 @@ pub fn unfold<E: gpui::Styled + gpui::IntoElement + 'static>(
 ) -> gpui::AnyElement {
     use gpui::{prelude::*, px, AnimationExt as _, SharedString};
     if reduced_motion() && !leaving {
-        return if up { el.mb(px(8.)) } else { el }.into_any_element();
+        return if up { el.mb(px(8.)) } else { el }
+            .into_any_element();
     }
     if leaving {
         el.with_animation(

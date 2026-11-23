@@ -852,20 +852,20 @@ pub struct Sizes {
     pub tool_image: Pixels,    // 360: that picture's widest, in the call's opened body
     pub control: Pixels,       // 26: pills, small buttons
     // Icons: one scale, 12 / 14 / 16 / 20, and Lucide's own 2px stroke.
-    pub icon_xs: Pixels,         // 12: inside captions and chips
-    pub icon_sm: Pixels,         // 14
-    pub icon: Pixels,            // 16
-    pub icon_lg: Pixels,         // 20: the composer's +
-    pub composer_max: Pixels,    // the composer's tallest input
-    pub composer_radius: Pixels, // 16: the composer box's corners
-    pub composer_line: Pixels,   // 46: the composer box with one line in it
-    pub composer_width: Pixels,  // 560: the composer's widest, wherever it sits
-    pub palette: Pixels,         // command palette width
-    pub hairline: Pixels,        // 1
-    pub line_height_chat: f32,   // 23px lines at 15px: whole pixels, crisp
-    pub chat_text: Pixels,       // 15: replies and your messages
-    pub greeting: Pixels,        // 32: the new-chat greeting, Anthropic Sans Display 600
-    pub statusbar: Pixels,       // 26: the status bar at the foot of the window
+    pub icon_xs: Pixels,            // 12: inside captions and chips
+    pub icon_sm: Pixels,            // 14
+    pub icon: Pixels,               // 16
+    pub icon_lg: Pixels,            // 20: the composer's +
+    pub composer_max: Pixels,       // the composer's tallest input
+    pub composer_radius: Pixels,    // 16: the composer box's corners
+    pub composer_line: Pixels,      // 46: the composer box with one line in it
+    pub composer_width: Pixels,     // 560: the composer's widest, wherever it sits
+    pub palette: Pixels,            // command palette width
+    pub hairline: Pixels,           // 1
+    pub line_height_chat: f32,      // 23px lines at 15px: whole pixels, crisp
+    pub chat_text: Pixels,          // 15: replies and your messages
+    pub greeting: Pixels,           // 32: the new-chat greeting, Anthropic Sans Display 600
+    pub statusbar: Pixels,          // 26: the status bar at the foot of the window
     #[allow(dead_code)] // in the design tokens; previously used in the Agents summary header
     pub figure: Pixels, // 28: one figure that leads a view (agents finished)
     // Motion uses three durations only: fast 120 (leaving, small things
@@ -895,8 +895,8 @@ pub struct Sizes {
     pub composer_clearance: Pixels, // 150: toasts sit above the composer, its chips included
     pub attach_thumb: Pixels,       // 28: an attachment chip's picture or icon
     pub attach_chip: Pixels,        // 220: an attachment chip's widest
-    pub design_menu: Pixels,        // 340: the composer's design menu's width
-    pub design_menu_list: Pixels,   // 400: its list's tallest, room for every kind of work
+    pub design_menu: Pixels,      // 340: the composer's design menu's width
+    pub design_menu_list: Pixels, // 400: its list's tallest, room for every kind of work
     pub attach_tile: Pixels, // 108: a pasted text's or picture's square tile, as Claude's box shows them
     pub popover_list: Pixels, // 300: the tallest an autocomplete or context list grows
     pub completion_width: Pixels, // 460: the / and @ lists, opened at the caret

@@ -332,24 +332,25 @@ impl Browser {
     fn conn(&mut self) -> Result<&mut Conn, String> {
         if self.conn.is_none() {
             let until = Instant::now() + Duration::from_secs(30);
-            let ws = loop {
-                let got = ureq::get(&format!("{}/json/version", self.http))
-                    .timeout(Duration::from_secs(2))
-                    .call()
-                    .ok()
-                    .and_then(|r| r.into_json::<Value>().ok())
-                    .and_then(|v| v["webSocketDebuggerUrl"].as_str().map(str::to_string));
-                match got {
-                    Some(ws) => break ws,
-                    None if Instant::now() < until => {
-                        std::thread::sleep(Duration::from_millis(300))
+            let ws =
+                loop {
+                    let got = ureq::get(&format!("{}/json/version", self.http))
+                        .timeout(Duration::from_secs(2))
+                        .call()
+                        .ok()
+                        .and_then(|r| r.into_json::<Value>().ok())
+                        .and_then(|v| v["webSocketDebuggerUrl"].as_str().map(str::to_string));
+                    match got {
+                        Some(ws) => break ws,
+                        None if Instant::now() < until => {
+                            std::thread::sleep(Duration::from_millis(300))
+                        }
+                        None => return Err(
+                            "KodAct's browser isn't running: open the Browser tab in the side panel"
+                                .into(),
+                        ),
                     }
-                    None => return Err(
-                        "KodAct's browser isn't running: open the Browser tab in the side panel"
-                            .into(),
-                    ),
-                }
-            };
+                };
             let mut c = connect(&ws)?;
             // A dialog never holds a step: alerts close, questions get Cancel
             // unless the step says accept (`run_step`).

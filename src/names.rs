@@ -83,31 +83,19 @@ mod tests {
         let d = std::env::temp_dir().join(format!("kodact-names-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
-        assert_eq!(
-            project_dir(&d),
-            d.join(".kodact"),
-            "a new project gets KodAct's folder"
-        );
+        assert_eq!(project_dir(&d), d.join(".kodact"), "a new project gets KodAct's folder");
         assert_eq!(instructions(&d), d.join("KODACT.md"));
         assert_eq!(local_instructions(&d), d.join("KODACT.local.md"));
         std::fs::create_dir_all(d.join(".forge")).unwrap();
         std::fs::write(d.join("FORGE.md"), "old").unwrap();
         std::fs::write(d.join("FORGE.local.md"), "mine").unwrap();
-        assert_eq!(
-            project_dir(&d),
-            d.join(".forge"),
-            "an old project keeps ForgeCLI's"
-        );
+        assert_eq!(project_dir(&d), d.join(".forge"), "an old project keeps ForgeCLI's");
         assert_eq!(in_project_dir(&d, "memory.md"), ".forge/memory.md");
         assert_eq!(instructions(&d), d.join("FORGE.md"));
         assert_eq!(local_instructions(&d), d.join("FORGE.local.md"));
         std::fs::create_dir_all(d.join(".kodact")).unwrap();
         std::fs::write(d.join("KODACT.md"), "new").unwrap();
-        assert_eq!(
-            project_dir(&d),
-            d.join(".kodact"),
-            "KodAct's wins once it exists"
-        );
+        assert_eq!(project_dir(&d), d.join(".kodact"), "KodAct's wins once it exists");
         assert_eq!(instructions(&d), d.join("KODACT.md"));
         let _ = std::fs::remove_dir_all(&d);
     }

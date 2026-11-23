@@ -40,9 +40,8 @@ impl SkillsEditor {
             _sub: cx.observe(&state, |_, _, cx| cx.notify()),
             name: cx.new(|cx| InputState::new(window, cx).placeholder("pdf")),
             description: cx.new(|cx| {
-                InputState::new(window, cx).placeholder(
-                    "e.g. Reads PDF files. Use it when the user shares or mentions a PDF.",
-                )
+                InputState::new(window, cx)
+                    .placeholder("e.g. Reads PDF files. Use it when the user shares or mentions a PDF.")
             }),
             body: cx.new(|cx| {
                 TextareaState::new(window, cx)

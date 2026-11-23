@@ -225,25 +225,15 @@ mod tests {
         let dir = std::path::Path::new("/tmp/x");
         let c = clone_command("https://gitlab.com/a/b.git", dir, Some("glpat-SECRET"));
         let args: Vec<String> = c.get_args().map(|a| a.to_string_lossy().into()).collect();
-        assert_eq!(
-            args[..3],
-            ["-c", "credential.helper=", "-c"],
-            "own helpers off first"
-        );
+        assert_eq!(args[..3], ["-c", "credential.helper=", "-c"], "own helpers off first");
         assert!(args[3].starts_with("credential.helper=!"));
-        assert_eq!(
-            args[4..],
-            ["clone", "--", "https://gitlab.com/a/b.git", "/tmp/x"]
-        );
+        assert_eq!(args[4..], ["clone", "--", "https://gitlab.com/a/b.git", "/tmp/x"]);
         assert!(args.iter().all(|a| !a.contains("SECRET")), "{args:?}");
         let env: Vec<_> = c.get_envs().collect();
         assert!(env.contains(&("KODACT_GIT_TOKEN".as_ref(), Some("glpat-SECRET".as_ref()))));
 
         let plain = clone_command("https://github.com/a/b", dir, None);
-        let args: Vec<String> = plain
-            .get_args()
-            .map(|a| a.to_string_lossy().into())
-            .collect();
+        let args: Vec<String> = plain.get_args().map(|a| a.to_string_lossy().into()).collect();
         assert_eq!(args, ["clone", "--", "https://github.com/a/b", "/tmp/x"]);
         assert!(plain.get_envs().all(|(k, _)| k != "KODACT_GIT_TOKEN"));
     }
@@ -261,22 +251,11 @@ mod tests {
         let log = std::env::var("KODACT_TEST_HELPER_LOG").ok();
         let base = std::env::temp_dir().join(format!("kodact-clone-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
-        let with = clone_command(&url, &base.join("with"), Some(&token))
-            .output()
-            .unwrap();
-        assert!(
-            with.status.success(),
-            "{}",
-            String::from_utf8_lossy(&with.stderr)
-        );
+        let with = clone_command(&url, &base.join("with"), Some(&token)).output().unwrap();
+        assert!(with.status.success(), "{}", String::from_utf8_lossy(&with.stderr));
         let config = std::fs::read_to_string(base.join("with/.git/config")).unwrap();
-        assert!(
-            !config.contains(&token) && !config.contains("credential"),
-            "{config}"
-        );
-        let wrong = clone_command(&url, &base.join("wrong"), Some("nope"))
-            .output()
-            .unwrap();
+        assert!(!config.contains(&token) && !config.contains("credential"), "{config}");
+        let wrong = clone_command(&url, &base.join("wrong"), Some("nope")).output().unwrap();
         assert!(!wrong.status.success());
         if let Some(log) = log {
             let calls = std::fs::read_to_string(&log).unwrap_or_default();
@@ -374,12 +353,8 @@ mod tests {
             None
         );
         assert_eq!(
-            normalize_git_clone_url(
-                ForgeKind::Custom,
-                None,
-                "ssh://git@git.acme.internal/org/app.git"
-            )
-            .as_deref(),
+            normalize_git_clone_url(ForgeKind::Custom, None, "ssh://git@git.acme.internal/org/app.git")
+                .as_deref(),
             Some("ssh://git@git.acme.internal/org/app.git")
         );
     }
