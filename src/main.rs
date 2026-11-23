@@ -114,6 +114,7 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("secondary-shift-f", FindInFile, Some("Workspace")),
         KeyBinding::new("alt-down", NextPage, Some("Workspace")),
         KeyBinding::new("alt-up", PreviousPage, Some("Workspace")),
+        KeyBinding::new("secondary-s", SaveDocEdits, Some("Workspace")),
         KeyBinding::new("secondary-=", DocZoomIn, Some("Workspace")),
         KeyBinding::new("secondary-+", DocZoomIn, Some("Workspace")),
         KeyBinding::new("secondary--", DocZoomOut, Some("Workspace")),

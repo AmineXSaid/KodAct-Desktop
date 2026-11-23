@@ -766,6 +766,18 @@ impl CommandPalette {
                     Box::new(PreviousPage),
                 ));
             }
+            if s.doc_dirty() {
+                out.extend([
+                    act("Save your edits to the open file", "icons/check.svg", Some(shortcut("S")), Box::new(SaveDocEdits)),
+                    act("Discard your edits to the open file", "icons/undo-2.svg", None, Box::new(DiscardDocEdits)),
+                ]);
+            }
+            if crate::ui::text_editor::editable(f) && (f.is_markdown() || f.office().is_none()) {
+                out.extend([
+                    act("Undo in the open file", "icons/undo-2.svg", None, Box::new(UndoDocEdit)),
+                    act("Redo in the open file", "icons/redo-2.svg", None, Box::new(RedoDocEdit)),
+                ]);
+            }
             if s.doc_page_count() > 0 || f.is_image() {
                 out.extend([
                     act("Zoom the file in", "icons/zoom-in.svg", Some(shortcut("=")), Box::new(DocZoomIn)),

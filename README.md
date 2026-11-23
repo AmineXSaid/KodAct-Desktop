@@ -101,6 +101,7 @@ table in step.
 | Ctrl/⌘ 3 | Side panel: Files |
 | Ctrl/⌘ 4 | Side panel: Browser |
 | Alt F | Open file: full screen, or back |
+| Ctrl/⌘ S | Open file: save your edits |
 | Ctrl/⌘ = (or +) | Open file: zoom in |
 | Ctrl/⌘ - | Open file: zoom out |
 | Ctrl/⌘ 0 | Open file: fit to the panel's width |

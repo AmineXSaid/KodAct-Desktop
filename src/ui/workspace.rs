@@ -55,6 +55,8 @@ pub struct Workspace {
     doc_find: Entity<super::doc_find::DocFind>,
     /// The file view's page field (`page_field.rs`).
     page_field: Entity<super::page_field::PageField>,
+    /// The file view's text editor (`text_editor.rs`).
+    text_editor: Entity<super::text_editor::TextEditor>,
     /// Interactive spreadsheet editor bar (`sheet_view.rs`).
     sheet_editor: Entity<super::sheet_view::SheetEditor>,
     /// The project's tree and a viewer, under the side panel (`files_pane.rs`).
@@ -115,6 +117,8 @@ impl Workspace {
         let doc_find = cx.new(|cx| super::doc_find::DocFind::new(state.clone(), window, cx));
         let page_field =
             cx.new(|cx| super::page_field::PageField::new(state.clone(), window, cx));
+        let text_editor =
+            cx.new(|cx| super::text_editor::TextEditor::new(state.clone(), window, cx));
         let sheet_editor =
             cx.new(|cx| super::sheet_view::SheetEditor::new(state.clone(), window, cx));
         let files = cx.new(|cx| super::files_pane::FilesPane::new(state.clone(), window, cx));
@@ -142,6 +146,7 @@ impl Workspace {
             doc_comments,
             doc_find,
             page_field,
+            text_editor,
             sheet_editor,
             files,
             presence: Presences::default(),
@@ -1027,6 +1032,8 @@ impl Render for Workspace {
                 thumbs: s.doc_thumbs_here(),
                 menu: s.doc_menu,
                 drag: s.doc_drag.clone(),
+                dirty: s.doc_dirty(),
+                edit_text: s.doc_edit.as_ref().map(|(_, t)| t.clone()),
             };
             let doc_changes = s
                 .doc_changes
@@ -1082,8 +1089,9 @@ impl Render for Workspace {
             let leaving_fit = fit.clone();
             let doc_view = |f: &crate::state::FileRef, fit: super::doc_pane::Fit, leaving: bool| {
                 // A file leaving has nothing to edit or comment on any more.
-                let (editor, comments, find, page_field) = if leaving {
+                let (editor, comments, find, page_field, text_editor) = if leaving {
                     (
+                        div().into_any_element(),
                         div().into_any_element(),
                         div().into_any_element(),
                         div().into_any_element(),
@@ -1095,6 +1103,7 @@ impl Render for Workspace {
                         self.doc_comments.clone().into_any_element(),
                         self.doc_find.clone().into_any_element(),
                         self.page_field.clone().into_any_element(),
+                        self.text_editor.clone().into_any_element(),
                     )
                 };
                 super::doc_pane::render(
@@ -1112,6 +1121,7 @@ impl Render for Workspace {
                     comments,
                     find,
                     page_field,
+                    text_editor,
                     &t,
                 )
             };
@@ -1516,6 +1526,18 @@ impl Render for Workspace {
             }))
             .on_action(cx.listener(|this, _: &PreviousPage, _, cx| {
                 this.state.update(cx, |s, cx| s.step_doc_page(-1, cx))
+            }))
+            .on_action(cx.listener(|this, _: &SaveDocEdits, _, cx| {
+                this.state.update(cx, |s, cx| s.save_doc_edits(cx))
+            }))
+            .on_action(cx.listener(|this, _: &DiscardDocEdits, _, cx| {
+                this.state.update(cx, |s, cx| s.discard_doc_edits(cx))
+            }))
+            .on_action(cx.listener(|this, _: &UndoDocEdit, window, cx| {
+                this.text_editor.update(cx, |e, cx| e.step(true, window, cx))
+            }))
+            .on_action(cx.listener(|this, _: &RedoDocEdit, window, cx| {
+                this.text_editor.update(cx, |e, cx| e.step(false, window, cx))
             }))
             .on_action(cx.listener(|this, _: &DocZoomIn, _, cx| {
                 this.state.update(cx, |s, cx| s.zoom_doc(true, cx))

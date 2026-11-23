@@ -2138,6 +2138,9 @@ pub struct AppState {
     pub doc_thumbs: std::collections::HashMap<String, bool>,
     /// The file view's open menu: the zoom list, or the tools that did not fit.
     pub doc_menu: Option<DocMenu>,
+    /// The text file in the panel has edits not saved: its file id and the
+    /// text in the editor (`ui/text_editor.rs`).
+    pub doc_edit: Option<(String, SharedString)>,
     /// Where the last mouse move of a drag to pan a picture was.
     pub doc_drag: std::rc::Rc<std::cell::Cell<Option<gpui::Point<gpui::Pixels>>>>,
     /// The percentage the open file's pages are drawn at when fitted, for
@@ -2520,6 +2523,7 @@ impl AppState {
             doc_thumbs: Default::default(),
             doc_menu: None,
             doc_drag: Default::default(),
+            doc_edit: None,
             doc_fitted: std::sync::Arc::new(std::sync::atomic::AtomicU16::new(100)),
             doc_word_comments: true,
             doc_changes: None,
@@ -5483,6 +5487,91 @@ impl AppState {
             });
         })
         .detach();
+    }
+
+    /// The editor's text changed (or went back to the saved one: None).
+    pub fn set_doc_edit(&mut self, edit: Option<(String, SharedString)>, cx: &mut Context<Self>) {
+        self.doc_edit = edit;
+        cx.notify();
+    }
+
+    /// The panel's file has changes to save: a text edit or cell edits.
+    pub fn doc_dirty(&self) -> bool {
+        !self.sheet_edits.is_empty()
+            || self.doc.as_ref().is_some_and(|f| {
+                self.doc_edit
+                    .as_ref()
+                    .is_some_and(|(id, _)| *id == crate::doc_versions::file_id(f))
+            })
+    }
+
+    /// Where the panel's file lives on this computer: its own path, or its
+    /// project-relative one under the project. None for a remote chat.
+    fn doc_disk_path(&self, f: &FileRef) -> Option<std::path::PathBuf> {
+        if self.current_remote().is_some() {
+            return None;
+        }
+        let p = std::path::PathBuf::from(f.path.as_ref()?.as_ref());
+        Some(if p.is_absolute() { p } else { self.project_dir.join(p) })
+    }
+
+    /// Save what is edited in the panel: cells of a workbook, or the text of
+    /// a text file, written to its project path and kept as a new version in
+    /// the chat (Changes and the version stepper work as for KodAct's own).
+    pub fn save_doc_edits(&mut self, cx: &mut Context<Self>) {
+        if !self.sheet_edits.is_empty() {
+            return self.save_sheet_edits(cx);
+        }
+        let (Some(file), Some((id, text))) = (self.doc.clone(), self.doc_edit.clone()) else {
+            return;
+        };
+        if id != crate::doc_versions::file_id(&file) {
+            return;
+        }
+        let new = FileRef {
+            name: file.name.clone(),
+            path: file.path.clone(),
+            content: text.clone(),
+            bytes: None,
+        };
+        let disk = self.doc_disk_path(&file);
+        let name = file.name.clone();
+        cx.spawn(async move |this, cx| {
+            let wrote = cx
+                .background_spawn(async move {
+                    if let Some(p) = disk {
+                        if let Some(parent) = p.parent() {
+                            let _ = std::fs::create_dir_all(parent);
+                        }
+                        std::fs::write(&p, text.as_bytes()).map_err(|e| e.to_string())?;
+                    }
+                    Ok::<(), String>(())
+                })
+                .await;
+            let _ = this.update(cx, |s, cx| match wrote {
+                Ok(()) => {
+                    if let Some(chat) = s.current {
+                        s.push_block(chat, Block::File(new.clone()));
+                    }
+                    s.doc_edit = None;
+                    s.show_doc(new, cx);
+                    s.show_toast(format!("Saved {name}"), cx);
+                }
+                Err(e) => s.show_toast(format!("Could not save {name}: {e}"), cx),
+            });
+        })
+        .detach();
+    }
+
+    /// Drop what is edited in the panel: the file goes back as it was saved.
+    pub fn discard_doc_edits(&mut self, cx: &mut Context<Self>) {
+        self.doc_edit = None;
+        if !self.sheet_edits.is_empty() {
+            self.sheet_edits.clear();
+            self.sheet_extra_rows.clear();
+            self.sheet_extra_cols.clear();
+        }
+        cx.notify();
     }
 
     pub fn toggle_doc_fit(&mut self, cx: &mut Context<Self>) {
@@ -13867,6 +13956,12 @@ fn demo_plan() -> Vec<Step> {
             "finance/q3-budget.pptx",
             "",
             Some(include_bytes!("../assets/docs/samples/q3-budget.pptx")),
+        ),
+        file(
+            "greeting.rs",
+            "src/greeting.rs",
+            "//! The greeting on the home screen.\n\n/// \"Good morning, Sam\", by the hour.\npub fn greeting(name: &str, hour: u32) -> String {\n    let part = match hour {\n        5..=11 => \"Good morning\",\n        12..=17 => \"Good afternoon\",\n        _ => \"Good evening\",\n    };\n    format!(\"{part}, {name}\")\n}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n\n    #[test]\n    fn the_hour_picks_the_words() {\n        assert_eq!(greeting(\"Sam\", 9), \"Good morning, Sam\");\n        assert_eq!(greeting(\"Sam\", 20), \"Good evening, Sam\");\n    }\n}\n",
+            None,
         ),
         file(
             "badge.png",

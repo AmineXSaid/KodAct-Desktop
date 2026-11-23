@@ -52,6 +52,7 @@ pub const SHORTCUTS: &[(&str, &str, &str)] = &[
     ("secondary-3", "Side panel: Files", "Conversation"),
     ("secondary-4", "Side panel: Browser", "Conversation"),
     ("alt-f", "Open file: full screen, or back", "Conversation"),
+    ("secondary-s", "Open file: save your edits", "Conversation"),
     ("secondary-=", "Open file: zoom in", "Conversation"),
     ("secondary-+", "Open file: zoom in", "Conversation"),
     ("secondary--", "Open file: zoom out", "Conversation"),

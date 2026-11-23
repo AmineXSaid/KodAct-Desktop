@@ -67,6 +67,9 @@ pub struct Fit {
     pub menu: Option<crate::state::DocMenu>,
     /// Where a drag to pan a picture last was.
     pub drag: std::rc::Rc<std::cell::Cell<Option<gpui::Point<gpui::Pixels>>>>,
+    /// The file has edits not saved, and (for a text file) the text edited.
+    pub dirty: bool,
+    pub edit_text: Option<SharedString>,
 }
 
 /// What this version changed: None while it is worked out, `Some(None)`
@@ -98,6 +101,7 @@ pub fn render(
     comments: AnyElement,
     find: AnyElement,
     page_field: AnyElement,
+    text_editor: AnyElement,
     t: &Theme,
 ) -> AnyElement {
     // The version bar at the foot, when the chat has more than one version.
@@ -158,7 +162,10 @@ pub fn render(
         office,
         Some(crate::office::Kind::Docx | crate::office::Kind::Pptx | crate::office::Kind::Xlsx)
     );
-    let dirty_sheet = office == Some(crate::office::Kind::Xlsx) && !sheet_edits.is_empty();
+    let dirty_sheet = fit.dirty || (office == Some(crate::office::Kind::Xlsx) && !sheet_edits.is_empty());
+    let editing = (source || (office.is_none() && !binary && !file.is_markdown() && !diagram))
+        && super::text_editor::editable(file)
+        && !showing_changes;
     let full = fit.full;
     let full_t = fit.full_t;
     let fuller = state.clone();
@@ -166,6 +173,7 @@ pub fn render(
     // The status line: where you are, the versions, the scale.
     let top = fit.scroll.top_item();
     let position = match pages {
+        _ if editing => super::text_editor::counts(fit.edit_text.as_ref().unwrap_or(&file.content)),
         _ if image => file
             .bytes
             .as_ref()
@@ -463,6 +471,37 @@ pub fn render(
             width: 28. + 62. + 28. + 4.,
         });
     }
+    // Edit: undo, redo, and the one accent action while something is unsaved.
+    if editing {
+        let (save, discard) = (state.clone(), state.clone());
+        let mut g: Vec<AnyElement> = vec![
+            tool_button("doc-undo", "icons/undo-2.svg", "Undo")
+                .on_click(|_, window, cx| window.dispatch_action(Box::new(super::UndoDocEdit), cx))
+                .into_any_element(),
+            tool_button("doc-redo", "icons/redo-2.svg", "Redo")
+                .on_click(|_, window, cx| window.dispatch_action(Box::new(super::RedoDocEdit), cx))
+                .into_any_element(),
+        ];
+        let mut w = 28. * 2. + 2.;
+        if fit.dirty {
+            g.push(
+                super::button::Button::accent("doc-save", "Save")
+                    .compact()
+                    .on_click(move |_, _, cx| save.update(cx, |s, cx| s.save_doc_edits(cx)))
+                    .into_any_element(),
+            );
+            g.push(
+                super::button::Button::ghost("doc-discard", "Discard")
+                    .compact()
+                    .on_click(move |_, _, cx| {
+                        discard.update(cx, |s, cx| s.discard_doc_edits(cx))
+                    })
+                    .into_any_element(),
+            );
+            w += 64. + 76.;
+        }
+        groups.push(super::panel_chrome::Group { tools: g, width: w });
+    }
     // Review: find.
     groups.push(super::panel_chrome::Group::of(
         t,
@@ -683,9 +722,12 @@ pub fn render(
             })
             .on_mouse_up(gpui::MouseButton::Left, move |_, _, _| up.set(None))
             .child(super::image_view::render(file, &fit, t))
+    } else if editing {
+        // The source in an editor: a file that is only text, or a page or
+        // Markdown file switched to its source. The editor scrolls itself.
+        body.overflow_hidden().child(text_editor)
     } else if source || (office.is_none() && !binary && !file.is_markdown() && !diagram) {
-        // The source, as an editor shows it: a file that is only text, or
-        // a page or Markdown file switched to its source.
+        // Too large to edit: the source, read-only.
         body.child(
             div()
                 .px(t.space.lg)

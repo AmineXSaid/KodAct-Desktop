@@ -98,6 +98,7 @@ pub mod starters;
 pub mod status_bar;
 pub mod tasks;
 pub mod terminal;
+pub mod text_editor;
 pub mod terminal_dock;
 pub mod title_menus;
 pub mod todo_card;
@@ -185,6 +186,10 @@ gpui::actions!(
         ChangeRemoteFolder,
         NextPage,
         PreviousPage,
+        SaveDocEdits,
+        DiscardDocEdits,
+        UndoDocEdit,
+        RedoDocEdit,
         DocZoomIn,
         DocZoomOut,
         DocZoomFit,
