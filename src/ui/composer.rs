@@ -65,6 +65,9 @@ pub struct Composer {
     modes_presence: super::motion::Presence<()>,
     add_presence: super::motion::Presence<()>,
     design_presence: super::motion::Presence<crate::state::DesignTab>,
+    /// Where the design chip's top sits in the window (measured each frame),
+    /// so its menu fits the room above it and never covers the chip.
+    design_chip_top: std::rc::Rc<std::cell::Cell<f32>>,
     project_presence: super::motion::Presence<()>,
     context_presence: super::motion::Presence<()>,
     ac_presence: super::motion::Presence<AcShown>,
@@ -229,6 +232,7 @@ impl Composer {
             modes_presence: Default::default(),
             add_presence: Default::default(),
             design_presence: Default::default(),
+            design_chip_top: Default::default(),
             project_presence: Default::default(),
             context_presence: Default::default(),
             dismissed_at: None,
@@ -673,12 +677,21 @@ impl Render for Composer {
                     .mx(t.space.sm)
                     .mb(t.space.xs)
                     .into_any_element();
+                // The room above the chip, less the window's margin and the
+                // gap the menu keeps from its chip.
+                let room = gpui::px(
+                    (self.design_chip_top.get()
+                        - f32::from(t.size.viewport_margin)
+                        - f32::from(t.space.sm))
+                    .max(160.),
+                );
                 super::design_chips::menu(
                     &t,
                     &state,
                     tab,
                     &query,
                     search,
+                    room,
                     window,
                     cx,
                     move |pos, cx| dismiss_design(pos, Menu::Design, cx),
@@ -1332,7 +1345,21 @@ impl Render for Composer {
                             )
                             // A design chat: the chip and its menu above it.
                             .children(design_trigger.map(|d| {
-                                div().relative().flex_none().child(d).children(design_menu)
+                                let top = self.design_chip_top.clone();
+                                div()
+                                    .relative()
+                                    .flex_none()
+                                    .child(d)
+                                    // Its top in the window, for the menu's room.
+                                    .child(
+                                        gpui::canvas(
+                                            move |bounds, _, _| top.set(f32::from(bounds.origin.y)),
+                                            |_, _, _, _| {},
+                                        )
+                                        .absolute()
+                                        .size_full(),
+                                    )
+                                    .children(design_menu)
                             }))
                             .child(
                                 div()

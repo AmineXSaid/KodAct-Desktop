@@ -94,7 +94,9 @@ pub fn menu(
     tab: DesignTab,
     query: &str,
     search: AnyElement,
-    window: &gpui::Window,
+    // The room above its chip: the menu never grows past it.
+    room: gpui::Pixels,
+    _window: &gpui::Window,
     cx: &App,
     on_out: impl Fn(gpui::Point<gpui::Pixels>, &mut App) + 'static,
     leaving: bool,
@@ -311,14 +313,14 @@ pub fn menu(
         })
         .children(end);
 
-    // One height on every tab, the search included: the menu opens above
-    // its chip, so a list that changed height would move the tabs under the
-    // pointer between two clicks.
-    let tall = t.size.design_menu_list.min(crate::theme::fit_height(
-        window,
-        t,
-        t.size.viewport_margin + px(140.),
-    ));
+    // As tall as its rows, up to the list's tallest and the room above the
+    // chip (less the header and tabs over the list): no empty space under
+    // the last row, and the menu always opens above its chip, never over it.
+    let tall = t
+        .size
+        .design_menu_list
+        .min(room - px(DESIGN_MENU_CHROME))
+        .max(px(120.));
     let list = div()
         .id("design-rows")
         .flex_1()
@@ -326,7 +328,7 @@ pub fn menu(
         .overflow_y_scroll()
         .child(rows);
     let body = div()
-        .h(tall)
+        .max_h(tall)
         .flex()
         .flex_col()
         .when(needs_search, |d| d.child(search))
@@ -364,6 +366,9 @@ pub fn menu(
         .with_priority(2),
     )
 }
+
+/// The design menu's height over its list: its header, its tabs and its padding.
+const DESIGN_MENU_CHROME: f32 = 96.;
 
 /// An entry's title by id, or the id when the library isn't read yet.
 fn title_of(ix: Option<&Index>, kind: Kind, id: &str) -> String {
