@@ -19,7 +19,7 @@ use crate::theme::Theme;
 const COPY_KEY: &str = "doc-pane-copy";
 
 /// How much of the height the panel takes when split below the chat.
-const BELOW_SHARE: f32 = 0.45;
+pub const BELOW_SHARE: f32 = 0.45;
 
 /// A header button: icon-only, named in its tooltip, keyboard-reachable.
 fn tool_button(id: &'static str, path: &'static str, tip: &'static str) -> super::button::Button {
@@ -27,6 +27,7 @@ fn tool_button(id: &'static str, path: &'static str, tip: &'static str) -> super
 }
 
 /// What the panel needs from the window: its width and how dense the display is.
+#[derive(Clone)]
 pub struct Fit {
     /// The panel's width, in logical pixels.
     pub width: f32,
@@ -410,7 +411,7 @@ pub fn render(
                 .pb(t.space.xxl * 2.)
                 .child(div().w_full().max_w(t.size.doc_measure).child(content)),
         );
-        return finish_at(fit.below, full_t, file, header, body, footer(), fit.width, t);
+        return finish_at(&fit, full_t, file, header, body, footer(), fit.width, t);
     }
     let body = if source || (office.is_none() && !binary && !file.is_markdown() && !diagram) {
         // The source, as an editor shows it: a file that is only text, or
@@ -482,7 +483,7 @@ pub fn render(
             Some(Ok(p)) => match p.as_ref() {
                 crate::office::Preview::Sheets(sheets) => {
                     return finish_at(
-                        fit.below,
+                        &fit,
                         full_t,
                         file,
                         header,
@@ -507,7 +508,7 @@ pub fn render(
                     let text_view = text_view || d.pages.is_empty();
                     if !text_view {
                         return finish_at(
-                            fit.below,
+                            &fit,
                             full_t,
                             file,
                             header,
@@ -574,7 +575,7 @@ pub fn render(
         )
     };
 
-    finish_at(fit.below, full_t, file, header, body, footer(), fit.width, t)
+    finish_at(&fit, full_t, file, header, body, footer(), fit.width, t)
 }
 
 /// A document's text as you can select it, to comment on a passage or
@@ -709,7 +710,7 @@ fn pages_view(
 /// with a hairline on its left; below it, the full width and part of the
 /// height with a hairline on top. The card surface, and a short entrance.
 fn finish_at(
-    below: bool,
+    fit: &Fit,
     full_t: f32,
     file: &FileRef,
     header: gpui::Div,
@@ -718,6 +719,7 @@ fn finish_at(
     width: f32,
     t: &Theme,
 ) -> AnyElement {
+    let below = fit.below;
     let settled_full = full_t >= 0.999;
     let border_alpha = (1.0 - full_t).clamp(0.0, 1.0);
     let border_color = gpui::Hsla {
@@ -730,7 +732,7 @@ fn finish_at(
             d.flex_none().w(px(width)).h_full().border_l_1()
         })
         .when(!settled_full && below, |d| {
-            d.flex_none().w_full().h(relative(BELOW_SHARE)).border_t_1()
+            d.flex_none().w_full().h_full().border_t_1()
         })
         .flex()
         .flex_col()
@@ -739,10 +741,14 @@ fn finish_at(
         .child(header)
         .child(body)
         .children(footer)
-        // In with a short ease-out: it fades and settles 16px from the right.
+        // In with a short ease-out: it fades and settles 16px from the right
+        // (opened from the Files tab, the push moves it instead).
         .with_animation(
             SharedString::from(format!("doc-in-{}", file.name)),
-            Animation::new(Duration::from_millis(t.motion_ms)).with_easing(gpui::ease_out_quint()),
+            Animation::new(Duration::from_millis(super::motion::played(
+                if fit.from_panel { 1 } else { t.motion_ms },
+            )))
+            .with_easing(gpui::ease_out_quint()),
             |d, k| d.opacity(k).relative().left(px(16. * (1. - k))),
         )
         .into_any_element()

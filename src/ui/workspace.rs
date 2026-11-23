@@ -880,7 +880,7 @@ impl Render for Workspace {
         let side_f = self
             .presence
             .side
-            .frame(side_now, t.size.panel_out_ms, window);
+            .frame(side_now, super::motion::close_ms(&t), window);
         let side_leaving = side_f.as_ref().is_some_and(|(_, leaving)| *leaving);
         let side_open = side_f.is_some();
         let (side_doc, side_panel, files_open) =
@@ -902,10 +902,11 @@ impl Render for Workspace {
         // With Files open or full-screen active, the side column stands beside the chat.
         let below = s.doc_below && !files_open && !panel_full && !doc_full_active;
         // The terminal dock, kept while it slides back out.
-        let dock_f =
-            self.presence
-                .dock
-                .frame(s.terminal_open.then_some(()), t.size.panel_out_ms, window);
+        let dock_f = self.presence.dock.frame(
+            s.terminal_open.then_some(()),
+            super::motion::close_ms(&t),
+            window,
+        );
         let dock_leaving = dock_f.is_some_and(|(_, leaving)| leaving);
         let terminal_open = dock_f.is_some();
         // What is left of the window beside the sidebar is shared by the
@@ -974,6 +975,15 @@ impl Render for Workspace {
             Screen::Design => 4,
             Screen::Project(id) => 5 + id,
         };
+        // A file opened from the Files tab is pushed over its list (and
+        // pulled back); a file opened from a reply just arrives.
+        let push_frame = self.presence.push.frame(
+            side_doc
+                .clone()
+                .filter(|_| side_panel.is_some() && !files_open && !below),
+            t.size.window_in_ms,
+            window,
+        );
         // A file opened from a reply, or the setup guide, sits beside the session.
         let pane = {
             let s = self.state.read(cx);
@@ -1052,32 +1062,63 @@ impl Render for Workspace {
             let extra_rows = s.sheet_extra_rows.get(&s.doc_sheet).copied().unwrap_or(0);
             let extra_cols = s.sheet_extra_cols.get(&s.doc_sheet).copied().unwrap_or(0);
             let panel_resizing = s.panel_resizing;
-            let top = side_doc
-                .as_ref()
-                .map(|f| {
-                    super::doc_pane::render(
-                        f,
-                        self.state.clone(),
-                        s.copied.clone(),
-                        fit,
-                        read,
-                        s.doc_sheet,
-                        s.doc_pick,
-                        &s.sheet_edits,
-                        (extra_rows, extra_cols),
+            let leaving_fit = fit.clone();
+            let doc_view = |f: &crate::state::FileRef, fit: super::doc_pane::Fit, leaving: bool| {
+                // A file leaving has nothing to edit or comment on any more.
+                let (editor, comments, find) = if leaving {
+                    (
+                        div().into_any_element(),
+                        div().into_any_element(),
+                        div().into_any_element(),
+                    )
+                } else {
+                    (
                         self.sheet_editor.clone().into_any_element(),
-                        doc_changes,
                         self.doc_comments.clone().into_any_element(),
                         self.doc_find.clone().into_any_element(),
-                        &t,
                     )
-                })
-                .or(panel)
-                .map(|p| match files_open {
-                    // A file or tab above, the Files pane under it.
-                    true => div().flex_1().min_h_0().flex().child(p).into_any_element(),
-                    false => p,
-                });
+                };
+                super::doc_pane::render(
+                    f,
+                    self.state.clone(),
+                    s.copied.clone(),
+                    fit,
+                    read,
+                    s.doc_sheet,
+                    s.doc_pick,
+                    &s.sheet_edits,
+                    (extra_rows, extra_cols),
+                    editor,
+                    doc_changes,
+                    comments,
+                    find,
+                    &t,
+                )
+            };
+            use super::motion::PushFrame;
+            let top = match (push_frame, side_doc.as_ref(), panel) {
+                (PushFrame::Forward(k), Some(f), Some(list)) => Some(super::motion::push(
+                    list,
+                    doc_view(f, fit, false),
+                    pane_width,
+                    true,
+                    k,
+                )),
+                (PushFrame::Back(old, k), None, Some(list)) => Some(super::motion::push(
+                    list,
+                    doc_view(&old, leaving_fit, true),
+                    pane_width,
+                    false,
+                    k,
+                )),
+                (_, Some(f), _) => Some(doc_view(f, fit, false)),
+                (_, None, panel) => panel,
+            }
+            .map(|p| match files_open {
+                // A file or tab above, the Files pane under it.
+                true => div().flex_1().min_h_0().flex().child(p).into_any_element(),
+                false => p,
+            });
             let column = match (top, files_open) {
                 (top, true) => Some(
                     div()
@@ -1165,6 +1206,8 @@ impl Render for Workspace {
                         .flex()
                         .child(p)
                         .into_any_element()
+                } else if pane_below {
+                    super::motion::split_in(p, super::doc_pane::BELOW_SHARE, &t)
                 } else {
                     super::motion::slide_in(p, pane_width, pane_below, &t)
                 }),
@@ -1328,7 +1371,7 @@ impl Render for Workspace {
             let session = self
                 .presence
                 .session
-                .frame(session_now, t.size.panel_out_ms, window)
+                .frame(session_now, super::motion::close_ms(&t), window)
                 .map(|(chat, leaving)| {
                     let w = f32::from(t.size.session_panel);
                     let col =
@@ -2245,6 +2288,8 @@ struct Presences {
         bool,
     )>,
     doc_full: super::motion::Tween,
+    /// A file pushed over the Files tab's list, and pulled back.
+    push: super::motion::Push<crate::state::FileRef>,
 }
 
 /// The title bar's popovers: Some(leaving) while each shows or leaves.

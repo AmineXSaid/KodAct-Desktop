@@ -383,8 +383,38 @@ pub fn notice<E: gpui::Styled + gpui::IntoElement + 'static>(
     }
 }
 
-/// The reverse of `slide_in`: the side panel slides back out to the right
-/// edge, its width closing while it fades, and the chat eases wider.
+/// How long a panel takes to close: its content fades first (fast, 120),
+/// then its width closes (base, 200). The presences that keep a panel on
+/// screen while it leaves wait this long.
+pub fn close_ms(t: &crate::theme::Theme) -> u64 {
+    t.size.pop_in_ms + t.size.panel_out_ms
+}
+
+/// Where a closing panel is at `elapsed` of `close_ms` (both as played):
+/// the content's opacity, then the share of its width that is left. The
+/// content is gone before the width starts to close.
+fn close_at(elapsed: f32, fade_ms: f32, width_ms: f32) -> (f32, f32) {
+    let fade = (elapsed / fade_ms.max(1.)).clamp(0., 1.);
+    let shut = ((elapsed - fade_ms) / width_ms.max(1.)).clamp(0., 1.);
+    (1. - fade, 1. - gpui::ease_in_out(shut))
+}
+
+/// Where an opening panel is at `elapsed` (as played): the share of its
+/// width, over `width_ms`, and its content's progress, which starts `lag_ms`
+/// after the width and runs `rise_ms`.
+fn open_at(elapsed: f32, width_ms: f32, lag_ms: f32, rise_ms: f32) -> (f32, f32) {
+    let width = (elapsed / width_ms.max(1.)).clamp(0., 1.);
+    let rise = ((elapsed - lag_ms) / rise_ms.max(1.)).clamp(0., 1.);
+    (gpui::ease_out_quint()(width), gpui::ease_out_quint()(rise))
+}
+
+/// The content starts this long after the width (fast, shorter than a hover).
+const OPEN_LAG_MS: u64 = 40;
+/// And rises this far as it fades in.
+const OPEN_RISE_PX: f32 = 8.;
+
+/// The reverse of `slide_in`: the side panel's content fades first (fast),
+/// then its width closes (base) and the chat eases wider.
 pub fn slide_out(
     pane: gpui::AnyElement,
     width: f32,
@@ -392,6 +422,20 @@ pub fn slide_out(
     t: &crate::theme::Theme,
 ) -> gpui::AnyElement {
     use gpui::{div, prelude::*, px, AnimationExt as _, SharedString};
+    let (fade_ms, width_ms) = (
+        played(t.size.pop_in_ms) as f32,
+        played(t.size.panel_out_ms) as f32,
+    );
+    let total = fade_ms + width_ms;
+    // Linear: each phase eases itself.
+    let anim = |name: &str| {
+        (
+            SharedString::from(format!("{id}-{name}")),
+            gpui::Animation::new(std::time::Duration::from_millis(total as u64)),
+        )
+    };
+    let (wid, wanim) = anim("out");
+    let (cid, canim) = anim("out-content");
     div()
         .relative()
         .flex_none()
@@ -405,23 +449,22 @@ pub fn slide_out(
                 .left_0()
                 .w(px(width))
                 .flex()
-                .child(pane),
+                .child(pane)
+                .with_animation(cid, canim, move |d, k| {
+                    d.opacity(close_at(k * total, fade_ms, width_ms).0)
+                }),
         )
-        // Eased both ways, so it is seen leaving rather than snatched away.
-        .with_animation(
-            SharedString::from(format!("{id}-out")),
-            gpui::Animation::new(std::time::Duration::from_millis(played(
-                t.size.panel_out_ms,
-            )))
-            .with_easing(gpui::ease_in_out),
-            move |d, k| d.w(px(width * (1. - k))).opacity(1. - k * k),
-        )
+        .with_animation(wid, wanim, move |d, k| {
+            d.w(px(width * close_at(k * total, fade_ms, width_ms).1))
+        })
         .into_any_element()
 }
 
 /// The side panel sliding in from the right edge as it opens: its width grows
-/// from nothing to `width` while the chat beside it eases narrower, and the
-/// panel fades in. Below the chat (a narrow window) it is left as it is.
+/// from nothing to `width` (slow, 280) while the chat beside it eases
+/// narrower; its content rises 8px and fades in, starting 40ms after the
+/// width. Below the chat (a narrow window) it is left as it is
+/// (`split_in` plays that one).
 pub fn slide_in(
     pane: gpui::AnyElement,
     width: f32,
@@ -429,12 +472,18 @@ pub fn slide_in(
     t: &crate::theme::Theme,
 ) -> gpui::AnyElement {
     use gpui::{div, prelude::*, px, AnimationExt as _};
-    let anim = once(t.size.panel_in_ms);
     if below || reduced_motion() {
         // Below the chat (or under reduced motion) the pane stays at its
         // resting size immediately.
         return pane;
     }
+    let (width_ms, lag_ms) = (
+        played(t.size.panel_in_ms) as f32,
+        played(OPEN_LAG_MS) as f32,
+    );
+    let rise_ms = played(t.size.window_in_ms) as f32;
+    let total = (lag_ms + rise_ms).max(width_ms);
+    let timed = move || gpui::Animation::new(std::time::Duration::from_millis(total as u64));
     // The panel keeps its full width inside, pinned to the wrapper's left
     // edge, so it moves in with that edge rather than being uncovered.
     div()
@@ -450,12 +499,195 @@ pub fn slide_in(
                 .left_0()
                 .w(px(width))
                 .flex()
-                .child(pane),
+                .child(pane)
+                .with_animation("side-panel-in-content", timed(), move |d, k| {
+                    let (_, rise) = open_at(k * total, width_ms, lag_ms, rise_ms);
+                    d.opacity(rise).mt(px(OPEN_RISE_PX * (1. - rise)))
+                }),
         )
-        .with_animation("side-panel-in", anim, move |d, k| {
-            d.w(px(width * k)).opacity((k * 1.6).min(1.))
+        .with_animation("side-panel-in", timed(), move |d, k| {
+            let (w, _) = open_at(k * total, width_ms, lag_ms, rise_ms);
+            d.w(px(width * w))
         })
         .into_any_element()
+}
+
+/// The panel moving beside the chat to below it: it keeps the share of the
+/// height it ends with (`share` of the stage), and its content slides up from
+/// the foot of that share as it fades in, over `panel_in_ms`.
+pub fn split_in(pane: gpui::AnyElement, share: f32, t: &crate::theme::Theme) -> gpui::AnyElement {
+    use gpui::{div, prelude::*, relative, AnimationExt as _};
+    let wrap = div()
+        .relative()
+        .flex_none()
+        .w_full()
+        .h(relative(share))
+        .overflow_hidden();
+    let inner = div()
+        .absolute()
+        .left_0()
+        .w_full()
+        .h_full()
+        .flex()
+        .child(pane);
+    if reduced_motion() {
+        return wrap.child(inner.top_0()).into_any_element();
+    }
+    wrap.child(
+        inner.with_animation("side-panel-split", once(t.size.panel_in_ms), |d, k| {
+            d.top(relative(1. - k)).opacity((k * 2.).min(1.))
+        }),
+    )
+    .into_any_element()
+}
+
+/// How far the incoming view of a push travels, in px.
+const PUSH_PX: f32 = 24.;
+
+/// A detail view pushed over its list (a file opened from the Files tab) and
+/// pulled back. `Push` keeps what the detail was, so it can leave as the list
+/// returns, for `ms`.
+pub struct Push<K> {
+    /// The detail the last frame showed.
+    shown: Option<K>,
+    /// When the detail last came or went, and which way.
+    moved: Option<(std::time::Instant, bool)>,
+    /// The detail that last went, kept while it leaves.
+    left: Option<K>,
+}
+
+impl<K> Default for Push<K> {
+    fn default() -> Self {
+        Self {
+            shown: None,
+            moved: None,
+            left: None,
+        }
+    }
+}
+
+/// What a push draws.
+#[derive(Debug, PartialEq)]
+pub enum PushFrame<K> {
+    /// The list, at rest.
+    List,
+    /// The detail, at rest.
+    Detail,
+    /// The detail arriving over the list; progress `0..1`, eased.
+    Forward(f32),
+    /// The detail (kept) leaving, the list returning; progress `0..1`, eased.
+    Back(K, f32),
+}
+
+impl<K: Clone + PartialEq> Push<K> {
+    /// The frame for `detail` (Some while a detail is open over the list),
+    /// `elapsed` after `now` began it; `ms` is as played.
+    fn step(&mut self, detail: Option<K>, now: std::time::Instant, ms: u64) -> PushFrame<K> {
+        let was = self.shown.is_some();
+        if detail.is_some() != was {
+            self.moved = Some((now, detail.is_some()));
+            if was {
+                self.left = self.shown.clone();
+            }
+        }
+        self.shown = detail.clone();
+        if reduced_motion() {
+            self.moved = None;
+        }
+        let at = self.moved.and_then(|(from, forward)| {
+            let raw = now.duration_since(from).as_secs_f32() / (ms.max(1) as f32 / 1000.);
+            (raw < 1.).then_some((raw, forward))
+        });
+        let Some((raw, forward)) = at else {
+            self.moved = None;
+            return if detail.is_some() {
+                PushFrame::Detail
+            } else {
+                PushFrame::List
+            };
+        };
+        let k = gpui::ease_out_quint()(raw);
+        match (forward, self.left.clone()) {
+            (true, _) => PushFrame::Forward(k),
+            (false, Some(old)) => PushFrame::Back(old, k),
+            (false, None) => PushFrame::List,
+        }
+    }
+
+    /// `step`, asking for another frame while the push is in flight.
+    pub fn frame(&mut self, detail: Option<K>, ms: u64, window: &mut gpui::Window) -> PushFrame<K> {
+        let f = self.step(detail, std::time::Instant::now(), played(ms));
+        if matches!(f, PushFrame::Forward(_) | PushFrame::Back(..)) {
+            window.request_animation_frame();
+        }
+        f
+    }
+}
+
+/// A push's two layers, at progress `k`: the list under (dimmed as the
+/// detail covers it, `forward`; brought back as it leaves) and the detail
+/// over it (24px in from the right while it fades in; going back, out to
+/// the right as it fades). Both fill the same box.
+pub fn push(
+    list: gpui::AnyElement,
+    detail: gpui::AnyElement,
+    width: f32,
+    forward: bool,
+    k: f32,
+) -> gpui::AnyElement {
+    use gpui::{div, prelude::*, px};
+    let (list_a, detail_a, dx) = if forward {
+        (1. - 0.6 * k, k, PUSH_PX * (1. - k))
+    } else {
+        (0.4 + 0.6 * k, 1. - k, PUSH_PX * k)
+    };
+    div()
+        .relative()
+        .flex_none()
+        .w(px(width))
+        .h_full()
+        .overflow_hidden()
+        .child(
+            div()
+                .absolute()
+                .top_0()
+                .left_0()
+                .size_full()
+                .flex()
+                .opacity(list_a)
+                .child(list),
+        )
+        .child(
+            div()
+                .absolute()
+                .top_0()
+                .size_full()
+                .left(px(dx))
+                .flex()
+                .opacity(detail_a)
+                .child(detail),
+        )
+        .into_any_element()
+}
+
+/// A panel tab arriving: it fades in while it shifts 6px in the direction
+/// of its tab (from the right for a tab further along, from the left for
+/// one before). Keyed by `id`, so each switch plays it.
+pub fn tab_in<E: gpui::Styled + gpui::IntoElement + 'static>(
+    el: E,
+    id: impl Into<gpui::ElementId>,
+    from_right: bool,
+    t: &crate::theme::Theme,
+) -> gpui::AnyElement {
+    use gpui::{prelude::*, px, AnimationExt as _};
+    if reduced_motion() {
+        return el.into_any_element();
+    }
+    let sign = if from_right { 1. } else { -1. };
+    el.with_animation(id, once(t.size.pop_in_ms), move |d, k| {
+        d.opacity(k).relative().left(px(6. * sign * (1. - k)))
+    })
+    .into_any_element()
 }
 
 /// A list opening row by row: row `index` starts a beat after the one above
@@ -717,4 +949,77 @@ pub fn side_shade(t: &crate::theme::Theme) -> Option<gpui::AnyElement> {
             ))
             .into_any_element(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn a_closing_panel_fades_before_its_width_closes() {
+        // 120ms of fade, then 200ms of width.
+        let (op, w) = close_at(0., 120., 200.);
+        assert_eq!((op, w), (1., 1.));
+        let (op, w) = close_at(120., 120., 200.);
+        assert_eq!(op, 0.);
+        assert_eq!(w, 1.);
+        let (op, w) = close_at(60., 120., 200.);
+        assert!(op > 0. && op < 1. && w == 1.);
+        let (op, w) = close_at(220., 120., 200.);
+        assert_eq!(op, 0.);
+        assert!(w > 0. && w < 1.);
+        assert_eq!(close_at(320., 120., 200.), (0., 0.));
+    }
+
+    #[test]
+    fn an_opening_panel_lands_open_with_its_content_a_beat_behind() {
+        let (w, r) = open_at(0., 280., 40., 200.);
+        assert_eq!((w, r), (0., 0.));
+        // 30ms in: the width has started, the content has not.
+        let (w, r) = open_at(30., 280., 40., 200.);
+        assert!(w > 0. && r == 0.);
+        let (w, r) = open_at(240., 280., 40., 200.);
+        assert!(w > 0.9 && r == 1.);
+        assert_eq!(open_at(280., 280., 40., 200.), (1., 1.));
+    }
+
+    #[test]
+    fn a_push_runs_forward_and_back_and_lands_at_rest() {
+        let mut p: Push<&str> = Push::default();
+        let t0 = Instant::now();
+        let ms = 200;
+        // At rest on the list.
+        assert_eq!(p.step(None, t0, ms), PushFrame::List);
+        // A file opens: it arrives, then rests.
+        let f = p.step(Some("a.md"), t0, ms);
+        assert!(matches!(f, PushFrame::Forward(k) if k < 0.01));
+        let f = p.step(Some("a.md"), t0 + Duration::from_millis(100), ms);
+        assert!(matches!(f, PushFrame::Forward(k) if k > 0. && k < 1.));
+        assert_eq!(
+            p.step(Some("a.md"), t0 + Duration::from_millis(250), ms),
+            PushFrame::Detail
+        );
+        // Back: the file leaves as the list returns, then the list rests.
+        let t1 = t0 + Duration::from_millis(300);
+        let f = p.step(None, t1, ms);
+        assert!(matches!(f, PushFrame::Back("a.md", k) if k < 0.01));
+        let f = p.step(None, t1 + Duration::from_millis(100), ms);
+        assert!(matches!(f, PushFrame::Back("a.md", k) if k > 0. && k < 1.));
+        assert_eq!(
+            p.step(None, t1 + Duration::from_millis(250), ms),
+            PushFrame::List
+        );
+        // Another file over the open one is no push.
+        let mut p: Push<&str> = Push::default();
+        p.step(Some("a"), t0, ms);
+        assert_eq!(
+            p.step(Some("a"), t0 + Duration::from_millis(500), ms),
+            PushFrame::Detail
+        );
+        assert_eq!(
+            p.step(Some("b"), t0 + Duration::from_millis(600), ms),
+            PushFrame::Detail
+        );
+    }
 }

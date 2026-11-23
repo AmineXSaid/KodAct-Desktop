@@ -316,6 +316,11 @@ fn plan_bar(
         .into_any_element()
 }
 
+thread_local! {
+    /// The tab the panel showed last, for the direction a switch arrives from.
+    static LAST_TAB: std::cell::Cell<(i32, i32)> = const { std::cell::Cell::new((0, 0)) };
+}
+
 const PLAN_COPY: &str = "panel-plan-copy";
 
 pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
@@ -602,6 +607,27 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
         PanelTab::Browser => div().size_full().child(v.browser.clone()).into_any_element(),
     };
 
+    // The tab arrives from the side its place in the row is on: from the
+    // right for a tab further along, from the left for one before it.
+    let from_right = {
+        let at = |tab: PanelTab| match tab {
+            PanelTab::Plan => 0,
+            PanelTab::Agents => 1,
+            PanelTab::Files => 2,
+            PanelTab::Browser => 3,
+        };
+        // (the tab before, the tab now): the pair only moves on a switch, so
+        // the direction holds for the whole of its animation.
+        LAST_TAB.with(|l| {
+            let (prev, now) = l.get();
+            if now == at(v.tab) {
+                now >= prev
+            } else {
+                l.set((now, at(v.tab)));
+                at(v.tab) >= now
+            }
+        })
+    };
     let fills = matches!(v.tab, PanelTab::Browser | PanelTab::Agents);
     let full_agents = v.full && v.tab == PanelTab::Agents;
     div()
@@ -609,7 +635,7 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
         .when(!full_agents, |d| {
             d.flex_none()
                 .when(!v.below, |d| d.w(px(v.width)).h_full().border_l_1())
-                .when(v.below, |d| d.w_full().h(relative(0.45)).border_t_1())
+                .when(v.below, |d| d.w_full().h_full().border_t_1())
         })
         .flex()
         .flex_col()
@@ -647,12 +673,12 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
                         .child(body)
                         .into_any_element()
                 } else {
-                    super::motion::rise_in(
+                    super::motion::tab_in(
                         div()
                             .when(fills, |d| d.flex_1().min_h_0().flex().flex_col())
                             .child(body),
                         SharedString::from(format!("panel-view-{:?}", v.tab)),
-                        6.,
+                        from_right,
                         t,
                     )
                 }),
