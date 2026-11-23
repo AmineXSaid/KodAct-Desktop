@@ -9,45 +9,113 @@ use super::icon;
 use crate::state::{AppState, FileRef};
 use crate::theme::Theme;
 
-/// The page tile: a sheet with a few lines of "text" and the file's type.
-fn page(file: &FileRef, t: &Theme) -> AnyElement {
-    let line = |w: f32| {
-        div()
-            .h(px(2.))
-            .w(relative(w))
-            .rounded(t.radius.line)
-            .bg(t.colors.text_subtle.opacity(0.35))
-    };
+/// A file's first page (or a picture) as a small sheet: the page's own
+/// shape, a hairline round it and a soft lift, with the app's mark in its
+/// corner so the type still reads at a glance.
+fn sheet(
+    img: std::sync::Arc<gpui::Image>,
+    kind: Option<crate::office::Kind>,
+    scale: f32,
+    t: &Theme,
+) -> AnyElement {
     div()
+        .relative()
         .flex_none()
-        .w(px(36.))
-        .h(px(44.))
-        .flex()
-        .flex_col()
-        .justify_between()
-        .p(px(6.))
+        .w(px(THUMB_W))
+        .h(px(THUMB_H))
+        .rounded(t.radius.small)
+        .border_1()
+        .border_color(t.colors.border)
+        .bg(gpui::white())
+        .shadow(t.elevation_grain())
+        .overflow_hidden()
+        .child(
+            gpui::img(img)
+                .size_full()
+                .object_fit(gpui::ObjectFit::Cover),
+        )
+        .children(kind.map(|k| {
+            div()
+                .absolute()
+                .right(px(2.))
+                .bottom(px(2.))
+                .child(super::file_mark::render(k, 14., scale))
+        }))
+        .into_any_element()
+}
+
+/// The first-page sheet's size on a card: a portrait page's proportions.
+const THUMB_W: f32 = 48.;
+const THUMB_H: f32 = 60.;
+
+/// The page tile for a text file (Markdown, code, a web page): its first
+/// lines in miniature on a sheet the size of a first-page thumbnail, so the
+/// card shows what is in it and lines up with the others, and its type in a
+/// small tag at the foot.
+fn page(file: &FileRef, t: &Theme) -> AnyElement {
+    let lines: Vec<String> = file
+        .content
+        .lines()
+        .map(str::trim_end)
+        .filter(|l| !l.trim().is_empty())
+        .take(9)
+        .map(|l| l.chars().take(40).collect())
+        .collect();
+    let first_heading = file.is_markdown();
+    div()
+        .relative()
+        .flex_none()
+        .w(px(THUMB_W))
+        .h(px(THUMB_H))
+        .overflow_hidden()
+        .px(px(4.))
+        .pt(px(4.))
         .bg(t.extra.stage)
         .border_1()
         .border_color(t.colors.border)
-        // Concentric with the card: its 12px corner less the 8px between them.
         .rounded(t.radius.small)
+        .shadow(t.elevation_grain())
+        .flex()
+        .flex_col()
+        .gap(px(1.))
+        .children(lines.into_iter().enumerate().map(|(i, l)| {
+            let heading = first_heading && i == 0;
+            div()
+                .whitespace_nowrap()
+                .overflow_hidden()
+                .text_size(px(if heading { 5.5 } else { 4.5 }))
+                .line_height(relative(1.15))
+                .font_family(if first_heading {
+                    t.font_reading.clone()
+                } else {
+                    t.font_mono.clone()
+                })
+                .when(heading, |d| d.font_weight(FontWeight::BOLD))
+                .text_color(if heading {
+                    t.colors.text_strong
+                } else {
+                    t.colors.text_muted
+                })
+                .child(l.trim_start_matches('#').trim().to_string())
+        }))
         .child(
             div()
-                .flex()
-                .flex_col()
-                .gap(px(3.))
-                .child(line(0.9))
-                .child(line(0.7))
-                .child(line(0.8)),
-        )
-        .child(
-            div()
-                .text_size(px(9.))
+                .absolute()
+                .left(px(3.))
+                .bottom(px(3.))
+                .px(px(3.))
+                .py(px(1.))
+                .rounded(t.radius.small)
+                .bg(t.colors.surface)
+                .border_1()
+                .border_color(t.colors.border)
+                .whitespace_nowrap()
+                .text_size(px(7.))
                 .line_height(relative(1.))
                 .font_weight(FontWeight::BOLD)
                 .font_family(t.font_mono.clone())
-                .text_color(t.colors.primary)
-                .child(file.kind()),
+                .text_color(t.colors.text_muted)
+                .child(file.kind().chars().take(4).collect::<String>()),
         )
         .into_any_element()
 }
@@ -137,6 +205,7 @@ pub fn render(
     open: bool,
     scale: f32,
     view: Option<DiagramView>,
+    thumb: Option<std::sync::Arc<gpui::Image>>,
     t: &Theme,
 ) -> AnyElement {
     if file.is_diagram() {
@@ -174,10 +243,13 @@ pub fn render(
         .rounded(t.radius.card)
         .cursor_pointer()
         .hover(move |st| st.border_color(edge))
-        // An Office file or PDF shows its app's mark; anything else a page.
-        .child(match file.office() {
-            Some(kind) => super::file_mark::render(kind, MARK, scale),
-            None => page(file, t),
+        // Its first page as it prints (or the picture itself) once drawn;
+        // until then, or without LibreOffice, an Office file or PDF shows its
+        // app's mark and anything else a page.
+        .child(match (thumb, file.office()) {
+            (Some(img), kind) => sheet(img, kind, scale, t),
+            (None, Some(kind)) => super::file_mark::render(kind, MARK, scale),
+            (None, None) => page(file, t),
         })
         .child(
             label_row(file, key, state, file.label(), t)

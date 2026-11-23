@@ -2,8 +2,9 @@
 //! into a PDF, which `office.rs` draws page by page, so the side panel shows
 //! a document's layout, fonts and pictures, and a deck's slides as designed.
 //!
-//! LibreOffice is used when it is on this computer (`KODACT_SOFFICE`, PATH,
-//! or where its installer puts it); without it the panel shows the file's
+//! LibreOffice is used when it is on this computer (`KODACT_SOFFICE`, the
+//! copy KodAct's installer puts beside the app, PATH, or where LibreOffice's
+//! own installer puts it); without it the panel shows the file's
 //! text, as before. Each file is rendered once, keyed by its bytes, into
 //! KodAct's temp folder. Rendering blocks for seconds: run it off the UI
 //! thread.
@@ -26,6 +27,18 @@ pub fn soffice() -> Option<PathBuf> {
 fn find() -> Option<PathBuf> {
     if let Some(p) = std::env::var_os("KODACT_SOFFICE").map(PathBuf::from) {
         return p.is_file().then_some(p);
+    }
+    // The copy the installer put beside the app (`installer/stage_libreoffice.sh`).
+    let beside = std::env::current_exe().ok().and_then(|exe| {
+        let p = exe
+            .parent()?
+            .join("libreoffice")
+            .join("program")
+            .join(if cfg!(windows) { "soffice.exe" } else { "soffice" });
+        p.is_file().then_some(p)
+    });
+    if beside.is_some() {
+        return beside;
     }
     let names: &[&str] = if cfg!(windows) {
         &["soffice.exe", "soffice.com"]

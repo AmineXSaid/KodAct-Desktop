@@ -166,6 +166,56 @@ fn pages(bytes: &[u8]) -> Result<(Vec<Page>, usize), String> {
     Ok((out, total))
 }
 
+/// A file's first page as a small picture, for its card in a reply: a PDF
+/// drawn directly, a Word, PowerPoint or Excel file through LibreOffice
+/// (`office_render.rs`, which caches the PDF it makes, so opening the file
+/// after reuses it). `Err` without LibreOffice or for a file it cannot draw.
+/// Blocks for seconds: run it off the UI thread.
+pub fn first_page(name: &str, bytes: &[u8]) -> Result<Page, String> {
+    let pdf = match Kind::of(name) {
+        Some(Kind::Pdf) => bytes.to_vec(),
+        Some(_) => crate::office_render::to_pdf(name, bytes)?,
+        None => return Err("not an Office file or a PDF".into()),
+    };
+    std::panic::catch_unwind(|| page_at(&pdf, 0, THUMB_SCALE))
+        .unwrap_or_else(|_| Err("the page could not be drawn".into()))
+}
+
+/// How a card's page is drawn: about 300 px wide for a letter page, sharp
+/// on a 2x screen at the card's size.
+const THUMB_SCALE: f32 = 0.5;
+
+/// One page of a PDF at `scale` (1 is 72 dpi).
+fn page_at(bytes: &[u8], at: usize, scale: f32) -> Result<Page, String> {
+    use hayro::hayro_interpret::InterpreterSettings;
+    use hayro::hayro_syntax::Pdf;
+    let pdf = Pdf::new(bytes.to_vec()).map_err(|e| format!("not a PDF KodAct can draw: {e:?}"))?;
+    let pages = pdf.pages();
+    let page = pages.get(at).ok_or("the PDF has no such page")?;
+    let pixmap = hayro::render(
+        page,
+        &hayro::RenderCache::new(),
+        &InterpreterSettings::default(),
+        &hayro::RenderSettings::default(),
+        &hayro::PixmapSettings {
+            x_scale: scale,
+            y_scale: scale,
+            bg_color: hayro::vello_cpu::color::palette::css::WHITE,
+        },
+    );
+    let (width, height) = (u32::from(pixmap.width()), u32::from(pixmap.height()));
+    let rgba = image::RgbaImage::from_raw(width, height, pixmap.data_as_u8_slice().to_vec())
+        .ok_or("a page KodAct could not draw")?;
+    let mut png = Vec::new();
+    rgba.write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png)
+        .map_err(|e| e.to_string())?;
+    Ok(Page {
+        image: std::sync::Arc::new(gpui::Image::from_bytes(gpui::ImageFormat::Png, png)),
+        width,
+        height,
+    })
+}
+
 /// What the panel shows at once: a workbook's sheets, or a document's text
 /// (a PDF's pages too, which draw quickly). `draw` adds the pages of a Word
 /// or PowerPoint file after.

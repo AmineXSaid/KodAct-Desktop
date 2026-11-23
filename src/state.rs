@@ -2114,6 +2114,10 @@ pub struct AppState {
     /// An Office file or PDF in the panel, read: by file name and content
     /// (`name#key`), the preview or why it couldn't be read. None while it
     /// is being read.
+    /// Each file card's first page, by its bytes' key (`office_render::key`):
+    /// `None` while it is drawn, or when it cannot be (no LibreOffice, a
+    /// file it cannot read); the card then shows the app's mark.
+    pub card_thumbs: std::sync::Arc<std::collections::HashMap<u64, Option<std::sync::Arc<gpui::Image>>>>,
     pub doc_preview: Option<(
         SharedString,
         Result<std::sync::Arc<crate::office::Preview>, String>,
@@ -2540,6 +2544,7 @@ impl AppState {
             doc_below: false,
             doc_full: false,
             doc_preview: None,
+            card_thumbs: Default::default(),
             doc_text: false,
             source_view: false,
             plan_version: None,
@@ -12973,6 +12978,45 @@ impl AppState {
             });
         })
         .detach();
+    }
+
+    // ------------------------------------------------------------ file cards
+
+    /// Draw the first page of each of `files` not drawn yet, off the UI
+    /// thread, for its card in the reply: a picture is itself; a PDF, Word,
+    /// PowerPoint or Excel file its first page (`office::first_page`).
+    pub fn want_thumbs(&mut self, files: Vec<FileRef>, cx: &mut Context<Self>) {
+        for file in files {
+            let Some(bytes) = file.bytes.clone() else {
+                continue;
+            };
+            let key = crate::office_render::key(&bytes);
+            if self.card_thumbs.contains_key(&key) {
+                continue;
+            }
+            std::sync::Arc::make_mut(&mut self.card_thumbs).insert(key, None);
+            let name = file.name.to_string();
+            cx.spawn(async move |this, cx| {
+                let thumb = cx
+                    .background_spawn(async move {
+                        if let Some(format) = crate::ui::image_view::format_of(&name) {
+                            return Some(std::sync::Arc::new(gpui::Image::from_bytes(
+                                format,
+                                bytes.to_vec(),
+                            )));
+                        }
+                        crate::office::first_page(&name, &bytes).ok().map(|p| p.image)
+                    })
+                    .await;
+                let _ = this.update(cx, |s, cx| {
+                    if thumb.is_some() {
+                        std::sync::Arc::make_mut(&mut s.card_thumbs).insert(key, thumb);
+                        cx.notify();
+                    }
+                });
+            })
+            .detach();
+        }
     }
 
     // ------------------------------------------------------------ side questions

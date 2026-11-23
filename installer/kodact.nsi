@@ -10,6 +10,8 @@
 ;   %LOCALAPPDATA%\Programs\KodAct\bin\linux-x86_64\kodact  KodAct CLI for Linux, put on
 ;                                     WSL distros, SSH hosts and containers
 ;   %LOCALAPPDATA%\Programs\KodAct\design-library\  the design library
+;   %LOCALAPPDATA%\Programs\KodAct\python\          Python with the document libraries
+;   %LOCALAPPDATA%\Programs\KodAct\libreoffice\     LibreOffice, so Office files show as they print
 ; plus the user's Start menu and desktop shortcuts, an optional PATH entry for
 ; `kodact` (the user's), and an uninstaller in Apps & features (the user's).
 
@@ -38,7 +40,10 @@ OutFile "${OUT}"
 InstallDir "$LOCALAPPDATA\Programs\KodAct"
 InstallDirRegKey HKCU "Software\KodAct" "InstallDir"
 RequestExecutionLevel user
-BrandingText "KodAct ${VERSION}"
+ManifestDPIAware true
+ShowInstDetails nevershow
+ShowUninstDetails nevershow
+BrandingText "KodAct ${VERSION}  ·  From code to impact"
 
 VIProductVersion "${VERSION}.0"
 VIAddVersionKey "ProductName" "KodAct"
@@ -50,9 +55,44 @@ VIAddVersionKey "LegalCopyright" "KodAct"
 !define MUI_ICON "..\assets\kodact.ico"
 !define MUI_UNICON "..\assets\kodact.ico"
 !define MUI_ABORTWARNING
+!define MUI_ABORTWARNING_TEXT "Stop installing KodAct? Nothing is left half installed."
 !define MUI_COMPONENTSPAGE_SMALLDESC
+
+; KodAct's look: the burgundy side panel on the welcome and finish pages,
+; the icon in the white header, a flat burgundy progress bar, and one status
+; line in plain words instead of a list of files. The pictures are drawn by
+; scripts/make_installer_art.py at twice their size, for high-DPI screens.
+!ifdef ART_DIR
+  !define MUI_WELCOMEFINISHPAGE_BITMAP "${ART_DIR}\welcome.bmp"
+  !define MUI_WELCOMEFINISHPAGE_BITMAP_STRETCH AspectFitHeight
+  !define MUI_UNWELCOMEFINISHPAGE_BITMAP "${ART_DIR}\unwelcome.bmp"
+  !define MUI_UNWELCOMEFINISHPAGE_BITMAP_STRETCH AspectFitHeight
+  !define MUI_HEADERIMAGE
+  !define MUI_HEADERIMAGE_RIGHT
+  !define MUI_HEADERIMAGE_BITMAP "${ART_DIR}\header.bmp"
+  !define MUI_HEADERIMAGE_BITMAP_STRETCH AspectFitHeight
+  !define MUI_HEADERIMAGE_UNBITMAP "${ART_DIR}\header.bmp"
+  !define MUI_HEADERIMAGE_UNBITMAP_STRETCH AspectFitHeight
+!endif
+!define MUI_BGCOLOR "FFFFFF"
+!define MUI_TEXTCOLOR "1A1816"
+!define MUI_INSTFILESPAGE_PROGRESSBAR "colored"
+!define MUI_INSTFILESPAGE_COLORS "7A1F3D FFFFFF"
+
+!define MUI_WELCOMEPAGE_TITLE "Welcome to KodAct"
+!define MUI_WELCOMEPAGE_TITLE_3LINES
+!define MUI_WELCOMEPAGE_TEXT "KodAct turns what you ask into working code and finished documents, and asks before it changes anything.$\r$\n$\r$\nThis installs the KodAct desktop app and KodAct CLI for you alone: no administrator rights needed. It also brings everything KodAct works with: Python with the document libraries, and LibreOffice, so Word, Excel and PowerPoint files show exactly as they print.$\r$\n$\r$\nClick Next to continue."
+!define MUI_COMPONENTSPAGE_TEXT_TOP "Everything is ticked for the full experience. Untick what you would rather not have."
+!define MUI_INSTFILESPAGE_FINISHHEADER_TEXT "KodAct is installed"
+!define MUI_INSTFILESPAGE_FINISHHEADER_SUBTEXT "Everything is in place."
+!define MUI_INSTFILESPAGE_ABORTHEADER_TEXT "Installation stopped"
+!define MUI_INSTFILESPAGE_ABORTHEADER_SUBTEXT "KodAct was not installed."
+!define MUI_FINISHPAGE_TITLE "KodAct is ready"
+!define MUI_FINISHPAGE_TITLE_3LINES
+!define MUI_FINISHPAGE_TEXT "Open KodAct from the Start menu, or type kodact in any terminal.$\r$\n$\r$\nFrom code to impact."
 !define MUI_FINISHPAGE_RUN "$INSTDIR\KodAct.exe"
-!define MUI_FINISHPAGE_RUN_TEXT "Start KodAct"
+!define MUI_FINISHPAGE_RUN_TEXT "Start KodAct now"
+!define MUI_FINISHPAGE_NOREBOOTSUPPORT
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_COMPONENTS
@@ -63,10 +103,26 @@ VIAddVersionKey "LegalCopyright" "KodAct"
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
 
+; Windows' own UI face, so the pages read like the app.
+Function .onGUIInit
+  SetFont "Segoe UI" 9
+FunctionEnd
+Function un.onGUIInit
+  SetFont "Segoe UI" 9
+FunctionEnd
+
+; One status line for a step, its file list hidden.
+!macro Step TEXT
+  SetDetailsPrint textonly
+  DetailPrint "${TEXT}"
+  SetDetailsPrint none
+!macroend
+
 ; ------------------------------------------------------------------ install
 
 Section "KodAct desktop app" SecApp
   SectionIn RO
+  !insertmacro Step "Installing the KodAct desktop app…"
   SetOutPath "$INSTDIR"
   File "/oname=KodAct.exe" "${APP_EXE}"
   File "/oname=kodact.ico" "..\assets\kodact.ico"
@@ -98,6 +154,7 @@ Section "Document tools" SecPython
   ; files with (staged by stage_python.sh), so nothing has to be installed
   ; by hand. Replaced whole: it is KodAct's own, and an update's libraries
   ; must not mix with the last one's.
+  !insertmacro Step "Setting up Python and the document libraries…"
   RMDir /r "$INSTDIR\python"
   SetOutPath "$INSTDIR\python"
   File /r "${PYTHON_DIR}\*.*"
@@ -109,6 +166,7 @@ Section "Design library" SecDesign
   ; KodAct's design chats read (design-library/, staged by build.sh with its
   ; media fetched). Replaced whole, so an update leaves no stale files; only
   ; a library KodAct put there (it has UPSTREAM.json) is ever removed.
+  !insertmacro Step "Unpacking the design library…"
   IfFileExists "$INSTDIR\design-library\UPSTREAM.json" 0 +2
     RMDir /r "$INSTDIR\design-library"
   SetOutPath "$INSTDIR\design-library"
@@ -117,6 +175,7 @@ SectionEnd
 
 Section "KodAct CLI (kodact)" SecCli
   SectionIn RO
+  !insertmacro Step "Installing KodAct CLI…"
   SetOutPath "$INSTDIR\bin"
   File "/oname=kodact.exe" "${CLI_EXE}"
   ; Remote development: the app copies this to a remote the first time.
@@ -124,7 +183,22 @@ Section "KodAct CLI (kodact)" SecCli
   File "/oname=kodact" "${LINUX_CLI}"
 SectionEnd
 
+!ifdef LIBREOFFICE_DIR
+Section "LibreOffice (documents as they print)" SecOffice
+  ; LibreOffice, unpacked beside the app (staged by stage_libreoffice.sh):
+  ; KodAct draws Word, PowerPoint and Excel files through it as they print,
+  ; exports them to PDF and recalculates workbooks. KodAct finds it in
+  ; libreoffice\program\soffice.exe; nothing is registered with Windows, and
+  ; a LibreOffice installed separately is left alone. Replaced whole.
+  !insertmacro Step "Unpacking LibreOffice for documents as they print. This takes a minute…"
+  RMDir /r "$INSTDIR\libreoffice"
+  SetOutPath "$INSTDIR\libreoffice"
+  File /r "${LIBREOFFICE_DIR}\*.*"
+SectionEnd
+!endif
+
 Section "Add kodact to PATH" SecPath
+  !insertmacro Step "Adding kodact to your PATH…"
   Push "$INSTDIR\bin"
   Call AddToPath
 SectionEnd
@@ -145,6 +219,7 @@ Section "Turn on all KodAct nudges" SecNudges
 SectionEnd
 
 Section "Desktop shortcut" SecDesktop
+  !insertmacro Step "Adding the desktop shortcut…"
   SetShellVarContext current
   CreateShortcut "$DESKTOP\KodAct.lnk" "$INSTDIR\KodAct.exe" "" "$INSTDIR\KodAct.exe" 0
 SectionEnd
@@ -154,6 +229,9 @@ SectionEnd
   !insertmacro MUI_DESCRIPTION_TEXT ${SecPython} "Python with the libraries KodAct edits Word, Excel, PowerPoint and PDF files with."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecDesign} "Skills, templates and design systems for design chats."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecCli} "KodAct CLI, the engine behind every chat. The app needs it."
+!ifdef LIBREOFFICE_DIR
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecOffice} "Shows Word, Excel and PowerPoint files exactly as they print, exports them to PDF, recalculates workbooks. About 860 MB."
+!endif
   !insertmacro MUI_DESCRIPTION_TEXT ${SecNudges} "Every KodAct CLI nudge on (KODACT_NUDGES=all in your user's environment)."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecPath} "Run kodact from any terminal (your user's PATH)."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} "A KodAct icon on the desktop."
@@ -318,6 +396,7 @@ Section "Uninstall"
   Delete "$INSTDIR\kodact.ico"
   RMDir /r "$INSTDIR\fonts"
   RMDir /r "$INSTDIR\python"
+  RMDir /r "$INSTDIR\libreoffice"
   IfFileExists "$INSTDIR\design-library\UPSTREAM.json" 0 +2
     RMDir /r "$INSTDIR\design-library"
   Delete "$INSTDIR\Uninstall.exe"

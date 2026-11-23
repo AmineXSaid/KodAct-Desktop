@@ -5,8 +5,9 @@
 #   KODACT_DIR=../kodact installer/build.sh [out-dir]
 #
 # Needs: rustup targets x86_64-pc-windows-gnu and x86_64-unknown-linux-musl,
-# x86_64-w64-mingw32-gcc, musl-gcc (musl-tools), makensis; python3 with pip,
-# curl and unzip (the bundled Python, `stage_python.sh`).
+# x86_64-w64-mingw32-gcc, musl-gcc (musl-tools), makensis; python3 with pip
+# and Pillow, curl and unzip (the bundled Python, `stage_python.sh`; the
+# pictures), and msiextract (msitools, the bundled LibreOffice).
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 cli="${KODACT_DIR:-$here/../kodact}"
@@ -52,8 +53,21 @@ python3 -I "$here/scripts/sync_open_design.py" stage "$out/stage/design-library"
 # office-documents skill's tools run on (`src/doc_tools.rs` finds it).
 "$here/installer/stage_python.sh" "$out/stage/python"
 
+# LibreOffice, so Office files show as they print (`src/office_render.rs`).
+# KODACT_NO_LIBREOFFICE=1 builds a smaller installer without it.
+office=()
+if [ "${KODACT_NO_LIBREOFFICE:-}" != 1 ]; then
+  "$here/installer/stage_libreoffice.sh" "$out/stage/libreoffice"
+  office=(-DLIBREOFFICE_DIR="$out/stage/libreoffice")
+fi
+
+# The installer's pictures, in KodAct's colours.
+python3 -I "$here/scripts/make_installer_art.py" "$out/stage/art"
+
 makensis -V2 -WX \
   "${fonts[@]}" \
+  "${office[@]}" \
+  -DART_DIR="$out/stage/art" \
   -DPYTHON_DIR="$out/stage/python" \
   -DDESIGN_DIR="$out/stage/design-library" \
   -DAPP_EXE="$out/stage/app/KodAct.exe" \

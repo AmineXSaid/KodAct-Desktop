@@ -59,6 +59,9 @@ pub struct ItemContext {
     /// Diagrams showing their source (`AppState::diagram_code`).
     pub sources: std::sync::Arc<std::collections::HashSet<SharedString>>,
     pub zooms: std::sync::Arc<std::collections::HashMap<SharedString, f32>>,
+    /// Each file card's first page, by its bytes' key (`AppState::card_thumbs`).
+    pub thumbs:
+        std::sync::Arc<std::collections::HashMap<u64, Option<std::sync::Arc<gpui::Image>>>>,
     /// What the newest turn changed in the project's memory, under its reply.
     pub memory: Option<crate::state::MemoryChange>,
     /// The runs of calls opened to their steps, by their first block (in
@@ -1012,6 +1015,10 @@ pub(super) fn block(blocks: &[Block], b: usize, cx: &ItemContext, t: &Theme) -> 
                 cx.open_doc.as_ref() == Some(file),
                 cx.scale,
                 Some(view),
+                file.bytes
+                    .as_ref()
+                    .and_then(|b| cx.thumbs.get(&crate::office_render::key(b)).cloned())
+                    .flatten(),
                 t,
             )
         }
