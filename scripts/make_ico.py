@@ -1,17 +1,10 @@
 """Build assets/kodact.ico (the Windows icon: taskbar, title bar, Start,
 Explorer, the installer).
 
-The icon is KodAct's mark alone, `./<` (src/ui/kodact_mark.rs: the dot, the
-slash and the angle that read as a K), with nothing behind it: a transparent
-ground, like the other icons on a Windows 11 taskbar. It has to stand out on
-any desktop (white, black, a photo), so:
-
-- the dot and the angle are KodAct's burgundy and the slash is near white,
-  as the mark is in dark mode;
-- each stroke carries a dark keyline, so burgundy and white still read on a
-  white or pale wallpaper, and the angle stays apart where it meets the slash;
-- each stroke is shaded a little, top to bottom, and the mark sits on a soft
-  shadow, which lifts it off a busy picture.
+The icon is KodAct's mark, `./<` (src/ui/kodact_mark.rs: the dot, the
+slash and the angle that read as a K), in paper white on a burgundy tile
+(`#7a1f3d`, the app's one colour), with a soft shadow that lifts the tile off
+a busy wallpaper. The tile's rounded corners follow Windows 11's.
 
 Every size Windows asks for is drawn on its own from the geometry
 (supersampled, then reduced), never scaled from another size, so 16 and
@@ -46,16 +39,15 @@ SLASH = [(68.0, 224.0), (96.0, 232.0), (148.0, 22.0), (120.0, 14.0)]
 ANGLE = [(114.0, 130.0), (223.0, 22.0), (243.0, 42.0), (154.0, 130.0), (243.0, 218.0), (223.0, 238.0)]
 JOIN = 3.0  # the strokes' rounded join, in the mark's units
 
-# Colours: each stroke's shade top to bottom, and its keyline.
-BURGUNDY = ((0xB2, 0x3A, 0x5C), (0x6E, 0x15, 0x31))  # the brand's burgundy, lit to deep
-BURGUNDY_LINE = (0x22, 0x06, 0x0F)
-INK = ((0xFF, 0xFF, 0xFF), (0xD9, 0xDE, 0xE6))  # the slash: near white
-INK_LINE = (0x0B, 0x0D, 0x10)
-STROKES = [(DOT, BURGUNDY, BURGUNDY_LINE), (SLASH, INK, INK_LINE), (ANGLE, BURGUNDY, BURGUNDY_LINE)]
+# Colours: the burgundy tile (lit a touch along the top) and the paper mark.
+TILE = ((0x8A, 0x26, 0x47), (0x6C, 0x1A, 0x35))  # `#7a1f3d` at the middle
+PAPER = ((0xFF, 0xFC, 0xF8), (0xF0, 0xEA, 0xE2))
+STROKES = [(DOT, PAPER), (SLASH, PAPER), (ANGLE, PAPER)]
 
-FILL = 0.92  # the mark's width, as a share of the icon: big, with just room for keyline and shadow
-KEYLINE = 0.032  # the keyline's width, as a share of the icon; at least 1 px
-SHADOW = 0.45  # the shadow's opacity; it falls 2.5% of the icon below the mark
+TILE_FILL = 0.94  # the tile's width, as a share of the icon
+TILE_RADIUS = 0.22  # its corner radius, as a share of the tile
+FILL = 0.56  # the mark's width, as a share of the icon
+SHADOW = 0.35  # the shadow's opacity; it falls 2% of the icon below the tile
 
 
 def mask(poly, size, dy=0.0):
@@ -71,17 +63,6 @@ def mask(poly, size, dy=0.0):
     return m
 
 
-def grow(m, by):
-    """The mask widened by `by` pixels all round (a round keyline)."""
-    if by <= 0:
-        return m
-    k = 2 * by + 1
-    if k <= 9:
-        return m.filter(ImageFilter.MaxFilter(k))
-    # A wide keyline: blur, then threshold just past the edge.
-    return m.filter(ImageFilter.GaussianBlur(by / 1.6)).point(lambda v: 255 if v > 24 else 0)
-
-
 def shade(size, top, bottom):
     col = Image.new("RGBA", (1, size))
     for y in range(size):
@@ -90,25 +71,28 @@ def shade(size, top, bottom):
     return col.resize((size, size), Image.NEAREST)
 
 
+def tile(big, dy=0.0):
+    """The rounded tile as a mask."""
+    m = Image.new("L", (big, big), 0)
+    side = big * TILE_FILL
+    o = (big - side) / 2
+    y = o + dy * big
+    ImageDraw.Draw(m).rounded_rectangle([o, y, o + side, y + side], radius=side * TILE_RADIUS, fill=255)
+    return m
+
+
 def icon(n):
     big = n * SS
-    # The keyline in final pixels: never thinner than one, and tapering at
-    # the large sizes (5 px at 256), where a proportional one turns heavy.
-    line = max(1.0, min(KEYLINE * n, 0.014 * n + 1.4)) * SS
     img = Image.new("RGBA", (big, big), (0, 0, 0, 0))
 
-    # The soft shadow under the whole mark, outline included.
-    shadow = Image.new("L", (big, big), 0)
-    for poly, _, _ in STROKES:
-        shadow.paste(255, (0, 0), grow(mask(poly, big, 0.025), round(line)))
-    shadow = shadow.filter(ImageFilter.GaussianBlur(big * 0.03)).point(lambda v: round(v * SHADOW))
+    # The soft shadow under the tile.
+    shadow = tile(big, 0.02).filter(ImageFilter.GaussianBlur(big * 0.02)).point(lambda v: round(v * SHADOW))
     img.paste((0, 0, 0, 255), (0, 0), shadow)
 
-    # Each stroke: its keyline, then its fill, in order.
-    for poly, colours, keyline in STROKES:
-        m = mask(poly, big)
-        img.paste(keyline + (255,), (0, 0), grow(m, round(line)))
-        img.paste(shade(big, *colours), (0, 0), m)
+    # The burgundy tile, then the paper mark on it.
+    img.paste(shade(big, *TILE), (0, 0), tile(big))
+    for poly, colours in STROKES:
+        img.paste(shade(big, *colours), (0, 0), mask(poly, big))
     return img.resize((n, n), Image.LANCZOS)
 
 

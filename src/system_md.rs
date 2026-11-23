@@ -65,7 +65,7 @@ fn render() -> String {
 
     let _ = writeln!(w, "## Direction\n");
     let _ = writeln!(w, "**Personality:** calmly smooth: a warm editorial workspace, confident and unhurried, closer to a printed quarterly than a dashboard (after the Anchor style reference).\n");
-    let _ = writeln!(w, "**Foundation:** KodAct burgundy on neutral greys (after Postman's, for easy reading). By day: the window and sidebar #efefef, the session #f7f7f7, cards white; type #212121, secondary #616161. At night: the session charcoal #212121, the sidebar and title bar #282828, cards #303030; type white, secondary #b0b0b0. One ink carries the type. One colour, burgundy: #8c1d40 (#e8809f at night) for the mark, Send, filled buttons, the one decisive action and a waiting dot; a step lighter, #9b2348 (#f0a3ba at night), for links, focus, selection and a switch that is on. Work in progress and inline code are ink. Everything else is neutral; colour otherwise only for meaning (modes, status).\n");
+    let _ = writeln!(w, "**Foundation:** KodAct burgundy on neutral greys (after Postman's, for easy reading). By day: the window and sidebar #efefef, the session #f7f7f7, cards white; type #212121, secondary #616161. At night: the session charcoal #212121, the sidebar and title bar #282828, cards #303030; type white, secondary #b0b0b0. One colour, burgundy: #7a1f3d (#e0889f at night) for the mark, Send and the other main actions (Save, Allow), a waiting dot and the Act of the wordmark; its wash is #f3dde3 (#3a1a24 at night). Links (underlined), focus, selection, switches that are on, all other buttons and work in progress are ink: #1a1816 (#edeae6 at night). Errors are a brick red, #b82a1a (#ff8a7a at night), held apart from the burgundy. Everything else is neutral; colour otherwise only for meaning (modes, status).\n");
     let _ = writeln!(w, "**Depth:** nearly flat. Hairlines inside cards; the session and the user's message lift on paper grain (three 1px shadows at 6/4/1% ink); popovers and the permission card a touch more.\n");
     let _ = writeln!(w, "**Shape:** two shapes. Everything you press is a pill (buttons, chips, icon buttons, the new-chat and needs-you pills); everything that holds content is 4px (cards, rows, menus, fields, the composer, the session).\n");
     let _ = writeln!(w, "**Type:** Anthropic Sans only, the Text cut for every word (code included) and the Display cut for the greeting and headings: 400 for text, 500 for labels, 600 for headings and buttons. Small labels in sentence case, never uppercase and never above a heading. The app bundles no font; diagrams are redrawn in it whatever they name.\n");
@@ -222,6 +222,23 @@ fn render() -> String {
             z.mark_home,
             "the mark beside the home greeting",
         ),
+        (
+            "panel_header",
+            z.panel_header,
+            "every right-side panel's title row (title 14 semibold)",
+        ),
+        (
+            "panel_toolbar",
+            z.panel_toolbar,
+            "the file view's second row (labels 12 medium)",
+        ),
+        (
+            "panel_footer",
+            z.panel_footer,
+            "the file view's status line",
+        ),
+        ("tool_btn", z.tool_btn, "a toolbar button"),
+        ("thumb_rail", z.thumb_rail, "the thumbnail rail"),
     ] {
         let _ = writeln!(w, "- `{name}`: {}px, {role}", px(v));
     }
@@ -246,6 +263,12 @@ fn render() -> String {
             l.colors.surface,
             d.colors.surface,
             "cards, the composer, popovers",
+        ),
+        (
+            "panel",
+            l.extra.panel,
+            d.extra.panel,
+            "every right-side surface: side bar, Session column, file view",
         ),
         (
             "selected",
@@ -543,6 +566,7 @@ fn render() -> String {
         ("KodAct Signal", "The app takes KodAct's identity: its mark (a step, then a chevron) in place of the ingot, warm ink and paper, and two colours with separate jobs. Turquoise is rationed to the mark, Send, the one decisive action and a waiting dot; peach, the terminal's warm accent, is for links, focus, selection and switches; buttons and work in progress are ink. It replaces KodAct Ember, and an all-turquoise first pass that put the accent on every control.", "2026-11-11"),
         ("Postman's greys", "The warm paper and the blue-black obsidian give way to plain neutral greys, after Postman's, so everything reads easily: by day #efefef / #f7f7f7 / white, at night #212121 / #282828 / #303030 with white type and #b0b0b0 secondary (a touch brighter than Postman's #a6a6a6, to keep AA on hovered and selected rows). Burgundy stays the one colour.", "2026-11-20"),
         ("KodAct burgundy", "One colour replaces turquoise and peach: burgundy for the mark (`./<`), Send, filled buttons and the decision in front of you, and a lighter burgundy for links, focus, selection and switches. The Windows icon and the brand SVG carry the same burgundy; the startup film and the onboarding orbit are gone, and the working mark types, runs and clears `./<` like a line at a prompt.", "2026-11-20"),
+        ("Burgundy, and ink for the rest", "The accent is `#7a1f3d` (`#e0889f` at night) and keeps only the main action, the mark and a waiting dot. Links (underlined), focus, selection and switches become ink, so burgundy is the only colour on screen; errors move to a brick red held at least 25 degrees of hue away from it. Every right-side panel shares one header (44px), one background (`panel`) and one chrome (`ui/panel_chrome.rs`).", "2026-11-23"),
         ("A neutral wash for the open row", "The accent stays for the action; the open chat and the open screen lift by a grey wash.", "2026-10-23"),
         ("Composer at 620px", "A comfortable measure for a prompt, the same in a chat and on the welcome page.", "2026-10-11"),
         ("Composer on the reading column", "In a chat the composer takes the 760px column the reply is read in, so the two line up; on the welcome page it keeps its own measure.", "2026-10-23"),

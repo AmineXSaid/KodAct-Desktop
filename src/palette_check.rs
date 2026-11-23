@@ -143,8 +143,8 @@ fn surfaces_stack_like_paper_on_paper() {
     }
 }
 
-/// One colour: the accent, the mark, links and switches share KodAct's
-/// burgundy hue (links a step lighter); live work is ink.
+/// One colour: the accent and the mark are KodAct's burgundy; links, focus
+/// and switches are ink, and so is live work.
 #[test]
 fn each_theme_has_one_colour() {
     let hue = |c: Hsla| {
@@ -178,12 +178,21 @@ fn each_theme_has_one_colour() {
             assert!(chroma > 0.04, "{mode}: the accent has no colour");
             let d = (hue(x.mark_top) - hue(x.accent) + 540.) % 360. - 180.;
             assert!(d.abs() <= 20., "{mode}: the mark is {d:.0}° off the accent");
-            // One colour: links and switches are the accent's burgundy, a
-            // step lighter; work in progress has no colour of its own.
-            let d = (hue(x.toggle_on) - hue(t.colors.primary) + 540.) % 360. - 180.;
-            assert!(d.abs() <= 20., "{mode}: the switch is {d:.0}° off the link");
-            let d = (hue(t.colors.primary) - hue(x.accent) + 540.) % 360. - 180.;
-            assert!(d.abs() <= 20., "{mode}: the link is {d:.0}° off the accent");
+            // Burgundy: red-pink in OKLab, neither orange nor purple.
+            let h = (hue(x.accent) + 360.) % 360.;
+            assert!(
+                (-0. ..=30.).contains(&h) || h >= 345.,
+                "{mode}: the accent's hue is {h:.0}°, not burgundy"
+            );
+            // One colour: links, focus and switches are ink, with no colour.
+            for (name, c) in [
+                ("the link", t.colors.primary),
+                ("the link, hovered", t.colors.primary_hover),
+                ("the switch", x.toggle_on),
+            ] {
+                let chroma = oklab(rgba(c)).1;
+                assert!(chroma <= 0.02, "{mode}: {name} has colour ({chroma:.3})");
+            }
             let chroma = oklab(rgba(x.live)).1;
             assert!(chroma <= 0.02, "{mode}: live work has colour ({chroma:.3})");
         }
@@ -201,7 +210,46 @@ fn each_theme_has_one_colour() {
         );
     }
     let calm = Theme::light();
-    assert_eq!(rgba(calm.extra.accent), rgba(gpui::rgb(0x8c1d40).into()));
+    assert_eq!(rgba(calm.extra.accent), rgba(gpui::rgb(0x7a1f3d).into()));
+}
+
+/// The accent and `danger` are never confused: a failure must not look like
+/// the main action. They sit at least 25° of hue apart, and a clear step
+/// apart in lightness or in chroma.
+#[test]
+fn the_accent_and_danger_stay_apart() {
+    let lch = |c: Hsla| {
+        let r = rgba(c);
+        let (l, chroma) = oklab(r);
+        let (lr, lg, lb) = (linear(r.r), linear(r.g), linear(r.b));
+        let (lc, m, sc) = (
+            (0.412_221_46 * lr + 0.536_332_55 * lg + 0.051_445_995 * lb).cbrt(),
+            (0.211_903_5 * lr + 0.680_699_5 * lg + 0.107_396_96 * lb).cbrt(),
+            (0.088_302_46 * lr + 0.281_718_85 * lg + 0.629_978_7 * lb).cbrt(),
+        );
+        let a = 1.977_998_5 * lc - 2.428_592_2 * m + 0.450_593_7 * sc;
+        let b = 0.025_904_037 * lc + 0.782_771_77 * m - 0.808_675_77 * sc;
+        (l, chroma, b.atan2(a).to_degrees())
+    };
+    for (mode, t) in both() {
+        for (name, danger) in [
+            ("danger", t.extra.danger),
+            ("fill_danger", t.extra.fill_danger),
+        ] {
+            let (la, ca, ha) = lch(t.extra.accent);
+            let (ld, cd, hd) = lch(danger);
+            let dh = ((ha - hd + 540.) % 360. - 180.).abs();
+            assert!(
+                dh >= 25.,
+                "{mode}: {name} is only {dh:.0}° of hue from the accent"
+            );
+            let (dl, dc) = ((la - ld).abs(), (ca - cd).abs());
+            assert!(
+                dl >= 0.03 || dc >= 0.03,
+                "{mode}: {name} is {dl:.3} lighter and {dc:.3} more chromatic than the accent; too alike"
+            );
+        }
+    }
 }
 
 #[test]

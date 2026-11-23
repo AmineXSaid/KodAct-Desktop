@@ -1,7 +1,7 @@
 //! Design tokens for GPUI in the "calmly smooth" system (after the Anchor
 //! style reference), in KodAct's colours: warm paper surfaces stacked like
 //! paper on paper (ink at night), one ink, burgundy for the decisive
-//! action and (a step lighter) links and switches, Anthropic Sans
+//! action (links and switches are ink), Anthropic Sans
 //! throughout, 4px cards against pill buttons, and shadows thin as grain.
 //! Pure UI: colors, type, spacing, radius, elevation, motion + a few styled primitives.
 //! Written against GPUI's current API; field/method names may need small tweaks per GPUI version.
@@ -81,7 +81,7 @@ pub struct Radius {
 /// for now; every face is Anthropic Sans (`fonts.rs`).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Look {
-    /// Warm paper and ink, burgundy for the action and links.
+    /// Warm paper and ink, burgundy for the action.
     #[default]
     Calm,
 }
@@ -143,20 +143,20 @@ impl Look {
             link_hover,
             mark_top,
         };
-        // KodAct burgundy: neutral greys (after Postman's) and one colour. Burgundy
-        // (`#8c1d40` on paper; `#e8809f` on ink) is the mark, Send, the one
-        // decisive action and what waits on you; a step lighter, it is
-        // links, focus, selection and a switch that is on. Buttons and
-        // work in progress are ink.
+        // KodAct burgundy: neutral greys (after Postman's) and one colour.
+        // Burgundy (`#7a1f3d` on paper; `#e0889f` on ink) is the mark, Send,
+        // the one decisive action and what waits on you. Links (underlined),
+        // focus, selection and a switch that is on are ink (`#1a1816`;
+        // `#edeae6` at night), as are all other buttons and work in progress.
         if dark {
             t(
-                0x282828, 0x212121, 0x303030, 0x1c1c1c, 0xe8809f, 0x1a0710, 0x3a1422, 0xf0a3ba,
-                0xf7c3d2, 0xe8809f,
+                0x282828, 0x212121, 0x303030, 0x1c1c1c, 0xe0889f, 0x1a0710, 0x3a1a24, 0xedeae6,
+                0xffffff, 0xe0889f,
             )
         } else {
             t(
-                0xefefef, 0xf7f7f7, 0xffffff, 0xf2f2f2, 0x8c1d40, 0xffffff, 0xf2dde4, 0x9b2348,
-                0x761835, 0x8c1d40,
+                0xefefef, 0xf7f7f7, 0xffffff, 0xf2f2f2, 0x7a1f3d, 0xffffff, 0xf3dde3, 0x1a1816,
+                0x4a4541, 0x7a1f3d,
             )
         }
     }
@@ -290,6 +290,7 @@ impl Theme {
         (self.extra.stage, self.colors.canvas) = (c(k.stage), c(k.stage));
         self.extra.selected = c(if self.is_dark { 0x353535 } else { k.stage });
         self.colors.surface = c(k.card);
+        self.extra.panel = if self.is_dark { c(k.canvas) } else { c(k.card) };
         self.extra.sunk = c(k.sunk);
         self.extra.accent = c(k.accent);
         self.extra.accent_fg = c(k.accent_fg);
@@ -340,12 +341,11 @@ impl Theme {
                 text_subtle: rgb(0x8f8f8f).into(),
                 border: ink(0.12),
                 hover: ink(0.05),
-                // Links, focus and selected text: the burgundy, a step
-                // lighter than the action's.
-                primary: rgb(0x9b2348).into(),
-                primary_hover: rgb(0x761835).into(),
+                // Links, focus and selected text: ink, underlined for links.
+                primary: rgb(0x1a1816).into(),
+                primary_hover: rgb(0x4a4541).into(),
                 primary_fg: rgb(0xffffff).into(),
-                primary_tint: Hsla::from(rgb(0x9b2348)).opacity(0.10),
+                primary_tint: Hsla::from(rgb(0x1a1816)).opacity(0.08),
                 marigold: rgb(0xffb110).into(),
                 coral: rgb(0xc84b55).into(),
                 sky: rgb(0x62aef0).into(),
@@ -371,10 +371,10 @@ impl Theme {
                 text_subtle: rgb(0x858585).into(),
                 border: hsla(0., 0., 1., 0.10),
                 hover: hsla(0., 0., 1., 0.06),
-                primary: rgb(0xf0a3ba).into(),
-                primary_hover: rgb(0xf7c3d2).into(),
+                primary: rgb(0xedeae6).into(),
+                primary_hover: rgb(0xffffff).into(),
                 primary_fg: rgb(0x0a0b0d).into(),
-                primary_tint: Hsla::from(rgb(0xf0a3ba)).opacity(0.14),
+                primary_tint: Hsla::from(rgb(0xedeae6)).opacity(0.12),
                 marigold: rgb(0xffb110).into(),
                 coral: rgb(0xd8646d).into(),
                 sky: rgb(0x62aef0).into(),
@@ -486,6 +486,7 @@ pub struct ExtraColors {
     pub chrome: Hsla, // the title bar
     pub pane: Hsla,   // the sidebar
     pub stage: Hsla,  // the session: the chat, the welcome, Rules, Projects
+    pub panel: Hsla,  // every right-side surface: `pane` at night, `surface` by day
     // Filled buttons. Light uses `primary` as is; in dark, white text on
     // `primary` reads at only 3.3:1, so the fill is the same blue, deeper,
     // and links keep `primary` (`palette_check.rs` holds both to 4.5:1).
@@ -493,7 +494,7 @@ pub struct ExtraColors {
     pub fill_hover: Hsla,
     pub fill_danger: Hsla, // a destructive confirm ("Allow bypass")
     pub fill_fg: Hsla,     // text and icons on `fill` (ink in light, paper in dark)
-    // The accent: KodAct's burgundy (`#8c1d40` on paper, `#e8809f` on
+    // The accent: KodAct's burgundy (`#7a1f3d` on paper, `#e0889f` on
     // ink), kept for the few places it earns: the send button, the mark.
     pub accent: Hsla,
     pub accent_soft: Hsla, // the send button with nothing to send; a soft wash
@@ -561,8 +562,8 @@ impl ExtraColors {
                 inset: hsla(0., 0., 1., 0.04),
                 success: rgb(0x8fbf9b).into(),
                 success_tint: rgb(0x1b2c22).into(),
-                danger: rgb(0xe98a72).into(),
-                danger_tint: hsla(7. / 360., 0.7, 0.55, 0.12),
+                danger: rgb(0xff8a7a).into(),
+                danger_tint: hsla(5. / 360., 1., 0.74, 0.12),
                 warning: rgb(0xffc85a).into(),
                 warning_tint: hsla(40. / 360., 1., 0.53, 0.18),
                 diff_add: hsla(135. / 360., 0.27, 0.65, 0.12),
@@ -574,27 +575,28 @@ impl ExtraColors {
                 chrome: rgb(0x282828).into(),
                 pane: rgb(0x282828).into(),
                 stage: rgb(0x212121).into(),
+                panel: rgb(0x282828).into(),
                 // The filled action is paper on ink, as ink on paper in light.
                 // The filled action is the burgundy, lifted for the night,
                 // under a dark label.
-                fill: rgb(0xe8809f).into(),
-                fill_hover: rgb(0xf0a3ba).into(),
+                fill: rgb(0xe0889f).into(),
+                fill_hover: rgb(0xeba3b5).into(),
                 // Brick, lifted for the night, under the dark label.
-                fill_danger: rgb(0xe98a72).into(),
+                fill_danger: rgb(0xff8a7a).into(),
                 fill_fg: rgb(0x1a0710).into(),
-                accent: rgb(0xe8809f).into(),
-                accent_soft: rgb(0x3a1422).into(),
+                accent: rgb(0xe0889f).into(),
+                accent_soft: rgb(0x3a1a24).into(),
                 accent_fg: rgb(0x1a0710).into(),
-                mark_top: rgb(0xe8809f).into(),
-                page_ink: rgb(0x8c1d40).into(),
+                mark_top: rgb(0xe0889f).into(),
+                page_ink: rgb(0x7a1f3d).into(),
                 page_halo: rgb(0xffffff).into(),
-                mark_heat_white: rgb(0xfff5f8).into(),
-                mark_heat: rgb(0xf7a8bf).into(),
-                mark_heat_ember: rgb(0xa8304f).into(),
-                mark_heat_iron: rgb(0x3a0f1c).into(),
+                mark_heat_white: rgb(0xfff6f8).into(),
+                mark_heat: rgb(0xe0889f).into(),
+                mark_heat_ember: rgb(0x7a1f3d).into(),
+                mark_heat_iron: rgb(0x2a0d17).into(),
                 border_strong: rgb(0x4a4a4a).into(),
                 sunk: rgb(0x1c1c1c).into(),
-                toggle_on: rgb(0xf0a3ba).into(),
+                toggle_on: rgb(0xedeae6).into(),
                 live: rgb(0xb0b0b0).into(),
                 agent: None,
                 memory: rgb(0xe5c77a).into(),
@@ -635,8 +637,8 @@ impl ExtraColors {
                 inset: ink(0.03),
                 success: rgb(0x3f6b4b).into(),
                 success_tint: rgb(0xe3ebe3).into(),
-                danger: rgb(0xa3402c).into(),
-                danger_tint: hsla(9. / 360., 0.6, 0.55, 0.1),
+                danger: rgb(0xb82a1a).into(),
+                danger_tint: hsla(4. / 360., 0.71, 0.4, 0.1),
                 warning: rgb(0x8a5600).into(),
                 warning_tint: hsla(40. / 360., 1., 0.53, 0.2),
                 diff_add: hsla(137. / 360., 0.26, 0.33, 0.10),
@@ -648,25 +650,26 @@ impl ExtraColors {
                 chrome: rgb(0xefefef).into(),
                 pane: rgb(0xefefef).into(),
                 stage: rgb(0xf7f7f7).into(),
+                panel: rgb(0xffffff).into(),
                 // The filled action is the burgundy pill.
-                fill: rgb(0x8c1d40).into(),
-                fill_hover: rgb(0x761835).into(),
-                fill_danger: rgb(0xa3402c).into(),
+                fill: rgb(0x7a1f3d).into(),
+                fill_hover: rgb(0x641830).into(),
+                fill_danger: rgb(0xb82a1a).into(),
                 fill_fg: rgb(0xffffff).into(),
                 // Burgundy, deep enough to read on paper: the one colour.
-                accent: rgb(0x8c1d40).into(),
-                accent_soft: rgb(0xf2dde4).into(),
+                accent: rgb(0x7a1f3d).into(),
+                accent_soft: rgb(0xf3dde3).into(),
                 accent_fg: rgb(0xffffff).into(),
-                mark_top: rgb(0x8c1d40).into(),
-                page_ink: rgb(0x8c1d40).into(),
+                mark_top: rgb(0x7a1f3d).into(),
+                page_ink: rgb(0x7a1f3d).into(),
                 page_halo: rgb(0xffffff).into(),
-                mark_heat_white: rgb(0xfff5f8).into(),
-                mark_heat: rgb(0xf7a8bf).into(),
-                mark_heat_ember: rgb(0xa8304f).into(),
-                mark_heat_iron: rgb(0x3a0f1c).into(),
+                mark_heat_white: rgb(0xfff6f8).into(),
+                mark_heat: rgb(0xe0889f).into(),
+                mark_heat_ember: rgb(0x7a1f3d).into(),
+                mark_heat_iron: rgb(0x2a0d17).into(),
                 border_strong: rgb(0xd4d4d4).into(),
                 sunk: rgb(0xf2f2f2).into(),
-                toggle_on: rgb(0x9b2348).into(),
+                toggle_on: rgb(0x1a1816).into(),
                 live: rgb(0x616161).into(),
                 agent: None,
                 memory: rgb(0x75591a).into(),
@@ -915,6 +918,14 @@ pub struct Sizes {
     pub edge_fade: Pixels, // 40: the transcript fading out where the composer meets it
     pub home_heading: Pixels, // 36: the home screen's heading, Anthropic Sans Display 600
     pub mark_home: Pixels, // 44: the mark beside the home screen's greeting
+    // The right side's shared chrome (`ui/panel_chrome.rs`). Type: a panel's
+    // title 14 semibold, toolbar labels 12 medium, body 13.
+    pub panel_header: Pixels,  // 44: every right-side panel's title row
+    pub panel_toolbar: Pixels, // 36: the file view's second row
+    pub panel_footer: Pixels,  // 32: the file view's status line
+    pub tool_btn: Pixels,      // 28: a toolbar button
+    #[allow(dead_code)] // in the design tokens; the file view's thumbnails use it
+    pub thumb_rail: Pixels, // 112: the thumbnail rail
 }
 
 impl Default for Sizes {
@@ -998,6 +1009,11 @@ impl Default for Sizes {
             edge_fade: px(40.),
             home_heading: px(36.),
             mark_home: px(44.),
+            panel_header: px(44.),
+            panel_toolbar: px(36.),
+            panel_footer: px(32.),
+            tool_btn: px(28.),
+            thumb_rail: px(112.),
         }
     }
 }

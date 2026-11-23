@@ -682,8 +682,8 @@ impl Render for BrowserView {
             .items_center()
             .gap(t.space.xs)
             .px(t.space.sm)
-            .py(t.space.xs)
-            .bg(t.colors.surface)
+            .h(t.size.panel_toolbar)
+            .bg(t.extra.panel)
             .border_b_1()
             .border_color(t.colors.border)
             .child(

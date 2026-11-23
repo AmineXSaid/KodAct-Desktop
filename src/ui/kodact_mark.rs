@@ -544,8 +544,8 @@ mod tests {
     #[test]
     fn heat_runs_white_to_bright_to_deep_to_dark_then_the_stroke() {
         let rgb = |c: u32| -> Hsla { gpui::rgb(c).into() };
-        let ramp = [rgb(0x3a0f1c), rgb(0xa8304f), rgb(0xf7a8bf), rgb(0xfff5f8)];
-        let burgundy = rgb(0x8c1d40);
+        let ramp = [rgb(0x2a0d17), rgb(0x7a1f3d), rgb(0xe0889f), rgb(0xfff6f8)];
+        let burgundy = rgb(0x7a1f3d);
         let close = |a: Hsla, b: Hsla| {
             let (a, b) = (a.to_rgb(), b.to_rgb());
             (a.r - b.r).abs() + (a.g - b.g).abs() + (a.b - b.b).abs() < 0.02
