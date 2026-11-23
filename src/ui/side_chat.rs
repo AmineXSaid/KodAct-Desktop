@@ -4,7 +4,7 @@
 //! folds to its title bar and closes with Esc; the thread keeps the last 20
 //! exchanges.
 
-use gpui::component::input::{Input, InputEvent, InputState};
+use gpui::component::input::{InputEvent, Textarea, TextareaState};
 use gpui::{
     div, prelude::*, px, AnimationExt as _, Context, Entity, FontWeight, IntoElement, Render,
     SharedString, Subscription, Window,
@@ -18,8 +18,11 @@ use crate::theme::ActiveTheme;
 /// they shrink to in a small window.
 const SIDE_W: f32 = 360.;
 const SIDE_H: f32 = 300.;
-const SIDE_W_GROWN: f32 = 560.;
-const SIDE_H_GROWN: f32 = 560.;
+/// Grown: 520 wide and 60% of the window tall.
+const SIDE_W_GROWN: f32 = 520.;
+const SIDE_H_SHARE: f32 = 0.6;
+/// The card's head (36) and the rule and field under the thread.
+const SIDE_HEAD: f32 = 36.;
 const SIDE_W_MIN: f32 = 240.;
 const SIDE_H_MIN: f32 = 120.;
 /// Where it sits: in from the right, above the composer's row; and what of
@@ -32,7 +35,7 @@ const SIDE_FOOT: f32 = 60.;
 
 pub struct SideChat {
     state: Entity<AppState>,
-    input: Entity<InputState>,
+    input: Entity<TextareaState>,
     /// The card, kept while it leaves.
     presence: super::motion::Presence<crate::state::Side>,
     /// Its body, kept while it folds to the title bar.
@@ -52,7 +55,14 @@ pub struct SideChat {
 
 impl SideChat {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder(SIDE_PLACEHOLDER));
+        // A field that grows to four lines, Enter sends, one border: the
+        // card's own field, the placeholder shown whole.
+        let input = cx.new(|cx| {
+            TextareaState::new(window, cx)
+                .auto_grow(1, 4)
+                .submit_on_enter(true)
+                .placeholder(SIDE_PLACEHOLDER)
+        });
         let subs = vec![
             cx.observe_in(&state, window, |this, state, window, cx| {
                 if state.read(cx).side_focus {
@@ -62,7 +72,7 @@ impl SideChat {
                 cx.notify();
             }),
             cx.subscribe_in(&input, window, |this, _, ev: &InputEvent, window, cx| {
-                if matches!(ev, InputEvent::PressEnter { .. }) {
+                if matches!(ev, InputEvent::PressEnter { shift: false, .. }) {
                     this.send(window, cx);
                 }
             }),
@@ -103,10 +113,14 @@ impl Render for SideChat {
         };
         let hover = t.colors.hover;
         let state = self.state.clone();
+        let copied = self.state.read(cx).copied.clone();
         // Its size: a card, or grown for a long answer; never past the window.
         let view = window.viewport_size();
         let (want_w, want_h) = if side.expanded {
-            (SIDE_W_GROWN, SIDE_H_GROWN)
+            (
+                SIDE_W_GROWN,
+                f32::from(view.height) * SIDE_H_SHARE - SIDE_HEAD - SIDE_FOOT,
+            )
         } else {
             (SIDE_W, SIDE_H)
         };
@@ -179,7 +193,7 @@ impl Render for SideChat {
             .flex()
             .items_center()
             .gap(px(6.))
-            .h(px(36.))
+            .h(px(SIDE_HEAD))
             .pl(px(12.))
             .pr(px(6.))
             .child(icon(
@@ -282,15 +296,54 @@ impl Render for SideChat {
         }
         for item in &side.thread {
             thread = thread.child(match item {
-                SideItem::Answer { question, answer } => exchange(
-                    question.clone(),
-                    div()
-                        .text_size(t.text.body_sm)
-                        .text_color(t.colors.text)
-                        .line_height(gpui::relative(1.5))
-                        .child(answer.clone())
-                        .into_any_element(),
-                ),
+                SideItem::Answer { question, answer } => {
+                    let key: SharedString = format!("side-answer-{}", answer.len()).into();
+                    let (copy_state, text) = (state.clone(), answer.clone());
+                    let did = copied.as_ref() == Some(&key);
+                    let key2 = key.clone();
+                    exchange(
+                        question.clone(),
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(4.))
+                            .child(super::markdown::render(
+                                answer,
+                                &t,
+                                &super::markdown::CopyContext {
+                                    streaming: false,
+                                    state: state.clone(),
+                                    key: key.to_string(),
+                                    copied: copied.clone(),
+                                    scale: window.scale_factor(),
+                                    sources: Default::default(),
+                                    zooms: Default::default(),
+                                },
+                            ))
+                            .child(
+                                div().flex().child(
+                                    super::button::Button::icon(
+                                        SharedString::from(format!("side-copy-{}", key.as_ref())),
+                                        if did {
+                                            "icons/check.svg"
+                                        } else {
+                                            "icons/copy.svg"
+                                        },
+                                        "Copy the answer",
+                                    )
+                                    .compact()
+                                    .on_click(move |_, _, cx| {
+                                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                                            text.to_string(),
+                                        ));
+                                        copy_state
+                                            .update(cx, |s, cx| s.mark_copied(key2.clone(), cx));
+                                    }),
+                                ),
+                            )
+                            .into_any_element(),
+                    )
+                }
                 SideItem::Failed { question, message } => exchange(
                     question.clone(),
                     div()
@@ -326,13 +379,14 @@ impl Render for SideChat {
         let typed = !self.input.read(cx).value().trim().is_empty();
         let input_row = div()
             .flex()
-            .items_center()
+            .items_end()
             .gap(px(4.))
             .mx(px(10.))
             .mb(px(10.))
             .pr(px(5.))
-            .h(t.size.field_h)
-            .rounded(t.radius.card)
+            .pb(px(5.))
+            .min_h(t.size.field_h)
+            .rounded(t.radius.field)
             .bg(t.colors.canvas)
             .border_1()
             .border_color(if focused {
@@ -342,7 +396,7 @@ impl Render for SideChat {
             })
             .child(
                 div().flex_1().min_w_0().child(
-                    Input::new(&self.input)
+                    Textarea::new(&self.input)
                         .appearance(false)
                         .text_size(t.text.body_sm),
                 ),
@@ -397,6 +451,20 @@ impl Render for SideChat {
             .rounded(t.radius.card)
             .shadow(t.elevation_popover())
             .overflow_hidden()
+            // Esc closes the card while it has the keyboard, and goes no
+            // further: the window's Esc is Stop (`StopReply`), which would
+            // decline a permission that is waiting. The field's own Escape
+            // action is taken here too.
+            .capture_action(cx.listener(|this, _: &super::StopReply, _, cx| {
+                this.state.update(cx, |s, cx| s.close_side(cx));
+                cx.stop_propagation();
+            }))
+            .capture_action(cx.listener(
+                |this, _: &gpui::component::input::Escape, _, cx| {
+                    this.state.update(cx, |s, cx| s.close_side(cx));
+                    cx.stop_propagation();
+                },
+            ))
             .on_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, _, cx| {
                 if ev.keystroke.key == "escape" {
                     this.state.update(cx, |s, cx| s.close_side(cx));
