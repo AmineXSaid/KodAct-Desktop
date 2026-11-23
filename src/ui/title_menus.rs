@@ -16,21 +16,8 @@ pub fn render(
     chat: Option<usize>,
     window: &gpui::Window,
 ) -> AnyElement {
-    let hover = t.colors.hover;
     let row = |key: &str, label: SharedString, hint: Option<SharedString>| {
-        div()
-            .id(SharedString::from(format!("title-menu-{key}")))
-            .flex()
-            .items_center()
-            .gap(t.space.md)
-            .h(t.size.menu_row)
-            .px(t.space.snug)
-            .rounded(t.radius.button)
-            .cursor_pointer()
-            .whitespace_nowrap()
-            .text_size(t.text.body_sm)
-            .text_color(t.colors.text)
-            .hover(move |d| d.bg(hover))
+        crate::theme::menu_row(t, SharedString::from(format!("title-menu-{key}")), false)
             .child(
                 div()
                     .flex_1()

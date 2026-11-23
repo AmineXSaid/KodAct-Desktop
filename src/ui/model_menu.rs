@@ -584,7 +584,7 @@ pub fn render(
         .border_1()
         .border_color(t.colors.border)
         .rounded(t.radius.card)
-        .shadow_lg()
+        .shadow(t.elevation_popover())
         .occlude()
         .overflow_hidden()
         .text_size(t.text.body_sm)

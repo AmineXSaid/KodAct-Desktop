@@ -1209,6 +1209,34 @@ pub fn popover(t: &Theme) -> Div {
         .shadow(t.elevation_popover())
 }
 
+/// One row of a menu or a popover list: `menu_row` tall, rounded like every
+/// row (`radius.button`), quiet until hovered; a chosen item sits on the
+/// neutral wash (`selected`), with an ink check set by the caller.
+pub fn menu_row(
+    t: &Theme,
+    id: impl Into<gpui::ElementId>,
+    selected_item: bool,
+) -> gpui::Stateful<Div> {
+    let hover = t.colors.hover;
+    let row = div()
+        .id(id)
+        .flex()
+        .items_center()
+        .gap(t.space.md)
+        .h(t.size.menu_row)
+        .px(t.space.snug)
+        .rounded(t.radius.button)
+        .cursor_pointer()
+        .whitespace_nowrap()
+        .text_size(t.text.body_sm)
+        .text_color(t.colors.text);
+    if selected_item {
+        selected(t, row)
+    } else {
+        row.hover(move |d| d.bg(hover))
+    }
+}
+
 #[cfg(test)]
 mod look_tests {
     use super::*;

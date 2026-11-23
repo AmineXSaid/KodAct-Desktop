@@ -148,19 +148,8 @@ pub fn render(
         })
     };
     let item = |key: String, label: SharedString| {
-        div()
-            .id(SharedString::from(format!("chat-sub-{key}")))
-            .flex()
-            .items_center()
+        crate::theme::menu_row(t, SharedString::from(format!("chat-sub-{key}")), false)
             .gap(t.space.sm)
-            .h(t.size.menu_row)
-            .px(t.space.snug)
-            .rounded(t.radius.button)
-            .cursor_pointer()
-            .whitespace_nowrap()
-            .text_size(t.text.body_sm)
-            .text_color(t.colors.text)
-            .hover(move |d| d.bg(hover))
             .child(label)
     };
 
