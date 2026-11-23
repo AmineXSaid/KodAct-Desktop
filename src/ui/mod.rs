@@ -61,6 +61,7 @@ pub mod pet;
 pub mod model_menu;
 pub mod motion;
 pub mod new_project;
+pub mod office_editor;
 pub mod onboarding;
 pub mod image_view;
 pub mod page_field;

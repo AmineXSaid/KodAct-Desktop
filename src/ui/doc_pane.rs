@@ -105,6 +105,7 @@ pub fn render(
     page_field: AnyElement,
     text_editor: AnyElement,
     browser: AnyElement,
+    office_editor: AnyElement,
     t: &Theme,
 ) -> AnyElement {
     // The version bar at the foot, when the chat has more than one version.
@@ -157,6 +158,11 @@ pub fn render(
         _ => None,
     };
     let has_pages = pages.is_some();
+    // A Word file or deck's words can be edited; a PDF's only read.
+    let words_editable = matches!(
+        office,
+        Some(crate::office::Kind::Docx | crate::office::Kind::Pptx)
+    );
     let image = file.is_image() && !showing_changes;
     let paged = (has_pages && !text_view && !showing_changes) || image;
     let viewer = state.clone();
@@ -181,6 +187,9 @@ pub fn render(
         _ if previewing_html => {
             let d = fit.device;
             d.width().map_or(d.label().to_string(), |w| format!("{} · {w} px", d.label()))
+        }
+        _ if words_editable && text_view => {
+            format!("Editing text{}", if fit.dirty { " · not saved" } else { "" })
         }
         _ if editing => super::text_editor::counts(fit.edit_text.as_ref().unwrap_or(&file.content)),
         _ if image => file
@@ -390,7 +399,7 @@ pub fn render(
                             }
                         })
                     })
-                    .option("Text", text_view, move |_, _, cx| {
+                    .option(if words_editable { "Edit text" } else { "Text" }, text_view, move |_, _, cx| {
                         to_text.update(cx, |s, cx| {
                             if !s.doc_text {
                                 s.toggle_doc_text(cx)
@@ -496,17 +505,21 @@ pub fn render(
         });
     }
     // Edit: undo, redo, and the one accent action while something is unsaved.
-    if editing {
+    if editing || (words_editable && fit.dirty) {
         let (save, discard) = (state.clone(), state.clone());
-        let mut g: Vec<AnyElement> = vec![
+        let mut g: Vec<AnyElement> = if !editing {
+            vec![]
+        } else {
+            vec![
             tool_button("doc-undo", "icons/undo-2.svg", "Undo")
                 .on_click(|_, window, cx| window.dispatch_action(Box::new(super::UndoDocEdit), cx))
                 .into_any_element(),
             tool_button("doc-redo", "icons/redo-2.svg", "Redo")
                 .on_click(|_, window, cx| window.dispatch_action(Box::new(super::RedoDocEdit), cx))
                 .into_any_element(),
-        ];
-        let mut w = 28. * 2. + 2.;
+            ]
+        };
+        let mut w = if editing { 28. * 2. + 2. } else { 0. };
         if fit.dirty {
             g.push(
                 super::button::Button::accent("doc-save", "Save")
@@ -864,6 +877,18 @@ pub fn render(
                                     state,
                                     t,
                                 )),
+                            footer(),
+                            fit.width,
+                            t,
+                        );
+                    }
+                    if words_editable {
+                        return finish_at(
+                            &fit,
+                            full_t,
+                            file,
+                            header,
+                            body.child(office_editor),
                             footer(),
                             fit.width,
                             t,

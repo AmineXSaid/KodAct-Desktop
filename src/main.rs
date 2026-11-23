@@ -45,6 +45,7 @@ mod mermaid;
 mod modes;
 mod names;
 mod office;
+mod office_edit;
 mod office_render;
 #[cfg(test)]
 mod palette_check;

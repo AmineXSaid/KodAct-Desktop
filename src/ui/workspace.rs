@@ -57,6 +57,8 @@ pub struct Workspace {
     page_field: Entity<super::page_field::PageField>,
     /// The file view's text editor (`text_editor.rs`).
     text_editor: Entity<super::text_editor::TextEditor>,
+    /// A Word file's or deck's words as fields (`office_editor.rs`).
+    office_editor: Entity<super::office_editor::OfficeEditor>,
     /// Interactive spreadsheet editor bar (`sheet_view.rs`).
     sheet_editor: Entity<super::sheet_view::SheetEditor>,
     /// The project's tree and a viewer, under the side panel (`files_pane.rs`).
@@ -119,6 +121,8 @@ impl Workspace {
             cx.new(|cx| super::page_field::PageField::new(state.clone(), window, cx));
         let text_editor =
             cx.new(|cx| super::text_editor::TextEditor::new(state.clone(), window, cx));
+        let office_editor =
+            cx.new(|cx| super::office_editor::OfficeEditor::new(state.clone(), window, cx));
         let sheet_editor =
             cx.new(|cx| super::sheet_view::SheetEditor::new(state.clone(), window, cx));
         let files = cx.new(|cx| super::files_pane::FilesPane::new(state.clone(), window, cx));
@@ -147,6 +151,7 @@ impl Workspace {
             doc_find,
             page_field,
             text_editor,
+            office_editor,
             sheet_editor,
             files,
             presence: Presences::default(),
@@ -1090,8 +1095,9 @@ impl Render for Workspace {
             let leaving_fit = fit.clone();
             let doc_view = |f: &crate::state::FileRef, fit: super::doc_pane::Fit, leaving: bool| {
                 // A file leaving has nothing to edit or comment on any more.
-                let (editor, comments, find, page_field, text_editor, browser) = if leaving {
+                let (editor, comments, find, page_field, text_editor, browser, office_editor) = if leaving {
                     (
+                        div().into_any_element(),
                         div().into_any_element(),
                         div().into_any_element(),
                         div().into_any_element(),
@@ -1107,6 +1113,7 @@ impl Render for Workspace {
                         self.page_field.clone().into_any_element(),
                         self.text_editor.clone().into_any_element(),
                         self.browser.clone().into_any_element(),
+                        self.office_editor.clone().into_any_element(),
                     )
                 };
                 super::doc_pane::render(
@@ -1126,6 +1133,7 @@ impl Render for Workspace {
                     page_field,
                     text_editor,
                     browser,
+                    office_editor,
                     &t,
                 )
             };

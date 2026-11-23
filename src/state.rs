@@ -2175,6 +2175,9 @@ pub struct AppState {
     /// The text file in the panel has edits not saved: its file id and the
     /// text in the editor (`ui/text_editor.rs`).
     pub doc_edit: Option<(String, SharedString)>,
+    /// Words changed in a Word file or deck in the panel, by (slide, notes,
+    /// paragraph): the new text (`ui/office_editor.rs`).
+    pub doc_words: std::collections::BTreeMap<(usize, bool, usize), String>,
     /// The width a web page in the panel previews at, and the version of the
     /// page the browser last loaded.
     pub web_device: Device,
@@ -2562,6 +2565,7 @@ impl AppState {
             doc_menu: None,
             doc_drag: Default::default(),
             doc_edit: None,
+            doc_words: Default::default(),
             web_device: Device::Desktop,
             html_previewed: None,
             doc_fitted: std::sync::Arc::new(std::sync::atomic::AtomicU16::new(100)),
@@ -5171,6 +5175,7 @@ impl AppState {
     fn show_doc(&mut self, file: FileRef, cx: &mut Context<Self>) {
         self.doc_sheet = 0;
         self.doc_pick = None;
+        self.doc_words.clear();
         self.sheet_edits.clear();
         self.sheet_extra_rows.clear();
         self.sheet_extra_cols.clear();
@@ -5580,9 +5585,24 @@ impl AppState {
         cx.notify();
     }
 
+    /// A field of a Word file or deck changed (or went back: None).
+    pub fn set_doc_word(
+        &mut self,
+        key: (usize, bool, usize),
+        text: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
+        match text {
+            Some(t) => self.doc_words.insert(key, t),
+            None => self.doc_words.remove(&key),
+        };
+        cx.notify();
+    }
+
     /// The panel's file has changes to save: a text edit or cell edits.
     pub fn doc_dirty(&self) -> bool {
         !self.sheet_edits.is_empty()
+            || !self.doc_words.is_empty()
             || self.doc.as_ref().is_some_and(|f| {
                 self.doc_edit
                     .as_ref()
@@ -5606,6 +5626,9 @@ impl AppState {
     pub fn save_doc_edits(&mut self, cx: &mut Context<Self>) {
         if !self.sheet_edits.is_empty() {
             return self.save_sheet_edits(cx);
+        }
+        if !self.doc_words.is_empty() {
+            return self.save_office_text(cx);
         }
         let (Some(file), Some((id, text))) = (self.doc.clone(), self.doc_edit.clone()) else {
             return;
@@ -5648,9 +5671,66 @@ impl AppState {
         .detach();
     }
 
+    /// Save the words changed in a Word file or deck: written into the file
+    /// (`office_edit.rs`), to its project path, kept as a new version; the
+    /// pages are drawn again.
+    fn save_office_text(&mut self, cx: &mut Context<Self>) {
+        let (Some(file), Some(bytes)) = (self.doc.clone(), self.doc.as_ref().and_then(|f| f.bytes.clone())) else {
+            return;
+        };
+        let words = self.doc_words.clone();
+        let kind = file.office();
+        let disk = self.doc_disk_path(&file);
+        let (name, path) = (file.name.clone(), file.path.clone());
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_spawn(async move {
+                    let updated = match kind {
+                        Some(crate::office::Kind::Docx) => crate::office_edit::write_docx_text(
+                            &bytes,
+                            &crate::ui::office_editor::docx_edits(&words),
+                        )?,
+                        Some(crate::office::Kind::Pptx) => crate::office_edit::write_pptx_text(
+                            &bytes,
+                            &crate::ui::office_editor::pptx_edits(&words),
+                        )?,
+                        _ => return Err("only Word files and decks have words to edit".to_string()),
+                    };
+                    if let Some(p) = disk {
+                        if let Some(parent) = p.parent() {
+                            let _ = std::fs::create_dir_all(parent);
+                        }
+                        std::fs::write(&p, &updated).map_err(|e| e.to_string())?;
+                    }
+                    Ok(updated)
+                })
+                .await;
+            let _ = this.update(cx, |s, cx| match result {
+                Ok(updated) => {
+                    let new = FileRef {
+                        name: name.clone(),
+                        path,
+                        content: SharedString::default(),
+                        bytes: Some(std::sync::Arc::from(updated)),
+                    };
+                    if let Some(chat) = s.current {
+                        s.push_block(chat, Block::File(new.clone()));
+                    }
+                    // The pages are drawn again from the new file.
+                    s.doc_preview = None;
+                    s.show_doc(new, cx);
+                    s.show_toast(format!("Saved {name}"), cx);
+                }
+                Err(e) => s.show_toast(format!("Could not save {name}: {e}"), cx),
+            });
+        })
+        .detach();
+    }
+
     /// Drop what is edited in the panel: the file goes back as it was saved.
     pub fn discard_doc_edits(&mut self, cx: &mut Context<Self>) {
         self.doc_edit = None;
+        self.doc_words.clear();
         if !self.sheet_edits.is_empty() {
             self.sheet_edits.clear();
             self.sheet_extra_rows.clear();
