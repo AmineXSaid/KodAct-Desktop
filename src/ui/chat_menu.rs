@@ -63,7 +63,7 @@ pub fn render(
                 .gap(t.space.md)
                 .h(t.size.menu_row)
                 .px(t.space.snug)
-                .rounded(t.radius.small)
+                .rounded(t.radius.button)
                 .cursor_pointer()
                 .text_size(t.text.body_sm)
                 .text_color(if danger {
@@ -155,7 +155,7 @@ pub fn render(
             .gap(t.space.sm)
             .h(t.size.menu_row)
             .px(t.space.snug)
-            .rounded(t.radius.small)
+            .rounded(t.radius.button)
             .cursor_pointer()
             .whitespace_nowrap()
             .text_size(t.text.body_sm)

@@ -906,18 +906,24 @@ mod tests {
     }
 
     /// Calmly smooth has two shapes: what you press is a pill, what holds
-    /// content is 4px. Every theme keeps the order: what you press is at
+    /// content is rounded (rows 8, cards and fields 12, the composer 16;
+    /// each a step above the one nested in it). Every theme keeps the order: what you press is at
     /// least as round as a row, and the composer at least as round as a card.
     #[test]
-    fn pills_to_press_four_pixels_to_hold() {
+    fn pills_to_press_rounded_cards_to_hold() {
         for dark in [false, true] {
             let r = Theme::of(crate::theme::Look::Calm, dark).radius;
             let z = Theme::of(crate::theme::Look::Calm, dark).size;
             for v in [r.compact, r.control, r.segment, r.pill] {
                 assert!(f32::from(v) >= 999., "{}px", f32::from(v));
             }
-            for v in [r.button, r.card, r.field, z.composer_radius] {
-                assert_eq!(f32::from(v), 4.);
+            for (v, px) in [
+                (r.button, 8.),
+                (r.card, 12.),
+                (r.field, 12.),
+                (z.composer_radius, 16.),
+            ] {
+                assert_eq!(f32::from(v), px);
             }
         }
         for t in crate::theme::Look::ALL

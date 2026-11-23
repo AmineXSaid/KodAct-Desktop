@@ -157,7 +157,7 @@ impl Render for SheetEditor {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .rounded(t.radius.button)
+                    .rounded(t.radius.field)
                     .bg(t.extra.sunk)
                     .border_1()
                     .border_color(line)
@@ -181,7 +181,7 @@ impl Render for SheetEditor {
                     .flex()
                     .items_center()
                     .gap(t.space.xs)
-                    .rounded(t.radius.button)
+                    .rounded(t.radius.field)
                     .border_1()
                     .border_color(if input_dirty {
                         t.colors.primary.opacity(0.6)
@@ -455,7 +455,7 @@ pub fn render(
                 .h(t.size.tool_btn)
                 .flex()
                 .items_center()
-                .rounded(t.radius.button)
+                .rounded(t.radius.card)
                 .cursor_pointer()
                 .text_size(t.text.body_sm)
                 .map(|d| {

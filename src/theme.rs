@@ -2,7 +2,7 @@
 //! style reference), in KodAct's colours: warm paper surfaces stacked like
 //! paper on paper (ink at night), one ink, burgundy for the decisive
 //! action (links and switches are ink), Anthropic Sans
-//! throughout, 4px cards against pill buttons, and shadows thin as grain.
+//! throughout, rounded cards against pill buttons, and shadows thin as grain.
 //! Pure UI: colors, type, spacing, radius, elevation, motion + a few styled primitives.
 //! Written against GPUI's current API; field/method names may need small tweaks per GPUI version.
 
@@ -110,7 +110,7 @@ impl Look {
         Form {
             display_weight: FontWeight::SEMIBOLD,
             // (button, card, field, composer, pressed: buttons and chips)
-            corners: (4., 4., 4., 4., 9999.),
+            corners: (8., 12., 12., 16., 9999.),
             row: 30.,
             titlebar: 36.,
             // Denser, as Claude Code sets a reply: a third more on screen.
@@ -251,7 +251,7 @@ impl Theme {
                 line: px(1.),
                 small: px(4.),
                 // Buttons, chips and icon buttons are pills; cards, rows,
-                // menus and fields are 4px: the contrast is the system.
+                // menus and fields are rounded (12; rows 8; the composer 16): the contrast is the system.
                 segment: px(9999.),
                 compact: px(9999.),
                 button: px(4.),
@@ -857,7 +857,7 @@ pub struct Sizes {
     pub icon: Pixels,               // 16
     pub icon_lg: Pixels,            // 20: the composer's +
     pub composer_max: Pixels,       // the composer's tallest input
-    pub composer_radius: Pixels,    // 4: the composer box's corners, a card's
+    pub composer_radius: Pixels,    // 16: the composer box's corners
     pub composer_line: Pixels,      // 46: the composer box with one line in it
     pub composer_width: Pixels,     // 560: the composer's widest, wherever it sits
     pub palette: Pixels,            // command palette width

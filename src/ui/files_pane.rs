@@ -211,7 +211,7 @@ impl FilesPane {
                     .h(t.size.row)
                     .pl(px(4. + INDENT * r.depth as f32))
                     .pr(t.space.sm)
-                    .rounded(t.radius.small)
+                    .rounded(t.radius.button)
                     .cursor_pointer()
                     .text_size(t.text.body_sm)
                     .text_color(t.colors.text)

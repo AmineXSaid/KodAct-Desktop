@@ -614,7 +614,7 @@ impl Render for RemotePicker {
                     .gap(t.space.sm)
                     .px(t.space.sm + px(2.))
                     .h(t.size.row)
-                    .rounded(t.radius.small)
+                    .rounded(t.radius.button)
                     .cursor_pointer()
                     .hover(move |st| st.bg(hover))
                     .font_weight(FontWeight::MEDIUM)
@@ -701,7 +701,7 @@ impl Render for RemotePicker {
                 .min_h(t.size.row)
                 .px(t.space.sm + px(2.))
                 .py(px(3.))
-                .rounded(t.radius.small)
+                .rounded(t.radius.button)
                 .when(on, |d| d.bg(t.colors.hover))
                 .when(enabled_row, |d| {
                     d.cursor_pointer().hover(move |st| st.bg(hover))

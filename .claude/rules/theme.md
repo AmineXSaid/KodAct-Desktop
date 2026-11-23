@@ -12,7 +12,7 @@ light/dark switching must keep working (`ui::set_theme`).
 
 There is one look (`theme::Look::Calm`, Calmly smooth): its colours
 (`Look::tint`, light and dark) and its form (`Look::form`: corners, row and
-title-bar height, chat text). It keeps its rule (pills to press, 4px to
+title-bar height, chat text). It keeps its rule (pills to press, rounded cards to
 hold) and passes `palette_check.rs` and the button tests in both modes.
 Every face is Anthropic Sans (`fonts.rs`): never name or bundle another.
 

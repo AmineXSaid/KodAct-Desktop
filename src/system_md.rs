@@ -67,7 +67,7 @@ fn render() -> String {
     let _ = writeln!(w, "**Personality:** calmly smooth: a warm editorial workspace, confident and unhurried, closer to a printed quarterly than a dashboard (after the Anchor style reference).\n");
     let _ = writeln!(w, "**Foundation:** KodAct burgundy on neutral greys (after Postman's, for easy reading). By day: the window and sidebar #efefef, the session #f7f7f7, cards white; type #212121, secondary #616161. At night: the session charcoal #212121, the sidebar and title bar #282828, cards #303030; type white, secondary #b0b0b0. One colour, burgundy: #7a1f3d (#e0889f at night, where it is a line, a dot, the mark or text) for the mark and a waiting dot; as a fill (Send, Save, Allow) it is #7a1f3d, deeper at night (#a8324f) under a white label, and the Act of the wordmark; its wash is #f3dde3 (#3a1a24 at night). Links (underlined), focus, selection, switches that are on, all other buttons and work in progress are ink: #1a1816 (#edeae6 at night). Errors are a brick red, #b82a1a (#ff8a7a at night), held apart from the burgundy. Everything else is neutral; colour otherwise only for meaning (modes, status).\n");
     let _ = writeln!(w, "**Depth:** nearly flat. Hairlines inside cards; the session and the user's message lift on paper grain (three 1px shadows at 6/4/1% ink); popovers and the permission card a touch more.\n");
-    let _ = writeln!(w, "**Shape:** two shapes. Everything you press is a pill (buttons, chips, icon buttons, the new-chat and needs-you pills); everything that holds content is 4px (cards, rows, menus, fields, the composer, the session).\n");
+    let _ = writeln!(w, "**Shape:** two shapes. Everything you press is a pill (buttons, chips, icon buttons, the new-chat and needs-you pills); everything that holds content is rounded: cards, menus and fields 12px, rows 8px, the composer 16px, with nested corners one step down so the curves stay parallel.\n");
     let _ = writeln!(w, "**Type:** Anthropic Sans only, the Text cut for every word (code included) and the Display cut for the greeting and headings: 400 for text, 500 for labels, 600 for headings and buttons. Small labels in sentence case, never uppercase and never above a heading. The app bundles no font; diagrams are redrawn in it whatever they name.\n");
 
     let _ = writeln!(w, "## Tokens\n");
@@ -88,7 +88,7 @@ fn render() -> String {
     );
     let r = &l.radius;
     let z = &l.size;
-    let _ = writeln!(w, "### Radius\nTwo shapes: 4px for everything that holds content, pill for everything you press.\nScale: {}px (a line's ends), {}px (key caps), {}px (rows and squarer buttons), {}px (cards, tool rows, menus), {}px (fields), {}px (the composer), pill (buttons, chips, icon buttons, segments, the send button, switches, badges, avatars)\n", px(r.line), px(r.small), px(r.button), px(r.card), px(r.field), px(z.composer_radius));
+    let _ = writeln!(w, "### Radius\nTwo shapes: rounded for everything that holds content (cards and fields 12px, rows 8px, the composer 16px; an inner element in a card takes the next step down), pill for everything you press.\nScale: {}px (a line's ends), {}px (key caps), {}px (rows and squarer buttons), {}px (cards, tool rows, menus), {}px (fields), {}px (the composer), pill (buttons, chips, icon buttons, segments, the send button, switches, badges, avatars)\n", px(r.line), px(r.small), px(r.button), px(r.card), px(r.field), px(z.composer_radius));
 
     let _ = writeln!(w, "### Typography");
     let _ = writeln!(
@@ -560,8 +560,8 @@ fn render() -> String {
     for (what, why, when) in [
         ("One colour, moss, not terracotta", "The reference rations one warm orange to the primary action; KodAct keeps the rationing and takes the reference's own moss, calmer on cream and kin to the mark.", "2026-10-18"),
         ("Dusty blue, not moss", "Moss read as too green beside the cream; a dusty blue from the Slate theme's family, warmed for cream, keeps the same rationing and contrast (5.4:1 on the session).", "2026-10-19"),
-        ("Paper on paper", "The session is a 4px sheet on the cream canvas with paper grain; the title bar and sidebar have no dividers, the sheet's edge is the split.", "2026-10-18"),
-        ("Pills to press, 4px to hold", "The contrast between the two shapes is the system: it says at a glance what acts and what holds.", "2026-10-18"),
+        ("Paper on paper", "The session is a rounded sheet on the cream canvas with paper grain; the title bar and sidebar have no dividers, the sheet's edge is the split.", "2026-10-18"),
+        ("Pills to press, rounded cards to hold", "The contrast between the two shapes is the system: it says at a glance what acts and what holds. Cards, menus and fields are 12px, rows 8px, the composer 16px (they were 4px).", "2026-10-18"),
         ("Ink pills for the loud neutrals", "New chat and needs-you are ink pills; the accent is kept for the one decision in front of you (Allow once, Send).", "2026-10-18"),
         ("Anthropic Sans only", "One family everywhere, in its Text and Display cuts: the interface, replies, code, the terminal and diagrams. No other face is bundled or named.", "2026-10-26"),
         ("One look", "The theme picker and its eleven other looks are gone; Calmly smooth, light and dark, is the app's one look.", "2026-10-26"),

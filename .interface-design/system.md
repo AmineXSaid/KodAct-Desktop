@@ -12,7 +12,7 @@
 
 **Depth:** nearly flat. Hairlines inside cards; the session and the user's message lift on paper grain (three 1px shadows at 6/4/1% ink); popovers and the permission card a touch more.
 
-**Shape:** two shapes. Everything you press is a pill (buttons, chips, icon buttons, the new-chat and needs-you pills); everything that holds content is 4px (cards, rows, menus, fields, the composer, the session).
+**Shape:** two shapes. Everything you press is a pill (buttons, chips, icon buttons, the new-chat and needs-you pills); everything that holds content is rounded: cards, menus and fields 12px, rows 8px, the composer 16px, with nested corners one step down so the curves stay parallel.
 
 **Type:** Anthropic Sans only, the Text cut for every word (code included) and the Display cut for the greeting and headings: 400 for text, 500 for labels, 600 for headings and buttons. Small labels in sentence case, never uppercase and never above a heading. The app bundles no font; diagrams are redrawn in it whatever they name.
 
@@ -23,7 +23,7 @@ Base: 4px
 Scale: 4, 6, 8, 10, 12, 16, 20, 24, 32, 40
 
 ### Radius
-Two shapes: 4px for everything that holds content, pill for everything you press.
+Two shapes: rounded for everything that holds content (cards and fields 12px, rows 8px, the composer 16px; an inner element in a card takes the next step down), pill for everything you press.
 Scale: 1px (a line's ends), 4px (key caps), 4px (rows and squarer buttons), 4px (cards, tool rows, menus), 4px (fields), 4px (the composer), pill (buttons, chips, icon buttons, segments, the send button, switches, badges, avatars)
 
 ### Typography
@@ -95,7 +95,7 @@ One look, Calmly smooth, in light and dark (`window.json` keeps the mode). Every
 |---|---|---|
 | Canvas / session / accent | `#efefef` / `#f7f7f7` / `#7a1f3d` | `#282828` / `#212121` / `#e0889f` |
 
-Faces (UI / display / code / replies): Anthropic Sans Text / Anthropic Sans Display / Anthropic Sans Text / Anthropic Sans Text. Corners button · card · field · composer · pressed: 4 · 4 · 4 · 4 · pill. Row · title bar · chat: 30 · 36 · 14.
+Faces (UI / display / code / replies): Anthropic Sans Text / Anthropic Sans Display / Anthropic Sans Text / Anthropic Sans Text. Corners button · card · field · composer · pressed: 8 · 12 · 12 · 16 · pill. Row · title bar · chat: 30 · 36 · 14.
 
 ### Terminal
 The dock's 16 colours, on `stage` (`palette_check.rs` holds them to AA).
@@ -162,34 +162,34 @@ Contrast is the WCAG ratio of text on `stage`, of a colour on `surface`, or of w
 
 ### Buttons (`ui/button.rs`)
 One family; every control takes keyboard focus (a `primary` edge shows for the keyboard only), names itself to assistive technology, and swallows clicks while disabled or loading.
-- Primary: 32px tall, padding 0 14px, radius 4px, `fill` with `fill_fg`, 500 weight. One per surface.
+- Primary: 32px tall, padding 0 14px, radius 8px, `fill` with `fill_fg`, 500 weight. One per surface.
 - Secondary and Outlined: `surface`, 1px `border_strong`, `hover` wash.
 - Ghost: clear until hovered. Danger: `fill_danger`, white.
-- Icon: 34px square, radius 4px, a 16px icon in `text_muted`; outlined squares 38px at 9999px radius.
+- Icon: 34px square, radius 8px, a 16px icon in `text_muted`; outlined squares 38px at 9999px radius.
 - Send: 38px, radius 9999px, `accent_fill` with a white arrow; `accent_soft` with nothing to send; Stop is an ink ring round a square.
 - Switch: 36x20px pill, 14px thumb sliding over 120ms; `toggle_on` when on, `border_strong` when off.
-- Segmented: a `sunk` track, radius 4px; the chosen segment raised onto `surface` at 9999px.
+- Segmented: a `sunk` track, radius 8px; the chosen segment raised onto `surface` at 9999px.
 
 ### Composer
 - Width: up to 560px, centred
-- One unit: a white box (radius 4px, 1px `border`, `border_strong` while focused, tinted by the mode when one is set) resting in a `sunk` tray
+- One unit: a white box (radius 16px, 1px `border`, `border_strong` while focused, tinted by the mode when one is set) resting in a `sunk` tray
 - Text: 14px; the outlined + bottom left and Send bottom right, 10px from the box's edges
 - The tray: the project, the context ring, the model and the mode as quiet 28px selectors: a 14px icon, the label, a chevron that flips while open; washed on hover, raised onto `surface` with a hairline while open
 
 ### Card Default
 - Border: 1px `border`
 - Padding: 24px
-- Radius: 4px
+- Radius: 12px
 - Background: `surface`
 - Usage: tool calls, file cards, code blocks
 
 ### Popover
-- Border: 1px `border`, radius 4px, padding 4px
+- Border: 1px `border`, radius 12px, padding 4px
 - Background: `surface`, with the two-layer popover shadow
 - Usage: menus, pickers, the command palette
 
 ### File Card
-- A file KodAct made, in its reply: up to 440px, `surface`, 1px `border`, radius 4px, padding 8px
+- A file KodAct made, in its reply: up to 440px, `surface`, 1px `border`, radius 12px, padding 8px
 - A 36x44 page tile (radius 4px, concentric with the card) previews it, its type in mono `primary`
 - Title 600 `text_strong`; "Document · MD" caption `text_muted`; a bordered Download button
 - Open: the edge turns `primary` at 60%
@@ -201,7 +201,7 @@ One family; every control takes keyboard focus (a `primary` edge shows for the k
 - Enters with a 220ms ease-out, fading in from 16px to the right; Escape closes it
 
 ### Sidebar Row
-- Height: 30px, radius 4px
+- Height: 30px, radius 8px
 - Current: the `active` wash, 500 weight, no border
 - New chat: a round `accent` mark with a white +
 - Collapsed: a 52px rail of icon buttons for the same actions
@@ -213,8 +213,8 @@ One family; every control takes keyboard focus (a `primary` edge shows for the k
 |----------|-----------|------|
 | One colour, moss, not terracotta | The reference rations one warm orange to the primary action; KodAct keeps the rationing and takes the reference's own moss, calmer on cream and kin to the mark. | 2026-10-18 |
 | Dusty blue, not moss | Moss read as too green beside the cream; a dusty blue from the Slate theme's family, warmed for cream, keeps the same rationing and contrast (5.4:1 on the session). | 2026-10-19 |
-| Paper on paper | The session is a 4px sheet on the cream canvas with paper grain; the title bar and sidebar have no dividers, the sheet's edge is the split. | 2026-10-18 |
-| Pills to press, 4px to hold | The contrast between the two shapes is the system: it says at a glance what acts and what holds. | 2026-10-18 |
+| Paper on paper | The session is a rounded sheet on the cream canvas with paper grain; the title bar and sidebar have no dividers, the sheet's edge is the split. | 2026-10-18 |
+| Pills to press, rounded cards to hold | The contrast between the two shapes is the system: it says at a glance what acts and what holds. Cards, menus and fields are 12px, rows 8px, the composer 16px (they were 4px). | 2026-10-18 |
 | Ink pills for the loud neutrals | New chat and needs-you are ink pills; the accent is kept for the one decision in front of you (Allow once, Send). | 2026-10-18 |
 | Anthropic Sans only | One family everywhere, in its Text and Display cuts: the interface, replies, code, the terminal and diagrams. No other face is bundled or named. | 2026-10-26 |
 | One look | The theme picker and its eleven other looks are gone; Calmly smooth, light and dark, is the app's one look. | 2026-10-26 |

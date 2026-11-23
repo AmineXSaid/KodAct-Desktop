@@ -277,7 +277,7 @@ impl Workspace {
             .pl(t.space.sm)
             .pr(t.space.xs)
             .ml(-t.space.sm)
-            .rounded(t.radius.small)
+            .rounded(t.radius.button)
             .cursor_pointer()
             .text_size(t.text.body)
             .font_weight(FontWeight::MEDIUM)
