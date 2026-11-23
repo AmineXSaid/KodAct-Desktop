@@ -41,6 +41,8 @@ InstallDir "$LOCALAPPDATA\Programs\KodAct"
 InstallDirRegKey HKCU "Software\KodAct" "InstallDir"
 RequestExecutionLevel user
 ManifestDPIAware true
+; Windows' own UI face, so the pages read like the app.
+SetFont "Segoe UI" 9
 ShowInstDetails nevershow
 ShowUninstDetails nevershow
 BrandingText "KodAct ${VERSION}  ·  From code to impact"
@@ -103,13 +105,6 @@ VIAddVersionKey "LegalCopyright" "KodAct"
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
 
-; Windows' own UI face, so the pages read like the app.
-Function .onGUIInit
-  SetFont "Segoe UI" 9
-FunctionEnd
-Function un.onGUIInit
-  SetFont "Segoe UI" 9
-FunctionEnd
 
 ; One status line for a step, its file list hidden.
 !macro Step TEXT
