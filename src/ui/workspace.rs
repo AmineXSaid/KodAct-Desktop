@@ -1033,6 +1033,7 @@ impl Render for Workspace {
                 menu: s.doc_menu,
                 drag: s.doc_drag.clone(),
                 dirty: s.doc_dirty(),
+                device: s.web_device,
                 edit_text: s.doc_edit.as_ref().map(|(_, t)| t.clone()),
             };
             let doc_changes = s
@@ -1089,8 +1090,9 @@ impl Render for Workspace {
             let leaving_fit = fit.clone();
             let doc_view = |f: &crate::state::FileRef, fit: super::doc_pane::Fit, leaving: bool| {
                 // A file leaving has nothing to edit or comment on any more.
-                let (editor, comments, find, page_field, text_editor) = if leaving {
+                let (editor, comments, find, page_field, text_editor, browser) = if leaving {
                     (
+                        div().into_any_element(),
                         div().into_any_element(),
                         div().into_any_element(),
                         div().into_any_element(),
@@ -1104,6 +1106,7 @@ impl Render for Workspace {
                         self.doc_find.clone().into_any_element(),
                         self.page_field.clone().into_any_element(),
                         self.text_editor.clone().into_any_element(),
+                        self.browser.clone().into_any_element(),
                     )
                 };
                 super::doc_pane::render(
@@ -1122,6 +1125,7 @@ impl Render for Workspace {
                     find,
                     page_field,
                     text_editor,
+                    browser,
                     &t,
                 )
             };

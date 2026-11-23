@@ -18,6 +18,15 @@ pub enum Zoom {
 }
 
 impl Zoom {
+    /// What the toolbar and the footer say: the step, or the fit.
+    pub fn label(self) -> String {
+        match self {
+            Zoom::FitWidth => "Fit width".into(),
+            Zoom::FitPage => "Fit page".into(),
+            Zoom::Percent(p) => format!("{p}%"),
+        }
+    }
+
     /// The next step in (`up`) or out from `now` percent: the nearest step
     /// above or below, clamped to the range. Fitted views step from the
     /// percentage they currently show.
@@ -58,6 +67,13 @@ pub fn percent_of(width: f32, natural: f32) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_label_names_a_fit_and_a_step() {
+        assert_eq!(Zoom::FitWidth.label(), "Fit width");
+        assert_eq!(Zoom::FitPage.label(), "Fit page");
+        assert_eq!(Zoom::Percent(125).label(), "125%");
+    }
 
     #[test]
     fn stepping_walks_the_steps_and_clamps() {

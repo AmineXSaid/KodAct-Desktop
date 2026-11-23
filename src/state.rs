@@ -919,6 +919,11 @@ impl FileRef {
             .unwrap_or_else(|| self.content.as_bytes().to_vec())
     }
 
+    /// A web page that is not a diagram: it previews in the browser.
+    pub fn is_html(&self) -> bool {
+        matches!(self.kind().as_ref(), "HTML" | "HTM") && !self.is_diagram()
+    }
+
     /// A picture the panel shows (`ui/image_view.rs`).
     pub fn is_image(&self) -> bool {
         self.bytes.is_some() && crate::ui::image_view::format_of(&self.name).is_some()
@@ -1002,6 +1007,35 @@ pub struct Chat {
     pub archived: bool,
     /// The transcript in detail: every run of work and every thought opened.
     pub detailed: bool,
+}
+
+/// The width a web page previews at in the file view: the panel's own, a
+/// tablet's or a phone's.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Device {
+    #[default]
+    Desktop,
+    Tablet,
+    Phone,
+}
+
+impl Device {
+    /// The page's width in CSS pixels; None is the room the panel gives it.
+    pub fn width(self) -> Option<u32> {
+        match self {
+            Device::Desktop => None,
+            Device::Tablet => Some(768),
+            Device::Phone => Some(390),
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Device::Desktop => "Desktop",
+            Device::Tablet => "Tablet",
+            Device::Phone => "Phone",
+        }
+    }
 }
 
 /// A menu open in the file view's toolbar.
@@ -2141,6 +2175,10 @@ pub struct AppState {
     /// The text file in the panel has edits not saved: its file id and the
     /// text in the editor (`ui/text_editor.rs`).
     pub doc_edit: Option<(String, SharedString)>,
+    /// The width a web page in the panel previews at, and the version of the
+    /// page the browser last loaded.
+    pub web_device: Device,
+    html_previewed: Option<SharedString>,
     /// Where the last mouse move of a drag to pan a picture was.
     pub doc_drag: std::rc::Rc<std::cell::Cell<Option<gpui::Point<gpui::Pixels>>>>,
     /// The percentage the open file's pages are drawn at when fitted, for
@@ -2524,6 +2562,8 @@ impl AppState {
             doc_menu: None,
             doc_drag: Default::default(),
             doc_edit: None,
+            web_device: Device::Desktop,
+            html_previewed: None,
             doc_fitted: std::sync::Arc::new(std::sync::atomic::AtomicU16::new(100)),
             doc_word_comments: true,
             doc_changes: None,
@@ -5182,6 +5222,51 @@ impl AppState {
         if self.doc_show_changes {
             self.load_doc_changes(cx);
         }
+        self.preview_html(cx);
+        cx.notify();
+    }
+
+    /// A web page in the panel, shown (not its code): load it into the
+    /// panel's browser, once for each version of it.
+    pub fn preview_html(&mut self, cx: &mut Context<Self>) {
+        let Some(file) = self.doc.clone().filter(|f| f.is_html()) else {
+            return;
+        };
+        if self.source_view {
+            return;
+        }
+        let key = doc_version_key(&file);
+        if self.html_previewed.as_ref() == Some(&key) && self.web.is_some() {
+            return;
+        }
+        self.html_previewed = Some(key);
+        let dir = std::env::temp_dir().join("forge-files");
+        let name = crate::downloads::clean_name(&file.name);
+        let content = file.content.clone();
+        cx.spawn(async move |this, cx| {
+            let path = dir.join(name);
+            let wrote = cx
+                .background_spawn({
+                    let path = path.clone();
+                    async move {
+                        std::fs::create_dir_all(&dir)?;
+                        std::fs::write(&path, content.as_bytes())
+                    }
+                })
+                .await;
+            let _ = this.update(cx, |s, cx| match wrote {
+                Ok(()) => s.web_send(
+                    crate::web_view::Cmd::Navigate(crate::office_render::url(&path)),
+                    cx,
+                ),
+                Err(e) => s.show_toast(format!("Could not show the page: {e}"), cx),
+            });
+        })
+        .detach();
+    }
+
+    pub fn set_web_device(&mut self, d: Device, cx: &mut Context<Self>) {
+        self.web_device = d;
         cx.notify();
     }
 
@@ -7528,6 +7613,7 @@ fix everything under 8, render it again to check, then tell me the scores before
     /// Preview or Source, in the panel.
     pub fn set_source_view(&mut self, on: bool, cx: &mut Context<Self>) {
         self.source_view = on;
+        self.preview_html(cx);
         cx.notify();
     }
 
@@ -13958,6 +14044,12 @@ fn demo_plan() -> Vec<Step> {
             Some(include_bytes!("../assets/docs/samples/q3-budget.pptx")),
         ),
         file(
+            "release-notes.html",
+            "docs/release-notes.html",
+            include_str!("../assets/docs/release-notes.html"),
+            None,
+        ),
+        file(
             "greeting.rs",
             "src/greeting.rs",
             "//! The greeting on the home screen.\n\n/// \"Good morning, Sam\", by the hour.\npub fn greeting(name: &str, hour: u32) -> String {\n    let part = match hour {\n        5..=11 => \"Good morning\",\n        12..=17 => \"Good afternoon\",\n        _ => \"Good evening\",\n    };\n    format!(\"{part}, {name}\")\n}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n\n    #[test]\n    fn the_hour_picks_the_words() {\n        assert_eq!(greeting(\"Sam\", 9), \"Good morning, Sam\");\n        assert_eq!(greeting(\"Sam\", 20), \"Good evening, Sam\");\n    }\n}\n",
@@ -15347,5 +15439,26 @@ mod tests {
             })
             .count();
         assert_eq!(started, 10);
+    }
+}
+
+#[cfg(test)]
+mod device_tests {
+    use super::*;
+
+    #[test]
+    fn a_page_previews_at_the_width_of_its_device() {
+        assert_eq!(Device::Desktop.width(), None);
+        assert_eq!(Device::Tablet.width(), Some(768));
+        assert_eq!(Device::Phone.width(), Some(390));
+        let page = |name: &str, content: &str| FileRef {
+            name: name.into(),
+            path: None,
+            content: content.into(),
+            bytes: None,
+        };
+        assert!(page("a.html", "<p>hi</p>").is_html());
+        assert!(!page("a.html", "<svg></svg>").is_html());
+        assert!(!page("a.md", "# hi").is_html());
     }
 }

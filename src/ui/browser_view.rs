@@ -63,6 +63,9 @@ pub struct BrowserView {
     focus: FocusHandle,
     /// Where the page is drawn, from the last frame, to map the mouse.
     page_bounds: Rc<Cell<Bounds<Pixels>>>,
+    /// How far a page laid out narrower than the room (a phone preview) sits
+    /// in from the left, so the mouse maps onto it.
+    x_off: Rc<Cell<f32>>,
     /// The size last sent to the browser: CSS width, height, scale.
     sent_size: Rc<Cell<(u32, u32, f32)>>,
     /// The address shown, so typing in it isn't overwritten as pages change.
@@ -161,6 +164,7 @@ impl BrowserView {
             address,
             focus: cx.focus_handle(),
             page_bounds: Rc::new(Cell::new(Bounds::default())),
+            x_off: Rc::new(Cell::new(0.)),
             sent_size: Rc::new(Cell::new((0, 0, 0.))),
             shown_url: String::new(),
             zoom: 1.0,
@@ -318,7 +322,7 @@ impl BrowserView {
         let b = self.page_bounds.get();
         b.contains(&p).then(|| {
             (
-                f64::from(f32::from(p.x - b.origin.x)) / self.zoom,
+                f64::from(f32::from(p.x - b.origin.x) - self.x_off.get()) / self.zoom,
                 f64::from(f32::from(p.y - b.origin.y)) / self.zoom,
             )
         })
@@ -803,6 +807,8 @@ impl Render for BrowserView {
 
         // The page, laid out at the panel's own size (see `canvas` below).
         let bounds = self.page_bounds.clone();
+        let x_off = self.x_off.clone();
+        let device_forced = self.state.read(cx).web_device.width().is_some();
         let sent = self.sent_size.clone();
         let state = self.state.clone();
         let viewport = div()
@@ -826,10 +832,16 @@ impl Render for BrowserView {
                         (size.width.0 as f32 / scale, size.height.0 as f32 / scale)
                     }
                 };
+                let off = if device_forced {
+                    ((f32::from(bounds.get().size.width) - w) / 2.).max(0.)
+                } else {
+                    0.
+                };
+                x_off.set(off);
                 img(f)
                     .absolute()
                     .top_0()
-                    .left_0()
+                    .left(px(off))
                     .w(px(w))
                     .h(px(h))
                     .object_fit(ObjectFit::Fill)
@@ -840,8 +852,12 @@ impl Render for BrowserView {
                 canvas(
                     move |b, window, cx| {
                         bounds.set(b);
+                        // A page previewed at a tablet's or a phone's width is
+                        // laid out that narrow, in the middle of the room.
+                        let forced = state.read(cx).web_device.width();
+                        let room = f32::from(b.size.width).round() as u32;
                         let size = (
-                            f32::from(b.size.width).round() as u32,
+                            forced.map_or(room, |w| w.min(room)),
                             f32::from(b.size.height).round() as u32,
                             window.scale_factor(),
                         );

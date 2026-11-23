@@ -137,7 +137,7 @@ fn run(program: &Path, input: &Path, out: &Path) -> Result<(), String> {
 
 /// A folder as a file URL, as LibreOffice's `-env:` wants it
 /// (`file:///C:/Users/…` on Windows, `file:///tmp/…` elsewhere).
-fn url(path: &Path) -> String {
+pub(crate) fn url(path: &Path) -> String {
     let p = path.to_string_lossy().replace('\\', "/");
     let p = p.trim_start_matches('/');
     format!("file:///{}", p.replace(' ', "%20"))

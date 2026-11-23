@@ -69,6 +69,8 @@ pub struct Fit {
     pub drag: std::rc::Rc<std::cell::Cell<Option<gpui::Point<gpui::Pixels>>>>,
     /// The file has edits not saved, and (for a text file) the text edited.
     pub dirty: bool,
+    /// The width a web page previews at.
+    pub device: crate::state::Device,
     pub edit_text: Option<SharedString>,
 }
 
@@ -102,6 +104,7 @@ pub fn render(
     find: AnyElement,
     page_field: AnyElement,
     text_editor: AnyElement,
+    browser: AnyElement,
     t: &Theme,
 ) -> AnyElement {
     // The version bar at the foot, when the chat has more than one version.
@@ -138,7 +141,8 @@ pub fn render(
 
     let from_panel = fit.from_panel;
     // Markdown and pages read as themselves, or as what was written.
-    let two_views = office.is_none() && (diagram || file.is_markdown());
+    let html = file.is_html();
+    let two_views = office.is_none() && (diagram || html || file.is_markdown());
     let source = two_views && fit.source;
     let text_view = fit.text;
     let page_pick = fit.page_pick;
@@ -163,7 +167,8 @@ pub fn render(
         Some(crate::office::Kind::Docx | crate::office::Kind::Pptx | crate::office::Kind::Xlsx)
     );
     let dirty_sheet = fit.dirty || (office == Some(crate::office::Kind::Xlsx) && !sheet_edits.is_empty());
-    let editing = (source || (office.is_none() && !binary && !file.is_markdown() && !diagram))
+    let previewing_html = html && !source && !showing_changes;
+    let editing = (source || (office.is_none() && !binary && !file.is_markdown() && !diagram && !html))
         && super::text_editor::editable(file)
         && !showing_changes;
     let full = fit.full;
@@ -173,6 +178,10 @@ pub fn render(
     // The status line: where you are, the versions, the scale.
     let top = fit.scroll.top_item();
     let position = match pages {
+        _ if previewing_html => {
+            let d = fit.device;
+            d.width().map_or(d.label().to_string(), |w| format!("{} · {w} px", d.label()))
+        }
         _ if editing => super::text_editor::counts(fit.edit_text.as_ref().unwrap_or(&file.content)),
         _ if image => file
             .bytes
@@ -187,13 +196,9 @@ pub fn render(
         ),
         _ => String::new(),
     };
-    let (fitted, zoom_now) = (fit.fitted.clone(), fit.zoom);
+    let zoom_now = fit.zoom;
     let bar_state = state.clone();
     let footer = move || {
-        let pct = match zoom_now {
-            crate::doc_zoom::Zoom::Percent(p) => p,
-            _ => fitted.load(std::sync::atomic::Ordering::Relaxed),
-        };
         let right = div()
             .flex_none()
             .flex()
@@ -209,7 +214,7 @@ pub fn render(
                     summary.clone(),
                 ))
             })
-            .when(paged, |d| d.child(format!("{pct}%")));
+            .when(paged, |d| d.child(zoom_now.label()));
         Some(
             div()
                 .flex_none()
@@ -244,7 +249,7 @@ pub fn render(
         .child(mark)
         .child(
             div()
-                .min_w(px(120.))
+                .min_w(px(48.))
                 .flex_shrink(1.)
                 .overflow_hidden()
                 .whitespace_nowrap()
@@ -367,7 +372,7 @@ pub fn render(
                         to_preview.update(cx, |s, cx| s.set_source_view(false, cx))
                     })
                     .option(
-                        if diagram { "Code" } else { "Markdown" },
+                        if diagram || html { "Code" } else { "Markdown" },
                         source,
                         move |_, _, cx| to_source.update(cx, |s, cx| s.set_source_view(true, cx)),
                     )
@@ -419,6 +424,29 @@ pub fn render(
             groups.push(super::panel_chrome::Group { tools: g, width: w });
         }
     }
+    // A web page's preview: the width it is laid out at, and Reload.
+    if previewing_html {
+        use crate::state::Device;
+        let (reload, dev) = (state.clone(), state.clone());
+        let mut seg = super::button::Segmented::new("doc-device", "Width");
+        for d in [Device::Desktop, Device::Tablet, Device::Phone] {
+            let st = dev.clone();
+            seg = seg.option(d.label(), fit.device == d, move |_, _, cx| {
+                st.update(cx, |s, cx| s.set_web_device(d, cx))
+            });
+        }
+        groups.push(super::panel_chrome::Group {
+            tools: vec![
+                seg.into_any_element(),
+                tool_button("doc-reload", "icons/refresh-cw.svg", "Reload the page")
+                    .on_click(move |_, _, cx| {
+                        reload.update(cx, |s, cx| s.web_send(crate::web_view::Cmd::Reload, cx))
+                    })
+                    .into_any_element(),
+            ],
+            width: 236. + 30.,
+        });
+    }
     // Navigate: previous, the page field, next, thumbnails.
     if let (Some((n, _)), true) = (pages, paged && !image) {
         let (prev, next, thumbs) = (state.clone(), state.clone(), state.clone());
@@ -447,15 +475,11 @@ pub fn render(
     let zoom_group_at = groups.iter().map(|g| g.width + 9.).sum::<f32>();
     if paged {
         let (zout, zin, zmenu) = (state.clone(), state.clone(), state.clone());
-        let pct = match fit.zoom {
-            crate::doc_zoom::Zoom::Percent(p) => p,
-            _ => fit.fitted.load(std::sync::atomic::Ordering::Relaxed),
-        };
         let g = vec![
             tool_button("doc-zoom-out", "icons/zoom-out.svg", "Zoom out (Ctrl+-)")
                 .on_click(move |_, _, cx| zout.update(cx, |s, cx| s.zoom_doc(false, cx)))
                 .into_any_element(),
-            super::button::Button::ghost("doc-zoom-menu", format!("{pct}%"))
+            super::button::Button::ghost("doc-zoom-menu", fit.zoom.label())
                 .compact()
                 .selected(fit.menu == Some(crate::state::DocMenu::Zoom))
                 .on_click(move |_, _, cx| {
@@ -468,7 +492,7 @@ pub fn render(
         ];
         groups.push(super::panel_chrome::Group {
             tools: g,
-            width: 28. + 62. + 28. + 4.,
+            width: 28. + 82. + 28. + 4.,
         });
     }
     // Edit: undo, redo, and the one accent action while something is unsaved.
@@ -722,6 +746,9 @@ pub fn render(
             })
             .on_mouse_up(gpui::MouseButton::Left, move |_, _, _| up.set(None))
             .child(super::image_view::render(file, &fit, t))
+    } else if previewing_html {
+        // The page, in the panel's live browser.
+        body.overflow_hidden().child(div().size_full().child(browser))
     } else if editing {
         // The source in an editor: a file that is only text, or a page or
         // Markdown file switched to its source. The editor scrolls itself.
