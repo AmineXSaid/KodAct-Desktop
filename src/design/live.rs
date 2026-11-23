@@ -16,6 +16,25 @@ pub fn is_page(path: &str) -> bool {
     lower.ends_with(".html") || lower.ends_with(".htm")
 }
 
+/// A text file the side panel can show as KodAct writes it (Markdown,
+/// notes, code, data, config): its draft streams in, as a page's does. Not
+/// a page (the design view takes those) and not an Office file or a picture.
+pub fn is_live_text(path: &str) -> bool {
+    let name = path.rsplit(['/', '\\']).next().unwrap_or(path).to_ascii_lowercase();
+    let Some((_, ext)) = name.rsplit_once('.') else {
+        return true;
+    };
+    matches!(
+        ext,
+        "md" | "markdown" | "txt" | "rst" | "adoc" | "csv" | "tsv" | "json" | "jsonl" | "toml"
+            | "yaml" | "yml" | "ini" | "cfg" | "conf" | "env" | "xml" | "svg" | "css" | "scss"
+            | "less" | "rs" | "py" | "js" | "mjs" | "cjs" | "ts" | "tsx" | "jsx" | "go" | "java"
+            | "kt" | "swift" | "c" | "h" | "cc" | "cpp" | "hpp" | "cs" | "rb" | "php" | "lua"
+            | "sh" | "bash" | "zsh" | "ps1" | "bat" | "sql" | "r" | "dart" | "scala" | "vue"
+            | "svelte" | "graphql" | "proto" | "tf" | "dockerfile" | "makefile" | "gradle" | "lock"
+    )
+}
+
 /// A Write call's `file_path` and `content` so far, read from the input
 /// JSON as it streams in (`{"file_path": "a.html", "content": "<!doctype…`).
 /// The content stops where the stream has got to, mid-escape included. None
@@ -405,5 +424,21 @@ mod tests {
             draft_page("<p>", &dir),
             "<base href=\"file:///p/site/\"><p>"
         );
+    }
+}
+
+#[cfg(test)]
+mod live_text_tests {
+    use super::{is_live_text, is_page};
+
+    #[test]
+    fn text_files_stream_and_office_files_and_pictures_do_not() {
+        for p in ["notes.md", "src/main.rs", "a/b/data.csv", "Makefile", "x.json"] {
+            assert!(is_live_text(p), "{p}");
+        }
+        for p in ["deck.pptx", "memo.docx", "budget.xlsx", "photo.png", "doc.pdf"] {
+            assert!(!is_live_text(p), "{p}");
+        }
+        assert!(is_page("site/index.html") && !is_live_text("site/index.html"));
     }
 }

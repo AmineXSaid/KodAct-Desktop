@@ -882,7 +882,13 @@ impl Parser {
                                 if let Some((path, content)) = due
                                     .then(|| crate::design::live::partial_write(json))
                                     .flatten()
-                                    .filter(|(p, c)| crate::design::live::is_page(p) && !c.is_empty())
+                                    // A page for the design view; any text file for
+                                    // the side panel's live view (`watch_draft`).
+                                    .filter(|(p, c)| {
+                                        (crate::design::live::is_page(p)
+                                            || crate::design::live::is_live_text(p))
+                                            && !c.is_empty()
+                                    })
                                 {
                                     *sent = Some(std::time::Instant::now());
                                     out.push(Event::Drafting {
@@ -1352,9 +1358,19 @@ mod tests {
         );
         // Then at most every DRAFT_EVERY.
         assert!(feed(delta(1, " intro</h1>")).is_empty());
-        // Not a page, not a Write, or a sub-agent's: no drafts.
+        // A text file drafts too, for the side panel's live view.
+        feed(start(5, "Write"));
+        assert_eq!(
+            feed(delta(5, r##"{"file_path": "notes.md", "content": "# Notes"##)),
+            [Event::Drafting {
+                id: "w5".into(),
+                path: "notes.md".into(),
+                content: "# Notes".into()
+            }]
+        );
+        // Not a page or a text file, not a Write, or a sub-agent's: no drafts.
         feed(start(2, "Write"));
-        assert!(feed(delta(2, r#"{"file_path": "a.md", "content": "x"#)).is_empty());
+        assert!(feed(delta(2, r#"{"file_path": "a.pptx", "content": "x"#)).is_empty());
         feed(start(3, "Bash"));
         assert!(feed(delta(3, r#"{"command": "ls"#)).is_empty());
         let nested = json!({"type":"stream_event","parent_tool_use_id":"t9","event":{"type":"content_block_start","index":4,"content_block":{"type":"tool_use","id":"w4","name":"Write","input":{}}}});

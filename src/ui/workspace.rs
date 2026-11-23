@@ -65,6 +65,8 @@ pub struct Workspace {
     files: Entity<super::files_pane::FilesPane>,
     /// The windows drawn here, kept for the beat each takes to leave.
     presence: Presences,
+    /// The file the side panel last showed, for its slide out after it closes.
+    last_side_doc: Option<crate::state::FileRef>,
     focus: FocusHandle,
 }
 
@@ -155,6 +157,7 @@ impl Workspace {
             sheet_editor,
             files,
             presence: Presences::default(),
+            last_side_doc: None,
             focus: cx.focus_handle(),
         };
         if first_run {
@@ -874,16 +877,34 @@ impl Render for Workspace {
         let empty = s.chat().is_none_or(|c| c.messages.is_empty());
         // The side column: the file or tab in it and the Files pane, kept
         // while it slides back out after it closes.
+        // Keyed by which file is open, not by its text: a file KodAct is
+        // writing changes with every chunk (`AppState::watch_draft`), and a
+        // new key would play the panel's close and open over and over.
+        let doc_id = s.doc.as_ref().map(|d| crate::state::FileRef {
+            content: SharedString::default(),
+            bytes: None,
+            ..d.clone()
+        });
         let side_now = (s.doc.is_some() || s.panel.is_some() || s.files_open)
-            .then(|| (s.doc.clone(), s.panel, s.files_open));
+            .then(|| (doc_id, s.panel, s.files_open));
         let side_f = self
             .presence
             .side
             .frame(side_now, super::motion::close_ms(&t), window);
         let side_leaving = side_f.as_ref().is_some_and(|(_, leaving)| *leaving);
         let side_open = side_f.is_some();
-        let (side_doc, side_panel, files_open) =
+        let (side_id, side_panel, files_open) =
             side_f.map(|(k, _)| k).unwrap_or((None, None, false));
+        // The file itself while it is the one open; the last one seen while
+        // the panel slides out.
+        let side_doc = match (side_id, s.doc.clone()) {
+            (Some(id), Some(doc)) if id.name == doc.name && id.path == doc.path => {
+                self.last_side_doc = Some(doc.clone());
+                Some(doc)
+            }
+            (Some(_), _) => self.last_side_doc.clone(),
+            (None, _) => None,
+        };
         let panel_full = !loading
             && !empty
             && screen == Screen::Chat
@@ -1013,6 +1034,7 @@ impl Render for Workspace {
                 show_changes: s.doc_show_changes,
                 page_pick: s.doc_page_pick,
                 scroll: s.doc_scroll.clone(),
+                live: s.doc_is_live(),
                 height: {
                     let stage = f32::from(window.viewport_size().height)
                         - f32::from(t.size.titlebar)

@@ -55,6 +55,8 @@ pub struct Fit {
     pub page_pick: Option<usize>,
     /// The body's scroll, whose items are the pages.
     pub scroll: gpui::ScrollHandle,
+    /// KodAct is writing this file now and the panel follows it.
+    pub live: bool,
     /// The room for a whole page: the body's height.
     pub height: f32,
     /// How this file is scaled, and the percentage fitted pages draw at
@@ -340,6 +342,35 @@ pub fn render(
                             }
                         })
                     }),
+            )
+        })
+        // Being written: a breathing dot and the words, until the write ends.
+        .when(fit.live, |d| {
+            d.child(
+                div()
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.))
+                    .px(t.space.sm)
+                    .h(px(22.))
+                    .rounded(t.radius.pill)
+                    .bg(t.extra.accent_soft)
+                    .text_size(t.text.caption)
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(t.colors.text)
+                    .child(
+                        div()
+                            .size(px(6.))
+                            .rounded(t.radius.pill)
+                            .bg(t.extra.accent)
+                            .with_animation(
+                                "doc-live-dot",
+                                Animation::new(Duration::from_millis(1200)).repeat(),
+                                |d, k| d.opacity(0.35 + 0.65 * (k * std::f32::consts::PI).sin()),
+                            ),
+                    )
+                    .child("KodAct is writing…"),
             )
         })
         .when(dirty_sheet, |d| {

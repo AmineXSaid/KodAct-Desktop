@@ -2168,6 +2168,13 @@ pub struct AppState {
     /// The panel's body: its pages are its items, so the keyboard and a
     /// search result can bring one to the top.
     pub doc_scroll: gpui::ScrollHandle,
+    /// Each text file a reply is writing, by chat and path: its content as
+    /// far as it has streamed (`Event::Drafting`), for the live view.
+    pub drafts: std::collections::HashMap<(usize, String), SharedString>,
+    /// The file the side panel follows while KodAct writes it: its chat and
+    /// path. Its draft replaces the open file's text as it streams, and the
+    /// panel keeps to the newest line. Ends when the write ends.
+    pub doc_live: Option<(usize, String)>,
     next_comment: usize,
     /// A page (or slide) of the panel's document picked to comment on, from 0.
     pub doc_page_pick: Option<usize>,
@@ -2563,6 +2570,8 @@ impl AppState {
             title_menu: None,
             chat_menu_at: Default::default(),
             doc_scroll: gpui::ScrollHandle::new(),
+            drafts: Default::default(),
+            doc_live: None,
             next_comment: 1,
             doc_page_pick: None,
             doc_zoom: Default::default(),
@@ -5855,6 +5864,66 @@ impl AppState {
         }
     }
 
+    /// A text file streaming in: kept as far as it has got, and shown in
+    /// the side panel when it is the file you are watching.
+    fn text_draft(&mut self, chat: usize, path: &str, content: &str, cx: &mut Context<Self>) {
+        let content: SharedString = content.to_string().into();
+        self.drafts.insert((chat, path.to_string()), content.clone());
+        if self.doc_live.as_ref() == Some(&(chat, path.to_string())) {
+            if let Some(doc) = self.doc.as_mut() {
+                doc.content = content;
+                // Keep to the newest line, as a terminal follows its output.
+                self.doc_scroll.scroll_to_bottom();
+            }
+        }
+        cx.notify();
+    }
+
+    /// Open the file a reply is writing in the side panel and follow it:
+    /// what has streamed so far now, the rest as it comes.
+    pub fn watch_draft(&mut self, chat: usize, path: &str, cx: &mut Context<Self>) {
+        let name = std::path::Path::new(path)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| path.to_string());
+        let content = self
+            .drafts
+            .get(&(chat, path.to_string()))
+            .cloned()
+            .unwrap_or_default();
+        self.show_doc(
+            FileRef {
+                name: name.into(),
+                path: Some(path.to_string().into()),
+                content,
+                bytes: None,
+            },
+            cx,
+        );
+        self.doc_live = Some((chat, path.to_string()));
+        self.doc_scroll.scroll_to_bottom();
+        cx.notify();
+    }
+
+    /// The write of `path` ended: the live view stops following; the file's
+    /// card then opens what was written.
+    fn end_draft(&mut self, chat: usize, path: &str, cx: &mut Context<Self>) {
+        let key = (chat, path.to_string());
+        let finished = self.drafts.remove(&key);
+        if self.doc_live.as_ref() == Some(&key) {
+            self.doc_live = None;
+            if let (Some(doc), Some(text)) = (self.doc.as_mut(), finished) {
+                doc.content = text;
+            }
+            cx.notify();
+        }
+    }
+
+    /// Whether the side panel is following a file KodAct is writing now.
+    pub fn doc_is_live(&self) -> bool {
+        self.doc_live.is_some() && self.busy()
+    }
+
     /// A page streaming in: shown as far as it has got.
     fn design_draft(&mut self, chat: usize, path: &str, content: &str, cx: &mut Context<Self>) {
         let Some(full) = self.design_path(chat, path) else {
@@ -8054,6 +8123,7 @@ fix everything under 8, render it again to check, then tell me the scores before
     }
 
     pub fn close_doc(&mut self, cx: &mut Context<Self>) {
+        self.doc_live = None;
         self.doc_finding = false;
         self.doc_full = false;
         self.sheet_edits.clear();
@@ -11662,7 +11732,13 @@ fix everything under 8, render it again to check, then tell me the scores before
                     self.tool_rows.insert((chat, id), at);
                 }
             }
-            Event::Drafting { path, content, .. } => self.design_draft(chat, &path, &content, cx),
+            Event::Drafting { path, content, .. } => {
+                if crate::design::live::is_page(&path) {
+                    self.design_draft(chat, &path, &content, cx)
+                } else {
+                    self.text_draft(chat, &path, &content, cx)
+                }
+            }
             Event::ToolResult {
                 id,
                 output,
@@ -11712,6 +11788,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                     // A document KodAct wrote gets its card in the reply; one
                     // it edited, the card brought up to date.
                     if let Some((p, edit)) = written {
+                        self.end_draft(chat, &p, cx);
                         if let Some(remote) = self.chat_remote(chat) {
                             self.remote_written_file(chat, remote, p, edit, cx);
                         } else if let Some(file) = self.written_file(chat, &p) {
@@ -13297,7 +13374,11 @@ impl AppState {
     fn apply(&mut self, chat: usize, step: Step, cx: &mut Context<Self>) {
         // A page streaming: the live view, as for a real Write.
         if let Step::Draft(path, content) = &step {
-            self.design_draft(chat, path, content, cx);
+            if crate::design::live::is_page(path) {
+                self.design_draft(chat, path, content, cx);
+            } else {
+                self.text_draft(chat, path, content, cx);
+            }
             return;
         }
         if let Step::Wrote(path, content) = &step {
@@ -13322,6 +13403,7 @@ impl AppState {
                 }
             }
             self.design_done(chat, path, cx);
+            self.end_draft(chat, path, cx);
             if let Some(file) = self.written_file(chat, path) {
                 self.push_block(chat, Block::File(file));
             }
@@ -13727,6 +13809,31 @@ const DEMO_CHARTS: &str = "Where the time went:\n\n```mermaid\npie title Time pe
 
 /// The demo's ASCII answer, for checking that box drawing keeps its columns.
 const DEMO_ASCII: &str = "Here it is in ASCII.\n\n```text\n┌──────────────┐     ┌──────────────┐\n│  KodAct app   │ ──▶ │   KodAct CLI   │\n└──────┬───────┘     └──────┬───────┘\n       │ stream-json        │ HTTPS\n       ▼                    ▼\n┌──────────────┐     ┌──────────────┐\n│  Chat view   │ ◀── │    Model     │\n└──────────────┘     └──────────────┘\n```\n\nAnd the same without a fence:\n\n+--------+      +---------+\n| Client | ---> | Server  |\n+--------+      +---------+\n     |               |\n     v               v\n  [ UI ]         [ DB ]\n";
+
+/// The demo's notes: a Markdown file written a few lines at a time, so its
+/// Watch live view (`AppState::watch_draft`) shows it filling in.
+fn demo_notes() -> Vec<Step> {
+    const NOTES: &str = include_str!("../assets/docs/settings-migration-plan.md");
+    let path = std::env::temp_dir()
+        .join("kodact-demo")
+        .join("migration-notes.md")
+        .display()
+        .to_string();
+    let mut s = words(
+        "I'll write the migration notes as a Markdown file you can keep in the repo.",
+        Step::Say,
+    );
+    s.push(Step::ToolStart(ToolKind::Write, path.clone(), None));
+    let lines: Vec<&str> = NOTES.split_inclusive('\n').collect();
+    let mut so_far = String::new();
+    for chunk in lines.chunks(3) {
+        so_far.extend(chunk.iter().copied());
+        s.push(Step::Draft(path.clone(), so_far.clone()));
+    }
+    s.push(Step::Wrote(path, NOTES.to_string()));
+    s.extend(words("\n\nThe notes are written.", Step::Say));
+    s
+}
 
 /// The demo's page: a six-slide course introduction, written a few lines
 /// at a time, so the live view shows it forming, then made on disk.
@@ -14448,6 +14555,11 @@ fn script(prompt: &str) -> Vec<Step> {
             Step::Say,
         ));
         s.push(Step::End { seconds: 3.1 });
+        return s;
+    }
+    if lower.contains("notes") || lower.contains("write a doc") {
+        s.extend(demo_notes());
+        s.push(Step::End { seconds: 12.0 });
         return s;
     }
     if ["design", "deck", "slides", "course"]
