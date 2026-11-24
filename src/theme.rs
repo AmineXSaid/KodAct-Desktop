@@ -436,6 +436,35 @@ impl Theme {
         )
     }
 
+    /// The backdrops of the welcome page's artifact cards: the palette's
+    /// hues (burgundy, Pajamas purple and blue, lime, orange, marigold),
+    /// deep at night and pastel by day, so a page reads on each. A card
+    /// takes one by its file's name (`artifact_well`).
+    pub fn artifact_wells(&self) -> [Hsla; 6] {
+        let hues = [
+            self.extra.accent,
+            self.code.keyword,
+            self.code.function,
+            self.code.type_,
+            self.code.number,
+            self.colors.marigold,
+        ];
+        hues.map(|c| {
+            if self.is_dark {
+                hsla(c.h, 0.42, 0.30, 1.)
+            } else {
+                hsla(c.h, 0.55, 0.84, 1.)
+            }
+        })
+    }
+
+    /// The backdrop for the card of the file `name`: the same one each time.
+    pub fn artifact_well(&self, name: &str) -> Hsla {
+        let n = name.bytes().fold(5381u32, |h, b| h.wrapping_mul(33) ^ b as u32);
+        let wells = self.artifact_wells();
+        wells[n as usize % wells.len()]
+    }
+
     /// What lifts a card or the session off the canvas: paper grain (three
     /// hairline shadows under 4px of blur and 6% ink).
     pub fn elevation_grain(&self) -> Vec<BoxShadow> {

@@ -234,15 +234,15 @@ impl Render for ConfirmWindow {
                             ),
                         vec![
                             super::button::Button::ghost("confirm-cancel", "Cancel")
-                                .on_click(
-                                    cx.listener(|this, _, window, cx| this.cancel(window, cx)),
-                                )
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.cancel(window, cx)
+                                }))
                                 .into_any_element(),
                             super::button::Button::danger("confirm-delete", action)
                                 .with_icon(action_icon)
-                                .on_click(
-                                    cx.listener(|this, _, window, cx| this.confirm(window, cx)),
-                                )
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.confirm(window, cx)
+                                }))
                                 .into_any_element(),
                         ],
                     ),

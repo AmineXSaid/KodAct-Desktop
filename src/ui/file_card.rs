@@ -558,7 +558,7 @@ pub fn artifact(
                 .w_full()
                 .h(px(ARTIFACT_WELL_H))
                 .overflow_hidden()
-                .bg(t.extra.sunk)
+                .bg(t.artifact_well(file.path.as_deref().unwrap_or(&file.name)))
                 .border_b_1()
                 .border_color(t.colors.border)
                 // The page, inset at the top and sides, running on past
@@ -913,18 +913,9 @@ pub fn list(
                 .text_size(t.text.caption)
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(t.colors.text_muted)
-                .child(icon(
-                    "icons/folder.svg",
-                    t.size.icon_xs,
-                    t.colors.text_muted,
-                ))
+                .child(icon("icons/folder.svg", t.size.icon_xs, t.colors.text_muted))
                 .child(format!("{n} files")),
         )
-        .child(
-            div()
-                .border_t_1()
-                .border_color(t.colors.border)
-                .children(rows),
-        )
+        .child(div().border_t_1().border_color(t.colors.border).children(rows))
         .into_any_element()
 }
