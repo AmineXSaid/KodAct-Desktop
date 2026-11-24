@@ -169,6 +169,15 @@ impl Default for Attachment {
 }
 
 impl Attachment {
+    /// The word on a text card: whose words they are.
+    pub fn badge(&self) -> &'static str {
+        match self.name.as_ref() {
+            "KodAct's reply" => "Reply",
+            "Your message" => "Message",
+            _ => "Pasted",
+        }
+    }
+
     /// `2.4 MB`, `812 KB`, `90 B`.
     pub fn size_text(&self) -> String {
         size_text(self.size)
@@ -715,7 +724,8 @@ pub fn pasted_text(text: &str, n: usize, id: u64) -> Attachment {
 /// blocks (Anthropic's wire does; an OpenAI-shaped one drops them).
 pub fn content_blocks(text: &str, attachments: &[Attachment], documents: bool) -> Value {
     let mut blocks = vec![];
-    for a in attachments {
+    for (i, a) in attachments.iter().enumerate() {
+        let index = i + 1;
         match (a.kind, a.bytes.as_deref()) {
             (Kind::Image(mime), Some(b)) => blocks.push(json!({ "type": "image", "source": { "type": "base64", "media_type": mime, "data": base64(b) } })),
             (Kind::Text, Some(b)) => {
@@ -725,7 +735,7 @@ pub fn content_blocks(text: &str, attachments: &[Attachment], documents: bool) -
             (Kind::Pasted, _) => {
                 let body = a.text.as_deref().unwrap_or_default();
                 blocks.push(json!({ "type": "text", "text": format!(
-                    "<pasted_text name=\"{}\" lines=\"{}\">\n{body}\n</pasted_text>",
+                    "<pasted_text index=\"{index}\" name=\"{}\" lines=\"{}\">\n{body}\n</pasted_text>",
                     a.name,
                     line_count(body)
                 ) }));
@@ -768,6 +778,19 @@ mod tests {
         let mut out = std::io::Cursor::new(Vec::new());
         img.write_to(&mut out, image::ImageFormat::Png).unwrap();
         out.into_inner()
+    }
+
+    /// A chat message attached to the next travels whole, numbered and
+    /// named, so the model can tell which text "the attached reply" means.
+    #[test]
+    fn attached_messages_are_numbered_and_named() {
+        let mut a = pasted_text("Line one\nLine two", 0, 1);
+        a.name = "KodAct's reply".into();
+        assert_eq!(a.badge(), "Reply");
+        let blocks = content_blocks("shorten it", &[pasted_text("x", 1, 2), a], false);
+        let text = blocks[2]["text"].as_str().unwrap();
+        assert!(text.starts_with("<pasted_text index=\"2\" name=\"KodAct's reply\" lines=\"2\">"));
+        assert!(text.contains("Line two"));
     }
 
     #[test]
@@ -986,7 +1009,7 @@ mod tests {
         let blocks = content_blocks("What is this talking about?", &[a.clone()], true);
         let sent = blocks[1]["text"].as_str().unwrap();
         assert!(
-            sent.starts_with("<pasted_text name=\"Pasted text 1\" lines=\"14\">\nLet us now"),
+            sent.starts_with("<pasted_text index=\"1\" name=\"Pasted text 1\" lines=\"14\">\nLet us now"),
             "{sent}"
         );
         assert!(!sent.contains("```"), "never fenced");

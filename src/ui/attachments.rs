@@ -275,7 +275,7 @@ fn tile(
             .text_size(t.text.caption)
             .font_weight(gpui::FontWeight::MEDIUM)
             .text_color(t.colors.text_muted)
-            .child("Pasted")
+            .child(a.badge())
     });
     let pencil = edit.map(|edit| {
         div()

@@ -211,6 +211,20 @@ fn turn_footer(
             )
             .on_click(move |_, _, app| s_copy.update(app, |s, cx| s.copy_turn(chat, end, cx))),
         )
+        .child({
+            let s_attach = cx.state.clone();
+            action_button(
+                format!("attach-turn-{key}").into(),
+                "icons/text-quote.svg",
+                t.colors.text_muted,
+                "Attach to your next message",
+                t,
+            )
+            .on_click(move |_, window, app| {
+                s_attach.update(app, |s, cx| s.attach_turn(chat, end, cx));
+                window.dispatch_action(Box::new(super::FocusComposer), app);
+            })
+        })
         .child(
             action_button(
                 format!("good-{key}").into(),
@@ -670,6 +684,7 @@ fn user(
     let (state, chat, msg) = (cx.state.clone(), cx.chat, cx.index);
     let (state_edit, state_copy) = (state.clone(), state.clone());
     let to_copy = text.to_string();
+    let (to_attach, state_attach) = (to_copy.clone(), state.clone());
     let actions = div()
         .flex()
         .items_center()
@@ -716,6 +731,15 @@ fn user(
                 let key = copy_key.clone();
                 state_copy.update(app, |s, cx| s.mark_copied(key, cx));
             }),
+        )
+        .child(
+            action("attach", "icons/text-quote.svg", t.colors.text_muted)
+                .tooltip(|w, cx| gpui::component::tooltip::Tooltip::new("Attach to your next message").build(w, cx))
+                .on_click(move |_, window, app| {
+                    let text = to_attach.clone();
+                    state_attach.update(app, |s, cx| s.attach_text("Your message".into(), text, cx));
+                    window.dispatch_action(Box::new(super::FocusComposer), app);
+                }),
         );
     div()
         .group(group)

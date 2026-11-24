@@ -8857,6 +8857,35 @@ fix everything under 8, render it again to check, then tell me the scores before
         cx.notify();
     }
 
+    /// A message from the chat, yours or KodAct's, attached to the next one
+    /// as a text card (`name` says whose), so the model reads it whole and
+    /// can be pointed at it ("shorten the attached reply").
+    pub fn attach_text(&mut self, name: String, text: String, cx: &mut Context<Self>) {
+        if text.trim().is_empty() {
+            return self.show_toast("This message has no text to attach.", cx);
+        }
+        if self.attachments.len() >= crate::attach::MAX_FILES {
+            return self.show_toast(
+                format!("A message takes up to {} files.", crate::attach::MAX_FILES),
+                cx,
+            );
+        }
+        self.attachment_seq += 1;
+        let mut a = crate::attach::pasted_text(&text, 0, self.attachment_seq);
+        a.name = name.into();
+        self.attachments.push(a);
+        cx.notify();
+    }
+
+    /// The reply ending at `end`, attached to the next message.
+    pub fn attach_turn(&mut self, chat: usize, end: usize, cx: &mut Context<Self>) {
+        let Some(c) = self.chats.iter().find(|c| c.id == chat) else {
+            return;
+        };
+        let text = turn_text(&c.messages, end);
+        self.attach_text("KodAct's reply".into(), text, cx);
+    }
+
     /// Open an attachment in the box in its editor: a pasted text, or a
     /// picture to draw on.
     pub fn edit_attachment(&mut self, id: u64, cx: &mut Context<Self>) {
