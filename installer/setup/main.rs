@@ -94,6 +94,7 @@ fn run_silent(mode: &Mode, exe: &std::path::Path) -> i32 {
                 path: true,
                 nudges: true,
                 desktop: true,
+                taskbar: true,
             };
             work::install(exe, &c, report);
         }

@@ -24,12 +24,15 @@ use std::sync::Mutex;
 /// The libraries, pinned to the versions the skill's own tests pass with
 /// (`assets/kodact-plugin/skills/office-documents/scripts/test_tools.py`),
 /// and the module each is imported as.
-pub const LIBS: [(&str, &str); 5] = [
+pub const LIBS: [(&str, &str); 6] = [
     ("python-docx==1.2.0", "docx"),
     ("openpyxl==3.1.5", "openpyxl"),
     ("python-pptx==1.0.2", "pptx"),
     ("pypdf==6.17.0", "pypdf"),
     ("reportlab==5.0.1", "reportlab"),
+    // Draws PDF pages as images for `check_tool.py render` where poppler isn't installed
+    // (every Windows PC): what lets a chat look at the slides or pages it made.
+    ("pypdfium2==5.14.0", "pypdfium2"),
 ];
 
 /// Where the document tools stand.
@@ -69,13 +72,17 @@ pub fn ready() -> Option<PathBuf> {
     }
 }
 
-/// What a local KodAct CLI session's environment gains: PATH with the
-/// Python's folder first, and `KODACT_PYTHON`. Nothing until one is ready.
+/// What a local KodAct CLI session's environment gains: `KODACT_SOFFICE`, the
+/// LibreOffice the app found (the installer's own copy is on no PATH, so a
+/// chat can't find it otherwise); then, once the document tools' Python is
+/// ready, PATH with its folder first and `KODACT_PYTHON`.
 pub fn session_env() -> Vec<(String, std::ffi::OsString)> {
+    let soffice = crate::office_render::soffice().map(|p| ("KODACT_SOFFICE".to_string(), p.into_os_string()));
     let Some(python) = ready() else {
-        return vec![];
+        return soffice.into_iter().collect();
     };
     let mut out = vec![("KODACT_PYTHON".to_string(), python.clone().into_os_string())];
+    out.extend(soffice);
     if let Some(dir) = python.parent() {
         let rest = std::env::var_os("PATH").unwrap_or_default();
         let all = std::iter::once(dir.to_path_buf()).chain(std::env::split_paths(&rest));
@@ -340,7 +347,8 @@ mod tests {
         assert_eq!(PathBuf::from(&env[0].1), python);
         let path = &env.iter().find(|(k, _)| k == "PATH").expect("PATH").1;
         assert_eq!(std::env::split_paths(path).next(), Some(dir));
-        assert!(none.is_empty());
+        // Before Python is ready, at most where LibreOffice is.
+        assert!(none.iter().all(|(k, _)| k == "KODACT_SOFFICE"), "{none:?}");
     }
 
     /// The whole set-up, for real: a Python without the libraries, an empty

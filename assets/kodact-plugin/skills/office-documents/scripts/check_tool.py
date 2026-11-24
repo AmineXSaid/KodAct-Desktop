@@ -95,6 +95,11 @@ def validate(path):
 
 
 def _soffice():
+    # KodAct's app names the LibreOffice it found, its installer's own copy included (that one
+    # is on no PATH).
+    named = os.environ.get("KODACT_SOFFICE")
+    if named and os.path.isfile(named):
+        return named
     found = shutil.which("soffice") or shutil.which("libreoffice")
     for p in (r"C:\Program Files\LibreOffice\program\soffice.exe", "/Applications/LibreOffice.app/Contents/MacOS/soffice"):
         if not found and os.path.exists(p):
@@ -118,18 +123,53 @@ def to_pdf(path, tmp):
     return pdf
 
 
+def _pdfium():
+    """pypdfium2 and Pillow, when both import: what draws pages where poppler isn't installed."""
+    try:
+        import pypdfium2  # noqa: F401
+        import PIL  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _draw_with_pdfium(pdf, stem, dpi, pages):
+    """`stem-N.png` for each page (or `pages`, "2-3"), as pdftoppm names them."""
+    import pypdfium2 as pdfium
+
+    doc = pdfium.PdfDocument(pdf)
+    try:
+        n = len(doc)
+        first, last = 1, n
+        if pages:
+            a, _, b = pages.partition("-")
+            first, last = int(a), int(b or a)
+        for i in range(max(first, 1), min(last, n) + 1):
+            page = doc[i - 1]
+            page.render(scale=dpi / 72).to_pil().save(f"{stem}-{i}.png")
+            page.close()
+    finally:
+        doc.close()
+
+
 def render(path, out_dir, dpi=80, pages=None):
-    """PNG images of the pages, `name-1.png`, … in `out_dir`."""
-    if not shutil.which("pdftoppm"):
-        raise SystemExit("render needs pdftoppm (poppler-utils)")
+    """PNG images of the pages, `name-1.png`, … in `out_dir`: drawn by poppler's pdftoppm, or by
+    pypdfium2 (bundled with KodAct's Python) where poppler isn't installed."""
+    poppler = shutil.which("pdftoppm")
+    if not poppler and not _pdfium():
+        raise SystemExit("render needs pdftoppm (poppler-utils), or the Python packages pypdfium2 and Pillow")
     os.makedirs(out_dir, exist_ok=True)
     stem = os.path.join(out_dir, os.path.splitext(os.path.basename(path))[0])
     with tempfile.TemporaryDirectory() as tmp:
-        cmd = ["pdftoppm", "-png", "-r", str(dpi)]
-        if pages:
-            first, _, last = pages.partition("-")
-            cmd += ["-f", first, "-l", last or first]
-        subprocess.run(cmd + [to_pdf(os.path.abspath(path), tmp), stem], check=True, capture_output=True, timeout=120)
+        pdf = to_pdf(os.path.abspath(path), tmp)
+        if poppler:
+            cmd = [poppler, "-png", "-r", str(dpi)]
+            if pages:
+                first, _, last = pages.partition("-")
+                cmd += ["-f", first, "-l", last or first]
+            subprocess.run(cmd + [pdf, stem], check=True, capture_output=True, timeout=120)
+        else:
+            _draw_with_pdfium(pdf, stem, dpi, pages)
     prefix = os.path.basename(stem) + "-"
     return sorted((os.path.join(out_dir, f) for f in os.listdir(out_dir) if f.startswith(prefix) and f.endswith(".png")),
                   key=lambda p: int(p.rsplit("-", 1)[1][:-4]))

@@ -81,6 +81,31 @@ fn font() -> &'static str {
 /// KodAct's ./< mark, `assets/brand/kodact-mark-burgundy.svg` as it is, at twice its size
 /// (`rsvg-convert -w 560 -h 544 assets/brand/kodact-mark-burgundy.svg -o installer/setup/mark.png`).
 const LOGO: &[u8] = include_bytes!("mark.png");
+/// The mark's three pieces, each alone on the same canvas, for the intro: they come together,
+/// then give way to the whole mark (whose shadow falls once, as the SVG draws it).
+const LOGO_DOT: &[u8] = include_bytes!("mark-dot.png");
+const LOGO_SLASH: &[u8] = include_bytes!("mark-slash.png");
+const LOGO_ANGLE: &[u8] = include_bytes!("mark-angle.png");
+
+/// The intro, from the window's first frame: the mark comes together, the name rises, the
+/// right side glides in. Quick: about a second.
+const INTRO: Duration = Duration::from_millis(1150);
+
+/// Where `t` (0 to 1 over the intro) is between `a` and `b`, from 0 to 1.
+fn span(t: f32, a: f32, b: f32) -> f32 {
+    ((t - a) / (b - a)).clamp(0., 1.)
+}
+
+/// Ease out, overshooting a touch, then settling: a piece that lands.
+fn land(x: f32) -> f32 {
+    let (c1, c3) = (1.70158, 2.70158);
+    1. + c3 * (x - 1.).powi(3) + c1 * (x - 1.).powi(2)
+}
+
+/// Ease out, no overshoot.
+fn glide(x: f32) -> f32 {
+    1. - (1. - x).powi(3)
+}
 
 /// The few icons the setup draws (Lucide, ISC licence, from the app's own set).
 struct Icons;
@@ -133,6 +158,7 @@ pub struct Setup {
     path: bool,
     nudges: bool,
     desktop: bool,
+    taskbar: bool,
     version: String,
     /// Bytes each part unpacks to.
     sizes: std::collections::BTreeMap<String, u64>,
@@ -143,6 +169,7 @@ pub struct Setup {
     file: String,
     launch_after: bool,
     logo: Arc<Image>,
+    pieces: [Arc<Image>; 3],
 }
 
 impl Setup {
@@ -181,6 +208,7 @@ impl Setup {
             path: true,
             nudges: true,
             desktop: false,
+            taskbar: true,
             version: manifest.version,
             sizes: manifest.sizes,
             step: 0,
@@ -189,11 +217,23 @@ impl Setup {
             file: String::new(),
             launch_after: true,
             logo: Arc::new(Image::from_bytes(ImageFormat::Png, LOGO.to_vec())),
+            pieces: [LOGO_DOT, LOGO_SLASH, LOGO_ANGLE]
+                .map(|b| Arc::new(Image::from_bytes(ImageFormat::Png, b.to_vec()))),
         };
         if matches!(s.mode, Mode::Uninstall { .. }) {
             s.steps = work::UNINSTALL_STEPS.to_vec();
         }
         s
+    }
+
+    /// The screen's name, so its content glides in each time it changes.
+    fn screen_name(&self) -> &'static str {
+        match self.screen {
+            Screen::Choose => "choose",
+            Screen::Working => "working",
+            Screen::Done(_) => "done",
+            Screen::Failed(_) => "failed",
+        }
     }
 
     fn uninstalling(&self) -> bool {
@@ -227,6 +267,7 @@ impl Setup {
             path: self.path,
             nudges: self.nudges,
             desktop: self.desktop,
+            taskbar: self.taskbar,
         };
         let steps = self.steps.len();
         std::thread::spawn(move || {
@@ -475,7 +516,7 @@ impl Setup {
                 div()
                     .absolute()
                     .left(px(110.))
-                    .top(px(170.))
+                    .top(px(200.))
                     .size(px(120.))
                     .rounded_full()
                     .shadow(vec![BoxShadow {
@@ -484,7 +525,13 @@ impl Setup {
                         blur_radius: px(120.),
                         spread_radius: px(30.),
                         inset: false,
-                    }]),
+                    }])
+                    // Breathing, slowly, for as long as the window is open.
+                    .with_animation(
+                        "glow",
+                        Animation::new(Duration::from_millis(3600)).repeat(),
+                        |el, t| el.opacity(0.7 + 0.3 * (t * std::f32::consts::TAU).cos()),
+                    ),
             )
             .child(
                 div()
@@ -495,26 +542,21 @@ impl Setup {
                     .flex()
                     .flex_col()
                     .items_center()
-                    .pt(px(160.))
-                    .child(
-                        img(self.logo.clone())
-                            .w(px(140.))
-                            .h(px(136.))
-                            .with_animation(
-                                "mark-in",
-                                Animation::new(Duration::from_millis(700))
-                                    .with_easing(gpui::ease_out_quint()),
-                                |el, d| el.opacity(d),
-                            ),
-                    )
+                    .pt(px(190.))
+                    .child(self.mark())
                     .child(
                         div()
+                            .relative()
                             .mt(px(26.))
                             .flex()
                             .text_size(px(40.))
                             .font_weight(FontWeight::SEMIBOLD)
                             .child(div().text_color(Ink::text()).child("Kod"))
-                            .child(div().text_color(Ink::rose()).child("Act")),
+                            .child(div().text_color(Ink::rose()).child("Act"))
+                            .with_animation("name-in", Animation::new(INTRO), |el, t| {
+                                let p = glide(span(t, 0.5, 0.85));
+                                el.top(px(16. * (1. - p))).opacity(p)
+                            }),
                     )
                     .child(
                         div()
@@ -522,7 +564,10 @@ impl Setup {
                             .text_size(px(11.))
                             .font_weight(FontWeight::BOLD)
                             .text_color(Ink::muted())
-                            .child("F R O M   C O D E   T O   I M P A C T"),
+                            .child("F R O M   C O D E   T O   I M P A C T")
+                            .with_animation("tagline-in", Animation::new(INTRO), |el, t| {
+                                el.opacity(span(t, 0.68, 1.))
+                            }),
                     ),
             )
             .child(
@@ -530,13 +575,83 @@ impl Setup {
                     .absolute()
                     .left(px(32.))
                     .right(px(32.))
-                    .bottom(px(28.))
+                    .bottom(px(26.))
                     .flex()
-                    .justify_center()
-                    .text_size(px(12.))
-                    .text_color(Ink::subtle())
-                    .child(version),
+                    .flex_col()
+                    .items_center()
+                    .gap(px(10.))
+                    .child(
+                        div()
+                            .text_size(px(12.))
+                            .text_color(Ink::subtle())
+                            .child(version),
+                    )
+                    // The author's signature: a rose hairline, then the name, signed off.
+                    .child(div().w(px(36.)).h(px(1.)).bg(rgba(0xe0889f80)))
+                    .child(
+                        div()
+                            .flex()
+                            .items_baseline()
+                            .gap(px(6.))
+                            .child(
+                                div()
+                                    .text_size(px(11.))
+                                    .text_color(Ink::muted())
+                                    .child("crafted by"),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(14.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(rgb(0xf0a7b9))
+                                    .child("Mohamed Amine Said"),
+                            ),
+                    )
+                    .with_animation("signature-in", Animation::new(INTRO), |el, t| {
+                        el.opacity(span(t, 0.75, 1.))
+                    }),
             )
+    }
+
+    /// The mark coming together: the dot drops in, the slash slides down, the angle slides in
+    /// from the right, each landing with a touch of overshoot; then the whole mark takes over.
+    fn mark(&self) -> impl IntoElement {
+        let [dot, slash, angle] = self.pieces.clone();
+        // (piece, id, start, end, from x, from y)
+        let moves: [(Arc<Image>, &'static str, f32, f32, f32, f32); 3] = [
+            (dot, "dot", 0.0, 0.38, 0., -46.),
+            (slash, "slash", 0.12, 0.52, 0., -70.),
+            (angle, "angle", 0.26, 0.68, 64., 0.),
+        ];
+        let mut stack = div().relative().w(px(140.)).h(px(136.));
+        for (image, id, a, b, dx, dy) in moves {
+            stack = stack.child(
+                img(image)
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .w(px(140.))
+                    .h(px(136.))
+                    .with_animation(id, Animation::new(INTRO), move |el, t| {
+                        let p = land(span(t, a, b));
+                        let shown = span(t, a, a + 0.12) * (1. - span(t, 0.82, 0.92));
+                        el.left(px(dx * (1. - p)))
+                            .top(px(dy * (1. - p)))
+                            .opacity(shown)
+                    }),
+            );
+        }
+        stack.child(
+            img(self.logo.clone())
+                .absolute()
+                .top_0()
+                .left_0()
+                .w(px(140.))
+                .h(px(136.))
+                .with_animation("mark-whole", Animation::new(INTRO), |el, t| {
+                    el.opacity(span(t, 0.82, 0.92))
+                }),
+        )
     }
 
     /// The strip at the top: drags the window; minimize and close at its end.
@@ -773,6 +888,15 @@ impl Setup {
                 None,
                 self.desktop,
                 |s| s.desktop = !s.desktop,
+                cx,
+            ))
+            .child(self.option(
+                "taskbar",
+                "Pin to taskbar",
+                "KodAct one click away, at the bottom of your screen",
+                None,
+                self.taskbar,
+                |s| s.taskbar = !s.taskbar,
                 cx,
             ));
         div()
@@ -1143,7 +1267,14 @@ impl Render for Setup {
                     .px(px(44.))
                     .pt(px(52.))
                     .pb(px(28.))
-                    .child(body)
+                    .child(div().relative().child(body).with_animation(
+                        SharedString::from(format!("body-{}", self.screen_name())),
+                        Animation::new(Duration::from_millis(520)),
+                        |el, t| {
+                            let p = glide(span(t, 0.1, 1.));
+                            el.top(px(12. * (1. - p))).opacity(p)
+                        },
+                    ))
                     .child(self.footer(cx)),
             )
             .child(self.bar(window))
@@ -1155,7 +1286,7 @@ pub fn run(mode: Mode, exe: PathBuf) {
         .with_assets(Icons)
         .run(move |cx: &mut App| {
             gpui::init(cx);
-            let bounds = Bounds::centered(None, size(px(900.), px(620.)), cx);
+            let bounds = Bounds::centered(None, size(px(900.), px(680.)), cx);
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 titlebar: Some(gpui::TitlebarOptions {

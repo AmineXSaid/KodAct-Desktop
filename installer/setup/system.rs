@@ -195,7 +195,49 @@ pub fn shortcuts(install: &Path, desktop: bool) -> Result<(), String> {
     .map(drop)
 }
 
+/// Where Windows keeps the taskbar's pinned shortcuts for this user.
+fn taskbar_pins() -> Option<std::path::PathBuf> {
+    std::env::var_os("APPDATA").map(|a| {
+        std::path::PathBuf::from(a)
+            .join(r"Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar")
+    })
+}
+
+/// KodAct pinned to the taskbar, if Windows lets setup do it. Since Windows 10 1809 it doesn't
+/// (pinning is the person's to do), so this tries the Start menu shortcut's "pin to taskbar"
+/// verb and then looks for the pin: true only when it is there.
+pub fn pin_to_taskbar() -> bool {
+    if !cfg!(windows) {
+        eprintln!("(setup, not on Windows) pin KodAct to the taskbar");
+        return false;
+    }
+    let _ = run(
+        "powershell",
+        &[
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            "$d=[Environment]::GetFolderPath('Programs');$i=(New-Object -ComObject Shell.Application).Namespace($d).ParseName('KodAct.lnk');\
+             if($i){$v=$i.Verbs()|Where-Object{$_.Name.Replace('&','') -match 'taskbar|barre des t|Taskleiste|barra de tareas'};if($v){$v|ForEach-Object{$_.DoIt()}}else{$i.InvokeVerb('taskbarpin')}}",
+        ],
+    );
+    taskbar_pins().is_some_and(|d| {
+        std::fs::read_dir(d).is_ok_and(|rd| {
+            rd.flatten().any(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .eq_ignore_ascii_case("KodAct.lnk")
+            })
+        })
+    })
+}
+
 fn remove_shortcuts() {
+    if let Some(pin) = taskbar_pins().map(|d| d.join("KodAct.lnk")) {
+        let _ = std::fs::remove_file(pin);
+    }
     let _ = run(
         "powershell",
         &[

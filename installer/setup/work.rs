@@ -14,6 +14,7 @@ pub struct Choices {
     pub path: bool,
     pub nudges: bool,
     pub desktop: bool,
+    pub taskbar: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -122,6 +123,12 @@ fn try_install(exe: &Path, c: &Choices, send: &impl Fn(Report)) -> Result<Vec<St
         .map_err(|e| format!("Couldn't add KodAct to Apps & features: {e}"))?;
     if let Err(e) = system::shortcuts(dir, c.desktop) {
         warnings.push(format!("The Start menu shortcut couldn't be made ({e})."));
+    }
+    if c.taskbar && !system::pin_to_taskbar() {
+        warnings.push(
+            "Windows lets only you pin apps to the taskbar: right-click KodAct in the Start menu, then Pin to taskbar."
+                .into(),
+        );
     }
     if c.path {
         let bin = dir.join("bin");

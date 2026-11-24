@@ -12,7 +12,8 @@ right the first time.
 
 The tools are in `scripts/` (Python 3 with python-docx, openpyxl,
 python-pptx, pypdf and reportlab; LibreOffice for `recalc`, `convert` and
-`render`, poppler's pdftoppm for `render`).
+`render` (`KODACT_SOFFICE` names the one KodAct found, its own copy included);
+for `render`, poppler's pdftoppm or else pypdfium2, which KodAct's Python has).
 Run them as `python <skill-dir>/scripts/<tool>.py …`. Each has `--help`.
 KodAct puts a Python that has these libraries first on PATH, and names it
 in `KODACT_PYTHON`: if `python` is not found or lacks a library, run the

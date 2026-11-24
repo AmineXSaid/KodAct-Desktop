@@ -38,8 +38,8 @@ unzip -q "$zip" -d "$dest"
 printf 'python%s.zip\r\n.\r\nLib\\site-packages\r\nimport site\r\n' "$tag" > "$dest/python$tag._pth"
 
 # The pins, from the one place they are written.
-mapfile -t libs < <(sed -n 's/^ *("\([a-zA-Z0-9_.-]*==[0-9][^"]*\)", "[a-z]*"),$/\1/p' "$here/src/doc_tools.rs")
-[ "${#libs[@]}" -ge 5 ] || { echo "error: no pins found in src/doc_tools.rs" >&2; exit 1; }
+mapfile -t libs < <(sed -n 's/^ *("\([a-zA-Z0-9_.-]*==[0-9][^"]*\)", "[a-z0-9_]*"),$/\1/p' "$here/src/doc_tools.rs")
+[ "${#libs[@]}" -ge 6 ] || { echo "error: no pins found in src/doc_tools.rs" >&2; exit 1; }
 
 python3 -m pip install --quiet --disable-pip-version-check --no-input \
   --target "$dest/Lib/site-packages" \
