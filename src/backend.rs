@@ -1338,6 +1338,48 @@ mod tests {
         lines.iter().flat_map(|l| p.line(&l.to_string())).collect()
     }
 
+    /// A whole session with KodAct CLI's main branch, recorded as this app
+    /// drives it (`scripts/cli_compat/`): every line this app relies on
+    /// still reads as it should. Re-record it after a CLI change.
+    #[test]
+    fn a_session_recorded_from_the_cli_reads_whole() {
+        let lines: Vec<Value> = include_str!("../tests/fixtures/cli/main-session.jsonl")
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
+        let events = parse(&lines);
+        let has = |f: &dyn Fn(&Event) -> bool| events.iter().any(f);
+        // Your message, taken as a turn under its id.
+        assert!(has(&|e| matches!(e, Event::UserAccepted { text, .. } if text == "write notes")));
+        // The task list, and the file asked about, drafted, written.
+        assert!(has(&|e| matches!(e, Event::ToolUse { name, .. } if name == "TodoWrite")));
+        assert!(has(&|e| matches!(e, Event::Ask { tool_name, .. } if tool_name == "Write")));
+        assert!(has(&|e| matches!(e, Event::Drafting { path, content, .. }
+            if path == "notes.md" && content.starts_with("# Notes"))));
+        assert!(has(&|e| matches!(e, Event::ToolResult { is_error: false, .. })));
+        // The reply, the turn's end, the three control answers, /status.
+        let text: String = events
+            .iter()
+            .filter_map(|e| match e {
+                Event::Text(t) => Some(t.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert!(text.contains("I wrote notes.md"), "{text}");
+        assert_eq!(events.iter().filter(|e| matches!(e, Event::TurnEnd { error: None, .. })).count(), 1);
+        let replies: Vec<&String> = events
+            .iter()
+            .filter_map(|e| match e {
+                Event::ControlReply { request_id, result: Ok(_) } => Some(request_id),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(replies, ["forge-req-0", "forge-req-1", "forge-req-2"]);
+        assert!(has(&|e| matches!(e, Event::Immediate { text, is_error: false } if text.starts_with("KodAct"))));
+        assert!(!has(&|e| matches!(e, Event::Error(_))));
+    }
+
     #[test]
     fn a_page_being_written_is_drafted_as_it_streams() {
         let delta = |i: u64, part: &str| json!({"type":"stream_event","parent_tool_use_id":null,"event":{"type":"content_block_delta","index":i,"delta":{"type":"input_json_delta","partial_json":part}}});
