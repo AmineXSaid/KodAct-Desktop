@@ -72,7 +72,10 @@ fn chat_rows(files: &[FileRef], open: Option<&FileRef>, toggles: &HashSet<String
             .unwrap_or_default();
         // The folders the path names, under the project (an absolute path
         // keeps only its last folder).
-        let parent = path.rsplit_once('/').map(|(d, _)| d.to_string()).unwrap_or_default();
+        let parent = path
+            .rsplit_once('/')
+            .map(|(d, _)| d.to_string())
+            .unwrap_or_default();
         let parent = if parent.starts_with('/') || parent.contains(':') {
             parent.rsplit('/').next().unwrap_or("").to_string()
         } else {
@@ -105,7 +108,9 @@ fn chat_rows(files: &[FileRef], open: Option<&FileRef>, toggles: &HashSet<String
         toggles: &HashSet<String>,
         out: &mut Vec<Row>,
     ) {
-        let Some((subs, files)) = dirs.get(dir) else { return };
+        let Some((subs, files)) = dirs.get(dir) else {
+            return;
+        };
         let mut subs = subs.clone();
         subs.sort_by_key(|s| s.to_lowercase());
         for s in subs {
@@ -216,7 +221,14 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
             col = col.child(row(r, &state, t));
         }
     }
-    col = col.child(section("project", &v.project, None, project_shut, &state, t));
+    col = col.child(section(
+        "project",
+        &v.project,
+        None,
+        project_shut,
+        &state,
+        t,
+    ));
     if !project_shut {
         match &v.index {
             None => col = col.child(quiet("Reading the project…", t)),
@@ -310,14 +322,19 @@ fn context_menu(
         }
     }
     let st = state.clone();
-    let menu = menu.on_mouse_down_out(move |_, _, cx| {
-        st.update(cx, |s, cx| s.close_explorer_menu(cx))
-    });
+    let menu =
+        menu.on_mouse_down_out(move |_, _, cx| st.update(cx, |s, cx| s.close_explorer_menu(cx)));
     gpui::deferred(
         gpui::anchored()
             .position(at)
             .snap_to_window_with_margin(px(8.))
-            .child(super::motion::unfold(menu, "explorer-menu", false, false, t)),
+            .child(super::motion::unfold(
+                menu,
+                "explorer-menu",
+                false,
+                false,
+                t,
+            )),
     )
     .with_priority(4)
     .into_any_element()
@@ -374,9 +391,7 @@ fn section(
                 .text_color(t.colors.text_muted)
                 .child(n.to_string())
         }))
-        .on_click(move |_, _, cx| {
-            st.update(cx, |s, cx| s.toggle_ui(section_folded(id), None, cx))
-        })
+        .on_click(move |_, _, cx| st.update(cx, |s, cx| s.toggle_ui(section_folded(id), None, cx)))
         .into_any_element()
 }
 
@@ -509,8 +524,10 @@ mod tests {
             f("notes.md", None),
         ];
         let rows = chat_rows(&files, None, &HashSet::new());
-        let shown: Vec<(usize, &str, bool)> =
-            rows.iter().map(|r| (r.depth, r.name.as_str(), r.folder.is_some())).collect();
+        let shown: Vec<(usize, &str, bool)> = rows
+            .iter()
+            .map(|r| (r.depth, r.name.as_str(), r.folder.is_some()))
+            .collect();
         assert_eq!(
             shown,
             vec![

@@ -1045,6 +1045,15 @@ impl Render for Workspace {
                 cx.defer(move |cx| st.update(cx, |s, cx| s.ensure_completions(cx)));
             }
         }
+        // A deck's shapes, read for its version, to edit on its slides.
+        {
+            let s = self.state.read(cx);
+            let want = s.doc.as_ref().filter(|f| f.office() == Some(crate::office::Kind::Pptx)).map(crate::state::doc_version_key);
+            if want.is_some() && s.deck_shapes.as_ref().map(|(k, ..)| k) != want.as_ref() {
+                let st = self.state.clone();
+                cx.defer(move |cx| st.update(cx, |s, cx| s.ensure_deck_shapes(cx)));
+            }
+        }
         // The title menu's name field opens filled with the file's name.
         {
             let (menu, name) = {
@@ -1112,6 +1121,17 @@ impl Render for Workspace {
                 device: s.web_device,
                 edit_text: s.doc_edit.as_ref().map(|(_, t)| t.clone()),
                 md_mode: s.md_mode(),
+                deck: s
+                    .deck_shapes
+                    .as_ref()
+                    .filter(|(k, ..)| side_doc.as_ref().is_some_and(|f| crate::state::doc_version_key(f) == *k))
+                    .map(|(_, shapes, size)| super::doc_pane::DeckView {
+                        shapes: shapes.clone(),
+                        size: *size,
+                        sel: s.deck_sel,
+                        drag: s.deck_drag.clone(),
+                        fill_menu: s.deck_fill_menu,
+                    }),
                 crumbs: side_doc
                     .as_ref()
                     .and_then(|f| f.path.as_ref())

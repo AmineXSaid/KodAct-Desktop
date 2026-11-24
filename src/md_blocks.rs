@@ -21,7 +21,10 @@ pub enum Kind {
     Table(Vec<Vec<String>>),
     Divider,
     /// A picture on a line of its own: its alt text and where it is.
-    Image { alt: String, src: String },
+    Image {
+        alt: String,
+        src: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -66,9 +69,17 @@ pub fn parse(md: &str) -> Vec<Block> {
             for (k, l) in para.iter().enumerate() {
                 if k > 0 {
                     let prev = para[k - 1];
-                    text.push(if prev.ends_with("  ") || prev.ends_with('\\') { '\n' } else { ' ' });
+                    text.push(if prev.ends_with("  ") || prev.ends_with('\\') {
+                        '\n'
+                    } else {
+                        ' '
+                    });
                 }
-                text.push_str(if k + 1 < para.len() { l.trim_end_matches(' ') } else { l });
+                text.push_str(if k + 1 < para.len() {
+                    l.trim_end_matches(' ')
+                } else {
+                    l
+                });
             }
             out.push(Block::new(Kind::Paragraph, text));
             para.clear();
@@ -87,7 +98,10 @@ pub fn parse(md: &str) -> Vec<Block> {
                 body.push(lines[i]);
                 i += 1;
             }
-            out.push(Block::new(Kind::Code(lang.trim().to_string()), body.join("\n")));
+            out.push(Block::new(
+                Kind::Code(lang.trim().to_string()),
+                body.join("\n"),
+            ));
             i += 1;
             continue;
         }
@@ -323,7 +337,10 @@ mod tests {
         let b = parse(DOC);
         let kinds: Vec<&Kind> = b.iter().map(|b| &b.kind).collect();
         assert_eq!(kinds[0], &Kind::Heading(1));
-        assert_eq!(b[1], Block::new(Kind::Paragraph, "Why we move. It is time."));
+        assert_eq!(
+            b[1],
+            Block::new(Kind::Paragraph, "Why we move. It is time.")
+        );
         assert_eq!(kinds[2], &Kind::Heading(2));
         assert_eq!(b[3], Block::new(Kind::Bullet, "Read the sheet"));
         assert_eq!(kinds[5], &Kind::Numbered);
@@ -372,8 +389,14 @@ mod tests {
 
     #[test]
     fn marks_typed_at_the_start_change_the_block() {
-        assert_eq!(shortcut("# Title"), Some((Kind::Heading(1), "Title".into())));
-        assert_eq!(shortcut("[] task"), Some((Kind::Check(false), "task".into())));
+        assert_eq!(
+            shortcut("# Title"),
+            Some((Kind::Heading(1), "Title".into()))
+        );
+        assert_eq!(
+            shortcut("[] task"),
+            Some((Kind::Check(false), "task".into()))
+        );
         assert_eq!(shortcut("- "), Some((Kind::Bullet, String::new())));
         assert_eq!(shortcut("---"), Some((Kind::Divider, String::new())));
         assert_eq!(shortcut("plain"), None);
@@ -385,12 +408,18 @@ mod tests {
         assert_eq!((s.as_str(), r.clone()), ("make **this** bold", 7..11));
         let (s, r) = toggle_mark(&s, r, "**");
         assert_eq!((s.as_str(), r), ("make this bold", 5..9));
-        assert_eq!(link("see docs", 4..8, "https://x.y").0, "see [docs](https://x.y)");
+        assert_eq!(
+            link("see docs", 4..8, "https://x.y").0,
+            "see [docs](https://x.y)"
+        );
     }
 
     #[test]
     fn the_outline_lists_the_headings() {
         let o = outline(&parse(DOC));
-        assert_eq!(o, vec![(0, 1, "Settings migration".into()), (2, 2, "Steps".into())]);
+        assert_eq!(
+            o,
+            vec![(0, 1, "Settings migration".into()), (2, 2, "Steps".into())]
+        );
     }
 }

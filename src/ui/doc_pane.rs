@@ -81,6 +81,19 @@ pub struct Fit {
     /// Where the file is, as VS Code's breadcrumbs: the project, its
     /// folders, the file (empty when it has no place on disk).
     pub crumbs: Vec<SharedString>,
+    /// A deck's shapes, to pick and move on its slides.
+    pub deck: Option<DeckView>,
+}
+
+/// A deck's shapes as the slides show them, and what is picked or dragged.
+#[derive(Clone)]
+pub struct DeckView {
+    pub shapes: std::sync::Arc<Vec<Vec<crate::pptx_shapes::Shape>>>,
+    /// The slide's size, in EMU.
+    pub size: (i64, i64),
+    pub sel: Option<(usize, u32)>,
+    pub drag: Option<crate::state::ShapeDrag>,
+    pub fill_menu: bool,
 }
 
 /// What this version changed: None while it is worked out, `Some(None)`
@@ -1039,15 +1052,23 @@ pub fn render(
                                 .flex_1()
                                 .min_h_0()
                                 .flex()
+                                .relative()
                                 .children(fit.thumbs.then(|| thumb_rail(d, &fit, state.clone(), t)))
                                 .child(pages_view(
                                     body.bg(t.extra.inset),
                                     d,
                                     &fit,
                                     page_pick,
-                                    state,
+                                    state.clone(),
                                     t,
-                                )),
+                                ))
+                                // Over the slides, so it paints on top.
+                                .children(
+                                    fit.deck
+                                        .as_ref()
+                                        .filter(|_| d.slides)
+                                        .map(|deck| shape_bar(deck, &state, t)),
+                                ),
                             footer(),
                             fit.width,
                             t,
@@ -1540,10 +1561,17 @@ fn pages_view(
                         .border_color(if on { t.colors.primary } else { t.colors.border })
                         .when(on, |d| d.shadow(t.elevation_popover()))
                         .when(d.slides, |d| d.rounded(t.radius.small).overflow_hidden())
+                        .relative()
                         .child(
                             gpui::img(page.image.clone())
                                 .size_full()
                                 .object_fit(gpui::ObjectFit::Contain),
+                        )
+                        .children(
+                            fit.deck
+                                .as_ref()
+                                .filter(|_| d.slides)
+                                .map(|deck| shape_layer(i, w, deck, &state, t)),
                         ),
                 )
                 .child(
@@ -1604,6 +1632,262 @@ fn pages_view(
                     )),
             )
         })
+}
+
+/// A slide's shapes over its picture: each an outline on hover, the picked
+/// one framed with four handles. Drag a shape to move it, a handle to size
+/// it; double-click to edit its words; a click on the slide drops the pick.
+fn shape_layer(
+    slide: usize,
+    width: f32,
+    deck: &DeckView,
+    state: &Entity<AppState>,
+    t: &Theme,
+) -> AnyElement {
+    use crate::state::ShapeDrag;
+    let k = width / deck.size.0.max(1) as f32;
+    let shapes = deck.shapes.get(slide).cloned().unwrap_or_default();
+    let accent = t.extra.accent;
+    let (mv, up, bg) = (state.clone(), state.clone(), state.clone());
+    let mut layer = div()
+        .id(SharedString::from(format!("shapes-{slide}")))
+        .absolute()
+        .inset_0()
+        .on_mouse_move(move |ev, _, cx| {
+            if ev.pressed_button == Some(gpui::MouseButton::Left) {
+                mv.update(cx, |s, cx| s.drag_shape(ev.position, cx));
+            }
+        })
+        .on_mouse_up(gpui::MouseButton::Left, move |_, _, cx| {
+            up.update(cx, |s, cx| s.drop_shape(cx))
+        })
+        .on_mouse_down(gpui::MouseButton::Left, move |_, _, cx| {
+            bg.update(cx, |s, cx| s.pick_shape(None, cx))
+        });
+    for sh in shapes.iter().filter(|s| s.kind != crate::pptx_shapes::Kind::Group) {
+        let picked = deck.sel == Some((slide, sh.id));
+        let dragging = deck.drag.as_ref().filter(|d| d.slide == slide && d.id == sh.id);
+        let (x, y, w, h) = dragging.map_or((sh.x, sh.y, sh.w, sh.h), |d| d.now);
+        let px_of = |v: i64| px(v as f32 * k);
+        let (st, place) = (state.clone(), (sh.x, sh.y, sh.w, sh.h));
+        let id = sh.id;
+        let mut el = div()
+            .id(SharedString::from(format!("shape-{slide}-{id}")))
+            .absolute()
+            .left(px_of(x))
+            .top(px_of(y))
+            .w(px_of(w))
+            .h(px_of(h))
+            .cursor(if picked { gpui::CursorStyle::OpenHand } else { gpui::CursorStyle::PointingHand })
+            .border_1()
+            .border_color(if picked { accent } else { gpui::transparent_black() })
+            .when(dragging.is_some(), |d| d.bg(accent.opacity(0.08)))
+            .when(!picked, |d| d.hover(move |s| s.border_color(accent.opacity(0.55))))
+            .on_mouse_down(gpui::MouseButton::Left, move |ev, _, cx| {
+                cx.stop_propagation();
+                let start = ev.position;
+                let twice = ev.click_count >= 2;
+                st.update(cx, |s, cx| {
+                    if twice {
+                        // Its words, in the deck's Edit text view.
+                        if !s.doc_text {
+                            s.toggle_doc_text(cx);
+                        }
+                        return;
+                    }
+                    s.deck_sel = Some((slide, id));
+                    s.deck_fill_menu = false;
+                    s.deck_drag = Some(ShapeDrag {
+                        slide,
+                        id,
+                        corner: None,
+                        start,
+                        k,
+                        from: place,
+                        now: place,
+                    });
+                    cx.notify();
+                })
+            });
+        if picked {
+            for corner in 0u8..4 {
+                let st = state.clone();
+                let (left, top) = (corner % 2 == 1, corner >= 2);
+                el = el.child(
+                    div()
+                        .id(SharedString::from(format!("handle-{slide}-{id}-{corner}")))
+                        .absolute()
+                        .size(px(8.))
+                        .when(!left, |d| d.left(px(-4.)))
+                        .when(left, |d| d.right(px(-4.)))
+                        .when(!top, |d| d.top(px(-4.)))
+                        .when(top, |d| d.bottom(px(-4.)))
+                        .rounded(px(2.))
+                        .bg(gpui::white())
+                        .border_1()
+                        .border_color(accent)
+                        .cursor(if corner == 0 || corner == 3 {
+                            gpui::CursorStyle::ResizeUpLeftDownRight
+                        } else {
+                            gpui::CursorStyle::ResizeUpRightDownLeft
+                        })
+                        .on_mouse_down(gpui::MouseButton::Left, move |ev, _, cx| {
+                            cx.stop_propagation();
+                            let start = ev.position;
+                            st.update(cx, |s, cx| {
+                                s.deck_drag = Some(ShapeDrag {
+                                    slide,
+                                    id,
+                                    corner: Some(corner),
+                                    start,
+                                    k,
+                                    from: place,
+                                    now: place,
+                                });
+                                cx.notify();
+                            })
+                        }),
+                );
+            }
+        }
+        layer = layer.child(el);
+    }
+    layer.into_any_element()
+}
+
+/// The floating bar over a deck's slides: add a shape or a text box; for
+/// the picked shape, its fill, duplicate, front, back, its words, delete.
+fn shape_bar(deck: &DeckView, state: &Entity<AppState>, t: &Theme) -> AnyElement {
+    use crate::pptx_shapes::{New, ShapeOp, FILLS};
+    use crate::state::DeckEdit;
+    let slide = deck.sel.map(|s| s.0).unwrap_or(0);
+    let picked = deck.sel;
+    let edit = |op: ShapeOp| {
+        let st = state.clone();
+        move |_: &gpui::ClickEvent, _: &mut gpui::Window, cx: &mut gpui::App| {
+            let op = op.clone();
+            st.update(cx, |s, cx| {
+                s.deck_fill_menu = false;
+                s.deck_edit(DeckEdit::Shape { slide, op }, cx)
+            })
+        }
+    };
+    let sep = || div().w(px(1.)).h(px(18.)).mx(px(2.)).bg(t.colors.border);
+    let mut bar = div()
+        .flex()
+        .items_center()
+        .gap(px(2.))
+        .p(px(4.))
+        .rounded(t.radius.pill)
+        .bg(t.colors.surface)
+        .border_1()
+        .border_color(t.colors.border)
+        .shadow(t.elevation_popover())
+        .child(tool_button("shape-rect", "icons/square.svg", "Add a rectangle").on_click(edit(ShapeOp::Add(New::Rectangle))))
+        .child(tool_button("shape-ellipse", "icons/circle.svg", "Add an ellipse").on_click(edit(ShapeOp::Add(New::Ellipse))))
+        .child(tool_button("shape-text", "icons/type.svg", "Add a text box").on_click(edit(ShapeOp::Add(New::TextBox))));
+    let fill_now = picked.and_then(|(sl, id)| deck.shapes.get(sl)?.iter().find(|s| s.id == id)?.fill.clone());
+    if let Some((_, id)) = picked {
+        let (menu_st, words) = (state.clone(), state.clone());
+        let swatch = fill_now
+            .as_deref()
+            .and_then(|h| u32::from_str_radix(h, 16).ok())
+            .map(|v| gpui::Hsla::from(gpui::rgb(v)))
+            .unwrap_or(gpui::transparent_black());
+        bar = bar
+            .child(sep())
+            .child(
+                div()
+                    .id("shape-fill")
+                    .h(px(28.))
+                    .px(t.space.sm)
+                    .flex()
+                    .items_center()
+                    .gap(px(6.))
+                    .rounded(t.radius.pill)
+                    .cursor_pointer()
+                    .text_size(t.text.body_sm)
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(t.colors.text)
+                    .hover(|s| s.bg(t.colors.hover))
+                    .when(deck.fill_menu, |d| d.bg(t.colors.hover))
+                    .child(
+                        div()
+                            .size(px(14.))
+                            .rounded(t.radius.pill)
+                            .border_1()
+                            .border_color(t.colors.border)
+                            .bg(swatch),
+                    )
+                    .child("Fill")
+                    .child(icon("icons/chevron-down.svg", px(12.), t.colors.text_muted))
+                    .on_click(move |_, _, cx| {
+                        menu_st.update(cx, |s, cx| {
+                            s.deck_fill_menu = !s.deck_fill_menu;
+                            cx.notify()
+                        })
+                    }),
+            )
+            .child(tool_button("shape-dup", "icons/copy-plus.svg", "Duplicate").on_click(edit(ShapeOp::Duplicate { id })))
+            .child(tool_button("shape-front", "icons/arrow-up.svg", "Bring to front").on_click(edit(ShapeOp::Front { id })))
+            .child(tool_button("shape-back", "icons/arrow-down.svg", "Send to back").on_click(edit(ShapeOp::Back { id })))
+            .child(
+                tool_button("shape-words", "icons/pencil.svg", "Edit its words (double-click)").on_click(move |_, _, cx| {
+                    words.update(cx, |s, cx| {
+                        if !s.doc_text {
+                            s.toggle_doc_text(cx)
+                        }
+                    })
+                }),
+            )
+            .child(tool_button("shape-del", "icons/trash-2.svg", "Delete").on_click(edit(ShapeOp::Delete { id })));
+    }
+    let menu = (deck.fill_menu && picked.is_some()).then(|| {
+        let id = picked.map(|p| p.1).unwrap_or(0);
+        let mut grid = div().flex().flex_wrap().gap(px(6.)).w(px(6. * 28.));
+        for (name, hex) in FILLS {
+            let v = u32::from_str_radix(hex, 16).unwrap_or(0);
+            let on = fill_now.as_deref().is_some_and(|f| f.eq_ignore_ascii_case(hex));
+            grid = grid.child(
+                div()
+                    .id(SharedString::from(format!("fill-{hex}")))
+                    .size(px(22.))
+                    .rounded(t.radius.pill)
+                    .cursor_pointer()
+                    .bg(gpui::rgb(v))
+                    .border_2()
+                    .border_color(if on { t.colors.text } else { t.colors.border })
+                    .tooltip(move |w, cx| gpui::component::tooltip::Tooltip::new(*name).build(w, cx))
+                    .on_click(edit(ShapeOp::Fill { id, rgb: hex.to_string() })),
+            );
+        }
+        super::motion::unfold(
+            div()
+                .mb(t.space.xs)
+                .p(t.space.sm)
+                .bg(t.colors.surface)
+                .border_1()
+                .border_color(t.colors.border)
+                .rounded(t.radius.card)
+                .shadow(t.elevation_popover())
+                .child(grid),
+            "shape-fill-menu",
+            true,
+            false,
+            t,
+        )
+    });
+    div()
+        .absolute()
+        .bottom(t.space.lg)
+        .left_0()
+        .right_0()
+        .flex()
+        .flex_col()
+        .items_center()
+        .children(menu)
+        .child(bar)
+        .into_any_element()
 }
 
 /// The panel around its header and body: beside the chat, a fixed width

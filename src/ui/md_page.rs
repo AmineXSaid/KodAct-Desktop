@@ -163,10 +163,11 @@ impl MdPage {
                 .submit_on_enter(!code)
                 .default_value(text)
         });
-        self.row_subs
-            .push(cx.subscribe_in(&field, window, |this, field, ev: &InputEvent, window, cx| {
-                this.on_field(field, ev, window, cx)
-            }));
+        self.row_subs.push(cx.subscribe_in(
+            &field,
+            window,
+            |this, field, ev: &InputEvent, window, cx| this.on_field(field, ev, window, cx),
+        ));
         field
     }
 
@@ -180,12 +181,19 @@ impl MdPage {
         };
         Row {
             kind: b.kind.clone(),
-            field: b.is_text().then(|| self.field(&b.kind, &b.text, window, cx)),
+            field: b
+                .is_text()
+                .then(|| self.field(&b.kind, &b.text, window, cx)),
             cells,
         }
     }
 
-    fn cell(&mut self, text: &str, window: &mut Window, cx: &mut Context<Self>) -> Entity<TextareaState> {
+    fn cell(
+        &mut self,
+        text: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<TextareaState> {
         let text = text.to_string();
         let field = cx.new(|cx| {
             TextareaState::new(window, cx)
@@ -193,12 +201,13 @@ impl MdPage {
                 .submit_on_enter(true)
                 .default_value(text)
         });
-        self.row_subs
-            .push(cx.subscribe_in(&field, window, |this, _, ev: &InputEvent, _, cx| {
+        self.row_subs.push(
+            cx.subscribe_in(&field, window, |this, _, ev: &InputEvent, _, cx| {
                 if matches!(ev, InputEvent::Change) {
                     this.changed(cx);
                 }
-            }));
+            }),
+        );
         field
     }
 
@@ -206,7 +215,10 @@ impl MdPage {
     fn open(&mut self, file: &crate::state::FileRef, window: &mut Window, cx: &mut Context<Self>) {
         self.row_subs.clear();
         let mut blocks = md_blocks::parse(&file.content);
-        if blocks.last().is_none_or(|b| !matches!(b.kind, Kind::Paragraph)) {
+        if blocks
+            .last()
+            .is_none_or(|b| !matches!(b.kind, Kind::Paragraph))
+        {
             // Room to type after the last block.
             blocks.push(Block::new(Kind::Paragraph, ""));
         }
@@ -231,12 +243,19 @@ impl MdPage {
                     ),
                     k => k.clone(),
                 };
-                let text = r.field.as_ref().map(|f| f.read(cx).value().to_string()).unwrap_or_default();
+                let text = r
+                    .field
+                    .as_ref()
+                    .map(|f| f.read(cx).value().to_string())
+                    .unwrap_or_default();
                 Block::new(kind, text)
             })
             .collect();
         // The empty paragraph left to type into is not part of the file.
-        while out.last().is_some_and(|b| matches!(b.kind, Kind::Paragraph) && b.text.is_empty()) {
+        while out
+            .last()
+            .is_some_and(|b| matches!(b.kind, Kind::Paragraph) && b.text.is_empty())
+        {
             out.pop();
         }
         out
@@ -260,9 +279,11 @@ impl MdPage {
     }
 
     fn index_of(&self, field: &Entity<TextareaState>) -> Option<usize> {
-        self.rows
-            .iter()
-            .position(|r| r.field.as_ref().is_some_and(|f| f.entity_id() == field.entity_id()))
+        self.rows.iter().position(|r| {
+            r.field
+                .as_ref()
+                .is_some_and(|f| f.entity_id() == field.entity_id())
+        })
     }
 
     fn on_field(
@@ -272,7 +293,9 @@ impl MdPage {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(i) = self.index_of(field) else { return };
+        let Some(i) = self.index_of(field) else {
+            return;
+        };
         match ev {
             InputEvent::Focus => {
                 self.focused = Some(i);
@@ -284,7 +307,11 @@ impl MdPage {
                     let value = field.read(cx).value().to_string();
                     if let Some((kind, rest)) = md_blocks::shortcut(&value) {
                         if kind == Kind::Divider {
-                            self.rows[i] = Row { kind: Kind::Divider, field: None, cells: vec![] };
+                            self.rows[i] = Row {
+                                kind: Kind::Divider,
+                                field: None,
+                                cells: vec![],
+                            };
                             let next = self.row(&Block::new(Kind::Paragraph, ""), window, cx);
                             self.rows.insert(i + 1, next);
                             self.focus_next = Some((i + 1, false));
@@ -304,7 +331,9 @@ impl MdPage {
 
     /// Enter: the words after the caret go on in a new block.
     fn split(&mut self, i: usize, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(field) = self.rows[i].field.clone() else { return };
+        let Some(field) = self.rows[i].field.clone() else {
+            return;
+        };
         let (value, at) = {
             let f = field.read(cx);
             (f.value().to_string(), f.cursor().min(f.value().len()))
@@ -329,7 +358,9 @@ impl MdPage {
     /// Backspace at a block's start: a styled block becomes a paragraph; a
     /// paragraph joins the one above. True when it took the key.
     fn backspace(&mut self, i: usize, window: &mut Window, cx: &mut Context<Self>) -> bool {
-        let Some(field) = self.rows[i].field.clone() else { return false };
+        let Some(field) = self.rows[i].field.clone() else {
+            return false;
+        };
         let (value, at, empty_sel) = {
             let f = field.read(cx);
             let r = f.selected_range();
@@ -374,7 +405,9 @@ impl MdPage {
     /// The block you are in, made `kind`.
     fn set_kind(&mut self, kind: Kind, window: &mut Window, cx: &mut Context<Self>) {
         let i = self.focused.unwrap_or(self.rows.len().saturating_sub(1));
-        let Some(row) = self.rows.get_mut(i) else { return };
+        let Some(row) = self.rows.get_mut(i) else {
+            return;
+        };
         if row.field.is_none() {
             return;
         }
@@ -383,7 +416,11 @@ impl MdPage {
         let is_code = matches!(kind, Kind::Code(_));
         row.kind = kind.clone();
         if was_code != is_code {
-            let text = row.field.as_ref().map(|f| f.read(cx).value().to_string()).unwrap_or_default();
+            let text = row
+                .field
+                .as_ref()
+                .map(|f| f.read(cx).value().to_string())
+                .unwrap_or_default();
             let field = self.field(&kind, &text, window, cx);
             self.rows[i].field = Some(field);
             self.focus_next = Some((i, true));
@@ -440,8 +477,12 @@ impl MdPage {
         });
         let base = self.folder(cx);
         cx.spawn(async move |this, cx| {
-            let Ok(Ok(Some(paths))) = picked.await else { return };
-            let Some(p) = paths.into_iter().next() else { return };
+            let Ok(Ok(Some(paths))) = picked.await else {
+                return;
+            };
+            let Some(p) = paths.into_iter().next() else {
+                return;
+            };
             let src = base
                 .as_ref()
                 .and_then(|b| p.strip_prefix(b).ok())
@@ -464,13 +505,20 @@ impl MdPage {
         let s = self.state.read(cx);
         let path = s.doc.as_ref()?.path.as_ref()?.to_string();
         let p = std::path::PathBuf::from(path);
-        let p = if p.is_absolute() { p } else { s.project_dir.join(p) };
+        let p = if p.is_absolute() {
+            p
+        } else {
+            s.project_dir.join(p)
+        };
         p.parent().map(|d| d.to_path_buf())
     }
 
     /// The checklist button: the block becomes a checklist item, or back.
     fn toggle_check(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let now = self.focused.and_then(|i| self.rows.get(i)).map(|r| r.kind.clone());
+        let now = self
+            .focused
+            .and_then(|i| self.rows.get(i))
+            .map(|r| r.kind.clone());
         let kind = if matches!(now, Some(Kind::Check(_))) {
             Kind::Paragraph
         } else {
@@ -561,12 +609,22 @@ impl MdPage {
         });
     }
 
-    fn add_table_line(&mut self, i: usize, column: bool, window: &mut Window, cx: &mut Context<Self>) {
+    fn add_table_line(
+        &mut self,
+        i: usize,
+        column: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let cols = self.rows[i].cells.iter().map(Vec::len).max().unwrap_or(1);
         if column {
             let n = self.rows[i].cells.len();
             for r in 0..n {
-                let head = if r == 0 { format!("Column {}", cols + 1) } else { String::new() };
+                let head = if r == 0 {
+                    format!("Column {}", cols + 1)
+                } else {
+                    String::new()
+                };
                 let c = self.cell(&head, window, cx);
                 self.rows[i].cells[r].push(c);
             }
@@ -639,7 +697,10 @@ impl Render for MdPage {
             })
             .collect();
 
-        let current = self.focused.and_then(|i| self.rows.get(i)).map(|r| r.kind.clone());
+        let current = self
+            .focused
+            .and_then(|i| self.rows.get(i))
+            .map(|r| r.kind.clone());
         let toolbar = toolbar(&entity, current.as_ref(), menu, &self.link, &t);
 
         div()
@@ -717,10 +778,16 @@ fn block(
                     .justify_center()
                     .rounded(t.radius.small)
                     .border_1()
-                    .border_color(if done { t.colors.text } else { t.colors.text_subtle })
+                    .border_color(if done {
+                        t.colors.text
+                    } else {
+                        t.colors.text_subtle
+                    })
                     .when(done, |d| d.bg(t.colors.text))
                     .cursor_pointer()
-                    .when(done, |d| d.child(icon("icons/check.svg", px(12.), t.colors.surface)))
+                    .when(done, |d| {
+                        d.child(icon("icons/check.svg", px(12.), t.colors.surface))
+                    })
                     .on_click(move |_, _, cx| p.update(cx, |p, cx| p.tick(i, cx)))
                     .into_any_element(),
             ))
@@ -758,7 +825,11 @@ fn block(
                     div()
                         .text_size(t.text.caption)
                         .text_color(t.colors.text_muted)
-                        .child(if alt.is_empty() { src.clone() } else { alt.clone() }),
+                        .child(if alt.is_empty() {
+                            src.clone()
+                        } else {
+                            alt.clone()
+                        }),
                 )
                 .into_any_element()
         }
@@ -777,7 +848,9 @@ fn block(
                     div()
                         .flex()
                         .when(ri > 0, |d| d.border_t_1().border_color(t.colors.border))
-                        .when(ri == 0, |d| d.bg(t.extra.sunk).font_weight(FontWeight::SEMIBOLD))
+                        .when(ri == 0, |d| {
+                            d.bg(t.extra.sunk).font_weight(FontWeight::SEMIBOLD)
+                        })
                         .children((0..cols).map(|ci| {
                             div()
                                 .flex_1()
@@ -820,12 +893,16 @@ fn block(
                     div()
                         .flex()
                         .gap(t.space.xs)
-                        .child(add(format!("md-row-{i}"), "Row").on_click(move |_, window, cx| {
-                            p1.update(cx, |p, cx| p.add_table_line(i, false, window, cx))
-                        }))
-                        .child(add(format!("md-col-{i}"), "Column").on_click(move |_, window, cx| {
-                            p2.update(cx, |p, cx| p.add_table_line(i, true, window, cx))
-                        })),
+                        .child(
+                            add(format!("md-row-{i}"), "Row").on_click(move |_, window, cx| {
+                                p1.update(cx, |p, cx| p.add_table_line(i, false, window, cx))
+                            }),
+                        )
+                        .child(add(format!("md-col-{i}"), "Column").on_click(
+                            move |_, window, cx| {
+                                p2.update(cx, |p, cx| p.add_table_line(i, true, window, cx))
+                            },
+                        )),
                 )
                 .into_any_element()
         }
@@ -841,7 +918,11 @@ fn block(
                 .text_size(size)
                 .font_weight(weight)
                 .line_height(relative(if mono { 1.45 } else { 1.55 }))
-                .text_color(if done { t.colors.text_muted } else { t.colors.text_strong })
+                .text_color(if done {
+                    t.colors.text_muted
+                } else {
+                    t.colors.text_strong
+                })
                 .when(done, |d| d.line_through())
                 .when(mono, |d| d.font_family(t.font_mono.clone()))
                 .child(
@@ -884,7 +965,10 @@ fn block(
                     if took {
                         cx.stop_propagation();
                     }
-                } else if k.modifiers.secondary() && !k.modifiers.shift && (k.key == "b" || k.key == "i") {
+                } else if k.modifiers.secondary()
+                    && !k.modifiers.shift
+                    && (k.key == "b" || k.key == "i")
+                {
                     let mark = if k.key == "b" { "**" } else { "*" };
                     p.update(cx, |p, cx| {
                         p.focused = p.index_of(&f);
@@ -927,85 +1011,92 @@ fn toolbar(
         let st = p.read(cx).state.clone();
         st.update(cx, |s, cx| s.toggle_doc_menu(m, cx));
     };
-    let bar = div()
-        .flex()
-        .items_center()
-        .gap(px(2.))
-        .p(px(4.))
-        .rounded(t.radius.pill)
-        .bg(t.colors.surface)
-        .border_1()
-        .border_color(t.colors.border)
-        .shadow(t.elevation_popover())
-        .child(
+    let bar =
+        div()
+            .flex()
+            .items_center()
+            .gap(px(2.))
+            .p(px(4.))
+            .rounded(t.radius.pill)
+            .bg(t.colors.surface)
+            .border_1()
+            .border_color(t.colors.border)
+            .shadow(t.elevation_popover())
+            .child(
+                div()
+                    .id("md-style")
+                    .h(px(28.))
+                    .px(t.space.sm)
+                    .flex()
+                    .items_center()
+                    .gap(px(4.))
+                    .rounded(t.radius.pill)
+                    .cursor_pointer()
+                    .text_size(t.text.body_sm)
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(t.colors.text)
+                    .hover(|s| s.bg(t.colors.hover))
+                    .when(menu == Some(DocMenu::TextStyle), |d| d.bg(t.colors.hover))
+                    .child(style_label)
+                    .child(icon("icons/chevron-down.svg", px(12.), t.colors.text_muted))
+                    .on_click(move |_, _, cx| open_menu(&p_style, DocMenu::TextStyle, cx)),
+            )
+            .child(sep())
+            .child(
+                tool("md-table", "icons/table.svg", "Table").on_click(move |_, window, cx| {
+                    p_table.update(cx, |p, cx| p.insert_table(window, cx))
+                }),
+            )
+            .child(
+                tool("md-image", "icons/image.svg", "Picture")
+                    .on_click(move |_, _, cx| p_image.update(cx, |p, cx| p.insert_image(cx))),
+            )
+            .child(
+                tool("md-check", "icons/square-check.svg", "Checklist")
+                    .selected(matches!(current, Some(Kind::Check(_))))
+                    .on_click(move |_, window, cx| {
+                        p_check.update(cx, |p, cx| p.toggle_check(window, cx))
+                    }),
+            )
+            .child(tool("md-divider", "icons/minus.svg", "Divider").on_click(
+                move |_, window, cx| p_div.update(cx, |p, cx| p.insert_divider(window, cx)),
+            ))
+            .child(sep())
+            .child(
+                tool("md-more", "icons/ellipsis.svg", "Bold, italic, link, code")
+                    .selected(menu == Some(DocMenu::Format))
+                    .on_click(move |_, _, cx| open_menu(&p_more, DocMenu::Format, cx)),
+            )
+            .child(sep())
+            .child(
+                tool("md-comment", "icons/message-square-plus.svg", "Comment")
+                    .on_click(move |_, _, cx| p_comment.update(cx, |p, cx| p.comment(cx))),
+            );
+
+    let item =
+        |id: String, path: &'static str, label: &'static str, keys: &'static str, on: bool| {
             div()
-                .id("md-style")
-                .h(px(28.))
+                .id(SharedString::from(id))
+                .h(t.size.menu_row)
                 .px(t.space.sm)
                 .flex()
                 .items_center()
-                .gap(px(4.))
-                .rounded(t.radius.pill)
+                .gap(t.space.sm)
+                .rounded(t.radius.small)
                 .cursor_pointer()
                 .text_size(t.text.body_sm)
-                .font_weight(FontWeight::MEDIUM)
                 .text_color(t.colors.text)
-                .hover(|s| s.bg(t.colors.hover))
-                .when(menu == Some(DocMenu::TextStyle), |d| d.bg(t.colors.hover))
-                .child(style_label)
-                .child(icon("icons/chevron-down.svg", px(12.), t.colors.text_muted))
-                .on_click(move |_, _, cx| open_menu(&p_style, DocMenu::TextStyle, cx)),
-        )
-        .child(sep())
-        .child(tool("md-table", "icons/table.svg", "Table").on_click(move |_, window, cx| {
-            p_table.update(cx, |p, cx| p.insert_table(window, cx))
-        }))
-        .child(tool("md-image", "icons/image.svg", "Picture").on_click(move |_, _, cx| {
-            p_image.update(cx, |p, cx| p.insert_image(cx))
-        }))
-        .child(
-            tool("md-check", "icons/square-check.svg", "Checklist")
-                .selected(matches!(current, Some(Kind::Check(_))))
-                .on_click(move |_, window, cx| p_check.update(cx, |p, cx| p.toggle_check(window, cx))),
-        )
-        .child(tool("md-divider", "icons/minus.svg", "Divider").on_click(move |_, window, cx| {
-            p_div.update(cx, |p, cx| p.insert_divider(window, cx))
-        }))
-        .child(sep())
-        .child(
-            tool("md-more", "icons/ellipsis.svg", "Bold, italic, link, code")
-                .selected(menu == Some(DocMenu::Format))
-                .on_click(move |_, _, cx| open_menu(&p_more, DocMenu::Format, cx)),
-        )
-        .child(sep())
-        .child(
-            tool("md-comment", "icons/message-square-plus.svg", "Comment")
-                .on_click(move |_, _, cx| p_comment.update(cx, |p, cx| p.comment(cx))),
-        );
-
-    let item = |id: String, path: &'static str, label: &'static str, keys: &'static str, on: bool| {
-        div()
-            .id(SharedString::from(id))
-            .h(t.size.menu_row)
-            .px(t.space.sm)
-            .flex()
-            .items_center()
-            .gap(t.space.sm)
-            .rounded(t.radius.small)
-            .cursor_pointer()
-            .text_size(t.text.body_sm)
-            .text_color(t.colors.text)
-            .when(on, |d| crate::theme::selected(t, d))
-            .when(!on, |d| d.hover(|s| s.bg(t.colors.hover)))
-            .child(icon(path, t.size.icon_sm, t.colors.text_muted))
-            .child(div().flex_1().child(label))
-            .child(
-                div()
-                    .text_size(t.text.caption)
-                    .text_color(t.colors.text_subtle)
-                    .child(keys),
-            )
-    };
+                .when(on, |d| crate::theme::selected(t, d))
+                .when(!on, |d| d.hover(|s| s.bg(t.colors.hover)))
+                .child(icon(path, t.size.icon_sm, t.colors.text_muted))
+                .child(div().flex_1().child(label))
+                .child(
+                    div()
+                        .text_size(t.text.caption)
+                        .text_color(t.colors.text_subtle)
+                        .child(keys),
+                )
+        };
     let popover = |w: f32| {
         div()
             .w(px(w))
@@ -1025,11 +1116,11 @@ fn toolbar(
             for (k, (name, path)) in STYLES.iter().enumerate() {
                 let p = page.clone();
                 let on = style_label == *name;
-                m = m.child(
-                    item(format!("md-style-{k}"), path, name, "", on).on_click(move |_, window, cx| {
+                m = m.child(item(format!("md-style-{k}"), path, name, "", on).on_click(
+                    move |_, window, cx| {
                         p.update(cx, |p, cx| p.set_kind(style_kind(name), window, cx))
-                    }),
-                );
+                    },
+                ));
             }
             Some(m)
         }
@@ -1037,16 +1128,34 @@ fn toolbar(
             let (pb, pi, pc, pl) = (page.clone(), page.clone(), page.clone(), page.clone());
             Some(
                 popover(240.)
-                    .child(item("md-bold".into(), "icons/bold.svg", "Bold", "Ctrl+B", false).on_click(
-                        move |_, window, cx| pb.update(cx, |p, cx| p.mark("**", window, cx)),
-                    ))
                     .child(
-                        item("md-italic".into(), "icons/italic.svg", "Italic", "Ctrl+I", false)
-                            .on_click(move |_, window, cx| pi.update(cx, |p, cx| p.mark("*", window, cx))),
+                        item("md-bold".into(), "icons/bold.svg", "Bold", "Ctrl+B", false).on_click(
+                            move |_, window, cx| pb.update(cx, |p, cx| p.mark("**", window, cx)),
+                        ),
                     )
                     .child(
-                        item("md-code".into(), "icons/code-xml.svg", "Inline code", "", false)
-                            .on_click(move |_, window, cx| pc.update(cx, |p, cx| p.mark("`", window, cx))),
+                        item(
+                            "md-italic".into(),
+                            "icons/italic.svg",
+                            "Italic",
+                            "Ctrl+I",
+                            false,
+                        )
+                        .on_click(move |_, window, cx| {
+                            pi.update(cx, |p, cx| p.mark("*", window, cx))
+                        }),
+                    )
+                    .child(
+                        item(
+                            "md-code".into(),
+                            "icons/code-xml.svg",
+                            "Inline code",
+                            "",
+                            false,
+                        )
+                        .on_click(move |_, window, cx| {
+                            pc.update(cx, |p, cx| p.mark("`", window, cx))
+                        }),
                     )
                     .child(div().h(px(1.)).my(t.space.xs).bg(t.colors.border))
                     .child(

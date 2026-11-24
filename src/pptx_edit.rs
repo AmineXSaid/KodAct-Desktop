@@ -70,7 +70,11 @@ fn rebuild(
         let opts = zip::write::SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::Deflated);
         for i in 0..archive.len() {
-            let name = archive.by_index(i).map_err(|e| e.to_string())?.name().to_string();
+            let name = archive
+                .by_index(i)
+                .map_err(|e| e.to_string())?
+                .name()
+                .to_string();
             if drop.contains(&name) {
                 continue;
             }
@@ -94,6 +98,16 @@ fn rebuild(
     Ok(out)
 }
 
+/// `bytes` with one part replaced.
+pub(crate) fn replace_part(bytes: &[u8], path: &str, xml: String) -> Result<Vec<u8>, String> {
+    rebuild(
+        bytes,
+        &BTreeMap::from([(path.to_string(), xml)]),
+        &HashSet::new(),
+        &[],
+    )
+}
+
 /// An attribute's value in a tag's text (`<p:sldId id="256" r:id="rId7"/>`).
 fn attr_in(tag: &str, key: &str) -> Option<String> {
     let at = tag.find(&format!(" {key}=\""))? + key.len() + 3;
@@ -108,7 +122,9 @@ fn tags<'a>(xml: &'a str, name: &str) -> Vec<(usize, usize, &'a str)> {
     let mut from = 0;
     while let Some(i) = xml[from..].find(&open) {
         let start = from + i;
-        let Some(len) = xml[start..].find('>') else { break };
+        let Some(len) = xml[start..].find('>') else {
+            break;
+        };
         let end = start + len + 1;
         out.push((start, end, &xml[start..end]));
         from = end;
@@ -121,7 +137,12 @@ fn slide_ids(presentation: &str) -> Vec<(String, u32, usize, usize)> {
     tags(presentation, "p:sldId")
         .into_iter()
         .filter_map(|(s, e, tag)| {
-            Some((attr_in(tag, "r:id")?, attr_in(tag, "id")?.parse().ok()?, s, e))
+            Some((
+                attr_in(tag, "r:id")?,
+                attr_in(tag, "id")?.parse().ok()?,
+                s,
+                e,
+            ))
         })
         .collect()
 }
@@ -237,7 +258,11 @@ fn format_xml(xml: &str, para: usize, f: Format) -> Result<String, String> {
         with_attr(e, k, Some(v))
     };
     let set_ppr = |e: &BytesStart| -> BytesStart<'static> {
-        let (m, i) = if bullets_on { ("342900", "-342900") } else { ("0", "0") };
+        let (m, i) = if bullets_on {
+            ("342900", "-342900")
+        } else {
+            ("0", "0")
+        };
         with_attr(&with_attr(e, "marL", Some(m)), "indent", Some(i))
     };
     let bullet_el = || {
@@ -260,13 +285,15 @@ fn format_xml(xml: &str, para: usize, f: Format) -> Result<String, String> {
         // A paragraph's first child, when it is not its properties: they go
         // in first, with the bullet.
         if need_ppr {
-            let is_ppr = matches!(&ev, Event::Start(e) | Event::Empty(e) if e.name().as_ref() == b"a:pPr");
+            let is_ppr =
+                matches!(&ev, Event::Start(e) | Event::Empty(e) if e.name().as_ref() == b"a:pPr");
             if !is_ppr {
                 need_ppr = false;
                 let ppr = set_ppr(&BytesStart::new("a:pPr"));
                 w.write_event(Event::Start(ppr)).map_err(err)?;
                 w.write_event(Event::Empty(bullet_el())).map_err(err)?;
-                w.write_event(Event::End(BytesEnd::new("a:pPr"))).map_err(err)?;
+                w.write_event(Event::End(BytesEnd::new("a:pPr")))
+                    .map_err(err)?;
             }
         }
         match ev {
@@ -292,7 +319,8 @@ fn format_xml(xml: &str, para: usize, f: Format) -> Result<String, String> {
                 need_ppr = false;
                 w.write_event(Event::Start(set_ppr(&e))).map_err(err)?;
                 w.write_event(Event::Empty(bullet_el())).map_err(err)?;
-                w.write_event(Event::End(BytesEnd::new("a:pPr"))).map_err(err)?;
+                w.write_event(Event::End(BytesEnd::new("a:pPr")))
+                    .map_err(err)?;
             }
             Event::Start(e) if inside && need_ppr && e.name().as_ref() == b"a:pPr" => {
                 need_ppr = false;
@@ -301,7 +329,10 @@ fn format_xml(xml: &str, para: usize, f: Format) -> Result<String, String> {
             }
             Event::Empty(e)
                 if in_ppr
-                    && matches!(e.name().as_ref(), b"a:buChar" | b"a:buNone" | b"a:buAutoNum") => {}
+                    && matches!(
+                        e.name().as_ref(),
+                        b"a:buChar" | b"a:buNone" | b"a:buAutoNum"
+                    ) => {}
             Event::End(e) if in_ppr && e.name().as_ref() == b"a:pPr" => {
                 in_ppr = false;
                 w.write_event(Event::Empty(bullet_el())).map_err(err)?;
@@ -322,7 +353,8 @@ fn format_xml(xml: &str, para: usize, f: Format) -> Result<String, String> {
             }
             Event::Start(e) if pending_run => {
                 pending_run = false;
-                w.write_event(Event::Empty(set_run(&BytesStart::new("a:rPr")))).map_err(err)?;
+                w.write_event(Event::Empty(set_run(&BytesStart::new("a:rPr"))))
+                    .map_err(err)?;
                 w.write_event(Event::Start(e)).map_err(err)?;
             }
             other => w.write_event(other).map_err(err)?,
@@ -357,7 +389,12 @@ pub fn slides(bytes: &[u8], op: SlideOp) -> Result<(Vec<u8>, usize), String> {
             entries.swap(i, to);
             let (start, end) = (ids[0].2, ids[count - 1].3);
             let new = format!("{}{}{}", &pres[..start], entries.join(""), &pres[end..]);
-            let out = rebuild(bytes, &BTreeMap::from([(PRESENTATION.to_string(), new)]), &HashSet::new(), &[])?;
+            let out = rebuild(
+                bytes,
+                &BTreeMap::from([(PRESENTATION.to_string(), new)]),
+                &HashSet::new(),
+                &[],
+            )?;
             Ok((out, to))
         }
         SlideOp::Delete(i) => {
@@ -382,10 +419,13 @@ pub fn slides(bytes: &[u8], op: SlideOp) -> Result<(Vec<u8>, usize), String> {
                 }
             }
             let new_pres = format!("{}{}", &pres[..*s], &pres[*e..]);
-            let new_rels = remove_tag(&pres_rels, "Relationship", |t| attr_in(t, "Id").as_deref() == Some(rid));
+            let new_rels = remove_tag(&pres_rels, "Relationship", |t| {
+                attr_in(t, "Id").as_deref() == Some(rid)
+            });
             let types = part(&mut zip, TYPES).unwrap_or_default();
             let new_types = remove_tag(&types, "Override", |t| {
-                attr_in(t, "PartName").is_some_and(|p| dropped_parts.iter().any(|d| p == format!("/{d}")))
+                attr_in(t, "PartName")
+                    .is_some_and(|p| dropped_parts.iter().any(|d| p == format!("/{d}")))
             });
             let replace = BTreeMap::from([
                 (PRESENTATION.to_string(), new_pres),
@@ -409,7 +449,12 @@ pub fn slides(bytes: &[u8], op: SlideOp) -> Result<(Vec<u8>, usize), String> {
             });
             let number = zip
                 .file_names()
-                .filter_map(|n| n.strip_prefix("ppt/slides/slide")?.strip_suffix(".xml")?.parse::<u32>().ok())
+                .filter_map(|n| {
+                    n.strip_prefix("ppt/slides/slide")?
+                        .strip_suffix(".xml")?
+                        .parse::<u32>()
+                        .ok()
+                })
                 .max()
                 .unwrap_or(0)
                 + 1;
@@ -527,7 +572,10 @@ mod tests {
         let (moved, at) = slides(DECK, SlideOp::Move(1, 1)).unwrap();
         assert_eq!(at, 2);
         let after = words(&moved);
-        assert_eq!((after[1].as_str(), after[2].as_str()), (before[2].as_str(), before[1].as_str()));
+        assert_eq!(
+            (after[1].as_str(), after[2].as_str()),
+            (before[2].as_str(), before[1].as_str())
+        );
 
         let (dup, at) = slides(DECK, SlideOp::Duplicate(1)).unwrap();
         assert_eq!(at, 2);
@@ -548,7 +596,12 @@ mod tests {
     fn a_paragraph_turns_bold_and_back_and_gets_a_bullet() {
         let (bold, ..) = current(&format_xml(SLIDE, 1, Format::Bold).unwrap(), 1);
         assert!(bold);
-        let twice = format_xml(&format_xml(SLIDE, 1, Format::Bold).unwrap(), 1, Format::Bold).unwrap();
+        let twice = format_xml(
+            &format_xml(SLIDE, 1, Format::Bold).unwrap(),
+            1,
+            Format::Bold,
+        )
+        .unwrap();
         assert!(!current(&twice, 1).0);
         let bullet = format_xml(SLIDE, 1, Format::Bullets).unwrap();
         assert!(current(&bullet, 1).2);

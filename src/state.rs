@@ -1081,14 +1081,51 @@ pub enum ExplorerAction {
 }
 
 /// A change to the deck in the panel (`AppState::deck_edit`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum DeckEdit {
+    /// A shape on slide `slide` moved, resized, filled, added…
+    Shape {
+        slide: usize,
+        op: crate::pptx_shapes::ShapeOp,
+    },
     Format {
         slide: usize,
         para: usize,
         format: crate::pptx_edit::Format,
     },
     Slides(crate::pptx_edit::SlideOp),
+}
+
+/// A shape being dragged on a slide: what, how, and where it is now.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ShapeDrag {
+    pub slide: usize,
+    pub id: u32,
+    /// None to move it; a corner (0 top left, 1 top right, 2 bottom left,
+    /// 3 bottom right) to resize it.
+    pub corner: Option<u8>,
+    pub start: gpui::Point<gpui::Pixels>,
+    /// Pixels per EMU on screen.
+    pub k: f32,
+    pub from: (i64, i64, i64, i64),
+    pub now: (i64, i64, i64, i64),
+}
+
+impl ShapeDrag {
+    /// The shape's place for the pointer at `at`.
+    pub fn at(&self, at: gpui::Point<gpui::Pixels>) -> (i64, i64, i64, i64) {
+        let dx = (f32::from(at.x - self.start.x) / self.k) as i64;
+        let dy = (f32::from(at.y - self.start.y) / self.k) as i64;
+        let (x, y, w, h) = self.from;
+        let min = 91_440; // a tenth of an inch
+        match self.corner {
+            None => (x + dx, y + dy, w, h),
+            Some(0) => (x + dx.min(w - min), y + dy.min(h - min), (w - dx).max(min), (h - dy).max(min)),
+            Some(1) => (x, y + dy.min(h - min), (w + dx).max(min), (h - dy).max(min)),
+            Some(2) => (x + dx.min(w - min), y, (w - dx).max(min), (h + dy).max(min)),
+            _ => (x, y, (w + dx).max(min), (h + dy).max(min)),
+        }
+    }
 }
 
 /// How the side panel shows a Markdown file.
@@ -2194,6 +2231,17 @@ pub struct AppState {
     pub explorer_menu: Option<(ExplorerItem, gpui::Point<gpui::Pixels>)>,
     /// The slide the deck editor shows after a change to the deck.
     pub deck_focus: Option<usize>,
+    /// The deck's shapes, slide by slide, for its version, and its size.
+    pub deck_shapes: Option<(
+        SharedString,
+        std::sync::Arc<Vec<Vec<crate::pptx_shapes::Shape>>>,
+        (i64, i64),
+    )>,
+    /// The shape picked on a slide: (slide, id).
+    pub deck_sel: Option<(usize, u32)>,
+    pub deck_drag: Option<ShapeDrag>,
+    /// The shape bar's fill menu is open.
+    pub deck_fill_menu: bool,
     /// The plan version the Plan tab shows (from 0); None, the latest.
     pub plan_version: Option<usize>,
     /// The cells picked in a workbook in the panel (anchor, other end).
@@ -2625,6 +2673,10 @@ impl AppState {
             md_jump: None,
             explorer_menu: None,
             deck_focus: None,
+            deck_shapes: None,
+            deck_sel: None,
+            deck_drag: None,
+            deck_fill_menu: false,
             plan_version: None,
             doc_pick: None,
             doc_show_changes: false,
@@ -5980,6 +6032,7 @@ impl AppState {
         cx.spawn(async move |this, cx| {
             let result = cx
                 .background_spawn(async move {
+                    let mut picked: Option<(usize, Option<u32>)> = None;
                     let typed = crate::office_edit::write_pptx_text(
                         &bytes,
                         &crate::ui::office_editor::pptx_edits(&words),
@@ -5990,6 +6043,12 @@ impl AppState {
                             slide,
                         ),
                         DeckEdit::Slides(op) => crate::pptx_edit::slides(&typed, op)?,
+                        DeckEdit::Shape { slide, op } => {
+                            let out = crate::pptx_shapes::edit(&typed, slide, &op)?;
+                            let sel = crate::pptx_shapes::selected_after(&typed, &out, slide, &op);
+                            picked = Some((slide, sel));
+                            (out, slide)
+                        }
                     };
                     if let Some(p) = disk {
                         if let Some(parent) = p.parent() {
@@ -5997,11 +6056,14 @@ impl AppState {
                         }
                         std::fs::write(&p, &updated).map_err(|e| e.to_string())?;
                     }
-                    Ok::<_, String>((updated, show))
+                    Ok::<_, String>((updated, show, picked))
                 })
                 .await;
             let _ = this.update(cx, |s, cx| match result {
-                Ok((updated, show)) => {
+                Ok((updated, show, picked)) => {
+                    if let Some((slide, sel)) = picked {
+                        s.deck_sel = sel.map(|id| (slide, id));
+                    }
                     let new = FileRef {
                         bytes: Some(std::sync::Arc::from(updated)),
                         ..file.clone()
@@ -6031,6 +6093,70 @@ impl AppState {
             });
         })
         .detach();
+    }
+
+    /// Read the deck's shapes for the version in the panel, once.
+    pub fn ensure_deck_shapes(&mut self, cx: &mut Context<Self>) {
+        let Some(file) = self.doc.clone() else { return };
+        let Some(bytes) = file.bytes.clone() else { return };
+        if file.office() != Some(crate::office::Kind::Pptx) {
+            return;
+        }
+        let key = doc_version_key(&file);
+        if self.deck_shapes.as_ref().is_some_and(|(k, ..)| *k == key) {
+            return;
+        }
+        self.deck_shapes = Some((key.clone(), Default::default(), (12_192_000, 6_858_000)));
+        cx.spawn(async move |this, cx| {
+            let read = cx
+                .background_spawn(async move {
+                    (crate::pptx_shapes::read(&bytes), crate::pptx_shapes::slide_size(&bytes))
+                })
+                .await;
+            let _ = this.update(cx, |s, cx| {
+                if let (Ok(shapes), size) = read {
+                    if s.deck_shapes.as_ref().is_some_and(|(k, ..)| *k == key) {
+                        s.deck_shapes = Some((key, std::sync::Arc::new(shapes), size));
+                        cx.notify();
+                    }
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// Pick a shape on a slide (None: nothing).
+    pub fn pick_shape(&mut self, pick: Option<(usize, u32)>, cx: &mut Context<Self>) {
+        self.deck_sel = pick;
+        self.deck_fill_menu = false;
+        cx.notify();
+    }
+
+    /// The pointer moved while dragging a shape.
+    pub fn drag_shape(&mut self, at: gpui::Point<gpui::Pixels>, cx: &mut Context<Self>) {
+        if let Some(d) = self.deck_drag.as_mut() {
+            let now = d.at(at);
+            if now != d.now {
+                d.now = now;
+                cx.notify();
+            }
+        }
+    }
+
+    /// The drag ended: the shape goes where it was dropped.
+    pub fn drop_shape(&mut self, cx: &mut Context<Self>) {
+        let Some(d) = self.deck_drag.take() else { return };
+        cx.notify();
+        if d.now != d.from {
+            let (x, y, w, h) = d.now;
+            self.deck_edit(
+                DeckEdit::Shape {
+                    slide: d.slide,
+                    op: crate::pptx_shapes::ShapeOp::Place { id: d.id, x, y, w, h },
+                },
+                cx,
+            );
+        }
     }
 
     /// Hold `anchor` for the comment box: the page editor's Comment.
