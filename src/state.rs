@@ -2338,6 +2338,8 @@ pub struct AppState {
     copied_reset: Option<Task<()>>,
     /// A short message at the bottom of the window (stubs say what they would do).
     pub toast: Option<SharedString>,
+    /// The file the toast is about (a download): it offers Open and Show in folder.
+    pub toast_file: Option<std::path::PathBuf>,
     toast_reset: Option<Task<()>>,
     /// The replies being played, by chat. Each keeps going while you look at
     /// another chat; dropping one stops it.
@@ -2786,6 +2788,7 @@ impl AppState {
             dirty: Default::default(),
             save_task: None,
             live: Default::default(),
+            toast_file: None,
             live_task: None,
             live_opened: Default::default(),
             resuming: Default::default(),
@@ -5409,7 +5412,25 @@ impl AppState {
                 format!("{}#{:x}", file.name, crate::office_render::key(&bytes)).into();
             let ready = self.doc_preview.as_ref().is_some_and(|(k, _)| *k == key);
             if !ready {
-                self.doc_preview = None;
+                // A new version of the file on show (a deck growing slide by
+                // slide): its last drawn pages stay up, marked as updating,
+                // until the new ones are drawn, instead of the panel falling
+                // back to text for the seconds the drawing takes.
+                let stale_pages = self.doc_preview.as_ref().and_then(|(k, r)| {
+                    let same_file = k.split_once('#').map(|(n, _)| n) == Some(file.name.as_ref());
+                    match r {
+                        Ok(p) if same_file => match p.as_ref() {
+                            crate::office::Preview::Doc(d) if !d.pages.is_empty() => {
+                                Some((d.pages.clone(), d.total))
+                            }
+                            _ => None,
+                        },
+                        _ => None,
+                    }
+                });
+                if stale_pages.is_none() {
+                    self.doc_preview = None;
+                }
                 let name = file.name.clone();
                 cx.spawn(async move |this, cx| {
                     let (n, b) = (name.to_string(), bytes.clone());
@@ -5417,6 +5438,14 @@ impl AppState {
                         .background_spawn(async move { crate::office::preview(&n, &b) })
                         .await;
                     let drawing = matches!(&read, Ok(crate::office::Preview::Doc(d)) if d.drawing);
+                    let read = read.map(|mut p| {
+                        if let (crate::office::Preview::Doc(d), Some((pages, total))) = (&mut p, stale_pages) {
+                            if d.drawing && d.pages.is_empty() {
+                                (d.pages, d.total) = (pages, total);
+                            }
+                        }
+                        p
+                    });
                     let _ = this.update(cx, |s, cx| {
                         s.doc_preview = Some((key.clone(), read.map(std::sync::Arc::new)));
                         cx.notify();
@@ -5640,15 +5669,13 @@ impl AppState {
                 })
                 .await;
             let _ = this.update(cx, |s, cx| match saved {
-                Ok(path) => s.show_toast(
-                    format!(
-                        "Saved to Downloads as {}",
-                        path.file_name()
-                            .map(|n| n.to_string_lossy().into_owned())
-                            .unwrap_or_default()
-                    ),
-                    cx,
-                ),
+                Ok(path) => {
+                    let name = path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    s.show_file_toast(format!("Saved to Downloads as {name}"), path, cx)
+                }
                 Err(e) => s.show_toast(format!("Could not export it: {e}"), cx),
             });
         })
@@ -10882,13 +10909,51 @@ fix everything under 8, render it again to check, then tell me the scores before
     }
 
     pub fn show_toast(&mut self, text: impl Into<SharedString>, cx: &mut Context<Self>) {
-        self.toast = Some(text.into());
+        self.toast_file = None;
+        self.toast_for(text.into(), Duration::from_millis(2600), cx);
+    }
+
+    /// A toast about a file just saved, with Open and Show in folder: up
+    /// longer, so there is time to reach for them.
+    pub fn show_file_toast(
+        &mut self,
+        text: impl Into<SharedString>,
+        path: std::path::PathBuf,
+        cx: &mut Context<Self>,
+    ) {
+        self.toast_file = Some(path);
+        self.toast_for(text.into(), Duration::from_millis(7000), cx);
+    }
+
+    /// Open the file the toast is about, in its own app (PowerPoint, Word…).
+    pub fn toast_open(&mut self, cx: &mut Context<Self>) {
+        if let Some(p) = self.toast_file.clone() {
+            cx.open_with_system(&p);
+        }
+    }
+
+    /// Show the file the toast is about in Explorer, selected.
+    pub fn toast_reveal(&mut self, cx: &mut Context<Self>) {
+        let Some(p) = self.toast_file.clone() else { return };
+        if cfg!(windows) {
+            let mut arg = std::ffi::OsString::from("/select,");
+            arg.push(p.as_os_str());
+            if std::process::Command::new("explorer").arg(arg).spawn().is_ok() {
+                return;
+            }
+        }
+        if let Some(dir) = p.parent() {
+            cx.open_with_system(dir);
+        }
+    }
+
+    fn toast_for(&mut self, text: SharedString, how_long: Duration, cx: &mut Context<Self>) {
+        self.toast = Some(text);
         self.toast_reset = Some(cx.spawn(async move |this, cx| {
-            cx.background_executor()
-                .timer(Duration::from_millis(2600))
-                .await;
+            cx.background_executor().timer(how_long).await;
             let _ = this.update(cx, |s, cx| {
                 s.toast = None;
+                s.toast_file = None;
                 cx.notify();
             });
         }));

@@ -1071,7 +1071,9 @@ pub fn render(
                                         .as_ref()
                                         .filter(|_| d.slides)
                                         .map(|deck| shape_bar(deck, &state, t)),
-                                ),
+                                )
+                                // The last version's pages, while the new one draws.
+                                .children(d.drawing.then(|| updating_chip(t))),
                             footer(),
                             fit.width,
                             t,
@@ -1938,5 +1940,27 @@ fn finish_at(
             .with_easing(gpui::ease_out_quint()),
             |d, k| d.opacity(k).relative().left(px(16. * (1. - k))),
         )
+        .into_any_element()
+}
+
+/// "Updating…" over pages from the version before, while the new one draws.
+fn updating_chip(t: &Theme) -> AnyElement {
+    div()
+        .absolute()
+        .top(t.space.md)
+        .right(t.space.md)
+        .flex()
+        .items_center()
+        .gap(t.space.xs)
+        .px(t.space.sm)
+        .py(t.space.xs)
+        .rounded(t.radius.button)
+        .bg(t.colors.surface)
+        .border_1()
+        .border_color(t.colors.border)
+        .text_size(t.text.caption)
+        .text_color(t.colors.text_muted)
+        .child(super::icon("icons/refresh-cw.svg", t.size.icon_xs, t.colors.primary))
+        .child("Updating…")
         .into_any_element()
 }

@@ -847,7 +847,29 @@ impl Workspace {
                         .items_center()
                         .gap(t.space.sm)
                         .child(icon("icons/info.svg", t.size.icon_sm, t.colors.text_muted))
-                        .child(text),
+                        .child(text)
+                        // A saved file: open it, or find it.
+                        .children(self.state.read(cx).toast_file.is_some().then(|| {
+                            let (opener, revealer) = (self.state.clone(), self.state.clone());
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(t.space.xs)
+                                .child(
+                                    theme::text_button(&t, "Open")
+                                        .id("toast-open")
+                                        .on_click(move |_, _, cx| {
+                                            opener.update(cx, |s, cx| s.toast_open(cx))
+                                        }),
+                                )
+                                .child(
+                                    theme::text_button(&t, "Show in folder")
+                                        .id("toast-reveal")
+                                        .on_click(move |_, _, cx| {
+                                            revealer.update(cx, |s, cx| s.toast_reveal(cx))
+                                        }),
+                                )
+                        })),
                     &id,
                     leaving,
                     &t,
