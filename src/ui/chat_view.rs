@@ -622,6 +622,7 @@ impl Render for ChatView {
                         busy: s.busy(),
                         last: ix + 1 == chat.messages.len(),
                         open_doc: s.doc.clone(),
+                        writing: s.writing(chat.id),
                         scale: window.scale_factor(),
                         rating: s.ratings.get(&(chat.id, ix)).copied(),
                         newest_turn: !s.busy()

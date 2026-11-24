@@ -77,12 +77,20 @@ pub fn ready() -> Option<PathBuf> {
 /// chat can't find it otherwise); then, once the document tools' Python is
 /// ready, PATH with its folder first and `KODACT_PYTHON`.
 pub fn session_env() -> Vec<(String, std::ffi::OsString)> {
-    let soffice = crate::office_render::soffice().map(|p| ("KODACT_SOFFICE".to_string(), p.into_os_string()));
+    let soffice =
+        crate::office_render::soffice().map(|p| ("KODACT_SOFFICE".to_string(), p.into_os_string()));
+    // How the skill's `render` draws pages: the route the panel uses, so the
+    // model never looks for tools (`office`, `libreoffice` or `none`).
+    let route = (
+        "KODACT_OFFICE_RENDER".to_string(),
+        std::ffi::OsString::from(crate::office_render::route_name()),
+    );
     let Some(python) = ready() else {
-        return soffice.into_iter().collect();
+        return soffice.into_iter().chain([route]).collect();
     };
     let mut out = vec![("KODACT_PYTHON".to_string(), python.clone().into_os_string())];
     out.extend(soffice);
+    out.push(route);
     if let Some(dir) = python.parent() {
         let rest = std::env::var_os("PATH").unwrap_or_default();
         let all = std::iter::once(dir.to_path_buf()).chain(std::env::split_paths(&rest));
@@ -348,7 +356,15 @@ mod tests {
         let path = &env.iter().find(|(k, _)| k == "PATH").expect("PATH").1;
         assert_eq!(std::env::split_paths(path).next(), Some(dir));
         // Before Python is ready, at most where LibreOffice is.
-        assert!(none.iter().all(|(k, _)| k == "KODACT_SOFFICE"), "{none:?}");
+        assert!(
+            none.iter()
+                .all(|(k, _)| k == "KODACT_SOFFICE" || k == "KODACT_OFFICE_RENDER"),
+            "{none:?}"
+        );
+        assert!(
+            none.iter().any(|(k, _)| k == "KODACT_OFFICE_RENDER"),
+            "the render route is always named"
+        );
     }
 
     /// The whole set-up, for real: a Python without the libraries, an empty

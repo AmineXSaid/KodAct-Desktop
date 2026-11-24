@@ -38,6 +38,8 @@ pub struct ItemContext {
     pub last: bool,
     /// The file open beside the chat, so its card shows it is open.
     pub open_doc: Option<crate::state::FileRef>,
+    /// The documents this chat is making now: their cards say "Writing…".
+    pub writing: Vec<String>,
     /// Device pixels per logical pixel, for diagrams drawn to exact size.
     pub scale: f32,
     /// The rating given to the reply this turn end closes.
@@ -760,10 +762,14 @@ fn user(
         )
         .child(
             action("attach", "icons/text-quote.svg", t.colors.text_muted)
-                .tooltip(|w, cx| gpui::component::tooltip::Tooltip::new("Attach to your next message").build(w, cx))
+                .tooltip(|w, cx| {
+                    gpui::component::tooltip::Tooltip::new("Attach to your next message")
+                        .build(w, cx)
+                })
                 .on_click(move |_, window, app| {
                     let text = to_attach.clone();
-                    state_attach.update(app, |s, cx| s.attach_text("Your message".into(), text, cx));
+                    state_attach
+                        .update(app, |s, cx| s.attach_text("Your message".into(), text, cx));
                     window.dispatch_action(Box::new(super::FocusComposer), app);
                 }),
         );
@@ -1085,6 +1091,9 @@ pub(super) fn block(blocks: &[Block], b: usize, cx: &ItemContext, t: &Theme) -> 
                 &key,
                 cx.state.clone(),
                 cx.open_doc.as_ref() == Some(file),
+                file.path
+                    .as_ref()
+                    .is_some_and(|p| cx.writing.iter().any(|w| w == p.as_ref())),
                 cx.scale,
                 Some(view),
                 t,

@@ -1,0 +1,221 @@
+//! Documents being made, watched while the turn runs: a deck KodAct builds
+//! slide by slide shows in the chat from the first command that names it,
+//! and its card and the side panel redraw each time the file settles on disk,
+//! even when the command that changed it (`python build.py`) never names it.
+//!
+//! Polling, not a filesystem watcher: one `metadata` call per file every
+//! [`EVERY`] costs nothing, works the same on every Windows filesystem
+//! (network drives and OneDrive folders included, where change notifications
+//! are unreliable), and needs no new dependency. A change counts once the
+//! file's size and time have held still for one poll, so a deck is never read
+//! half-written; the tools also write beside the file and rename it into
+//! place. Office's own lock files (`~$deck.pptx`) are never watched.
+
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
+
+/// How often a watched file is looked at.
+pub const EVERY: Duration = Duration::from_millis(600);
+
+/// The kinds of file watched: every document the side panel shows as one
+/// (Markdown, Word, Excel, PowerPoint, PDF, an HTML page, an SVG).
+pub fn is_watched(path: &str) -> bool {
+    let name = path.rsplit(['/', '\\']).next().unwrap_or(path);
+    if name.starts_with("~$") || name.ends_with(".part") {
+        return false;
+    }
+    let lower = name.to_ascii_lowercase();
+    [
+        ".pptx",
+        ".docx",
+        ".xlsx",
+        ".pdf",
+        ".md",
+        ".markdown",
+        ".html",
+        ".htm",
+        ".svg",
+    ]
+    .iter()
+    .any(|e| lower.ends_with(e))
+}
+
+/// The documents a command line or a path names (`init deck.pptx`,
+/// `--out=report.docx`, `"C:\\work\\notes.md"`), at most eight.
+pub fn named(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    for word in text.split_whitespace() {
+        let w = word
+            .trim_matches(|c: char| {
+                matches!(c, '"' | '\'' | '`' | '(' | ')' | '[' | ']' | ',' | ';')
+            })
+            .trim_end_matches(['.', ':']);
+        let w = w.rsplit_once('=').map_or(w, |(_, v)| v);
+        if w.len() > 3 && is_watched(w) && !out.iter().any(|o| o == w) {
+            out.push(w.to_string());
+        }
+        if out.len() == 8 {
+            break;
+        }
+    }
+    out
+}
+
+/// What a file looked like at one poll.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Stamp {
+    pub len: u64,
+    pub modified: Option<SystemTime>,
+}
+
+impl Stamp {
+    pub fn of(path: &Path) -> Option<Stamp> {
+        let m = std::fs::metadata(path).ok()?;
+        m.is_file().then(|| Stamp {
+            len: m.len(),
+            modified: m.modified().ok(),
+        })
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+struct Entry {
+    /// The version last shown (None: not shown yet).
+    shown: Option<Stamp>,
+    /// What the last poll saw, waiting to hold still.
+    seen: Option<Stamp>,
+}
+
+/// The files one chat is making.
+#[derive(Clone, Debug, Default)]
+pub struct Watch {
+    files: HashMap<PathBuf, Entry>,
+}
+
+impl Watch {
+    /// Watch `path`; true when it is new to the watch.
+    pub fn add(&mut self, path: PathBuf) -> bool {
+        if !is_watched(&path.to_string_lossy()) || self.files.contains_key(&path) {
+            return false;
+        }
+        self.files.insert(path, Entry::default());
+        true
+    }
+
+    /// A version of `path` was shown (its card was placed some other way):
+    /// the next poll doesn't show it again.
+    pub fn shown(&mut self, path: &Path, stamp: Option<Stamp>) {
+        if let Some(e) = self.files.get_mut(path) {
+            e.shown = stamp;
+            e.seen = stamp;
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.files.is_empty()
+    }
+
+    pub fn paths(&self) -> impl Iterator<Item = &PathBuf> {
+        self.files.keys()
+    }
+
+    /// One poll, with `stamp_of` reading each file: the files whose new
+    /// version has settled (the same as at the last poll, and not shown yet).
+    pub fn poll(&mut self, stamp_of: impl Fn(&Path) -> Option<Stamp>) -> Vec<PathBuf> {
+        let mut ready = vec![];
+        for (path, e) in self.files.iter_mut() {
+            let now = stamp_of(path);
+            if now.is_some() && now == e.seen && now != e.shown {
+                e.shown = now;
+                ready.push(path.clone());
+            }
+            e.seen = now;
+        }
+        ready.sort();
+        ready
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::RefCell;
+
+    fn stamp(len: u64, secs: u64) -> Option<Stamp> {
+        Some(Stamp {
+            len,
+            modified: Some(SystemTime::UNIX_EPOCH + Duration::from_secs(secs)),
+        })
+    }
+
+    #[test]
+    fn office_files_are_watched_but_not_their_lock_files() {
+        assert!(is_watched(r"C:\work\deck.pptx"));
+        assert!(is_watched("out/Report.DOCX"));
+        assert!(is_watched("a.pdf"));
+        assert!(!is_watched(r"C:\work\~$deck.pptx"));
+        assert!(!is_watched("deck.pptx.part"));
+        assert!(is_watched("notes.md"));
+        assert!(is_watched("page.html"));
+        assert!(is_watched("chart.svg"));
+        assert!(
+            !is_watched("build_deck.py"),
+            "a helper script is not a document"
+        );
+    }
+
+    #[test]
+    fn documents_are_found_in_commands() {
+        assert_eq!(
+            named(r#"python pptx_tool.py init "C:\work\deck.pptx" --theme kids"#),
+            [r"C:\work\deck.pptx"]
+        );
+        assert_eq!(
+            named("docx_tool.py create --out=memo.docx --markdown memo.md"),
+            ["memo.docx", "memo.md"]
+        );
+        assert_eq!(named("xlsx_tool.py init budget.xlsx"), ["budget.xlsx"]);
+        assert!(named("python build.py && ls").is_empty());
+    }
+
+    #[test]
+    fn a_change_shows_once_it_holds_still() {
+        let disk = RefCell::new(None);
+        let read = |_: &Path| *disk.borrow();
+        let mut w = Watch::default();
+        assert!(w.add(PathBuf::from("deck.pptx")));
+        assert!(!w.add(PathBuf::from("deck.pptx")), "watched once");
+        assert!(w.poll(read).is_empty(), "not made yet");
+        *disk.borrow_mut() = stamp(10, 1);
+        assert!(w.poll(read).is_empty(), "just appeared: wait one poll");
+        assert_eq!(w.poll(read), [PathBuf::from("deck.pptx")], "settled: shown");
+        assert!(w.poll(read).is_empty(), "shown once");
+        *disk.borrow_mut() = stamp(20, 2);
+        assert!(w.poll(read).is_empty(), "still being written");
+        *disk.borrow_mut() = stamp(30, 3);
+        assert!(w.poll(read).is_empty(), "still being written");
+        assert_eq!(w.poll(read), [PathBuf::from("deck.pptx")], "the new slide");
+    }
+
+    #[test]
+    fn a_version_shown_another_way_is_not_shown_again() {
+        let mut w = Watch::default();
+        w.add(PathBuf::from("deck.pptx"));
+        w.shown(Path::new("deck.pptx"), stamp(10, 1));
+        assert!(w.poll(|_| stamp(10, 1)).is_empty());
+    }
+
+    #[test]
+    fn stamps_read_the_disk() {
+        let dir = std::env::temp_dir().join(format!("kodact-live-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("deck.pptx");
+        let _ = std::fs::remove_file(&p);
+        assert_eq!(Stamp::of(&p), None);
+        std::fs::write(&p, b"abc").unwrap();
+        assert_eq!(Stamp::of(&p).map(|s| s.len), Some(3));
+        assert_eq!(Stamp::of(&dir), None, "a folder is not a file");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

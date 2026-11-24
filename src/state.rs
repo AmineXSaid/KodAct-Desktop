@@ -1120,7 +1120,12 @@ impl ShapeDrag {
         let min = 91_440; // a tenth of an inch
         match self.corner {
             None => (x + dx, y + dy, w, h),
-            Some(0) => (x + dx.min(w - min), y + dy.min(h - min), (w - dx).max(min), (h - dy).max(min)),
+            Some(0) => (
+                x + dx.min(w - min),
+                y + dy.min(h - min),
+                (w - dx).max(min),
+                (h - dy).max(min),
+            ),
             Some(1) => (x, y + dy.min(h - min), (w + dx).max(min), (h - dy).max(min)),
             Some(2) => (x + dx.min(w - min), y, (w - dx).max(min), (h + dy).max(min)),
             _ => (x, y, (w + dx).max(min), (h + dy).max(min)),
@@ -1939,6 +1944,9 @@ pub enum Request {
     SendQueuedNow { chat: usize, uuid: String },
     /// What fills the chat's context, for the Session column.
     ContextUsage { chat: usize },
+    /// A mode switch. Refused, KodAct CLI stays in its mode and says which
+    /// (`system/status`), so the chip follows; this says why.
+    SetMode { mode: ModeId },
 }
 
 /// The queued messages a replayed message of yours carries, taken out of
@@ -2435,6 +2443,12 @@ pub struct AppState {
     /// Chats changed since they were last written, and the pending write.
     dirty: std::collections::HashSet<usize>,
     save_task: Option<Task<()>>,
+    /// Documents each chat is making this turn, watched so their cards and
+    /// the side panel redraw as they change (`live_docs.rs`).
+    pub live: std::collections::HashMap<usize, crate::live_docs::Watch>,
+    live_task: Option<Task<()>>,
+    /// Chats whose first document of the turn already opened the panel.
+    live_opened: std::collections::HashSet<usize>,
     /// Chats whose process is resuming a conversation and hasn't spoken yet:
     /// if it ends first, the conversation couldn't be reopened.
     resuming: std::collections::HashSet<usize>,
@@ -2615,7 +2629,7 @@ impl AppState {
             mode: ModeId::Manual,
             kept_modes: Default::default(),
             default_mode: ModeId::Manual,
-            bypass_allowed: false,
+            bypass_allowed: crate::app_settings::load_window().bypass_allowed,
             browser: crate::browser::enabled(),
             modes_open: false,
             bypass_warning: false,
@@ -2776,6 +2790,9 @@ impl AppState {
             history: crate::history::dir(),
             dirty: Default::default(),
             save_task: None,
+            live: Default::default(),
+            live_task: None,
+            live_opened: Default::default(),
             resuming: Default::default(),
             clock: None,
             generations: 0,
@@ -4528,8 +4545,10 @@ impl AppState {
             self.modes_open = false;
             self.bypass_warning = false;
             self.keep_mode();
-            if let Some(live) = self.current.and_then(|id| self.sessions.get(&id)) {
-                let _ = live.session.set_mode(mode);
+            if let Some(chat) = self.current {
+                if let Some(Ok(id)) = self.sessions.get(&chat).map(|l| l.session.set_mode(mode)) {
+                    self.requests.insert(id, Request::SetMode { mode });
+                }
             }
             // A question already waiting that the new mode allows is
             // answered by it, as if it had been asked now.
@@ -4572,6 +4591,7 @@ impl AppState {
     /// The Bypass warning's "Allow": from now on Bypass is offered.
     pub fn allow_bypass(&mut self, cx: &mut Context<Self>) {
         self.bypass_allowed = true;
+        self.save_window();
         self.set_mode(ModeId::Bypass, cx);
     }
 
@@ -5599,9 +5619,9 @@ impl AppState {
                 return self.show_toast("Only Word, Excel and PowerPoint files export to PDF.", cx)
             }
         }
-        if crate::office_render::soffice().is_none() {
+        if !crate::office_render::can_draw() {
             self.show_toast(
-                "Exporting to PDF needs LibreOffice. Install it, then try again.",
+                "Exporting to PDF needs Microsoft Office or LibreOffice. Install one, then try again.",
                 cx,
             );
             return;
@@ -5861,10 +5881,12 @@ impl AppState {
         if let Some(chat) = self.current {
             if let Some(c) = self.chats.iter_mut().find(|c| c.id == chat) {
                 let card = c.messages.iter_mut().rev().find_map(|m| match m {
-                    Message::Assistant { blocks } => blocks.iter_mut().rev().find_map(|b| match b {
-                        Block::File(f) if crate::doc_versions::same_file(f, &file) => Some(f),
-                        _ => None,
-                    }),
+                    Message::Assistant { blocks } => {
+                        blocks.iter_mut().rev().find_map(|b| match b {
+                            Block::File(f) if crate::doc_versions::same_file(f, &file) => Some(f),
+                            _ => None,
+                        })
+                    }
                     _ => None,
                 });
                 if let Some(f) = card {
@@ -5896,7 +5918,10 @@ impl AppState {
         }
         let ext = file.name.rsplit_once('.').map(|(_, e)| e.to_string());
         if let Some(ext) = ext {
-            if !name.to_ascii_lowercase().ends_with(&format!(".{}", ext.to_ascii_lowercase())) {
+            if !name
+                .to_ascii_lowercase()
+                .ends_with(&format!(".{}", ext.to_ascii_lowercase()))
+            {
                 name = format!("{name}.{ext}");
             }
         }
@@ -5993,12 +6018,16 @@ impl AppState {
 
     /// Do `act` to the right-clicked row.
     pub fn explorer_action(&mut self, act: ExplorerAction, cx: &mut Context<Self>) {
-        let Some((item, _)) = self.explorer_menu.take() else { return };
+        let Some((item, _)) = self.explorer_menu.take() else {
+            return;
+        };
         let (disk, rel) = self.explorer_paths(&item);
         match act {
             ExplorerAction::Open => match &item {
                 ExplorerItem::Chat(f) => self.open_doc(f.clone(), cx),
-                ExplorerItem::Project { rel, dir: false } => self.open_project_file(rel.clone(), cx),
+                ExplorerItem::Project { rel, dir: false } => {
+                    self.open_project_file(rel.clone(), cx)
+                }
                 ExplorerItem::Project { .. } => {}
             },
             ExplorerAction::Download => match &item {
@@ -6018,7 +6047,8 @@ impl AppState {
                         let saved = cx
                             .background_spawn(async move {
                                 let bytes = std::fs::read(&p).map_err(|e| e.to_string())?;
-                                crate::downloads::save(&dir, &name, &bytes).map_err(|e| e.to_string())
+                                crate::downloads::save(&dir, &name, &bytes)
+                                    .map_err(|e| e.to_string())
                             })
                             .await;
                         let _ = this.update(cx, |s, cx| match saved {
@@ -6075,7 +6105,9 @@ impl AppState {
     /// pages are drawn again, showing the slide the change is on.
     pub fn deck_edit(&mut self, edit: DeckEdit, cx: &mut Context<Self>) {
         let Some(file) = self.doc.clone() else { return };
-        let Some(bytes) = file.bytes.clone() else { return };
+        let Some(bytes) = file.bytes.clone() else {
+            return;
+        };
         if file.office() != Some(crate::office::Kind::Pptx) {
             return;
         }
@@ -6090,7 +6122,11 @@ impl AppState {
                         &crate::ui::office_editor::pptx_edits(&words),
                     )?;
                     let (updated, show) = match edit {
-                        DeckEdit::Format { slide, para, format } => (
+                        DeckEdit::Format {
+                            slide,
+                            para,
+                            format,
+                        } => (
                             crate::pptx_edit::format_para(&typed, slide, para, format)?,
                             slide,
                         ),
@@ -6125,7 +6161,11 @@ impl AppState {
                             let card = c.messages.iter_mut().rev().find_map(|m| match m {
                                 Message::Assistant { blocks } => {
                                     blocks.iter_mut().rev().find_map(|b| match b {
-                                        Block::File(f) if crate::doc_versions::same_file(f, &file) => Some(f),
+                                        Block::File(f)
+                                            if crate::doc_versions::same_file(f, &file) =>
+                                        {
+                                            Some(f)
+                                        }
                                         _ => None,
                                     })
                                 }
@@ -6150,7 +6190,9 @@ impl AppState {
     /// Read the deck's shapes for the version in the panel, once.
     pub fn ensure_deck_shapes(&mut self, cx: &mut Context<Self>) {
         let Some(file) = self.doc.clone() else { return };
-        let Some(bytes) = file.bytes.clone() else { return };
+        let Some(bytes) = file.bytes.clone() else {
+            return;
+        };
         if file.office() != Some(crate::office::Kind::Pptx) {
             return;
         }
@@ -6162,7 +6204,10 @@ impl AppState {
         cx.spawn(async move |this, cx| {
             let read = cx
                 .background_spawn(async move {
-                    (crate::pptx_shapes::read(&bytes), crate::pptx_shapes::slide_size(&bytes))
+                    (
+                        crate::pptx_shapes::read(&bytes),
+                        crate::pptx_shapes::slide_size(&bytes),
+                    )
                 })
                 .await;
             let _ = this.update(cx, |s, cx| {
@@ -6197,14 +6242,22 @@ impl AppState {
 
     /// The drag ended: the shape goes where it was dropped.
     pub fn drop_shape(&mut self, cx: &mut Context<Self>) {
-        let Some(d) = self.deck_drag.take() else { return };
+        let Some(d) = self.deck_drag.take() else {
+            return;
+        };
         cx.notify();
         if d.now != d.from {
             let (x, y, w, h) = d.now;
             self.deck_edit(
                 DeckEdit::Shape {
                     slide: d.slide,
-                    op: crate::pptx_shapes::ShapeOp::Place { id: d.id, x, y, w, h },
+                    op: crate::pptx_shapes::ShapeOp::Place {
+                        id: d.id,
+                        x,
+                        y,
+                        w,
+                        h,
+                    },
                 },
                 cx,
             );
@@ -6240,12 +6293,23 @@ impl AppState {
             prompt: Some("Use this KodAct CLI".into()),
         });
         cx.spawn(async move |this, cx| {
-            let Ok(Ok(Some(paths))) = picked.await else { return };
-            let Some(p) = paths.into_iter().next() else { return };
-            let done = cx.background_spawn(async move { crate::engine::install(&p) }).await;
+            let Ok(Ok(Some(paths))) = picked.await else {
+                return;
+            };
+            let Some(p) = paths.into_iter().next() else {
+                return;
+            };
+            let done = cx
+                .background_spawn(async move { crate::engine::install(&p) })
+                .await;
             let _ = this.update(cx, |s, cx| {
                 match done {
-                    Ok(v) => s.show_toast(format!("New chats now run {v}. Running chats keep theirs until they restart."), cx),
+                    Ok(v) => s.show_toast(
+                        format!(
+                            "New chats now run {v}. Running chats keep theirs until they restart."
+                        ),
+                        cx,
+                    ),
                     Err(e) => s.show_toast(format!("Not used: {e}."), cx),
                 }
                 s.refresh_engine(cx);
@@ -6264,7 +6328,11 @@ impl AppState {
     }
 
     /// Hold `anchor` for the comment box: the page editor's Comment.
-    pub fn hold_doc_comment(&mut self, anchor: crate::doc_versions::Anchor, cx: &mut Context<Self>) {
+    pub fn hold_doc_comment(
+        &mut self,
+        anchor: crate::doc_versions::Anchor,
+        cx: &mut Context<Self>,
+    ) {
         self.doc_comment_hold = Some(anchor);
         cx.notify();
     }
@@ -6497,7 +6565,8 @@ impl AppState {
     fn text_draft(&mut self, chat: usize, path: &str, content: &str, cx: &mut Context<Self>) {
         let content: SharedString = content.to_string().into();
         let first = !self.drafts.contains_key(&(chat, path.to_string()));
-        self.drafts.insert((chat, path.to_string()), content.clone());
+        self.drafts
+            .insert((chat, path.to_string()), content.clone());
         // The file's card, as soon as its writing starts, as if it were
         // done: a click opens it beside the chat, filling in live. The
         // finished file then takes the same card's place (`update_card`).
@@ -8944,13 +9013,19 @@ fix everything under 8, render it again to check, then tell me the scores before
                             | "pptx"
                             | "pdf"
                     );
-                    match doc.then(|| file_card(name.clone(), ext.clone(), full.clone(), bytes.clone())) {
+                    match doc
+                        .then(|| file_card(name.clone(), ext.clone(), full.clone(), bytes.clone()))
+                    {
                         Some(Some(file)) => {
                             s.doc = None;
                             s.open_doc(file, cx);
                         }
                         // A picture, or a text or code file, reads in the panel.
-                        _ if matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp") => {
+                        _ if matches!(
+                            ext.as_str(),
+                            "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp"
+                        ) =>
+                        {
                             s.doc = None;
                             s.open_doc(
                                 FileRef {
@@ -9939,6 +10014,12 @@ fix everything under 8, render it again to check, then tell me the scores before
         result: Result<serde_json::Value, String>,
         cx: &mut Context<Self>,
     ) {
+        if let Request::SetMode { mode } = req {
+            if let Err(e) = result {
+                self.show_toast(format!("Couldn't switch to {}: {e}", mode.label()), cx);
+            }
+            return;
+        }
         if let Request::StopAgents { chat, ids } = req {
             return self.on_stop_reply(chat, &ids, result, cx);
         }
@@ -10048,7 +10129,8 @@ fix everything under 8, render it again to check, then tell me the scores before
                 | Request::McpReconnect { .. }
                 | Request::CancelQueued { .. }
                 | Request::SendQueuedNow { .. }
-                | Request::ContextUsage { .. },
+                | Request::ContextUsage { .. }
+                | Request::SetMode { .. },
                 _,
             ) => {}
             (_, Err(e)) => self.show_toast(format!("Couldn't revert: {e}"), cx),
@@ -10764,7 +10846,10 @@ fix everything under 8, render it again to check, then tell me the scores before
         }
         // A plain chat's own folder goes with it (never the shared one, or a
         // folder of yours).
-        if let Some(dir) = self.chat_project_dir(id).filter(|d| d.starts_with(scratch_dir().join("chats"))) {
+        if let Some(dir) = self
+            .chat_project_dir(id)
+            .filter(|d| d.starts_with(scratch_dir().join("chats")))
+        {
             cx.background_spawn(async move {
                 let _ = std::fs::remove_dir_all(dir);
             })
@@ -12527,6 +12612,7 @@ fix everything under 8, render it again to check, then tell me the scores before
                         .insert((chat, id.clone()), SystemTime::now());
                 }
                 self.design_call(chat, &name, &input, cx);
+                self.watch_documents(chat, &name, &input, cx);
                 if let Some(at) =
                     self.push_block(chat, Block::Tool(crate::backend::tool_call(&name, &input)))
                 {
@@ -12983,6 +13069,7 @@ impl AppState {
             panel_share: self.panel_share,
             dark: self.dark,
             theme: self.look.id().into(),
+            bypass_allowed: self.bypass_allowed,
         });
     }
 
@@ -13759,6 +13846,97 @@ impl AppState {
         }
     }
 
+    /// A tool call that names a document (`pptx_tool.py init deck.pptx`, a
+    /// Write of `report.pdf`): watch it for the rest of the turn. Its card
+    /// joins the chat as soon as the file exists, and it redraws each time
+    /// the file settles, whatever command changed it.
+    fn watch_documents(
+        &mut self,
+        chat: usize,
+        name: &str,
+        input: &serde_json::Value,
+        cx: &mut Context<Self>,
+    ) {
+        if self.chat_remote(chat).is_some() {
+            return; // A remote's files come back over the connection (`documents_made`).
+        }
+        let named = match name {
+            "Bash" | "PowerShell" => input["command"].as_str().unwrap_or_default().to_string(),
+            "Write" | "Edit" | "MultiEdit" => {
+                input["file_path"].as_str().unwrap_or_default().to_string()
+            }
+            _ => return,
+        };
+        let mut added = false;
+        for p in crate::live_docs::named(&named) {
+            let full = std::path::PathBuf::from(self.chat_path(chat, &p));
+            added |= self.live.entry(chat).or_default().add(full);
+        }
+        if added {
+            self.ensure_live_loop(cx);
+        }
+    }
+
+    /// The poll that drives every chat's watch, while any chat has one.
+    fn ensure_live_loop(&mut self, cx: &mut Context<Self>) {
+        if self.live_task.is_some() {
+            return;
+        }
+        self.live_task = Some(cx.spawn(async move |this, cx| loop {
+            cx.background_executor()
+                .timer(crate::live_docs::EVERY)
+                .await;
+            let go_on = this
+                .update(cx, |s, cx| {
+                    let chats: Vec<usize> = s.live.keys().copied().collect();
+                    for chat in chats {
+                        s.poll_live(chat, false, cx);
+                    }
+                    if s.live.values().all(|w| w.is_empty()) {
+                        s.live_task = None;
+                        return false;
+                    }
+                    true
+                })
+                .unwrap_or(false);
+            if !go_on {
+                break;
+            }
+        }));
+    }
+
+    /// Show the watched documents of `chat` that changed and settled; with
+    /// `last`, also the ones that changed since the last poll at all.
+    fn poll_live(&mut self, chat: usize, last: bool, cx: &mut Context<Self>) {
+        let Some(w) = self.live.get_mut(&chat) else {
+            return;
+        };
+        let mut ready = w.poll(crate::live_docs::Stamp::of);
+        if last {
+            // The turn is over: nothing more is being written.
+            ready.extend(w.poll(crate::live_docs::Stamp::of));
+        }
+        for path in ready {
+            if let Some(file) = self.written_file(chat, &path.to_string_lossy()) {
+                self.place_card(chat, file, false, cx);
+            }
+        }
+        if !self.live.get(&chat).is_none_or(|w| w.is_empty()) {
+            cx.notify();
+        }
+    }
+
+    /// The paths `chat` is making now, for the "Writing…" on their cards.
+    pub fn writing(&self, chat: usize) -> Vec<String> {
+        if !self.turn_started.contains_key(&chat) {
+            return vec![];
+        }
+        self.live
+            .get(&chat)
+            .map(|w| w.paths().map(|p| p.display().to_string()).collect())
+            .unwrap_or_default()
+    }
+
     /// The documents among `paths` that changed since `since` (a command
     /// made or rewrote them), each read and shown as a card in the reply:
     /// from disk here, over the connection on a remote, so a document made
@@ -13814,6 +13992,27 @@ impl AppState {
     /// the final version. An edit adds a card only for a diagram (Diagram
     /// Design copies its template, then edits it); editing a README doesn't.
     fn place_card(&mut self, chat: usize, file: FileRef, edit: bool, cx: &mut Context<Self>) {
+        if let Some(path) = file
+            .path
+            .as_ref()
+            .map(|p| std::path::PathBuf::from(p.as_ref()))
+        {
+            if let Some(w) = self.live.get_mut(&chat) {
+                w.shown(&path, crate::live_docs::Stamp::of(&path));
+            }
+        }
+        // The turn's first Word, Excel, PowerPoint or PDF file opens beside
+        // the chat, so the person watches it being made; one they closed stays
+        // closed. (Markdown and pages still redraw live; a note the model jots
+        // doesn't take the panel.)
+        if file.office().is_some()
+            && self.current == Some(chat)
+            && self.doc.is_none()
+            && self.turn_started.contains_key(&chat)
+            && self.live_opened.insert(chat)
+        {
+            self.open_doc(file.clone(), cx);
+        }
         self.follow_doc(chat, &file, cx);
         let Some(c) = self.chat_mut(chat) else { return };
         if let Some(file) = c.update_card(file, edit) {
@@ -13849,6 +14048,10 @@ impl AppState {
 
     /// The turn is over: the composer is free again.
     fn finish_turn(&mut self, chat: usize, cx: &mut Context<Self>) {
+        // A last look, so the cards end on the final version, then stop watching.
+        self.poll_live(chat, true, cx);
+        self.live.remove(&chat);
+        self.live_opened.remove(&chat);
         self.touch(chat, cx);
         self.check_memory(chat, cx);
         self.replies.remove(&chat);

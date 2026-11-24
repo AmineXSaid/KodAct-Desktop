@@ -22,8 +22,8 @@ mod context;
 mod design;
 mod design_mcp;
 mod diagnose;
-mod doc_tools;
 mod diagram;
+mod doc_tools;
 mod doc_versions;
 mod doc_zoom;
 mod downloads;
@@ -33,7 +33,6 @@ mod engine;
 mod error_words;
 mod export;
 mod fonts;
-mod i18n;
 mod forge_files;
 mod git_status;
 mod github_knowledge;
@@ -41,19 +40,21 @@ mod greeting;
 mod health;
 mod highlight;
 mod history;
+mod i18n;
 mod knowledge;
-mod mermaid;
+mod live_docs;
 mod md_blocks;
+mod mermaid;
 mod modes;
 mod names;
 mod office;
 mod office_edit;
 mod office_render;
-mod pptx_edit;
-mod pptx_shapes;
 #[cfg(test)]
 mod palette_check;
 mod plugin;
+mod pptx_edit;
+mod pptx_shapes;
 mod profile;
 mod project_ctx;
 mod project_memory;
@@ -65,8 +66,8 @@ mod setting_profiles;
 mod shell_prompt;
 mod skill_install;
 mod stage;
-mod status_words;
 mod state;
+mod status_words;
 mod stubs;
 #[cfg(test)]
 mod system_md;
@@ -208,6 +209,9 @@ fn adopt_forge_env() {
 
 fn main() {
     adopt_forge_env();
+    // Whether Microsoft Office can draw decks for the side panel: asked once,
+    // off the UI thread (it starts PowerShell).
+    office_render::warm();
     // `--browser-mcp <devtools> <focus-file>`: serve the browser tools to a
     // KodAct CLI (`browser_mcp.rs`) instead of opening the window.
     let args: Vec<String> = std::env::args().collect();

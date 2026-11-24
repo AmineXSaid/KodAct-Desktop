@@ -1094,11 +1094,7 @@ impl Render for Sidebar {
 /// icon buttons, each named in its tooltip, so nothing goes out of reach.
 /// A click anywhere on it opens the sidebar again: on its bare strip that
 /// alone, on a button along with what the button does.
-pub fn rail(
-    t: &crate::theme::Theme,
-    screen: Screen,
-    state: &Entity<AppState>,
-) -> impl IntoElement {
+pub fn rail(t: &crate::theme::Theme, screen: Screen, state: &Entity<AppState>) -> impl IntoElement {
     let open = state.clone();
     use super::button::Button;
     let nav = |id: &'static str, path: &'static str, tip: String, on: bool| {

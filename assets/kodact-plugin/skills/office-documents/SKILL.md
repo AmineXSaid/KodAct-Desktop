@@ -6,9 +6,23 @@ license: Proprietary (KodAct)
 
 # Office documents
 
-KodAct shows any .docx, .xlsx, .pptx or .pdf you write as a card in your
-reply, and opens it beside the chat for the person to read. Make those files
-right the first time.
+KodAct shows any .docx, .xlsx, .pptx or .pdf you write as a card in the
+chat **from the first command that names it**, opens it beside the chat, and
+redraws it each time the file changes. So the person watches the file being
+made: create the requested file first, then build it up in place.
+
+**Start with the file they asked for.** For a new deck, your first command is
+`pptx_tool.py init deck.pptx --theme … --title …`: the real .pptx, with its
+title slide, before any plan, outline or helper script. Then `add` slides
+one or a few at a time. Never begin by writing a `.md` outline or a
+build script the person did not ask for.
+
+**Don't look for tools.** KodAct has already found them: `KODACT_PYTHON` is
+the Python with the libraries, and `check_tool.py render` draws pages with
+Microsoft Office (on Windows) or LibreOffice, whichever KodAct found
+(`KODACT_OFFICE_RENDER`). Don't run `which`, `where`, `Get-Command` or pip,
+and don't write your own renderer. If `render` says nothing can draw the
+file, say you couldn't check the layout and go on.
 
 The tools are in `scripts/` (Python 3 with python-docx, openpyxl,
 python-pptx, pypdf and reportlab; LibreOffice for `recalc`, `convert` and
@@ -48,7 +62,9 @@ and look → report.**
 6. **Look at it.** Run `check_tool.py render OUT pages/` and look at the
    images of the pages or slides you changed: text running off a slide, a
    table split across pages, an empty page, a chart with no data. Fix what
-   you see. (No LibreOffice? Say you could not check the layout.)
+   you see. If `render` says nothing here can draw the file, say you could
+   not check the layout; don't hunt for other tools. Delete `pages/` when
+   you are done: the person sees the file itself beside the chat.
 7. **Check by reading back, and say what changed.** `read` the output and
    end with the file name and a short list of the edits, in your own words,
    with the numbers: which cells, which paragraphs, which slides. For
@@ -100,12 +116,34 @@ letters and row numbers, so you can name cells exactly.
 |:--|:--|
 | Read slides and notes | `read deck.pptx` |
 | Name each slide's shapes | `read deck.pptx --shapes` |
-| Build from an outline | `create deck.pptx --outline outline.md` |
+| **Start a new deck (always first)** | `init deck.pptx --theme kids --title "What Is Cancer?" --subtitle "…" --tag "Ages 6-10"` |
+| **Add designed slides** | `add deck.pptx --json '{"layout": "cards", "title": "…", "items": ["…", "…"], "notes": "…"}'` (a JSON list adds several; `@slides.json` reads a file) |
+| Build from an existing outline | `create deck.pptx --outline outline.md` (only when the person gave you one) |
 | Replace text | `replace deck.pptx deck-2.pptx --find "2025" --replace "2026"` |
 | Set one shape's text | `set-text deck.pptx deck-2.pptx --slide 2 --shape "#1" --text "Line one\nLine two"` |
 | Speaker notes | `notes deck.pptx deck-2.pptx --slide 2 --text "Lead with the total."` |
 | Reorder or delete slides | `slides deck.pptx deck-2.pptx --order 1,3,2` (slides left out are deleted) |
 | Duplicate a slide | `duplicate deck.pptx deck-2.pptx --slide 2` (the copy follows it) |
+
+**Designing a deck.** Pick the theme from the audience: `kids` (warm cream,
+bright colours, rounded cards, drawn faces and stars), `clean` (white, one
+blue, for work), `bold` (dark stage, strong colour, for talks). Then choose
+each slide's layout from what it says, and vary them:
+
+| Layout | For | Fields |
+|:--|:--|:--|
+| `cards` | 2-6 points, numbered or marked | `items`, `marks`: number, heart, star, sun |
+| `steps` | a process or a cause and effect (2-4) | `items` as "Head: body", `footer` |
+| `statement` | the one sentence to remember | `statement`, `items`, `art` |
+| `faces` | feelings, reactions (up to 4) | `items` [{"label", "mood"}], `lines` |
+| `bullets` | a short plain list | `items` |
+| `closing` | the last slide | `title`, `items` |
+
+Every slide takes `title`, `icon` (sun, star, heart, cloud, cell, none) and
+`notes` (speaker notes: write them for the person presenting). Moods: happy,
+sad, worried, angry, confused, surprised. Text is sized to fit its box, so
+keep each item to one short sentence. Render once at the end, look at the
+slides, and fix with `set-text`, or `slides` to drop and re-`add`.
 
 In an outline, each `# Title` starts a slide; the first is the title slide
 and the line under it its subtitle; `- ` lines are bullets, two spaces per

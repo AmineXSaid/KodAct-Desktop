@@ -28,7 +28,8 @@ pub struct SheetEditor {
 impl SheetEditor {
     pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("Pick a cell; double-click to edit, or type =formula")
+            InputState::new(window, cx)
+                .placeholder("Pick a cell; double-click to edit, or type =formula")
         });
         let subs = vec![
             cx.observe(&state, |_, _, cx| cx.notify()),
@@ -63,7 +64,12 @@ impl SheetEditor {
             })
             .and_then(|sh| sh.rows.get(r))
             .and_then(|row| row.get(c))
-            .map(|cell| cell.look.formula.clone().unwrap_or_else(|| cell.text.clone()))
+            .map(|cell| {
+                cell.look
+                    .formula
+                    .clone()
+                    .unwrap_or_else(|| cell.text.clone())
+            })
             .unwrap_or_default();
         Some((sheet_idx, r, c, val))
     }
@@ -81,8 +87,8 @@ impl SheetEditor {
         // Confirming a cell without changing it is not an edit: the box holds
         // the cell as shown ("27,500", "€1,172.28"), and writing that back
         // would turn a number into text.
-        let unchanged = Self::current_cell_value(self.state.read(cx))
-            .is_some_and(|(.., shown)| shown == val);
+        let unchanged =
+            Self::current_cell_value(self.state.read(cx)).is_some_and(|(.., shown)| shown == val);
         self.last_cell = Some((si, r, c, val.clone()));
         self.state.update(cx, |s, cx| {
             if !unchanged {
@@ -113,8 +119,7 @@ impl Render for SheetEditor {
                 .as_ref()
                 .map(|(_, _, _, v)| v.clone())
                 .unwrap_or_default();
-            self.input
-                .update(cx, |i, cx| i.set_value(text, window, cx));
+            self.input.update(cx, |i, cx| i.set_value(text, window, cx));
         }
         if focus_seq != self.last_focus_seq {
             self.last_focus_seq = focus_seq;

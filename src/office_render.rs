@@ -1,6 +1,12 @@
-//! Word, PowerPoint and Excel files as they print: LibreOffice turns them
-//! into a PDF, which `office.rs` draws page by page, so the side panel shows
-//! a document's layout, fonts and pictures, and a deck's slides as designed.
+//! Word, PowerPoint and Excel files as they print: Microsoft Office (on
+//! Windows, through COM, by the office-documents skill's `office_to_pdf.ps1`)
+//! or else LibreOffice turns them into a PDF, which `office.rs` draws page by
+//! page, so the side panel shows a document's layout, fonts and pictures, and
+//! a deck's slides as designed. Office comes first: it draws a deck exactly as
+//! the person's PowerPoint will, and most Windows computers have it.
+//!
+//! `KODACT_OFFICE_RENDER` (`office`, `libreoffice` or `none`) picks one, for
+//! tests and for a computer where one of them misbehaves.
 //!
 //! LibreOffice is used when it is on this computer (`KODACT_SOFFICE`, the
 //! copy KodAct's installer puts beside the app, PATH, or where LibreOffice's
@@ -34,7 +40,11 @@ fn find() -> Option<PathBuf> {
             .parent()?
             .join("libreoffice")
             .join("program")
-            .join(if cfg!(windows) { "soffice.exe" } else { "soffice" });
+            .join(if cfg!(windows) {
+                "soffice.exe"
+            } else {
+                "soffice"
+            });
         p.is_file().then_some(p)
     });
     if beside.is_some() {
@@ -69,6 +79,93 @@ fn find() -> Option<PathBuf> {
     })
 }
 
+/// What draws Office files here.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Renderer {
+    /// Microsoft Office, through COM.
+    Office,
+    LibreOffice,
+}
+
+fn forced() -> Option<String> {
+    std::env::var("KODACT_OFFICE_RENDER")
+        .ok()
+        .map(|v| v.to_ascii_lowercase())
+        .filter(|v| !v.is_empty())
+}
+
+/// The skill's helper that asks Office for a PDF.
+fn helper() -> Option<PathBuf> {
+    let p = crate::plugin::dir()?
+        .join("skills")
+        .join("office-documents")
+        .join("scripts")
+        .join("office_to_pdf.ps1");
+    p.is_file().then_some(p)
+}
+
+static OFFICE: OnceLock<bool> = OnceLock::new();
+
+/// Whether Microsoft Office can draw files here: asked once (it starts
+/// PowerShell, so never on the UI thread: [`warm`] asks at launch).
+fn office_blocking() -> bool {
+    *OFFICE.get_or_init(|| {
+        if !cfg!(windows) {
+            return false;
+        }
+        let Some(helper) = helper() else { return false };
+        Command::new("powershell")
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+            .arg(helper)
+            .arg("-Probe")
+            .stdin(Stdio::null())
+            .stderr(Stdio::null())
+            .output()
+            .is_ok_and(|o| o.status.success() && !o.stdout.trim_ascii().is_empty())
+    })
+}
+
+/// Find out at launch, off the UI thread, whether Office is here.
+pub fn warm() {
+    std::thread::spawn(office_blocking);
+}
+
+/// What draws Office files here, as far as is known now (never blocks).
+pub fn renderer() -> Option<Renderer> {
+    choose(
+        forced().as_deref(),
+        OFFICE.get().copied().unwrap_or(false),
+        soffice().is_some(),
+    )
+}
+
+/// The route from what was asked for (`KODACT_OFFICE_RENDER`) and what is
+/// here: Office first, then LibreOffice.
+fn choose(forced: Option<&str>, office: bool, libreoffice: bool) -> Option<Renderer> {
+    match forced {
+        Some("none") => None,
+        Some("libreoffice") => libreoffice.then_some(Renderer::LibreOffice),
+        Some("office" | "powerpoint") => Some(Renderer::Office),
+        _ if office => Some(Renderer::Office),
+        _ => libreoffice.then_some(Renderer::LibreOffice),
+    }
+}
+
+/// Can Office files be drawn as pages here?
+pub fn can_draw() -> bool {
+    renderer().is_some()
+}
+
+/// For a chat's KodAct CLI: `KODACT_OFFICE_RENDER`, so the skill's renderer
+/// uses the same route and the model never looks for tools.
+pub fn route_name() -> &'static str {
+    match renderer() {
+        Some(Renderer::Office) => "office",
+        Some(Renderer::LibreOffice) => "libreoffice",
+        None => "none",
+    }
+}
+
 /// Where rendered files are kept.
 fn cache_dir() -> PathBuf {
     std::env::temp_dir().join("forge-previews")
@@ -83,7 +180,24 @@ pub fn key(bytes: &[u8]) -> u64 {
 
 /// `name` (whose extension says what it is) as a PDF.
 pub fn to_pdf(name: &str, bytes: &[u8]) -> Result<Vec<u8>, String> {
-    let program = soffice().ok_or("LibreOffice is not installed")?;
+    let forced = forced();
+    let use_office = match forced.as_deref() {
+        Some("none") => {
+            return Err("drawing Office files is turned off (KODACT_OFFICE_RENDER)".into())
+        }
+        Some("libreoffice") => false,
+        Some("office" | "powerpoint") => true,
+        _ => office_blocking(),
+    };
+    if use_office {
+        match office_pdf(name, bytes) {
+            Ok(pdf) => return Ok(pdf),
+            // Office is missing that app (Excel, say), or failed: LibreOffice may still draw it.
+            Err(e) if soffice().is_none() || forced.is_some() => return Err(e),
+            Err(_) => {}
+        }
+    }
+    let program = soffice().ok_or("neither Microsoft Office nor LibreOffice is installed")?;
     let ext = name
         .rsplit_once('.')
         .map(|(_, e)| e.to_ascii_lowercase())
@@ -111,6 +225,71 @@ pub fn to_pdf(name: &str, bytes: &[u8]) -> Result<Vec<u8>, String> {
     }
     let _ = std::fs::remove_dir_all(&job);
     result
+}
+
+/// `name` as a PDF drawn by Microsoft Office. The bytes are copied into
+/// KodAct's temp folder first: a deck still open in PowerPoint, or being
+/// rewritten, is never touched.
+fn office_pdf(name: &str, bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let helper = helper().ok_or("the office-documents helper is missing")?;
+    let ext = extension(name)?;
+    let dir = cache_dir();
+    let id = format!("{:016x}-{ext}", key(bytes));
+    let done = dir.join(format!("{id}.office.pdf"));
+    if let Ok(pdf) = std::fs::read(&done) {
+        return Ok(pdf);
+    }
+    // One Office export at a time: COM apps are single instances.
+    static ONE: Mutex<()> = Mutex::new(());
+    let _turn = ONE.lock().unwrap_or_else(|e| e.into_inner());
+    let job = dir.join(format!("{id}-office"));
+    std::fs::create_dir_all(&job).map_err(|e| e.to_string())?;
+    let input = job.join(format!("file.{ext}"));
+    std::fs::write(&input, bytes).map_err(|e| e.to_string())?;
+    let out = job.join("file.pdf");
+    let mut cmd = Command::new("powershell");
+    cmd.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+        .arg(&helper)
+        .arg(&input)
+        .arg(&out);
+    let result = wait(cmd, "Microsoft Office")
+        .and_then(|()| std::fs::read(&out).map_err(|_| "Office made no PDF".to_string()));
+    if let Ok(pdf) = &result {
+        let _ = std::fs::write(&done, pdf);
+    }
+    let _ = std::fs::remove_dir_all(&job);
+    result
+}
+
+fn extension(name: &str) -> Result<String, String> {
+    name.rsplit_once('.')
+        .map(|(_, e)| e.to_ascii_lowercase())
+        .filter(|e| e.chars().all(|c| c.is_ascii_alphanumeric()))
+        .ok_or_else(|| "the file has no type".to_string())
+}
+
+/// Run `cmd` to its end, or stop it after [`TIME_LIMIT`].
+fn wait(mut cmd: Command, who: &str) -> Result<(), String> {
+    let mut child = cmd
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| format!("{who} did not start: {e}"))?;
+    let start = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) if status.success() => return Ok(()),
+            Ok(Some(status)) => return Err(format!("{who} stopped ({status})")),
+            Ok(None) if start.elapsed() > TIME_LIMIT => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("{who} took too long"));
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(100)),
+            Err(e) => return Err(e.to_string()),
+        }
+    }
 }
 
 fn run(program: &Path, input: &Path, out: &Path) -> Result<(), String> {
@@ -164,6 +343,21 @@ mod tests {
     fn profile_urls_are_file_urls() {
         assert_eq!(url(Path::new("/tmp/a b")), "file:///tmp/a%20b");
         assert_eq!(url(Path::new("C:\\Users\\me")), "file:///C:/Users/me");
+    }
+
+    #[test]
+    fn office_comes_first_and_the_route_can_be_named() {
+        use Renderer::*;
+        assert_eq!(choose(None, true, true), Some(Office));
+        assert_eq!(choose(None, false, true), Some(LibreOffice));
+        assert_eq!(choose(None, false, false), None);
+        assert_eq!(choose(Some("libreoffice"), true, true), Some(LibreOffice));
+        assert_eq!(choose(Some("libreoffice"), true, false), None);
+        assert_eq!(choose(Some("none"), true, true), None);
+        assert_eq!(choose(Some("office"), false, false), Some(Office));
+        if !cfg!(windows) {
+            assert!(!office_blocking(), "Office is only asked for on Windows");
+        }
     }
 
     #[test]

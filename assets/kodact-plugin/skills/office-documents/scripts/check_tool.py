@@ -107,13 +107,68 @@ def _soffice():
     return found
 
 
+HELPER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "office_to_pdf.ps1")
+
+
+def _office_route():
+    """How Office files become PDFs here: `office` (Microsoft Office through COM,
+    on Windows), `libreoffice`, or None. KodAct's app names the one it found in
+    KODACT_OFFICE_RENDER (powerpoint|libreoffice|none), so nothing is searched for."""
+    named = (os.environ.get("KODACT_OFFICE_RENDER") or "").lower()
+    if named in ("powerpoint", "office", "word", "excel"):
+        return "office"
+    if named == "libreoffice":
+        return "libreoffice" if _soffice() else None
+    if named == "none":
+        return None
+    if os.name == "nt" and os.path.exists(HELPER) and _office_probe():
+        return "office"
+    return "libreoffice" if _soffice() else None
+
+
+def _powershell():
+    return shutil.which("powershell") or shutil.which("pwsh")
+
+
+def _office_probe():
+    ps = _powershell()
+    if not ps:
+        return False
+    r = subprocess.run([ps, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", HELPER, "-Probe"],
+                       capture_output=True, text=True, timeout=30)
+    return r.returncode == 0 and bool(r.stdout.strip())
+
+
+def _office_to_pdf(path, tmp):
+    """Microsoft Office draws the file into a PDF (office_to_pdf.ps1)."""
+    ps = _powershell()
+    if not ps:
+        raise SystemExit("render: PowerShell is missing, so Office can't be asked to draw the file")
+    pdf = os.path.join(tmp, os.path.splitext(os.path.basename(path))[0] + ".pdf")
+    r = subprocess.run([ps, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", HELPER, path, pdf],
+                       capture_output=True, text=True, timeout=120)
+    if r.returncode == 3:
+        return None
+    if r.returncode != 0 or not os.path.exists(pdf):
+        raise SystemExit(f"Office could not draw it: {r.stderr.strip() or 'exit ' + str(r.returncode)}")
+    return pdf
+
+
 def to_pdf(path, tmp):
-    """The file as a PDF in `tmp` (itself, if it is one)."""
+    """The file as a PDF in `tmp` (itself, if it is one): Microsoft Office on
+    Windows when it is installed, else LibreOffice."""
     if path.lower().endswith(".pdf"):
         return path
-    soffice = _soffice()
+    route = _office_route()
+    if route == "office":
+        pdf = _office_to_pdf(path, tmp)
+        if pdf:
+            return pdf
+        route = "libreoffice" if _soffice() else None
+    soffice = _soffice() if route == "libreoffice" else None
     if not soffice:
-        raise SystemExit("render needs LibreOffice (soffice) for Office files")
+        raise SystemExit("render: no Microsoft Office or LibreOffice here to draw Office files. "
+                         "Say you could not check the layout; don't look for other tools.")
     profile = "file://" + os.path.join(tmp, "profile").replace(os.sep, "/")
     subprocess.run([soffice, f"-env:UserInstallation={profile}", "--headless", "--convert-to", "pdf", "--outdir", tmp, path],
                    check=True, capture_output=True, timeout=120)

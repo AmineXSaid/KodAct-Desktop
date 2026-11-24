@@ -1,6 +1,8 @@
 """PowerPoint decks: read, create from an outline, replace text, set one
 shape's text, write speaker notes, reorder, delete and duplicate slides.
 
+    python pptx_tool.py init OUT.pptx [--audience WORDS | --theme NAME] [--title T] [--subtitle S] [--tag T]
+    python pptx_tool.py add FILE --json SLIDE      (SLIDE: JSON text, or @file.json; appends, saves in place)
     python pptx_tool.py read FILE [--shapes]
     python pptx_tool.py create OUT.pptx --outline FILE.md
     python pptx_tool.py replace FILE OUT.pptx --find TEXT --replace TEXT [...]
@@ -8,6 +10,20 @@ shape's text, write speaker notes, reorder, delete and duplicate slides.
     python pptx_tool.py notes FILE OUT.pptx --slide N --text TEXT
     python pptx_tool.py slides FILE OUT.pptx --order 1,3,2   (slides left out are deleted)
     python pptx_tool.py duplicate FILE OUT.pptx --slide N    (the copy goes right after it)
+
+`init` makes the real file first, a designed title slide, so the person
+sees the deck from the first step; each `add` appends one designed slide and
+saves, so they watch it grow. A slide is JSON:
+
+    {"layout": "cards", "title": "Your Body Is Made of Cells",
+     "items": ["Billions of tiny parts", "Each has a job"], "icon": "cell",
+     "notes": "What to say."}
+
+Layouts: title (title, subtitle, tag, icon), cards (items; "marks":
+number|heart|star|sun), steps (2-4 items, "Head: body"; footer), statement
+(statement, items, art), faces (items [{"label", "mood"}], lines), bullets
+(items), closing (title, items). Icons: sun star heart cloud cell none.
+Moods: happy sad worried angry confused surprised. Text is sized to fit.
 
 `read --shapes` names each slide's shapes (`#0 Title 1: …`), which is what
 `set-text` takes. `set-text` keeps the shape's formatting: each line of the
@@ -24,6 +40,8 @@ properties (title, author KodAct, dates) instead of python-pptx's defaults.
 
 import argparse
 import copy
+import json
+import os
 import re
 import sys
 from datetime import datetime, timezone
@@ -31,6 +49,8 @@ from datetime import datetime, timezone
 from pptx import Presentation
 from pptx.enum.text import MSO_AUTO_SIZE
 from pptx.util import Emu
+
+import deck_design
 
 AUTHOR = "KodAct"
 # 16:9, as PowerPoint makes new decks.
@@ -66,13 +86,76 @@ def _finish(prs, title=None, new=False):
     cp.modified = _now()
 
 
+THEME_MARK = "kodact-theme:"
+
+
+def init(out, theme="kids", title=None, subtitle=None, tag=None):
+    """A new 16:9 deck holding its designed title slide, saved at once."""
+    t = deck_design.theme(theme)
+    prs = Presentation()
+    _widen(prs)
+    deck_design.add_slide(prs, t, {"layout": "title", "title": title or "Untitled deck",
+                                   "subtitle": subtitle, "tag": tag}, 1)
+    _finish(prs, title, new=True)
+    prs.core_properties.category = THEME_MARK + theme
+    _save(prs, out)
+    return 1
+
+
+def _theme_of(prs, override=None):
+    if override:
+        return override
+    cat = prs.core_properties.category or ""
+    return cat[len(THEME_MARK):] if cat.startswith(THEME_MARK) else "clean"
+
+
+def add(path, spec, theme=None):
+    """Append one designed slide from `spec` and save the deck in place."""
+    if not isinstance(spec, dict):
+        sys.exit("a slide is a JSON object, e.g. {\"layout\": \"cards\", \"title\": \"…\", \"items\": […]}")
+    prs = Presentation(path)
+    t = deck_design.theme(_theme_of(prs, theme))
+    n = len(prs.slides) + 1
+    deck_design.add_slide(prs, t, spec, n)
+    _finish(prs)
+    _save(prs, path)
+    return n
+
+
+def _save(prs, out):
+    """Write next to the target, then move it into place: a viewer watching the
+    file (KodAct's panel) never reads half a deck."""
+    tmp = out + ".part"
+    prs.save(tmp)
+    os.replace(tmp, out)
+
+
+def _spec(arg):
+    raw = arg
+    if arg.startswith("@"):
+        with open(arg[1:], encoding="utf-8") as f:
+            raw = f.read()
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as e:
+        sys.exit(f"--json is not valid JSON ({e}); quote keys and strings with double quotes")
+
+
+def _title_shape(slide):
+    """The slide's title: its title placeholder, or the text box `add` names Title."""
+    if slide.shapes.title is not None and slide.shapes.title.has_text_frame:
+        return slide.shapes.title
+    return next((s for s in slide.shapes if s.name == "Title" and s.has_text_frame), None)
+
+
 def read(path, shapes=False):
     """Each slide's title and text, as Markdown; with `shapes`, each text
     shape by index and name, as `set-text` names them."""
     prs = Presentation(path)
     out = []
     for n, slide in enumerate(prs.slides, start=1):
-        title = slide.shapes.title.text_frame.text.strip() if slide.shapes.title is not None and slide.shapes.title.has_text_frame else ""
+        title_shape = _title_shape(slide)
+        title = title_shape.text_frame.text.strip() if title_shape is not None else ""
         out.append(f"## Slide {n}" + (f": {title}" if title else ""))
         if shapes:
             for i, shape in enumerate(slide.shapes):
@@ -81,7 +164,7 @@ def read(path, shapes=False):
             out.append("")
             continue
         for shape in slide.shapes:
-            if not shape.has_text_frame or shape == slide.shapes.title:
+            if not shape.has_text_frame or shape == title_shape or shape.name.startswith("Decor"):
                 continue
             for p in shape.text_frame.paragraphs:
                 text = "".join(r.text for r in p.runs).strip()
@@ -266,6 +349,12 @@ def _text(path):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
+    i = sub.add_parser("init"); i.add_argument("out")
+    i.add_argument("--theme", choices=sorted(deck_design.THEMES))
+    i.add_argument("--audience", help="who it is for, in words; picks the theme when --theme is not given")
+    i.add_argument("--title"); i.add_argument("--subtitle"); i.add_argument("--tag")
+    a = sub.add_parser("add"); a.add_argument("file"); a.add_argument("--json", required=True)
+    a.add_argument("--theme", choices=sorted(deck_design.THEMES))
     r = sub.add_parser("read"); r.add_argument("file"); r.add_argument("--shapes", action="store_true")
     c = sub.add_parser("create"); c.add_argument("out"); c.add_argument("--outline", required=True)
     p = sub.add_parser("replace"); p.add_argument("file"); p.add_argument("out")
@@ -277,7 +366,17 @@ def main(argv=None):
     o = sub.add_parser("slides"); o.add_argument("file"); o.add_argument("out"); o.add_argument("--order", required=True)
     d = sub.add_parser("duplicate"); d.add_argument("file"); d.add_argument("out"); d.add_argument("--slide", type=int, required=True)
     args = ap.parse_args(argv)
-    if args.cmd == "read":
+    if args.cmd == "init":
+        theme = args.theme or deck_design.for_audience(args.audience)
+        init(args.out, theme, args.title, args.subtitle, args.tag)
+        print(f"wrote {args.out}: its {theme} title slide; add slides with `add`")
+    elif args.cmd == "add":
+        spec = _spec(args.json)
+        specs = spec if isinstance(spec, list) else [spec]
+        for one in specs:
+            n = add(args.file, one, args.theme)
+        print(f"added slide(s) up to {n}; saved {args.file}")
+    elif args.cmd == "read":
         sys.stdout.write(read(args.file, args.shapes))
     elif args.cmd == "set-text":
         set_text(args.file, args.out, args.slide, args.shape, args.text)

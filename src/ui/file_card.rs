@@ -117,6 +117,7 @@ pub fn render(
     key: &str,
     state: Entity<AppState>,
     open: bool,
+    writing: bool,
     scale: f32,
     view: Option<DiagramView>,
     t: &Theme,
@@ -161,9 +162,16 @@ pub fn render(
         // artifacts show previews.)
         .child(page(file, t))
         .child(
-            label_row(file, key, state, file.label(), t)
-                .flex_1()
-                .min_w_0(),
+            label_row(
+                file,
+                key,
+                state,
+                // Being made this turn: it redraws as it changes.
+                if writing { "Writing…" } else { file.label() },
+                t,
+            )
+            .flex_1()
+            .min_w_0(),
         )
         .on_click(move |_, _, cx| opener.update(cx, |s, cx| s.open_doc(to_open.clone(), cx)))
         .into_any_element()
@@ -913,9 +921,18 @@ pub fn list(
                 .text_size(t.text.caption)
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(t.colors.text_muted)
-                .child(icon("icons/folder.svg", t.size.icon_xs, t.colors.text_muted))
+                .child(icon(
+                    "icons/folder.svg",
+                    t.size.icon_xs,
+                    t.colors.text_muted,
+                ))
                 .child(format!("{n} files")),
         )
-        .child(div().border_t_1().border_color(t.colors.border).children(rows))
+        .child(
+            div()
+                .border_t_1()
+                .border_color(t.colors.border)
+                .children(rows),
+        )
         .into_any_element()
 }

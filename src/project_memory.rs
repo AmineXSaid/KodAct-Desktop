@@ -207,7 +207,11 @@ mod tests {
     #[test]
     fn a_new_chat_gets_the_memory_and_how_to_keep_it() {
         let p = prompt(MEM, ".kodact/memory.md");
-        assert!(p.contains("- No ORMs.") && p.contains(".kodact/memory.md") && p.contains("Never record secrets"));
+        assert!(
+            p.contains("- No ORMs.")
+                && p.contains(".kodact/memory.md")
+                && p.contains("Never record secrets")
+        );
         assert!(prompt("", ".kodact/memory.md").contains("(Nothing yet.)"));
     }
 }

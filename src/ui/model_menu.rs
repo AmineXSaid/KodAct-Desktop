@@ -352,7 +352,11 @@ pub fn render(
     // Its rows arrive one by one as it opens (`motion::cascade`).
     let mut n = 0;
     if loading {
-        list = super::motion::cascade(list, &mut n, "model-in", t, 
+        list = super::motion::cascade(
+            list,
+            &mut n,
+            "model-in",
+            t,
             div()
                 .pt(px(8.))
                 .px(px(8.))
@@ -382,7 +386,11 @@ pub fn render(
                         })
                         .on_click(move |_, _, cx| st.update(cx, |s, cx| s.toggle_failed_models(cx)))
                 });
-                list = super::motion::cascade(list, &mut n, "model-in", t, 
+                list = super::motion::cascade(
+                    list,
+                    &mut n,
+                    "model-in",
+                    t,
                     div()
                         .px(px(12.))
                         .pt(px(8.))
@@ -421,7 +429,11 @@ pub fn render(
                         gpui::component::tooltip::Tooltip::new(title.clone()).build(window, cx)
                     })
             });
-            list = super::motion::cascade(list, &mut n, "model-in", t, 
+            list = super::motion::cascade(
+                list,
+                &mut n,
+                "model-in",
+                t,
                 div()
                     .id(SharedString::from(format!("model-{key}")))
                     .mx(px(4.))

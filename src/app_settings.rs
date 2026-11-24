@@ -190,6 +190,9 @@ pub struct WindowState {
     /// Light or dark, and which theme (`theme::Look::id`), from Settings.
     pub dark: bool,
     pub theme: String,
+    /// You allowed Bypass permissions behind its warning: it stays offered,
+    /// and a chat reopened in Bypass starts in it.
+    pub bypass_allowed: bool,
 }
 
 impl Default for WindowState {
@@ -200,6 +203,7 @@ impl Default for WindowState {
             panel_share: None,
             dark: false,
             theme: crate::theme::Look::default().id().into(),
+            bypass_allowed: false,
         }
     }
 }

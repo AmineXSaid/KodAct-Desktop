@@ -314,6 +314,71 @@ class Slides(Tmp):
         with self.assertRaises(SystemExit):
             pptx_tool.reorder(twice, moved, [1, 1])
 
+    def test_init_makes_the_real_deck_first_and_add_grows_it(self):
+        """The person sees the requested file from the first step: `init` writes a
+        valid deck with its designed title slide, and each `add` saves one more slide."""
+        deck = self.path("kids.pptx")
+        pptx_tool.init(deck, "kids", "What Is Cancer?", "A guide for kids", "Ages 6 to 10")
+        self.assertEqual(check_tool.validate(deck), [])
+        self.assertEqual(len(Presentation(deck).slides), 1)
+        self.assertIn("## Slide 1: What Is Cancer?", pptx_tool.read(deck))
+        specs = [
+            {"layout": "cards", "title": "Cells", "items": ["One", "Two", "Three"], "notes": "Say hi."},
+            {"layout": "steps", "title": "Steps", "items": ["A: first", "B: second", "C: third"], "footer": "Then."},
+            {"layout": "statement", "title": "Not your fault", "statement": "Nothing you did caused it.",
+             "items": ["Not catching"]},
+            {"layout": "faces", "title": "Feelings",
+             "items": [{"label": m.title(), "mood": m} for m in ("worried", "angry", "sad", "confused")],
+             "lines": ["All okay."]},
+            {"layout": "bullets", "title": "Questions", "items": ["Will it hurt?"]},
+            {"layout": "closing", "title": "You Are Loved", "items": ["Ask anything."]},
+        ]
+        for n, spec in enumerate(specs, start=2):
+            self.assertEqual(pptx_tool.add(deck, spec), n)
+            self.assertEqual(check_tool.validate(deck), [], spec["layout"])
+            self.assertFalse(os.path.exists(deck + ".part"), "saved by replace: never half a file")
+        text = pptx_tool.read(deck)
+        for title in ("Cells", "Steps", "Not your fault", "Feelings", "Questions", "You Are Loved"):
+            self.assertIn(f": {title}", text)
+        self.assertNotIn("- 2\n", text, "slide numbers and badges are decoration, not content")
+        self.assertIn("> Notes: Say hi.", text)
+        prs = Presentation(deck)
+        self.assertEqual(prs.core_properties.category, "kodact-theme:kids", "add keeps the deck's theme")
+        for slide in prs.slides:
+            for shape in slide.shapes:
+                if shape.rotation:
+                    continue
+                self.assertGreaterEqual(shape.left, -prs.slide_width, shape.name)
+                if shape.name == "Title" or shape.has_text_frame and shape.text_frame.text.strip():
+                    self.assertLessEqual(shape.left + shape.width, prs.slide_width, f"{shape.name} runs off")
+                    self.assertLessEqual(shape.top + shape.height, prs.slide_height, f"{shape.name} runs off")
+
+    def test_add_refuses_what_it_cannot_draw(self):
+        deck = self.path("d.pptx")
+        pptx_tool.init(deck, "clean", "T")
+        for bad in ({"layout": "spiral", "items": ["x"]}, {"layout": "cards", "title": "No items"},
+                    {"layout": "faces", "items": [{"label": "x", "mood": "sleepy"}]}):
+            with self.assertRaises(SystemExit):
+                pptx_tool.add(deck, bad)
+        self.assertEqual(check_tool.validate(deck), [], "a refused slide leaves the deck as it was")
+        self.assertEqual(len(Presentation(deck).slides), 1)
+
+    def test_text_shrinks_to_fit_its_box(self):
+        import deck_design
+        self.assertEqual(deck_design.fit_pt("Short", 10, 1, 24), 24)
+        long = "word " * 120
+        self.assertLess(deck_design.fit_pt(long, 6, 1.5, 24), 24)
+
+    @unittest.skipUnless(HAS_OFFICE, "LibreOffice is not installed")
+    def test_office_render_route_is_named_not_searched(self):
+        os.environ["KODACT_OFFICE_RENDER"] = "none"
+        try:
+            with self.assertRaises(SystemExit) as e:
+                check_tool.to_pdf(self._outline().replace(".md", ".pptx"), self.dir)
+            self.assertIn("don't look for other tools", str(e.exception))
+        finally:
+            del os.environ["KODACT_OFFICE_RENDER"]
+
     def _outline(self):
         p = self.path("outline.md")
         with open(p, "w", encoding="utf-8") as f:
