@@ -87,11 +87,12 @@ const LOGO_DOT: &[u8] = include_bytes!("mark-dot.png");
 const LOGO_SLASH: &[u8] = include_bytes!("mark-slash.png");
 const LOGO_ANGLE: &[u8] = include_bytes!("mark-angle.png");
 /// The author's signature, handwritten: "Mohamed Amine Said" in Pinyon Script (SIL OFL 1.1,
-/// `signature-font-OFL.txt`), drawn once into a picture at three times its size, champagne
-/// fading to ivory left to right. The picture, not the font, ships.
+/// `signature-font-OFL.txt`), drawn once into a picture at three times its size: a pale
+/// champagne fading to soft ivory, at 80% ink, so it reads as a light hand, not a headline.
+/// The picture, not the font, ships.
 const SIGNATURE: &[u8] = include_bytes!("signature.png");
 /// Its size in the window, in logical pixels (the picture is 1314 x 144).
-const SIGNATURE_SIZE: (f32, f32) = (255.5, 28.);
+const SIGNATURE_SIZE: (f32, f32) = (237.2, 26.0);
 
 /// The intro, from the window's first frame: the mark comes together, the name rises, the
 /// right side glides in. Quick: about a second.
@@ -601,7 +602,7 @@ impl Setup {
                     .child(
                         div()
                             .text_size(px(9.))
-                            .font_weight(FontWeight::MEDIUM)
+                            .font_weight(FontWeight::NORMAL)
                             .text_color(Ink::subtle())
                             .child("C R A F T E D   B Y"),
                     )
