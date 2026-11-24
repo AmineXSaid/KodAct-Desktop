@@ -381,23 +381,13 @@ pub fn render(v: View, state: Entity<AppState>, t: &Theme) -> AnyElement {
                 .into_any_element(),
         );
     }
-    trailing.push(
-        super::button::Button::icon(
-            "panel-split",
-            "icons/split.svg",
-            if v.below {
-                "Put it beside the chat"
-            } else {
-                "Put it below the chat"
-            },
-        )
-        .compact()
-        .on_click(|_, window, cx| window.dispatch_action(Box::new(super::ToggleSplit), cx))
-        .into_any_element(),
-    );
-    trailing.push(super::panel_chrome::close_button(
-        "panel-close",
-        "Close",
+    // Where the panel sits and Close, in the same pill as the file view's.
+    trailing.push(super::panel_chrome::window_controls(
+        t,
+        "panel",
+        None,
+        v.below,
+        |_, _, _| {},
         move |_, _, cx| closer.update(cx, |s, cx| s.close_panel(cx)),
     ));
     let header = super::panel_chrome::header(

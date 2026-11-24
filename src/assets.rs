@@ -16,6 +16,7 @@ macro_rules! icons {
 }
 
 icons!(
+    "panel-bottom",
     "zoom-in",
     "zoom-out",
     "scan",

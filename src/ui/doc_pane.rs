@@ -386,21 +386,6 @@ pub fn render(
                     }),
             )
         });
-    let full_btn: AnyElement = tool_button(
-        "doc-full",
-        if full {
-            "icons/minimize-2.svg"
-        } else {
-            "icons/maximize-2.svg"
-        },
-        if full {
-            "Exit full screen (Alt+F)"
-        } else {
-            "Full screen (Alt+F)"
-        },
-    )
-    .on_click(move |_, _, cx| fuller.update(cx, |s, cx| s.toggle_doc_full(cx)))
-    .into_any_element();
     let leading: Vec<AnyElement> = from_panel
         .then(|| {
             tool_button("doc-back", "icons/arrow-left.svg", "All files")
@@ -411,27 +396,14 @@ pub fn render(
         })
         .into_iter()
         .collect();
-    let mut trailing = vec![full_btn];
-    if !full {
-        trailing.push(
-            tool_button(
-                "doc-split",
-                "icons/split.svg",
-                if fit.below {
-                    "Put it beside the chat"
-                } else {
-                    "Put it below the chat"
-                },
-            )
-            .on_click(|_, window, cx| window.dispatch_action(Box::new(super::ToggleSplit), cx))
-            .into_any_element(),
-        );
-    }
-    trailing.push(super::panel_chrome::close_button(
-        "doc-close",
-        "Close",
+    let trailing = vec![super::panel_chrome::window_controls(
+        t,
+        "doc",
+        Some(full),
+        fit.below,
+        move |_, _, cx| fuller.update(cx, |s, cx| s.toggle_doc_full(cx)),
         move |_, _, cx| closer.update(cx, |s, cx| s.close_doc(cx)),
-    ));
+    )];
     let row1 = super::panel_chrome::header(t, title_block, leading, trailing);
 
     // Row 2: the tools, in groups.

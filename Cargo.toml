@@ -11,6 +11,11 @@ publish = false
 # and gpui-component. Aliased as `gpui`, as its README advises, so `use gpui::...`
 # and GPUI's macros resolve through it.
 gpui = { package = "gpui-kit", version = "=0.7.1" }
+# Code coloured in the file view's editor: the kit's component crate with
+# its tree-sitter grammars (Rust, Python, JS/TS, Go, C/C++, Java, HTML, CSS,
+# SQL, YAML, TOML, Bash and more; each grammar MIT). Same pinned version as
+# the kit uses, so the feature joins the kit's own copy.
+gpui-component = { version = "=0.7.1", default-features = false, features = ["tree-sitter-languages"] }
 pulldown-cmark = { version = "0.13", default-features = false }
 # The Rules screen: rule globs, and walking a project the way git sees it.
 globset = "=0.4.20"

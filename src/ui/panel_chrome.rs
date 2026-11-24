@@ -69,6 +69,76 @@ pub fn close_button(
         .into_any_element()
 }
 
+/// The panel's window controls in one quiet pill, so they read as one
+/// group apart from the tools: full screen, where the panel sits (beside or
+/// below the chat), and close. `below` is where it sits now; `full`, the
+/// file view in full screen (then the panel's place is not offered).
+pub fn window_controls(
+    t: &Theme,
+    id: &str,
+    full: Option<bool>,
+    below: bool,
+    on_full: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    on_close: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> AnyElement {
+    let full_btn = full.map(|full| {
+        Button::icon(
+            SharedString::from(format!("{id}-full")),
+            if full {
+                "icons/minimize-2.svg"
+            } else {
+                "icons/maximize-2.svg"
+            },
+            if full {
+                "Exit full screen (Alt+F)"
+            } else {
+                "Full screen (Alt+F)"
+            },
+        )
+        .compact()
+        .on_click(on_full)
+    });
+    // The icon shows where the panel goes, not a fork: a panel along the
+    // bottom to move it below, one along the side to move it beside.
+    let place = (full != Some(true)).then(|| {
+        Button::icon(
+            SharedString::from(format!("{id}-place")),
+            if below {
+                "icons/panel-right.svg"
+            } else {
+                "icons/panel-bottom.svg"
+            },
+            if below {
+                "Move beside the chat (Ctrl+\\)"
+            } else {
+                "Move below the chat (Ctrl+\\)"
+            },
+        )
+        .compact()
+        .on_click(|_, window, cx| window.dispatch_action(Box::new(super::ToggleSplit), cx))
+    });
+    div()
+        .flex_none()
+        .flex()
+        .items_center()
+        .gap(px(1.))
+        .p(px(2.))
+        .ml(t.space.xs)
+        .rounded(t.radius.pill)
+        .bg(t.extra.sunk)
+        .border_1()
+        .border_color(t.colors.border)
+        .children(full_btn)
+        .children(place)
+        .child(div().flex_none().w(t.size.hairline).h(px(14.)).mx(px(2.)).bg(t.colors.border))
+        .child(
+            Button::icon(SharedString::from(format!("{id}-close")), "icons/x.svg", "Close (Esc)")
+                .compact()
+                .on_click(on_close),
+        )
+        .into_any_element()
+}
+
 /// A hairline between two groups of tools.
 fn divider(t: &Theme) -> gpui::Div {
     div()
