@@ -130,11 +130,22 @@ pub fn window_controls(
         .border_color(t.colors.border)
         .children(full_btn)
         .children(place)
-        .child(div().flex_none().w(t.size.hairline).h(px(14.)).mx(px(2.)).bg(t.colors.border))
         .child(
-            Button::icon(SharedString::from(format!("{id}-close")), "icons/x.svg", "Close (Esc)")
-                .compact()
-                .on_click(on_close),
+            div()
+                .flex_none()
+                .w(t.size.hairline)
+                .h(px(14.))
+                .mx(px(2.))
+                .bg(t.colors.border),
+        )
+        .child(
+            Button::icon(
+                SharedString::from(format!("{id}-close")),
+                "icons/x.svg",
+                "Close (Esc)",
+            )
+            .compact()
+            .on_click(on_close),
         )
         .into_any_element()
 }
@@ -311,9 +322,7 @@ pub fn window(
         t,
         title(t, title_text),
         leading_icon
-            .map(|p| {
-                super::icon(p, t.size.icon, t.colors.primary).into_any_element()
-            })
+            .map(|p| super::icon(p, t.size.icon, t.colors.primary).into_any_element())
             .into_iter()
             .collect(),
         vec![close_button(

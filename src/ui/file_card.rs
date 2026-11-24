@@ -913,9 +913,18 @@ pub fn list(
                 .text_size(t.text.caption)
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(t.colors.text_muted)
-                .child(icon("icons/folder.svg", t.size.icon_xs, t.colors.text_muted))
+                .child(icon(
+                    "icons/folder.svg",
+                    t.size.icon_xs,
+                    t.colors.text_muted,
+                ))
                 .child(format!("{n} files")),
         )
-        .child(div().border_t_1().border_color(t.colors.border).children(rows))
+        .child(
+            div()
+                .border_t_1()
+                .border_color(t.colors.border)
+                .children(rows),
+        )
         .into_any_element()
 }

@@ -403,7 +403,13 @@ impl Render for OfficeEditor {
 }
 
 /// The text sizes the deck bar offers: name and points.
-const SIZES: &[(&str, u32)] = &[("Title", 40), ("Heading", 28), ("Subheading", 22), ("Body", 18), ("Small", 14)];
+const SIZES: &[(&str, u32)] = &[
+    ("Title", 40),
+    ("Heading", 28),
+    ("Subheading", 22),
+    ("Body", 18),
+    ("Small", 14),
+];
 
 impl OfficeEditor {
     /// The floating bar over a deck's words: the selected text box's size,
@@ -421,24 +427,34 @@ impl OfficeEditor {
         let me = cx.entity();
         let fmt = |f: Format| {
             let me = me.clone();
-            move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| me.update(cx, |this, cx| {
-                let Some((slide, false, para)) = this.focused else {
+            move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                me.update(cx, |this, cx| {
+                    let Some((slide, false, para)) = this.focused else {
+                        this.state.update(cx, |s, cx| {
+                            s.show_toast("Click into a slide's text box first.", cx)
+                        });
+                        return;
+                    };
+                    this.size_menu = false;
                     this.state.update(cx, |s, cx| {
-                        s.show_toast("Click into a slide's text box first.", cx)
+                        s.deck_edit(
+                            DeckEdit::Format {
+                                slide,
+                                para,
+                                format: f,
+                            },
+                            cx,
+                        )
                     });
-                    return;
-                };
-                this.size_menu = false;
-                this.state.update(cx, |s, cx| {
-                    s.deck_edit(DeckEdit::Format { slide, para, format: f }, cx)
-                });
-            })
+                })
+            }
         };
         let op = |o: SlideOp| {
             let me = me.clone();
             move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
                 me.update(cx, |this, cx| {
-                    this.state.update(cx, |s, cx| s.deck_edit(DeckEdit::Slides(o), cx))
+                    this.state
+                        .update(cx, |s, cx| s.deck_edit(DeckEdit::Slides(o), cx))
                 })
             }
         };
@@ -465,11 +481,19 @@ impl OfficeEditor {
                     .cursor_pointer()
                     .text_size(t.text.body_sm)
                     .font_weight(FontWeight::MEDIUM)
-                    .text_color(if para.is_some() { t.colors.text } else { t.colors.text_subtle })
+                    .text_color(if para.is_some() {
+                        t.colors.text
+                    } else {
+                        t.colors.text_subtle
+                    })
                     .hover(|s| s.bg(t.colors.hover))
                     .when(self.size_menu, |d| d.bg(t.colors.hover))
                     .child(size_label)
-                    .child(super::icon("icons/chevron-down.svg", px(12.), t.colors.text_muted))
+                    .child(super::icon(
+                        "icons/chevron-down.svg",
+                        px(12.),
+                        t.colors.text_muted,
+                    ))
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.size_menu = !this.size_menu;
                         cx.notify();
@@ -479,33 +503,44 @@ impl OfficeEditor {
             .child(tool("deck-italic", "icons/italic.svg", "Italic").on_click(fmt(Format::Italic)))
             .child(tool("deck-bullets", "icons/list.svg", "Bullets").on_click(fmt(Format::Bullets)))
             .child(sep())
-            .child(tool("deck-new", "icons/plus.svg", "New slide after this one").on_click(op(SlideOp::New(slide))))
+            .child(
+                tool("deck-new", "icons/plus.svg", "New slide after this one")
+                    .on_click(op(SlideOp::New(slide))),
+            )
             .child(
                 tool("deck-dup", "icons/copy-plus.svg", "Duplicate slide")
                     .on_click(op(SlideOp::Duplicate(slide))),
             )
-            .child(tool("deck-del", "icons/trash-2.svg", "Delete slide").on_click(op(SlideOp::Delete(slide))))
+            .child(
+                tool("deck-del", "icons/trash-2.svg", "Delete slide")
+                    .on_click(op(SlideOp::Delete(slide))),
+            )
             .child(
                 tool("deck-up", "icons/arrow-up.svg", "Move slide up")
                     .disabled(slide == 0)
                     .on_click(op(SlideOp::Move(slide, -1))),
             )
-            .child(tool("deck-down", "icons/arrow-down.svg", "Move slide down").on_click(op(SlideOp::Move(slide, 1))))
+            .child(
+                tool("deck-down", "icons/arrow-down.svg", "Move slide down")
+                    .on_click(op(SlideOp::Move(slide, 1))),
+            )
             .child(sep())
-            .child(tool("deck-comment", "icons/message-square-plus.svg", "Comment").on_click(cx.listener(
-                move |this, _, _, cx| {
-                    let words = this.focused_text(cx);
-                    this.state.update(cx, |s, cx| {
-                        s.hold_doc_comment(
-                            crate::doc_versions::Anchor {
-                                place: format!("Slide {}", slide + 1),
-                                quote: words,
-                            },
-                            cx,
-                        )
-                    });
-                },
-            )));
+            .child(
+                tool("deck-comment", "icons/message-square-plus.svg", "Comment").on_click(
+                    cx.listener(move |this, _, _, cx| {
+                        let words = this.focused_text(cx);
+                        this.state.update(cx, |s, cx| {
+                            s.hold_doc_comment(
+                                crate::doc_versions::Anchor {
+                                    place: format!("Slide {}", slide + 1),
+                                    quote: words,
+                                },
+                                cx,
+                            )
+                        });
+                    }),
+                ),
+            );
         let menu = self.size_menu.then(|| {
             let mut m = div()
                 .w(px(200.))
@@ -559,7 +594,9 @@ impl OfficeEditor {
 
     /// The words of the field last typed in.
     fn focused_text(&self, cx: &Context<Self>) -> String {
-        let Some(want) = self.focused else { return String::new() };
+        let Some(want) = self.focused else {
+            return String::new();
+        };
         self.items
             .iter()
             .find_map(|it| match it {

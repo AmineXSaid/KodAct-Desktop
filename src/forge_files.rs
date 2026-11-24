@@ -769,10 +769,13 @@ fn read_skill(scope: Scope, dir: &Path, enabled: bool) -> Option<Skill> {
         // The app's install record (`skill_install::RECORD`, or Forge's
         // older name) isn't one of its files.
         extra_files: count_files(dir).saturating_sub(1).saturating_sub(
-            [crate::skill_install::RECORD, crate::skill_install::OLD_RECORD]
-                .iter()
-                .filter(|r| dir.join(r).is_file())
-                .count(),
+            [
+                crate::skill_install::RECORD,
+                crate::skill_install::OLD_RECORD,
+            ]
+            .iter()
+            .filter(|r| dir.join(r).is_file())
+            .count(),
         ),
     })
 }
@@ -2053,7 +2056,9 @@ mod tests {
         std::fs::write(p.join("FORGE.local.md"), "mine").unwrap();
         let m = memory_files(&p);
         assert!(m.iter().any(|f| f.path == p.join("FORGE.md") && f.exists));
-        assert!(m.iter().any(|f| f.path == p.join("FORGE.local.md") && f.exists));
+        assert!(m
+            .iter()
+            .any(|f| f.path == p.join("FORGE.local.md") && f.exists));
         // A KODACT.md wins, as the engine reads it: FORGE.md is no longer listed.
         std::fs::write(p.join("KODACT.md"), "new").unwrap();
         let m = memory_files(&p);
@@ -2065,16 +2070,26 @@ mod tests {
     fn an_old_projects_folder_is_where_settings_and_resources_go() {
         let p = tmp("old-dir");
         std::fs::create_dir_all(p.join(".forge")).unwrap();
-        assert_eq!(Layer::Project.path(&p), Some(p.join(".forge/settings.json")));
+        assert_eq!(
+            Layer::Project.path(&p),
+            Some(p.join(".forge/settings.json"))
+        );
         assert_eq!(
             kind_dir("commands", Scope::Project, &p),
             Some(p.join(".forge/commands"))
         );
         // Resources are read from both folders, KodAct's last (it wins).
         let dirs = read_dirs("commands", &p);
-        let forge = dirs.iter().position(|(_, d)| *d == p.join(".forge/commands"));
-        let kodact = dirs.iter().position(|(_, d)| *d == p.join(".kodact/commands"));
-        assert!(forge.is_some() && kodact.is_some() && forge < kodact, "{dirs:?}");
+        let forge = dirs
+            .iter()
+            .position(|(_, d)| *d == p.join(".forge/commands"));
+        let kodact = dirs
+            .iter()
+            .position(|(_, d)| *d == p.join(".kodact/commands"));
+        assert!(
+            forge.is_some() && kodact.is_some() && forge < kodact,
+            "{dirs:?}"
+        );
     }
 
     #[test]

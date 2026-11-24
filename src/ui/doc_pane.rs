@@ -215,9 +215,11 @@ pub fn render(
         office,
         Some(crate::office::Kind::Docx | crate::office::Kind::Pptx | crate::office::Kind::Xlsx)
     );
-    let dirty_sheet = fit.dirty || (office == Some(crate::office::Kind::Xlsx) && !sheet_edits.is_empty());
+    let dirty_sheet =
+        fit.dirty || (office == Some(crate::office::Kind::Xlsx) && !sheet_edits.is_empty());
     let previewing_html = html && !source && !showing_changes;
-    let editing = (source || (office.is_none() && !binary && !file.is_markdown() && !diagram && !html))
+    let editing = (source
+        || (office.is_none() && !binary && !file.is_markdown() && !diagram && !html))
         && super::text_editor::editable(file)
         && !showing_changes;
     let md_page_on = md && md_mode == crate::state::MdMode::Editing && !showing_changes;
@@ -230,7 +232,8 @@ pub fn render(
     let position = match pages {
         _ if previewing_html => {
             let d = fit.device;
-            d.width().map_or(d.label().to_string(), |w| format!("{} · {w} px", d.label()))
+            d.width()
+                .map_or(d.label().to_string(), |w| format!("{} · {w} px", d.label()))
         }
         _ if sheets_read.is_some() => sheets_read
             .and_then(|sh| sh.get(sheet))
@@ -243,13 +246,20 @@ pub fn render(
                     if sheet_edits.is_empty() {
                         String::new()
                     } else {
-                        format!(" · {} edit{}", sheet_edits.len(), if sheet_edits.len() == 1 { "" } else { "s" })
+                        format!(
+                            " · {} edit{}",
+                            sheet_edits.len(),
+                            if sheet_edits.len() == 1 { "" } else { "s" }
+                        )
                     }
                 )
             })
             .unwrap_or_default(),
         _ if words_editable && text_view => {
-            format!("Editing text{}", if fit.dirty { " · not saved" } else { "" })
+            format!(
+                "Editing text{}",
+                if fit.dirty { " · not saved" } else { "" }
+            )
         }
         _ if md_page_on => format!(
             "{}{}",
@@ -307,7 +317,9 @@ pub fn render(
     // split, close. The name always shows; the tools are on row 2.
     let mark = match office {
         Some(kind) => super::file_mark::render(kind, f32::from(t.size.icon_lg), fit.scale),
-        None if diagram => icon("icons/network.svg", t.size.icon_sm, t.colors.sky).into_any_element(),
+        None if diagram => {
+            icon("icons/network.svg", t.size.icon_sm, t.colors.sky).into_any_element()
+        }
         None => gpui::img(super::file_icon::asset(
             &file.name,
             false,
@@ -330,7 +342,11 @@ pub fn render(
         .text_color(t.colors.text_strong)
         // Code, text and pictures by their file name, as an editor's tab;
         // documents by their title.
-        .child(if plain { file.name.clone() } else { file.title() });
+        .child(if plain {
+            file.name.clone()
+        } else {
+            file.title()
+        });
     // A Markdown file's title opens its menu: Rename, Versions.
     let md_tools = md && !fit.live;
     let title_el: AnyElement = if md_tools {
@@ -348,11 +364,19 @@ pub fn render(
             .rounded(t.radius.button)
             .cursor_pointer()
             .hover(|s| s.bg(t.colors.hover))
-            .when(fit.menu == Some(crate::state::DocMenu::Title), |d| d.bg(t.colors.hover))
+            .when(fit.menu == Some(crate::state::DocMenu::Title), |d| {
+                d.bg(t.colors.hover)
+            })
             .child(title_text)
-            .child(icon("icons/chevron-down.svg", t.size.icon_xs, t.colors.text_muted))
+            .child(icon(
+                "icons/chevron-down.svg",
+                t.size.icon_xs,
+                t.colors.text_muted,
+            ))
             .on_click(move |_, _, cx| {
-                st.update(cx, |s, cx| s.toggle_doc_menu(crate::state::DocMenu::Title, cx))
+                st.update(cx, |s, cx| {
+                    s.toggle_doc_menu(crate::state::DocMenu::Title, cx)
+                })
             })
             .into_any_element()
     } else {
@@ -465,7 +489,9 @@ pub fn render(
             tool_button("doc-outline", "icons/list-tree.svg", "Outline")
                 .selected(fit.menu == Some(crate::state::DocMenu::Outline))
                 .on_click(move |_, _, cx| {
-                    outline.update(cx, |s, cx| s.toggle_doc_menu(crate::state::DocMenu::Outline, cx))
+                    outline.update(cx, |s, cx| {
+                        s.toggle_doc_menu(crate::state::DocMenu::Outline, cx)
+                    })
                 })
                 .into_any_element(),
         );
@@ -489,11 +515,19 @@ pub fn render(
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(t.colors.text)
                 .hover(|s| s.bg(t.colors.hover))
-                .when(fit.menu == Some(crate::state::DocMenu::MdMode), |d| d.bg(t.colors.hover))
+                .when(fit.menu == Some(crate::state::DocMenu::MdMode), |d| {
+                    d.bg(t.colors.hover)
+                })
                 .child(label)
-                .child(icon("icons/chevron-down.svg", t.size.icon_xs, t.colors.text_muted))
+                .child(icon(
+                    "icons/chevron-down.svg",
+                    t.size.icon_xs,
+                    t.colors.text_muted,
+                ))
                 .on_click(move |_, _, cx| {
-                    mode.update(cx, |s, cx| s.toggle_doc_menu(crate::state::DocMenu::MdMode, cx))
+                    mode.update(cx, |s, cx| {
+                        s.toggle_doc_menu(crate::state::DocMenu::MdMode, cx)
+                    })
                 })
                 .into_any_element(),
         );
@@ -540,13 +574,17 @@ pub fn render(
                             }
                         })
                     })
-                    .option(if words_editable { "Edit text" } else { "Text" }, text_view, move |_, _, cx| {
-                        to_text.update(cx, |s, cx| {
-                            if !s.doc_text {
-                                s.toggle_doc_text(cx)
-                            }
-                        })
-                    })
+                    .option(
+                        if words_editable { "Edit text" } else { "Text" },
+                        text_view,
+                        move |_, _, cx| {
+                            to_text.update(cx, |s, cx| {
+                                if !s.doc_text {
+                                    s.toggle_doc_text(cx)
+                                }
+                            })
+                        },
+                    )
                     .into_any_element(),
             );
         }
@@ -556,7 +594,11 @@ pub fn render(
                 tool_button(
                     "doc-fit",
                     "icons/maximize-2.svg",
-                    if fit.fit { "Actual size" } else { "Fit to panel" },
+                    if fit.fit {
+                        "Actual size"
+                    } else {
+                        "Fit to panel"
+                    },
                 )
                 .on_click(move |_, _, cx| fitter.update(cx, |s, cx| s.toggle_doc_fit(cx))),
             );
@@ -611,10 +653,14 @@ pub fn render(
                 .disabled(top + 1 >= n)
                 .on_click(move |_, _, cx| next.update(cx, |s, cx| s.step_doc_page(1, cx)))
                 .into_any_element(),
-            tool_button("doc-thumbs", "icons/panel-left.svg", "Thumbnails (Ctrl+Alt+T)")
-                .selected(on)
-                .on_click(move |_, _, cx| thumbs.update(cx, |s, cx| s.toggle_doc_thumbs(cx)))
-                .into_any_element(),
+            tool_button(
+                "doc-thumbs",
+                "icons/panel-left.svg",
+                "Thumbnails (Ctrl+Alt+T)",
+            )
+            .selected(on)
+            .on_click(move |_, _, cx| thumbs.update(cx, |s, cx| s.toggle_doc_thumbs(cx)))
+            .into_any_element(),
         ];
         groups.push(super::panel_chrome::Group {
             tools: g,
@@ -638,7 +684,9 @@ pub fn render(
                 .compact()
                 .selected(fit.menu == Some(crate::state::DocMenu::Zoom))
                 .on_click(move |_, _, cx| {
-                    zmenu.update(cx, |s, cx| s.toggle_doc_menu(crate::state::DocMenu::Zoom, cx))
+                    zmenu.update(cx, |s, cx| {
+                        s.toggle_doc_menu(crate::state::DocMenu::Zoom, cx)
+                    })
                 })
                 .into_any_element(),
             tool_button("doc-zoom-in", "icons/zoom-in.svg", "Zoom in (Ctrl+=)")
@@ -657,12 +705,16 @@ pub fn render(
             vec![]
         } else {
             vec![
-            tool_button("doc-undo", "icons/undo-2.svg", "Undo")
-                .on_click(|_, window, cx| window.dispatch_action(Box::new(super::UndoDocEdit), cx))
-                .into_any_element(),
-            tool_button("doc-redo", "icons/redo-2.svg", "Redo")
-                .on_click(|_, window, cx| window.dispatch_action(Box::new(super::RedoDocEdit), cx))
-                .into_any_element(),
+                tool_button("doc-undo", "icons/undo-2.svg", "Undo")
+                    .on_click(|_, window, cx| {
+                        window.dispatch_action(Box::new(super::UndoDocEdit), cx)
+                    })
+                    .into_any_element(),
+                tool_button("doc-redo", "icons/redo-2.svg", "Redo")
+                    .on_click(|_, window, cx| {
+                        window.dispatch_action(Box::new(super::RedoDocEdit), cx)
+                    })
+                    .into_any_element(),
             ]
         };
         let mut w = if editing { 28. * 2. + 2. } else { 0. };
@@ -676,9 +728,7 @@ pub fn render(
             g.push(
                 super::button::Button::ghost("doc-discard", "Discard")
                     .compact()
-                    .on_click(move |_, _, cx| {
-                        discard.update(cx, |s, cx| s.discard_doc_edits(cx))
-                    })
+                    .on_click(move |_, _, cx| discard.update(cx, |s, cx| s.discard_doc_edits(cx)))
                     .into_any_element(),
             );
             w += 64. + 76.;
@@ -688,9 +738,13 @@ pub fn render(
     // Review: find.
     groups.push(super::panel_chrome::Group::of(
         t,
-        vec![tool_button("doc-find", "icons/search.svg", "Find in this file (Ctrl+Shift+F)")
-            .on_click(move |_, _, cx| finder.update(cx, |s, cx| s.toggle_doc_find(cx)))
-            .into_any_element()],
+        vec![tool_button(
+            "doc-find",
+            "icons/search.svg",
+            "Find in this file (Ctrl+Shift+F)",
+        )
+        .on_click(move |_, _, cx| finder.update(cx, |s, cx| s.toggle_doc_find(cx)))
+        .into_any_element()],
     ));
     // Share: export, open in its app, copy, download. Collapses first.
     {
@@ -767,7 +821,9 @@ pub fn render(
         groups,
         fit.menu == Some(crate::state::DocMenu::More),
         move |_, _, cx| {
-            more_state.update(cx, |s, cx| s.toggle_doc_menu(crate::state::DocMenu::More, cx))
+            more_state.update(cx, |s, cx| {
+                s.toggle_doc_menu(crate::state::DocMenu::More, cx)
+            })
         },
     );
     // The zoom menu hangs under the scale button.
@@ -823,8 +879,14 @@ pub fn render(
                 fit.zoom == crate::doc_zoom::Zoom::FitPage,
                 crate::doc_zoom::Zoom::FitPage,
             ));
-        gpui::deferred(super::motion::unfold(menu, "doc-zoom-menu", false, false, t))
-            .with_priority(3)
+        gpui::deferred(super::motion::unfold(
+            menu,
+            "doc-zoom-menu",
+            false,
+            false,
+            t,
+        ))
+        .with_priority(3)
     });
     // A Markdown file's menus: its title's (Rename, Versions), the outline
     // and the mode, hanging under the title row.
@@ -929,7 +991,8 @@ pub fn render(
             .child(super::image_view::render(file, &fit, t))
     } else if previewing_html {
         // The page, in the panel's live browser.
-        body.overflow_hidden().child(div().size_full().child(browser))
+        body.overflow_hidden()
+            .child(div().size_full().child(browser))
     } else if md_page_on {
         // A Markdown file as a page to type on; it scrolls itself.
         body.overflow_hidden().child(md_page)
@@ -1168,26 +1231,33 @@ fn breadcrumbs(crumbs: &[SharedString], file: &FileRef, t: &Theme) -> Option<Any
         .text_color(t.colors.text_muted);
     for (i, c) in crumbs.iter().enumerate() {
         if i > 0 {
-            row = row.child(icon("icons/chevron-right.svg", px(12.), t.colors.text_subtle));
+            row = row.child(icon(
+                "icons/chevron-right.svg",
+                px(12.),
+                t.colors.text_subtle,
+            ));
         }
         let seg = div()
             .flex()
             .items_center()
             .gap(px(4.))
             .whitespace_nowrap()
-            .when(i < last, |d| d.flex_shrink(1.).min_w(px(12.)).overflow_hidden().text_ellipsis())
+            .when(i < last, |d| {
+                d.flex_shrink(1.)
+                    .min_w(px(12.))
+                    .overflow_hidden()
+                    .text_ellipsis()
+            })
             .when(i == last, |d| {
-                d.flex_none()
-                    .text_color(t.colors.text)
-                    .child(
-                        gpui::img(super::file_icon::asset(
-                            &file.name,
-                            false,
-                            file.path.as_deref().unwrap_or(&file.name),
-                        ))
-                        .flex_none()
-                        .size(px(14.)),
-                    )
+                d.flex_none().text_color(t.colors.text).child(
+                    gpui::img(super::file_icon::asset(
+                        &file.name,
+                        false,
+                        file.path.as_deref().unwrap_or(&file.name),
+                    ))
+                    .flex_none()
+                    .size(px(14.)),
+                )
             })
             .child(c.clone());
         row = row.child(seg);
@@ -1237,7 +1307,9 @@ fn md_menu(
                         )
                     }),
             )
-            .when(on, |d| d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.text)))
+            .when(on, |d| {
+                d.child(icon("icons/check.svg", t.size.icon_sm, t.colors.text))
+            })
     };
     let pop = |w: f32| {
         div()
@@ -1317,18 +1389,23 @@ fn md_menu(
                 )
                 .child(div().h(px(1.)).my(t.space.xs).bg(t.colors.border))
                 .child(
-                    item("md-versions".into(), "icons/history.svg", versions, "", false).on_click(
-                        move |_, _, cx| {
-                            ver.update(cx, |s, cx| {
-                                s.doc_menu = None;
-                                if s.doc_versions().1 > 0 {
-                                    s.toggle_doc_changes(cx)
-                                } else {
-                                    s.show_toast("This file has one version so far.", cx)
-                                }
-                            })
-                        },
-                    ),
+                    item(
+                        "md-versions".into(),
+                        "icons/history.svg",
+                        versions,
+                        "",
+                        false,
+                    )
+                    .on_click(move |_, _, cx| {
+                        ver.update(cx, |s, cx| {
+                            s.doc_menu = None;
+                            if s.doc_versions().1 > 0 {
+                                s.toggle_doc_changes(cx)
+                            } else {
+                                s.show_toast("This file has one version so far.", cx)
+                            }
+                        })
+                    }),
                 )
                 .on_mouse_down_out(move |_, _, cx| {
                     rn.update(cx, |s, cx| {
@@ -1341,7 +1418,10 @@ fn md_menu(
         }
         DocMenu::Outline => {
             let heads = crate::md_blocks::outline(&crate::md_blocks::parse(&file.content));
-            let mut p = pop(260.).id("md-outline").overflow_y_scroll().right(t.space.md + px(140.));
+            let mut p = pop(260.)
+                .id("md-outline")
+                .overflow_y_scroll()
+                .right(t.space.md + px(140.));
             if heads.is_empty() {
                 p = p.child(
                     div()
@@ -1368,7 +1448,11 @@ fn md_menu(
                         .text_ellipsis()
                         .text_size(t.text.body_sm)
                         .when(level == 1, |d| d.font_weight(FontWeight::MEDIUM))
-                        .text_color(if level == 1 { t.colors.text } else { t.colors.text_muted })
+                        .text_color(if level == 1 {
+                            t.colors.text
+                        } else {
+                            t.colors.text_muted
+                        })
                         .hover(|s| s.bg(t.colors.hover))
                         .child(words)
                         .on_click(move |_, _, cx| {
@@ -1392,9 +1476,24 @@ fn md_menu(
         DocMenu::MdMode => {
             let mut p = pop(240.).id("md-mode-menu").right(t.space.md + px(104.));
             for (k, (m, path, label, note)) in [
-                (MdMode::Editing, "icons/pencil.svg", "Editing", "Type on the page"),
-                (MdMode::Viewing, "icons/eye.svg", "Viewing", "Read, select and comment"),
-                (MdMode::Markdown, "icons/code-xml.svg", "Markdown", "Edit the source"),
+                (
+                    MdMode::Editing,
+                    "icons/pencil.svg",
+                    "Editing",
+                    "Type on the page",
+                ),
+                (
+                    MdMode::Viewing,
+                    "icons/eye.svg",
+                    "Viewing",
+                    "Read, select and comment",
+                ),
+                (
+                    MdMode::Markdown,
+                    "icons/code-xml.svg",
+                    "Markdown",
+                    "Edit the source",
+                ),
             ]
             .into_iter()
             .enumerate()
@@ -1417,7 +1516,10 @@ fn md_menu(
         }
         _ => return None,
     };
-    Some(gpui::deferred(super::motion::unfold(menu, "md-head-menu", false, false, t)).with_priority(3))
+    Some(
+        gpui::deferred(super::motion::unfold(menu, "md-head-menu", false, false, t))
+            .with_priority(3),
+    )
 }
 
 /// A document's text as you can select it, to comment on a passage or
@@ -1440,12 +1542,7 @@ fn selectable(name: &str, text: &str, t: &Theme) -> AnyElement {
 
 /// The thumbnail rail: each page small, the one at the top marked; a click
 /// brings that page to the top.
-fn thumb_rail(
-    d: &crate::office::Doc,
-    fit: &Fit,
-    state: Entity<AppState>,
-    t: &Theme,
-) -> AnyElement {
+fn thumb_rail(d: &crate::office::Doc, fit: &Fit, state: Entity<AppState>, t: &Theme) -> AnyElement {
     let now = fit.scroll.top_item().min(d.pages.len().saturating_sub(1));
     let w = f32::from(t.size.thumb_rail) - 2. * f32::from(t.space.md) - 2.;
     div()
@@ -1479,7 +1576,11 @@ fn thumb_rail(
                         .rounded(t.radius.small)
                         .overflow_hidden()
                         .border_1()
-                        .border_color(if on { t.colors.primary } else { t.colors.border })
+                        .border_color(if on {
+                            t.colors.primary
+                        } else {
+                            t.colors.border
+                        })
                         .child(
                             gpui::img(page.image.clone())
                                 .size_full()
@@ -1489,8 +1590,16 @@ fn thumb_rail(
                 .child(
                     div()
                         .text_size(t.text.caption)
-                        .font_weight(if on { FontWeight::MEDIUM } else { FontWeight::NORMAL })
-                        .text_color(if on { t.colors.text_strong } else { t.colors.text_muted })
+                        .font_weight(if on {
+                            FontWeight::MEDIUM
+                        } else {
+                            FontWeight::NORMAL
+                        })
+                        .text_color(if on {
+                            t.colors.text_strong
+                        } else {
+                            t.colors.text_muted
+                        })
                         .child((i + 1).to_string()),
                 )
                 .on_click(move |_, _, cx| st.update(cx, |s, cx| s.show_doc_page(i, cx)))
@@ -1510,12 +1619,15 @@ fn pages_view(
     picked: Option<usize>,
     state: Entity<AppState>,
     t: &Theme,
-
 ) -> gpui::Stateful<gpui::Div> {
     let room = fit.width
         - 2. * f32::from(t.space.xl)
         - 2.
-        - if fit.thumbs { f32::from(t.size.thumb_rail) } else { 0. };
+        - if fit.thumbs {
+            f32::from(t.size.thumb_rail)
+        } else {
+            0.
+        };
     let room_h = (fit.height - 2. * f32::from(t.space.xl)).max(120.);
     let shown = d.pages.len();
     let noun = if d.slides { "Slide" } else { "Page" };
@@ -1664,9 +1776,15 @@ fn shape_layer(
         .on_mouse_down(gpui::MouseButton::Left, move |_, _, cx| {
             bg.update(cx, |s, cx| s.pick_shape(None, cx))
         });
-    for sh in shapes.iter().filter(|s| s.kind != crate::pptx_shapes::Kind::Group) {
+    for sh in shapes
+        .iter()
+        .filter(|s| s.kind != crate::pptx_shapes::Kind::Group)
+    {
         let picked = deck.sel == Some((slide, sh.id));
-        let dragging = deck.drag.as_ref().filter(|d| d.slide == slide && d.id == sh.id);
+        let dragging = deck
+            .drag
+            .as_ref()
+            .filter(|d| d.slide == slide && d.id == sh.id);
         let (x, y, w, h) = dragging.map_or((sh.x, sh.y, sh.w, sh.h), |d| d.now);
         let px_of = |v: i64| px(v as f32 * k);
         let (st, place) = (state.clone(), (sh.x, sh.y, sh.w, sh.h));
@@ -1678,11 +1796,21 @@ fn shape_layer(
             .top(px_of(y))
             .w(px_of(w))
             .h(px_of(h))
-            .cursor(if picked { gpui::CursorStyle::OpenHand } else { gpui::CursorStyle::PointingHand })
+            .cursor(if picked {
+                gpui::CursorStyle::OpenHand
+            } else {
+                gpui::CursorStyle::PointingHand
+            })
             .border_1()
-            .border_color(if picked { accent } else { gpui::transparent_black() })
+            .border_color(if picked {
+                accent
+            } else {
+                gpui::transparent_black()
+            })
             .when(dragging.is_some(), |d| d.bg(accent.opacity(0.08)))
-            .when(!picked, |d| d.hover(move |s| s.border_color(accent.opacity(0.55))))
+            .when(!picked, |d| {
+                d.hover(move |s| s.border_color(accent.opacity(0.55)))
+            })
             .on_mouse_down(gpui::MouseButton::Left, move |ev, _, cx| {
                 cx.stop_propagation();
                 let start = ev.position;
@@ -1783,10 +1911,26 @@ fn shape_bar(deck: &DeckView, state: &Entity<AppState>, t: &Theme) -> AnyElement
         .border_1()
         .border_color(t.colors.border)
         .shadow(t.elevation_popover())
-        .child(tool_button("shape-rect", "icons/square.svg", "Add a rectangle").on_click(edit(ShapeOp::Add(New::Rectangle))))
-        .child(tool_button("shape-ellipse", "icons/circle.svg", "Add an ellipse").on_click(edit(ShapeOp::Add(New::Ellipse))))
-        .child(tool_button("shape-text", "icons/type.svg", "Add a text box").on_click(edit(ShapeOp::Add(New::TextBox))));
-    let fill_now = picked.and_then(|(sl, id)| deck.shapes.get(sl)?.iter().find(|s| s.id == id)?.fill.clone());
+        .child(
+            tool_button("shape-rect", "icons/square.svg", "Add a rectangle")
+                .on_click(edit(ShapeOp::Add(New::Rectangle))),
+        )
+        .child(
+            tool_button("shape-ellipse", "icons/circle.svg", "Add an ellipse")
+                .on_click(edit(ShapeOp::Add(New::Ellipse))),
+        )
+        .child(
+            tool_button("shape-text", "icons/type.svg", "Add a text box")
+                .on_click(edit(ShapeOp::Add(New::TextBox))),
+        );
+    let fill_now = picked.and_then(|(sl, id)| {
+        deck.shapes
+            .get(sl)?
+            .iter()
+            .find(|s| s.id == id)?
+            .fill
+            .clone()
+    });
     if let Some((_, id)) = picked {
         let (menu_st, words) = (state.clone(), state.clone());
         let swatch = fill_now
@@ -1828,11 +1972,25 @@ fn shape_bar(deck: &DeckView, state: &Entity<AppState>, t: &Theme) -> AnyElement
                         })
                     }),
             )
-            .child(tool_button("shape-dup", "icons/copy-plus.svg", "Duplicate").on_click(edit(ShapeOp::Duplicate { id })))
-            .child(tool_button("shape-front", "icons/arrow-up.svg", "Bring to front").on_click(edit(ShapeOp::Front { id })))
-            .child(tool_button("shape-back", "icons/arrow-down.svg", "Send to back").on_click(edit(ShapeOp::Back { id })))
             .child(
-                tool_button("shape-words", "icons/pencil.svg", "Edit its words (double-click)").on_click(move |_, _, cx| {
+                tool_button("shape-dup", "icons/copy-plus.svg", "Duplicate")
+                    .on_click(edit(ShapeOp::Duplicate { id })),
+            )
+            .child(
+                tool_button("shape-front", "icons/arrow-up.svg", "Bring to front")
+                    .on_click(edit(ShapeOp::Front { id })),
+            )
+            .child(
+                tool_button("shape-back", "icons/arrow-down.svg", "Send to back")
+                    .on_click(edit(ShapeOp::Back { id })),
+            )
+            .child(
+                tool_button(
+                    "shape-words",
+                    "icons/pencil.svg",
+                    "Edit its words (double-click)",
+                )
+                .on_click(move |_, _, cx| {
                     words.update(cx, |s, cx| {
                         if !s.doc_text {
                             s.toggle_doc_text(cx)
@@ -1840,14 +1998,19 @@ fn shape_bar(deck: &DeckView, state: &Entity<AppState>, t: &Theme) -> AnyElement
                     })
                 }),
             )
-            .child(tool_button("shape-del", "icons/trash-2.svg", "Delete").on_click(edit(ShapeOp::Delete { id })));
+            .child(
+                tool_button("shape-del", "icons/trash-2.svg", "Delete")
+                    .on_click(edit(ShapeOp::Delete { id })),
+            );
     }
     let menu = (deck.fill_menu && picked.is_some()).then(|| {
         let id = picked.map(|p| p.1).unwrap_or(0);
         let mut grid = div().flex().flex_wrap().gap(px(6.)).w(px(6. * 28.));
         for (name, hex) in FILLS {
             let v = u32::from_str_radix(hex, 16).unwrap_or(0);
-            let on = fill_now.as_deref().is_some_and(|f| f.eq_ignore_ascii_case(hex));
+            let on = fill_now
+                .as_deref()
+                .is_some_and(|f| f.eq_ignore_ascii_case(hex));
             grid = grid.child(
                 div()
                     .id(SharedString::from(format!("fill-{hex}")))
@@ -1857,8 +2020,13 @@ fn shape_bar(deck: &DeckView, state: &Entity<AppState>, t: &Theme) -> AnyElement
                     .bg(gpui::rgb(v))
                     .border_2()
                     .border_color(if on { t.colors.text } else { t.colors.border })
-                    .tooltip(move |w, cx| gpui::component::tooltip::Tooltip::new(*name).build(w, cx))
-                    .on_click(edit(ShapeOp::Fill { id, rgb: hex.to_string() })),
+                    .tooltip(move |w, cx| {
+                        gpui::component::tooltip::Tooltip::new(*name).build(w, cx)
+                    })
+                    .on_click(edit(ShapeOp::Fill {
+                        id,
+                        rgb: hex.to_string(),
+                    })),
             );
         }
         super::motion::unfold(

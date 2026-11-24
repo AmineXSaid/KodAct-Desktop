@@ -1120,7 +1120,12 @@ impl ShapeDrag {
         let min = 91_440; // a tenth of an inch
         match self.corner {
             None => (x + dx, y + dy, w, h),
-            Some(0) => (x + dx.min(w - min), y + dy.min(h - min), (w - dx).max(min), (h - dy).max(min)),
+            Some(0) => (
+                x + dx.min(w - min),
+                y + dy.min(h - min),
+                (w - dx).max(min),
+                (h - dy).max(min),
+            ),
             Some(1) => (x, y + dy.min(h - min), (w + dx).max(min), (h - dy).max(min)),
             Some(2) => (x + dx.min(w - min), y, (w - dx).max(min), (h + dy).max(min)),
             _ => (x, y, (w + dx).max(min), (h + dy).max(min)),
@@ -5834,10 +5839,12 @@ impl AppState {
         if let Some(chat) = self.current {
             if let Some(c) = self.chats.iter_mut().find(|c| c.id == chat) {
                 let card = c.messages.iter_mut().rev().find_map(|m| match m {
-                    Message::Assistant { blocks } => blocks.iter_mut().rev().find_map(|b| match b {
-                        Block::File(f) if crate::doc_versions::same_file(f, &file) => Some(f),
-                        _ => None,
-                    }),
+                    Message::Assistant { blocks } => {
+                        blocks.iter_mut().rev().find_map(|b| match b {
+                            Block::File(f) if crate::doc_versions::same_file(f, &file) => Some(f),
+                            _ => None,
+                        })
+                    }
                     _ => None,
                 });
                 if let Some(f) = card {
@@ -5869,7 +5876,10 @@ impl AppState {
         }
         let ext = file.name.rsplit_once('.').map(|(_, e)| e.to_string());
         if let Some(ext) = ext {
-            if !name.to_ascii_lowercase().ends_with(&format!(".{}", ext.to_ascii_lowercase())) {
+            if !name
+                .to_ascii_lowercase()
+                .ends_with(&format!(".{}", ext.to_ascii_lowercase()))
+            {
                 name = format!("{name}.{ext}");
             }
         }
@@ -5966,12 +5976,16 @@ impl AppState {
 
     /// Do `act` to the right-clicked row.
     pub fn explorer_action(&mut self, act: ExplorerAction, cx: &mut Context<Self>) {
-        let Some((item, _)) = self.explorer_menu.take() else { return };
+        let Some((item, _)) = self.explorer_menu.take() else {
+            return;
+        };
         let (disk, rel) = self.explorer_paths(&item);
         match act {
             ExplorerAction::Open => match &item {
                 ExplorerItem::Chat(f) => self.open_doc(f.clone(), cx),
-                ExplorerItem::Project { rel, dir: false } => self.open_project_file(rel.clone(), cx),
+                ExplorerItem::Project { rel, dir: false } => {
+                    self.open_project_file(rel.clone(), cx)
+                }
                 ExplorerItem::Project { .. } => {}
             },
             ExplorerAction::Download => match &item {
@@ -5991,7 +6005,8 @@ impl AppState {
                         let saved = cx
                             .background_spawn(async move {
                                 let bytes = std::fs::read(&p).map_err(|e| e.to_string())?;
-                                crate::downloads::save(&dir, &name, &bytes).map_err(|e| e.to_string())
+                                crate::downloads::save(&dir, &name, &bytes)
+                                    .map_err(|e| e.to_string())
                             })
                             .await;
                         let _ = this.update(cx, |s, cx| match saved {
@@ -6048,7 +6063,9 @@ impl AppState {
     /// pages are drawn again, showing the slide the change is on.
     pub fn deck_edit(&mut self, edit: DeckEdit, cx: &mut Context<Self>) {
         let Some(file) = self.doc.clone() else { return };
-        let Some(bytes) = file.bytes.clone() else { return };
+        let Some(bytes) = file.bytes.clone() else {
+            return;
+        };
         if file.office() != Some(crate::office::Kind::Pptx) {
             return;
         }
@@ -6063,7 +6080,11 @@ impl AppState {
                         &crate::ui::office_editor::pptx_edits(&words),
                     )?;
                     let (updated, show) = match edit {
-                        DeckEdit::Format { slide, para, format } => (
+                        DeckEdit::Format {
+                            slide,
+                            para,
+                            format,
+                        } => (
                             crate::pptx_edit::format_para(&typed, slide, para, format)?,
                             slide,
                         ),
@@ -6098,7 +6119,11 @@ impl AppState {
                             let card = c.messages.iter_mut().rev().find_map(|m| match m {
                                 Message::Assistant { blocks } => {
                                     blocks.iter_mut().rev().find_map(|b| match b {
-                                        Block::File(f) if crate::doc_versions::same_file(f, &file) => Some(f),
+                                        Block::File(f)
+                                            if crate::doc_versions::same_file(f, &file) =>
+                                        {
+                                            Some(f)
+                                        }
                                         _ => None,
                                     })
                                 }
@@ -6123,7 +6148,9 @@ impl AppState {
     /// Read the deck's shapes for the version in the panel, once.
     pub fn ensure_deck_shapes(&mut self, cx: &mut Context<Self>) {
         let Some(file) = self.doc.clone() else { return };
-        let Some(bytes) = file.bytes.clone() else { return };
+        let Some(bytes) = file.bytes.clone() else {
+            return;
+        };
         if file.office() != Some(crate::office::Kind::Pptx) {
             return;
         }
@@ -6135,7 +6162,10 @@ impl AppState {
         cx.spawn(async move |this, cx| {
             let read = cx
                 .background_spawn(async move {
-                    (crate::pptx_shapes::read(&bytes), crate::pptx_shapes::slide_size(&bytes))
+                    (
+                        crate::pptx_shapes::read(&bytes),
+                        crate::pptx_shapes::slide_size(&bytes),
+                    )
                 })
                 .await;
             let _ = this.update(cx, |s, cx| {
@@ -6170,14 +6200,22 @@ impl AppState {
 
     /// The drag ended: the shape goes where it was dropped.
     pub fn drop_shape(&mut self, cx: &mut Context<Self>) {
-        let Some(d) = self.deck_drag.take() else { return };
+        let Some(d) = self.deck_drag.take() else {
+            return;
+        };
         cx.notify();
         if d.now != d.from {
             let (x, y, w, h) = d.now;
             self.deck_edit(
                 DeckEdit::Shape {
                     slide: d.slide,
-                    op: crate::pptx_shapes::ShapeOp::Place { id: d.id, x, y, w, h },
+                    op: crate::pptx_shapes::ShapeOp::Place {
+                        id: d.id,
+                        x,
+                        y,
+                        w,
+                        h,
+                    },
                 },
                 cx,
             );
@@ -6185,7 +6223,11 @@ impl AppState {
     }
 
     /// Hold `anchor` for the comment box: the page editor's Comment.
-    pub fn hold_doc_comment(&mut self, anchor: crate::doc_versions::Anchor, cx: &mut Context<Self>) {
+    pub fn hold_doc_comment(
+        &mut self,
+        anchor: crate::doc_versions::Anchor,
+        cx: &mut Context<Self>,
+    ) {
         self.doc_comment_hold = Some(anchor);
         cx.notify();
     }
@@ -6418,7 +6460,8 @@ impl AppState {
     fn text_draft(&mut self, chat: usize, path: &str, content: &str, cx: &mut Context<Self>) {
         let content: SharedString = content.to_string().into();
         let first = !self.drafts.contains_key(&(chat, path.to_string()));
-        self.drafts.insert((chat, path.to_string()), content.clone());
+        self.drafts
+            .insert((chat, path.to_string()), content.clone());
         // The file's card, as soon as its writing starts, as if it were
         // done: a click opens it beside the chat, filling in live. The
         // finished file then takes the same card's place (`update_card`).
@@ -8865,13 +8908,19 @@ fix everything under 8, render it again to check, then tell me the scores before
                             | "pptx"
                             | "pdf"
                     );
-                    match doc.then(|| file_card(name.clone(), ext.clone(), full.clone(), bytes.clone())) {
+                    match doc
+                        .then(|| file_card(name.clone(), ext.clone(), full.clone(), bytes.clone()))
+                    {
                         Some(Some(file)) => {
                             s.doc = None;
                             s.open_doc(file, cx);
                         }
                         // A picture, or a text or code file, reads in the panel.
-                        _ if matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp") => {
+                        _ if matches!(
+                            ext.as_str(),
+                            "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp"
+                        ) =>
+                        {
                             s.doc = None;
                             s.open_doc(
                                 FileRef {

@@ -38,7 +38,8 @@ impl SlashCommands {
         Self {
             _sub,
             name: cx.new(|cx| {
-                InputState::new(window, cx).placeholder("e.g. review  (or git:review for a subfolder)")
+                InputState::new(window, cx)
+                    .placeholder("e.g. review  (or git:review for a subfolder)")
             }),
             description: cx
                 .new(|cx| InputState::new(window, cx).placeholder("Shown beside it in the / list")),
@@ -263,7 +264,9 @@ impl SlashCommands {
         let note = c.shadowed.then(|| {
             (
                 t.extra.warning,
-                "Another /".to_string() + &c.name + " later in KodAct CLI's order replaces this one.",
+                "Another /".to_string()
+                    + &c.name
+                    + " later in KodAct CLI's order replaces this one.",
             )
         });
         let (edit, del) = (c.clone(), c.path.clone());
